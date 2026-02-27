@@ -544,11 +544,13 @@ enum Bech32 {
     private static func hrpExpand(_ hrp: String) -> [UInt8] {
         var result: [UInt8] = []
         for char in hrp {
-            result.append(UInt8(char.asciiValue! >> 5))
+            guard let ascii = char.asciiValue else { return [] }
+            result.append(UInt8(ascii >> 5))
         }
         result.append(0)
         for char in hrp {
-            result.append(UInt8(char.asciiValue! & 31))
+            guard let ascii = char.asciiValue else { return [] }
+            result.append(UInt8(ascii & 31))
         }
         return result
     }

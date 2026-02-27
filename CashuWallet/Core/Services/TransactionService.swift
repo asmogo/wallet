@@ -23,6 +23,7 @@ class TransactionService: ObservableObject {
     
     private var claimedTokens: [ClaimedToken] = []
     private let walletRepository: () -> WalletRepository?
+    private let getTrackedMintUrls: () -> [String]
     
     // Storage keys
     private enum StorageKeys {
@@ -34,8 +35,12 @@ class TransactionService: ObservableObject {
     
     // MARK: - Initialization
     
-    init(walletRepository: @escaping () -> WalletRepository?) {
+    init(
+        walletRepository: @escaping () -> WalletRepository?,
+        getTrackedMintUrls: @escaping () -> [String]
+    ) {
         self.walletRepository = walletRepository
+        self.getTrackedMintUrls = getTrackedMintUrls
     }
     
     // MARK: - Transaction Loading
@@ -49,12 +54,14 @@ class TransactionService: ObservableObject {
         loadPendingReceiveTokens()
         loadClaimedTokens()
         
-        do {
-            // Get transactions from all wallets
-            var allTransactions: [WalletTransaction] = []
-            let wallets = await repo.getWallets()
-            
-            for wallet in wallets {
+        // Get transactions from tracked wallets
+        var allTransactions: [WalletTransaction] = []
+        let trackedMintUrls = Set(getTrackedMintUrls().filter { !$0.isEmpty })
+        
+        for mintUrlString in trackedMintUrls {
+            do {
+                let mintUrl = try MintUrl(url: mintUrlString)
+                let wallet = try await repo.getWallet(mintUrl: mintUrl, unit: .sat)
                 let txs = try await wallet.listTransactions(direction: nil)
                 let walletTxs: [WalletTransaction] = txs.map { tx in
                     // Determine if this is a Lightning or Ecash transaction
@@ -77,51 +84,51 @@ class TransactionService: ObservableObject {
                     )
                 }
                 allTransactions.append(contentsOf: walletTxs)
+            } catch {
+                print("Failed to load transactions for mint \(mintUrlString): \(error)")
             }
-            
-            // Add pending tokens as pending transactions
-            for pendingToken in pendingTokens {
-                var pendingTx = WalletTransaction(
-                    id: pendingToken.tokenId,
-                    amount: pendingToken.amount,
-                    type: .outgoing,
-                    kind: .ecash,
-                    date: pendingToken.date,
-                    memo: pendingToken.memo,
-                    status: .pending,
-                    mintUrl: pendingToken.mintUrl,
-                    token: pendingToken.token,
-                    isPendingToken: true
-                )
-                pendingTx.fee = pendingToken.fee
-                allTransactions.append(pendingTx)
-            }
-            
-            // Add claimed tokens as completed transactions
-            for claimedToken in claimedTokens {
-                var claimedTx = WalletTransaction(
-                    id: claimedToken.tokenId,
-                    amount: claimedToken.amount,
-                    type: .outgoing,
-                    kind: .ecash,
-                    date: claimedToken.date,
-                    memo: claimedToken.memo,
-                    status: .completed,
-                    mintUrl: claimedToken.mintUrl,
-                    token: claimedToken.token
-                )
-                claimedTx.fee = claimedToken.fee
-                allTransactions.append(claimedTx)
-            }
-            
-            // Sort by date descending (newest first)
-            transactions = allTransactions.sorted { $0.date > $1.date }
-            
-            // Post notification that transactions were updated
-            NotificationCenter.default.post(name: .cashuTransactionsUpdated, object: nil)
-        } catch {
-            print("Failed to load transactions: \(error)")
         }
+        
+        // Add pending tokens as pending transactions
+        for pendingToken in pendingTokens {
+            var pendingTx = WalletTransaction(
+                id: pendingToken.tokenId,
+                amount: pendingToken.amount,
+                type: .outgoing,
+                kind: .ecash,
+                date: pendingToken.date,
+                memo: pendingToken.memo,
+                status: .pending,
+                mintUrl: pendingToken.mintUrl,
+                token: pendingToken.token,
+                isPendingToken: true
+            )
+            pendingTx.fee = pendingToken.fee
+            allTransactions.append(pendingTx)
+        }
+        
+        // Add claimed tokens as completed transactions
+        for claimedToken in claimedTokens {
+            var claimedTx = WalletTransaction(
+                id: claimedToken.tokenId,
+                amount: claimedToken.amount,
+                type: .outgoing,
+                kind: .ecash,
+                date: claimedToken.date,
+                memo: claimedToken.memo,
+                status: .completed,
+                mintUrl: claimedToken.mintUrl,
+                token: claimedToken.token
+            )
+            claimedTx.fee = claimedToken.fee
+            allTransactions.append(claimedTx)
+        }
+        
+        // Sort by date descending (newest first)
+        transactions = allTransactions.sorted { $0.date > $1.date }
+        
+        // Post notification that transactions were updated
+        NotificationCenter.default.post(name: .cashuTransactionsUpdated, object: nil)
     }
     
     // MARK: - Token Persistence
@@ -143,6 +150,7 @@ class TransactionService: ObservableObject {
     
     /// Save a pending token (when sending ecash)
     func savePendingToken(_ pendingToken: PendingToken) {
+        pendingTokens.removeAll { $0.tokenId == pendingToken.tokenId }
         pendingTokens.append(pendingToken)
         persistPendingTokens()
     }
@@ -156,6 +164,8 @@ class TransactionService: ObservableObject {
                 print("Failed to load pending tokens: \(error)")
                 pendingTokens = []
             }
+        } else {
+            pendingTokens = []
         }
     }
     
@@ -203,6 +213,7 @@ class TransactionService: ObservableObject {
     
     /// Save a token for later claiming
     func savePendingReceiveToken(_ token: PendingReceiveToken) {
+        pendingReceiveTokens.removeAll { $0.tokenId == token.tokenId }
         pendingReceiveTokens.append(token)
         persistPendingReceiveTokens()
     }
@@ -216,6 +227,8 @@ class TransactionService: ObservableObject {
                 print("Failed to load pending receive tokens: \(error)")
                 pendingReceiveTokens = []
             }
+        } else {
+            pendingReceiveTokens = []
         }
     }
     
@@ -239,6 +252,7 @@ class TransactionService: ObservableObject {
     
     /// Save a claimed token
     private func saveClaimedToken(_ claimedToken: ClaimedToken) {
+        claimedTokens.removeAll { $0.tokenId == claimedToken.tokenId }
         claimedTokens.append(claimedToken)
         persistClaimedTokens()
     }
@@ -252,6 +266,8 @@ class TransactionService: ObservableObject {
                 print("Failed to load claimed tokens: \(error)")
                 claimedTokens = []
             }
+        } else {
+            claimedTokens = []
         }
     }
     

@@ -1331,31 +1331,40 @@ struct SettingsView: View {
         .padding(.vertical, 8)
     }
     
+    @ViewBuilder
     private func linkRow(icon: String, title: String, subtitle: String, url: String) -> some View {
-        Link(destination: URL(string: url)!) {
-            HStack(spacing: 16) {
-                Image(systemName: icon)
-                    .font(.title3)
-                    .foregroundColor(settings.accentColor)
-                    .frame(width: 28)
-                
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(title)
-                        .font(.subheadline)
-                        .foregroundColor(.white)
-                    Text(subtitle)
-                        .font(.caption)
-                        .foregroundColor(.cashuMutedText)
-                }
-                
-                Spacer()
-                
-                Image(systemName: "arrow.up.right")
+        if let destination = URL(string: url) {
+            Link(destination: destination) {
+                linkRowLabel(icon: icon, title: title, subtitle: subtitle)
+            }
+        } else {
+            linkRowLabel(icon: icon, title: title, subtitle: subtitle)
+        }
+    }
+    
+    private func linkRowLabel(icon: String, title: String, subtitle: String) -> some View {
+        HStack(spacing: 16) {
+            Image(systemName: icon)
+                .font(.title3)
+                .foregroundColor(settings.accentColor)
+                .frame(width: 28)
+            
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                    .font(.subheadline)
+                    .foregroundColor(.white)
+                Text(subtitle)
                     .font(.caption)
                     .foregroundColor(.cashuMutedText)
             }
-            .padding(.vertical, 12)
+            
+            Spacer()
+            
+            Image(systemName: "arrow.up.right")
+                .font(.caption)
+                .foregroundColor(.cashuMutedText)
         }
+        .padding(.vertical, 12)
     }
     
     private func deleteWallet() {

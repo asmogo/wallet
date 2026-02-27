@@ -97,11 +97,14 @@ class NPCService: ObservableObject {
     /// Initialize with wallet seed
     func initializeWithSeed(_ seed: Data) throws {
         // Derive Nostr secret key from wallet seed using CDK function
-        nostrSecretKey = try npubcashDeriveSecretKeyFromSeed(seed: seed)
-        nostrPubkey = try npubcashGetPubkey(nostrSecretKey: nostrSecretKey!)
+        let derivedSecretKey = try npubcashDeriveSecretKeyFromSeed(seed: seed)
+        let derivedPubkey = try npubcashGetPubkey(nostrSecretKey: derivedSecretKey)
         
         // Convert hex pubkey to bech32 npub format for Lightning address
-        let npub = try hexToNpub(nostrPubkey!)
+        let npub = try hexToNpub(derivedPubkey)
+        
+        nostrSecretKey = derivedSecretKey
+        nostrPubkey = derivedPubkey
         lightningAddress = "\(npub)@\(domain)"
         
         print("NPC: Initialized with npub: \(npub.prefix(20))...")
@@ -150,11 +153,12 @@ class NPCService: ObservableObject {
         do {
             // Create NpubCashClient with CDKaaaaaaaaaaaa
             print(baseURL)
-            client = try NpubCashClient(baseUrl: baseURL, nostrSecretKey: secretKey)
+            let connectedClient = try NpubCashClient(baseUrl: baseURL, nostrSecretKey: secretKey)
+            client = connectedClient
             
             // Try to get user info by fetching quotes (this validates connection)
             // The client handles authentication internally
-            let quotes = try await client!.getQuotes(since: nil)
+            let quotes = try await connectedClient.getQuotes(since: nil)
             print("NPC: Connected successfully, found \(quotes.count) quotes")
             
             // If user hasn't selected a mint and we have quotes, use the mint from first quote

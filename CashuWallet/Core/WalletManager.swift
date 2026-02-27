@@ -38,7 +38,13 @@ class WalletManager: ObservableObject {
     private(set) lazy var mintService = MintService(walletRepository: { [weak self] in self?.walletRepository })
     
     /// Transaction history service
-    private(set) lazy var transactionService = TransactionService(walletRepository: { [weak self] in self?.walletRepository })
+    private(set) lazy var transactionService = TransactionService(
+        walletRepository: { [weak self] in self?.walletRepository },
+        getTrackedMintUrls: { [weak self] in
+            guard let self else { return [] }
+            return self.trackedMintUrlsForWalletAccess()
+        }
+    )
     
     /// Token operations service
     private(set) lazy var tokenService = TokenService(
@@ -87,9 +93,11 @@ class WalletManager: ObservableObject {
     private var db: WalletSqliteDatabase?
     private let keychainService = KeychainService()
     // Note: No default mint is added on wallet creation - user must add mints manually
-    private let defaultMintUrl = "https://testnut.cashu.space"
     private var mnemonic: String?
     private var hasInitialized = false
+    private var npcQuoteObserver: NSObjectProtocol?
+    private let walletDatabaseDirectoryName = "cashu-swift"
+    private let walletDatabaseFilename = "wallet.db"
     
     // MARK: - Initialization
     
@@ -212,11 +220,11 @@ class WalletManager: ObservableObject {
     }
     
     private func initializeWallet(mnemonic: String) async throws {
-        let documentsPath = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
-        let dbPath = documentsPath.appendingPathComponent("cashu_wallet.db").path
+        let databaseURL = try walletDatabaseURL()
+        let repository = try initializeRepositoryWithRecovery(mnemonic: mnemonic, databaseURL: databaseURL)
         
-        db = try WalletSqliteDatabase(filePath: dbPath)
-        walletRepository = try WalletRepository(mnemonic: mnemonic, db: db!)
+        db = repository.db
+        walletRepository = repository.repository
         
         await mintService.loadMints()
         await refreshBalance()
@@ -229,6 +237,129 @@ class WalletManager: ObservableObject {
     private func generateMnemonic() throws -> String {
         // Use CDK's built-in BIP39 mnemonic generation
         return try CashuDevKit.generateMnemonic()
+    }
+    
+    private func walletDatabaseURL() throws -> URL {
+        let applicationSupportURL = try FileManager.default.url(
+            for: .applicationSupportDirectory,
+            in: .userDomainMask,
+            appropriateFor: nil,
+            create: true
+        )
+        
+        let walletDirectoryURL = applicationSupportURL.appendingPathComponent(walletDatabaseDirectoryName, isDirectory: true)
+        if !FileManager.default.fileExists(atPath: walletDirectoryURL.path) {
+            try FileManager.default.createDirectory(at: walletDirectoryURL, withIntermediateDirectories: true)
+        }
+        
+        let currentDatabaseURL = walletDirectoryURL.appendingPathComponent(walletDatabaseFilename)
+        try migrateLegacyWalletDatabaseIfNeeded(to: currentDatabaseURL)
+        return currentDatabaseURL
+    }
+    
+    private func legacyWalletDatabaseURL() -> URL {
+        let documentsPath = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+        return documentsPath.appendingPathComponent("cashu_wallet.db")
+    }
+    
+    private func migrateLegacyWalletDatabaseIfNeeded(to currentDatabaseURL: URL) throws {
+        let legacyDatabaseURL = legacyWalletDatabaseURL()
+        
+        guard FileManager.default.fileExists(atPath: legacyDatabaseURL.path) else { return }
+        guard !FileManager.default.fileExists(atPath: currentDatabaseURL.path) else { return }
+        
+        try FileManager.default.moveItem(at: legacyDatabaseURL, to: currentDatabaseURL)
+        
+        for suffix in ["-wal", "-shm", "-journal"] {
+            let legacySidecarURL = URL(fileURLWithPath: legacyDatabaseURL.path + suffix)
+            guard FileManager.default.fileExists(atPath: legacySidecarURL.path) else { continue }
+            
+            let currentSidecarURL = URL(fileURLWithPath: currentDatabaseURL.path + suffix)
+            if FileManager.default.fileExists(atPath: currentSidecarURL.path) {
+                try FileManager.default.removeItem(at: currentSidecarURL)
+            }
+            try FileManager.default.moveItem(at: legacySidecarURL, to: currentSidecarURL)
+        }
+    }
+    
+    private func initializeRepositoryWithRecovery(
+        mnemonic: String,
+        databaseURL: URL
+    ) throws -> (db: WalletSqliteDatabase, repository: WalletRepository) {
+        do {
+            return try createRepository(mnemonic: mnemonic, databaseURL: databaseURL)
+        } catch {
+            guard shouldAttemptDatabaseRecovery(after: error, databaseURL: databaseURL) else {
+                throw error
+            }
+            
+            let backupURL = try backupCorruptedDatabase(at: databaseURL)
+            print("Wallet DB recovery: moved corrupted database to \(backupURL.path)")
+            return try createRepository(mnemonic: mnemonic, databaseURL: databaseURL)
+        }
+    }
+    
+    private func createRepository(
+        mnemonic: String,
+        databaseURL: URL
+    ) throws -> (db: WalletSqliteDatabase, repository: WalletRepository) {
+        let database = try WalletSqliteDatabase(filePath: databaseURL.path)
+        let repository = try WalletRepository(mnemonic: mnemonic, db: database)
+        return (database, repository)
+    }
+    
+    private func shouldAttemptDatabaseRecovery(after error: Error, databaseURL: URL) -> Bool {
+        guard FileManager.default.fileExists(atPath: databaseURL.path) else {
+            return false
+        }
+        
+        let errorDescription = String(describing: error).lowercased()
+        return errorDescription.contains("sqlite")
+            || errorDescription.contains("database")
+            || errorDescription.contains("corrupt")
+            || errorDescription.contains("malformed")
+            || errorDescription.contains("walletdb")
+    }
+    
+    private func backupCorruptedDatabase(at databaseURL: URL) throws -> URL {
+        let timestamp = Int(Date().timeIntervalSince1970)
+        let backupURL = databaseURL.deletingLastPathComponent()
+            .appendingPathComponent("\(walletDatabaseFilename).corrupt.\(timestamp)")
+        
+        if FileManager.default.fileExists(atPath: backupURL.path) {
+            try FileManager.default.removeItem(at: backupURL)
+        }
+        
+        try FileManager.default.moveItem(at: databaseURL, to: backupURL)
+        
+        for suffix in ["-wal", "-shm", "-journal"] {
+            let sidecarURL = URL(fileURLWithPath: databaseURL.path + suffix)
+            guard FileManager.default.fileExists(atPath: sidecarURL.path) else { continue }
+            
+            let sidecarBackupURL = URL(fileURLWithPath: backupURL.path + suffix)
+            if FileManager.default.fileExists(atPath: sidecarBackupURL.path) {
+                try FileManager.default.removeItem(at: sidecarBackupURL)
+            }
+            try FileManager.default.moveItem(at: sidecarURL, to: sidecarBackupURL)
+        }
+        
+        return backupURL
+    }
+    
+    private func trackedMintUrlsForWalletAccess() -> [String] {
+        var urls = mints.map(\.url).filter { !$0.isEmpty }
+        
+        if let activeUrl = activeMint?.url, !activeUrl.isEmpty, !urls.contains(activeUrl) {
+            urls.append(activeUrl)
+        }
+        
+        return Array(Set(urls))
+    }
+    
+    private func ensureMintTrackedForToken(_ tokenString: String) async throws {
+        let token = try tokenService.decodeToken(tokenString: tokenString)
+        let tokenMintUrl = try token.mintUrl().url
+        await mintService.ensureMintExists(url: tokenMintUrl)
     }
     
     // MARK: - Nostr & NPC Integration
@@ -247,7 +378,11 @@ class WalletManager: ObservableObject {
     }
     
     private func setupNPCQuoteListener() {
-        NotificationCenter.default.addObserver(forName: .npcQuoteReceived, object: nil, queue: .main) { [weak self] notification in
+        if let npcQuoteObserver {
+            NotificationCenter.default.removeObserver(npcQuoteObserver)
+        }
+        
+        npcQuoteObserver = NotificationCenter.default.addObserver(forName: .npcQuoteReceived, object: nil, queue: .main) { [weak self] notification in
             guard let self = self,
                   let userInfo = notification.userInfo,
                   let mintQuote = userInfo["mintQuote"] as? MintQuote else { return }
@@ -315,32 +450,30 @@ class WalletManager: ObservableObject {
     
     func refreshBalance() async {
         guard let walletRepository = walletRepository else { return }
+        let mintUrls = trackedMintUrlsForWalletAccess()
         
-        do {
-            // Get all wallets and sum their balances
-            let wallets = await walletRepository.getWallets()
-            var total: UInt64 = 0
-            
-            for wallet in wallets {
-                do {
-                    // Only process sat unit wallets
-                    guard wallet.unit() == .sat else { continue }
-                    
-                    let walletBalance = try await wallet.totalBalance()
-                    let mintUrlStr = wallet.mintUrl().url
-                    total += walletBalance.value
-                    
-                    // Update individual mint balance
-                    mintService.updateMintBalance(url: mintUrlStr, balance: walletBalance.value)
-                } catch {
-                    print("Failed to get balance for wallet: \(error)")
-                }
-            }
-            
-            balance = total
-        } catch {
-            print("Failed to refresh balance: \(error)")
+        guard !mintUrls.isEmpty else {
+            balance = 0
+            return
         }
+        
+        var total: UInt64 = 0
+        
+        for mintUrlString in mintUrls {
+            do {
+                let mintUrl = try MintUrl(url: mintUrlString)
+                let wallet = try await walletRepository.getWallet(mintUrl: mintUrl, unit: .sat)
+                let walletBalance = try await wallet.totalBalance()
+                
+                total += walletBalance.value
+                mintService.updateMintBalance(url: mintUrlString, balance: walletBalance.value)
+            } catch {
+                mintService.updateMintBalance(url: mintUrlString, balance: 0)
+                print("Failed to refresh balance for mint \(mintUrlString): \(error)")
+            }
+        }
+        
+        balance = total
     }
     
     // MARK: - Lightning Operations (Delegate to LightningService)
@@ -392,6 +525,7 @@ class WalletManager: ObservableObject {
     }
     
     func receiveTokens(tokenString: String) async throws -> UInt64 {
+        try await ensureMintTrackedForToken(tokenString)
         let amount = try await tokenService.receiveTokens(tokenString: tokenString)
         await refreshBalance()
         await transactionService.loadTransactions()
@@ -403,6 +537,7 @@ class WalletManager: ObservableObject {
     }
     
     func calculateReceiveFee(tokenString: String) async throws -> UInt64 {
+        try await ensureMintTrackedForToken(tokenString)
         return try await tokenService.calculateReceiveFee(tokenString: tokenString)
     }
     
@@ -438,9 +573,8 @@ class WalletManager: ObservableObject {
     }
     
     func claimPendingReceiveToken(_ token: PendingReceiveToken) async throws -> UInt64 {
-        let amount = try await tokenService.receiveTokens(tokenString: token.token)
+        let amount = try await receiveTokens(tokenString: token.token)
         transactionService.removePendingReceiveToken(tokenId: token.tokenId)
-        await refreshBalance()
         await transactionService.loadTransactions()
         return amount
     }
@@ -451,12 +585,14 @@ class WalletManager: ObservableObject {
     
     // MARK: - Token Status Checks
     
-    func checkTokenSpendable(token: String) async -> Bool {
-        return await tokenService.checkTokenSpendable(token: token, mintUrl: activeMint?.url ?? "")
+    func checkTokenSpendable(token: String, mintUrl: String? = nil) async -> Bool {
+        let resolvedMintUrl = mintUrl ?? activeMint?.url ?? ""
+        guard !resolvedMintUrl.isEmpty else { return false }
+        return await tokenService.checkTokenSpendable(token: token, mintUrl: resolvedMintUrl)
     }
     
     func checkPendingTokenStatus(pendingToken: PendingToken) async {
-        let isSpent = await checkTokenSpendable(token: pendingToken.token)
+        let isSpent = await checkTokenSpendable(token: pendingToken.token, mintUrl: pendingToken.mintUrl)
         if isSpent {
             transactionService.removePendingToken(tokenId: pendingToken.tokenId)
         }
@@ -470,9 +606,8 @@ class WalletManager: ObservableObject {
     }
     
     func reclaimPendingToken(pendingToken: PendingToken) async throws -> UInt64 {
-        let amount = try await tokenService.receiveTokens(tokenString: pendingToken.token)
+        let amount = try await receiveTokens(tokenString: pendingToken.token)
         transactionService.removePendingToken(tokenId: pendingToken.tokenId)
-        await refreshBalance()
         await transactionService.loadTransactions()
         return amount
     }
@@ -495,6 +630,12 @@ class WalletManager: ObservableObject {
             .split(separator: " ")
             .map(String.init)
         return words.count == 12 || words.count == 24
+    }
+    
+    deinit {
+        if let npcQuoteObserver {
+            NotificationCenter.default.removeObserver(npcQuoteObserver)
+        }
     }
 }
 
