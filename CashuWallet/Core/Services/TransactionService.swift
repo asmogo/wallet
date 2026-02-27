@@ -1,0 +1,267 @@
+import Foundation
+import CashuDevKit
+
+// MARK: - Transaction Service
+
+/// Service responsible for transaction history and token persistence.
+/// Handles loading, saving, and managing transaction records and pending tokens.
+@MainActor
+class TransactionService: ObservableObject {
+    
+    // MARK: - Published Properties
+    
+    /// All wallet transactions (incoming/outgoing)
+    @Published var transactions: [WalletTransaction] = []
+    
+    /// Pending tokens that have been sent but not yet claimed by recipient
+    @Published var pendingTokens: [PendingToken] = []
+    
+    /// Pending tokens that have been received but not yet claimed by user
+    @Published var pendingReceiveTokens: [PendingReceiveToken] = []
+    
+    // MARK: - Private Properties
+    
+    private var claimedTokens: [ClaimedToken] = []
+    private let walletRepository: () -> WalletRepository?
+    
+    // Storage keys
+    private enum StorageKeys {
+        static let pendingTokens = "pendingTokens"
+        static let pendingReceiveTokens = "pendingReceiveTokens"
+        static let claimedTokens = "claimedTokens"
+        static let savedTokens = "savedTokens"
+    }
+    
+    // MARK: - Initialization
+    
+    init(walletRepository: @escaping () -> WalletRepository?) {
+        self.walletRepository = walletRepository
+    }
+    
+    // MARK: - Transaction Loading
+    
+    /// Load transaction history from all mints
+    func loadTransactions() async {
+        guard let repo = walletRepository() else { return }
+        
+        // Load pending and claimed tokens from storage
+        loadPendingTokens()
+        loadPendingReceiveTokens()
+        loadClaimedTokens()
+        
+        do {
+            // Get transactions from all wallets
+            var allTransactions: [WalletTransaction] = []
+            let wallets = await repo.getWallets()
+            
+            for wallet in wallets {
+                let txs = try await wallet.listTransactions(direction: nil)
+                let walletTxs: [WalletTransaction] = txs.map { tx in
+                    // Determine if this is a Lightning or Ecash transaction
+                    let isLightning = tx.paymentRequest != nil
+                    
+                    // Get stored token for ecash transactions
+                    let storedToken = !isLightning ? self.getToken(txId: tx.id.hex) : nil
+                    
+                    return WalletTransaction(
+                        id: tx.id.hex,
+                        amount: tx.amount.value,
+                        type: tx.direction == .incoming ? .incoming : .outgoing,
+                        kind: isLightning ? .lightning : .ecash,
+                        date: Date(timeIntervalSince1970: TimeInterval(tx.timestamp)),
+                        memo: tx.memo,
+                        status: .completed,
+                        mintUrl: tx.mintUrl.url,
+                        token: storedToken,
+                        invoice: tx.paymentRequest
+                    )
+                }
+                allTransactions.append(contentsOf: walletTxs)
+            }
+            
+            // Add pending tokens as pending transactions
+            for pendingToken in pendingTokens {
+                var pendingTx = WalletTransaction(
+                    id: pendingToken.tokenId,
+                    amount: pendingToken.amount,
+                    type: .outgoing,
+                    kind: .ecash,
+                    date: pendingToken.date,
+                    memo: pendingToken.memo,
+                    status: .pending,
+                    mintUrl: pendingToken.mintUrl,
+                    token: pendingToken.token,
+                    isPendingToken: true
+                )
+                pendingTx.fee = pendingToken.fee
+                allTransactions.append(pendingTx)
+            }
+            
+            // Add claimed tokens as completed transactions
+            for claimedToken in claimedTokens {
+                var claimedTx = WalletTransaction(
+                    id: claimedToken.tokenId,
+                    amount: claimedToken.amount,
+                    type: .outgoing,
+                    kind: .ecash,
+                    date: claimedToken.date,
+                    memo: claimedToken.memo,
+                    status: .completed,
+                    mintUrl: claimedToken.mintUrl,
+                    token: claimedToken.token
+                )
+                claimedTx.fee = claimedToken.fee
+                allTransactions.append(claimedTx)
+            }
+            
+            // Sort by date descending (newest first)
+            transactions = allTransactions.sorted { $0.date > $1.date }
+            
+            // Post notification that transactions were updated
+            NotificationCenter.default.post(name: .cashuTransactionsUpdated, object: nil)
+        } catch {
+            print("Failed to load transactions: \(error)")
+        }
+    }
+    
+    // MARK: - Token Persistence
+    
+    /// Save a token string for later retrieval
+    func saveToken(txId: String, token: String) {
+        var tokens = UserDefaults.standard.dictionary(forKey: StorageKeys.savedTokens) as? [String: String] ?? [:]
+        tokens[txId] = token
+        UserDefaults.standard.set(tokens, forKey: StorageKeys.savedTokens)
+    }
+    
+    /// Get a stored token by transaction ID
+    func getToken(txId: String) -> String? {
+        let tokens = UserDefaults.standard.dictionary(forKey: StorageKeys.savedTokens) as? [String: String]
+        return tokens?[txId]
+    }
+    
+    // MARK: - Pending Token Management (Outgoing)
+    
+    /// Save a pending token (when sending ecash)
+    func savePendingToken(_ pendingToken: PendingToken) {
+        pendingTokens.append(pendingToken)
+        persistPendingTokens()
+    }
+    
+    /// Load pending tokens from storage
+    func loadPendingTokens() {
+        if let data = UserDefaults.standard.data(forKey: StorageKeys.pendingTokens) {
+            do {
+                pendingTokens = try JSONDecoder().decode([PendingToken].self, from: data)
+            } catch {
+                print("Failed to load pending tokens: \(error)")
+                pendingTokens = []
+            }
+        }
+    }
+    
+    /// Persist pending tokens to storage
+    private func persistPendingTokens() {
+        do {
+            let data = try JSONEncoder().encode(pendingTokens)
+            UserDefaults.standard.set(data, forKey: StorageKeys.pendingTokens)
+        } catch {
+            print("Failed to save pending tokens: \(error)")
+        }
+    }
+    
+    /// Remove a pending token (when claimed or confirmed spent)
+    func removePendingToken(tokenId: String) {
+        pendingTokens.removeAll { $0.tokenId == tokenId }
+        persistPendingTokens()
+    }
+    
+    /// Mark a token as claimed - move from pending to claimed storage
+    func markTokenAsClaimed(token: String) {
+        // Find the pending token by its token string
+        if let pendingToken = pendingTokens.first(where: { $0.token == token }) {
+            // Create a claimed token entry with fee
+            let claimedToken = ClaimedToken(
+                tokenId: pendingToken.tokenId,
+                token: pendingToken.token,
+                amount: pendingToken.amount,
+                fee: pendingToken.fee,
+                date: pendingToken.date,
+                mintUrl: pendingToken.mintUrl,
+                memo: pendingToken.memo,
+                claimedDate: Date()
+            )
+            
+            // Add to claimed tokens
+            saveClaimedToken(claimedToken)
+            
+            // Remove from pending list
+            removePendingToken(tokenId: pendingToken.tokenId)
+        }
+    }
+    
+    // MARK: - Pending Receive Token Management (Incoming)
+    
+    /// Save a token for later claiming
+    func savePendingReceiveToken(_ token: PendingReceiveToken) {
+        pendingReceiveTokens.append(token)
+        persistPendingReceiveTokens()
+    }
+    
+    /// Load pending receive tokens from storage
+    func loadPendingReceiveTokens() {
+        if let data = UserDefaults.standard.data(forKey: StorageKeys.pendingReceiveTokens) {
+            do {
+                pendingReceiveTokens = try JSONDecoder().decode([PendingReceiveToken].self, from: data)
+            } catch {
+                print("Failed to load pending receive tokens: \(error)")
+                pendingReceiveTokens = []
+            }
+        }
+    }
+    
+    /// Persist pending receive tokens to storage
+    private func persistPendingReceiveTokens() {
+        do {
+            let data = try JSONEncoder().encode(pendingReceiveTokens)
+            UserDefaults.standard.set(data, forKey: StorageKeys.pendingReceiveTokens)
+        } catch {
+            print("Failed to save pending receive tokens: \(error)")
+        }
+    }
+    
+    /// Remove a pending receive token (after claiming)
+    func removePendingReceiveToken(tokenId: String) {
+        pendingReceiveTokens.removeAll { $0.tokenId == tokenId }
+        persistPendingReceiveTokens()
+    }
+    
+    // MARK: - Claimed Token Management
+    
+    /// Save a claimed token
+    private func saveClaimedToken(_ claimedToken: ClaimedToken) {
+        claimedTokens.append(claimedToken)
+        persistClaimedTokens()
+    }
+    
+    /// Load claimed tokens from storage
+    func loadClaimedTokens() {
+        if let data = UserDefaults.standard.data(forKey: StorageKeys.claimedTokens) {
+            do {
+                claimedTokens = try JSONDecoder().decode([ClaimedToken].self, from: data)
+            } catch {
+                print("Failed to load claimed tokens: \(error)")
+                claimedTokens = []
+            }
+        }
+    }
+    
+    /// Persist claimed tokens to storage
+    private func persistClaimedTokens() {
+        do {
+            let data = try JSONEncoder().encode(claimedTokens)
+            UserDefaults.standard.set(data, forKey: StorageKeys.claimedTokens)
+        } catch {
+            print("Failed to save claimed tokens: \(error)")
+        }
+    }
+}

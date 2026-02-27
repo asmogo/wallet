@@ -1,0 +1,13 @@
+{
+  "pins" : [
+    {
+      "identity" : "cdk-swift",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/cashubtc/cdk-swift",
+      "state" : {
+        "revision" : "b79a160b70bcaa6aa7a98201ab1294409a97674f"
+      }
+    }
+  ],
+  "version" : 2
+}

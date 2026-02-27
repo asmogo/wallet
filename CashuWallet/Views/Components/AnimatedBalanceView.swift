@@ -1,0 +1,235 @@
+import SwiftUI
+
+// MARK: - Animated Balance View
+/// Displays balance with animated number transitions, matching cashu.me's AnimatedNumber component
+
+struct AnimatedBalanceView: View {
+    let value: UInt64
+    var fontSize: CGFloat = 48
+    var fontWeight: Font.Weight = .bold
+    var hideBalance: Bool = false
+    
+    @ObservedObject var settings = SettingsManager.shared
+    @State private var displayValue: UInt64 = 0
+    @State private var animationProgress: Double = 0
+    
+    var body: some View {
+        Group {
+            if hideBalance {
+                Text("••••••")
+                    .font(.system(size: fontSize, weight: fontWeight, design: .default))
+                    .foregroundColor(settings.accentColor)
+            } else {
+                Text(formattedValue)
+                    .font(.system(size: fontSize, weight: fontWeight, design: .default))
+                    .foregroundColor(settings.accentColor)
+                    .animation(.spring(response: 0.5, dampingFraction: 0.8), value: displayValue)
+            }
+        }
+        .onChange(of: value) { newValue in
+            withAnimation(.spring(response: 0.5, dampingFraction: 0.8)) {
+                displayValue = newValue
+            }
+        }
+        .onAppear {
+            displayValue = value
+        }
+    }
+    
+    private var formattedValue: String {
+        settings.formatAmountBalance(displayValue)
+    }
+}
+
+// MARK: - Animated Amount Display
+/// Full amount display with unit, used for main balance view
+
+struct AnimatedAmountDisplay: View {
+    let value: UInt64
+    var fontSize: CGFloat = 48
+    var showUnit: Bool = true
+    var hideBalance: Bool = false
+    
+    @ObservedObject var settings = SettingsManager.shared
+    
+    var body: some View {
+        VStack(spacing: 4) {
+            AnimatedBalanceView(
+                value: value,
+                fontSize: fontSize,
+                hideBalance: hideBalance
+            )
+            
+            if showUnit && !hideBalance {
+                Text(settings.unitSuffix)
+                    .font(.title3)
+                    .foregroundColor(.cashuMutedText)
+            }
+        }
+    }
+}
+
+// MARK: - Balance Card View
+/// Complete balance card matching cashu.me's BalanceView component
+
+struct BalanceCardView: View {
+    let balance: UInt64
+    let mintName: String?
+    let pendingBalance: UInt64
+    var onUnitToggle: (() -> Void)?
+    var onHideToggle: (() -> Void)?
+    
+    @ObservedObject var settings = SettingsManager.shared
+    @State private var isHidden: Bool = false
+    
+    var body: some View {
+        VStack(spacing: 16) {
+            // Unit toggle badge at top
+            // UnitToggleBadge(onTap: onUnitToggle) // Removed because UnitToggleBadge is undefined
+            Button(action: { onUnitToggle?() }) {
+                HStack(spacing: 4) {
+                    Image(systemName: "arrow.left.arrow.right")
+                        .font(.caption2)
+                    Text(settings.unitLabel)
+                        .font(.caption)
+                        .fontWeight(.bold)
+                }
+                .foregroundColor(settings.accentColor)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 6)
+                .overlay(
+                    Capsule()
+                        .stroke(settings.accentColor, lineWidth: 1)
+                )
+            }
+            .padding(.top, 20)
+            
+            // Main balance display
+            VStack(spacing: 8) {
+                AnimatedBalanceView(
+                    value: balance,
+                    fontSize: 48,
+                    hideBalance: isHidden
+                )
+                .onTapGesture {
+                    withAnimation(.easeInOut(duration: 0.2)) {
+                        isHidden.toggle()
+                        onHideToggle?()
+                    }
+                }
+                
+                // Unit suffix
+                if !settings.useBitcoinSymbol {
+                    Text("sat")
+                        .font(.title3)
+                        .foregroundColor(.cashuMutedText)
+                }
+                
+                // Fiat conversion placeholder
+                if !isHidden {
+                    Text("$0.00") // Placeholder - would need price feed
+                        .font(.subheadline)
+                        .foregroundColor(.cashuMutedText)
+                }
+            }
+            .padding(.vertical, 24)
+            
+            // Mint name
+            if let mintName = mintName {
+                HStack {
+                    Text("Mint:")
+                        .foregroundColor(.cashuMutedText)
+                    Text(mintName)
+                        .fontWeight(.semibold)
+                        .foregroundColor(.cashuMutedText)
+                }
+                .font(.caption)
+            }
+            
+            // Pending balance indicator
+            if pendingBalance > 0 {
+                PendingBalanceBadge(amount: pendingBalance)
+            }
+        }
+    }
+}
+
+// MARK: - Pending Balance Badge
+/// Shows pending balance with clock icon
+
+struct PendingBalanceBadge: View {
+    let amount: UInt64
+    var onTap: (() -> Void)?
+    
+    @ObservedObject var settings = SettingsManager.shared
+    
+    var body: some View {
+        Button(action: { onTap?() }) {
+            HStack(spacing: 6) {
+                Image(systemName: "clock")
+                    .font(.caption)
+                
+                Text("Pending: \(settings.formatAmountShort(amount)) \(settings.unitSuffix)")
+                    .font(.caption)
+                    .fontWeight(.medium)
+            }
+            .foregroundColor(settings.accentColor)
+            .padding(.horizontal, 16)
+            .padding(.vertical, 8)
+            .background(
+                Capsule()
+                    .stroke(settings.accentColor, lineWidth: 1)
+            )
+        }
+    }
+}
+
+// MARK: - Transaction Amount View
+/// Displays transaction amounts with proper +/- formatting
+
+struct TransactionAmountView: View {
+    let amount: Int64
+    let isIncoming: Bool
+    var fontSize: CGFloat = 16
+    
+    @ObservedObject var settings = SettingsManager.shared
+    
+    var body: some View {
+        Text(formattedAmount)
+            .font(.system(size: fontSize, weight: .medium))
+            .foregroundColor(amountColor)
+    }
+    
+    private var formattedAmount: String {
+        let sign = isIncoming ? "+" : "-"
+        return "\(sign)\(settings.formatAmountShort(UInt64(abs(amount))))"
+    }
+    
+    private var amountColor: Color {
+        isIncoming ? .green : .white
+    }
+}
+
+// MARK: - Preview
+
+#Preview("Balance Card") {
+    ZStack {
+        Color.cashuBackground
+            .ignoresSafeArea()
+        
+        BalanceCardView(
+            balance: 21000,
+            mintName: "mint.minibits.cash",
+            pendingBalance: 1000
+        )
+    }
+}
+
+#Preview("Animated Balance") {
+    ZStack {
+        Color.cashuBackground
+            .ignoresSafeArea()
+        
+        AnimatedBalanceView(value: 123456)
+    }
+}

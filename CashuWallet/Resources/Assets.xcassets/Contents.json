@@ -1,0 +1,18 @@
+{
+  "colors" : [
+    {
+      "idiom" : "universal",
+      "filename" : "AccentColor.colorset"
+    }
+  ],
+  "images" : [
+    {
+      "idiom" : "universal",
+      "filename" : "AppIcon.appiconset"
+    }
+  ],
+  "info" : {
+    "author" : "xcode",
+    "version" : 1
+  }
+}
