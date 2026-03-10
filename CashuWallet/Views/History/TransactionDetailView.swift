@@ -9,7 +9,7 @@ struct TransactionDetailView: View {
     @State private var copyButtonText = "COPY"
     @State private var showShareSheet = false
     
-    /// Returns the content to display as QR code (token for Ecash, invoice for Lightning)
+    /// Returns the content to display as QR code (token for Ecash, payment request for Lightning)
     private var qrContent: String? {
         if let token = transaction.token {
             return token
@@ -27,7 +27,7 @@ struct TransactionDetailView: View {
                     .ignoresSafeArea()
                 
                 VStack(spacing: 20) {
-                    // QR Code (for token or lightning invoice)
+                    // QR Code (for token or lightning payment request)
                     if let content = qrContent {
                         ZStack {
                             RoundedRectangle(cornerRadius: 16)
@@ -104,7 +104,7 @@ struct TransactionDetailView: View {
                     // For ecash tokens, use cashu: URL scheme
                     CashuTokenShareSheet(token: token)
                 } else if let invoice = transaction.invoice {
-                    // For lightning invoices, share as-is
+                    // For lightning payment requests, share as-is
                     ShareSheet(items: [invoice])
                 }
             }
@@ -128,7 +128,7 @@ struct TransactionDetailView: View {
     private var titleForTransaction: String {
         switch transaction.kind {
         case .lightning:
-            return "Lightning invoice"
+            return "Lightning request"
         case .ecash:
             return transaction.status == .pending ? "Pending Ecash" : "Ecash"
         }

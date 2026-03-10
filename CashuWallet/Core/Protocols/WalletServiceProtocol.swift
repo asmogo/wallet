@@ -91,7 +91,10 @@ protocol QuoteServiceProtocol {
     /// Mint tokens from a paid quote
     func mintTokens(quoteId: String) async throws -> UInt64
     
-    /// Create a melt quote (pay via Lightning)
+    /// Create a melt quote (pay via Lightning request: BOLT11 invoice or BOLT12 offer)
+    func createMeltQuote(request: String) async throws -> MeltQuoteInfo
+    
+    /// Backward-compatible bolt11-specific entrypoint
     func createMeltQuote(invoice: String) async throws -> MeltQuoteInfo
     
     /// Execute the melt (pay the invoice)
