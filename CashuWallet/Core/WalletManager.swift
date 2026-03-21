@@ -489,8 +489,16 @@ class WalletManager: ObservableObject {
         return amount
     }
     
+    func createMeltQuote(request: String) async throws -> MeltQuoteInfo {
+        return try await lightningService.createMeltQuote(request: request)
+    }
+    
     func createMeltQuote(invoice: String) async throws -> MeltQuoteInfo {
-        return try await lightningService.createMeltQuote(invoice: invoice)
+        return try await createMeltQuote(request: invoice)
+    }
+
+    func createHumanReadableMeltQuote(address: String, amount: UInt64) async throws -> MeltQuoteInfo {
+        return try await lightningService.createHumanReadableMeltQuote(address: address, amount: amount)
     }
     
     func meltTokens(quoteId: String) async throws -> String? {

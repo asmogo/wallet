@@ -1,5 +1,6 @@
 import SwiftUI
 import AVFoundation
+import CashuDevKit
 #if canImport(URKit)
 import URKit
 #endif
@@ -70,8 +71,10 @@ struct ScannerWrapperView: View {
     @StateObject private var scannerModel = ScannerViewModel()
     @State private var scannedToken: String?
     @State private var scannedInvoice: String?
+    @State private var scannedAddress: String?
     @State private var navigateToDetail = false
     @State private var navigateToMelt = false
+    @State private var navigateToMeltAddress = false
     
     var body: some View {
         NavigationStack {
@@ -109,7 +112,7 @@ struct ScannerWrapperView: View {
                         .padding(.bottom, 50)
                         .padding(.horizontal, 40)
                     } else {
-                        Text("Scan Cashu Token or Lightning Invoice")
+                        Text("Scan Cashu Token, Lightning Request, or Address")
                             .foregroundColor(.white)
                             .font(.caption)
                             .padding()
@@ -158,9 +161,48 @@ struct ScannerWrapperView: View {
                     .environmentObject(walletManager)
                 }
             }
+            .fullScreenCover(isPresented: $navigateToMeltAddress) {
+                if let address = scannedAddress {
+                    MeltViewWithAddress(address: address, onComplete: {
+                        dismiss()
+                    })
+                    .environmentObject(walletManager)
+                }
+            }
         }
     }
     
+    private static func isHumanReadableAddress(_ content: String) -> Bool {
+        let trimmed = content.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let atIndex = trimmed.firstIndex(of: "@") else { return false }
+        let user = trimmed[trimmed.startIndex..<atIndex]
+        let domain = trimmed[trimmed.index(after: atIndex)...]
+        return !user.isEmpty && domain.contains(".") && !domain.hasPrefix(".") && !domain.hasSuffix(".")
+    }
+    
+    private static func parseLightningPaymentRequest(_ content: String) -> String? {
+        let request = normalizedLightningRequest(content)
+        guard !request.isEmpty else { return nil }
+        
+        do {
+            _ = try decodeInvoice(invoiceStr: request)
+            return request
+        } catch {
+            return nil
+        }
+    }
+    
+    private static func normalizedLightningRequest(_ content: String) -> String {
+        let trimmed = content.trimmingCharacters(in: .whitespacesAndNewlines)
+        let lightningPrefix = "lightning:"
+        
+        if trimmed.lowercased().hasPrefix(lightningPrefix) {
+            return String(trimmed.dropFirst(lightningPrefix.count))
+        }
+        
+        return trimmed
+    }
+
     private func handleScan(code: String) {
         guard scannerModel.isScanning else { return }
         
@@ -192,28 +234,30 @@ struct ScannerWrapperView: View {
             scannedToken = content
             navigateToDetail = true
             
-        } else if content.lowercased().hasPrefix("lnbc") || content.lowercased().hasPrefix("lightning:") {
-            // Handle Lightning Invoice -> Navigate to MeltView for payment
+        } else if let paymentRequest = Self.parseLightningPaymentRequest(content) {
+            // Handle Lightning payment request (BOLT11/BOLT12) -> Navigate to MeltView for payment
             let generator = UINotificationFeedbackGenerator()
             generator.notificationOccurred(.success)
-            
-            // Strip "lightning:" prefix if present
-            var invoice = content
-            if invoice.lowercased().hasPrefix("lightning:") {
-                invoice = String(invoice.dropFirst(10))
-            }
-            
-            scannedInvoice = invoice
+
+            scannedInvoice = paymentRequest
             navigateToMelt = true
             
+        } else if Self.isHumanReadableAddress(content) {
+            // Handle BIP 353 / Lightning Address -> Navigate to MeltViewWithAddress
+            let generator = UINotificationFeedbackGenerator()
+            generator.notificationOccurred(.success)
+
+            scannedAddress = content
+            navigateToMeltAddress = true
+
         } else if content.lowercased().hasPrefix("https://") && content.contains("mint") {
             // Possibly a mint URL - copy for now, could add mint
             UIPasteboard.general.string = content
             let generator = UINotificationFeedbackGenerator()
             generator.notificationOccurred(.success)
-            
+
             scannerModel.errorMessage = "Mint URL copied to clipboard"
-            
+
             DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
                 self.dismiss()
             }
@@ -372,4 +416,3 @@ class QRScannerViewController: UIViewController, AVCaptureMetadataOutputObjectsD
         return .portrait
     }
 }
-

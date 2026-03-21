@@ -86,10 +86,10 @@ class LightningService: ObservableObject {
     
     // MARK: - Melting (NUT-05) - Pay via Lightning
     
-    /// Create a melt quote for paying a Lightning invoice
-    /// - Parameter invoice: The bolt11 invoice to pay
+    /// Create a melt quote for paying a Lightning payment request
+    /// - Parameter request: The BOLT11 invoice or BOLT12 offer to pay
     /// - Returns: Melt quote with fee information
-    func createMeltQuote(invoice: String) async throws -> MeltQuoteInfo {
+    func createMeltQuote(request: String) async throws -> MeltQuoteInfo {
         guard let repo = walletRepository(), let activeMint = getActiveMint() else {
             throw WalletError.notInitialized
         }
@@ -99,10 +99,11 @@ class LightningService: ObservableObject {
         
         let mintUrl = try MintUrl(url: activeMint.url)
         let wallet = try await repo.getWallet(mintUrl: mintUrl, unit: .sat)
+        let parsedRequest = try parseMeltRequest(request)
         
         let quote = try await wallet.meltQuote(
-            method: PaymentMethod.bolt11,
-            request: invoice,
+            method: parsedRequest.method,
+            request: parsedRequest.request,
             options: nil,
             extra: nil
         )
@@ -116,6 +117,72 @@ class LightningService: ObservableObject {
         )
     }
     
+    /// Backward-compatible wrapper for older bolt11-specific call sites.
+    func createMeltQuote(invoice: String) async throws -> MeltQuoteInfo {
+        try await createMeltQuote(request: invoice)
+    }
+    
+    /// Create a melt quote for paying a human-readable address (BIP 353 / Lightning Address)
+    /// - Parameters:
+    ///   - address: The user@domain address
+    ///   - amount: Amount in satoshis
+    /// - Returns: Melt quote with fee information
+    func createHumanReadableMeltQuote(address: String, amount: UInt64) async throws -> MeltQuoteInfo {
+        guard let repo = walletRepository(), let activeMint = getActiveMint() else {
+            throw WalletError.notInitialized
+        }
+
+        isLoading = true
+        defer { isLoading = false }
+
+        let mintUrl = try MintUrl(url: activeMint.url)
+        let wallet = try await repo.getWallet(mintUrl: mintUrl, unit: .sat)
+
+        let amountMsat = Amount(value: amount * 1000)
+        let quote = try await wallet.meltHumanReadable(address: address, amountMsat: amountMsat)
+
+        return MeltQuoteInfo(
+            id: quote.id,
+            amount: quote.amount.value,
+            feeReserve: quote.feeReserve.value,
+            state: .unpaid,
+            expiry: quote.expiry
+        )
+    }
+    
+    // MARK: - Payment Request Parsing
+    
+    private struct ParsedMeltRequest {
+        let request: String
+        let method: PaymentMethod
+    }
+    
+    private func parseMeltRequest(_ request: String) throws -> ParsedMeltRequest {
+        let normalizedRequest = normalizeLightningRequest(request)
+        let decodedRequest = try decodeInvoice(invoiceStr: normalizedRequest)
+        
+        let method: PaymentMethod
+        switch decodedRequest.paymentType {
+        case .bolt11:
+            method = .bolt11
+        case .bolt12:
+            method = .bolt12
+        }
+        
+        return ParsedMeltRequest(request: normalizedRequest, method: method)
+    }
+    
+    private func normalizeLightningRequest(_ request: String) -> String {
+        let trimmedRequest = request.trimmingCharacters(in: .whitespacesAndNewlines)
+        let lightningPrefix = "lightning:"
+        
+        if trimmedRequest.lowercased().hasPrefix(lightningPrefix) {
+            return String(trimmedRequest.dropFirst(lightningPrefix.count))
+        }
+        
+        return trimmedRequest
+    }
+
     /// Pay a Lightning invoice (melt tokens)
     /// - Parameter quoteId: The quote ID to melt
     /// - Returns: Payment preimage if successful

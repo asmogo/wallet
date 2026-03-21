@@ -29,7 +29,7 @@ extension Notification.Name {
 /// Mint quote information
 struct MintQuoteInfo: Identifiable {
     let id: String
-    let request: String  // Lightning invoice (bolt11)
+    let request: String  // Lightning payment request (BOLT11 invoice or BOLT12 offer)
     let amount: UInt64
     var state: MintQuoteState
     let expiry: UInt64?
@@ -78,7 +78,7 @@ struct WalletTransaction: Identifiable {
     /// Ecash token string (for outgoing pending transactions)
     var token: String?
     
-    /// Lightning invoice (bolt11) for Lightning transactions
+    /// Lightning payment request (BOLT11 invoice or BOLT12 offer) for Lightning transactions
     var invoice: String?
     
     /// Fee paid for the transaction (in sats)

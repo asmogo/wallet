@@ -144,7 +144,7 @@ struct SendView: View {
             Button(action: { showMeltView = true }) {
                 HStack {
                     Image(systemName: "bolt.fill")
-                    Text("Pay Lightning Invoice")
+                    Text("Pay Lightning Request")
                 }
                 .font(.subheadline)
                 .foregroundColor(.cashuAccent)
@@ -562,21 +562,30 @@ struct SendView: View {
 struct MeltView: View {
     @Environment(\.dismiss) private var dismiss
     @EnvironmentObject var walletManager: WalletManager
-    
+
     @State private var invoice = ""
+    @State private var amountString = ""
     @State private var meltQuote: MeltQuoteInfo?
     @State private var isGettingQuote = false
     @State private var isPaying = false
     @State private var isPaid = false
     @State private var preimage: String?
     @State private var errorMessage: String?
-    
+
+    private var isHumanReadableAddress: Bool {
+        let trimmed = invoice.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let atIndex = trimmed.firstIndex(of: "@") else { return false }
+        let user = trimmed[trimmed.startIndex..<atIndex]
+        let domain = trimmed[trimmed.index(after: atIndex)...]
+        return !user.isEmpty && domain.contains(".") && !domain.hasPrefix(".") && !domain.hasSuffix(".")
+    }
+
     var body: some View {
         NavigationStack {
             ZStack {
                 Color.cashuBackground
                     .ignoresSafeArea()
-                
+
                 if isPaid {
                     paymentSuccessView
                 } else if let quote = meltQuote {
@@ -593,7 +602,7 @@ struct MeltView: View {
                             .foregroundColor(.white)
                     }
                 }
-                
+
                 ToolbarItem(placement: .principal) {
                     Text("Pay Lightning")
                         .font(.headline)
@@ -602,25 +611,25 @@ struct MeltView: View {
             }
         }
     }
-    
+
     // MARK: - Invoice Input View
-    
+
     private var invoiceInputView: some View {
         VStack(spacing: 24) {
             Spacer()
-            
+
             Image(systemName: "bolt.fill")
                 .font(.system(size: 48))
                 .foregroundColor(.cashuAccent)
-            
-            Text("Pay Lightning Invoice")
+
+            Text("Pay Lightning Request")
                 .font(.title2)
                 .foregroundColor(.white)
-            
-            Text("Paste a Lightning invoice to pay")
+
+            Text("Paste a Lightning invoice/offer or BIP 353 address")
                 .font(.subheadline)
                 .foregroundColor(.cashuMutedText)
-            
+
             TextEditor(text: $invoice)
                 .font(.system(.body, design: .monospaced))
                 .foregroundColor(.white)
@@ -636,7 +645,20 @@ struct MeltView: View {
                         )
                 )
                 .padding(.horizontal)
-            
+
+            if isHumanReadableAddress {
+                VStack(spacing: 4) {
+                    Text(amountString.isEmpty ? "0" : amountString)
+                        .font(.cashuBalance)
+                        .foregroundColor(.white)
+                    Text("sat")
+                        .font(.title3)
+                        .foregroundColor(.cashuMutedText)
+                }
+                NumericKeyboard(text: $amountString)
+                    .padding(.horizontal, 20)
+            }
+
             Button(action: pasteFromClipboard) {
                 HStack {
                     Image(systemName: "doc.on.clipboard")
@@ -645,15 +667,17 @@ struct MeltView: View {
             }
             .buttonStyle(CashuSecondaryButtonStyle())
             .padding(.horizontal)
-            
+
             if let error = errorMessage {
                 Text(error)
                     .font(.caption)
                     .foregroundColor(.cashuError)
             }
-            
-            Spacer()
-            
+
+            if !isHumanReadableAddress {
+                Spacer()
+            }
+
             Button(action: getQuote) {
                 if isGettingQuote {
                     ProgressView()
@@ -662,11 +686,19 @@ struct MeltView: View {
                     Text("GET QUOTE")
                 }
             }
-            .buttonStyle(CashuPrimaryButtonStyle(isDisabled: invoice.isEmpty))
-            .disabled(invoice.isEmpty || isGettingQuote)
+            .buttonStyle(CashuPrimaryButtonStyle(isDisabled: !canGetQuote))
+            .disabled(!canGetQuote || isGettingQuote)
             .padding(.horizontal)
             .padding(.bottom, 30)
         }
+    }
+
+    private var canGetQuote: Bool {
+        if isHumanReadableAddress {
+            guard let amount = UInt64(amountString), amount > 0 else { return false }
+            return true
+        }
+        return !invoice.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
     
     // MARK: - Quote Confirm View
@@ -767,28 +799,35 @@ struct MeltView: View {
     }
     
     private func getQuote() {
-        guard !invoice.isEmpty else { return }
-        
+        let trimmedInvoice = invoice.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedInvoice.isEmpty else { return }
+
         isGettingQuote = true
         errorMessage = nil
-        
+
         Task { @MainActor in
             do {
-                let quote = try await walletManager.createMeltQuote(invoice: invoice)
-                meltQuote = quote
+                if isHumanReadableAddress {
+                    guard let amount = UInt64(amountString), amount > 0 else { return }
+                    let quote = try await walletManager.createHumanReadableMeltQuote(address: trimmedInvoice, amount: amount)
+                    meltQuote = quote
+                } else {
+                    let quote = try await walletManager.createMeltQuote(request: trimmedInvoice)
+                    meltQuote = quote
+                }
             } catch {
                 errorMessage = error.localizedDescription
             }
             isGettingQuote = false
         }
     }
-    
+
     private func payInvoice() {
         guard let quote = meltQuote else { return }
-        
+
         isPaying = true
         errorMessage = nil
-        
+
         Task { @MainActor in
             do {
                 preimage = try await walletManager.meltTokens(quoteId: quote.id)
@@ -998,7 +1037,7 @@ struct MeltViewWithInvoice: View {
         
         Task { @MainActor in
             do {
-                let quote = try await walletManager.createMeltQuote(invoice: invoice)
+                let quote = try await walletManager.createMeltQuote(request: invoice)
                 meltQuote = quote
             } catch {
                 errorMessage = error.localizedDescription
@@ -1019,6 +1058,241 @@ struct MeltViewWithInvoice: View {
                 isPaid = true
                 
                 // Auto-dismiss after 2 seconds
+                try? await Task.sleep(nanoseconds: 2_000_000_000)
+                onComplete?()
+                dismiss()
+            } catch {
+                errorMessage = error.localizedDescription
+            }
+            isPaying = false
+        }
+    }
+}
+
+// MARK: - Melt View With Pre-filled Address (from QR scan)
+
+struct MeltViewWithAddress: View {
+    let address: String
+    var onComplete: (() -> Void)?
+
+    @Environment(\.dismiss) private var dismiss
+    @EnvironmentObject var walletManager: WalletManager
+
+    @State private var amountString = ""
+    @State private var meltQuote: MeltQuoteInfo?
+    @State private var isGettingQuote = false
+    @State private var isPaying = false
+    @State private var isPaid = false
+    @State private var preimage: String?
+    @State private var errorMessage: String?
+
+    var body: some View {
+        NavigationStack {
+            ZStack {
+                Color.cashuBackground
+                    .ignoresSafeArea()
+
+                if isPaid {
+                    paymentSuccessView
+                } else if let quote = meltQuote {
+                    quoteConfirmView(quote: quote)
+                } else {
+                    amountInputView
+                }
+            }
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarLeading) {
+                    Button(action: {
+                        onComplete?()
+                        dismiss()
+                    }) {
+                        Image(systemName: "xmark")
+                            .foregroundColor(.white)
+                    }
+                }
+
+                ToolbarItem(placement: .principal) {
+                    Text("Pay Lightning")
+                        .font(.headline)
+                        .foregroundColor(.white)
+                }
+            }
+        }
+    }
+
+    private var amountInputView: some View {
+        VStack(spacing: 0) {
+            Spacer()
+
+            Image(systemName: "bolt.fill")
+                .font(.system(size: 48))
+                .foregroundColor(.cashuAccent)
+                .padding(.bottom, 12)
+
+            Text(address)
+                .font(.subheadline)
+                .foregroundColor(.cashuMutedText)
+                .padding(.bottom, 24)
+
+            VStack(spacing: 4) {
+                Text(amountString.isEmpty ? "0" : amountString)
+                    .font(.cashuBalance)
+                    .foregroundColor(.white)
+                Text("sat")
+                    .font(.title3)
+                    .foregroundColor(.cashuMutedText)
+            }
+
+            if let error = errorMessage {
+                Text(error)
+                    .font(.caption)
+                    .foregroundColor(.cashuError)
+                    .padding(.top, 8)
+            }
+
+            Spacer()
+
+            NumericKeyboard(text: $amountString)
+                .padding(.horizontal, 20)
+
+            Button(action: getQuote) {
+                if isGettingQuote {
+                    ProgressView()
+                        .tint(.black)
+                } else {
+                    Text("GET QUOTE")
+                }
+            }
+            .buttonStyle(CashuPrimaryButtonStyle(isDisabled: !canGetQuote))
+            .disabled(!canGetQuote || isGettingQuote)
+            .padding(.horizontal)
+            .padding(.vertical, 20)
+        }
+    }
+
+    private var canGetQuote: Bool {
+        guard let amount = UInt64(amountString), amount > 0 else { return false }
+        return true
+    }
+
+    private func quoteConfirmView(quote: MeltQuoteInfo) -> some View {
+        VStack(spacing: 24) {
+            Spacer()
+
+            Text("\(quote.amount)")
+                .font(.cashuBalanceMedium)
+                .foregroundColor(.cashuAccent)
+
+            Text("sat")
+                .font(.title3)
+                .foregroundColor(.cashuMutedText)
+
+            VStack(spacing: 16) {
+                detailRow(label: "To", value: address)
+                detailRow(label: "Amount", value: "\(quote.amount) sat")
+                detailRow(label: "Fee", value: "\(quote.feeReserve) sat")
+                Divider()
+                    .background(Color.cashuBorder)
+                detailRow(label: "Total", value: "\(quote.totalAmount) sat", highlight: true)
+            }
+            .padding()
+            .background(
+                RoundedRectangle(cornerRadius: 12)
+                    .fill(Color.cashuCardBackground)
+            )
+            .padding(.horizontal)
+
+            if let error = errorMessage {
+                Text(error)
+                    .font(.caption)
+                    .foregroundColor(.cashuError)
+            }
+
+            Spacer()
+
+            Button(action: payInvoice) {
+                if isPaying {
+                    ProgressView()
+                        .tint(.black)
+                } else {
+                    Text("PAY \(quote.totalAmount) SAT")
+                }
+            }
+            .buttonStyle(CashuPrimaryButtonStyle())
+            .disabled(isPaying)
+            .padding(.horizontal)
+            .padding(.bottom, 30)
+        }
+    }
+
+    private func detailRow(label: String, value: String, highlight: Bool = false) -> some View {
+        HStack {
+            Text(label)
+                .foregroundColor(.cashuMutedText)
+            Spacer()
+            Text(value)
+                .fontWeight(highlight ? .bold : .regular)
+                .foregroundColor(highlight ? .cashuAccent : .white)
+        }
+        .font(.subheadline)
+    }
+
+    private var paymentSuccessView: some View {
+        VStack(spacing: 24) {
+            Spacer()
+
+            Image(systemName: "checkmark.circle.fill")
+                .font(.system(size: 80))
+                .foregroundColor(.cashuAccent)
+
+            Text("Payment Sent!")
+                .font(.title)
+                .fontWeight(.bold)
+                .foregroundColor(.white)
+
+            Spacer()
+
+            Button(action: {
+                onComplete?()
+                dismiss()
+            }) {
+                Text("DONE")
+            }
+            .buttonStyle(CashuPrimaryButtonStyle())
+            .padding(.horizontal)
+            .padding(.bottom, 30)
+        }
+    }
+
+    private func getQuote() {
+        guard let amount = UInt64(amountString), amount > 0 else { return }
+
+        isGettingQuote = true
+        errorMessage = nil
+
+        Task { @MainActor in
+            do {
+                let quote = try await walletManager.createHumanReadableMeltQuote(address: address, amount: amount)
+                meltQuote = quote
+            } catch {
+                errorMessage = error.localizedDescription
+            }
+            isGettingQuote = false
+        }
+    }
+
+    private func payInvoice() {
+        guard let quote = meltQuote else { return }
+
+        isPaying = true
+        errorMessage = nil
+
+        Task { @MainActor in
+            do {
+                preimage = try await walletManager.meltTokens(quoteId: quote.id)
+                isPaid = true
+
                 try? await Task.sleep(nanoseconds: 2_000_000_000)
                 onComplete?()
                 dismiss()
