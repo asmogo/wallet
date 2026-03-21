@@ -89,12 +89,14 @@ class SettingsManager: ObservableObject {
     @Published var useWebsockets: Bool {
         didSet {
             UserDefaults.standard.set(useWebsockets, forKey: "useWebsockets")
+            restartNostrFeatures()
         }
     }
 
     @Published var enablePaymentRequests: Bool {
         didSet {
             UserDefaults.standard.set(enablePaymentRequests, forKey: "enablePaymentRequests")
+            restartNostrFeatures()
         }
     }
 
@@ -110,12 +112,20 @@ class SettingsManager: ObservableObject {
             if enableNWC {
                 _ = generateNWCConnection()
             }
+            restartNostrFeatures()
         }
     }
 
     @Published var nwcConnections: [NWCConnection] {
         didSet {
             persistNWCConnections()
+            restartNostrFeatures()
+        }
+    }
+
+    @Published var nostrMintBackupEnabled: Bool {
+        didSet {
+            UserDefaults.standard.set(nostrMintBackupEnabled, forKey: "nostrMintBackupEnabled")
         }
     }
 
@@ -148,6 +158,7 @@ class SettingsManager: ObservableObject {
     @Published var nostrRelays: [String] {
         didSet {
             UserDefaults.standard.set(nostrRelays, forKey: "nostrRelays")
+            restartNostrFeatures()
         }
     }
     
@@ -171,10 +182,11 @@ class SettingsManager: ObservableObject {
         self.checkSentTokens = UserDefaults.standard.object(forKey: "checkSentTokens") as? Bool ?? true
         self.autoPasteEcashReceive = UserDefaults.standard.object(forKey: "autoPasteEcashReceive") as? Bool ?? true
         self.useWebsockets = UserDefaults.standard.object(forKey: "useWebsockets") as? Bool ?? true
-        self.enablePaymentRequests = UserDefaults.standard.object(forKey: "enablePaymentRequests") as? Bool ?? false
+        self.enablePaymentRequests = UserDefaults.standard.object(forKey: "enablePaymentRequests") as? Bool ?? true
         self.receivePaymentRequestsAutomatically = UserDefaults.standard.object(forKey: "receivePaymentRequestsAutomatically") as? Bool ?? false
         self.enableNWC = UserDefaults.standard.object(forKey: "enableNWC") as? Bool ?? false
         self.nwcConnections = Self.loadNWCConnections()
+        self.nostrMintBackupEnabled = UserDefaults.standard.object(forKey: "nostrMintBackupEnabled") as? Bool ?? true
         self.showP2PKButtonInDrawer = UserDefaults.standard.object(forKey: "showP2PKButtonInDrawer") as? Bool ?? false
         self.p2pkKeys = Self.loadP2PKKeys()
         self.checkIncomingInvoices = UserDefaults.standard.object(forKey: "checkIncomingInvoices") as? Bool ?? true
@@ -289,6 +301,32 @@ class SettingsManager: ObservableObject {
 
     func removeP2PKKey(_ key: P2PKKey) {
         p2pkKeys.removeAll { $0.id == key.id }
+    }
+
+    /// Reset wallet-scoped settings while preserving app-wide appearance preferences.
+    func resetWalletScopedState() {
+        UserDefaults.standard.removeObject(forKey: "enablePaymentRequests")
+        UserDefaults.standard.removeObject(forKey: "receivePaymentRequestsAutomatically")
+        UserDefaults.standard.removeObject(forKey: "enableNWC")
+        UserDefaults.standard.removeObject(forKey: "nwcConnections")
+        UserDefaults.standard.removeObject(forKey: "showP2PKButtonInDrawer")
+        UserDefaults.standard.removeObject(forKey: "p2pkKeys")
+        UserDefaults.standard.removeObject(forKey: "nostrMintBackupEnabled")
+
+        enablePaymentRequests = true
+        receivePaymentRequestsAutomatically = false
+        enableNWC = false
+        nwcConnections = []
+        nostrMintBackupEnabled = true
+        showP2PKButtonInDrawer = false
+        p2pkKeys = []
+    }
+
+    private func restartNostrFeatures() {
+        Task {
+            await PaymentRequestService.shared.applySettings()
+            await NWCService.shared.applySettings()
+        }
     }
     
     private func updateThemeColor() {

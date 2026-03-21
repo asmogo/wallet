@@ -7,6 +7,7 @@ struct ReceiveTokenDetailView: View {
     @EnvironmentObject var walletManager: WalletManager
     @Environment(\.dismiss) var dismiss
     @ObservedObject private var settings = SettingsManager.shared
+    @ObservedObject private var priceService = PriceService.shared
     
     @State private var decodedToken: Token?
     @State private var tokenAmount: UInt64 = 0
@@ -115,7 +116,7 @@ struct ReceiveTokenDetailView: View {
                         } else {
                             DetailRow(label: "Fee", value: "\(receiveFee) sat", icon: "arrow.left.arrow.right")
                         }
-                        DetailRow(label: "Fiat", value: "$0.00", icon: "banknote")
+                        DetailRow(label: "Fiat", value: fiatValueText, icon: "banknote")
                         DetailRow(label: "Mint", value: shortMintUrl(mintUrl), icon: "building.columns")
                         if !p2pkPubkeys.isEmpty {
                             DetailRow(
@@ -244,6 +245,7 @@ struct ReceiveTokenDetailView: View {
         Task {
             do {
                 let receivedAmount = try await walletManager.receiveTokens(tokenString: tokenString)
+                let fee = receiveFee
                 await MainActor.run {
                     let generator = UINotificationFeedbackGenerator()
                     generator.notificationOccurred(.success)
@@ -252,7 +254,7 @@ struct ReceiveTokenDetailView: View {
                     NotificationCenter.default.post(
                         name: .cashuTokenReceived,
                         object: nil,
-                        userInfo: ["amount": receivedAmount, "fee": UInt64(0)] // TODO: Calculate fee
+                        userInfo: ["amount": receivedAmount, "fee": fee]
                     )
                     
                     // Dismiss entire scanner flow (not just this view)
@@ -274,6 +276,13 @@ struct ReceiveTokenDetailView: View {
     func shortMintUrl(_ url: String) -> String {
         guard let urlObj = URL(string: url) else { return url }
         return urlObj.host ?? url
+    }
+
+    private var fiatValueText: String {
+        guard settings.showFiatBalance else { return "Disabled" }
+        guard priceService.btcPriceUSD > 0 else { return "Loading..." }
+        let claimableAmount = tokenAmount > receiveFee ? tokenAmount - receiveFee : 0
+        return priceService.formatSatsAsFiat(claimableAmount)
     }
 
     private func normalizeP2PKForComparison(_ pubkey: String) -> String {

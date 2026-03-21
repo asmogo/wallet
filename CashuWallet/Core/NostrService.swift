@@ -222,6 +222,17 @@ class NostrService: ObservableObject {
         let bytes = privKey.dataRepresentation
         return bytes.map { String(format: "%02x", $0) }.joined()
     }
+
+    /// Clear in-memory signer state after wallet deletion.
+    func reset() {
+        privateKey = nil
+        currentSeed = nil
+        publicKeyHex = ""
+        npub = ""
+        nsec = ""
+        isInitialized = false
+        signerType = .seed
+    }
     
     /// Get the npub Lightning address for a given domain
     func getLightningAddress(domain: String) -> String {

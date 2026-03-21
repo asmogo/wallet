@@ -4,6 +4,7 @@ struct MintsListView: View {
     @EnvironmentObject var walletManager: WalletManager
     @ObservedObject var settings = SettingsManager.shared
     @ObservedObject var discoveryManager = MintDiscoveryManager.shared
+    @ObservedObject var priceService = PriceService.shared
     
     @State private var showAddMint = false
     @State private var newMintUrl = ""
@@ -219,10 +220,15 @@ struct MintsListView: View {
             
             // Balance pills
             HStack(spacing: 8) {
-                balancePill("\(mint.balance) sat")
-                balancePill("0 msat")
-                balancePill("$0.00")
-                balancePill("€0.00")
+                balancePill(settings.formatAmount(mint.balance))
+
+                if settings.showFiatBalance {
+                    balancePill(mintFiatLabel(for: mint.balance))
+                }
+
+                if !mint.units.isEmpty {
+                    balancePill(mint.units.map { $0.uppercased() }.joined(separator: ", "))
+                }
             }
         }
         .padding()
@@ -296,7 +302,11 @@ struct MintsListView: View {
         
         Task { @MainActor in
             do {
-                try await walletManager.addMint(url: newMintUrl)
+                let nickname = newMintNickname.trimmingCharacters(in: .whitespacesAndNewlines)
+                try await walletManager.addMint(
+                    url: newMintUrl,
+                    nickname: nickname.isEmpty ? nil : nickname
+                )
                 newMintUrl = ""
                 newMintNickname = ""
             } catch {
@@ -346,6 +356,11 @@ struct MintsListView: View {
                 await walletManager.removeMint(at: IndexSet(integer: index))
             }
         }
+    }
+
+    private func mintFiatLabel(for sats: UInt64) -> String {
+        guard priceService.btcPriceUSD > 0 else { return "Fiat loading..." }
+        return priceService.formatSatsAsFiat(sats)
     }
 }
 

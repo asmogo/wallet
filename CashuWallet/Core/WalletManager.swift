@@ -192,7 +192,7 @@ class WalletManager: ObservableObject {
         let restored = try await wallet.restore()
 
         // Ensure mint is in our saved list
-        await mintService.ensureMintExists(url: normalizedUrl, name: mintName)
+        try await mintService.ensureMintExists(url: normalizedUrl, name: mintName)
 
         // Refresh balance after restore
         await refreshBalance()
@@ -225,6 +225,7 @@ class WalletManager: ObservableObject {
         
         db = repository.db
         walletRepository = repository.repository
+        configureParityServices()
         
         await mintService.loadMints()
         await refreshBalance()
@@ -359,7 +360,7 @@ class WalletManager: ObservableObject {
     private func ensureMintTrackedForToken(_ tokenString: String) async throws {
         let token = try tokenService.decodeToken(tokenString: tokenString)
         let tokenMintUrl = try token.mintUrl().url
-        await mintService.ensureMintExists(url: tokenMintUrl)
+        try await mintService.ensureMintExists(url: tokenMintUrl)
     }
     
     // MARK: - Nostr & NPC Integration
@@ -367,14 +368,62 @@ class WalletManager: ObservableObject {
     private func initializeNostrKeypair(mnemonic: String) {
         Task {
             do {
-                let seedData = Data(mnemonic.utf8).sha256()
+                let seedData = try NostrCrypto.bip39Seed(from: mnemonic)
                 try NostrService.shared.deriveKeypair(from: seedData)
                 try NPCService.shared.initializeWithSeed(seedData)
                 await NPCService.shared.initializeIfEnabled()
+                await PaymentRequestService.shared.applySettings()
+                await NWCService.shared.applySettings()
             } catch {
                 print("Failed to initialize Nostr keypair: \(error)")
             }
         }
+    }
+
+    private func configureParityServices() {
+        PaymentRequestService.shared.configure(
+            walletRepositoryProvider: { [weak self] in
+                self?.walletRepository
+            },
+            ensureMintExists: { [weak self] url in
+                guard let self else {
+                    throw WalletError.notInitialized
+                }
+                try await self.mintService.ensureMintExists(url: url)
+            },
+            currentMintUrlProvider: { [weak self] in
+                self?.mintService.activeMint?.url
+            },
+            knownMintUrlsProvider: { [weak self] in
+                self?.mintService.mints.map(\.url) ?? []
+            },
+            refreshWalletState: { [weak self] in
+                await self?.refreshWalletStateForExternalOperation()
+            }
+        )
+
+        NWCService.shared.configure(
+            walletRepositoryProvider: { [weak self] in
+                self?.walletRepository
+            },
+            currentMintUrlProvider: { [weak self] in
+                self?.mintService.activeMint?.url
+            },
+            balanceProvider: { [weak self] in
+                self?.balance ?? 0
+            },
+            transactionsProvider: { [weak self] in
+                self?.transactions ?? []
+            },
+            refreshWalletState: { [weak self] in
+                await self?.refreshWalletStateForExternalOperation()
+            }
+        )
+    }
+
+    private func refreshWalletStateForExternalOperation() async {
+        await refreshBalance()
+        await transactionService.loadTransactions()
     }
     
     private func setupNPCQuoteListener() {
@@ -403,7 +452,7 @@ class WalletManager: ObservableObject {
             }
             
             let mintUrl = mintQuote.mintUrl
-            await mintService.ensureMintExists(url: mintUrl.url)
+            try await mintService.ensureMintExists(url: mintUrl.url)
             
             let wallet = try await walletRepository.getWallet(mintUrl: mintUrl, unit: .sat)
             
@@ -431,8 +480,8 @@ class WalletManager: ObservableObject {
     
     // MARK: - Mint Operations (Delegate to MintService)
     
-    func addMint(url: String) async throws {
-        try await mintService.addMint(url: url)
+    func addMint(url: String, nickname: String? = nil) async throws {
+        try await mintService.addMint(url: url, nickname: nickname)
         await refreshBalance()
     }
     
@@ -461,13 +510,13 @@ class WalletManager: ObservableObject {
         
         for mintUrlString in mintUrls {
             do {
-                let mintUrl = try MintUrl(url: mintUrlString)
+                let mintUrl = MintUrl(url: mintUrlString)
                 let wallet = try await walletRepository.getWallet(mintUrl: mintUrl, unit: .sat)
                 let walletBalance = try await wallet.totalBalance()
                 
                 total += walletBalance.value
                 mintService.updateMintBalance(url: mintUrlString, balance: walletBalance.value)
-            } catch {
+            } catch {   
                 mintService.updateMintBalance(url: mintUrlString, balance: 0)
                 print("Failed to refresh balance for mint \(mintUrlString): \(error)")
             }
@@ -638,6 +687,54 @@ class WalletManager: ObservableObject {
             .split(separator: " ")
             .map(String.init)
         return words.count == 12 || words.count == 24
+    }
+
+    /// Delete all wallet data and return the app to onboarding.
+    func deleteWallet() throws {
+        try keychainService.deleteMnemonic()
+        try? keychainService.deleteNostrPrivateKey()
+        
+        walletRepository = nil
+        db = nil
+        
+        try removeWalletDatabaseArtifacts()
+        
+        mintService.reset()
+        transactionService.reset()
+        SettingsManager.shared.resetWalletScopedState()
+        NPCService.shared.reset()
+        NostrService.shared.reset()
+        PaymentRequestService.shared.reset()
+        NWCService.shared.reset()
+        NostrMintBackupService.shared.clearDiscovered()
+        
+        mnemonic = nil
+        balance = 0
+        pendingBalance = 0
+        errorMessage = nil
+        activeUnit = "sat"
+        processedQuotes.removeAll()
+        needsOnboarding = true
+    }
+
+    private func removeWalletDatabaseArtifacts() throws {
+        let currentDatabaseURL = try walletDatabaseURL()
+        try removeDatabaseArtifacts(at: currentDatabaseURL)
+        try removeDatabaseArtifacts(at: legacyWalletDatabaseURL())
+    }
+
+    private func removeDatabaseArtifacts(at databaseURL: URL) throws {
+        let fileManager = FileManager.default
+        
+        if fileManager.fileExists(atPath: databaseURL.path) {
+            try fileManager.removeItem(at: databaseURL)
+        }
+        
+        for suffix in ["-wal", "-shm", "-journal"] {
+            let sidecarURL = URL(fileURLWithPath: databaseURL.path + suffix)
+            guard fileManager.fileExists(atPath: sidecarURL.path) else { continue }
+            try fileManager.removeItem(at: sidecarURL)
+        }
     }
     
     deinit {

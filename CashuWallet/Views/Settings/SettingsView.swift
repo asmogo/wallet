@@ -6,6 +6,9 @@ struct SettingsView: View {
     @ObservedObject var priceService = PriceService.shared
     @ObservedObject var npcService = NPCService.shared
     @ObservedObject var nostrService = NostrService.shared
+    @ObservedObject var paymentRequestService = PaymentRequestService.shared
+    @ObservedObject var nwcService = NWCService.shared
+    @ObservedObject var mintBackupService = NostrMintBackupService.shared
     
     @State private var showBackup = false
     @State private var showDeleteConfirm = false
@@ -33,6 +36,7 @@ struct SettingsView: View {
     @State private var activeQRPayload: QRPayload?
     @State private var copiedNWCConnectionId: UUID?
     @State private var copiedP2PKPublicKey: String?
+    @State private var deleteWalletError: String?
     
     var body: some View {
         NavigationStack {
@@ -97,6 +101,14 @@ struct SettingsView: View {
                             .frame(maxWidth: .infinity, alignment: .leading)
                             .padding()
                         }
+
+                        if let deleteWalletError {
+                            Text(deleteWalletError)
+                                .font(.caption2)
+                                .foregroundColor(.cashuError)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .padding(.horizontal)
+                        }
                         
                         Spacer(minLength: 100)
                     }
@@ -141,6 +153,12 @@ struct SettingsView: View {
             } message: {
                 Text("Are you sure you want to delete your wallet? This action cannot be undone. Make sure you have backed up your seed phrase!")
             }
+            .onChange(of: settings.nostrMintBackupEnabled) { enabled in
+                guard enabled else { return }
+                Task {
+                    await NostrMintBackupService.shared.backupCurrentMintsIfEnabled(mintURLs: walletManager.mints.map(\.url))
+                }
+            }
         }
     }
 
@@ -159,6 +177,21 @@ struct SettingsView: View {
                 subtitle: "Open the restore wizard to recover ecash from another mnemonic seed phrase."
             ) {
                 showRestoreFlowAlert = true
+            }
+
+            settingButton(
+                icon: "tray.and.arrow.up.fill",
+                title: "Back up mints to Nostr",
+                subtitle: mintBackupSubtitle
+            ) {
+                backupMintsNow()
+            }
+
+            if let lastBackupDate = mintBackupService.lastBackupDate {
+                Text("Last mint backup \(formatRelativeTime(lastBackupDate))")
+                    .font(.caption2)
+                    .foregroundColor(.cashuMutedText)
+                    .padding(.leading, 44)
             }
         }
         .padding(.vertical, 8)
@@ -194,6 +227,22 @@ struct SettingsView: View {
                     }
                 }
                 .toggleStyle(SwitchToggleStyle(tint: settings.accentColor))
+
+                Text(paymentRequestService.isListening ? "Listening for incoming payments on your Nostr relays." : "Incoming payment listening is paused.")
+                    .font(.caption2)
+                    .foregroundColor(paymentRequestService.isListening ? .cashuSuccess : .cashuMutedText)
+
+                if !paymentRequestService.incomingPayments.isEmpty {
+                    Text("\(paymentRequestService.incomingPayments.count) incoming payment request payment\(paymentRequestService.incomingPayments.count == 1 ? "" : "s") tracked")
+                        .font(.caption2)
+                        .foregroundColor(.cashuMutedText)
+                }
+            }
+
+            if let error = paymentRequestService.lastError {
+                Text(error)
+                    .font(.caption2)
+                    .foregroundColor(.cashuError)
             }
         }
         .padding(.vertical, 8)
@@ -221,6 +270,10 @@ struct SettingsView: View {
                 Text("You can only use NWC for payments from your Bitcoin balance on your active mint.")
                     .font(.caption2)
                     .foregroundColor(.cashuMutedText)
+
+                Text(nwcService.isListening ? "Listening for encrypted NWC commands." : "NWC listener is paused.")
+                    .font(.caption2)
+                    .foregroundColor(nwcService.isListening ? .cashuSuccess : .cashuMutedText)
 
                 Button(action: createNWCConnection) {
                     HStack(spacing: 8) {
@@ -287,6 +340,12 @@ struct SettingsView: View {
 
                 if let nwcError {
                     Text(nwcError)
+                        .font(.caption2)
+                        .foregroundColor(.cashuError)
+                }
+
+                if let backendError = nwcService.lastError {
+                    Text(backendError)
                         .font(.caption2)
                         .foregroundColor(.cashuError)
                 }
@@ -466,6 +525,18 @@ struct SettingsView: View {
                         .foregroundColor(.white)
                 }
                 .toggleStyle(SwitchToggleStyle(tint: settings.accentColor))
+
+                Toggle(isOn: $settings.nostrMintBackupEnabled) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Back up mint list to Nostr")
+                            .font(.subheadline)
+                            .foregroundColor(.white)
+                        Text("Publish your mint list with a deterministic Nostr backup key derived from your seed.")
+                            .font(.caption)
+                            .foregroundColor(.cashuMutedText)
+                    }
+                }
+                .toggleStyle(SwitchToggleStyle(tint: settings.accentColor))
             }
 
             VStack(alignment: .leading, spacing: 8) {
@@ -544,24 +615,6 @@ struct SettingsView: View {
 
     private var appearanceSection: some View {
         VStack(alignment: .leading, spacing: 12) {
-            VStack(alignment: .leading, spacing: 8) {
-                Text("On-screen keyboard")
-                    .font(.subheadline)
-                    .fontWeight(.medium)
-                    .foregroundColor(.white)
-
-                Text("Use the numeric keyboard for entering amounts.")
-                    .font(.caption)
-                    .foregroundColor(.cashuMutedText)
-
-                Toggle(isOn: $settings.useNumericKeyboard) {
-                    Text("Use numeric keyboard")
-                        .font(.subheadline)
-                        .foregroundColor(.white)
-                }
-                .toggleStyle(SwitchToggleStyle(tint: settings.accentColor))
-            }
-
             VStack(alignment: .leading, spacing: 8) {
                 Text("Bitcoin symbol")
                     .font(.subheadline)
@@ -1149,11 +1202,30 @@ struct SettingsView: View {
         }
     }
 
+    private var mintBackupSubtitle: String {
+        if mintBackupService.isBackingUp {
+            return "Publishing your current mint list to your configured Nostr relays."
+        }
+        if walletManager.mints.isEmpty {
+            return "No mints to back up yet."
+        }
+        return "Publish your current mint list so it can be found again during restore."
+    }
+
+    private func backupMintsNow() {
+        Task {
+            await mintBackupService.backupCurrentMintsIfEnabled(mintURLs: walletManager.mints.map(\.url))
+        }
+    }
+
     private func createNWCConnection() {
         nwcError = nil
         guard settings.generateNWCConnection() != nil else {
             nwcError = "Unable to create an NWC connection."
             return
+        }
+        Task {
+            await NWCService.shared.applySettings()
         }
     }
 
@@ -1368,8 +1440,13 @@ struct SettingsView: View {
     }
     
     private func deleteWallet() {
-        try? KeychainService().deleteMnemonic()
-        walletManager.needsOnboarding = true
+        deleteWalletError = nil
+        
+        do {
+            try walletManager.deleteWallet()
+        } catch {
+            deleteWalletError = error.localizedDescription
+        }
     }
     
     private func formatBTCPrice(_ price: Double) -> String {

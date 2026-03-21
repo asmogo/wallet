@@ -1,4 +1,5 @@
 import Foundation
+import CashuDevKit
 
 /// Mint information
 struct MintInfo: Identifiable, Equatable, Codable {
@@ -190,19 +191,24 @@ struct TokenInfo {
     
     /// Parse a cashu token string
     static func parse(_ tokenString: String) -> TokenInfo? {
-        // Basic parsing - cdk-swift handles the actual token parsing
-        // This is for display purposes
-        
         guard tokenString.hasPrefix("cashu") else { return nil }
-        
-        // For now, return placeholder - actual parsing done by cdk-swift
-        return TokenInfo(
-            amount: 0,
-            mint: "",
-            unit: "sat",
-            memo: nil,
-            proofCount: 0
-        )
+
+        do {
+            let token = try Token.decode(encodedToken: tokenString)
+            let proofs = try token.proofsSimple()
+            let amount = proofs.reduce(UInt64(0)) { $0 + $1.amount.value }
+            let mint = try token.mintUrl().url
+
+            return TokenInfo(
+                amount: amount,
+                mint: mint,
+                unit: "sat",
+                memo: nil,
+                proofCount: proofs.count
+            )
+        } catch {
+            return nil
+        }
     }
 }
 

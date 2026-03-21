@@ -11,6 +11,7 @@ struct SendView: View {
     @State private var tokenFee: UInt64 = 0
     @State private var isGenerating = false
     @State private var showMeltView = false
+    @State private var showPaymentRequestPay = false
     @State private var errorMessage: String?
     @State private var showMintPicker = false
     
@@ -66,6 +67,10 @@ struct SendView: View {
             }
             .fullScreenCover(isPresented: $showMeltView) {
                 MeltView()
+                    .environmentObject(walletManager)
+            }
+            .fullScreenCover(isPresented: $showPaymentRequestPay) {
+                PaymentRequestPayView()
                     .environmentObject(walletManager)
             }
             .sheet(isPresented: $showMintPicker) {
@@ -140,14 +145,26 @@ struct SendView: View {
             .padding(.horizontal)
             .padding(.vertical, 20)
             
-            // Pay Lightning link
-            Button(action: { showMeltView = true }) {
-                HStack {
-                    Image(systemName: "bolt.fill")
-                    Text("Pay Lightning Request")
+            VStack(spacing: 10) {
+                Button(action: { showMeltView = true }) {
+                    HStack {
+                        Image(systemName: "bolt.fill")
+                        Text("Pay Lightning Request")
+                    }
+                    .font(.subheadline)
+                    .foregroundColor(.cashuAccent)
                 }
-                .font(.subheadline)
-                .foregroundColor(.cashuAccent)
+
+                if settings.enablePaymentRequests {
+                    Button(action: { showPaymentRequestPay = true }) {
+                        HStack {
+                            Image(systemName: "arrow.up.doc.fill")
+                            Text("Pay Cashu Payment Request")
+                        }
+                        .font(.subheadline)
+                        .foregroundColor(.cashuAccent)
+                    }
+                }
             }
             .padding(.bottom, 30)
         }

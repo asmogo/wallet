@@ -35,7 +35,7 @@ class MintService: ObservableObject {
     /// Add a new mint to the wallet
     /// - Parameter url: The mint URL to add
     /// - Throws: WalletError if already exists or if initialization fails
-    func addMint(url: String) async throws {
+    func addMint(url: String, nickname: String? = nil) async throws {
         isLoading = true
         defer { isLoading = false }
         
@@ -61,9 +61,12 @@ class MintService: ObservableObject {
         let wallet = try await repo.getWallet(mintUrl: mintUrlObj, unit: .sat)
         let info = try await wallet.fetchMintInfo()
         
+        let trimmedNickname = nickname?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let displayName = trimmedNickname.flatMap { $0.isEmpty ? nil : $0 } ?? info?.name ?? "Unknown Mint"
+        
         let mintInfo = MintInfo(
             url: normalizedUrl,
-            name: info?.name ?? "Unknown Mint",
+            name: displayName,
             description: info?.description,
             isActive: true,
             balance: 0
@@ -148,8 +151,14 @@ class MintService: ObservableObject {
     }
     
     /// Add a mint if it doesn't exist (used for NPC and token receiving)
-    func ensureMintExists(url: String, name: String? = nil) async {
+    func ensureMintExists(url: String, name: String? = nil) async throws {
         let normalizedUrl = normalizeUrl(url)
+        guard let repo = walletRepository() else {
+            throw WalletError.notInitialized
+        }
+
+        let mintUrl = try MintUrl(url: normalizedUrl)
+        try await repo.createWallet(mintUrl: mintUrl, unit: .sat, targetProofCount: nil)
         
         guard !mints.contains(where: { $0.url == normalizedUrl }) else {
             return
@@ -163,7 +172,17 @@ class MintService: ObservableObject {
             balance: 0
         )
         mints.append(mintInfo)
+        if activeMint == nil {
+            activeMint = mintInfo
+        }
         saveMints()
+    }
+
+    /// Clear all persisted mint state for wallet deletion/reset flows.
+    func reset() {
+        mints = []
+        activeMint = nil
+        UserDefaults.standard.removeObject(forKey: storageKey)
     }
     
     // MARK: - Private Methods
@@ -182,6 +201,10 @@ class MintService: ObservableObject {
         do {
             let data = try JSONEncoder().encode(mints)
             UserDefaults.standard.set(data, forKey: storageKey)
+            let mintURLs = mints.map(\.url)
+            Task {
+                await NostrMintBackupService.shared.backupCurrentMintsIfEnabled(mintURLs: mintURLs)
+            }
         } catch {
             print("Failed to save mints: \(error)")
         }
