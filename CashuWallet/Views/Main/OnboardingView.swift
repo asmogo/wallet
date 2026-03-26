@@ -2,6 +2,7 @@ import SwiftUI
 
 struct OnboardingView: View {
     @EnvironmentObject var walletManager: WalletManager
+    @ObservedObject private var mintBackupService = NostrMintBackupService.shared
 
     @State private var currentStep: OnboardingStep = .welcome
     @State private var restoreMnemonic = ""
@@ -338,6 +339,78 @@ struct OnboardingView: View {
                 .multilineTextAlignment(.center)
                 .padding(.horizontal)
 
+            VStack(spacing: 10) {
+                Button(action: searchNostrMintBackups) {
+                    HStack(spacing: 8) {
+                        if mintBackupService.isSearching {
+                            ProgressView()
+                                .tint(.black)
+                        } else {
+                            Image(systemName: "tray.and.arrow.down.fill")
+                        }
+                        Text(mintBackupService.isSearching ? "Searching Nostr backups..." : "Search Nostr mint backups")
+                    }
+                }
+                .buttonStyle(CashuPrimaryButtonStyle())
+                .disabled(mintBackupService.isSearching)
+
+                Text("This searches a deterministic Nostr backup key derived from your seed phrase.")
+                    .font(.caption2)
+                    .foregroundColor(.cashuMutedText)
+                    .multilineTextAlignment(.center)
+
+                if !mintBackupService.discoveredMints.isEmpty {
+                    VStack(alignment: .leading, spacing: 10) {
+                        HStack {
+                            Text("Found on Nostr")
+                                .font(.subheadline)
+                                .fontWeight(.semibold)
+                                .foregroundColor(.white)
+                            Spacer()
+                            Button("Select all") {
+                                mintBackupService.selectAllDiscovered()
+                            }
+                            .font(.caption)
+                            .foregroundColor(.cashuAccent)
+                        }
+
+                        ForEach(mintBackupService.discoveredMints) { mint in
+                            Button(action: {
+                                mintBackupService.setSelected(!mint.selected, for: mint.url)
+                            }) {
+                                HStack(spacing: 12) {
+                                    Image(systemName: mint.selected ? "checkmark.circle.fill" : "circle")
+                                        .foregroundColor(mint.selected ? .cashuAccent : .cashuMutedText)
+                                    VStack(alignment: .leading, spacing: 2) {
+                                        Text(mint.url)
+                                            .font(.system(.caption, design: .monospaced))
+                                            .foregroundColor(.white)
+                                            .lineLimit(2)
+                                        Text("Updated \(formatRelativeTime(mint.timestamp))")
+                                            .font(.caption2)
+                                            .foregroundColor(.cashuMutedText)
+                                    }
+                                    Spacer()
+                                }
+                                .padding(12)
+                                .background(
+                                    RoundedRectangle(cornerRadius: 10)
+                                        .fill(Color.cashuCardBackground)
+                                )
+                            }
+                            .buttonStyle(.plain)
+                        }
+
+                        Button(action: addSelectedNostrMints) {
+                            Text("ADD SELECTED MINTS")
+                        }
+                        .buttonStyle(CashuSecondaryButtonStyle())
+                    }
+                    .padding(.horizontal)
+                }
+            }
+            .padding(.horizontal)
+
             // Mint URL input
             HStack(spacing: 12) {
                 TextField("https://mint.example.com", text: $mintUrlInput)
@@ -506,6 +579,7 @@ struct OnboardingView: View {
                 mintsToRestore.removeAll()
                 restoreResults.removeAll()
                 restoreMintError = nil
+                mintBackupService.clearDiscovered()
             }) {
                 Text("Back")
                     .foregroundColor(.cashuMutedText)
@@ -676,6 +750,41 @@ struct OnboardingView: View {
         }
     }
 
+    private func searchNostrMintBackups() {
+        restoreMintError = nil
+        let cleanedMnemonic = restoreMnemonic
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
+            .split(separator: " ")
+            .joined(separator: " ")
+
+        Task {
+            do {
+                _ = try await mintBackupService.searchBackups(using: cleanedMnemonic)
+            } catch {
+                await MainActor.run {
+                    restoreMintError = error.localizedDescription
+                }
+            }
+        }
+    }
+
+    private func addSelectedNostrMints() {
+        let selected = mintBackupService.discoveredMints.filter(\.selected)
+        var addedCount = 0
+        for mint in selected {
+            if addMintUrlToRestoreList(mint.url, showDuplicateError: false, showValidationError: false) {
+                addedCount += 1
+            }
+        }
+
+        if addedCount == 0 {
+            restoreMintError = "No new mint URLs were added from the Nostr backup."
+        } else {
+            restoreMintError = nil
+        }
+    }
+
     @discardableResult
     private func addMintUrlToRestoreList(_ rawUrl: String, showDuplicateError: Bool, showValidationError: Bool) -> Bool {
         guard let url = normalizedMintURL(from: rawUrl) else {
@@ -741,7 +850,16 @@ struct OnboardingView: View {
     private func finishRestore() {
         Task {
             await walletManager.completeRestore()
+            await MainActor.run {
+                mintBackupService.clearDiscovered()
+            }
         }
+    }
+
+    private func formatRelativeTime(_ date: Date) -> String {
+        let formatter = RelativeDateTimeFormatter()
+        formatter.unitsStyle = .abbreviated
+        return formatter.localizedString(for: date, relativeTo: Date())
     }
 
     private func finishOnboarding() {

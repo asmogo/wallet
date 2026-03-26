@@ -71,9 +71,11 @@ struct ScannerWrapperView: View {
     @StateObject private var scannerModel = ScannerViewModel()
     @State private var scannedToken: String?
     @State private var scannedInvoice: String?
+    @State private var scannedPaymentRequest: String?
     @State private var scannedAddress: String?
     @State private var navigateToDetail = false
     @State private var navigateToMelt = false
+    @State private var navigateToPaymentRequest = false
     @State private var navigateToMeltAddress = false
     
     var body: some View {
@@ -161,6 +163,14 @@ struct ScannerWrapperView: View {
                     .environmentObject(walletManager)
                 }
             }
+            .fullScreenCover(isPresented: $navigateToPaymentRequest) {
+                if let scannedPaymentRequest {
+                    PaymentRequestPayView(initialEncodedRequest: scannedPaymentRequest) {
+                        dismiss()
+                    }
+                    .environmentObject(walletManager)
+                }
+            }
             .fullScreenCover(isPresented: $navigateToMeltAddress) {
                 if let address = scannedAddress {
                     MeltViewWithAddress(address: address, onComplete: {
@@ -234,6 +244,13 @@ struct ScannerWrapperView: View {
             scannedToken = content
             navigateToDetail = true
             
+        } else if content.lowercased().hasPrefix("creq") {
+            let generator = UINotificationFeedbackGenerator()
+            generator.notificationOccurred(.success)
+
+            scannedPaymentRequest = content
+            navigateToPaymentRequest = true
+
         } else if let paymentRequest = Self.parseLightningPaymentRequest(content) {
             // Handle Lightning payment request (BOLT11/BOLT12) -> Navigate to MeltView for payment
             let generator = UINotificationFeedbackGenerator()

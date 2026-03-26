@@ -80,6 +80,7 @@ struct BalanceCardView: View {
     var onHideToggle: (() -> Void)?
     
     @ObservedObject var settings = SettingsManager.shared
+    @ObservedObject var priceService = PriceService.shared
     @State private var isHidden: Bool = false
     
     var body: some View {
@@ -125,11 +126,16 @@ struct BalanceCardView: View {
                         .foregroundColor(.cashuMutedText)
                 }
                 
-                // Fiat conversion placeholder
-                if !isHidden {
-                    Text("$0.00") // Placeholder - would need price feed
-                        .font(.subheadline)
-                        .foregroundColor(.cashuMutedText)
+                if !isHidden && settings.showFiatBalance {
+                    if priceService.btcPriceUSD > 0 {
+                        Text(priceService.formatSatsAsFiat(balance))
+                            .font(.subheadline)
+                            .foregroundColor(.cashuMutedText)
+                    } else {
+                        Text("Loading exchange rate...")
+                            .font(.subheadline)
+                            .foregroundColor(.cashuMutedText)
+                    }
                 }
             }
             .padding(.vertical, 24)

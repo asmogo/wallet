@@ -308,6 +308,28 @@ class NPCService: ObservableObject {
         startBackgroundRefresh()
     }
 
+    /// Clear persisted and in-memory npub.cash state after wallet deletion.
+    func reset() {
+        disconnect()
+        
+        UserDefaults.standard.removeObject(forKey: "npc.enabled")
+        UserDefaults.standard.removeObject(forKey: "npc.automaticClaim")
+        UserDefaults.standard.removeObject(forKey: "npc.selectedMint")
+        UserDefaults.standard.removeObject(forKey: "npc.lastCheck")
+        
+        isEnabled = false
+        automaticClaim = true
+        selectedMintUrl = nil
+        lastCheck = nil
+        lightningAddress = ""
+        configuredMintUrl = ""
+        isLoading = false
+        isConnected = false
+        errorMessage = nil
+        nostrSecretKey = nil
+        nostrPubkey = nil
+    }
+
     deinit {
         refreshTimer?.invalidate()
     }

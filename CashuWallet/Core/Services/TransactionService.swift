@@ -280,4 +280,19 @@ class TransactionService: ObservableObject {
             print("Failed to save claimed tokens: \(error)")
         }
     }
+
+    /// Clear persisted transaction-related state for wallet deletion/reset flows.
+    func reset() {
+        transactions = []
+        pendingTokens = []
+        pendingReceiveTokens = []
+        claimedTokens = []
+        
+        UserDefaults.standard.removeObject(forKey: StorageKeys.pendingTokens)
+        UserDefaults.standard.removeObject(forKey: StorageKeys.pendingReceiveTokens)
+        UserDefaults.standard.removeObject(forKey: StorageKeys.claimedTokens)
+        UserDefaults.standard.removeObject(forKey: StorageKeys.savedTokens)
+        
+        NotificationCenter.default.post(name: .cashuTransactionsUpdated, object: nil)
+    }
 }
