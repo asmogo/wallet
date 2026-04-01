@@ -34,59 +34,73 @@ struct SettingsView: View {
 
     var body: some View {
         NavigationStack {
-            List {
-                Section {
+            ScrollView {
+                VStack(spacing: 8) {
                     NavigationLink { backupDetailView } label: {
-                        Label("Backup & Restore", systemImage: "key.fill")
+                        settingsRow("Backup & Restore", icon: "key.fill")
                     }
                     NavigationLink { lightningDetailView } label: {
-                        Label("Lightning", systemImage: "bolt.fill")
+                        settingsRow("Lightning", icon: "bolt.fill")
                     }
                     NavigationLink { nostrDetailView } label: {
-                        Label("Nostr", systemImage: "person.circle")
+                        settingsRow("Nostr", icon: "person.circle")
                     }
                     NavigationLink { paymentRequestsDetailView } label: {
-                        Label("Payment Requests", systemImage: "arrow.left.arrow.right")
+                        settingsRow("Payment Requests", icon: "arrow.left.arrow.right")
                     }
                     NavigationLink { nwcDetailView } label: {
-                        Label("Nostr Wallet Connect", systemImage: "link")
+                        settingsRow("Nostr Wallet Connect", icon: "link")
                     }
                     NavigationLink { p2pkDetailView } label: {
-                        Label("P2PK", systemImage: "lock.fill")
+                        settingsRow("P2PK", icon: "lock.fill")
                     }
                     NavigationLink { privacyDetailView } label: {
-                        Label("Privacy", systemImage: "eye.slash")
+                        settingsRow("Privacy", icon: "eye.slash")
                     }
                     NavigationLink { appearanceDetailView } label: {
-                        Label("Appearance", systemImage: "paintbrush")
+                        settingsRow("Appearance", icon: "paintbrush")
                     }
-                }
 
-                Section("Wallet Info") {
-                    LabeledContent("Balance", value: settings.formatAmount(walletManager.balance))
-                    LabeledContent("Mints", value: "\(walletManager.mints.count)")
-                    LabeledContent("Unit", value: settings.unitLabel)
-                    LabeledContent("Version", value: "1.0.0")
-                }
+                    Divider()
+                        .padding(.vertical, 12)
 
-                Section("About") {
+                    VStack(spacing: 4) {
+                        LabeledContent("Balance", value: settings.formatAmount(walletManager.balance))
+                        LabeledContent("Mints", value: "\(walletManager.mints.count)")
+                        LabeledContent("Unit", value: settings.unitLabel)
+                        LabeledContent("Version", value: "1.0.0")
+                    }
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .padding(.horizontal)
+
+                    Divider()
+                        .padding(.vertical, 12)
+
                     Link(destination: URL(string: "https://cashu.space")!) {
-                        Label("Learn about Cashu", systemImage: "globe")
+                        settingsRow("Learn about Cashu", icon: "globe")
                     }
                     Link(destination: URL(string: "https://github.com/cashubtc/nuts")!) {
-                        Label("Protocol Specs (NUTs)", systemImage: "doc.text")
+                        settingsRow("Protocol Specs (NUTs)", icon: "doc.text")
                     }
-                }
 
-                Section {
+                    Divider()
+                        .padding(.vertical, 12)
+
                     Button(role: .destructive) {
                         showDeleteConfirm = true
                     } label: {
-                        Label("Delete Wallet", systemImage: "trash")
+                        HStack {
+                            Image(systemName: "trash")
+                            Text("Delete Wallet")
+                            Spacer()
+                        }
+                        .padding(.horizontal)
+                        .padding(.vertical, 12)
                     }
                 }
+                .padding(.vertical)
             }
-            .listStyle(.plain)
             .navigationTitle("Settings")
             .sheet(isPresented: $showBackup) {
                 BackupView()
@@ -236,6 +250,21 @@ struct SettingsView: View {
     }
 
     // MARK: - Helpers
+
+    private func settingsRow(_ title: String, icon: String) -> some View {
+        HStack(spacing: 14) {
+            Image(systemName: icon)
+                .frame(width: 24)
+            Text(title)
+            Spacer()
+            Image(systemName: "chevron.right")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+        .padding(.horizontal)
+        .padding(.vertical, 12)
+        .contentShape(Rectangle())
+    }
 
     private func deleteWallet() {
         try? KeychainService().deleteMnemonic()
