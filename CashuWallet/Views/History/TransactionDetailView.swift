@@ -83,7 +83,7 @@ struct TransactionDetailView: View {
                                     Text(copyButtonText)
                                 }
                             }
-                            .buttonStyle(.borderedProminent).controlSize(.large)
+                            .buttonStyle(.bordered).controlSize(.large)
                             .accessibilityLabel(copyButtonText == "COPIED" ? "Copied" : "Copy \(transaction.kind == .ecash ? "token" : "invoice")")
                             .accessibilityHint("Copies the \(transaction.kind == .ecash ? "ecash token" : "lightning invoice") to clipboard")
 

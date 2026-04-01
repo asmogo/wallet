@@ -240,7 +240,7 @@ struct MainWalletView: View {
     private var actionButtons: some View {
         HStack(spacing: 16) {
             Button("Receive") { showReceiveOptions = true }
-                .buttonStyle(.borderedProminent)
+                .buttonStyle(.bordered)
                 .controlSize(.large)
                 .accessibilityHint("Opens options to receive ecash or lightning payments")
 
@@ -253,7 +253,7 @@ struct MainWalletView: View {
             .accessibilityHint("Opens camera to scan a QR code")
 
             Button("Send") { showSendOptions = true }
-                .buttonStyle(.borderedProminent)
+                .buttonStyle(.bordered)
                 .controlSize(.large)
                 .accessibilityHint("Opens options to send ecash or pay lightning invoices")
         }

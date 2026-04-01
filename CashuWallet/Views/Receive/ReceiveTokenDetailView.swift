@@ -152,7 +152,7 @@ struct ReceiveTokenDetailView: View {
                         Text("Receive")
                     }
                 }
-                .buttonStyle(.borderedProminent)
+                .buttonStyle(.bordered)
                 .controlSize(.large)
                 .disabled(isReceiving || !tokenLockedToKnownKey)
                 .accessibilityLabel(isReceiving ? "Receiving token" : "Receive \(tokenAmount) sats")

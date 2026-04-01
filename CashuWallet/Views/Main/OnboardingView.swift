@@ -95,7 +95,7 @@ struct OnboardingView: View {
             Button(action: { currentStep = .createOrRestore }) {
                 Text("GET STARTED")
             }
-            .buttonStyle(.borderedProminent).controlSize(.large)
+            .buttonStyle(.bordered).controlSize(.large)
             .padding(.bottom, 40)
         }
         .padding()
@@ -139,7 +139,7 @@ struct OnboardingView: View {
                     }
                 }
             }
-            .buttonStyle(.borderedProminent).controlSize(.large)
+            .buttonStyle(.bordered).controlSize(.large)
             .disabled(isCreating)
 
             // Restore wallet
@@ -208,7 +208,7 @@ struct OnboardingView: View {
             Button(action: startVerification) {
                 Text("I'VE SAVED MY SEED PHRASE")
             }
-            .buttonStyle(.borderedProminent).controlSize(.large)
+            .buttonStyle(.bordered).controlSize(.large)
             .padding(.bottom, 40)
         }
         .padding()
@@ -241,7 +241,7 @@ struct OnboardingView: View {
             Button(action: checkVerification) {
                 Text("CONFIRM")
             }
-            .buttonStyle(.borderedProminent).controlSize(.large)
+            .buttonStyle(.bordered).controlSize(.large)
             .disabled(verificationAnswers.count < verificationIndices.count)
 
             Button(action: { currentStep = .showMnemonic }) {
@@ -380,7 +380,7 @@ struct OnboardingView: View {
                     Text("NEXT")
                 }
             }
-            .buttonStyle(.borderedProminent).controlSize(.large)
+            .buttonStyle(.bordered).controlSize(.large)
             .disabled(wordCount != 12 || isRestoring)
 
             // Back button
@@ -419,7 +419,7 @@ struct OnboardingView: View {
                 Button(action: addMintUrl) {
                     Label("Add", systemImage: "plus")
                 }
-                .buttonStyle(.borderedProminent)
+                .buttonStyle(.bordered)
                 .controlSize(.small)
                 .disabled(mintUrlInput.isEmpty)
 
@@ -519,7 +519,7 @@ struct OnboardingView: View {
                             }
                         }
                     }
-                    .buttonStyle(.borderedProminent).controlSize(.large)
+                    .buttonStyle(.bordered).controlSize(.large)
                     .disabled(isRestoringMints)
                 }
 
@@ -534,7 +534,7 @@ struct OnboardingView: View {
                     Button(action: finishRestore) {
                         Text("CONTINUE")
                     }
-                    .buttonStyle(.borderedProminent).controlSize(.large)
+                    .buttonStyle(.bordered).controlSize(.large)
                     .disabled(isRestoringMints)
                 }
             }

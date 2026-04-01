@@ -184,7 +184,7 @@ struct AmountEntryView: View {
                 Text(buttonLabel)
             }
         }
-        .buttonStyle(.borderedProminent).controlSize(.large)
+        .buttonStyle(.bordered).controlSize(.large)
         .disabled(isButtonDisabled)
         .padding(.horizontal, 20)
         .padding(.bottom, 20)
@@ -374,7 +374,7 @@ struct TokenDisplayView: View {
                         Text(copied ? "Copied!" : "Copy")
                     }
                 }
-                .buttonStyle(.borderedProminent).controlSize(.large)
+                .buttonStyle(.bordered).controlSize(.large)
                 .padding(.horizontal, 20)
                 .padding(.bottom, 40)
         }

@@ -121,7 +121,7 @@ struct ReceiveLightningView: View {
                     Text("CREATE INVOICE")
                 }
             }
-            .buttonStyle(.borderedProminent).controlSize(.large)
+            .buttonStyle(.bordered).controlSize(.large)
             .disabled(amountString.isEmpty || amountString == "0" || isCreatingInvoice)
             .accessibilityLabel(isCreatingInvoice ? "Creating invoice" : "Create invoice")
             .accessibilityHint("Creates a lightning invoice for \(amountString.isEmpty ? "0" : amountString) sats")
@@ -265,7 +265,7 @@ struct ReceiveLightningView: View {
                         Text(copyButtonText)
                     }
                 }
-                .buttonStyle(.borderedProminent).controlSize(.large)
+                .buttonStyle(.bordered).controlSize(.large)
                 .accessibilityLabel(copyButtonText == "COPIED" ? "Copied" : "Copy invoice")
                 .accessibilityHint("Copies the lightning invoice to clipboard")
                 .padding(.horizontal)

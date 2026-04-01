@@ -140,7 +140,7 @@ struct SendView: View {
                     Text("SEND")
                 }
             }
-            .buttonStyle(.borderedProminent).controlSize(.large)
+            .buttonStyle(.bordered).controlSize(.large)
             .disabled(!canSend || isGenerating)
             .padding(.horizontal)
             .padding(.vertical, 20)
@@ -373,7 +373,7 @@ struct SendView: View {
                 Button(action: { dismiss() }) {
                     Text("DONE")
                 }
-                .buttonStyle(.borderedProminent).controlSize(.large)
+                .buttonStyle(.bordered).controlSize(.large)
                 .accessibilityLabel("Done")
                 .accessibilityHint("Closes the send screen")
                 .padding(.horizontal)
@@ -404,7 +404,7 @@ struct SendView: View {
                             Text(copyButtonText)
                         }
                     }
-                    .buttonStyle(.borderedProminent).controlSize(.large)
+                    .buttonStyle(.bordered).controlSize(.large)
                     .accessibilityLabel(copyButtonText == "COPIED" ? "Copied" : "Copy token")
                     .accessibilityHint("Copies the ecash token to clipboard")
 
@@ -705,7 +705,7 @@ struct MeltView: View {
                     Text("GET QUOTE")
                 }
             }
-            .buttonStyle(.borderedProminent).controlSize(.large)
+            .buttonStyle(.bordered).controlSize(.large)
             .disabled(!canGetQuote || isGettingQuote)
             .accessibilityLabel(isGettingQuote ? "Getting quote" : "Get quote")
             .accessibilityHint("Fetches a payment quote for this invoice")
@@ -770,7 +770,7 @@ struct MeltView: View {
                     Text("PAY \(quote.totalAmount) SAT")
                 }
             }
-            .buttonStyle(.borderedProminent).controlSize(.large)
+            .buttonStyle(.bordered).controlSize(.large)
             .disabled(isPaying)
             .accessibilityLabel(isPaying ? "Processing payment" : "Pay \(quote.totalAmount) sats")
             .accessibilityHint("Sends lightning payment")
@@ -799,7 +799,7 @@ struct MeltView: View {
             Button(action: { dismiss() }) {
                 Text("DONE")
             }
-            .buttonStyle(.borderedProminent).controlSize(.large)
+            .buttonStyle(.bordered).controlSize(.large)
             .accessibilityLabel("Done")
             .accessibilityHint("Closes the payment screen")
             .padding(.horizontal)
@@ -947,7 +947,7 @@ struct MeltViewWithInvoice: View {
             Button(action: getQuote) {
                 Text("TRY AGAIN")
             }
-            .buttonStyle(.borderedProminent).controlSize(.large)
+            .buttonStyle(.bordered).controlSize(.large)
             .accessibilityLabel("Try again")
             .accessibilityHint("Retries fetching the payment quote")
             .padding(.horizontal)
@@ -1001,7 +1001,7 @@ struct MeltViewWithInvoice: View {
                     Text("PAY \(quote.totalAmount) SAT")
                 }
             }
-            .buttonStyle(.borderedProminent).controlSize(.large)
+            .buttonStyle(.bordered).controlSize(.large)
             .disabled(isPaying)
             .accessibilityLabel(isPaying ? "Processing payment" : "Pay \(quote.totalAmount) sats")
             .accessibilityHint("Sends lightning payment")
@@ -1031,7 +1031,7 @@ struct MeltViewWithInvoice: View {
             }) {
                 Text("DONE")
             }
-            .buttonStyle(.borderedProminent).controlSize(.large)
+            .buttonStyle(.bordered).controlSize(.large)
             .accessibilityLabel("Done")
             .accessibilityHint("Closes the payment screen")
             .padding(.horizontal)
@@ -1174,7 +1174,7 @@ struct MeltViewWithAddress: View {
                     Text("GET QUOTE")
                 }
             }
-            .buttonStyle(.borderedProminent).controlSize(.large)
+            .buttonStyle(.bordered).controlSize(.large)
             .disabled(!canGetQuote || isGettingQuote)
             .accessibilityLabel(isGettingQuote ? "Getting quote" : "Get quote")
             .accessibilityHint("Fetches a payment quote for this address")
@@ -1235,7 +1235,7 @@ struct MeltViewWithAddress: View {
                     Text("PAY \(quote.totalAmount) SAT")
                 }
             }
-            .buttonStyle(.borderedProminent).controlSize(.large)
+            .buttonStyle(.bordered).controlSize(.large)
             .disabled(isPaying)
             .accessibilityLabel(isPaying ? "Processing payment" : "Pay \(quote.totalAmount) sats")
             .accessibilityHint("Sends lightning payment to \(address)")
@@ -1265,7 +1265,7 @@ struct MeltViewWithAddress: View {
             }) {
                 Text("DONE")
             }
-            .buttonStyle(.borderedProminent).controlSize(.large)
+            .buttonStyle(.bordered).controlSize(.large)
             .accessibilityLabel("Done")
             .accessibilityHint("Closes the payment screen")
             .padding(.horizontal)
