@@ -81,6 +81,8 @@ struct QRCodeView: View {
                         .interpolation(.none)
                         .resizable()
                         .scaledToFit()
+                        .accessibilityLabel("QR code")
+                        .accessibilityHint("Contains scannable payment data")
                 } else {
                     Rectangle()
                         .fill(Color.gray.opacity(0.3))
@@ -89,6 +91,7 @@ struct QRCodeView: View {
                                 .font(.system(size: 48))
                                 .foregroundColor(.gray)
                         )
+                        .accessibilityLabel("QR code loading")
                 }
             }
             
@@ -125,13 +128,16 @@ struct QRCodeView: View {
                 HStack(spacing: 6) {
                     Image(systemName: "bolt.fill")
                         .font(.caption)
+                        .accessibilityHidden(true)
                     Text("SPEED: \(speed.rawValue)")
                         .font(.caption)
                         .fontWeight(.medium)
                 }
                 .foregroundColor(.gray)
             }
-            
+            .accessibilityLabel("QR animation speed: \(speed.rawValue)")
+            .accessibilityHint("Cycles through fast, medium, and slow animation speeds")
+
             // Size toggle
             Button(action: {
                 size = size.next
@@ -139,12 +145,15 @@ struct QRCodeView: View {
                 HStack(spacing: 6) {
                     Image(systemName: "magnifyingglass")
                         .font(.caption)
+                        .accessibilityHidden(true)
                     Text("SIZE: \(size.rawValue)")
                         .font(.caption)
                         .fontWeight(.medium)
                 }
                 .foregroundColor(.gray)
             }
+            .accessibilityLabel("QR chunk size: \(size.rawValue)")
+            .accessibilityHint("Cycles through small, medium, and large QR code chunk sizes")
         }
         .padding(.top, 4)
     }

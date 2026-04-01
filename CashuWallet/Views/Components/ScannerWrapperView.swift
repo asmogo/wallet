@@ -95,7 +95,7 @@ struct ScannerWrapperView: View {
                         VStack(spacing: 8) {
                             Text("Scanning Animated QR...")
                                 .font(.headline)
-                                .foregroundColor(.white)
+                                .foregroundStyle(.primary)
                             
                             ProgressView(value: scannerModel.scanProgress, total: 1.0)
                                 .progressViewStyle(LinearProgressViewStyle(tint: .green))
@@ -113,7 +113,7 @@ struct ScannerWrapperView: View {
                         .padding(.horizontal, 40)
                     } else {
                         Text("Scan Cashu Token, Lightning Request, or Address")
-                            .foregroundColor(.white)
+                            .foregroundStyle(.primary)
                             .font(.caption)
                             .padding()
                             .background(Color.black.opacity(0.6))
@@ -126,7 +126,7 @@ struct ScannerWrapperView: View {
                     VStack {
                         Spacer()
                         Text(error)
-                            .foregroundColor(.white)
+                            .foregroundStyle(.primary)
                             .padding()
                             .background(Color.red)
                             .cornerRadius(10)
@@ -140,7 +140,7 @@ struct ScannerWrapperView: View {
                 ToolbarItem(placement: .navigationBarLeading) {
                     Button(action: { dismiss() }) {
                         Image(systemName: "xmark")
-                            .foregroundColor(.white)
+                            .foregroundStyle(.primary)
                     }
                 }
             }

@@ -48,12 +48,15 @@ struct TransactionDetailView: View {
                             .font(.system(size: 80))
                             .foregroundColor(settings.accentColor)
                             .padding(.top, 40)
+                            .accessibilityHidden(true)
                     }
                     
                     // Amount
                     Text(settings.formatAmountShort(transaction.amount))
                         .font(.cashuBalanceMedium)
-                        .foregroundColor(.white)
+                        .foregroundStyle(.primary)
+                        .accessibilityLabel("Amount: \(settings.formatAmountShort(transaction.amount)) sats")
+                        .accessibilityValue("\(settings.formatAmountShort(transaction.amount)) sats")
                     
                     // Status badge with icon
                     statusBadge
@@ -80,16 +83,21 @@ struct TransactionDetailView: View {
                             Button(action: { copyContent(content) }) {
                                 HStack {
                                     Image(systemName: copyButtonText == "COPIED" ? "checkmark" : "doc.on.doc")
+                                        .accessibilityHidden(true)
                                     Text(copyButtonText)
                                 }
                             }
                             .buttonStyle(CashuPrimaryButtonStyle())
-                            
+                            .accessibilityLabel(copyButtonText == "COPIED" ? "Copied" : "Copy \(transaction.kind == .ecash ? "token" : "invoice")")
+                            .accessibilityHint("Copies the \(transaction.kind == .ecash ? "ecash token" : "lightning invoice") to clipboard")
+
                             Button(action: { showShareSheet = true }) {
                                 Image(systemName: "square.and.arrow.up")
                             }
                             .buttonStyle(CashuSecondaryButtonStyle())
                             .frame(width: 50)
+                            .accessibilityLabel("Share")
+                            .accessibilityHint("Opens share sheet for this \(transaction.kind == .ecash ? "token" : "invoice")")
                         }
                         .padding(.horizontal)
                     }
@@ -112,14 +120,15 @@ struct TransactionDetailView: View {
                 ToolbarItem(placement: .navigationBarLeading) {
                     Button(action: { dismiss() }) {
                         Image(systemName: "xmark")
-                            .foregroundColor(.white)
+                            .foregroundStyle(.primary)
                     }
+                    .accessibilityLabel("Close")
                 }
-                
+
                 ToolbarItem(placement: .principal) {
                     Text(titleForTransaction)
                         .font(.headline)
-                        .foregroundColor(.white)
+                        .foregroundStyle(.primary)
                 }
             }
         }
@@ -147,11 +156,14 @@ struct TransactionDetailView: View {
         HStack(spacing: 8) {
             Image(systemName: statusIcon)
                 .foregroundColor(statusColor)
+                .accessibilityHidden(true)
             Text(statusText)
                 .font(.title3)
                 .fontWeight(.semibold)
                 .foregroundColor(statusColor)
         }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("Status: \(statusText)")
     }
     
     private var statusIcon: String {
@@ -198,6 +210,7 @@ struct TransactionDetailView: View {
                 Image(systemName: icon)
                     .font(.caption)
                     .foregroundColor(.cashuMutedText)
+                    .accessibilityHidden(true)
                 Text(label)
                     .foregroundColor(.cashuMutedText)
             }
@@ -206,6 +219,8 @@ struct TransactionDetailView: View {
                 .foregroundColor(valueColor)
         }
         .font(.subheadline)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("\(label): \(value)")
     }
     
     private func extractMintHost(_ url: String) -> String {

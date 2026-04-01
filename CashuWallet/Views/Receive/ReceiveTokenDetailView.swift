@@ -28,16 +28,19 @@ struct ReceiveTokenDetailView: View {
             HStack {
                 Button(action: { dismiss() }) {
                     Image(systemName: "xmark")
-                        .foregroundColor(.white)
+                        .foregroundStyle(.primary)
                         .font(.system(size: 20, weight: .bold))
                 }
+                .accessibilityLabel("Close")
+                .accessibilityHint("Dismisses the token detail screen")
                 Spacer()
                 Text("Receive Ecash")
-                    .foregroundColor(.white)
+                    .foregroundStyle(.primary)
                     .font(.headline)
                 Spacer()
                 // Placeholder for alignment
                 Color.clear.frame(width: 20, height: 20)
+                    .accessibilityHidden(true)
             }
             .padding()
             .padding(.top, 20)
@@ -79,13 +82,13 @@ struct ReceiveTokenDetailView: View {
                             Spacer()
                             HStack(alignment: .bottom) {
                                 Text(shortMintUrl(mintUrl))
-                                    .foregroundColor(.white)
+                                    .foregroundStyle(.primary)
                                     .font(.subheadline)
                                 
                                 Spacer()
                                 
                                 Text("\(tokenAmount) sat")
-                                    .foregroundColor(.white)
+                                    .foregroundStyle(.primary)
                                     .font(.system(size: 32, weight: .bold))
                             }
                             .padding()
@@ -98,6 +101,8 @@ struct ReceiveTokenDetailView: View {
                             .stroke(Color.white.opacity(0.1), lineWidth: 1)
                     )
                     .shadow(color: Color.black.opacity(0.3), radius: 10, x: 0, y: 5)
+                    .accessibilityElement(children: .combine)
+                    .accessibilityLabel("Ecash token card, \(tokenAmount) sats from \(shortMintUrl(mintUrl))")
                     
                     // Details List
                     VStack(spacing: 20) {
@@ -149,8 +154,10 @@ struct ReceiveTokenDetailView: View {
                         .foregroundColor(.cashuMutedText)
                         .frame(maxWidth: .infinity)
                 }
+                .accessibilityLabel("Receive later")
+                .accessibilityHint("Saves this token to receive at a later time")
                 .padding(.bottom, 8)
-                
+
                 Button(action: receiveToken) {
                     ZStack {
                         if isReceiving {
@@ -168,6 +175,8 @@ struct ReceiveTokenDetailView: View {
                     .cornerRadius(28)
                 }
                 .disabled(isReceiving || !tokenLockedToKnownKey)
+                .accessibilityLabel(isReceiving ? "Receiving token" : "Receive \(tokenAmount) sats")
+                .accessibilityHint("Claims this ecash token to your wallet")
             }
             .padding()
             .padding(.bottom, 20)
@@ -245,8 +254,7 @@ struct ReceiveTokenDetailView: View {
             do {
                 let receivedAmount = try await walletManager.receiveTokens(tokenString: tokenString)
                 await MainActor.run {
-                    let generator = UINotificationFeedbackGenerator()
-                    generator.notificationOccurred(.success)
+                    HapticFeedback.notification(.success)
                     
                     // Post notification to show badge on main screen
                     NotificationCenter.default.post(
@@ -266,6 +274,7 @@ struct ReceiveTokenDetailView: View {
                 await MainActor.run {
                     errorMessage = error.localizedDescription
                     isReceiving = false
+                    HapticFeedback.notification(.error)
                 }
             }
         }
@@ -342,18 +351,21 @@ struct DetailRow: View {
     let label: String
     let value: String
     let icon: String
-    
+
     var body: some View {
         HStack {
             Image(systemName: icon)
                 .foregroundColor(.gray)
                 .frame(width: 24)
+                .accessibilityHidden(true)
             Text(label)
                 .foregroundColor(.gray)
             Spacer()
             Text(value)
-                .foregroundColor(.white)
+                .foregroundStyle(.primary)
                 .fontWeight(.medium)
         }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("\(label): \(value)")
     }
 }

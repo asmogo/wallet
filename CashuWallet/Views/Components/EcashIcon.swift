@@ -40,6 +40,7 @@ struct EcashIcon: View {
             context.stroke(frontCoinPath, with: .color(color), lineWidth: strokeWidth)
         }
         .frame(width: size, height: size)
+        .accessibilityHidden(true)
     }
 }
 
@@ -72,6 +73,7 @@ struct LightningIcon: View {
             context.fill(path, with: .color(color))
         }
         .frame(width: size, height: size)
+        .accessibilityHidden(true)
     }
 }
 

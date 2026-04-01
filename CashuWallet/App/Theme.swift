@@ -5,70 +5,70 @@ extension Color {
     /// Cashu neon green accent color (default, use cashuAccent for dynamic)
     @available(*, deprecated, message: "Use settings.accentColor or CashuPrimaryButtonStyle instead for dynamic theming")
     static let cashuGreen = Color(red: 0, green: 1, blue: 0) // #00FF00
-    
-    /// Background color - pure black
-    static let cashuBackground = Color.black
-    
-    /// Card background - dark gray
-    static let cashuCardBackground = Color(white: 0.08)
-    
-    /// Secondary background
-    static let cashuSecondaryBackground = Color(white: 0.12)
-    
-    /// Border color
-    static let cashuBorder = Color.white.opacity(0.15)
-    
+
+    /// Background color — adapts to system appearance
+    static let cashuBackground = Color(uiColor: .systemBackground)
+
+    /// Card background — adapts to system appearance
+    static let cashuCardBackground = Color(uiColor: .secondarySystemBackground)
+
+    /// Secondary background — adapts to system appearance
+    static let cashuSecondaryBackground = Color(uiColor: .tertiarySystemBackground)
+
+    /// Border color — adapts to system appearance
+    static let cashuBorder = Color(uiColor: .separator)
+
     /// Success green
     static let cashuSuccess = Color(red: 0.2, green: 0.8, blue: 0.2)
-    
+
     /// Warning/pending color
     static let cashuWarning = Color.orange
-    
+
     /// Error color
     static let cashuError = Color.red
-    
-    /// Muted text color
-    static let cashuMutedText = Color.gray
+
+    /// Muted text color — adapts to system appearance
+    static let cashuMutedText = Color.secondary
 }
 
 // MARK: - Theme Fonts
-// Using SF Pro (default system font) which closely matches Inter used by cashu.me
+// Using semantic font styles that scale with Dynamic Type
 extension Font {
-    /// Large balance display - matches cashu.me h3 bold style
-    static let cashuBalance = Font.system(size: 56, weight: .bold, design: .default)
-    
+    /// Large balance display — scales with accessibility settings
+    static let cashuBalance = Font.largeTitle.weight(.bold)
+
     /// Medium balance display
-    static let cashuBalanceMedium = Font.system(size: 36, weight: .bold, design: .default)
-    
+    static let cashuBalanceMedium = Font.title.weight(.bold)
+
     /// Small balance display
-    static let cashuBalanceSmall = Font.system(size: 24, weight: .bold, design: .default)
-    
-    /// Section title - matches Inter semibold
-    static let cashuTitle = Font.system(size: 20, weight: .semibold, design: .default)
-    
+    static let cashuBalanceSmall = Font.title2.weight(.bold)
+
+    /// Section title
+    static let cashuTitle = Font.title3.weight(.semibold)
+
     /// Dialog header title
-    static let cashuDialogHeader = Font.system(size: 18, weight: .semibold, design: .default)
-    
+    static let cashuDialogHeader = Font.headline
+
     /// Body text - regular weight
-    static let cashuBody = Font.system(size: 16, weight: .regular, design: .default)
-    
+    static let cashuBody = Font.body
+
     /// Body text - medium weight
-    static let cashuBodyMedium = Font.system(size: 16, weight: .medium, design: .default)
-    
+    static let cashuBodyMedium = Font.body.weight(.medium)
+
     /// Button text
-    static let cashuButton = Font.system(size: 16, weight: .semibold, design: .default)
-    
+    static let cashuButton = Font.callout.weight(.semibold)
+
     /// Small text / caption
-    static let cashuCaption = Font.system(size: 14, weight: .regular, design: .default)
-    
-    /// Numeric keypad
+    static let cashuCaption = Font.footnote
+
+    /// Numeric keypad — uses fixed size intentionally for layout stability
     static let cashuKeypad = Font.system(size: 32, weight: .medium, design: .default)
-    
+
     /// Unit label (BTC/SAT badge)
-    static let cashuUnitLabel = Font.system(size: 14, weight: .semibold, design: .default)
-    
+    static let cashuUnitLabel = Font.caption.weight(.semibold)
+
     /// Fiat price display
-    static let cashuFiatPrice = Font.system(size: 18, weight: .semibold, design: .default)
+    static let cashuFiatPrice = Font.headline
 }
 
 // MARK: - Dynamic Button Styles

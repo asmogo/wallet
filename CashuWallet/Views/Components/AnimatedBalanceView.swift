@@ -19,11 +19,14 @@ struct AnimatedBalanceView: View {
                 Text("••••••")
                     .font(.system(size: fontSize, weight: fontWeight, design: .default))
                     .foregroundColor(settings.accentColor)
+                    .accessibilityLabel("Balance hidden")
             } else {
                 Text(formattedValue)
                     .font(.system(size: fontSize, weight: fontWeight, design: .default))
                     .foregroundColor(settings.accentColor)
                     .animation(.spring(response: 0.5, dampingFraction: 0.8), value: displayValue)
+                    .accessibilityLabel("Balance: \(formattedValue)")
+                    .accessibilityValue(formattedValue)
             }
         }
         .onChange(of: value) { newValue in
@@ -90,6 +93,7 @@ struct BalanceCardView: View {
                 HStack(spacing: 4) {
                     Image(systemName: "arrow.left.arrow.right")
                         .font(.caption2)
+                        .accessibilityHidden(true)
                     Text(settings.unitLabel)
                         .font(.caption)
                         .fontWeight(.bold)
@@ -102,6 +106,8 @@ struct BalanceCardView: View {
                         .stroke(settings.accentColor, lineWidth: 1)
                 )
             }
+            .accessibilityLabel("Unit: \(settings.unitLabel)")
+            .accessibilityHint("Toggles the display unit")
             .padding(.top, 20)
             
             // Main balance display
@@ -168,7 +174,8 @@ struct PendingBalanceBadge: View {
             HStack(spacing: 6) {
                 Image(systemName: "clock")
                     .font(.caption)
-                
+                    .accessibilityHidden(true)
+
                 Text("Pending: \(settings.formatAmountShort(amount)) \(settings.unitSuffix)")
                     .font(.caption)
                     .fontWeight(.medium)
@@ -181,6 +188,8 @@ struct PendingBalanceBadge: View {
                     .stroke(settings.accentColor, lineWidth: 1)
             )
         }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("Pending balance: \(settings.formatAmountShort(amount)) \(settings.unitSuffix)")
     }
 }
 

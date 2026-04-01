@@ -45,7 +45,12 @@ class MintService: ObservableObject {
         
         // Normalize URL
         let normalizedUrl = normalizeUrl(url)
-        
+
+        // Validate HTTPS
+        if let validationError = validateMintUrl(normalizedUrl) {
+            throw WalletError.networkError(validationError)
+        }
+
         // Check if already exists locally
         if mints.contains(where: { $0.url == normalizedUrl }) {
             throw WalletError.mintAlreadyExists
@@ -121,7 +126,7 @@ class MintService: ObservableObject {
                         // Call createWallet even if hasMint returns true, to ensure unit is set
                         try await repo.createWallet(mintUrl: mintUrl, unit: .sat, targetProofCount: nil)
                     } catch {
-                        print("Failed to add mint \(mint.url): \(error)")
+                        AppLogger.wallet.error("Failed to add mint \(mint.url): \(error)")
                     }
                 }
                 
@@ -130,7 +135,7 @@ class MintService: ObservableObject {
                     activeMint = firstMint
                 }
             } catch {
-                print("Failed to load mints: \(error)")
+                AppLogger.wallet.error("Failed to load mints: \(error)")
             }
         }
     }
@@ -176,6 +181,18 @@ class MintService: ObservableObject {
         }
         return normalized
     }
+
+    /// Validate that a mint URL uses HTTPS
+    func validateMintUrl(_ url: String) -> String? {
+        let normalized = normalizeUrl(url)
+        guard let parsedUrl = URL(string: normalized), parsedUrl.host != nil else {
+            return "Invalid URL format."
+        }
+        guard parsedUrl.scheme == "https" else {
+            return "Mint URL must use HTTPS for security."
+        }
+        return nil
+    }
     
     /// Save mints to persistent storage
     func saveMints() {
@@ -183,7 +200,7 @@ class MintService: ObservableObject {
             let data = try JSONEncoder().encode(mints)
             UserDefaults.standard.set(data, forKey: storageKey)
         } catch {
-            print("Failed to save mints: \(error)")
+            AppLogger.wallet.error("Failed to save mints: \(error)")
         }
     }
 }

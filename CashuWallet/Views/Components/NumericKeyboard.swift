@@ -26,17 +26,20 @@ struct NumericKeyboard: View {
                 // Empty space
                 Color.clear
                     .frame(width: 70, height: 60)
-                
+                    .accessibilityHidden(true)
+
                 // Zero
                 keyButton("0")
-                
+
                 // Backspace
                 Button(action: backspace) {
                     Image(systemName: "delete.left")
                         .font(.title2)
-                        .foregroundColor(.white)
+                        .foregroundStyle(.primary)
                         .frame(width: 70, height: 60)
                 }
+                .accessibilityLabel("Delete")
+                .accessibilityHint("Removes the last digit")
             }
         }
     }
@@ -45,9 +48,10 @@ struct NumericKeyboard: View {
         Button(action: { appendDigit(value) }) {
             Text(value)
                 .font(.system(size: 32, weight: .regular))
-                .foregroundColor(.white)
+                .foregroundStyle(.primary)
                 .frame(width: 70, height: 60)
         }
+        .accessibilityLabel(value)
     }
     
     private func appendDigit(_ digit: String) {
@@ -79,7 +83,7 @@ struct NumericKeyboard: View {
         VStack {
             Text("1234 sat")
                 .font(.system(size: 48, weight: .bold))
-                .foregroundColor(.white)
+                .foregroundStyle(.primary)
             
             Spacer()
             

@@ -107,6 +107,8 @@ struct MainWalletView: View {
                             .stroke(settings.accentColor, lineWidth: 1.5)
                     )
             }
+            .accessibilityLabel("Display unit: \(settings.unitLabel)")
+            .accessibilityHint("Toggles between Bitcoin and Satoshi display")
             
                 // Main balance display
                 VStack(spacing: 8) {
@@ -115,13 +117,16 @@ struct MainWalletView: View {
                         .font(.cashuBalance)
                         .foregroundColor(settings.accentColor)
                         .minimumScaleFactor(0.5)
-                    
+                        .accessibilityLabel("Balance: \(formatBalanceWithUnit(walletManager.balance))")
+                        .accessibilityValue(formatBalanceWithUnit(walletManager.balance))
+
                     // Fiat balance (if enabled)
                     if settings.showFiatBalance && priceService.btcPriceUSD > 0 {
                         Text(priceService.formatSatsAsFiat(walletManager.balance))
                             .font(.cashuFiatPrice)
                             .foregroundColor(settings.accentColor)
                             .opacity(0.8)
+                            .accessibilityLabel("Fiat value: \(priceService.formatSatsAsFiat(walletManager.balance))")
                     }
                 }
                 .padding(.vertical, 20)
@@ -137,7 +142,7 @@ struct MainWalletView: View {
                             .foregroundColor(settings.accentColor)
                     }
                     .font(.cashuBody)
-                    
+
                     // Balance at this mint
                     HStack(spacing: 4) {
                         Text("Balance:")
@@ -148,6 +153,8 @@ struct MainWalletView: View {
                     }
                     .font(.cashuBody)
                 }
+                .accessibilityElement(children: .combine)
+                .accessibilityLabel("Active mint: \(mint.name), balance: \(formatBalanceWithUnit(mint.balance))")
             }
             
             // Pending indicator
@@ -171,13 +178,15 @@ struct MainWalletView: View {
             HStack(spacing: 8) {
                 Image(systemName: "bolt.fill")
                     .font(.system(size: 12, weight: .medium, design: .default))
-                
+                    .accessibilityHidden(true)
+
                 Text(truncatedLightningAddress())
                     .font(.system(size: 12, weight: .medium, design: .monospaced))
                     .lineLimit(1)
-                
+
                 Image(systemName: copiedLightningAddress ? "checkmark" : "doc.on.doc")
                     .font(.system(size: 10, weight: .medium, design: .default))
+                    .accessibilityHidden(true)
             }
             .foregroundColor(copiedLightningAddress ? .green : settings.accentColor)
             .padding(.horizontal, 16)
@@ -187,6 +196,9 @@ struct MainWalletView: View {
                     .stroke(copiedLightningAddress ? Color.green : settings.accentColor, lineWidth: 1)
             )
         }
+        .accessibilityLabel("Lightning address: \(npcService.lightningAddress)")
+        .accessibilityHint("Copies lightning address to clipboard")
+        .accessibilityValue(copiedLightningAddress ? "Copied" : "")
     }
     
     private func truncatedLightningAddress() -> String {
@@ -222,7 +234,8 @@ struct MainWalletView: View {
             // Refresh icon (two arrows in circle)
             Image(systemName: "arrow.triangle.2.circlepath")
                 .font(.system(size: 14, weight: .medium, design: .default))
-            
+                .accessibilityHidden(true)
+
             Text("PENDING: \(formatPendingAmount())")
                 .font(.system(size: 12, weight: .bold, design: .default))
                 .tracking(0.5)
@@ -234,6 +247,8 @@ struct MainWalletView: View {
             Capsule()
                 .stroke(settings.accentColor, lineWidth: 1.5)
         )
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("Pending balance: \(formatPendingAmount())")
     }
     
     // MARK: - Formatting Helpers
@@ -276,7 +291,9 @@ struct MainWalletView: View {
                             .fill(settings.accentColor)
                     )
             }
-            
+            .accessibilityLabel("Receive")
+            .accessibilityHint("Opens options to receive ecash or lightning payments")
+
             // QR Scanner button - Icon only
             Button(action: { navigationManager.showScannerSheet = true }) {
                 Image(systemName: "viewfinder")
@@ -288,7 +305,9 @@ struct MainWalletView: View {
                             .stroke(settings.accentColor, lineWidth: 2)
                     )
             }
-            
+            .accessibilityLabel("Scan QR code")
+            .accessibilityHint("Opens camera to scan a QR code")
+
             // Send button
             Button(action: { showSendOptions = true }) {
                 Text("SEND")
@@ -301,6 +320,8 @@ struct MainWalletView: View {
                             .fill(settings.accentColor)
                     )
             }
+            .accessibilityLabel("Send")
+            .accessibilityHint("Opens options to send ecash or pay lightning invoices")
         }
         .padding(.horizontal, 24)
     }

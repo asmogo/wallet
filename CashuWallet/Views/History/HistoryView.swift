@@ -81,24 +81,30 @@ struct HistoryView: View {
     
     // MARK: - Views
     
+    @ViewBuilder
     private var emptyStateView: some View {
-        VStack(spacing: 20) {
-            Spacer()
-            
-            EcashIcon(size: 60, color: .cashuMutedText)
-            
-            Text("No Transactions Yet")
-                .font(.headline)
-                .foregroundColor(.white)
-            
-            Text("Your transaction history will appear here")
-                .font(.subheadline)
-                .foregroundColor(.cashuMutedText)
-                .multilineTextAlignment(.center)
-            
-            Spacer()
+        if #available(iOS 17.0, *) {
+            ContentUnavailableView(
+                "No Transactions Yet",
+                systemImage: "clock",
+                description: Text("Your transaction history will appear here")
+            )
+        } else {
+            VStack(spacing: 20) {
+                Spacer()
+                Image(systemName: "clock")
+                    .font(.system(size: 48))
+                    .foregroundColor(.cashuMutedText)
+                Text("No Transactions Yet")
+                    .font(.headline)
+                    .foregroundStyle(.primary)
+                Text("Your transaction history will appear here")
+                    .font(.subheadline)
+                    .foregroundColor(.cashuMutedText)
+                Spacer()
+            }
+            .padding()
         }
-        .padding()
     }
     
     private var transactionsList: some View {
@@ -123,7 +129,8 @@ struct HistoryView: View {
             .frame(width: 32, height: 32)
             .background(Color.white.opacity(0.05))
             .clipShape(Circle())
-            
+            .accessibilityHidden(true)
+
             // Main content - tappable area
             Button(action: {
                 selectedTransaction = transaction
@@ -133,7 +140,7 @@ struct HistoryView: View {
                     VStack(alignment: .leading, spacing: 0) {
                         Text(transaction.kind == .ecash ? "Ecash" : "Lightning")
                             .font(.system(size: 16, weight: .medium))
-                            .foregroundColor(.white)
+                            .foregroundStyle(.primary)
                         
                         Text(formatRelativeDate(transaction.date))
                             .font(.system(size: 14))
@@ -164,7 +171,10 @@ struct HistoryView: View {
                 .contentShape(Rectangle())
             }
             .buttonStyle(PlainButtonStyle())
-            
+            .accessibilityElement(children: .combine)
+            .accessibilityLabel("\(transaction.kind == .ecash ? "Ecash" : "Lightning") transaction, \(formatAmount(transaction)) sats, \(transaction.status == .pending ? "pending" : "completed"), \(formatRelativeDate(transaction.date))")
+            .accessibilityHint("Opens transaction details")
+
             // Refresh button for pending ecash transactions
             if transaction.status == .pending && transaction.kind == .ecash {
                 Button(action: {
@@ -184,6 +194,8 @@ struct HistoryView: View {
                     }
                 }
                 .buttonStyle(PlainButtonStyle())
+                .accessibilityLabel(isCheckingStatus == transaction.id ? "Checking status" : "Refresh status")
+                .accessibilityHint("Checks if this pending token has been claimed")
             } else {
                 // Spacer to maintain consistent layout
                 Spacer()
@@ -222,22 +234,14 @@ struct HistoryView: View {
         return .white
     }
     
+    private static let relativeDateFormatter: RelativeDateTimeFormatter = {
+        let formatter = RelativeDateTimeFormatter()
+        formatter.unitsStyle = .abbreviated
+        return formatter
+    }()
+
     private func formatRelativeDate(_ date: Date) -> String {
-        let now = Date()
-        let seconds = now.timeIntervalSince(date)
-        
-        if seconds < 60 {
-            return "less than a minute ago"
-        } else if seconds < 3600 {
-            let minutes = Int(seconds / 60)
-            return "\(minutes) minute\(minutes == 1 ? "" : "s") ago"
-        } else if seconds < 86400 {
-            let hours = Int(seconds / 3600)
-            return "about \(hours) hour\(hours == 1 ? "" : "s") ago"
-        } else {
-            let days = Int(seconds / 86400)
-            return "\(days) day\(days == 1 ? "" : "s") ago"
-        }
+        Self.relativeDateFormatter.localizedString(for: date, relativeTo: Date())
     }
     
     private func checkTransactionStatus(_ transaction: WalletTransaction) async {
@@ -278,6 +282,8 @@ struct HistoryView: View {
                         )
                 )
         }
+        .accessibilityLabel(filterPending ? "Show all transactions" : "Filter pending transactions")
+        .accessibilityHint("Toggles between showing all transactions and only pending ones")
     }
     
     // MARK: - Pagination
@@ -285,10 +291,10 @@ struct HistoryView: View {
     private var paginationControls: some View {
         HStack(spacing: 8) {
             // First page
-            paginationButton(text: "|<", action: { currentPage = 1 }, enabled: currentPage > 1)
-            
+            paginationButton(text: "|<", action: { currentPage = 1 }, enabled: currentPage > 1, label: "First page")
+
             // Previous page
-            paginationButton(text: "<", action: { currentPage = max(1, currentPage - 1) }, enabled: currentPage > 1)
+            paginationButton(text: "<", action: { currentPage = max(1, currentPage - 1) }, enabled: currentPage > 1, label: "Previous page")
             
             // Page numbers
             ForEach(visiblePageNumbers, id: \.self) { pageNum in
@@ -303,10 +309,10 @@ struct HistoryView: View {
             }
             
             // Next page
-            paginationButton(text: ">", action: { currentPage = min(maxPages, currentPage + 1) }, enabled: currentPage < maxPages)
-            
+            paginationButton(text: ">", action: { currentPage = min(maxPages, currentPage + 1) }, enabled: currentPage < maxPages, label: "Next page")
+
             // Last page
-            paginationButton(text: ">|", action: { currentPage = maxPages }, enabled: currentPage < maxPages)
+            paginationButton(text: ">|", action: { currentPage = maxPages }, enabled: currentPage < maxPages, label: "Last page")
         }
     }
     
@@ -343,7 +349,7 @@ struct HistoryView: View {
         return pages
     }
     
-    private func paginationButton(text: String, action: @escaping () -> Void, enabled: Bool) -> some View {
+    private func paginationButton(text: String, action: @escaping () -> Void, enabled: Bool, label: String = "") -> some View {
         Button(action: action) {
             Text(text)
                 .font(.system(size: 14, weight: .medium))
@@ -351,6 +357,7 @@ struct HistoryView: View {
         }
         .disabled(!enabled)
         .frame(width: 30)
+        .accessibilityLabel(label.isEmpty ? text : label)
     }
     
     private func pageNumberButton(_ page: Int) -> some View {
@@ -368,6 +375,8 @@ struct HistoryView: View {
                         )
                 )
         }
+        .accessibilityLabel("Page \(page)")
+        .accessibilityValue(currentPage == page ? "Current page" : "")
     }
 }
 

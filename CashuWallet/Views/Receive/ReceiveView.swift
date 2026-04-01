@@ -24,11 +24,12 @@ struct ReceiveView: View {
                     Image(systemName: "arrow.down.circle.fill")
                         .font(.system(size: 60))
                         .foregroundColor(.cashuAccent)
+                        .accessibilityHidden(true)
                     
                     Text("Receive")
                         .font(.title)
                         .fontWeight(.bold)
-                        .foregroundColor(.white)
+                        .foregroundStyle(.primary)
                     
                     Text("Choose how you want to receive")
                         .font(.subheadline)
@@ -46,7 +47,9 @@ struct ReceiveView: View {
                                 subtitle: "Paste a token from clipboard"
                             )
                         }
-                        
+                        .accessibilityLabel("Paste Ecash Token")
+                        .accessibilityHint("Paste a cashu token from clipboard to receive ecash")
+
                         // Scan option
                         Button(action: { selectedOption = .scan }) {
                             receiveOptionRow(
@@ -55,7 +58,9 @@ struct ReceiveView: View {
                                 subtitle: "Scan token or invoice"
                             )
                         }
-                        
+                        .accessibilityLabel("Scan QR Code")
+                        .accessibilityHint("Opens camera to scan a token or invoice QR code")
+
                         // Lightning option
                         Button(action: { selectedOption = .lightning }) {
                             receiveOptionRow(
@@ -64,6 +69,8 @@ struct ReceiveView: View {
                                 subtitle: "Create invoice to receive sats"
                             )
                         }
+                        .accessibilityLabel("Lightning Invoice")
+                        .accessibilityHint("Creates a lightning invoice to receive sats")
                     }
                     .padding(.horizontal)
                     
@@ -74,6 +81,8 @@ struct ReceiveView: View {
                         Text("Cancel")
                             .foregroundColor(.cashuMutedText)
                     }
+                    .accessibilityLabel("Cancel")
+                    .accessibilityHint("Closes the receive screen")
                     .padding(.bottom, 40)
                 }
             }
@@ -104,26 +113,29 @@ struct ReceiveView: View {
                     RoundedRectangle(cornerRadius: 12)
                         .fill(Color.cashuCardBackground)
                 )
-            
+                .accessibilityHidden(true)
+
             VStack(alignment: .leading, spacing: 4) {
                 Text(title)
                     .font(.headline)
-                    .foregroundColor(.white)
+                    .foregroundStyle(.primary)
                 Text(subtitle)
                     .font(.caption)
                     .foregroundColor(.cashuMutedText)
             }
-            
+
             Spacer()
-            
+
             Image(systemName: "chevron.right")
                 .foregroundColor(.cashuMutedText)
+                .accessibilityHidden(true)
         }
         .padding()
         .background(
             RoundedRectangle(cornerRadius: 16)
                 .fill(Color.cashuCardBackground)
         )
+        .accessibilityElement(children: .combine)
     }
     
     private func handleScannedCode(_ code: String) {
@@ -162,16 +174,17 @@ struct ReceiveEcashView: View {
                     Image(systemName: "doc.on.clipboard")
                         .font(.system(size: 48))
                         .foregroundColor(.cashuAccent)
+                        .accessibilityHidden(true)
                     
                     Text("Paste Token")
                         .font(.title2)
                         .fontWeight(.bold)
-                        .foregroundColor(.white)
+                        .foregroundStyle(.primary)
                     
                     // Token input
                     TextEditor(text: $tokenInput)
                         .font(.system(.body, design: .monospaced))
-                        .foregroundColor(.white)
+                        .foregroundStyle(.primary)
                         .scrollContentBackground(.hidden)
                         .frame(height: 120)
                         .padding()
@@ -184,15 +197,20 @@ struct ReceiveEcashView: View {
                                 )
                         )
                         .padding(.horizontal)
+                        .accessibilityLabel("Ecash token input")
+                        .accessibilityHint("Enter or paste a cashu ecash token")
                     
                     // Paste from clipboard
                     Button(action: pasteFromClipboard) {
                         HStack {
                             Image(systemName: "doc.on.clipboard")
+                                .accessibilityHidden(true)
                             Text("Paste from Clipboard")
                         }
                     }
                     .buttonStyle(CashuSecondaryButtonStyle())
+                    .accessibilityLabel("Paste from Clipboard")
+                    .accessibilityHint("Pastes ecash token from clipboard")
                     .padding(.horizontal)
                     
                     if let error = errorMessage {
@@ -209,6 +227,8 @@ struct ReceiveEcashView: View {
                     }
                     .buttonStyle(CashuPrimaryButtonStyle(isDisabled: tokenInput.isEmpty))
                     .disabled(tokenInput.isEmpty)
+                    .accessibilityLabel("Continue")
+                    .accessibilityHint("Validates the token and proceeds to details")
                     .padding(.horizontal)
                     .padding(.bottom, 30)
                 }
@@ -218,14 +238,15 @@ struct ReceiveEcashView: View {
                 ToolbarItem(placement: .navigationBarLeading) {
                     Button(action: { dismiss() }) {
                         Image(systemName: "xmark")
-                            .foregroundColor(.white)
+                            .foregroundStyle(.primary)
                     }
+                    .accessibilityLabel("Close")
                 }
-                
+
                 ToolbarItem(placement: .principal) {
                     Text("Receive Ecash")
                         .font(.headline)
-                        .foregroundColor(.white)
+                        .foregroundStyle(.primary)
                 }
             }
             .navigationDestination(isPresented: $navigateToDetail) {

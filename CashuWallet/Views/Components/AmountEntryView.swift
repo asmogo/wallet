@@ -79,7 +79,7 @@ struct AmountEntryView: View {
             // Title
             Text(title)
                 .font(.cashuDialogHeader)
-                .foregroundColor(.white)
+                .foregroundStyle(.primary)
             
             Spacer()
             
@@ -116,7 +116,7 @@ struct AmountEntryView: View {
                         Text(mint.name)
                             .font(.subheadline)
                             .fontWeight(.medium)
-                            .foregroundColor(.white)
+                            .foregroundStyle(.primary)
                         
                         if let maxAmount = maxAmount {
                             Text("\(settings.formatAmountShort(maxAmount)) \(settings.unitSuffix) available")
@@ -252,7 +252,7 @@ struct MintPickerView: View {
                 ToolbarItem(placement: .navigationBarLeading) {
                     Button(action: { dismiss() }) {
                         Image(systemName: "xmark")
-                            .foregroundColor(.white)
+                            .foregroundStyle(.primary)
                     }
                 }
             }
@@ -278,7 +278,7 @@ struct MintPickerView: View {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(mint.name)
                         .font(.headline)
-                        .foregroundColor(.white)
+                        .foregroundStyle(.primary)
                     
                     Text("\(mint.balance) sat")
                         .font(.caption)
@@ -388,7 +388,7 @@ struct TokenDisplayView: View {
                     
                     Text("Ecash Token")
                         .font(.cashuDialogHeader)
-                        .foregroundColor(.white)
+                        .foregroundStyle(.primary)
                     
                     Spacer()
                     
@@ -417,7 +417,7 @@ struct TokenDisplayView: View {
                 // Amount
                 Text("\(settings.formatAmountShort(amount)) \(settings.unitSuffix)")
                     .font(.cashuBalanceSmall)
-                    .foregroundColor(.white)
+                    .foregroundStyle(.primary)
                 
                 Spacer()
                 

@@ -10,6 +10,8 @@ struct MintsListView: View {
     @State private var newMintNickname = ""
     @State private var isAddingMint = false
     @State private var errorMessage: String?
+    @State private var mintToRemove: MintInfo?
+    @State private var showRemoveConfirmation = false
     
     var body: some View {
         NavigationStack {
@@ -71,7 +73,7 @@ struct MintsListView: View {
                         // URL input
                         TextField("https://", text: $newMintUrl)
                             .textFieldStyle(.plain)
-                            .foregroundColor(.white)
+                            .foregroundStyle(.primary)
                             .autocapitalization(.none)
                             .autocorrectionDisabled()
                             .padding()
@@ -83,7 +85,7 @@ struct MintsListView: View {
                         // Nickname input
                         TextField("Nickname (e.g. Testnet)", text: $newMintNickname)
                             .textFieldStyle(.plain)
-                            .foregroundColor(.white)
+                            .foregroundStyle(.primary)
                             .padding()
                             .background(
                                 RoundedRectangle(cornerRadius: 12)
@@ -91,9 +93,9 @@ struct MintsListView: View {
                             )
                         
                         if let error = errorMessage {
-                            Text(error)
-                                .font(.caption)
-                                .foregroundColor(.cashuError)
+                            ErrorBannerView(message: error, type: .error) {
+                                errorMessage = nil
+                            }
                         }
                         
                         // Add buttons
@@ -139,7 +141,26 @@ struct MintsListView: View {
                 ToolbarItem(placement: .principal) {
                     Text("Mints")
                         .font(.headline)
-                        .foregroundColor(.white)
+                        .foregroundStyle(.primary)
+                }
+            }
+            .confirmationDialog(
+                "Remove Mint",
+                isPresented: $showRemoveConfirmation,
+                titleVisibility: .visible
+            ) {
+                Button("Remove", role: .destructive) {
+                    if let mint = mintToRemove {
+                        removeMint(mint)
+                    }
+                    mintToRemove = nil
+                }
+                Button("Cancel", role: .cancel) {
+                    mintToRemove = nil
+                }
+            } message: {
+                if let mint = mintToRemove {
+                    Text("Remove \(mint.name)? Any unspent ecash on this mint will need to be restored from your seed phrase.")
                 }
             }
         }
@@ -207,7 +228,10 @@ struct MintsListView: View {
                     Button(action: { setActive(mint) }) {
                         Label("Set as Active", systemImage: "checkmark.circle")
                     }
-                    Button(role: .destructive, action: { removeMint(mint) }) {
+                    Button(role: .destructive, action: {
+                        mintToRemove = mint
+                        showRemoveConfirmation = true
+                    }) {
                         Label("Remove", systemImage: "trash")
                     }
                 } label: {
@@ -246,7 +270,7 @@ struct MintsListView: View {
                 Text(mint.name ?? "Unknown Mint")
                     .font(.subheadline)
                     .fontWeight(.bold)
-                    .foregroundColor(.white)
+                    .foregroundStyle(.primary)
                 
                 Text(mint.url)
                     .font(.caption)
@@ -279,7 +303,7 @@ struct MintsListView: View {
     private func balancePill(_ text: String) -> some View {
         Text(text)
             .font(.caption2)
-            .foregroundColor(.white)
+            .foregroundStyle(.primary)
             .padding(.horizontal, 10)
             .padding(.vertical, 6)
             .background(

@@ -18,10 +18,16 @@ struct OnboardingView: View {
     @State private var currentRestoringMint: String?
     @State private var restoreMintError: String?
 
+    // Seed phrase verification state
+    @State private var verificationIndices: [Int] = []
+    @State private var verificationAnswers: [Int: String] = [:]
+    @State private var verificationError: String?
+
     enum OnboardingStep {
         case welcome
         case createOrRestore
         case showMnemonic
+        case verifyMnemonic
         case restoreInput
         case restoreMints
     }
@@ -39,6 +45,8 @@ struct OnboardingView: View {
                     createOrRestoreView
                 case .showMnemonic:
                     showMnemonicView
+                case .verifyMnemonic:
+                    verifyMnemonicView
                 case .restoreInput:
                     restoreInputView
                 case .restoreMints:
@@ -63,7 +71,7 @@ struct OnboardingView: View {
                 Text("Cashu Wallet")
                     .font(.largeTitle)
                     .fontWeight(.bold)
-                    .foregroundColor(.white)
+                    .foregroundStyle(.primary)
 
                 Text("Private digital cash for everyone")
                     .font(.subheadline)
@@ -119,7 +127,7 @@ struct OnboardingView: View {
 
             Text(text)
                 .font(.body)
-                .foregroundColor(.white)
+                .foregroundStyle(.primary)
 
             Spacer()
         }
@@ -135,7 +143,7 @@ struct OnboardingView: View {
             Text("Welcome to Cashu")
                 .font(.title)
                 .fontWeight(.bold)
-                .foregroundColor(.white)
+                .foregroundStyle(.primary)
 
             Text("Create a new wallet or restore from your seed phrase")
                 .font(.subheadline)
@@ -196,7 +204,7 @@ struct OnboardingView: View {
             Text("Your Seed Phrase")
                 .font(.title2)
                 .fontWeight(.bold)
-                .foregroundColor(.white)
+                .foregroundStyle(.primary)
 
             Text("Write down these 12 words in order and keep them safe. This is the only way to recover your wallet.")
                 .font(.subheadline)
@@ -230,7 +238,7 @@ struct OnboardingView: View {
 
                         Text(word)
                             .font(.system(.body, design: .monospaced))
-                            .foregroundColor(.white)
+                            .foregroundStyle(.primary)
                     }
                     .padding(.horizontal, 8)
                     .padding(.vertical, 8)
@@ -244,14 +252,132 @@ struct OnboardingView: View {
 
             Spacer()
 
-            // Continue button
-            Button(action: finishOnboarding) {
+            // Continue button — go to verification step
+            Button(action: startVerification) {
                 Text("I'VE SAVED MY SEED PHRASE")
             }
             .buttonStyle(CashuPrimaryButtonStyle())
             .padding(.bottom, 40)
         }
         .padding()
+    }
+
+    // MARK: - Verify Mnemonic View
+
+    private var verifyMnemonicView: some View {
+        VStack(spacing: 24) {
+            Text("Verify Seed Phrase")
+                .font(.title2)
+                .fontWeight(.bold)
+                .foregroundStyle(.primary)
+
+            Text("Select the correct word for each position to confirm you saved your seed phrase.")
+                .font(.subheadline)
+                .foregroundColor(.cashuMutedText)
+                .multilineTextAlignment(.center)
+
+            let words = walletManager.getMnemonicWords()
+
+            VStack(spacing: 16) {
+                ForEach(verificationIndices, id: \.self) { index in
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Word #\(index + 1)")
+                            .font(.caption)
+                            .fontWeight(.semibold)
+                            .foregroundColor(.cashuMutedText)
+
+                        let options = generateWordOptions(correctWord: words[index])
+                        LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible()), GridItem(.flexible())], spacing: 8) {
+                            ForEach(options, id: \.self) { option in
+                                Button(action: {
+                                    verificationAnswers[index] = option
+                                    verificationError = nil
+                                }) {
+                                    Text(option)
+                                        .font(.system(.subheadline, design: .monospaced))
+                                        .foregroundColor(verificationAnswers[index] == option ? .black : .white)
+                                        .frame(maxWidth: .infinity)
+                                        .padding(.vertical, 10)
+                                        .background(
+                                            RoundedRectangle(cornerRadius: 8)
+                                                .fill(verificationAnswers[index] == option ? SettingsManager.shared.accentColor : Color.cashuCardBackground)
+                                        )
+                                        .overlay(
+                                            RoundedRectangle(cornerRadius: 8)
+                                                .stroke(verificationAnswers[index] == option ? Color.clear : Color.cashuBorder, lineWidth: 1)
+                                        )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            .padding()
+
+            if let error = verificationError {
+                Text(error)
+                    .font(.caption)
+                    .foregroundColor(.cashuError)
+            }
+
+            Spacer()
+
+            Button(action: checkVerification) {
+                Text("CONFIRM")
+            }
+            .buttonStyle(CashuPrimaryButtonStyle(isDisabled: verificationAnswers.count < verificationIndices.count))
+            .disabled(verificationAnswers.count < verificationIndices.count)
+
+            Button(action: { currentStep = .showMnemonic }) {
+                Text("Go back and check")
+                    .foregroundColor(.cashuMutedText)
+            }
+            .padding(.bottom, 40)
+        }
+        .padding()
+    }
+
+    private func startVerification() {
+        let words = walletManager.getMnemonicWords()
+        guard words.count >= 3 else { return }
+        // Pick 3 random non-overlapping indices
+        var indices = Array(0..<words.count)
+        indices.shuffle()
+        verificationIndices = Array(indices.prefix(3)).sorted()
+        verificationAnswers = [:]
+        verificationError = nil
+        currentStep = .verifyMnemonic
+    }
+
+    private func generateWordOptions(correctWord: String) -> [String] {
+        let words = walletManager.getMnemonicWords()
+        var options: Set<String> = [correctWord]
+        // Add random wrong words from the mnemonic (different from correct)
+        let otherWords = words.filter { $0 != correctWord }
+        for word in otherWords.shuffled() where options.count < 3 {
+            options.insert(word)
+        }
+        // If not enough from mnemonic, add from BIP39 list
+        let sampleWords = ["abandon", "ability", "about", "abstract", "access", "account",
+                           "achieve", "adapt", "affair", "agent", "alarm", "anchor"]
+        for word in sampleWords.shuffled() where options.count < 3 {
+            if !words.contains(word) {
+                options.insert(word)
+            }
+        }
+        return Array(options).shuffled()
+    }
+
+    private func checkVerification() {
+        let words = walletManager.getMnemonicWords()
+        for index in verificationIndices {
+            if verificationAnswers[index] != words[index] {
+                verificationError = "Incorrect. Please go back and check your seed phrase."
+                verificationAnswers = [:]
+                return
+            }
+        }
+        finishOnboarding()
     }
 
     // MARK: - Restore Input View
@@ -261,7 +387,7 @@ struct OnboardingView: View {
             Text("Restore Wallet")
                 .font(.title2)
                 .fontWeight(.bold)
-                .foregroundColor(.white)
+                .foregroundStyle(.primary)
 
             Text("Enter your 12-word seed phrase to restore your wallet")
                 .font(.subheadline)
@@ -271,7 +397,7 @@ struct OnboardingView: View {
             // Mnemonic input
             TextEditor(text: $restoreMnemonic)
                 .font(.system(.body, design: .monospaced))
-                .foregroundColor(.white)
+                .foregroundStyle(.primary)
                 .scrollContentBackground(.hidden)
                 .frame(height: 150)
                 .padding()
@@ -289,14 +415,21 @@ struct OnboardingView: View {
                 .split(separator: " ")
                 .count
 
-            Text("\(wordCount) / 12 words")
-                .font(.caption)
-                .foregroundColor(wordCount == 12 ? .cashuAccent : .cashuMutedText)
+            let invalidIndices = walletManager.invalidMnemonicWords(restoreMnemonic)
+            HStack(spacing: 4) {
+                Text("\(wordCount) / 12 words")
+                    .font(.caption)
+                    .foregroundColor(wordCount == 12 ? .cashuAccent : .cashuMutedText)
+                if wordCount > 0 && !invalidIndices.isEmpty {
+                    Text("(\(invalidIndices.count) invalid)")
+                        .font(.caption)
+                        .foregroundColor(.cashuError)
+                }
+            }
 
             if let error = errorMessage {
-                Text(error)
-                    .font(.caption)
-                    .foregroundColor(.cashuError)
+                ErrorBannerView(message: error, type: .error)
+                    .padding(.horizontal)
             }
 
             Spacer()
@@ -330,7 +463,7 @@ struct OnboardingView: View {
             Text("Restore Ecash")
                 .font(.title2)
                 .fontWeight(.bold)
-                .foregroundColor(.white)
+                .foregroundStyle(.primary)
 
             Text("Add the mint URLs you used before to recover your ecash balance.")
                 .font(.subheadline)
@@ -342,7 +475,7 @@ struct OnboardingView: View {
             HStack(spacing: 12) {
                 TextField("https://mint.example.com", text: $mintUrlInput)
                     .font(.system(.body, design: .monospaced))
-                    .foregroundColor(.white)
+                    .foregroundStyle(.primary)
                     .autocapitalization(.none)
                     .disableAutocorrection(true)
                     .keyboardType(.URL)
@@ -540,7 +673,7 @@ struct OnboardingView: View {
                 Text(result?.mintName ?? shortenUrl(url))
                     .font(.subheadline)
                     .fontWeight(.medium)
-                    .foregroundColor(.white)
+                    .foregroundStyle(.primary)
                     .lineLimit(1)
 
                 Text(url)
@@ -606,7 +739,7 @@ struct OnboardingView: View {
                 currentStep = .showMnemonic
             } catch {
                 errorMessage = "Failed to create wallet: \(error.localizedDescription)"
-                print("Create wallet error: \(error)")
+                AppLogger.wallet.error("Create wallet error: \(error)")
             }
             isCreating = false
         }
@@ -730,7 +863,7 @@ struct OnboardingView: View {
                     mintsToRestore.removeAll { $0 == url }
                 } catch {
                     restoreMintError = "Failed to restore from \(shortenUrl(url)): \(error.localizedDescription)"
-                    print("Restore error for \(url): \(error)")
+                    AppLogger.wallet.error("Restore error for \(url): \(error)")
                 }
             }
             currentRestoringMint = nil

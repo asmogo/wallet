@@ -10,7 +10,7 @@ struct CashuWalletApp: App {
             ContentView()
                 .environmentObject(walletManager)
                 .environmentObject(navigationManager)
-                .preferredColorScheme(.dark)
+                // Removed forced dark mode — respects system appearance setting
                 .task {
                     await walletManager.initialize()
                     let (shouldCheckPending, shouldTrackSentTokens) = await MainActor.run {

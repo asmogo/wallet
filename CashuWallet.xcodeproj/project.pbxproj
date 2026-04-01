@@ -49,6 +49,19 @@
 		BB00000000000002 /* TransactionService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000012 /* TransactionService.swift */; };
 		BB00000000000003 /* TokenService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000013 /* TokenService.swift */; };
 		BB00000000000004 /* LightningService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000014 /* LightningService.swift */; };
+		CC00000000000001 /* ThemeSettingsSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC00000000000011 /* ThemeSettingsSection.swift */; };
+		CC00000000000002 /* BackupSettingsSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC00000000000012 /* BackupSettingsSection.swift */; };
+		CC00000000000003 /* NWCSettingsSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC00000000000013 /* NWCSettingsSection.swift */; };
+		CC00000000000004 /* P2PKSettingsSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC00000000000014 /* P2PKSettingsSection.swift */; };
+		CC00000000000005 /* NostrSettingsSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC00000000000015 /* NostrSettingsSection.swift */; };
+		CC00000000000006 /* PrivacySettingsSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC00000000000016 /* PrivacySettingsSection.swift */; };
+		CC00000000000007 /* AdvancedSettingsSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC00000000000017 /* AdvancedSettingsSection.swift */; };
+		CC00000000000008 /* LightningAddressSettingsSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC00000000000018 /* LightningAddressSettingsSection.swift */; };
+		CC00000000000009 /* PaymentRequestsSettingsSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC00000000000019 /* PaymentRequestsSettingsSection.swift */; };
+		DD00000000000001 /* AppLogger.swift in Sources */ = {isa = PBXBuildFile; fileRef = DD00000000000011 /* AppLogger.swift */; };
+		DD00000000000002 /* BIP39WordList.swift in Sources */ = {isa = PBXBuildFile; fileRef = DD00000000000012 /* BIP39WordList.swift */; };
+		DD00000000000003 /* HapticFeedback.swift in Sources */ = {isa = PBXBuildFile; fileRef = DD00000000000013 /* HapticFeedback.swift */; };
+		DD00000000000004 /* ErrorBannerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DD00000000000014 /* ErrorBannerView.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -92,6 +105,19 @@
 		BB00000000000012 /* TransactionService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TransactionService.swift; sourceTree = "<group>"; };
 		BB00000000000013 /* TokenService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TokenService.swift; sourceTree = "<group>"; };
 		BB00000000000014 /* LightningService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LightningService.swift; sourceTree = "<group>"; };
+		CC00000000000011 /* ThemeSettingsSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ThemeSettingsSection.swift; sourceTree = "<group>"; };
+		CC00000000000012 /* BackupSettingsSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BackupSettingsSection.swift; sourceTree = "<group>"; };
+		CC00000000000013 /* NWCSettingsSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NWCSettingsSection.swift; sourceTree = "<group>"; };
+		CC00000000000014 /* P2PKSettingsSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = P2PKSettingsSection.swift; sourceTree = "<group>"; };
+		CC00000000000015 /* NostrSettingsSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NostrSettingsSection.swift; sourceTree = "<group>"; };
+		CC00000000000016 /* PrivacySettingsSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PrivacySettingsSection.swift; sourceTree = "<group>"; };
+		CC00000000000017 /* AdvancedSettingsSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AdvancedSettingsSection.swift; sourceTree = "<group>"; };
+		CC00000000000018 /* LightningAddressSettingsSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LightningAddressSettingsSection.swift; sourceTree = "<group>"; };
+		CC00000000000019 /* PaymentRequestsSettingsSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PaymentRequestsSettingsSection.swift; sourceTree = "<group>"; };
+		DD00000000000011 /* AppLogger.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppLogger.swift; sourceTree = "<group>"; };
+		DD00000000000012 /* BIP39WordList.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BIP39WordList.swift; sourceTree = "<group>"; };
+		DD00000000000013 /* HapticFeedback.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HapticFeedback.swift; sourceTree = "<group>"; };
+		DD00000000000014 /* ErrorBannerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ErrorBannerView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -160,6 +186,9 @@
 				6A8EC92F2F2442EF0058C21B /* SettingsManager.swift */,
 				2100000000000004 /* WalletManager.swift */,
 				2100000000000005 /* KeychainService.swift */,
+				DD00000000000011 /* AppLogger.swift */,
+				DD00000000000012 /* BIP39WordList.swift */,
+				DD00000000000013 /* HapticFeedback.swift */,
 			);
 			path = Core;
 			sourceTree = "<group>";
@@ -242,6 +271,15 @@
 			isa = PBXGroup;
 			children = (
 				210000000000000E /* SettingsView.swift */,
+				CC00000000000012 /* BackupSettingsSection.swift */,
+				CC00000000000018 /* LightningAddressSettingsSection.swift */,
+				CC00000000000015 /* NostrSettingsSection.swift */,
+				CC00000000000019 /* PaymentRequestsSettingsSection.swift */,
+				CC00000000000013 /* NWCSettingsSection.swift */,
+				CC00000000000014 /* P2PKSettingsSection.swift */,
+				CC00000000000016 /* PrivacySettingsSection.swift */,
+				CC00000000000011 /* ThemeSettingsSection.swift */,
+				CC00000000000017 /* AdvancedSettingsSection.swift */,
 			);
 			path = Settings;
 			sourceTree = "<group>";
@@ -257,6 +295,7 @@
 				210000000000000F /* NumericKeyboard.swift */,
 				2100000000000010 /* QRCodeView.swift */,
 				6A8EC9372F2450000058C21B /* NotificationBadgeView.swift */,
+				DD00000000000014 /* ErrorBannerView.swift */,
 			);
 			path = Components;
 			sourceTree = "<group>";
@@ -415,6 +454,19 @@
 				BB00000000000002 /* TransactionService.swift in Sources */,
 				BB00000000000003 /* TokenService.swift in Sources */,
 				BB00000000000004 /* LightningService.swift in Sources */,
+				CC00000000000001 /* ThemeSettingsSection.swift in Sources */,
+				CC00000000000002 /* BackupSettingsSection.swift in Sources */,
+				CC00000000000003 /* NWCSettingsSection.swift in Sources */,
+				CC00000000000004 /* P2PKSettingsSection.swift in Sources */,
+				CC00000000000005 /* NostrSettingsSection.swift in Sources */,
+				CC00000000000006 /* PrivacySettingsSection.swift in Sources */,
+				CC00000000000007 /* AdvancedSettingsSection.swift in Sources */,
+				CC00000000000008 /* LightningAddressSettingsSection.swift in Sources */,
+				CC00000000000009 /* PaymentRequestsSettingsSection.swift in Sources */,
+				DD00000000000001 /* AppLogger.swift in Sources */,
+				DD00000000000002 /* BIP39WordList.swift in Sources */,
+				DD00000000000003 /* HapticFeedback.swift in Sources */,
+				DD00000000000004 /* ErrorBannerView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -547,7 +599,7 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = "";
+				DEVELOPMENT_TEAM = JQ4WB222T4;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = CashuWallet/Info.plist;
@@ -582,7 +634,7 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = "";
+				DEVELOPMENT_TEAM = JQ4WB222T4;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = CashuWallet/Info.plist;

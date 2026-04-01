@@ -37,14 +37,15 @@ struct ReceiveLightningView: View {
                 ToolbarItem(placement: .navigationBarLeading) {
                     Button(action: { dismiss() }) {
                         Image(systemName: "xmark")
-                            .foregroundColor(.white)
+                            .foregroundStyle(.primary)
                     }
+                    .accessibilityLabel("Close")
                 }
-                
+
                 ToolbarItem(placement: .principal) {
                     Text("Receive Lightning")
                         .font(.headline)
-                        .foregroundColor(.white)
+                        .foregroundStyle(.primary)
                 }
                 
                 ToolbarItem(placement: .topBarTrailing) {
@@ -92,12 +93,15 @@ struct ReceiveLightningView: View {
             VStack(spacing: 4) {
                 Text(amountString.isEmpty ? "0" : amountString)
                     .font(.cashuBalance)
-                    .foregroundColor(.white)
-                
+                    .foregroundStyle(.primary)
+
                 Text("sat")
                     .font(.title3)
                     .foregroundColor(.cashuMutedText)
             }
+            .accessibilityElement(children: .combine)
+            .accessibilityLabel("Invoice amount")
+            .accessibilityValue("\(amountString.isEmpty ? "0" : amountString) sats")
             
             if let error = errorMessage {
                 Text(error)
@@ -123,6 +127,8 @@ struct ReceiveLightningView: View {
             }
             .buttonStyle(CashuPrimaryButtonStyle(isDisabled: amountString.isEmpty || amountString == "0"))
             .disabled(amountString.isEmpty || amountString == "0" || isCreatingInvoice)
+            .accessibilityLabel(isCreatingInvoice ? "Creating invoice" : "Create invoice")
+            .accessibilityHint("Creates a lightning invoice for \(amountString.isEmpty ? "0" : amountString) sats")
             .padding(.horizontal)
             .padding(.vertical, 30)
         }
@@ -135,29 +141,34 @@ struct ReceiveLightningView: View {
             HStack {
                 Image(systemName: "bolt.fill")
                     .foregroundColor(.cashuAccent)
+                    .accessibilityHidden(true)
                 Text("Lightning Address")
                     .font(.caption)
                     .fontWeight(.medium)
                     .foregroundColor(.cashuMutedText)
             }
-            
+
             Button(action: copyLightningAddress) {
                 HStack {
                     Text(npcService.lightningAddress)
                         .font(.subheadline)
                         .fontWeight(.medium)
-                        .foregroundColor(.white)
+                        .foregroundStyle(.primary)
                         .lineLimit(1)
-                    
+
                     Spacer()
-                    
+
                     Image(systemName: lightningAddressCopied ? "checkmark" : "doc.on.doc")
                         .font(.caption)
                         .foregroundColor(lightningAddressCopied ? .cashuAccent : .cashuMutedText)
+                        .accessibilityHidden(true)
                 }
             }
             .buttonStyle(PlainButtonStyle())
-            
+            .accessibilityLabel("Lightning address: \(npcService.lightningAddress)")
+            .accessibilityHint("Copies lightning address to clipboard")
+            .accessibilityValue(lightningAddressCopied ? "Copied" : "")
+
             Text("Anyone can send sats to this address")
                 .font(.caption2)
                 .foregroundColor(.cashuMutedText)
@@ -195,20 +206,20 @@ struct ReceiveLightningView: View {
                         Image(systemName: "building.columns")
                             .foregroundColor(.gray)
                     )
-                
+
                 VStack(alignment: .leading, spacing: 2) {
                     Text(mint.name)
                         .font(.subheadline)
                         .fontWeight(.medium)
-                        .foregroundColor(.white)
-                    
+                        .foregroundStyle(.primary)
+
                     Text("\(mint.balance) sat available")
                         .font(.caption)
                         .foregroundColor(.cashuMutedText)
                 }
-                
+
                 Spacer()
-                
+
                 Image(systemName: "chevron.down")
                     .foregroundColor(.cashuMutedText)
             }
@@ -223,6 +234,9 @@ struct ReceiveLightningView: View {
             )
         }
         .buttonStyle(PlainButtonStyle())
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("Mint: \(mint.name), \(mint.balance) sats available")
+        .accessibilityHint("Opens mint selector")
     }
     
     // MARK: - Invoice Display View
@@ -248,7 +262,8 @@ struct ReceiveLightningView: View {
                 // Amount
                 Text("\(quote.amount) sat")
                     .font(.cashuBalanceSmall)
-                    .foregroundColor(.white)
+                    .foregroundStyle(.primary)
+                    .accessibilityLabel("Invoice amount: \(quote.amount) sats")
                 
                 // Status
                 statusBadge
@@ -275,10 +290,13 @@ struct ReceiveLightningView: View {
                 Button(action: { copyInvoice(quote.request) }) {
                     HStack {
                         Image(systemName: copyButtonText == "COPIED" ? "checkmark" : "doc.on.doc")
+                            .accessibilityHidden(true)
                         Text(copyButtonText)
                     }
                 }
                 .buttonStyle(CashuPrimaryButtonStyle())
+                .accessibilityLabel(copyButtonText == "COPIED" ? "Copied" : "Copy invoice")
+                .accessibilityHint("Copies the lightning invoice to clipboard")
                 .padding(.horizontal)
                 .padding(.bottom, 30)
             }
@@ -347,11 +365,14 @@ struct ReceiveLightningView: View {
         if isPaid {
             HStack(spacing: 6) {
                 Image(systemName: "checkmark.circle.fill")
+                    .accessibilityHidden(true)
                 Text("Payment Received!")
             }
             .font(.subheadline)
             .fontWeight(.medium)
             .foregroundColor(.cashuAccent)
+            .accessibilityElement(children: .combine)
+            .accessibilityLabel("Payment received")
         } else if isCheckingPayment || isMinting {
             HStack(spacing: 6) {
                 ProgressView()
@@ -361,13 +382,18 @@ struct ReceiveLightningView: View {
             }
             .font(.subheadline)
             .foregroundColor(.cashuMutedText)
+            .accessibilityElement(children: .combine)
+            .accessibilityLabel(isMinting ? "Minting tokens" : "Checking payment status")
         } else {
             HStack(spacing: 6) {
                 Image(systemName: "clock")
+                    .accessibilityHidden(true)
                 Text("Waiting for payment...")
             }
             .font(.subheadline)
             .foregroundColor(.cashuWarning)
+            .accessibilityElement(children: .combine)
+            .accessibilityLabel("Waiting for payment")
         }
     }
     
@@ -377,6 +403,7 @@ struct ReceiveLightningView: View {
                 Image(systemName: icon)
                     .font(.caption)
                     .foregroundColor(.cashuMutedText)
+                    .accessibilityHidden(true)
                 Text(label)
                     .foregroundColor(.cashuMutedText)
             }
@@ -385,6 +412,8 @@ struct ReceiveLightningView: View {
                 .foregroundColor(highlight ? .cashuAccent : .white)
         }
         .font(.subheadline)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("\(label): \(value)")
     }
     
     private func extractMintHost(_ url: String) -> String {

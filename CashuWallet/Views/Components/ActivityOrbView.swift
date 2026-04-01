@@ -104,7 +104,7 @@ struct MutexLockOverlay: View {
                         
                         Text(message)
                             .font(.headline)
-                            .foregroundColor(.white)
+                            .foregroundStyle(.primary)
                     }
                     .padding(40)
                     .background(
@@ -221,7 +221,7 @@ extension View {
             .ignoresSafeArea()
         
         Text("Main Content")
-            .foregroundColor(.white)
+            .foregroundStyle(.primary)
         
         MutexLockOverlay(isLocked: .constant(true), message: "Sending tokens...")
     }
