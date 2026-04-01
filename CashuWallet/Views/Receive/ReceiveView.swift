@@ -3,84 +3,79 @@ import SwiftUI
 struct ReceiveView: View {
     @Environment(\.dismiss) private var dismiss
     @EnvironmentObject var walletManager: WalletManager
-    
+
     @State private var selectedOption: ReceiveOption?
-    
+
     enum ReceiveOption: String, Identifiable {
         case paste, scan, lightning
         var id: String { rawValue }
     }
-    
+
     var body: some View {
         NavigationStack {
-            VStack(spacing: 24) {
-                Spacer()
-
-                // Icon
-                Image(systemName: "arrow.down.circle.fill")
-                    .font(.system(size: 60))
-                    .foregroundStyle(Color.accentColor)
-                    .accessibilityHidden(true)
-
-                Text("Receive")
-                    .font(.title)
-                    .fontWeight(.bold)
-
-                Text("Choose how you want to receive")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-
-                Spacer()
-
-                // Options
-                VStack(spacing: 12) {
-                        // Paste option
-                        Button(action: { selectedOption = .paste }) {
-                            receiveOptionRow(
-                                icon: "doc.on.clipboard",
-                                title: "Paste Ecash Token",
-                                subtitle: "Paste a token from clipboard"
-                            )
+            List {
+                Section {
+                    Button(action: { selectedOption = .paste }) {
+                        Label {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("Paste Ecash Token")
+                                Text("Paste a token from clipboard")
+                                    .font(.subheadline)
+                                    .foregroundStyle(.secondary)
+                            }
+                        } icon: {
+                            Image(systemName: "doc.on.clipboard")
+                                .foregroundStyle(Color.accentColor)
                         }
-                        .accessibilityLabel("Paste Ecash Token")
-                        .accessibilityHint("Paste a cashu token from clipboard to receive ecash")
-
-                        // Scan option
-                        Button(action: { selectedOption = .scan }) {
-                            receiveOptionRow(
-                                icon: "qrcode.viewfinder",
-                                title: "Scan QR Code",
-                                subtitle: "Scan token or invoice"
-                            )
-                        }
-                        .accessibilityLabel("Scan QR Code")
-                        .accessibilityHint("Opens camera to scan a token or invoice QR code")
-
-                        // Lightning option
-                        Button(action: { selectedOption = .lightning }) {
-                            receiveOptionRow(
-                                icon: "bolt.fill",
-                                title: "Lightning Invoice",
-                                subtitle: "Create invoice to receive sats"
-                            )
-                        }
-                        .accessibilityLabel("Lightning Invoice")
-                        .accessibilityHint("Creates a lightning invoice to receive sats")
                     }
-                    .padding(.horizontal)
+                    .accessibilityLabel("Paste Ecash Token")
+                    .accessibilityHint("Paste a cashu token from clipboard to receive ecash")
+                    .accessibilityAddTraits(.isButton)
 
-                Spacer()
+                    Button(action: { selectedOption = .scan }) {
+                        Label {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("Scan QR Code")
+                                Text("Scan token or invoice")
+                                    .font(.subheadline)
+                                    .foregroundStyle(.secondary)
+                            }
+                        } icon: {
+                            Image(systemName: "qrcode.viewfinder")
+                                .foregroundStyle(Color.accentColor)
+                        }
+                    }
+                    .accessibilityLabel("Scan QR Code")
+                    .accessibilityHint("Opens camera to scan a token or invoice QR code")
+                    .accessibilityAddTraits(.isButton)
 
-                // Cancel button
-                Button(action: { dismiss() }) {
-                    Text("Cancel")
-                        .foregroundStyle(.secondary)
+                    Button(action: { selectedOption = .lightning }) {
+                        Label {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("Lightning Invoice")
+                                Text("Create invoice to receive sats")
+                                    .font(.subheadline)
+                                    .foregroundStyle(.secondary)
+                            }
+                        } icon: {
+                            Image(systemName: "bolt.fill")
+                                .foregroundStyle(Color.accentColor)
+                        }
+                    }
+                    .accessibilityLabel("Lightning Invoice")
+                    .accessibilityHint("Creates a lightning invoice to receive sats")
+                    .accessibilityAddTraits(.isButton)
                 }
-                .accessibilityLabel("Cancel")
-                .accessibilityHint("Closes the receive screen")
-                .padding(.bottom, 40)
             }
-            .navigationBarHidden(true)
+            .navigationTitle("Receive")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") {
+                        dismiss()
+                    }
+                }
+            }
             .sheet(item: $selectedOption) { option in
                 switch option {
                 case .paste:
@@ -96,34 +91,7 @@ struct ReceiveView: View {
             }
         }
     }
-    
-    private func receiveOptionRow(icon: String, title: String, subtitle: String) -> some View {
-        GroupBox {
-            HStack(spacing: 16) {
-                Image(systemName: icon)
-                    .font(.title2)
-                    .foregroundStyle(Color.accentColor)
-                    .frame(width: 50, height: 50)
-                    .accessibilityHidden(true)
 
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(title)
-                        .font(.headline)
-                    Text(subtitle)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-
-                Spacer()
-
-                Image(systemName: "chevron.right")
-                    .foregroundStyle(.secondary)
-                    .accessibilityHidden(true)
-            }
-        }
-        .accessibilityElement(children: .combine)
-    }
-    
     private func handleScannedCode(_ code: String) {
         Task { @MainActor in
             if code.lowercased().hasPrefix("cashu") {
@@ -142,81 +110,54 @@ struct ReceiveEcashView: View {
     @Environment(\.dismiss) private var dismiss
     @EnvironmentObject var walletManager: WalletManager
     @ObservedObject private var settings = SettingsManager.shared
-    
+
     @State private var tokenInput = ""
     @State private var errorMessage: String?
     @State private var navigateToDetail = false
     @State private var validatedToken: String?
-    
+
     var body: some View {
         NavigationStack {
-            VStack(spacing: 24) {
-                Spacer()
-
-                Image(systemName: "doc.on.clipboard")
-                    .font(.system(size: 48))
-                    .foregroundStyle(Color.accentColor)
-                    .accessibilityHidden(true)
-
-                Text("Paste Token")
-                    .font(.title2)
-                    .fontWeight(.bold)
-
-                // Token input
-                GroupBox {
+            Form {
+                Section {
                     TextEditor(text: $tokenInput)
                         .font(.system(.body, design: .monospaced))
-                        .scrollContentBackground(.hidden)
                         .frame(height: 120)
+                        .accessibilityLabel("Ecash token input")
+                        .accessibilityHint("Enter or paste a cashu ecash token")
                 }
-                .padding(.horizontal)
-                .accessibilityLabel("Ecash token input")
-                .accessibilityHint("Enter or paste a cashu ecash token")
-                    
-                    // Paste from clipboard
+
+                Section {
                     Button(action: pasteFromClipboard) {
-                        HStack {
-                            Image(systemName: "doc.on.clipboard")
-                                .accessibilityHidden(true)
-                            Text("Paste from Clipboard")
-                        }
+                        Label("Paste from Clipboard", systemImage: "doc.on.clipboard")
                     }
-                    .buttonStyle(.bordered).controlSize(.large)
-                    .accessibilityLabel("Paste from Clipboard")
                     .accessibilityHint("Pastes ecash token from clipboard")
-                    .padding(.horizontal)
-                    
-                    if let error = errorMessage {
+                }
+
+                if let error = errorMessage {
+                    Section {
                         Text(error)
-                            .font(.caption)
                             .foregroundStyle(.red)
                     }
-                    
-                    Spacer()
-                    
-                    // Continue button - validates token and navigates to detail view
+                }
+
+                Section {
                     Button(action: validateAndContinue) {
-                        Text("CONTINUE")
+                        Text("Continue")
+                            .frame(maxWidth: .infinity)
                     }
-                    .buttonStyle(.borderedProminent).controlSize(.large)
                     .disabled(tokenInput.isEmpty)
-                    .accessibilityLabel("Continue")
                     .accessibilityHint("Validates the token and proceeds to details")
-                    .padding(.horizontal)
-                    .padding(.bottom, 30)
+                }
             }
+            .navigationTitle("Receive Ecash")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .navigationBarLeading) {
+                ToolbarItem(placement: .cancellationAction) {
                     Button(action: { dismiss() }) {
                         Image(systemName: "xmark")
                     }
                     .accessibilityLabel("Close")
-                }
-
-                ToolbarItem(placement: .principal) {
-                    Text("Receive Ecash")
-                        .font(.headline)
                 }
             }
             .navigationDestination(isPresented: $navigateToDetail) {
@@ -237,22 +178,20 @@ struct ReceiveEcashView: View {
             }
         }
     }
-    
+
     private func pasteFromClipboard() {
         if let clipboardContent = UIPasteboard.general.string {
             tokenInput = clipboardContent
         }
     }
-    
+
     private func validateAndContinue() {
         guard !tokenInput.isEmpty else { return }
-        
+
         errorMessage = nil
-        
-        // Validate that it's a valid cashu token before navigating
+
         let trimmedToken = tokenInput.trimmingCharacters(in: .whitespacesAndNewlines)
-        
-        // Basic validation - check if it looks like a cashu token
+
         if trimmedToken.lowercased().hasPrefix("cashu") {
             validatedToken = trimmedToken
             navigateToDetail = true

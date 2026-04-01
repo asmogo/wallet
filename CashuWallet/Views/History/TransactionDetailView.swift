@@ -41,7 +41,7 @@ struct TransactionDetailView: View {
                     } else {
                         // Placeholder icon if no QR content
                         Image(systemName: kindIcon)
-                            .font(.system(size: 80))
+                            .font(.largeTitle)
         .foregroundStyle(Color.accentColor)
                             .padding(.top, 40)
                             .accessibilityHidden(true)

@@ -5,23 +5,22 @@ import SwiftUI
 
 struct AnimatedBalanceView: View {
     let value: UInt64
-    var fontSize: CGFloat = 48
-    var fontWeight: Font.Weight = .bold
+    var textStyle: Font = .largeTitle.bold()
     var hideBalance: Bool = false
-    
+
     @ObservedObject var settings = SettingsManager.shared
     @State private var displayValue: UInt64 = 0
     @State private var animationProgress: Double = 0
-    
+
     var body: some View {
         Group {
             if hideBalance {
                 Text("••••••")
-                    .font(.system(size: fontSize, weight: fontWeight, design: .default))
+                    .font(textStyle)
                     .accessibilityLabel("Balance hidden")
             } else {
                 Text(formattedValue)
-                    .font(.system(size: fontSize, weight: fontWeight, design: .default))
+                    .font(textStyle)
                     .animation(.spring(response: 0.5, dampingFraction: 0.8), value: displayValue)
                     .accessibilityLabel("Balance: \(formattedValue)")
                     .accessibilityValue(formattedValue)
@@ -47,17 +46,15 @@ struct AnimatedBalanceView: View {
 
 struct AnimatedAmountDisplay: View {
     let value: UInt64
-    var fontSize: CGFloat = 48
     var showUnit: Bool = true
     var hideBalance: Bool = false
-    
+
     @ObservedObject var settings = SettingsManager.shared
-    
+
     var body: some View {
         VStack(spacing: 4) {
             AnimatedBalanceView(
                 value: value,
-                fontSize: fontSize,
                 hideBalance: hideBalance
             )
             
@@ -96,14 +93,9 @@ struct BalanceCardView: View {
                         .font(.caption)
                         .fontWeight(.bold)
                 }
-.foregroundStyle(.primary)
-                .padding(.horizontal, 12)
-                .padding(.vertical, 6)
-                .overlay(
-                    Capsule()
-                        .stroke(Color.accentColor, lineWidth: 1)
-                )
             }
+            .buttonStyle(.bordered)
+            .controlSize(.small)
             .accessibilityLabel("Unit: \(settings.unitLabel)")
             .accessibilityHint("Toggles the display unit")
             .padding(.top, 20)
@@ -112,7 +104,6 @@ struct BalanceCardView: View {
             VStack(spacing: 8) {
                 AnimatedBalanceView(
                     value: balance,
-                    fontSize: 48,
                     hideBalance: isHidden
                 )
                 .onTapGesture {
@@ -169,22 +160,10 @@ struct PendingBalanceBadge: View {
     
     var body: some View {
         Button(action: { onTap?() }) {
-            HStack(spacing: 6) {
-                Image(systemName: "clock")
-                    .font(.caption)
-                    .accessibilityHidden(true)
-
-                Text("Pending: \(settings.formatAmountShort(amount)) \(settings.unitSuffix)")
-                    .font(.caption)
-                    .fontWeight(.medium)
-            }
-.foregroundStyle(.primary)
-            .padding(.horizontal, 16)
-            .padding(.vertical, 8)
-            .background(
-                Capsule()
-                    .stroke(Color.accentColor, lineWidth: 1)
-            )
+            Label("Pending: \(settings.formatAmountShort(amount)) \(settings.unitSuffix)", systemImage: "clock")
+                .font(.caption)
+                .fontWeight(.medium)
+                .foregroundStyle(.secondary)
         }
         .accessibilityElement(children: .combine)
         .accessibilityLabel("Pending balance: \(settings.formatAmountShort(amount)) \(settings.unitSuffix)")
@@ -197,13 +176,12 @@ struct PendingBalanceBadge: View {
 struct TransactionAmountView: View {
     let amount: Int64
     let isIncoming: Bool
-    var fontSize: CGFloat = 16
-    
+
     @ObservedObject var settings = SettingsManager.shared
-    
+
     var body: some View {
         Text(formattedAmount)
-            .font(.system(size: fontSize, weight: .medium))
+            .font(.callout.weight(.medium))
             .foregroundColor(amountColor)
     }
     
@@ -213,7 +191,7 @@ struct TransactionAmountView: View {
     }
     
     private var amountColor: Color {
-        isIncoming ? .green : .white
+        isIncoming ? .green : .primary
     }
 }
 

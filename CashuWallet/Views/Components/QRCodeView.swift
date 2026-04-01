@@ -88,7 +88,7 @@ struct QRCodeView: View {
                         .fill(Color.gray.opacity(0.3))
                         .overlay(
                             Image(systemName: "qrcode")
-                                .font(.system(size: 48))
+                                .font(.title)
                                 .foregroundColor(.gray)
                         )
                         .accessibilityLabel("QR code loading")

@@ -8,20 +8,14 @@ struct NWCSettingsSection: View {
     @Binding var activeQRPayload: QRPayload?
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("Nostr Wallet Connect (NWC)")
-                .font(.subheadline)
-                .fontWeight(.medium)
-
+        Group {
             Text("Use NWC to control your wallet from compatible applications.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
 
             Toggle(isOn: $settings.enableNWC.animation(.easeInOut(duration: 0.2))) {
                 Text("Enable NWC")
-                    .font(.subheadline)
             }
-            .toggleStyle(SwitchToggleStyle(tint: Color.accentColor))
 
             if settings.enableNWC {
                 Text("You can only use NWC for payments from your Bitcoin balance on your active mint.")
@@ -33,53 +27,49 @@ struct NWCSettingsSection: View {
                         Image(systemName: "link.badge.plus")
                         Text(settings.nwcConnections.isEmpty ? "Create connection" : "Ensure connection")
                     }
-                    .font(.subheadline)
-.foregroundStyle(Color.accentColor)
                 }
 
                 ForEach(settings.nwcConnections) { connection in
-                    GroupBox {
-                        VStack(alignment: .leading, spacing: 10) {
-                            HStack {
-                                Text("Connection")
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
+                    VStack(alignment: .leading, spacing: 10) {
+                        HStack {
+                            Text("Connection")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
 
-                                Spacer()
+                            Spacer()
 
-                                Button(action: { copyNWCConnection(connection) }) {
-                                    Image(systemName: copiedNWCConnectionId == connection.id ? "checkmark" : "doc.on.doc")
-                                        .foregroundColor(copiedNWCConnectionId == connection.id ? .green : Color.accentColor)
-                                }
-                                .accessibilityLabel("Copy connection string")
-
-                                Button(action: { showQRCode(title: "NWC Connection", content: settings.nwcConnectionString(for: connection)) }) {
-                                    Image(systemName: "qrcode")
-                                        .foregroundStyle(Color.accentColor)
-                                }
-                                .accessibilityLabel("Show connection QR")
-
-                                Button(action: { settings.removeNWCConnection(connection) }) {
-                                    Image(systemName: "trash")
-                                        .foregroundStyle(.red)
-                                }
-                                .accessibilityLabel("Remove connection")
+                            Button(action: { copyNWCConnection(connection) }) {
+                                Image(systemName: copiedNWCConnectionId == connection.id ? "checkmark" : "doc.on.doc")
+                                    .foregroundColor(copiedNWCConnectionId == connection.id ? .green : Color.accentColor)
                             }
+                            .accessibilityLabel("Copy connection string")
 
-                            Text(settings.nwcConnectionString(for: connection))
-                                .font(.system(.caption2, design: .monospaced))
-                                .lineLimit(1)
-                                .truncationMode(.middle)
-
-                            LabeledContent("Allowance left (sat)") {
-                                TextField("0", text: allowanceBinding(for: connection))
-                                    .keyboardType(.numberPad)
-                                    .multilineTextAlignment(.trailing)
-                                    .font(.system(.caption, design: .monospaced))
-                                    .frame(maxWidth: 100)
+                            Button(action: { showQRCode(title: "NWC Connection", content: settings.nwcConnectionString(for: connection)) }) {
+                                Image(systemName: "qrcode")
+                                    .foregroundStyle(Color.accentColor)
                             }
-                            .font(.caption2)
+                            .accessibilityLabel("Show connection QR")
+
+                            Button(action: { settings.removeNWCConnection(connection) }) {
+                                Image(systemName: "trash")
+                                    .foregroundStyle(.red)
+                            }
+                            .accessibilityLabel("Remove connection")
                         }
+
+                        Text(settings.nwcConnectionString(for: connection))
+                            .font(.system(.caption2, design: .monospaced))
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+
+                        LabeledContent("Allowance left (sat)") {
+                            TextField("0", text: allowanceBinding(for: connection))
+                                .keyboardType(.numberPad)
+                                .multilineTextAlignment(.trailing)
+                                .font(.system(.caption, design: .monospaced))
+                                .frame(maxWidth: 100)
+                        }
+                        .font(.caption2)
                     }
                 }
 
@@ -90,7 +80,6 @@ struct NWCSettingsSection: View {
                 }
             }
         }
-        .padding(.vertical, 8)
     }
 
     // MARK: - Actions

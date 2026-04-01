@@ -34,100 +34,59 @@ struct SettingsView: View {
 
     var body: some View {
         NavigationStack {
-            ScrollView {
-                VStack(spacing: 0) {
-                        sectionHeader("BACKUP & RESTORE")
-                        BackupSettingsSection(
-                            showBackup: $showBackup,
-                            showRestoreFlowAlert: $showRestoreFlowAlert
-                        )
-
-                        sectionHeader("LIGHTNING ADDRESS")
-                        LightningAddressSettingsSection(
-                            copiedLightningAddress: $copiedLightningAddress,
-                            isCheckingPayments: $isCheckingPayments,
-                            showMintPicker: $showMintPicker
-                        )
-
-                        sectionHeader("NOSTR")
-                        NostrKeysSettingsSection(
-                            showNsec: $showNsec,
-                            copiedNsec: $copiedNsec,
-                            showImportNsec: $showImportNsec,
-                            importNsecText: $importNsecText,
-                            showGenerateKeyConfirm: $showGenerateKeyConfirm,
-                            showResetKeyConfirm: $showResetKeyConfirm,
-                            nostrKeyError: $nostrKeyError
-                        )
-                        NostrRelaysSettingsSection(
-                            relayInput: $relayInput,
-                            relayError: $relayError,
-                            copiedRelay: $copiedRelay
-                        )
-
-                        sectionHeader("PAYMENT REQUESTS")
-                        PaymentRequestsSettingsSection()
-
-                        sectionHeader("NOSTR WALLET CONNECT")
-                        NWCSettingsSection(
-                            nwcError: $nwcError,
-                            copiedNWCConnectionId: $copiedNWCConnectionId,
-                            activeQRPayload: $activeQRPayload
-                        )
-
-                        sectionHeader("P2PK FEATURES")
-                        P2PKSettingsSection(
-                            expandedP2PKKeys: $expandedP2PKKeys,
-                            activeQRPayload: $activeQRPayload,
-                            copiedP2PKPublicKey: $copiedP2PKPublicKey,
-                            p2pkImportText: $p2pkImportText,
-                            showImportP2PK: $showImportP2PK,
-                            p2pkError: $p2pkError
-                        )
-
-                        sectionHeader("PRIVACY")
-                        PrivacySettingsSection()
-
-                        sectionHeader("APPEARANCE")
-                        ThemeSettingsSection()
-
-                        sectionHeader("WALLET INFO")
-                        infoRow(label: "Balance", value: settings.formatAmount(walletManager.balance))
-                        infoRow(label: "Mints", value: "\(walletManager.mints.count)")
-                        infoRow(label: "Unit", value: settings.unitLabel)
-                        infoRow(label: "Version", value: "1.0.0")
-
-                        sectionHeader("ABOUT")
-                        linkRow(
-                            icon: "globe",
-                            title: "Learn about Cashu",
-                            subtitle: "cashu.space",
-                            url: "https://cashu.space"
-                        )
-                        linkRow(
-                            icon: "doc.text",
-                            title: "Protocol Specs (NUTs)",
-                            subtitle: "github.com/cashubtc/nuts",
-                            url: "https://github.com/cashubtc/nuts"
-                        )
-
-                        sectionHeader("ADVANCED")
-                        AdvancedSettingsSection(
-                            showDeleteConfirm: $showDeleteConfirm
-                        )
-
-                        Spacer(minLength: 100)
+            List {
+                Section {
+                    NavigationLink { backupDetailView } label: {
+                        Label("Backup & Restore", systemImage: "key.fill")
                     }
-                    .padding(.horizontal)
+                    NavigationLink { lightningDetailView } label: {
+                        Label("Lightning", systemImage: "bolt.fill")
+                    }
+                    NavigationLink { nostrDetailView } label: {
+                        Label("Nostr", systemImage: "person.circle")
+                    }
+                    NavigationLink { paymentRequestsDetailView } label: {
+                        Label("Payment Requests", systemImage: "arrow.left.arrow.right")
+                    }
+                    NavigationLink { nwcDetailView } label: {
+                        Label("Nostr Wallet Connect", systemImage: "link")
+                    }
+                    NavigationLink { p2pkDetailView } label: {
+                        Label("P2PK", systemImage: "lock.fill")
+                    }
+                    NavigationLink { privacyDetailView } label: {
+                        Label("Privacy", systemImage: "eye.slash")
+                    }
+                    NavigationLink { appearanceDetailView } label: {
+                        Label("Appearance", systemImage: "paintbrush")
+                    }
                 }
-            .navigationTitle("Settings")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .principal) {
-                    Text("Settings")
-                        .font(.headline)
+
+                Section("Wallet Info") {
+                    LabeledContent("Balance", value: settings.formatAmount(walletManager.balance))
+                    LabeledContent("Mints", value: "\(walletManager.mints.count)")
+                    LabeledContent("Unit", value: settings.unitLabel)
+                    LabeledContent("Version", value: "1.0.0")
+                }
+
+                Section("About") {
+                    Link(destination: URL(string: "https://cashu.space")!) {
+                        Label("Learn about Cashu", systemImage: "globe")
+                    }
+                    Link(destination: URL(string: "https://github.com/cashubtc/nuts")!) {
+                        Label("Protocol Specs (NUTs)", systemImage: "doc.text")
+                    }
+                }
+
+                Section {
+                    Button(role: .destructive) {
+                        showDeleteConfirm = true
+                    } label: {
+                        Label("Delete Wallet", systemImage: "trash")
+                    }
                 }
             }
+            .navigationTitle("Settings")
             .sheet(isPresented: $showBackup) {
                 BackupView()
                     .environmentObject(walletManager)
@@ -160,59 +119,114 @@ struct SettingsView: View {
         }
     }
 
+    // MARK: - Detail Views
+
+    private var backupDetailView: some View {
+        Form {
+            Section {
+                BackupSettingsSection(
+                    showBackup: $showBackup,
+                    showRestoreFlowAlert: $showRestoreFlowAlert
+                )
+            }
+        }
+        .navigationTitle("Backup & Restore")
+    }
+
+    private var lightningDetailView: some View {
+        Form {
+            Section {
+                LightningAddressSettingsSection(
+                    copiedLightningAddress: $copiedLightningAddress,
+                    isCheckingPayments: $isCheckingPayments,
+                    showMintPicker: $showMintPicker
+                )
+            }
+        }
+        .navigationTitle("Lightning")
+    }
+
+    private var nostrDetailView: some View {
+        Form {
+            Section("Keys") {
+                NostrKeysSettingsSection(
+                    showNsec: $showNsec,
+                    copiedNsec: $copiedNsec,
+                    showImportNsec: $showImportNsec,
+                    importNsecText: $importNsecText,
+                    showGenerateKeyConfirm: $showGenerateKeyConfirm,
+                    showResetKeyConfirm: $showResetKeyConfirm,
+                    nostrKeyError: $nostrKeyError
+                )
+            }
+            Section("Relays") {
+                NostrRelaysSettingsSection(
+                    relayInput: $relayInput,
+                    relayError: $relayError,
+                    copiedRelay: $copiedRelay
+                )
+            }
+        }
+        .navigationTitle("Nostr")
+    }
+
+    private var paymentRequestsDetailView: some View {
+        Form {
+            Section {
+                PaymentRequestsSettingsSection()
+            }
+        }
+        .navigationTitle("Payment Requests")
+    }
+
+    private var nwcDetailView: some View {
+        Form {
+            Section {
+                NWCSettingsSection(
+                    nwcError: $nwcError,
+                    copiedNWCConnectionId: $copiedNWCConnectionId,
+                    activeQRPayload: $activeQRPayload
+                )
+            }
+        }
+        .navigationTitle("Nostr Wallet Connect")
+    }
+
+    private var p2pkDetailView: some View {
+        Form {
+            Section {
+                P2PKSettingsSection(
+                    expandedP2PKKeys: $expandedP2PKKeys,
+                    activeQRPayload: $activeQRPayload,
+                    copiedP2PKPublicKey: $copiedP2PKPublicKey,
+                    p2pkImportText: $p2pkImportText,
+                    showImportP2PK: $showImportP2PK,
+                    p2pkError: $p2pkError
+                )
+            }
+        }
+        .navigationTitle("P2PK")
+    }
+
+    private var privacyDetailView: some View {
+        Form {
+            Section {
+                PrivacySettingsSection()
+            }
+        }
+        .navigationTitle("Privacy")
+    }
+
+    private var appearanceDetailView: some View {
+        Form {
+            Section {
+                ThemeSettingsSection()
+            }
+        }
+        .navigationTitle("Appearance")
+    }
+
     // MARK: - Helpers
-
-    private func sectionHeader(_ title: String) -> some View {
-        Text(title)
-            .font(.caption)
-            .fontWeight(.semibold)
-            .foregroundStyle(.secondary)
-            .tracking(2)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.top, 32)
-            .padding(.bottom, 8)
-    }
-
-    private func infoRow(label: String, value: String) -> some View {
-        LabeledContent(label, value: value)
-            .font(.subheadline)
-            .padding(.vertical, 8)
-    }
-
-    @ViewBuilder
-    private func linkRow(icon: String, title: String, subtitle: String, url: String) -> some View {
-        if let destination = URL(string: url) {
-            Link(destination: destination) {
-                linkRowLabel(icon: icon, title: title, subtitle: subtitle)
-            }
-        } else {
-            linkRowLabel(icon: icon, title: title, subtitle: subtitle)
-        }
-    }
-
-    private func linkRowLabel(icon: String, title: String, subtitle: String) -> some View {
-        HStack(spacing: 16) {
-            Image(systemName: icon)
-                .font(.title3)
-.foregroundStyle(Color.accentColor)
-                .frame(width: 28)
-
-            VStack(alignment: .leading, spacing: 2) {
-                Text(title)
-                    .font(.subheadline)
-                Text(subtitle)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-
-            Spacer()
-
-            Image(systemName: "arrow.up.right")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-        }
-        .padding(.vertical, 12)
-    }
 
     private func deleteWallet() {
         try? KeychainService().deleteMnemonic()
@@ -309,62 +323,35 @@ struct ImportP2PKSheet: View {
 
     var body: some View {
         NavigationStack {
-            VStack(spacing: 20) {
-                Text("Import P2PK nsec")
-                    .font(.headline)
+            Form {
+                Section {
+                    TextField("nsec1...", text: $nsecText)
+                        .font(.system(.body, design: .monospaced))
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled()
+                } footer: {
+                    Text("Import an nsec key to add a P2PK locking key.")
+                }
 
-                Text("Import an nsec key to add a P2PK locking key.")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                    .multilineTextAlignment(.center)
-                    .padding(.horizontal)
-
-                TextField("nsec1...", text: $nsecText)
-                    .font(.system(.body, design: .monospaced))
-                    .textInputAutocapitalization(.never)
-                    .autocorrectionDisabled()
-                    .textFieldStyle(.roundedBorder)
-                    .padding(.horizontal)
-
-                    if let validationError {
+                if let validationError {
+                    Section {
                         Text(validationError)
-                            .font(.caption)
                             .foregroundStyle(.red)
-                    }
-
-                    Spacer()
-
-                    VStack(spacing: 12) {
-                        Button(action: {
-                            if validate() {
-                                onImport()
-                            }
-                        }) {
-                            Text("Import nsec")
-                        }
-                        .buttonStyle(.borderedProminent).controlSize(.large)
-                        .disabled(nsecText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-
-                        Button(action: { dismiss() }) {
-                            Text("Cancel")
-                        }
-                        .buttonStyle(.bordered).controlSize(.large)
-                    }
-                    .padding(.horizontal)
-                    .padding(.bottom, 24)
-            }
-            .padding(.top, 24)
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .navigationBarLeading) {
-                    Button(action: { dismiss() }) {
-                        Image(systemName: "xmark")
                     }
                 }
 
-                ToolbarItem(placement: .principal) {
-                    Text("Import P2PK")
-                        .font(.headline)
+                Section {
+                    Button("Import nsec") {
+                        if validate() { onImport() }
+                    }
+                    .disabled(nsecText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                }
+            }
+            .navigationTitle("Import P2PK")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { dismiss() }
                 }
             }
         }
@@ -394,10 +381,9 @@ struct BackupView: View {
         NavigationStack {
             ScrollView {
                 VStack(spacing: 24) {
-                    // Warning
                     VStack(spacing: 12) {
                         Image(systemName: "exclamationmark.triangle.fill")
-                            .font(.system(size: 48))
+                            .font(.title)
                             .foregroundStyle(.orange)
 
                         Text("Keep Your Seed Phrase Safe")
@@ -427,12 +413,11 @@ struct BackupView: View {
                             VStack(spacing: 8) {
                                 Button(action: { showWords.toggle() }) {
                                     Image(systemName: showWords ? "eye.slash" : "eye")
-                                        .foregroundStyle(Color.accentColor)
                                 }
 
                                 Button(action: copyToClipboard) {
                                     Image(systemName: copiedToClipboard ? "checkmark" : "doc.on.doc")
-                                        .foregroundColor(copiedToClipboard ? .green : Color.accentColor)
+                                        .foregroundColor(copiedToClipboard ? .green : .accentColor)
                                 }
                             }
                         }
@@ -441,25 +426,17 @@ struct BackupView: View {
 
                     Spacer(minLength: 50)
 
-                    Button(action: { dismiss() }) {
-                        Text("DONE")
-                    }
-                    .buttonStyle(.bordered).controlSize(.large)
-                    .padding(.horizontal)
-                    .padding(.bottom, 30)
+                    Button("Done") { dismiss() }
+                        .buttonStyle(.bordered).controlSize(.large)
+                        .padding(.horizontal)
+                        .padding(.bottom, 30)
                 }
             }
+            .navigationTitle("Backup")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .navigationBarLeading) {
-                    Button(action: { dismiss() }) {
-                        Image(systemName: "xmark")
-                    }
-                }
-
-                ToolbarItem(placement: .principal) {
-                    Text("Backup")
-                        .font(.headline)
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { dismiss() }
                 }
             }
         }
@@ -486,53 +463,34 @@ struct MintPickerSheet: View {
 
     var body: some View {
         NavigationStack {
-            ScrollView {
-                VStack(spacing: 12) {
-                    ForEach(mints, id: \.url) { mint in
-                        Button(action: {
-                            selectedMintUrl = mint.url
-                            onSelect(mint.url)
-                            dismiss()
-                        }) {
-                            GroupBox {
-                                HStack {
-                                    VStack(alignment: .leading, spacing: 4) {
-                                        Text(mint.name)
-                                            .font(.subheadline)
-                                            .fontWeight(.medium)
-
-                                        Text(mint.url)
-                                            .font(.caption)
-                                            .foregroundStyle(.secondary)
-                                            .lineLimit(1)
-                                            .truncationMode(.middle)
-                                    }
-
-                                    Spacer()
-
-                                    if selectedMintUrl == mint.url {
-                                        Image(systemName: "checkmark.circle.fill")
-                                            .foregroundStyle(Color.accentColor)
-                                    }
-                                }
-                            }
+            List(mints, id: \.url) { mint in
+                Button {
+                    selectedMintUrl = mint.url
+                    onSelect(mint.url)
+                    dismiss()
+                } label: {
+                    HStack {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(mint.name)
+                            Text(mint.url)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                                .lineLimit(1)
+                                .truncationMode(.middle)
+                        }
+                        Spacer()
+                        if selectedMintUrl == mint.url {
+                            Image(systemName: "checkmark")
+                                .foregroundStyle(Color.accentColor)
                         }
                     }
                 }
-                .padding()
             }
             .navigationTitle("Select Mint")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .navigationBarLeading) {
-                    Button(action: { dismiss() }) {
-                        Image(systemName: "xmark")
-                    }
-                }
-
-                ToolbarItem(placement: .principal) {
-                    Text("Select Mint")
-                        .font(.headline)
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { dismiss() }
                 }
             }
         }
@@ -550,112 +508,58 @@ struct ImportNsecSheet: View {
 
     var body: some View {
         NavigationStack {
-            VStack(spacing: 24) {
-                // Instructions
-                VStack(spacing: 12) {
-                    Image(systemName: "key.fill")
-                        .font(.system(size: 48))
-                        .foregroundStyle(Color.accentColor)
-
-                    Text("Import Nostr Key")
-                        .font(.headline)
-
-                    Text("Enter your nsec (Nostr private key) to use it for your Lightning address.")
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                        .multilineTextAlignment(.center)
-                }
-                .padding()
-
-                // nsec input
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("nsec")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-
+            Form {
+                Section {
                     TextField("nsec1...", text: $nsecText)
                         .font(.system(.body, design: .monospaced))
                         .textInputAutocapitalization(.never)
                         .autocorrectionDisabled()
-                        .textFieldStyle(.roundedBorder)
-                }
-                .padding(.horizontal)
-
-                // Paste from clipboard button
-                Button(action: pasteFromClipboard) {
-                    HStack {
-                        Image(systemName: "doc.on.clipboard")
-                        Text("Paste from Clipboard")
-                    }
-                    .font(.subheadline)
-                    .foregroundStyle(Color.accentColor)
+                } footer: {
+                    Text("Enter your nsec (Nostr private key) to use it for your Lightning address.")
                 }
 
-                // Error message
-                if let error = errorMessage {
-                    Text(error)
-                        .font(.caption)
-                        .foregroundStyle(.red)
-                }
-
-                Spacer()
-
-                // Action buttons
-                VStack(spacing: 12) {
-                    Button(action: {
-                        if validateNsec() {
-                            onImport()
+                Section {
+                    Button("Paste from Clipboard") {
+                        if let text = UIPasteboard.general.string {
+                            nsecText = text.trimmingCharacters(in: .whitespacesAndNewlines)
                         }
-                    }) {
-                        Text("Import Key")
                     }
-                    .buttonStyle(.borderedProminent).controlSize(.large)
-                    .disabled(nsecText.isEmpty)
-
-                    Button(action: { dismiss() }) {
-                        Text("Cancel")
-                    }
-                    .buttonStyle(.bordered).controlSize(.large)
                 }
-                .padding(.horizontal)
-                .padding(.bottom, 30)
+
+                if let error = errorMessage {
+                    Section {
+                        Text(error).foregroundStyle(.red)
+                    }
+                }
+
+                Section {
+                    Button("Import Key") {
+                        if validateNsec() { onImport() }
+                    }
+                    .disabled(nsecText.isEmpty)
+                }
             }
+            .navigationTitle("Import Key")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .navigationBarLeading) {
-                    Button(action: { dismiss() }) {
-                        Image(systemName: "xmark")
-                    }
-                }
-
-                ToolbarItem(placement: .principal) {
-                    Text("Import Key")
-                        .font(.headline)
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { dismiss() }
                 }
             }
-        }
-    }
-
-    private func pasteFromClipboard() {
-        if let text = UIPasteboard.general.string {
-            nsecText = text.trimmingCharacters(in: .whitespacesAndNewlines)
         }
     }
 
     private func validateNsec() -> Bool {
         errorMessage = nil
         let trimmed = nsecText.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-
         guard trimmed.hasPrefix("nsec1") else {
             errorMessage = "Invalid format. nsec must start with 'nsec1'"
             return false
         }
-
         guard trimmed.count >= 59 else {
             errorMessage = "nsec is too short"
             return false
         }
-
         return true
     }
 }

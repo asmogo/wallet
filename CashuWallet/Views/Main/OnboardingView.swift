@@ -60,7 +60,7 @@ struct OnboardingView: View {
             // Logo
             VStack(spacing: 16) {
                 Image(systemName: "bitcoinsign.circle.fill")
-                    .font(.system(size: 80))
+                    .font(.largeTitle)
 .foregroundStyle(Color.accentColor)
 
                 Text("Cashu Wallet")
@@ -132,7 +132,6 @@ struct OnboardingView: View {
             Button(action: createWallet) {
                 if isCreating {
                     ProgressView()
-                        .tint(.black)
                 } else {
                     HStack {
                         Image(systemName: "plus.circle.fill")
@@ -377,7 +376,6 @@ struct OnboardingView: View {
             Button(action: initializeAndProceed) {
                 if isRestoring {
                     ProgressView()
-                        .tint(.black)
                 } else {
                     Text("NEXT")
                 }
@@ -409,34 +407,30 @@ struct OnboardingView: View {
                 .multilineTextAlignment(.center)
                 .padding(.horizontal)
 
-            // Mint URL input
-            HStack(spacing: 12) {
+            GroupBox {
                 TextField("https://mint.example.com", text: $mintUrlInput)
-                    .font(.system(.body, design: .monospaced))
                     .autocapitalization(.none)
                     .disableAutocorrection(true)
                     .keyboardType(.URL)
-                    .textFieldStyle(.roundedBorder)
+            }
+            .padding(.horizontal)
 
+            HStack(spacing: 12) {
                 Button(action: addMintUrl) {
-                    Image(systemName: "plus.circle.fill")
-                        .font(.title2)
-                        .foregroundColor(mintUrlInput.isEmpty ? .secondary : .accentColor)
+                    Label("Add", systemImage: "plus")
                 }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.small)
                 .disabled(mintUrlInput.isEmpty)
-            }
-            .padding(.horizontal)
 
-            Button(action: pasteMintUrlsFromClipboard) {
-                HStack {
-                    Image(systemName: "doc.on.clipboard")
-                    Text("Paste mints from clipboard")
+                Button(action: pasteMintUrlsFromClipboard) {
+                    Label("Paste from clipboard", systemImage: "doc.on.clipboard")
                 }
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+                .accessibilityLabel("Paste mint URLs from clipboard")
             }
             .padding(.horizontal)
-            .accessibilityLabel("Paste mint URLs from clipboard")
 
             // Mints list
             if !mintsToRestore.isEmpty || !restoreResults.isEmpty {
@@ -459,7 +453,7 @@ struct OnboardingView: View {
                 // Empty state
                 VStack(spacing: 12) {
                     Image(systemName: "building.columns")
-                        .font(.system(size: 40))
+                        .font(.title)
                         .foregroundColor(.secondary.opacity(0.5))
                     Text("No mints added yet")
                         .font(.subheadline)
@@ -516,14 +510,12 @@ struct OnboardingView: View {
                         if isRestoringMints {
                             HStack(spacing: 8) {
                                 ProgressView()
-                                    .tint(.black)
                                 Text("Restoring...")
-                                    .foregroundColor(.black)
                             }
                         } else {
                             HStack {
                                 Image(systemName: "arrow.counterclockwise")
-                                Text("RESTORE FROM \(mintsToRestore.count) MINT\(mintsToRestore.count == 1 ? "" : "S")")
+                                Text("Restore from \(mintsToRestore.count) mint\(mintsToRestore.count == 1 ? "" : "s")")
                             }
                         }
                     }

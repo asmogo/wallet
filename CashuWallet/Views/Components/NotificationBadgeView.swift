@@ -11,7 +11,7 @@ struct NotificationBadgeView: View {
             // Icon
             Image(systemName: "checkmark.circle.fill")
                 .foregroundStyle(.primary)
-                .font(.system(size: 24))
+                .font(.title3)
                 .accessibilityHidden(true)
 
             // Text Content
@@ -19,7 +19,7 @@ struct NotificationBadgeView: View {
                 if let amount = amount {
                     Text("Received \(amount) sat")
                         .foregroundStyle(.primary)
-                        .font(.system(size: 16, weight: .medium))
+                        .font(.callout.weight(.medium))
 
                     if let fee = fee, fee > 0 {
                         Text("(fee: \(fee) sat)")
@@ -29,7 +29,7 @@ struct NotificationBadgeView: View {
                 } else {
                     Text(message)
                         .foregroundStyle(.primary)
-                        .font(.system(size: 16, weight: .medium))
+                        .font(.callout.weight(.medium))
                 }
             }
 
@@ -39,14 +39,13 @@ struct NotificationBadgeView: View {
             Button(action: onDismiss) {
                 Image(systemName: "xmark")
                     .foregroundStyle(.primary)
-                    .font(.system(size: 16, weight: .bold))
+                    .font(.callout.weight(.bold))
             }
             .accessibilityLabel("Dismiss notification")
         }
         .padding(.vertical, 12)
         .padding(.horizontal, 16)
-        .background(Color.accentColor)
-        .cornerRadius(8)
+        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 8))
         .shadow(color: Color.black.opacity(0.2), radius: 4, x: 0, y: 2)
         .transition(.move(edge: .top).combined(with: .opacity))
         .accessibilityElement(children: .combine)

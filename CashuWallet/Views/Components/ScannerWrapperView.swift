@@ -98,7 +98,7 @@ struct ScannerWrapperView: View {
                                 .foregroundStyle(.primary)
                             
                             ProgressView(value: scannerModel.scanProgress, total: 1.0)
-                                .progressViewStyle(LinearProgressViewStyle(tint: .green))
+                                .progressViewStyle(LinearProgressViewStyle(tint: .accentColor))
                                 .frame(height: 8)
                                 .padding(.horizontal)
                             
@@ -360,7 +360,7 @@ class QRScannerViewController: UIViewController, AVCaptureMetadataOutputObjectsD
         // Initialize QR Code Frame View
         qrCodeFrameView = UIView()
         if let qrCodeFrameView = qrCodeFrameView {
-            qrCodeFrameView.layer.borderColor = UIColor.green.cgColor
+            qrCodeFrameView.layer.borderColor = UIColor.tintColor.cgColor
             qrCodeFrameView.layer.borderWidth = 2
             view.addSubview(qrCodeFrameView)
             view.bringSubviewToFront(qrCodeFrameView)

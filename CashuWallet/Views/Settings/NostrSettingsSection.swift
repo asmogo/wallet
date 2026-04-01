@@ -12,126 +12,114 @@ struct NostrKeysSettingsSection: View {
     @Binding var nostrKeyError: String?
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("Nostr Key Source")
-                .font(.subheadline)
-                .fontWeight(.medium)
-
+        Group {
             Text("Your Lightning address is derived from your Nostr public key. Choose which key to use.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
 
             // Signer type selection
-            VStack(spacing: 8) {
-                ForEach(NostrSignerType.allCases, id: \.self) { type in
-                    signerTypeRow(type)
+            ForEach(NostrSignerType.allCases, id: \.self) { type in
+                Button(action: {
+                    switchSignerType(to: type)
+                }) {
+                    HStack {
+                        Image(systemName: nostrService.signerType == type ? "largecircle.fill.circle" : "circle")
+                            .foregroundColor(nostrService.signerType == type ? Color.accentColor : .secondary)
+
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(type.displayName)
+                                .font(.subheadline)
+                            Text(type.description)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+
+                        Spacer()
+                    }
                 }
+                .buttonStyle(.plain)
             }
-            .padding(.top, 8)
 
             // Current key info
             if nostrService.isInitialized {
-                VStack(alignment: .leading, spacing: 8) {
+                VStack(alignment: .leading, spacing: 4) {
                     Text("Current Public Key")
                         .font(.caption)
                         .foregroundStyle(.secondary)
-                        .padding(.top, 12)
-
-                    // npub display
-                    GroupBox {
-                        Text(nostrService.npub)
-                            .font(.system(.caption, design: .monospaced))
-                            .lineLimit(1)
-                            .truncationMode(.middle)
-                    }
+                    Text(nostrService.npub)
+                        .font(.system(.caption, design: .monospaced))
+                        .lineLimit(1)
+                        .truncationMode(.middle)
                 }
 
                 // nsec reveal/copy
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("Private Key (nsec)")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .padding(.top, 8)
-
-                    GroupBox {
-                        HStack {
-                            if showNsec {
-                                Text(nostrService.nsec)
-                                    .font(.system(.caption, design: .monospaced))
-                                    .foregroundStyle(.orange)
-                                    .lineLimit(1)
-                                    .truncationMode(.middle)
-                            } else {
-                                Text(String(repeating: "*", count: 20))
-                                    .font(.system(.caption, design: .monospaced))
-                                    .foregroundStyle(.secondary)
-                            }
-
-                            Spacer()
-
-                            Button(action: { showNsec.toggle() }) {
-                                Image(systemName: showNsec ? "eye.slash" : "eye")
-                                    .foregroundStyle(Color.accentColor)
-                            }
-
-                            Button(action: copyNsec) {
-                                Image(systemName: copiedNsec ? "checkmark" : "doc.on.doc")
-                                    .foregroundColor(copiedNsec ? .green : Color.accentColor)
-                            }
+                HStack {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Private Key (nsec)")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                        if showNsec {
+                            Text(nostrService.nsec)
+                                .font(.system(.caption, design: .monospaced))
+                                .foregroundStyle(.orange)
+                                .lineLimit(1)
+                                .truncationMode(.middle)
+                        } else {
+                            Text(String(repeating: "*", count: 20))
+                                .font(.system(.caption, design: .monospaced))
+                                .foregroundStyle(.secondary)
                         }
                     }
 
-                    Text("Keep your private key secret. Anyone with it can control your Lightning address.")
-                        .font(.caption2)
-                        .foregroundStyle(.orange)
+                    Spacer()
+
+                    Button(action: { showNsec.toggle() }) {
+                        Image(systemName: showNsec ? "eye.slash" : "eye")
+                            .foregroundStyle(Color.accentColor)
+                    }
+
+                    Button(action: copyNsec) {
+                        Image(systemName: copiedNsec ? "checkmark" : "doc.on.doc")
+                            .foregroundColor(copiedNsec ? .green : Color.accentColor)
+                    }
                 }
+
+                Text("Keep your private key secret. Anyone with it can control your Lightning address.")
+                    .font(.caption2)
+                    .foregroundStyle(.orange)
             }
 
             // Action buttons
-            HStack(spacing: 12) {
-                Button(action: { showGenerateKeyConfirm = true }) {
-                    HStack {
-                        Image(systemName: "plus.circle")
-                        Text("Generate")
-                    }
-                    .font(.subheadline)
-.foregroundStyle(Color.accentColor)
-                }
-
-                Spacer()
-
-                Button(action: { showImportNsec = true }) {
-                    HStack {
-                        Image(systemName: "square.and.arrow.down")
-                        Text("Import")
-                    }
-                    .font(.subheadline)
-.foregroundStyle(Color.accentColor)
-                }
-
-                Spacer()
-
-                if nostrService.signerType == .privateKey {
-                    Button(action: { showResetKeyConfirm = true }) {
-                        HStack {
-                            Image(systemName: "arrow.counterclockwise")
-                            Text("Reset")
-                        }
-                        .font(.subheadline)
-                        .foregroundStyle(.orange)
-                    }
+            Button(action: { showGenerateKeyConfirm = true }) {
+                HStack {
+                    Image(systemName: "plus.circle")
+                    Text("Generate New Key")
                 }
             }
-            .padding(.top, 12)
+
+            Button(action: { showImportNsec = true }) {
+                HStack {
+                    Image(systemName: "square.and.arrow.down")
+                    Text("Import Key")
+                }
+            }
+
+            if nostrService.signerType == .privateKey {
+                Button(action: { showResetKeyConfirm = true }) {
+                    HStack {
+                        Image(systemName: "arrow.counterclockwise")
+                        Text("Reset to Wallet Seed")
+                    }
+                    .foregroundStyle(.orange)
+                }
+            }
 
             if let error = nostrKeyError {
                 Text(error)
                     .font(.caption)
                     .foregroundStyle(.red)
-                    .padding(.top, 4)
             }
         }
-        .padding(.vertical, 8)
         .alert("Generate New Key", isPresented: $showGenerateKeyConfirm) {
             Button("Cancel", role: .cancel) {}
             Button("Generate", role: .destructive) {
@@ -153,31 +141,6 @@ struct NostrKeysSettingsSection: View {
                 nsecText: $importNsecText,
                 onImport: importNsec
             )
-        }
-    }
-
-    // MARK: - Subviews
-
-    private func signerTypeRow(_ type: NostrSignerType) -> some View {
-        Button(action: {
-            switchSignerType(to: type)
-        }) {
-            GroupBox {
-                HStack {
-                    Image(systemName: nostrService.signerType == type ? "largecircle.fill.circle" : "circle")
-                        .foregroundColor(nostrService.signerType == type ? Color.accentColor : .secondary)
-
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(type.displayName)
-                            .font(.subheadline)
-                        Text(type.description)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-
-                    Spacer()
-                }
-            }
         }
     }
 
@@ -250,11 +213,7 @@ struct NostrRelaysSettingsSection: View {
     @Binding var copiedRelay: String?
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("Relay servers")
-                .font(.subheadline)
-                .fontWeight(.medium)
-
+        Group {
             Text("Manage your Nostr relay list for compatible features like npub.cash and backups.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
@@ -276,27 +235,25 @@ struct NostrRelaysSettingsSection: View {
             }
 
             ForEach(settings.nostrRelays, id: \.self) { relay in
-                GroupBox {
-                    HStack(spacing: 12) {
-                        Text(relay)
-                            .font(.system(.caption, design: .monospaced))
-                            .lineLimit(1)
-                            .truncationMode(.middle)
+                HStack(spacing: 12) {
+                    Text(relay)
+                        .font(.system(.caption, design: .monospaced))
+                        .lineLimit(1)
+                        .truncationMode(.middle)
 
-                        Spacer()
+                    Spacer()
 
-                        Button(action: { copyRelay(relay) }) {
-                            Image(systemName: copiedRelay == relay ? "checkmark" : "doc.on.doc")
-                                .foregroundColor(copiedRelay == relay ? .green : Color.accentColor)
-                        }
-                        .accessibilityLabel("Copy relay URL")
-
-                        Button(action: { settings.removeNostrRelay(relay) }) {
-                            Image(systemName: "trash")
-                                .foregroundStyle(.red)
-                        }
-                        .accessibilityLabel("Remove relay")
+                    Button(action: { copyRelay(relay) }) {
+                        Image(systemName: copiedRelay == relay ? "checkmark" : "doc.on.doc")
+                            .foregroundColor(copiedRelay == relay ? .green : Color.accentColor)
                     }
+                    .accessibilityLabel("Copy relay URL")
+
+                    Button(action: { settings.removeNostrRelay(relay) }) {
+                        Image(systemName: "trash")
+                            .foregroundStyle(.red)
+                    }
+                    .accessibilityLabel("Remove relay")
                 }
             }
 
@@ -311,12 +268,8 @@ struct NostrRelaysSettingsSection: View {
                 relayError = nil
             }) {
                 Text("Reset default relays")
-                    .font(.caption)
-.foregroundStyle(Color.accentColor)
             }
-            .padding(.top, 4)
         }
-        .padding(.vertical, 8)
     }
 
     // MARK: - Actions

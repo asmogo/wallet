@@ -9,125 +9,87 @@ struct LightningAddressSettingsSection: View {
     @Binding var showMintPicker: Bool
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            // Enable/Disable toggle
-            VStack(alignment: .leading, spacing: 8) {
-                Text("npub.cash Integration")
-                    .font(.subheadline)
-                    .fontWeight(.medium)
+        Group {
+            Text("Receive Lightning payments to your wallet using a Lightning address.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
 
-                Text("Receive Lightning payments to your wallet using a Lightning address.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-
-                Toggle(isOn: $npcService.isEnabled) {
-                    Text("Enable Lightning Address")
-                        .font(.subheadline)
-                    }
-                .toggleStyle(SwitchToggleStyle(tint: Color.accentColor))
-                .padding(.top, 8)
+            Toggle(isOn: $npcService.isEnabled) {
+                Text("Enable Lightning Address")
             }
 
             if npcService.isEnabled {
-                // Lightning Address Display
                 if npcService.isInitialized {
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text("Your Lightning Address")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
+                    // Lightning Address Display
+                    Button(action: copyLightningAddress) {
+                        HStack {
+                            Text(npcService.lightningAddress)
+                                .font(.system(.subheadline, design: .monospaced))
+                                .foregroundStyle(Color.accentColor)
+                                .lineLimit(1)
+                                .truncationMode(.middle)
 
-                        Button(action: copyLightningAddress) {
-                        GroupBox {
-                            HStack {
-                                Text(npcService.lightningAddress)
-                                    .font(.system(.subheadline, design: .monospaced))
-                                    .foregroundStyle(Color.accentColor)
-                                    .lineLimit(1)
-                                    .truncationMode(.middle)
+                            Spacer()
 
-                                Spacer()
-
-                                Image(systemName: copiedLightningAddress ? "checkmark" : "doc.on.doc")
-                                    .foregroundColor(copiedLightningAddress ? .green : Color.accentColor)
-                            }
+                            Image(systemName: copiedLightningAddress ? "checkmark" : "doc.on.doc")
+                                .foregroundColor(copiedLightningAddress ? .green : Color.accentColor)
                         }
                     }
-                    }
-                    .padding(.top, 8)
 
                     // Auto-claim toggle
-                    VStack(alignment: .leading, spacing: 8) {
-                        Toggle(isOn: $npcService.automaticClaim) {
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text("Auto-claim payments")
-                                    .font(.subheadline)
-                                                Text("Automatically mint received payments")
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                            }
+                    Toggle(isOn: $npcService.automaticClaim) {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Auto-claim payments")
+                            Text("Automatically mint received payments")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
                         }
-                        .toggleStyle(SwitchToggleStyle(tint: Color.accentColor))
                     }
-                    .padding(.top, 8)
 
                     // Mint selection
                     if !walletManager.mints.isEmpty {
-                        VStack(alignment: .leading, spacing: 8) {
-                            Text("Receiving Mint")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-
-                            Button(action: { showMintPicker = true }) {
-                            GroupBox {
-                                HStack {
-                                    VStack(alignment: .leading, spacing: 2) {
-                                        Text(selectedMintName())
-                                            .font(.subheadline)
-                                        Text(npcService.selectedMintUrl ?? "Select a mint")
-                                            .font(.caption)
-                                            .foregroundStyle(.secondary)
-                                            .lineLimit(1)
-                                            .truncationMode(.middle)
-                                    }
-
-                                    Spacer()
-
-                                    Image(systemName: "chevron.right")
+                        Button(action: { showMintPicker = true }) {
+                            HStack {
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text("Receiving Mint")
+                                        .font(.subheadline)
+                                    Text(npcService.selectedMintUrl ?? "Select a mint")
+                                        .font(.caption)
                                         .foregroundStyle(.secondary)
+                                        .lineLimit(1)
+                                        .truncationMode(.middle)
                                 }
+
+                                Spacer()
+
+                                Image(systemName: "chevron.right")
+                                    .foregroundStyle(.secondary)
                             }
                         }
-                        }
-                        .padding(.top, 8)
                     }
 
                     // Manual check button
-                    HStack {
-                        Button(action: checkForPayments) {
-                            HStack {
-                                if isCheckingPayments {
-                                    ProgressView()
-                                        .progressViewStyle(CircularProgressViewStyle(tint: Color.accentColor))
-                                        .scaleEffect(0.8)
-                                } else {
-                                    Image(systemName: "arrow.clockwise")
-                                }
-                                Text("Check for Payments")
+                    Button(action: checkForPayments) {
+                        HStack {
+                            if isCheckingPayments {
+                                ProgressView()
+                                    .progressViewStyle(CircularProgressViewStyle(tint: Color.accentColor))
+                                    .scaleEffect(0.8)
+                            } else {
+                                Image(systemName: "arrow.clockwise")
                             }
-                            .font(.subheadline)
-        .foregroundStyle(Color.accentColor)
-                        }
-                        .disabled(isCheckingPayments)
+                            Text("Check for Payments")
 
-                        Spacer()
+                            Spacer()
 
-                        if let lastCheck = npcService.lastCheck {
-                            Text("Last: \(formatRelativeTime(lastCheck))")
-                                .font(.caption2)
-                                .foregroundStyle(.secondary)
+                            if let lastCheck = npcService.lastCheck {
+                                Text("Last: \(formatRelativeTime(lastCheck))")
+                                    .font(.caption2)
+                                    .foregroundStyle(.secondary)
+                            }
                         }
                     }
-                    .padding(.top, 12)
+                    .disabled(isCheckingPayments)
 
                     // Connection status
                     HStack {
@@ -139,14 +101,12 @@ struct LightningAddressSettingsSection: View {
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
-                    .padding(.top, 8)
 
                     // Error message
                     if let error = npcService.errorMessage {
                         Text(error)
                             .font(.caption)
                             .foregroundStyle(.red)
-                            .padding(.top, 4)
                     }
                 } else {
                     // Nostr not initialized
@@ -157,11 +117,9 @@ struct LightningAddressSettingsSection: View {
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
-                    .padding(.top, 8)
                 }
             }
         }
-        .padding(.vertical, 8)
         .sheet(isPresented: $showMintPicker) {
             MintPickerSheet(
                 mints: walletManager.mints,

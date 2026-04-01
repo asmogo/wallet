@@ -28,7 +28,7 @@ struct ReceiveTokenDetailView: View {
             HStack {
                 Button(action: { dismiss() }) {
                     Image(systemName: "xmark")
-                        .font(.system(size: 20, weight: .bold))
+                        .font(.title3.weight(.bold))
                 }
                 .accessibilityLabel("Close")
                 .accessibilityHint("Dismisses the token detail screen")
@@ -85,7 +85,7 @@ struct ReceiveTokenDetailView: View {
                                 Spacer()
 
                                 Text("\(tokenAmount) sat")
-                                    .font(.system(size: 32, weight: .bold))
+                                    .font(.title.bold())
                             }
                             .padding()
                         }
@@ -146,21 +146,14 @@ struct ReceiveTokenDetailView: View {
                 .padding(.bottom, 8)
 
                 Button(action: receiveToken) {
-                    ZStack {
-                        if isReceiving {
-                            ProgressView()
-                                .progressViewStyle(CircularProgressViewStyle(tint: .black))
-                        } else {
-                            Text("RECEIVE")
-                                .font(.headline)
-                                .foregroundColor(.black)
-                        }
+                    if isReceiving {
+                        ProgressView()
+                    } else {
+                        Text("Receive")
                     }
-                    .frame(maxWidth: .infinity)
-                    .frame(height: 56)
-                    .background(Color.accentColor)
-                    .cornerRadius(28)
                 }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.large)
                 .disabled(isReceiving || !tokenLockedToKnownKey)
                 .accessibilityLabel(isReceiving ? "Receiving token" : "Receive \(tokenAmount) sats")
                 .accessibilityHint("Claims this ecash token to your wallet")

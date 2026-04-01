@@ -136,7 +136,6 @@ struct SendView: View {
             Button(action: { showSendConfirmation = true }) {
                 if isGenerating {
                     ProgressView()
-                        .tint(.black)
                 } else {
                     Text("SEND")
                 }
@@ -236,7 +235,7 @@ struct SendView: View {
                             .foregroundStyle(.secondary)
                     }
                 }
-                .toggleStyle(SwitchToggleStyle(tint: Color.accentColor))
+                .toggleStyle(.switch)
                 .accessibilityLabel("Lock ecash to P2PK key")
                 .accessibilityHint("When enabled, only the holder of the matching private key can claim this token")
                 .accessibilityValue(lockWithP2PK ? "On" : "Off")
@@ -387,8 +386,7 @@ struct SendView: View {
                     }) {
                         if isCheckingClaim {
                             ProgressView()
-                                .tint(.black)
-                        } else {
+                                } else {
                             Text("CHECK STATUS")
                         }
                     }
@@ -636,7 +634,7 @@ struct MeltView: View {
             Spacer()
 
             Image(systemName: "bolt.fill")
-                .font(.system(size: 48))
+                .font(.title)
                 .foregroundStyle(Color.accentColor)
                 .accessibilityHidden(true)
 
@@ -703,7 +701,6 @@ struct MeltView: View {
             Button(action: getQuote) {
                 if isGettingQuote {
                     ProgressView()
-                        .tint(.black)
                 } else {
                     Text("GET QUOTE")
                 }
@@ -769,7 +766,6 @@ struct MeltView: View {
             Button(action: payInvoice) {
                 if isPaying {
                     ProgressView()
-                        .tint(.black)
                 } else {
                     Text("PAY \(quote.totalAmount) SAT")
                 }
@@ -790,7 +786,7 @@ struct MeltView: View {
             Spacer()
 
             Image(systemName: "checkmark.circle.fill")
-                .font(.system(size: 80))
+                .font(.largeTitle)
                 .foregroundStyle(Color.accentColor)
                 .accessibilityHidden(true)
 
@@ -931,7 +927,7 @@ struct MeltViewWithInvoice: View {
             Spacer()
 
             Image(systemName: "exclamationmark.triangle.fill")
-                .font(.system(size: 48))
+                .font(.title)
                 .foregroundStyle(.red)
                 .accessibilityHidden(true)
 
@@ -1001,7 +997,6 @@ struct MeltViewWithInvoice: View {
             Button(action: payInvoice) {
                 if isPaying {
                     ProgressView()
-                        .tint(.black)
                 } else {
                     Text("PAY \(quote.totalAmount) SAT")
                 }
@@ -1020,7 +1015,7 @@ struct MeltViewWithInvoice: View {
             Spacer()
 
             Image(systemName: "checkmark.circle.fill")
-                .font(.system(size: 80))
+                .font(.largeTitle)
                 .foregroundStyle(Color.accentColor)
                 .accessibilityHidden(true)
 
@@ -1135,7 +1130,7 @@ struct MeltViewWithAddress: View {
             Spacer()
 
             Image(systemName: "bolt.fill")
-                .font(.system(size: 48))
+                .font(.title)
                 .foregroundStyle(Color.accentColor)
                 .padding(.bottom, 12)
                 .accessibilityHidden(true)
@@ -1175,7 +1170,6 @@ struct MeltViewWithAddress: View {
             Button(action: getQuote) {
                 if isGettingQuote {
                     ProgressView()
-                        .tint(.black)
                 } else {
                     Text("GET QUOTE")
                 }
@@ -1237,7 +1231,6 @@ struct MeltViewWithAddress: View {
             Button(action: payInvoice) {
                 if isPaying {
                     ProgressView()
-                        .tint(.black)
                 } else {
                     Text("PAY \(quote.totalAmount) SAT")
                 }
@@ -1256,7 +1249,7 @@ struct MeltViewWithAddress: View {
             Spacer()
 
             Image(systemName: "checkmark.circle.fill")
-                .font(.system(size: 80))
+                .font(.largeTitle)
                 .foregroundStyle(Color.accentColor)
                 .accessibilityHidden(true)
 
@@ -1350,7 +1343,7 @@ struct MintSelectorSheet: View {
     private var emptyStateView: some View {
         VStack(spacing: 16) {
             Image(systemName: "building.columns")
-                .font(.system(size: 48))
+                .font(.title)
                 .foregroundStyle(.secondary)
                 .accessibilityHidden(true)
 

@@ -14,7 +14,7 @@ struct ActivityOrbView: View {
         Group {
             if isVisible {
                 Image(systemName: "circle.dotted")
-                    .font(.system(size: 20))
+                    .font(.title3)
                     .foregroundStyle(Color.accentColor)
                     .rotationEffect(.degrees(rotation))
                     .transition(.opacity.combined(with: .scale))

@@ -4,39 +4,24 @@ struct ThemeSettingsSection: View {
     @ObservedObject var settings = SettingsManager.shared
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            VStack(alignment: .leading, spacing: 8) {
-                Text("On-screen keyboard")
-                    .font(.subheadline)
-                    .fontWeight(.medium)
-
-                Text("Use the numeric keyboard for entering amounts.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-
-                Toggle(isOn: $settings.useNumericKeyboard) {
+        Group {
+            Toggle(isOn: $settings.useNumericKeyboard) {
+                VStack(alignment: .leading, spacing: 2) {
                     Text("Use numeric keyboard")
-                        .font(.subheadline)
+                    Text("Use the numeric keyboard for entering amounts.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                 }
-                .toggleStyle(SwitchToggleStyle(tint: Color.accentColor))
             }
 
-            VStack(alignment: .leading, spacing: 8) {
-                Text("Bitcoin symbol")
-                    .font(.subheadline)
-                    .fontWeight(.medium)
-
-                Text("Use \u{20bf} symbol instead of sats.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-
-                Toggle(isOn: $settings.useBitcoinSymbol) {
+            Toggle(isOn: $settings.useBitcoinSymbol) {
+                VStack(alignment: .leading, spacing: 2) {
                     Text("Use \u{20bf} symbol")
-                        .font(.subheadline)
+                    Text("Use \u{20bf} symbol instead of sats.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                 }
-                .toggleStyle(SwitchToggleStyle(tint: Color.accentColor))
             }
         }
-        .padding(.vertical, 8)
     }
 }

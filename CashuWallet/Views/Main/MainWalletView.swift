@@ -96,34 +96,24 @@ struct MainWalletView: View {
                 settings.useBitcoinSymbol.toggle()
             }) {
                 Text(settings.unitLabel)
-                    .font(.caption)
-.foregroundStyle(Color.accentColor)
-                    .padding(.horizontal, 20)
-                    .padding(.vertical, 8)
-                    .overlay(
-                        Capsule()
-                            .stroke(Color.accentColor, lineWidth: 1.5)
-                    )
             }
+            .buttonStyle(.bordered)
+            .controlSize(.small)
             .accessibilityLabel("Display unit: \(settings.unitLabel)")
             .accessibilityHint("Toggles between Bitcoin and Satoshi display")
             
                 // Main balance display
                 VStack(spacing: 8) {
-                    // Balance with unit - using SF Pro (default) to match Inter font from cashu.me
                     Text(formatBalanceWithUnit(walletManager.balance))
                         .font(.largeTitle.bold())
-    .foregroundStyle(Color.accentColor)
                         .minimumScaleFactor(0.5)
                         .accessibilityLabel("Balance: \(formatBalanceWithUnit(walletManager.balance))")
                         .accessibilityValue(formatBalanceWithUnit(walletManager.balance))
 
-                    // Fiat balance (if enabled)
                     if settings.showFiatBalance && priceService.btcPriceUSD > 0 {
                         Text(priceService.formatSatsAsFiat(walletManager.balance))
                             .font(.headline)
-        .foregroundStyle(Color.accentColor)
-                            .opacity(0.8)
+                            .foregroundStyle(.secondary)
                             .accessibilityLabel("Fiat value: \(priceService.formatSatsAsFiat(walletManager.balance))")
                     }
                 }
@@ -132,21 +122,17 @@ struct MainWalletView: View {
             // Mint info section
             if let mint = walletManager.activeMint {
                 VStack(spacing: 8) {
-                    // Mint name
                     HStack(spacing: 4) {
                         Text("Mint:")
                             .foregroundStyle(.secondary)
                         Text(mint.name)
-        .foregroundStyle(Color.accentColor)
                     }
                     .font(.body)
 
-                    // Balance at this mint
                     HStack(spacing: 4) {
                         Text("Balance:")
                             .foregroundStyle(.secondary)
                         Text(formatBalanceWithUnit(mint.balance))
-        .foregroundStyle(Color.accentColor)
                             .fontWeight(.semibold)
                     }
                     .font(.body)
@@ -173,27 +159,18 @@ struct MainWalletView: View {
     
     private var lightningAddressBadge: some View {
         Button(action: copyLightningAddress) {
-            HStack(spacing: 8) {
+            HStack(spacing: 6) {
                 Image(systemName: "bolt.fill")
-                    .font(.system(size: 12, weight: .medium, design: .default))
                     .accessibilityHidden(true)
-
                 Text(truncatedLightningAddress())
-                    .font(.system(size: 12, weight: .medium, design: .monospaced))
+                    .font(.system(.caption, design: .monospaced))
                     .lineLimit(1)
-
                 Image(systemName: copiedLightningAddress ? "checkmark" : "doc.on.doc")
-                    .font(.system(size: 10, weight: .medium, design: .default))
                     .accessibilityHidden(true)
             }
-            .foregroundColor(copiedLightningAddress ? .green : Color.accentColor)
-            .padding(.horizontal, 16)
-            .padding(.vertical, 8)
-            .background(
-                Capsule()
-                    .stroke(copiedLightningAddress ? Color.green : Color.accentColor, lineWidth: 1)
-            )
         }
+        .buttonStyle(.bordered)
+        .controlSize(.small)
         .accessibilityLabel("Lightning address: \(npcService.lightningAddress)")
         .accessibilityHint("Copies lightning address to clipboard")
         .accessibilityValue(copiedLightningAddress ? "Copied" : "")
@@ -228,25 +205,10 @@ struct MainWalletView: View {
     }
     
     private var pendingBadge: some View {
-        HStack(spacing: 8) {
-            // Refresh icon (two arrows in circle)
-            Image(systemName: "arrow.triangle.2.circlepath")
-                .font(.system(size: 14, weight: .medium, design: .default))
-                .accessibilityHidden(true)
-
-            Text("PENDING: \(formatPendingAmount())")
-                .font(.system(size: 12, weight: .bold, design: .default))
-                .tracking(0.5)
-        }
-        .foregroundStyle(Color.accentColor)
-        .padding(.horizontal, 20)
-        .padding(.vertical, 10)
-        .background(
-            Capsule()
-                .stroke(Color.accentColor, lineWidth: 1.5)
-        )
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel("Pending balance: \(formatPendingAmount())")
+        Label("Pending: \(formatPendingAmount())", systemImage: "arrow.triangle.2.circlepath")
+            .font(.caption.weight(.semibold))
+            .foregroundStyle(.secondary)
+            .accessibilityLabel("Pending balance: \(formatPendingAmount())")
     }
     
     // MARK: - Formatting Helpers
@@ -277,49 +239,23 @@ struct MainWalletView: View {
     
     private var actionButtons: some View {
         HStack(spacing: 16) {
-            // Receive button
-            Button(action: { showReceiveOptions = true }) {
-                Text("RECEIVE")
-                    .font(.callout.weight(.semibold))
-                    .foregroundColor(.black)
-                    .frame(maxWidth: .infinity)
-                    .frame(height: 56) // Taller button
-                    .background(
-                        RoundedRectangle(cornerRadius: 28)
-                            .fill(Color.accentColor)
-                    )
-            }
-            .accessibilityLabel("Receive")
-            .accessibilityHint("Opens options to receive ecash or lightning payments")
+            Button("Receive") { showReceiveOptions = true }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.large)
+                .accessibilityHint("Opens options to receive ecash or lightning payments")
 
-            // QR Scanner button - Icon only
             Button(action: { navigationManager.showScannerSheet = true }) {
                 Image(systemName: "viewfinder")
-                    .font(.system(size: 24, weight: .medium, design: .default))
-.foregroundStyle(Color.accentColor)
-                    .frame(width: 56, height: 56)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 16) // Squircle
-                            .stroke(Color.accentColor, lineWidth: 2)
-                    )
             }
+            .buttonStyle(.bordered)
+            .controlSize(.large)
             .accessibilityLabel("Scan QR code")
             .accessibilityHint("Opens camera to scan a QR code")
 
-            // Send button
-            Button(action: { showSendOptions = true }) {
-                Text("SEND")
-                    .font(.callout.weight(.semibold))
-                    .foregroundColor(.black)
-                    .frame(maxWidth: .infinity)
-                    .frame(height: 56) // Taller button
-                    .background(
-                        RoundedRectangle(cornerRadius: 28)
-                            .fill(Color.accentColor)
-                    )
-            }
-            .accessibilityLabel("Send")
-            .accessibilityHint("Opens options to send ecash or pay lightning invoices")
+            Button("Send") { showSendOptions = true }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.large)
+                .accessibilityHint("Opens options to send ecash or pay lightning invoices")
         }
         .padding(.horizontal, 24)
     }

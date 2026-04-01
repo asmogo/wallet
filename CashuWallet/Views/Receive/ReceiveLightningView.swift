@@ -117,8 +117,7 @@ struct ReceiveLightningView: View {
             Button(action: createInvoice) {
                 if isCreatingInvoice {
                     ProgressView()
-                        .tint(.black)
-                } else {
+                    } else {
                     Text("CREATE INVOICE")
                 }
             }

@@ -101,7 +101,7 @@ struct AmountEntryView: View {
             GroupBox {
                 HStack(spacing: 12) {
                     Image(systemName: "building.columns")
-                        .font(.system(size: 16))
+                        .font(.callout)
                         .foregroundStyle(.secondary)
                         .frame(width: 40, height: 40)
 
@@ -141,7 +141,7 @@ struct AmountEntryView: View {
             TextField("0", text: $amountString)
                 .keyboardType(.numberPad)
                 .focused($amountFieldFocused)
-                .font(.system(size: 64, weight: .bold, design: .default))
+                .font(.largeTitle.bold())
                 .foregroundColor(amountColor)
                 .multilineTextAlignment(.center)
                 .minimumScaleFactor(0.4)
@@ -171,7 +171,7 @@ struct AmountEntryView: View {
         if insufficientFunds && amount > 0 {
             return .secondary
         }
-        return Color.accentColor
+        return .primary
     }
     
     // MARK: - Action Button Section
@@ -180,10 +180,8 @@ struct AmountEntryView: View {
         Button(action: submitAction) {
             if isLoading {
                 ProgressView()
-                    .tint(.black)
             } else {
                 Text(buttonLabel)
-                    .font(.system(size: 18, weight: .bold))
             }
         }
         .buttonStyle(.borderedProminent).controlSize(.large)

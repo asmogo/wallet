@@ -12,8 +12,6 @@ struct AdvancedSettingsSection: View {
                 Text("Delete Wallet")
             }
             .foregroundStyle(.red)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding()
         }
     }
 }
