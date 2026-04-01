@@ -15,11 +15,10 @@ struct P2PKSettingsSection: View {
             Text("P2PK")
                 .font(.subheadline)
                 .fontWeight(.medium)
-                .foregroundColor(.white)
 
             Text("Generate a key pair to receive P2PK-locked ecash. Use only small amounts while this remains experimental.")
                 .font(.caption)
-                .foregroundColor(.cashuMutedText)
+                .foregroundStyle(.secondary)
 
             HStack(spacing: 12) {
                 Button(action: generateP2PKKey) {
@@ -28,7 +27,7 @@ struct P2PKSettingsSection: View {
                         Text("Generate key")
                     }
                     .font(.subheadline)
-                    .foregroundColor(settings.accentColor)
+.foregroundStyle(Color.accentColor)
                 }
 
                 Button(action: {
@@ -40,7 +39,7 @@ struct P2PKSettingsSection: View {
                         Text("Import nsec")
                     }
                     .font(.subheadline)
-                    .foregroundColor(settings.accentColor)
+.foregroundStyle(Color.accentColor)
                 }
             }
 
@@ -48,13 +47,12 @@ struct P2PKSettingsSection: View {
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Quick access to lock")
                         .font(.subheadline)
-                        .foregroundColor(.white)
                     Text("Show your P2PK locking key in the Receive ecash menu.")
                         .font(.caption)
-                        .foregroundColor(.cashuMutedText)
+                        .foregroundStyle(.secondary)
                 }
             }
-            .toggleStyle(SwitchToggleStyle(tint: settings.accentColor))
+            .toggleStyle(SwitchToggleStyle(tint: Color.accentColor))
 
             if !settings.p2pkKeys.isEmpty {
                 DisclosureGroup(
@@ -62,42 +60,38 @@ struct P2PKSettingsSection: View {
                     content: {
                         VStack(spacing: 8) {
                             ForEach(settings.p2pkKeys) { key in
-                                HStack(spacing: 10) {
-                                    Button(action: { copyP2PKPublicKey(key.publicKey) }) {
-                                        Image(systemName: copiedP2PKPublicKey == key.publicKey ? "checkmark" : "doc.on.doc")
-                                            .foregroundColor(copiedP2PKPublicKey == key.publicKey ? .green : settings.accentColor)
-                                    }
+                                GroupBox {
+                                    HStack(spacing: 10) {
+                                        Button(action: { copyP2PKPublicKey(key.publicKey) }) {
+                                            Image(systemName: copiedP2PKPublicKey == key.publicKey ? "checkmark" : "doc.on.doc")
+                                                .foregroundColor(copiedP2PKPublicKey == key.publicKey ? .green : Color.accentColor)
+                                        }
 
-                                    Text(key.publicKey)
-                                        .font(.system(.caption2, design: .monospaced))
-                                        .foregroundColor(.white)
-                                        .lineLimit(1)
-                                        .truncationMode(.middle)
+                                        Text(key.publicKey)
+                                            .font(.system(.caption2, design: .monospaced))
+                                            .lineLimit(1)
+                                            .truncationMode(.middle)
 
-                                    if key.used {
-                                        Text("used")
-                                            .font(.caption2)
-                                            .foregroundColor(.black)
-                                            .padding(.horizontal, 6)
-                                            .padding(.vertical, 2)
-                                            .background(
-                                                Capsule()
-                                                    .fill(settings.accentColor)
-                                            )
-                                    }
+                                        if key.used {
+                                            Text("used")
+                                                .font(.caption2)
+                                                .foregroundColor(.black)
+                                                .padding(.horizontal, 6)
+                                                .padding(.vertical, 2)
+                                                .background(
+                                                    Capsule()
+                                                        .fill(Color.accentColor)
+                                                )
+                                        }
 
-                                    Spacer()
+                                        Spacer()
 
-                                    Button(action: { showQRCode(title: "P2PK Public Key", content: key.publicKey) }) {
-                                        Image(systemName: "qrcode")
-                                            .foregroundColor(settings.accentColor)
+                                        Button(action: { showQRCode(title: "P2PK Public Key", content: key.publicKey) }) {
+                                            Image(systemName: "qrcode")
+                                                .foregroundStyle(Color.accentColor)
+                                        }
                                     }
                                 }
-                                .padding(10)
-                                .background(
-                                    RoundedRectangle(cornerRadius: 8)
-                                        .fill(Color.cashuSecondaryBackground)
-                                )
                             }
                         }
                         .padding(.top, 8)
@@ -105,20 +99,16 @@ struct P2PKSettingsSection: View {
                     label: {
                         Text("Browse \(settings.p2pkKeys.count) keys")
                             .font(.caption)
-                            .foregroundColor(settings.accentColor)
+        .foregroundStyle(Color.accentColor)
                     }
                 )
                 .padding(10)
-                .background(
-                    RoundedRectangle(cornerRadius: 10)
-                        .fill(Color.cashuCardBackground)
-                )
             }
 
             if let p2pkError {
                 Text(p2pkError)
                     .font(.caption2)
-                    .foregroundColor(.cashuError)
+                    .foregroundStyle(.red)
             }
         }
         .padding(.vertical, 8)

@@ -2,7 +2,7 @@ import SwiftUI
 
 struct MintsListView: View {
     @EnvironmentObject var walletManager: WalletManager
-    @ObservedObject var settings = SettingsManager.shared
+    @ObservedObject var settings = SettingsManager.shared  // used for useWebsockets
     @ObservedObject var discoveryManager = MintDiscoveryManager.shared
     
     @State private var showAddMint = false
@@ -15,12 +15,8 @@ struct MintsListView: View {
     
     var body: some View {
         NavigationStack {
-            ZStack {
-                Color.cashuBackground
-                    .ignoresSafeArea()
-                
-                ScrollView {
-                    VStack(spacing: 16) {
+            ScrollView {
+                VStack(spacing: 16) {
                         // Existing mints
                         ForEach(walletManager.mints) { mint in
                             mintCard(mint: mint)
@@ -48,13 +44,18 @@ struct MintsListView: View {
                                 Text(discoveryManager.isDiscovering ? "DISCOVERING..." : "DISCOVER MINTS")
                             }
                         }
-                        .buttonStyle(CashuPrimaryButtonStyle(isDisabled: discoveryManager.isDiscovering))
+                        .buttonStyle(.borderedProminent).controlSize(.large)
                         .accessibilityLabel("Discover mints from relays")
                         .padding(.top, 8)
                         
                         // Discovered Mints
                         if !discoveryManager.discoveredMints.isEmpty {
-                            sectionHeader("DISCOVERED MINTS")
+                            Text("Discovered Mints")
+                                .font(.subheadline)
+                                .fontWeight(.bold)
+                                .foregroundStyle(.secondary)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .padding(.top, 16)
                             
                             ForEach(discoveryManager.discoveredMints) { mint in
                                 discoveredMintCard(mint: mint)
@@ -62,35 +63,28 @@ struct MintsListView: View {
                         }
                         
                         // Add mint section
-                        sectionHeader("ADD MINT")
+                        Text("Add Mint")
+                            .font(.subheadline)
+                            .fontWeight(.bold)
+                            .foregroundStyle(.secondary)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(.top, 16)
                         
                         Text("Enter the URL of a Cashu mint to connect to it. This wallet is not affiliated with any mint.")
                             .font(.caption)
-                            .foregroundColor(.cashuMutedText)
+                            .foregroundStyle(.secondary)
                             .multilineTextAlignment(.leading)
                             .frame(maxWidth: .infinity, alignment: .leading)
                         
                         // URL input
                         TextField("https://", text: $newMintUrl)
-                            .textFieldStyle(.plain)
-                            .foregroundStyle(.primary)
+                            .textFieldStyle(.roundedBorder)
                             .autocapitalization(.none)
                             .autocorrectionDisabled()
-                            .padding()
-                            .background(
-                                RoundedRectangle(cornerRadius: 12)
-                                    .fill(Color.cashuCardBackground)
-                            )
-                        
+
                         // Nickname input
                         TextField("Nickname (e.g. Testnet)", text: $newMintNickname)
-                            .textFieldStyle(.plain)
-                            .foregroundStyle(.primary)
-                            .padding()
-                            .background(
-                                RoundedRectangle(cornerRadius: 12)
-                                    .fill(Color.cashuCardBackground)
-                            )
+                            .textFieldStyle(.roundedBorder)
                         
                         if let error = errorMessage {
                             ErrorBannerView(message: error, type: .error) {
@@ -104,7 +98,7 @@ struct MintsListView: View {
                                 HStack {
                                     if isAddingMint {
                                         ProgressView()
-                                            .tint(settings.accentColor)
+                                            .tint(Color.accentColor)
                                             .scaleEffect(0.8)
                                     } else {
                                         Image(systemName: "plus")
@@ -112,7 +106,7 @@ struct MintsListView: View {
                                     Text("ADD MINT")
                                 }
                                 .font(.caption)
-                                .foregroundColor(newMintUrl.isEmpty ? .cashuMutedText : settings.accentColor)
+                                .foregroundColor(newMintUrl.isEmpty ? .secondary : Color.accentColor)
                             }
                             .disabled(newMintUrl.isEmpty || isAddingMint)
                             
@@ -124,7 +118,7 @@ struct MintsListView: View {
                                     Text("PASTE URL")
                                 }
                                 .font(.caption)
-                                .foregroundColor(settings.accentColor)
+            .foregroundStyle(Color.accentColor)
                             }
                             .accessibilityLabel("Paste mint URL from clipboard")
                         }
@@ -134,14 +128,12 @@ struct MintsListView: View {
                     }
                     .padding()
                 }
-            }
             .navigationTitle("Mints")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .principal) {
                     Text("Mints")
                         .font(.headline)
-                        .foregroundStyle(.primary)
                 }
             }
             .confirmationDialog(
@@ -166,151 +158,98 @@ struct MintsListView: View {
         }
     }
     
-    private func sectionHeader(_ title: String) -> some View {
-        HStack {
-            Rectangle()
-                .fill(Color.cashuBorder)
-                .frame(height: 1)
-            
-            Text(title)
-                .font(.caption)
-                .fontWeight(.semibold)
-                .foregroundColor(.cashuMutedText)
-                .tracking(2)
-            
-            Rectangle()
-                .fill(Color.cashuBorder)
-                .frame(height: 1)
-        }
-        .padding(.top, 24)
-    }
     
     private func mintCard(mint: MintInfo) -> some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack(spacing: 12) {
-                // Mint icon
-                Circle()
-                    .fill(Color.cashuCardBackground)
-                    .frame(width: 44, height: 44)
-                    .overlay(
-                        Image(systemName: "building.columns")
-                            .foregroundColor(settings.accentColor)
-                    )
-                
-                VStack(alignment: .leading, spacing: 2) {
-                    HStack {
-                        Text(mint.name)
-                            .font(.headline)
-                            .foregroundColor(settings.accentColor)
-                        
-                        if walletManager.activeMint?.url == mint.url {
-                            Text("Active")
-                                .font(.caption2)
-                                .foregroundColor(settings.accentColor)
-                                .padding(.horizontal, 6)
-                                .padding(.vertical, 2)
-                                .background(
-                                    Capsule()
-                                        .stroke(settings.accentColor, lineWidth: 1)
-                                )
+        GroupBox {
+            VStack(alignment: .leading, spacing: 12) {
+                HStack(spacing: 12) {
+                    Image(systemName: "building.columns")
+                        .foregroundStyle(Color.accentColor)
+                        .frame(width: 44, height: 44)
+
+                    VStack(alignment: .leading, spacing: 2) {
+                        HStack {
+                            Text(mint.name)
+                                .font(.headline)
+                                .foregroundStyle(Color.accentColor)
+
+                            if walletManager.activeMint?.url == mint.url {
+                                Text("Active")
+                                    .font(.caption2)
+                                    .foregroundStyle(Color.accentColor)
+                                    .padding(.horizontal, 6)
+                                    .padding(.vertical, 2)
+                                    .background(
+                                        Capsule()
+                                            .stroke(Color.accentColor, lineWidth: 1)
+                                    )
+                            }
                         }
+
+                        Text(mint.url)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
                     }
-                    
-                    Text(mint.url)
-                        .font(.caption)
-                        .foregroundColor(.cashuMutedText)
-                        .lineLimit(1)
+
+                    Spacer()
+
+                    Menu {
+                        Button(action: { setActive(mint) }) {
+                            Label("Set as Active", systemImage: "checkmark.circle")
+                        }
+                        Button(role: .destructive, action: {
+                            mintToRemove = mint
+                            showRemoveConfirmation = true
+                        }) {
+                            Label("Remove", systemImage: "trash")
+                        }
+                    } label: {
+                        Image(systemName: "ellipsis")
+                            .foregroundStyle(.secondary)
+                            .padding(8)
+                    }
                 }
-                
-                Spacer()
-                
-                Menu {
-                    Button(action: { setActive(mint) }) {
-                        Label("Set as Active", systemImage: "checkmark.circle")
-                    }
-                    Button(role: .destructive, action: {
-                        mintToRemove = mint
-                        showRemoveConfirmation = true
-                    }) {
-                        Label("Remove", systemImage: "trash")
-                    }
-                } label: {
-                    Image(systemName: "ellipsis")
-                        .foregroundColor(.cashuMutedText)
-                        .padding(8)
-                }
-            }
-            
-            // Balance pills
-            HStack(spacing: 8) {
-                balancePill("\(mint.balance) sat")
-                balancePill("0 msat")
-                balancePill("$0.00")
-                balancePill("€0.00")
+
+                // Balance
+                LabeledContent("Balance", value: "\(mint.balance) sat")
+                    .font(.subheadline)
             }
         }
-        .padding()
-        .background(
-            RoundedRectangle(cornerRadius: 16)
-                .stroke(settings.accentColor, lineWidth: 1)
-        )
     }
     
     private func discoveredMintCard(mint: DiscoveredMint) -> some View {
-        HStack(spacing: 12) {
-            Circle()
-                .fill(Color.cashuCardBackground)
-                .frame(width: 40, height: 40)
-                .overlay(
-                    Image(systemName: "globe")
-                        .foregroundColor(.cashuMutedText)
-                )
-            
-            VStack(alignment: .leading, spacing: 2) {
-                Text(mint.name ?? "Unknown Mint")
-                    .font(.subheadline)
-                    .fontWeight(.bold)
-                    .foregroundStyle(.primary)
-                
-                Text(mint.url)
-                    .font(.caption)
-                    .foregroundColor(.cashuMutedText)
-                    .lineLimit(1)
-            }
-            
-            Spacer()
-            
-            Button(action: {
-                newMintUrl = mint.url
-                addMint()
-            }) {
-                Image(systemName: "plus.circle.fill")
-                    .font(.title2)
-                    .foregroundColor(settings.accentColor)
+        GroupBox {
+            HStack(spacing: 12) {
+                Image(systemName: "globe")
+                    .foregroundStyle(.secondary)
+                    .frame(width: 40, height: 40)
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(mint.name ?? "Unknown Mint")
+                        .font(.subheadline)
+                        .fontWeight(.bold)
+
+                    Text(mint.url)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+
+                Spacer()
+
+                Button(action: {
+                    newMintUrl = mint.url
+                    addMint()
+                }) {
+                    Image(systemName: "plus.circle.fill")
+                        .font(.title2)
+                        .foregroundStyle(Color.accentColor)
+                }
             }
         }
-        .padding()
-        .background(
-            RoundedRectangle(cornerRadius: 12)
-                .fill(Color.cashuCardBackground)
-                .overlay(
-                    RoundedRectangle(cornerRadius: 12)
-                        .stroke(Color.cashuBorder, lineWidth: 1)
-                )
-        )
     }
     
-    private func balancePill(_ text: String) -> some View {
-        Text(text)
-            .font(.caption2)
-            .foregroundStyle(.primary)
-            .padding(.horizontal, 10)
-            .padding(.vertical, 6)
-            .background(
-                Capsule()
-                    .fill(Color.cashuCardBackground)
-            )
-    }
     
     private func addMint() {
         guard !newMintUrl.isEmpty else { return }

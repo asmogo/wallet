@@ -10,72 +10,64 @@ struct PrivacySettingsSection: View {
                 Text("Privacy")
                     .font(.subheadline)
                     .fontWeight(.medium)
-                    .foregroundColor(.white)
 
                 Text("These settings affect your privacy and wallet responsiveness.")
                     .font(.caption)
-                    .foregroundColor(.cashuMutedText)
+                    .foregroundStyle(.secondary)
 
                 Toggle(isOn: $settings.checkIncomingInvoices) {
                     Text("Check incoming invoice")
                         .font(.subheadline)
-                        .foregroundColor(.white)
-                }
-                .toggleStyle(SwitchToggleStyle(tint: settings.accentColor))
+                    }
+                .toggleStyle(SwitchToggleStyle(tint: Color.accentColor))
 
                 Toggle(isOn: $settings.checkPendingOnStartup) {
                     Text("Check pending invoices on startup")
                         .font(.subheadline)
-                        .foregroundColor(.white)
-                }
-                .toggleStyle(SwitchToggleStyle(tint: settings.accentColor))
+                    }
+                .toggleStyle(SwitchToggleStyle(tint: Color.accentColor))
 
                 Toggle(isOn: $settings.periodicallyCheckIncomingInvoices) {
                     Text("Check all invoices")
                         .font(.subheadline)
-                        .foregroundColor(.white)
-                }
-                .toggleStyle(SwitchToggleStyle(tint: settings.accentColor))
+                    }
+                .toggleStyle(SwitchToggleStyle(tint: Color.accentColor))
                 .disabled(!settings.checkIncomingInvoices)
                 .opacity(settings.checkIncomingInvoices ? 1.0 : 0.5)
 
                 Toggle(isOn: $settings.checkSentTokens) {
                     Text("Check sent ecash")
                         .font(.subheadline)
-                        .foregroundColor(.white)
-                }
-                .toggleStyle(SwitchToggleStyle(tint: settings.accentColor))
+                    }
+                .toggleStyle(SwitchToggleStyle(tint: Color.accentColor))
 
                 Toggle(isOn: $settings.useWebsockets) {
                     Text("Use WebSockets")
                         .font(.subheadline)
-                        .foregroundColor(.white)
-                }
-                .toggleStyle(SwitchToggleStyle(tint: settings.accentColor))
+                    }
+                .toggleStyle(SwitchToggleStyle(tint: Color.accentColor))
                 .disabled(!settings.checkIncomingInvoices && !settings.checkSentTokens)
                 .opacity((settings.checkIncomingInvoices || settings.checkSentTokens) ? 1 : 0.5)
 
                 Toggle(isOn: $settings.autoPasteEcashReceive) {
                     Text("Paste ecash automatically")
                         .font(.subheadline)
-                        .foregroundColor(.white)
-                }
-                .toggleStyle(SwitchToggleStyle(tint: settings.accentColor))
+                    }
+                .toggleStyle(SwitchToggleStyle(tint: Color.accentColor))
             }
 
             VStack(alignment: .leading, spacing: 8) {
                 Toggle(isOn: $settings.showFiatBalance) {
                     Text("Get exchange rate from Coinbase")
                         .font(.subheadline)
-                        .foregroundColor(.white)
-                }
-                .toggleStyle(SwitchToggleStyle(tint: settings.accentColor))
+                    }
+                .toggleStyle(SwitchToggleStyle(tint: Color.accentColor))
 
                 if settings.showFiatBalance {
                     HStack {
                         Text("Fiat Currency")
                             .font(.caption)
-                            .foregroundColor(.cashuMutedText)
+                            .foregroundStyle(.secondary)
                         Spacer()
                         Picker("Currency", selection: $settings.bitcoinPriceCurrency) {
                             ForEach(SettingsManager.supportedFiatCurrencies, id: \.self) { currency in
@@ -83,24 +75,23 @@ struct PrivacySettingsSection: View {
                             }
                         }
                         .labelsHidden()
-                        .tint(settings.accentColor)
+                        .tint(Color.accentColor)
                     }
 
                     HStack {
                         VStack(alignment: .leading, spacing: 4) {
                             Text("BTC Price (\(settings.bitcoinPriceCurrency))")
                                 .font(.caption)
-                                .foregroundColor(.cashuMutedText)
+                                .foregroundStyle(.secondary)
 
                             if priceService.btcPriceUSD > 0 {
                                 Text(formatBTCPrice(priceService.btcPriceUSD))
                                     .font(.subheadline)
                                     .fontWeight(.medium)
-                                    .foregroundColor(.white)
-                            } else {
+                                            } else {
                                 Text("Loading...")
                                     .font(.subheadline)
-                                    .foregroundColor(.cashuMutedText)
+                                    .foregroundStyle(.secondary)
                             }
                         }
 
@@ -111,10 +102,10 @@ struct PrivacySettingsSection: View {
                         }) {
                             if priceService.isFetching {
                                 ProgressView()
-                                    .progressViewStyle(CircularProgressViewStyle(tint: settings.accentColor))
+                                    .progressViewStyle(CircularProgressViewStyle(tint: Color.accentColor))
                             } else {
                                 Image(systemName: "arrow.clockwise")
-                                    .foregroundColor(settings.accentColor)
+                .foregroundStyle(Color.accentColor)
                             }
                         }
                         .disabled(priceService.isFetching)
@@ -123,13 +114,13 @@ struct PrivacySettingsSection: View {
                     if let lastUpdated = priceService.lastUpdated {
                         Text("Updated \(formatRelativeTime(lastUpdated))")
                             .font(.caption2)
-                            .foregroundColor(.cashuMutedText)
+                            .foregroundStyle(.secondary)
                     }
 
                     if let error = priceService.errorMessage {
                         Text(error)
                             .font(.caption2)
-                            .foregroundColor(.cashuError)
+                            .foregroundStyle(.red)
                     }
                 }
             }

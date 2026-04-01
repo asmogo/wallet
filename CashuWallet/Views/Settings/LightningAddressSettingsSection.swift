@@ -2,7 +2,6 @@ import SwiftUI
 
 struct LightningAddressSettingsSection: View {
     @EnvironmentObject var walletManager: WalletManager
-    @ObservedObject var settings = SettingsManager.shared
     @ObservedObject var npcService = NPCService.shared
 
     @Binding var copiedLightningAddress: Bool
@@ -16,18 +15,16 @@ struct LightningAddressSettingsSection: View {
                 Text("npub.cash Integration")
                     .font(.subheadline)
                     .fontWeight(.medium)
-                    .foregroundColor(.white)
 
                 Text("Receive Lightning payments to your wallet using a Lightning address.")
                     .font(.caption)
-                    .foregroundColor(.cashuMutedText)
+                    .foregroundStyle(.secondary)
 
                 Toggle(isOn: $npcService.isEnabled) {
                     Text("Enable Lightning Address")
                         .font(.subheadline)
-                        .foregroundColor(.white)
-                }
-                .toggleStyle(SwitchToggleStyle(tint: settings.accentColor))
+                    }
+                .toggleStyle(SwitchToggleStyle(tint: Color.accentColor))
                 .padding(.top, 8)
             }
 
@@ -37,27 +34,24 @@ struct LightningAddressSettingsSection: View {
                     VStack(alignment: .leading, spacing: 8) {
                         Text("Your Lightning Address")
                             .font(.caption)
-                            .foregroundColor(.cashuMutedText)
+                            .foregroundStyle(.secondary)
 
                         Button(action: copyLightningAddress) {
+                        GroupBox {
                             HStack {
                                 Text(npcService.lightningAddress)
                                     .font(.system(.subheadline, design: .monospaced))
-                                    .foregroundColor(settings.accentColor)
+                                    .foregroundStyle(Color.accentColor)
                                     .lineLimit(1)
                                     .truncationMode(.middle)
 
                                 Spacer()
 
                                 Image(systemName: copiedLightningAddress ? "checkmark" : "doc.on.doc")
-                                    .foregroundColor(copiedLightningAddress ? .green : settings.accentColor)
+                                    .foregroundColor(copiedLightningAddress ? .green : Color.accentColor)
                             }
-                            .padding(12)
-                            .background(
-                                RoundedRectangle(cornerRadius: 8)
-                                    .fill(Color.cashuCardBackground)
-                            )
                         }
+                    }
                     }
                     .padding(.top, 8)
 
@@ -67,13 +61,12 @@ struct LightningAddressSettingsSection: View {
                             VStack(alignment: .leading, spacing: 2) {
                                 Text("Auto-claim payments")
                                     .font(.subheadline)
-                                    .foregroundColor(.white)
-                                Text("Automatically mint received payments")
+                                                Text("Automatically mint received payments")
                                     .font(.caption)
-                                    .foregroundColor(.cashuMutedText)
+                                    .foregroundStyle(.secondary)
                             }
                         }
-                        .toggleStyle(SwitchToggleStyle(tint: settings.accentColor))
+                        .toggleStyle(SwitchToggleStyle(tint: Color.accentColor))
                     }
                     .padding(.top, 8)
 
@@ -82,17 +75,17 @@ struct LightningAddressSettingsSection: View {
                         VStack(alignment: .leading, spacing: 8) {
                             Text("Receiving Mint")
                                 .font(.caption)
-                                .foregroundColor(.cashuMutedText)
+                                .foregroundStyle(.secondary)
 
                             Button(action: { showMintPicker = true }) {
+                            GroupBox {
                                 HStack {
                                     VStack(alignment: .leading, spacing: 2) {
                                         Text(selectedMintName())
                                             .font(.subheadline)
-                                            .foregroundColor(.white)
                                         Text(npcService.selectedMintUrl ?? "Select a mint")
                                             .font(.caption)
-                                            .foregroundColor(.cashuMutedText)
+                                            .foregroundStyle(.secondary)
                                             .lineLimit(1)
                                             .truncationMode(.middle)
                                     }
@@ -100,14 +93,10 @@ struct LightningAddressSettingsSection: View {
                                     Spacer()
 
                                     Image(systemName: "chevron.right")
-                                        .foregroundColor(.cashuMutedText)
+                                        .foregroundStyle(.secondary)
                                 }
-                                .padding(12)
-                                .background(
-                                    RoundedRectangle(cornerRadius: 8)
-                                        .fill(Color.cashuCardBackground)
-                                )
                             }
+                        }
                         }
                         .padding(.top, 8)
                     }
@@ -118,7 +107,7 @@ struct LightningAddressSettingsSection: View {
                             HStack {
                                 if isCheckingPayments {
                                     ProgressView()
-                                        .progressViewStyle(CircularProgressViewStyle(tint: settings.accentColor))
+                                        .progressViewStyle(CircularProgressViewStyle(tint: Color.accentColor))
                                         .scaleEffect(0.8)
                                 } else {
                                     Image(systemName: "arrow.clockwise")
@@ -126,7 +115,7 @@ struct LightningAddressSettingsSection: View {
                                 Text("Check for Payments")
                             }
                             .font(.subheadline)
-                            .foregroundColor(settings.accentColor)
+        .foregroundStyle(Color.accentColor)
                         }
                         .disabled(isCheckingPayments)
 
@@ -135,7 +124,7 @@ struct LightningAddressSettingsSection: View {
                         if let lastCheck = npcService.lastCheck {
                             Text("Last: \(formatRelativeTime(lastCheck))")
                                 .font(.caption2)
-                                .foregroundColor(.cashuMutedText)
+                                .foregroundStyle(.secondary)
                         }
                     }
                     .padding(.top, 12)
@@ -148,7 +137,7 @@ struct LightningAddressSettingsSection: View {
 
                         Text(npcService.isConnected ? "Connected to npubx.cash" : "Connecting...")
                             .font(.caption)
-                            .foregroundColor(.cashuMutedText)
+                            .foregroundStyle(.secondary)
                     }
                     .padding(.top, 8)
 
@@ -156,17 +145,17 @@ struct LightningAddressSettingsSection: View {
                     if let error = npcService.errorMessage {
                         Text(error)
                             .font(.caption)
-                            .foregroundColor(.cashuError)
+                            .foregroundStyle(.red)
                             .padding(.top, 4)
                     }
                 } else {
                     // Nostr not initialized
                     HStack {
                         Image(systemName: "exclamationmark.triangle")
-                            .foregroundColor(.cashuWarning)
+                            .foregroundStyle(.orange)
                         Text("Wallet not fully initialized. Please restart the app.")
                             .font(.caption)
-                            .foregroundColor(.cashuMutedText)
+                            .foregroundStyle(.secondary)
                     }
                     .padding(.top, 8)
                 }

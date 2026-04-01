@@ -4,7 +4,7 @@ struct SendView: View {
     @Environment(\.dismiss) private var dismiss
     @EnvironmentObject var walletManager: WalletManager
     @ObservedObject private var settings = SettingsManager.shared
-    
+
     @State private var amountString = ""
     @State private var memo = ""
     @State private var generatedToken: String?
@@ -13,86 +13,82 @@ struct SendView: View {
     @State private var showMeltView = false
     @State private var errorMessage: String?
     @State private var showMintPicker = false
-    
+
     // Token claim detection
     @State private var isCheckingClaim = false
     @State private var tokenClaimed = false
     @State private var checkingTask: Task<Void, Never>?
-    
+
     // Copy button feedback
     @State private var copyButtonText = "COPY"
     @State private var showShareSheet = false
     @State private var lockWithP2PK = false
     @State private var p2pkPubkeyInput = ""
     @State private var showSendConfirmation = false
-    
+
+    @FocusState private var amountFieldFocused: Bool
+
     var body: some View {
         NavigationStack {
-            ZStack {
-                Color.cashuBackground
-                    .ignoresSafeArea()
-                
-                if let token = generatedToken {
-                    tokenDisplayView(token: token)
-                } else {
-                    sendInputView
-                }
-            }
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .navigationBarLeading) {
-                    Button(action: { dismiss() }) {
-                        Image(systemName: "xmark")
-                            .foregroundStyle(.primary)
-                    }
-                    .accessibilityLabel("Close")
-                    .accessibilityHint("Dismisses the send screen")
-                }
-
-                ToolbarItem(placement: .principal) {
-                    Text("Send Ecash")
-                        .font(.headline)
-                        .foregroundStyle(.primary)
-                }
-
-                ToolbarItem(placement: .topBarTrailing) {
-                    HStack(spacing: 8) {
-                        Image(systemName: lockWithP2PK ? "lock.fill" : "lock.open")
-                            .font(.caption)
-                            .foregroundColor(lockWithP2PK ? .cashuAccent : .cashuMutedText)
-                            .accessibilityHidden(true)
-                        Text(lockWithP2PK ? "P2PK" : "SAT")
-                            .font(.caption)
-                            .fontWeight(.bold)
-                            .foregroundColor(lockWithP2PK ? .cashuAccent : .cashuMutedText)
-                    }
-                    .accessibilityElement(children: .combine)
-                    .accessibilityLabel(lockWithP2PK ? "P2PK lock enabled" : "Unit: Satoshis")
-                }
-            }
-            .fullScreenCover(isPresented: $showMeltView) {
-                MeltView()
-                    .environmentObject(walletManager)
-            }
-            .sheet(isPresented: $showMintPicker) {
-                MintSelectorSheet(selectedMint: $walletManager.activeMint)
-                    .environmentObject(walletManager)
-                    .presentationDetents([.medium])
-            }
-            .sheet(isPresented: $showShareSheet) {
-                if let token = generatedToken {
-                    CashuTokenShareSheet(token: token)
-                }
-            }
-            .onDisappear {
-                // Cancel any running polling task when view disappears
-                checkingTask?.cancel()
+            if let token = generatedToken {
+                tokenDisplayView(token: token)
+            } else {
+                sendInputView
             }
         }
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .navigationBarLeading) {
+                Button(action: { dismiss() }) {
+                    Image(systemName: "xmark")
+                }
+                .accessibilityLabel("Close")
+                .accessibilityHint("Dismisses the send screen")
+            }
+
+            ToolbarItem(placement: .principal) {
+                Text("Send Ecash")
+                    .font(.headline)
+            }
+
+            ToolbarItem(placement: .topBarTrailing) {
+                HStack(spacing: 8) {
+                    Image(systemName: lockWithP2PK ? "lock.fill" : "lock.open")
+                        .font(.caption)
+                        .foregroundColor(lockWithP2PK ? .accentColor : .secondary)
+                        .accessibilityHidden(true)
+                    Text(lockWithP2PK ? "P2PK" : "SAT")
+                        .font(.caption)
+                        .fontWeight(.bold)
+                        .foregroundColor(lockWithP2PK ? .accentColor : .secondary)
+                }
+                .accessibilityElement(children: .combine)
+                .accessibilityLabel(lockWithP2PK ? "P2PK lock enabled" : "Unit: Satoshis")
+            }
+        }
+        .sheet(isPresented: $showMeltView) {
+            MeltView()
+                .environmentObject(walletManager)
+                .presentationDetents([.large])
+        }
+        .sheet(isPresented: $showMintPicker) {
+            MintSelectorSheet(selectedMint: $walletManager.activeMint)
+                .environmentObject(walletManager)
+                .presentationDetents([.medium])
+        }
+        .sheet(isPresented: $showShareSheet) {
+            if let token = generatedToken {
+                CashuTokenShareSheet(token: token)
+            }
+        }
+        .onDisappear {
+            // Cancel any running polling task when view disappears
+            checkingTask?.cancel()
+        }
     }
-    
+
     // MARK: - Send Input View
-    
+
     private var sendInputView: some View {
         VStack(spacing: 0) {
             // Mint selector
@@ -101,27 +97,32 @@ struct SendView: View {
                     .padding(.horizontal)
                     .padding(.top, 16)
             }
-            
+
             Spacer()
-            
+
             // Amount display
             VStack(spacing: 4) {
-                Text(amountString.isEmpty ? "0" : amountString)
-                    .font(.cashuBalance)
-                    .foregroundStyle(.primary)
+                TextField("0", text: $amountString)
+                    .keyboardType(.numberPad)
+                    .focused($amountFieldFocused)
+                    .font(.largeTitle.bold())
+                    .multilineTextAlignment(.center)
 
                 Text("sat")
                     .font(.title3)
-                    .foregroundColor(.cashuMutedText)
+                    .foregroundStyle(.secondary)
             }
             .accessibilityElement(children: .combine)
             .accessibilityLabel("Send amount")
             .accessibilityValue("\(amountString.isEmpty ? "0" : amountString) sats")
+            .onAppear {
+                amountFieldFocused = true
+            }
 
             if let error = errorMessage {
                 Text(error)
                     .font(.caption)
-                    .foregroundColor(.cashuError)
+                    .foregroundStyle(.red)
                     .padding(.top, 8)
             }
 
@@ -130,10 +131,6 @@ struct SendView: View {
             p2pkLockSection
                 .padding(.horizontal)
                 .padding(.bottom, 8)
-
-            // Numeric keypad
-            NumericKeyboard(text: $amountString)
-                .padding(.horizontal, 20)
 
             // Send button
             Button(action: { showSendConfirmation = true }) {
@@ -144,7 +141,7 @@ struct SendView: View {
                     Text("SEND")
                 }
             }
-            .buttonStyle(CashuPrimaryButtonStyle(isDisabled: !canSend))
+            .buttonStyle(.borderedProminent).controlSize(.large)
             .disabled(!canSend || isGenerating)
             .padding(.horizontal)
             .padding(.vertical, 20)
@@ -175,51 +172,44 @@ struct SendView: View {
                     Text("Pay Lightning Request")
                 }
                 .font(.subheadline)
-                .foregroundColor(.cashuAccent)
             }
             .accessibilityLabel("Pay Lightning Request")
             .accessibilityHint("Opens lightning invoice payment screen")
             .padding(.bottom, 30)
         }
     }
-    
+
     private func mintSelector(mint: MintInfo) -> some View {
         Button(action: { showMintPicker = true }) {
             HStack(spacing: 12) {
                 // Mint icon
                 Circle()
-                    .fill(Color.cashuCardBackground)
+                    .fill(Color(uiColor: .secondarySystemGroupedBackground))
                     .frame(width: 44, height: 44)
                     .overlay(
                         Image(systemName: "building.columns")
                             .foregroundColor(.gray)
                     )
-                
+
                 VStack(alignment: .leading, spacing: 2) {
                     Text(mint.name)
                         .font(.subheadline)
                         .fontWeight(.medium)
-                        .foregroundStyle(.primary)
-                    
+
                     Text("\(mint.balance) sat available")
                         .font(.caption)
-                        .foregroundColor(.cashuMutedText)
+                        .foregroundStyle(.secondary)
                 }
-                
+
                 Spacer()
-                
+
                 Image(systemName: "chevron.down")
-                    .foregroundColor(.cashuMutedText)
+                    .foregroundStyle(.secondary)
             }
             .padding()
-            .background(
-                RoundedRectangle(cornerRadius: 12)
-                    .fill(Color.cashuCardBackground)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 12)
-                            .stroke(Color.cashuBorder, lineWidth: 1)
-                    )
-            )
+            .background {
+                GroupBox { EmptyView() }
+            }
         }
         .buttonStyle(PlainButtonStyle())
         .accessibilityElement(children: .combine)
@@ -235,86 +225,75 @@ struct SendView: View {
     }
 
     private var p2pkLockSection: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Toggle(isOn: $lockWithP2PK.animation(.easeInOut(duration: 0.2))) {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Lock ecash to P2PK key")
-                        .font(.subheadline)
-                        .foregroundStyle(.primary)
-                    Text("Receiver must have the matching private key to claim this token.")
-                        .font(.caption2)
-                        .foregroundColor(.cashuMutedText)
+        GroupBox {
+            VStack(alignment: .leading, spacing: 8) {
+                Toggle(isOn: $lockWithP2PK.animation(.easeInOut(duration: 0.2))) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Lock ecash to P2PK key")
+                            .font(.subheadline)
+                        Text("Receiver must have the matching private key to claim this token.")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                    }
                 }
-            }
-            .toggleStyle(SwitchToggleStyle(tint: settings.accentColor))
-            .accessibilityLabel("Lock ecash to P2PK key")
-            .accessibilityHint("When enabled, only the holder of the matching private key can claim this token")
-            .accessibilityValue(lockWithP2PK ? "On" : "Off")
+                .toggleStyle(SwitchToggleStyle(tint: Color.accentColor))
+                .accessibilityLabel("Lock ecash to P2PK key")
+                .accessibilityHint("When enabled, only the holder of the matching private key can claim this token")
+                .accessibilityValue(lockWithP2PK ? "On" : "Off")
 
-            if lockWithP2PK {
-                TextField("02... P2PK public key", text: $p2pkPubkeyInput)
-                    .font(.system(.caption, design: .monospaced))
-                    .textInputAutocapitalization(.never)
-                    .autocorrectionDisabled()
-                    .padding(10)
-                    .background(
-                        RoundedRectangle(cornerRadius: 10)
-                            .fill(Color.cashuSecondaryBackground)
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 10)
-                                    .stroke(Color.cashuBorder, lineWidth: 1)
-                            )
-                    )
-                    .foregroundStyle(.primary)
-                    .accessibilityLabel("P2PK public key")
-                    .accessibilityHint("Enter the recipient's P2PK public key starting with 02")
+                if lockWithP2PK {
+                    TextField("02... P2PK public key", text: $p2pkPubkeyInput)
+                        .font(.system(.caption, design: .monospaced))
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled()
+                        .padding(10)
+                        .background(
+                            RoundedRectangle(cornerRadius: 10)
+                                .fill(Color(uiColor: .tertiarySystemGroupedBackground))
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 10)
+                                        .stroke(Color(uiColor: .separator), lineWidth: 1)
+                                )
+                        )
+                        .accessibilityLabel("P2PK public key")
+                        .accessibilityHint("Enter the recipient's P2PK public key starting with 02")
 
-                HStack {
-                    if let ownKey = settings.p2pkKeys.last {
-                        Button(action: { p2pkPubkeyInput = ownKey.publicKey }) {
-                            Text("Use my latest key")
-                                .font(.caption)
-                                .foregroundColor(settings.accentColor)
+                    HStack {
+                        if let ownKey = settings.p2pkKeys.last {
+                            Button(action: { p2pkPubkeyInput = ownKey.publicKey }) {
+                                Text("Use my latest key")
+                                    .font(.caption)
+                            }
+                            .accessibilityLabel("Use my latest key")
+                            .accessibilityHint("Fills in your most recent P2PK public key")
                         }
-                        .accessibilityLabel("Use my latest key")
-                        .accessibilityHint("Fills in your most recent P2PK public key")
+
+                        Spacer()
                     }
 
-                    Spacer()
-                }
-
-                if !p2pkPubkeyInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
-                   normalizedP2PKPubkeyInput == nil {
-                    Text("Invalid P2PK key format")
-                        .font(.caption2)
-                        .foregroundColor(.cashuError)
+                    if !p2pkPubkeyInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+                       normalizedP2PKPubkeyInput == nil {
+                        Text("Invalid P2PK key format")
+                            .font(.caption2)
+                            .foregroundStyle(.red)
+                    }
                 }
             }
         }
-        .padding(12)
-        .background(
-            RoundedRectangle(cornerRadius: 12)
-                .fill(Color.cashuCardBackground)
-                .overlay(
-                    RoundedRectangle(cornerRadius: 12)
-                        .stroke(Color.cashuBorder, lineWidth: 1)
-                )
-        )
     }
-    
+
     // MARK: - Token Display View
-    
+
     private func tokenDisplayView(token: String) -> some View {
         VStack(spacing: 16) {
             // Status header
             if tokenClaimed {
                 HStack(spacing: 8) {
                     Image(systemName: "checkmark.circle.fill")
-                        .foregroundColor(.cashuAccent)
                         .accessibilityHidden(true)
                     Text("Sent Ecash")
-                        .foregroundColor(.cashuAccent)
                 }
+                .foregroundStyle(Color.accentColor)
                 .font(.headline)
                 .padding(.top, 8)
                 .accessibilityElement(children: .combine)
@@ -324,14 +303,14 @@ struct SendView: View {
                     if isCheckingClaim {
                         ProgressView()
                             .scaleEffect(0.8)
-                            .tint(.cashuWarning)
+                            .tint(.orange)
                     } else {
                         Image(systemName: "clock.fill")
-                            .foregroundColor(.cashuWarning)
+                            .foregroundStyle(.orange)
                             .accessibilityHidden(true)
                     }
                     Text("Pending Ecash")
-                        .foregroundColor(.cashuWarning)
+                        .foregroundStyle(.orange)
                 }
                 .font(.headline)
                 .padding(.top, 8)
@@ -341,47 +320,49 @@ struct SendView: View {
                 if !settings.checkSentTokens {
                     Text("Automatic status checks are off. Use CHECK STATUS to verify redemption.")
                         .font(.caption)
-                        .foregroundColor(.cashuMutedText)
+                        .foregroundStyle(.secondary)
                         .multilineTextAlignment(.center)
                         .padding(.horizontal)
                 }
             }
-            
+
             // QR Code with border
             ZStack {
                 RoundedRectangle(cornerRadius: 16)
                     .fill(Color.white)
                     .frame(width: 280, height: 280)
-                
+
                 QRCodeView(content: token)
                     .frame(width: 250, height: 250)
             }
             .overlay(
                 RoundedRectangle(cornerRadius: 16)
-                    .stroke(Color.cashuMutedText.opacity(0.3), lineWidth: 1)
+                    .stroke(Color.secondary.opacity(0.3), lineWidth: 1)
             )
-            
+
             // Checking progress bar
             if isCheckingClaim && !tokenClaimed {
                 ProgressView()
-                    .progressViewStyle(LinearProgressViewStyle(tint: .cashuAccent))
+                    .progressViewStyle(LinearProgressViewStyle(tint: .accentColor))
                     .frame(width: 280)
             }
-            
+
             // Amount
             Text("\(amountString) sat")
-                .font(.cashuBalanceSmall)
-                .foregroundStyle(.primary)
+                .font(.title2.bold())
                 .accessibilityLabel("Amount: \(amountString) sats")
 
             // Details
-            VStack(spacing: 12) {
-                detailRow(icon: "arrow.up.arrow.down", label: "Fee", value: "\(tokenFee) sat")
-                detailRow(icon: "square.grid.2x2", label: "Unit", value: "SAT")
-                detailRow(icon: "clock", label: "Status", value: tokenClaimed ? "Claimed" : "Pending")
-                if let mint = walletManager.activeMint {
-                    detailRow(icon: "building.columns", label: "Mint", value: extractMintHost(mint.url))
+            GroupBox {
+                VStack(spacing: 12) {
+                    LabeledContent("Fee", value: "\(tokenFee) sat")
+                    LabeledContent("Unit", value: "SAT")
+                    LabeledContent("Status", value: tokenClaimed ? "Claimed" : "Pending")
+                    if let mint = walletManager.activeMint {
+                        LabeledContent("Mint", value: extractMintHost(mint.url))
+                    }
                 }
+                .font(.subheadline)
             }
             .padding(.horizontal)
 
@@ -393,7 +374,7 @@ struct SendView: View {
                 Button(action: { dismiss() }) {
                     Text("DONE")
                 }
-                .buttonStyle(CashuPrimaryButtonStyle())
+                .buttonStyle(.borderedProminent).controlSize(.large)
                 .accessibilityLabel("Done")
                 .accessibilityHint("Closes the send screen")
                 .padding(.horizontal)
@@ -411,7 +392,7 @@ struct SendView: View {
                             Text("CHECK STATUS")
                         }
                     }
-                    .buttonStyle(CashuSecondaryButtonStyle())
+                    .buttonStyle(.bordered).controlSize(.large)
                     .accessibilityLabel(isCheckingClaim ? "Checking status" : "Check status")
                     .accessibilityHint("Checks if the ecash token has been claimed")
                     .padding(.horizontal)
@@ -425,14 +406,14 @@ struct SendView: View {
                             Text(copyButtonText)
                         }
                     }
-                    .buttonStyle(CashuPrimaryButtonStyle())
+                    .buttonStyle(.borderedProminent).controlSize(.large)
                     .accessibilityLabel(copyButtonText == "COPIED" ? "Copied" : "Copy token")
                     .accessibilityHint("Copies the ecash token to clipboard")
 
                     Button(action: { showShareSheet = true }) {
                         Image(systemName: "square.and.arrow.up")
                     }
-                    .buttonStyle(CashuSecondaryButtonStyle())
+                    .buttonStyle(.bordered).controlSize(.large)
                     .frame(width: 50)
                     .accessibilityLabel("Share token")
                     .accessibilityHint("Opens share sheet to share the ecash token")
@@ -446,25 +427,6 @@ struct SendView: View {
             startClaimPolling(token: token)
         }
     }
-    
-    private func detailRow(icon: String, label: String, value: String) -> some View {
-        HStack {
-            HStack(spacing: 8) {
-                Image(systemName: icon)
-                    .font(.caption)
-                    .foregroundColor(.cashuMutedText)
-                    .accessibilityHidden(true)
-                Text(label)
-                    .foregroundColor(.cashuMutedText)
-            }
-            Spacer()
-            Text(value)
-                .foregroundStyle(.primary)
-        }
-        .font(.subheadline)
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel("\(label): \(value)")
-    }
 
     private func extractMintHost(_ url: String) -> String {
         if let urlObj = URL(string: url) {
@@ -472,9 +434,9 @@ struct SendView: View {
         }
         return url
     }
-    
+
     // MARK: - Actions
-    
+
     private func generateToken() {
         guard let amount = UInt64(amountString), amount > 0 else { return }
         let selectedP2PKPubkey = lockWithP2PK ? normalizedP2PKPubkeyInput : nil
@@ -482,10 +444,10 @@ struct SendView: View {
             errorMessage = "Please enter a valid P2PK key."
             return
         }
-        
+
         isGenerating = true
         errorMessage = nil
-        
+
         Task { @MainActor in
             do {
                 let result = try await walletManager.sendTokens(
@@ -523,54 +485,54 @@ struct SendView: View {
 
         return trimmed
     }
-    
+
     private func copyToken(_ token: String) {
         UIPasteboard.general.string = token
         HapticFeedback.notification(.success)
-        
+
         // Show "COPIED" feedback for 3 seconds
         copyButtonText = "COPIED"
         DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
             copyButtonText = "COPY"
         }
     }
-    
+
     // MARK: - Token Claim Detection
-    
+
     private func startClaimPolling(token: String) {
         // Cancel any existing task
         checkingTask?.cancel()
-        
+
         isCheckingClaim = true
-        
+
         checkingTask = Task {
             let maxChecks = 10
             let maxInterval: UInt64 = 15_000_000_000
             var checkCount = 0
             var interval: UInt64 = 5_000_000_000
-            
+
             while !Task.isCancelled && !tokenClaimed && checkCount < maxChecks {
                 try? await Task.sleep(nanoseconds: interval)
-                
+
                 guard !Task.isCancelled else { break }
-                
+
                 // Check if token has been spent
                 let isSpent = await walletManager.checkTokenSpendable(token: token)
-                
+
                 if isSpent {
                     await MainActor.run {
                         tokenClaimed = true
                         isCheckingClaim = false
-                        
+
                         // Haptic feedback for success
                         let generator = UINotificationFeedbackGenerator()
                         generator.notificationOccurred(.success)
                     }
-                    
+
                     // Remove from pending and reload transactions so HistoryView updates
                     // We need to find the pending token ID - it's stored when we create the token
                     await walletManager.markTokenAsClaimed(token: token)
-                    
+
                     await MainActor.run {
                         // Auto-dismiss after 2 seconds
                         DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
@@ -579,11 +541,11 @@ struct SendView: View {
                     }
                     break
                 }
-                
+
                 checkCount += 1
                 interval = min(interval + 1_000_000_000, maxInterval)
             }
-            
+
             await MainActor.run {
                 isCheckingClaim = false
             }
@@ -631,6 +593,8 @@ struct MeltView: View {
     @State private var preimage: String?
     @State private var errorMessage: String?
 
+    @FocusState private var meltAmountFieldFocused: Bool
+
     private var isHumanReadableAddress: Bool {
         let trimmed = invoice.trimmingCharacters(in: .whitespacesAndNewlines)
         guard let atIndex = trimmed.firstIndex(of: "@") else { return false }
@@ -641,33 +605,26 @@ struct MeltView: View {
 
     var body: some View {
         NavigationStack {
-            ZStack {
-                Color.cashuBackground
-                    .ignoresSafeArea()
-
-                if isPaid {
-                    paymentSuccessView
-                } else if let quote = meltQuote {
-                    quoteConfirmView(quote: quote)
-                } else {
-                    invoiceInputView
-                }
+            if isPaid {
+                paymentSuccessView
+            } else if let quote = meltQuote {
+                quoteConfirmView(quote: quote)
+            } else {
+                invoiceInputView
             }
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .navigationBarLeading) {
-                    Button(action: { dismiss() }) {
-                        Image(systemName: "xmark")
-                            .foregroundStyle(.primary)
-                    }
-                    .accessibilityLabel("Close")
+        }
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .navigationBarLeading) {
+                Button(action: { dismiss() }) {
+                    Image(systemName: "xmark")
                 }
+                .accessibilityLabel("Close")
+            }
 
-                ToolbarItem(placement: .principal) {
-                    Text("Pay Lightning")
-                        .font(.headline)
-                        .foregroundStyle(.primary)
-                }
+            ToolbarItem(placement: .principal) {
+                Text("Pay Lightning")
+                    .font(.headline)
             }
         }
     }
@@ -680,49 +637,45 @@ struct MeltView: View {
 
             Image(systemName: "bolt.fill")
                 .font(.system(size: 48))
-                .foregroundColor(.cashuAccent)
+                .foregroundStyle(Color.accentColor)
                 .accessibilityHidden(true)
 
             Text("Pay Lightning Request")
                 .font(.title2)
-                .foregroundStyle(.primary)
 
             Text("Paste a Lightning invoice/offer or BIP 353 address")
                 .font(.subheadline)
-                .foregroundColor(.cashuMutedText)
+                .foregroundStyle(.secondary)
 
             TextEditor(text: $invoice)
                 .font(.system(.body, design: .monospaced))
-                .foregroundStyle(.primary)
                 .scrollContentBackground(.hidden)
                 .frame(height: 100)
                 .padding()
-                .background(
-                    RoundedRectangle(cornerRadius: 12)
-                        .fill(Color.cashuCardBackground)
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 12)
-                                .stroke(Color.cashuBorder, lineWidth: 1)
-                        )
-                )
+                .background {
+                    GroupBox { EmptyView() }
+                }
                 .padding(.horizontal)
                 .accessibilityLabel("Lightning invoice or address")
                 .accessibilityHint("Enter a lightning invoice, offer, or BIP 353 address")
 
             if isHumanReadableAddress {
                 VStack(spacing: 4) {
-                    Text(amountString.isEmpty ? "0" : amountString)
-                        .font(.cashuBalance)
-                        .foregroundStyle(.primary)
+                    TextField("0", text: $amountString)
+                        .keyboardType(.numberPad)
+                        .focused($meltAmountFieldFocused)
+                        .font(.largeTitle.bold())
+                        .multilineTextAlignment(.center)
                     Text("sat")
                         .font(.title3)
-                        .foregroundColor(.cashuMutedText)
+                        .foregroundStyle(.secondary)
                 }
                 .accessibilityElement(children: .combine)
                 .accessibilityLabel("Payment amount")
                 .accessibilityValue("\(amountString.isEmpty ? "0" : amountString) sats")
-                NumericKeyboard(text: $amountString)
-                    .padding(.horizontal, 20)
+                .onAppear {
+                    meltAmountFieldFocused = true
+                }
             }
 
             Button(action: pasteFromClipboard) {
@@ -732,7 +685,7 @@ struct MeltView: View {
                     Text("Paste from Clipboard")
                 }
             }
-            .buttonStyle(CashuSecondaryButtonStyle())
+            .buttonStyle(.bordered).controlSize(.large)
             .accessibilityLabel("Paste from Clipboard")
             .accessibilityHint("Pastes invoice or address from clipboard")
             .padding(.horizontal)
@@ -740,7 +693,7 @@ struct MeltView: View {
             if let error = errorMessage {
                 Text(error)
                     .font(.caption)
-                    .foregroundColor(.cashuError)
+                    .foregroundStyle(.red)
             }
 
             if !isHumanReadableAddress {
@@ -755,7 +708,7 @@ struct MeltView: View {
                     Text("GET QUOTE")
                 }
             }
-            .buttonStyle(CashuPrimaryButtonStyle(isDisabled: !canGetQuote))
+            .buttonStyle(.borderedProminent).controlSize(.large)
             .disabled(!canGetQuote || isGettingQuote)
             .accessibilityLabel(isGettingQuote ? "Getting quote" : "Get quote")
             .accessibilityHint("Fetches a payment quote for this invoice")
@@ -779,33 +732,36 @@ struct MeltView: View {
             Spacer()
 
             Text("\(quote.amount)")
-                .font(.cashuBalanceMedium)
-                .foregroundColor(.cashuAccent)
+                .font(.title.bold())
+                .foregroundStyle(Color.accentColor)
                 .accessibilityLabel("\(quote.amount) sats")
 
             Text("sat")
                 .font(.title3)
-                .foregroundColor(.cashuMutedText)
+                .foregroundStyle(.secondary)
                 .accessibilityHidden(true)
 
-            VStack(spacing: 16) {
-                detailRow(label: "Amount", value: "\(quote.amount) sat")
-                detailRow(label: "Fee", value: "\(quote.feeReserve) sat")
-                Divider()
-                    .background(Color.cashuBorder)
-                detailRow(label: "Total", value: "\(quote.totalAmount) sat", highlight: true)
+            GroupBox {
+                VStack(spacing: 16) {
+                    LabeledContent("Amount", value: "\(quote.amount) sat")
+                    LabeledContent("Fee", value: "\(quote.feeReserve) sat")
+                    Divider()
+                    LabeledContent {
+                        Text("\(quote.totalAmount) sat")
+                            .fontWeight(.bold)
+                            .foregroundStyle(Color.accentColor)
+                    } label: {
+                        Text("Total")
+                    }
+                }
+                .font(.subheadline)
             }
-            .padding()
-            .background(
-                RoundedRectangle(cornerRadius: 12)
-                    .fill(Color.cashuCardBackground)
-            )
             .padding(.horizontal)
 
             if let error = errorMessage {
                 Text(error)
                     .font(.caption)
-                    .foregroundColor(.cashuError)
+                    .foregroundStyle(.red)
             }
 
             Spacer()
@@ -818,7 +774,7 @@ struct MeltView: View {
                     Text("PAY \(quote.totalAmount) SAT")
                 }
             }
-            .buttonStyle(CashuPrimaryButtonStyle())
+            .buttonStyle(.borderedProminent).controlSize(.large)
             .disabled(isPaying)
             .accessibilityLabel(isPaying ? "Processing payment" : "Pay \(quote.totalAmount) sats")
             .accessibilityHint("Sends lightning payment")
@@ -827,20 +783,6 @@ struct MeltView: View {
         }
     }
 
-    private func detailRow(label: String, value: String, highlight: Bool = false) -> some View {
-        HStack {
-            Text(label)
-                .foregroundColor(.cashuMutedText)
-            Spacer()
-            Text(value)
-                .fontWeight(highlight ? .bold : .regular)
-                .foregroundColor(highlight ? .cashuAccent : .white)
-        }
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel("\(label): \(value)")
-        .font(.subheadline)
-    }
-    
     // MARK: - Payment Success View
 
     private var paymentSuccessView: some View {
@@ -849,20 +791,19 @@ struct MeltView: View {
 
             Image(systemName: "checkmark.circle.fill")
                 .font(.system(size: 80))
-                .foregroundColor(.cashuAccent)
+                .foregroundStyle(Color.accentColor)
                 .accessibilityHidden(true)
 
             Text("Payment Sent!")
                 .font(.title)
                 .fontWeight(.bold)
-                .foregroundStyle(.primary)
 
             Spacer()
 
             Button(action: { dismiss() }) {
                 Text("DONE")
             }
-            .buttonStyle(CashuPrimaryButtonStyle())
+            .buttonStyle(.borderedProminent).controlSize(.large)
             .accessibilityLabel("Done")
             .accessibilityHint("Closes the payment screen")
             .padding(.horizontal)
@@ -877,7 +818,7 @@ struct MeltView: View {
             invoice = content.trimmingCharacters(in: .whitespacesAndNewlines)
         }
     }
-    
+
     private func getQuote() {
         let trimmedInvoice = invoice.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedInvoice.isEmpty else { return }
@@ -925,91 +866,82 @@ struct MeltView: View {
 struct MeltViewWithInvoice: View {
     let invoice: String
     var onComplete: (() -> Void)?
-    
+
     @Environment(\.dismiss) private var dismiss
     @EnvironmentObject var walletManager: WalletManager
-    
+
     @State private var meltQuote: MeltQuoteInfo?
     @State private var isGettingQuote = true
     @State private var isPaying = false
     @State private var isPaid = false
     @State private var preimage: String?
     @State private var errorMessage: String?
-    
+
     var body: some View {
         NavigationStack {
-            ZStack {
-                Color.cashuBackground
-                    .ignoresSafeArea()
-                
-                if isPaid {
-                    paymentSuccessView
-                } else if let quote = meltQuote {
-                    quoteConfirmView(quote: quote)
-                } else if isGettingQuote {
-                    loadingView
-                } else {
-                    errorView
-                }
-            }
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .navigationBarLeading) {
-                    Button(action: {
-                        onComplete?()
-                        dismiss()
-                    }) {
-                        Image(systemName: "xmark")
-                            .foregroundStyle(.primary)
-                    }
-                    .accessibilityLabel("Close")
-                }
-
-                ToolbarItem(placement: .principal) {
-                    Text("Pay Lightning")
-                        .font(.headline)
-                        .foregroundStyle(.primary)
-                }
-            }
-            .onAppear {
-                getQuote()
+            if isPaid {
+                paymentSuccessView
+            } else if let quote = meltQuote {
+                quoteConfirmView(quote: quote)
+            } else if isGettingQuote {
+                loadingView
+            } else {
+                errorView
             }
         }
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .navigationBarLeading) {
+                Button(action: {
+                    onComplete?()
+                    dismiss()
+                }) {
+                    Image(systemName: "xmark")
+                }
+                .accessibilityLabel("Close")
+            }
+
+            ToolbarItem(placement: .principal) {
+                Text("Pay Lightning")
+                    .font(.headline)
+            }
+        }
+        .onAppear {
+            getQuote()
+        }
     }
-    
+
     private var loadingView: some View {
         VStack(spacing: 24) {
             Spacer()
-            
+
             ProgressView()
                 .scaleEffect(1.5)
-                .tint(.cashuAccent)
-            
+                .tint(.accentColor)
+
             Text("Getting quote...")
                 .font(.headline)
-                .foregroundStyle(.primary)
-            
+
             Spacer()
         }
     }
-    
+
     private var errorView: some View {
         VStack(spacing: 24) {
             Spacer()
 
             Image(systemName: "exclamationmark.triangle.fill")
                 .font(.system(size: 48))
-                .foregroundColor(.cashuError)
+                .foregroundStyle(.red)
                 .accessibilityHidden(true)
 
             Text("Failed to get quote")
                 .font(.title2)
-                .foregroundStyle(.primary)
 
             if let error = errorMessage {
                 Text(error)
                     .font(.caption)
-                    .foregroundColor(.cashuMutedText)
+                    .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
                     .padding(.horizontal)
             }
@@ -1019,7 +951,7 @@ struct MeltViewWithInvoice: View {
             Button(action: getQuote) {
                 Text("TRY AGAIN")
             }
-            .buttonStyle(CashuPrimaryButtonStyle())
+            .buttonStyle(.borderedProminent).controlSize(.large)
             .accessibilityLabel("Try again")
             .accessibilityHint("Retries fetching the payment quote")
             .padding(.horizontal)
@@ -1032,33 +964,36 @@ struct MeltViewWithInvoice: View {
             Spacer()
 
             Text("\(quote.amount)")
-                .font(.cashuBalanceMedium)
-                .foregroundColor(.cashuAccent)
+                .font(.title.bold())
+                .foregroundStyle(Color.accentColor)
                 .accessibilityLabel("\(quote.amount) sats")
 
             Text("sat")
                 .font(.title3)
-                .foregroundColor(.cashuMutedText)
+                .foregroundStyle(.secondary)
                 .accessibilityHidden(true)
 
-            VStack(spacing: 16) {
-                detailRow(label: "Amount", value: "\(quote.amount) sat")
-                detailRow(label: "Fee", value: "\(quote.feeReserve) sat")
-                Divider()
-                    .background(Color.cashuBorder)
-                detailRow(label: "Total", value: "\(quote.totalAmount) sat", highlight: true)
+            GroupBox {
+                VStack(spacing: 16) {
+                    LabeledContent("Amount", value: "\(quote.amount) sat")
+                    LabeledContent("Fee", value: "\(quote.feeReserve) sat")
+                    Divider()
+                    LabeledContent {
+                        Text("\(quote.totalAmount) sat")
+                            .fontWeight(.bold)
+                            .foregroundStyle(Color.accentColor)
+                    } label: {
+                        Text("Total")
+                    }
+                }
+                .font(.subheadline)
             }
-            .padding()
-            .background(
-                RoundedRectangle(cornerRadius: 12)
-                    .fill(Color.cashuCardBackground)
-            )
             .padding(.horizontal)
 
             if let error = errorMessage {
                 Text(error)
                     .font(.caption)
-                    .foregroundColor(.cashuError)
+                    .foregroundStyle(.red)
             }
 
             Spacer()
@@ -1071,27 +1006,13 @@ struct MeltViewWithInvoice: View {
                     Text("PAY \(quote.totalAmount) SAT")
                 }
             }
-            .buttonStyle(CashuPrimaryButtonStyle())
+            .buttonStyle(.borderedProminent).controlSize(.large)
             .disabled(isPaying)
             .accessibilityLabel(isPaying ? "Processing payment" : "Pay \(quote.totalAmount) sats")
             .accessibilityHint("Sends lightning payment")
             .padding(.horizontal)
             .padding(.bottom, 30)
         }
-    }
-    
-    private func detailRow(label: String, value: String, highlight: Bool = false) -> some View {
-        HStack {
-            Text(label)
-                .foregroundColor(.cashuMutedText)
-            Spacer()
-            Text(value)
-                .fontWeight(highlight ? .bold : .regular)
-                .foregroundColor(highlight ? .cashuAccent : .white)
-        }
-        .font(.subheadline)
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel("\(label): \(value)")
     }
 
     private var paymentSuccessView: some View {
@@ -1100,13 +1021,12 @@ struct MeltViewWithInvoice: View {
 
             Image(systemName: "checkmark.circle.fill")
                 .font(.system(size: 80))
-                .foregroundColor(.cashuAccent)
+                .foregroundStyle(Color.accentColor)
                 .accessibilityHidden(true)
 
             Text("Payment Sent!")
                 .font(.title)
                 .fontWeight(.bold)
-                .foregroundStyle(.primary)
 
             Spacer()
 
@@ -1116,7 +1036,7 @@ struct MeltViewWithInvoice: View {
             }) {
                 Text("DONE")
             }
-            .buttonStyle(CashuPrimaryButtonStyle())
+            .buttonStyle(.borderedProminent).controlSize(.large)
             .accessibilityLabel("Done")
             .accessibilityHint("Closes the payment screen")
             .padding(.horizontal)
@@ -1138,18 +1058,18 @@ struct MeltViewWithInvoice: View {
             isGettingQuote = false
         }
     }
-    
+
     private func payInvoice() {
         guard let quote = meltQuote else { return }
-        
+
         isPaying = true
         errorMessage = nil
-        
+
         Task { @MainActor in
             do {
                 preimage = try await walletManager.meltTokens(quoteId: quote.id)
                 isPaid = true
-                
+
                 // Auto-dismiss after 2 seconds
                 try? await Task.sleep(nanoseconds: 2_000_000_000)
                 onComplete?()
@@ -1179,38 +1099,33 @@ struct MeltViewWithAddress: View {
     @State private var preimage: String?
     @State private var errorMessage: String?
 
+    @FocusState private var addressAmountFieldFocused: Bool
+
     var body: some View {
         NavigationStack {
-            ZStack {
-                Color.cashuBackground
-                    .ignoresSafeArea()
-
-                if isPaid {
-                    paymentSuccessView
-                } else if let quote = meltQuote {
-                    quoteConfirmView(quote: quote)
-                } else {
-                    amountInputView
-                }
+            if isPaid {
+                paymentSuccessView
+            } else if let quote = meltQuote {
+                quoteConfirmView(quote: quote)
+            } else {
+                amountInputView
             }
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .navigationBarLeading) {
-                    Button(action: {
-                        onComplete?()
-                        dismiss()
-                    }) {
-                        Image(systemName: "xmark")
-                            .foregroundStyle(.primary)
-                    }
-                    .accessibilityLabel("Close")
+        }
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .navigationBarLeading) {
+                Button(action: {
+                    onComplete?()
+                    dismiss()
+                }) {
+                    Image(systemName: "xmark")
                 }
+                .accessibilityLabel("Close")
+            }
 
-                ToolbarItem(placement: .principal) {
-                    Text("Pay Lightning")
-                        .font(.headline)
-                        .foregroundStyle(.primary)
-                }
+            ToolbarItem(placement: .principal) {
+                Text("Pay Lightning")
+                    .font(.headline)
             }
         }
     }
@@ -1221,39 +1136,41 @@ struct MeltViewWithAddress: View {
 
             Image(systemName: "bolt.fill")
                 .font(.system(size: 48))
-                .foregroundColor(.cashuAccent)
+                .foregroundStyle(Color.accentColor)
                 .padding(.bottom, 12)
                 .accessibilityHidden(true)
 
             Text(address)
                 .font(.subheadline)
-                .foregroundColor(.cashuMutedText)
+                .foregroundStyle(.secondary)
                 .padding(.bottom, 24)
                 .accessibilityLabel("Paying to: \(address)")
 
             VStack(spacing: 4) {
-                Text(amountString.isEmpty ? "0" : amountString)
-                    .font(.cashuBalance)
-                    .foregroundStyle(.primary)
+                TextField("0", text: $amountString)
+                    .keyboardType(.numberPad)
+                    .focused($addressAmountFieldFocused)
+                    .font(.largeTitle.bold())
+                    .multilineTextAlignment(.center)
                 Text("sat")
                     .font(.title3)
-                    .foregroundColor(.cashuMutedText)
+                    .foregroundStyle(.secondary)
             }
             .accessibilityElement(children: .combine)
             .accessibilityLabel("Payment amount")
             .accessibilityValue("\(amountString.isEmpty ? "0" : amountString) sats")
+            .onAppear {
+                addressAmountFieldFocused = true
+            }
 
             if let error = errorMessage {
                 Text(error)
                     .font(.caption)
-                    .foregroundColor(.cashuError)
+                    .foregroundStyle(.red)
                     .padding(.top, 8)
             }
 
             Spacer()
-
-            NumericKeyboard(text: $amountString)
-                .padding(.horizontal, 20)
 
             Button(action: getQuote) {
                 if isGettingQuote {
@@ -1263,7 +1180,7 @@ struct MeltViewWithAddress: View {
                     Text("GET QUOTE")
                 }
             }
-            .buttonStyle(CashuPrimaryButtonStyle(isDisabled: !canGetQuote))
+            .buttonStyle(.borderedProminent).controlSize(.large)
             .disabled(!canGetQuote || isGettingQuote)
             .accessibilityLabel(isGettingQuote ? "Getting quote" : "Get quote")
             .accessibilityHint("Fetches a payment quote for this address")
@@ -1282,34 +1199,37 @@ struct MeltViewWithAddress: View {
             Spacer()
 
             Text("\(quote.amount)")
-                .font(.cashuBalanceMedium)
-                .foregroundColor(.cashuAccent)
+                .font(.title.bold())
+                .foregroundStyle(Color.accentColor)
                 .accessibilityLabel("\(quote.amount) sats")
 
             Text("sat")
                 .font(.title3)
-                .foregroundColor(.cashuMutedText)
+                .foregroundStyle(.secondary)
                 .accessibilityHidden(true)
 
-            VStack(spacing: 16) {
-                detailRow(label: "To", value: address)
-                detailRow(label: "Amount", value: "\(quote.amount) sat")
-                detailRow(label: "Fee", value: "\(quote.feeReserve) sat")
-                Divider()
-                    .background(Color.cashuBorder)
-                detailRow(label: "Total", value: "\(quote.totalAmount) sat", highlight: true)
+            GroupBox {
+                VStack(spacing: 16) {
+                    LabeledContent("To", value: address)
+                    LabeledContent("Amount", value: "\(quote.amount) sat")
+                    LabeledContent("Fee", value: "\(quote.feeReserve) sat")
+                    Divider()
+                    LabeledContent {
+                        Text("\(quote.totalAmount) sat")
+                            .fontWeight(.bold)
+                            .foregroundStyle(Color.accentColor)
+                    } label: {
+                        Text("Total")
+                    }
+                }
+                .font(.subheadline)
             }
-            .padding()
-            .background(
-                RoundedRectangle(cornerRadius: 12)
-                    .fill(Color.cashuCardBackground)
-            )
             .padding(.horizontal)
 
             if let error = errorMessage {
                 Text(error)
                     .font(.caption)
-                    .foregroundColor(.cashuError)
+                    .foregroundStyle(.red)
             }
 
             Spacer()
@@ -1322,7 +1242,7 @@ struct MeltViewWithAddress: View {
                     Text("PAY \(quote.totalAmount) SAT")
                 }
             }
-            .buttonStyle(CashuPrimaryButtonStyle())
+            .buttonStyle(.borderedProminent).controlSize(.large)
             .disabled(isPaying)
             .accessibilityLabel(isPaying ? "Processing payment" : "Pay \(quote.totalAmount) sats")
             .accessibilityHint("Sends lightning payment to \(address)")
@@ -1331,33 +1251,18 @@ struct MeltViewWithAddress: View {
         }
     }
 
-    private func detailRow(label: String, value: String, highlight: Bool = false) -> some View {
-        HStack {
-            Text(label)
-                .foregroundColor(.cashuMutedText)
-            Spacer()
-            Text(value)
-                .fontWeight(highlight ? .bold : .regular)
-                .foregroundColor(highlight ? .cashuAccent : .white)
-        }
-        .font(.subheadline)
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel("\(label): \(value)")
-    }
-
     private var paymentSuccessView: some View {
         VStack(spacing: 24) {
             Spacer()
 
             Image(systemName: "checkmark.circle.fill")
                 .font(.system(size: 80))
-                .foregroundColor(.cashuAccent)
+                .foregroundStyle(Color.accentColor)
                 .accessibilityHidden(true)
 
             Text("Payment Sent!")
                 .font(.title)
                 .fontWeight(.bold)
-                .foregroundStyle(.primary)
 
             Spacer()
 
@@ -1367,7 +1272,7 @@ struct MeltViewWithAddress: View {
             }) {
                 Text("DONE")
             }
-            .buttonStyle(CashuPrimaryButtonStyle())
+            .buttonStyle(.borderedProminent).controlSize(.large)
             .accessibilityLabel("Done")
             .accessibilityHint("Closes the payment screen")
             .padding(.horizontal)
@@ -1420,29 +1325,24 @@ struct MintSelectorSheet: View {
     @Environment(\.dismiss) private var dismiss
     @EnvironmentObject var walletManager: WalletManager
     @Binding var selectedMint: MintInfo?
-    
+
     var body: some View {
         NavigationStack {
-            ZStack {
-                Color.cashuBackground
-                    .ignoresSafeArea()
-                
-                if walletManager.mints.isEmpty {
-                    emptyStateView
-                } else {
-                    mintListView
-                }
+            if walletManager.mints.isEmpty {
+                emptyStateView
+            } else {
+                mintListView
             }
-            .navigationTitle("Select Mint")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    Button(action: { dismiss() }) {
-                        Image(systemName: "xmark.circle.fill")
-                            .foregroundColor(.cashuMutedText)
-                    }
-                    .accessibilityLabel("Close")
+        }
+        .navigationTitle("Select Mint")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .navigationBarTrailing) {
+                Button(action: { dismiss() }) {
+                    Image(systemName: "xmark.circle.fill")
+                        .foregroundStyle(.secondary)
                 }
+                .accessibilityLabel("Close")
             }
         }
     }
@@ -1451,21 +1351,20 @@ struct MintSelectorSheet: View {
         VStack(spacing: 16) {
             Image(systemName: "building.columns")
                 .font(.system(size: 48))
-                .foregroundColor(.cashuMutedText)
+                .foregroundStyle(.secondary)
                 .accessibilityHidden(true)
-            
+
             Text("No Mints Available")
                 .font(.headline)
-                .foregroundStyle(.primary)
-            
+
             Text("Add a mint from Settings to get started")
                 .font(.subheadline)
-                .foregroundColor(.cashuMutedText)
+                .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
         }
         .padding()
     }
-    
+
     private var mintListView: some View {
         ScrollView {
             LazyVStack(spacing: 0) {
@@ -1476,59 +1375,57 @@ struct MintSelectorSheet: View {
             .padding(.top, 8)
         }
     }
-    
+
     private func mintRow(mint: MintInfo) -> some View {
         VStack(spacing: 0) {
             Button(action: { selectMint(mint) }) {
                 HStack(spacing: 12) {
                     Circle()
-                        .fill(Color.cashuCardBackground)
+                        .fill(Color(uiColor: .secondarySystemGroupedBackground))
                         .frame(width: 48, height: 48)
                         .overlay(
                             Image(systemName: "building.columns")
                                 .foregroundColor(.gray)
                         )
-                    
+
                     VStack(alignment: .leading, spacing: 4) {
                         Text(mint.name)
                             .font(.body)
                             .fontWeight(.medium)
-                            .foregroundStyle(.primary)
-                        
+
                         Text(formatBalance(mint))
                             .font(.subheadline)
-                            .foregroundColor(.cashuMutedText)
+                            .foregroundStyle(.secondary)
                     }
-                    
+
                     Spacer()
-                    
+
                     if selectedMint?.id == mint.id {
                         Image(systemName: "checkmark.circle.fill")
                             .font(.title2)
-                            .foregroundColor(SettingsManager.shared.accentColor)
+                            .foregroundStyle(Color.accentColor)
                     }
                 }
                 .padding(.horizontal, 16)
                 .padding(.vertical, 12)
                 .background(
-                    selectedMint?.id == mint.id 
-                        ? SettingsManager.shared.accentColor.opacity(0.1) 
+                    selectedMint?.id == mint.id
+                        ? Color.accentColor.opacity(0.1)
                         : Color.clear
                 )
             }
             .buttonStyle(PlainButtonStyle())
-            
+
             Divider()
-                .background(Color.cashuBorder)
                 .padding(.leading, 76)
         }
     }
-    
+
     private func formatBalance(_ mint: MintInfo) -> String {
         let formatted = SettingsManager.shared.formatAmountBalance(mint.balance)
         return "\(formatted) sat available"
     }
-    
+
     private func selectMint(_ mint: MintInfo) {
         Task {
             do {
@@ -1552,11 +1449,11 @@ struct MintSelectorSheet: View {
 
 struct ShareSheet: UIViewControllerRepresentable {
     let items: [Any]
-    
+
     func makeUIViewController(context: Context) -> UIActivityViewController {
         UIActivityViewController(activityItems: items, applicationActivities: nil)
     }
-    
+
     func updateUIViewController(_ uiViewController: UIActivityViewController, context: Context) {}
 }
 
@@ -1565,13 +1462,13 @@ struct ShareSheet: UIViewControllerRepresentable {
 /// Share sheet that formats cashu tokens with the cashu: URL scheme
 struct CashuTokenShareSheet: UIViewControllerRepresentable {
     let token: String
-    
+
     func makeUIViewController(context: Context) -> UIActivityViewController {
         // Format token with cashu: URL scheme for easy sharing
         let cashuUrl = "cashu:\(token)"
         return UIActivityViewController(activityItems: [cashuUrl], applicationActivities: nil)
     }
-    
+
     func updateUIViewController(_ uiViewController: UIActivityViewController, context: Context) {}
 }
 

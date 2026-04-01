@@ -19,13 +19,11 @@ struct ReceiveLightningView: View {
     @State private var expiryTimeRemaining: TimeInterval = 0
     @State private var expiryTimer: Timer?
     @State private var isExpired = false
+    @FocusState private var amountFieldFocused: Bool
     
     var body: some View {
         NavigationStack {
-            ZStack {
-                Color.cashuBackground
-                    .ignoresSafeArea()
-                
+            Group {
                 if let quote = mintQuote {
                     invoiceDisplayView(quote: quote)
                 } else {
@@ -37,7 +35,6 @@ struct ReceiveLightningView: View {
                 ToolbarItem(placement: .navigationBarLeading) {
                     Button(action: { dismiss() }) {
                         Image(systemName: "xmark")
-                            .foregroundStyle(.primary)
                     }
                     .accessibilityLabel("Close")
                 }
@@ -45,20 +42,22 @@ struct ReceiveLightningView: View {
                 ToolbarItem(placement: .principal) {
                     Text("Receive Lightning")
                         .font(.headline)
-                        .foregroundStyle(.primary)
                 }
                 
                 ToolbarItem(placement: .topBarTrailing) {
                     Text("SAT")
                         .font(.caption)
                         .fontWeight(.bold)
-                        .foregroundColor(.cashuAccent)
+    .foregroundStyle(Color.accentColor)
                 }
             }
             .sheet(isPresented: $showMintPicker) {
                 MintSelectorSheet(selectedMint: $walletManager.activeMint)
                     .environmentObject(walletManager)
                     .presentationDetents([.medium])
+            }
+            .onAppear {
+                amountFieldFocused = true
             }
             .onDisappear {
                 pollingTask?.cancel()
@@ -91,13 +90,15 @@ struct ReceiveLightningView: View {
             
             // Amount display
             VStack(spacing: 4) {
-                Text(amountString.isEmpty ? "0" : amountString)
-                    .font(.cashuBalance)
-                    .foregroundStyle(.primary)
+                TextField("0", text: $amountString)
+                    .keyboardType(.numberPad)
+                    .focused($amountFieldFocused)
+                    .font(.largeTitle.bold())
+                    .multilineTextAlignment(.center)
 
                 Text("sat")
                     .font(.title3)
-                    .foregroundColor(.cashuMutedText)
+                    .foregroundStyle(.secondary)
             }
             .accessibilityElement(children: .combine)
             .accessibilityLabel("Invoice amount")
@@ -106,16 +107,12 @@ struct ReceiveLightningView: View {
             if let error = errorMessage {
                 Text(error)
                     .font(.caption)
-                    .foregroundColor(.cashuError)
+                    .foregroundStyle(.red)
                     .padding(.top, 8)
             }
             
             Spacer()
-            
-            // Numeric keypad
-            NumericKeyboard(text: $amountString)
-                .padding(.horizontal, 20)
-            
+
             // Create invoice button
             Button(action: createInvoice) {
                 if isCreatingInvoice {
@@ -125,7 +122,7 @@ struct ReceiveLightningView: View {
                     Text("CREATE INVOICE")
                 }
             }
-            .buttonStyle(CashuPrimaryButtonStyle(isDisabled: amountString.isEmpty || amountString == "0"))
+            .buttonStyle(.borderedProminent).controlSize(.large)
             .disabled(amountString.isEmpty || amountString == "0" || isCreatingInvoice)
             .accessibilityLabel(isCreatingInvoice ? "Creating invoice" : "Create invoice")
             .accessibilityHint("Creates a lightning invoice for \(amountString.isEmpty ? "0" : amountString) sats")
@@ -137,51 +134,38 @@ struct ReceiveLightningView: View {
     // MARK: - Lightning Address Card
     
     private var lightningAddressCard: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack {
-                Image(systemName: "bolt.fill")
-                    .foregroundColor(.cashuAccent)
-                    .accessibilityHidden(true)
-                Text("Lightning Address")
+        GroupBox {
+            VStack(alignment: .leading, spacing: 8) {
+                Label("Lightning Address", systemImage: "bolt.fill")
                     .font(.caption)
                     .fontWeight(.medium)
-                    .foregroundColor(.cashuMutedText)
-            }
+                    .foregroundStyle(.secondary)
 
-            Button(action: copyLightningAddress) {
-                HStack {
-                    Text(npcService.lightningAddress)
-                        .font(.subheadline)
-                        .fontWeight(.medium)
-                        .foregroundStyle(.primary)
-                        .lineLimit(1)
+                Button(action: copyLightningAddress) {
+                    HStack {
+                        Text(npcService.lightningAddress)
+                            .font(.subheadline)
+                            .fontWeight(.medium)
+                            .lineLimit(1)
 
-                    Spacer()
+                        Spacer()
 
-                    Image(systemName: lightningAddressCopied ? "checkmark" : "doc.on.doc")
-                        .font(.caption)
-                        .foregroundColor(lightningAddressCopied ? .cashuAccent : .cashuMutedText)
-                        .accessibilityHidden(true)
+                        Image(systemName: lightningAddressCopied ? "checkmark" : "doc.on.doc")
+                            .font(.caption)
+                            .foregroundColor(lightningAddressCopied ? .accentColor : .secondary)
+                            .accessibilityHidden(true)
+                    }
                 }
-            }
-            .buttonStyle(PlainButtonStyle())
-            .accessibilityLabel("Lightning address: \(npcService.lightningAddress)")
-            .accessibilityHint("Copies lightning address to clipboard")
-            .accessibilityValue(lightningAddressCopied ? "Copied" : "")
+                .buttonStyle(PlainButtonStyle())
+                .accessibilityLabel("Lightning address: \(npcService.lightningAddress)")
+                .accessibilityHint("Copies lightning address to clipboard")
+                .accessibilityValue(lightningAddressCopied ? "Copied" : "")
 
-            Text("Anyone can send sats to this address")
-                .font(.caption2)
-                .foregroundColor(.cashuMutedText)
+                Text("Anyone can send sats to this address")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
         }
-        .padding()
-        .background(
-            RoundedRectangle(cornerRadius: 12)
-                .fill(Color.cashuCardBackground)
-                .overlay(
-                    RoundedRectangle(cornerRadius: 12)
-                        .stroke(Color.cashuAccent.opacity(0.3), lineWidth: 1)
-                )
-        )
     }
     
     private func copyLightningAddress() {
@@ -198,40 +182,28 @@ struct ReceiveLightningView: View {
     
     private func mintSelector(mint: MintInfo) -> some View {
         Button(action: { showMintPicker = true }) {
-            HStack(spacing: 12) {
-                Circle()
-                    .fill(Color.cashuCardBackground)
-                    .frame(width: 44, height: 44)
-                    .overlay(
-                        Image(systemName: "building.columns")
-                            .foregroundColor(.gray)
-                    )
+            GroupBox {
+                HStack(spacing: 12) {
+                    Image(systemName: "building.columns")
+                        .foregroundColor(.gray)
+                        .frame(width: 44, height: 44)
 
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(mint.name)
-                        .font(.subheadline)
-                        .fontWeight(.medium)
-                        .foregroundStyle(.primary)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(mint.name)
+                            .font(.subheadline)
+                            .fontWeight(.medium)
 
-                    Text("\(mint.balance) sat available")
-                        .font(.caption)
-                        .foregroundColor(.cashuMutedText)
+                        Text("\(mint.balance) sat available")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+
+                    Spacer()
+
+                    Image(systemName: "chevron.down")
+                        .foregroundStyle(.secondary)
                 }
-
-                Spacer()
-
-                Image(systemName: "chevron.down")
-                    .foregroundColor(.cashuMutedText)
             }
-            .padding()
-            .background(
-                RoundedRectangle(cornerRadius: 12)
-                    .fill(Color.cashuCardBackground)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 12)
-                            .stroke(Color.cashuBorder, lineWidth: 1)
-                    )
-            )
         }
         .buttonStyle(PlainButtonStyle())
         .accessibilityElement(children: .combine)
@@ -255,14 +227,13 @@ struct ReceiveLightningView: View {
                 }
                 .overlay(
                     RoundedRectangle(cornerRadius: 16)
-                        .stroke(Color.cashuMutedText.opacity(0.3), lineWidth: 1)
+                        .stroke(Color.secondary.opacity(0.3), lineWidth: 1)
                 )
                 .padding(.top, 20)
                 
                 // Amount
                 Text("\(quote.amount) sat")
-                    .font(.cashuBalanceSmall)
-                    .foregroundStyle(.primary)
+                    .font(.title2.bold())
                     .accessibilityLabel("Invoice amount: \(quote.amount) sats")
                 
                 // Status
@@ -275,13 +246,14 @@ struct ReceiveLightningView: View {
                 
                 // Details
                 VStack(spacing: 12) {
-                    detailRow(icon: "arrow.up.arrow.down", label: "Fee", value: "0 sat")
-                    detailRow(icon: "square.grid.2x2", label: "Unit", value: "SAT")
-                    detailRow(icon: "info.circle", label: "State", value: isPaid ? "Paid" : (isExpired ? "Expired" : "Pending"), highlight: isPaid)
+                    LabeledContent("Fee", value: "0 sat")
+                    LabeledContent("Unit", value: "SAT")
+                    LabeledContent("State", value: isPaid ? "Paid" : (isExpired ? "Expired" : "Pending"))
                     if let mint = walletManager.activeMint {
-                        detailRow(icon: "building.columns", label: "Mint", value: extractMintHost(mint.url))
+                        LabeledContent("Mint", value: extractMintHost(mint.url))
                     }
                 }
+                .font(.subheadline)
                 .padding(.horizontal)
                 
                 Spacer(minLength: 20)
@@ -294,7 +266,7 @@ struct ReceiveLightningView: View {
                         Text(copyButtonText)
                     }
                 }
-                .buttonStyle(CashuPrimaryButtonStyle())
+                .buttonStyle(.borderedProminent).controlSize(.large)
                 .accessibilityLabel(copyButtonText == "COPIED" ? "Copied" : "Copy invoice")
                 .accessibilityHint("Copies the lightning invoice to clipboard")
                 .padding(.horizontal)
@@ -310,19 +282,11 @@ struct ReceiveLightningView: View {
     // MARK: - Expiry View
     
     private var expiryView: some View {
-        HStack(spacing: 6) {
-            Image(systemName: "timer")
-                .foregroundColor(expiryTimeRemaining < 60 ? .cashuError : .cashuMutedText)
-            Text("Expires in \(formatTimeRemaining(expiryTimeRemaining))")
-                .font(.caption)
-                .foregroundColor(expiryTimeRemaining < 60 ? .cashuError : .cashuMutedText)
-        }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 6)
-        .background(
-            Capsule()
-                .fill(expiryTimeRemaining < 60 ? Color.cashuError.opacity(0.2) : Color.cashuCardBackground)
-        )
+        Label("Expires in \(formatTimeRemaining(expiryTimeRemaining))", systemImage: "timer")
+            .font(.caption)
+            .foregroundColor(expiryTimeRemaining < 60 ? .red : .secondary)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 6)
     }
     
     private func formatTimeRemaining(_ seconds: TimeInterval) -> String {
@@ -370,18 +334,18 @@ struct ReceiveLightningView: View {
             }
             .font(.subheadline)
             .fontWeight(.medium)
-            .foregroundColor(.cashuAccent)
+.foregroundStyle(Color.accentColor)
             .accessibilityElement(children: .combine)
             .accessibilityLabel("Payment received")
         } else if isCheckingPayment || isMinting {
             HStack(spacing: 6) {
                 ProgressView()
-                    .tint(.cashuAccent)
+                    .tint(.accentColor)
                     .scaleEffect(0.8)
                 Text(isMinting ? "Minting..." : "Checking...")
             }
             .font(.subheadline)
-            .foregroundColor(.cashuMutedText)
+            .foregroundStyle(.secondary)
             .accessibilityElement(children: .combine)
             .accessibilityLabel(isMinting ? "Minting tokens" : "Checking payment status")
         } else {
@@ -391,29 +355,10 @@ struct ReceiveLightningView: View {
                 Text("Waiting for payment...")
             }
             .font(.subheadline)
-            .foregroundColor(.cashuWarning)
+            .foregroundStyle(.orange)
             .accessibilityElement(children: .combine)
             .accessibilityLabel("Waiting for payment")
         }
-    }
-    
-    private func detailRow(icon: String, label: String, value: String, highlight: Bool = false) -> some View {
-        HStack {
-            HStack(spacing: 8) {
-                Image(systemName: icon)
-                    .font(.caption)
-                    .foregroundColor(.cashuMutedText)
-                    .accessibilityHidden(true)
-                Text(label)
-                    .foregroundColor(.cashuMutedText)
-            }
-            Spacer()
-            Text(value)
-                .foregroundColor(highlight ? .cashuAccent : .white)
-        }
-        .font(.subheadline)
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel("\(label): \(value)")
     }
     
     private func extractMintHost(_ url: String) -> String {

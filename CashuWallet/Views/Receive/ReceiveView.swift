@@ -13,32 +13,27 @@ struct ReceiveView: View {
     
     var body: some View {
         NavigationStack {
-            ZStack {
-                Color.cashuBackground
-                    .ignoresSafeArea()
-                
-                VStack(spacing: 24) {
-                    Spacer()
-                    
-                    // Icon
-                    Image(systemName: "arrow.down.circle.fill")
-                        .font(.system(size: 60))
-                        .foregroundColor(.cashuAccent)
-                        .accessibilityHidden(true)
-                    
-                    Text("Receive")
-                        .font(.title)
-                        .fontWeight(.bold)
-                        .foregroundStyle(.primary)
-                    
-                    Text("Choose how you want to receive")
-                        .font(.subheadline)
-                        .foregroundColor(.cashuMutedText)
-                    
-                    Spacer()
-                    
-                    // Options
-                    VStack(spacing: 12) {
+            VStack(spacing: 24) {
+                Spacer()
+
+                // Icon
+                Image(systemName: "arrow.down.circle.fill")
+                    .font(.system(size: 60))
+                    .foregroundStyle(Color.accentColor)
+                    .accessibilityHidden(true)
+
+                Text("Receive")
+                    .font(.title)
+                    .fontWeight(.bold)
+
+                Text("Choose how you want to receive")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+
+                Spacer()
+
+                // Options
+                VStack(spacing: 12) {
                         // Paste option
                         Button(action: { selectedOption = .paste }) {
                             receiveOptionRow(
@@ -73,21 +68,20 @@ struct ReceiveView: View {
                         .accessibilityHint("Creates a lightning invoice to receive sats")
                     }
                     .padding(.horizontal)
-                    
-                    Spacer()
-                    
-                    // Cancel button
-                    Button(action: { dismiss() }) {
-                        Text("Cancel")
-                            .foregroundColor(.cashuMutedText)
-                    }
-                    .accessibilityLabel("Cancel")
-                    .accessibilityHint("Closes the receive screen")
-                    .padding(.bottom, 40)
+
+                Spacer()
+
+                // Cancel button
+                Button(action: { dismiss() }) {
+                    Text("Cancel")
+                        .foregroundStyle(.secondary)
                 }
+                .accessibilityLabel("Cancel")
+                .accessibilityHint("Closes the receive screen")
+                .padding(.bottom, 40)
             }
             .navigationBarHidden(true)
-            .fullScreenCover(item: $selectedOption) { option in
+            .sheet(item: $selectedOption) { option in
                 switch option {
                 case .paste:
                     ReceiveEcashView()
@@ -104,37 +98,29 @@ struct ReceiveView: View {
     }
     
     private func receiveOptionRow(icon: String, title: String, subtitle: String) -> some View {
-        HStack(spacing: 16) {
-            Image(systemName: icon)
-                .font(.title2)
-                .foregroundColor(.cashuAccent)
-                .frame(width: 50, height: 50)
-                .background(
-                    RoundedRectangle(cornerRadius: 12)
-                        .fill(Color.cashuCardBackground)
-                )
-                .accessibilityHidden(true)
+        GroupBox {
+            HStack(spacing: 16) {
+                Image(systemName: icon)
+                    .font(.title2)
+                    .foregroundStyle(Color.accentColor)
+                    .frame(width: 50, height: 50)
+                    .accessibilityHidden(true)
 
-            VStack(alignment: .leading, spacing: 4) {
-                Text(title)
-                    .font(.headline)
-                    .foregroundStyle(.primary)
-                Text(subtitle)
-                    .font(.caption)
-                    .foregroundColor(.cashuMutedText)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(title)
+                        .font(.headline)
+                    Text(subtitle)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+
+                Spacer()
+
+                Image(systemName: "chevron.right")
+                    .foregroundStyle(.secondary)
+                    .accessibilityHidden(true)
             }
-
-            Spacer()
-
-            Image(systemName: "chevron.right")
-                .foregroundColor(.cashuMutedText)
-                .accessibilityHidden(true)
         }
-        .padding()
-        .background(
-            RoundedRectangle(cornerRadius: 16)
-                .fill(Color.cashuCardBackground)
-        )
         .accessibilityElement(children: .combine)
     }
     
@@ -164,41 +150,28 @@ struct ReceiveEcashView: View {
     
     var body: some View {
         NavigationStack {
-            ZStack {
-                Color.cashuBackground
-                    .ignoresSafeArea()
-                
-                VStack(spacing: 24) {
-                    Spacer()
-                    
-                    Image(systemName: "doc.on.clipboard")
-                        .font(.system(size: 48))
-                        .foregroundColor(.cashuAccent)
-                        .accessibilityHidden(true)
-                    
-                    Text("Paste Token")
-                        .font(.title2)
-                        .fontWeight(.bold)
-                        .foregroundStyle(.primary)
-                    
-                    // Token input
+            VStack(spacing: 24) {
+                Spacer()
+
+                Image(systemName: "doc.on.clipboard")
+                    .font(.system(size: 48))
+                    .foregroundStyle(Color.accentColor)
+                    .accessibilityHidden(true)
+
+                Text("Paste Token")
+                    .font(.title2)
+                    .fontWeight(.bold)
+
+                // Token input
+                GroupBox {
                     TextEditor(text: $tokenInput)
                         .font(.system(.body, design: .monospaced))
-                        .foregroundStyle(.primary)
                         .scrollContentBackground(.hidden)
                         .frame(height: 120)
-                        .padding()
-                        .background(
-                            RoundedRectangle(cornerRadius: 12)
-                                .fill(Color.cashuCardBackground)
-                                .overlay(
-                                    RoundedRectangle(cornerRadius: 12)
-                                        .stroke(Color.cashuBorder, lineWidth: 1)
-                                )
-                        )
-                        .padding(.horizontal)
-                        .accessibilityLabel("Ecash token input")
-                        .accessibilityHint("Enter or paste a cashu ecash token")
+                }
+                .padding(.horizontal)
+                .accessibilityLabel("Ecash token input")
+                .accessibilityHint("Enter or paste a cashu ecash token")
                     
                     // Paste from clipboard
                     Button(action: pasteFromClipboard) {
@@ -208,7 +181,7 @@ struct ReceiveEcashView: View {
                             Text("Paste from Clipboard")
                         }
                     }
-                    .buttonStyle(CashuSecondaryButtonStyle())
+                    .buttonStyle(.bordered).controlSize(.large)
                     .accessibilityLabel("Paste from Clipboard")
                     .accessibilityHint("Pastes ecash token from clipboard")
                     .padding(.horizontal)
@@ -216,7 +189,7 @@ struct ReceiveEcashView: View {
                     if let error = errorMessage {
                         Text(error)
                             .font(.caption)
-                            .foregroundColor(.cashuError)
+                            .foregroundStyle(.red)
                     }
                     
                     Spacer()
@@ -225,20 +198,18 @@ struct ReceiveEcashView: View {
                     Button(action: validateAndContinue) {
                         Text("CONTINUE")
                     }
-                    .buttonStyle(CashuPrimaryButtonStyle(isDisabled: tokenInput.isEmpty))
+                    .buttonStyle(.borderedProminent).controlSize(.large)
                     .disabled(tokenInput.isEmpty)
                     .accessibilityLabel("Continue")
                     .accessibilityHint("Validates the token and proceeds to details")
                     .padding(.horizontal)
                     .padding(.bottom, 30)
-                }
             }
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
                     Button(action: { dismiss() }) {
                         Image(systemName: "xmark")
-                            .foregroundStyle(.primary)
                     }
                     .accessibilityLabel("Close")
                 }
@@ -246,7 +217,6 @@ struct ReceiveEcashView: View {
                 ToolbarItem(placement: .principal) {
                     Text("Receive Ecash")
                         .font(.headline)
-                        .foregroundStyle(.primary)
                 }
             }
             .navigationDestination(isPresented: $navigateToDetail) {

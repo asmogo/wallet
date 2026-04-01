@@ -34,12 +34,8 @@ struct SettingsView: View {
 
     var body: some View {
         NavigationStack {
-            ZStack {
-                Color.cashuBackground
-                    .ignoresSafeArea()
-
-                ScrollView {
-                    VStack(spacing: 0) {
+            ScrollView {
+                VStack(spacing: 0) {
                         sectionHeader("BACKUP & RESTORE")
                         BackupSettingsSection(
                             showBackup: $showBackup,
@@ -124,14 +120,12 @@ struct SettingsView: View {
                     }
                     .padding(.horizontal)
                 }
-            }
             .navigationTitle("Settings")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .principal) {
                     Text("Settings")
                         .font(.headline)
-                        .foregroundColor(.white)
                 }
             }
             .sheet(isPresented: $showBackup) {
@@ -169,35 +163,20 @@ struct SettingsView: View {
     // MARK: - Helpers
 
     private func sectionHeader(_ title: String) -> some View {
-        HStack {
-            Rectangle()
-                .fill(Color.cashuBorder)
-                .frame(height: 1)
-
-            Text(title)
-                .font(.caption)
-                .fontWeight(.semibold)
-                .foregroundColor(.cashuMutedText)
-                .tracking(2)
-
-            Rectangle()
-                .fill(Color.cashuBorder)
-                .frame(height: 1)
-        }
-        .padding(.top, 32)
-        .padding(.bottom, 16)
+        Text(title)
+            .font(.caption)
+            .fontWeight(.semibold)
+            .foregroundStyle(.secondary)
+            .tracking(2)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.top, 32)
+            .padding(.bottom, 8)
     }
 
     private func infoRow(label: String, value: String) -> some View {
-        HStack {
-            Text(label)
-                .foregroundColor(.cashuMutedText)
-            Spacer()
-            Text(value)
-                .foregroundColor(.white)
-        }
-        .font(.subheadline)
-        .padding(.vertical, 8)
+        LabeledContent(label, value: value)
+            .font(.subheadline)
+            .padding(.vertical, 8)
     }
 
     @ViewBuilder
@@ -215,23 +194,22 @@ struct SettingsView: View {
         HStack(spacing: 16) {
             Image(systemName: icon)
                 .font(.title3)
-                .foregroundColor(settings.accentColor)
+.foregroundStyle(Color.accentColor)
                 .frame(width: 28)
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(title)
                     .font(.subheadline)
-                    .foregroundColor(.white)
                 Text(subtitle)
                     .font(.caption)
-                    .foregroundColor(.cashuMutedText)
+                    .foregroundStyle(.secondary)
             }
 
             Spacer()
 
             Image(systemName: "arrow.up.right")
                 .font(.caption)
-                .foregroundColor(.cashuMutedText)
+                .foregroundStyle(.secondary)
         }
         .padding(.vertical, 12)
     }
@@ -265,7 +243,6 @@ struct QRPayload: Identifiable {
 
 struct QRCodeDetailSheet: View {
     @Environment(\.dismiss) private var dismiss
-    @ObservedObject var settings = SettingsManager.shared
 
     let title: String
     let content: String
@@ -274,45 +251,38 @@ struct QRCodeDetailSheet: View {
 
     var body: some View {
         NavigationStack {
-            ZStack {
-                Color.cashuBackground
-                    .ignoresSafeArea()
+            VStack(spacing: 20) {
+                QRCodeView(content: content, showControls: false)
+                    .padding()
+                    .frame(width: 280, height: 280)
+                    .background(Color.white)
+                    .cornerRadius(12)
 
-                VStack(spacing: 20) {
-                    QRCodeView(content: content, showControls: false)
-                        .padding()
-                        .frame(width: 280, height: 280)
-                        .background(Color.white)
-                        .cornerRadius(12)
-
-                    Text(content)
-                        .font(.system(.caption, design: .monospaced))
-                        .foregroundColor(.white)
-                        .multilineTextAlignment(.center)
-                        .lineLimit(2)
-                        .truncationMode(.middle)
-                        .padding(.horizontal)
-
-                    Button(action: copyToClipboard) {
-                        HStack {
-                            Image(systemName: copied ? "checkmark" : "doc.on.doc")
-                            Text(copied ? "Copied" : "Copy")
-                        }
-                    }
-                    .buttonStyle(CashuSecondaryButtonStyle())
+                Text(content)
+                    .font(.system(.caption, design: .monospaced))
+                    .multilineTextAlignment(.center)
+                    .lineLimit(2)
+                    .truncationMode(.middle)
                     .padding(.horizontal)
 
-                    Spacer()
+                Button(action: copyToClipboard) {
+                    HStack {
+                        Image(systemName: copied ? "checkmark" : "doc.on.doc")
+                        Text(copied ? "Copied" : "Copy")
+                    }
                 }
-                .padding(.top, 24)
+                .buttonStyle(.bordered).controlSize(.large)
+                .padding(.horizontal)
+
+                Spacer()
             }
+            .padding(.top, 24)
             .navigationTitle(title)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
                     Button(action: { dismiss() }) {
                         Image(systemName: "xmark")
-                            .foregroundColor(.white)
                     }
                 }
             }
@@ -339,37 +309,27 @@ struct ImportP2PKSheet: View {
 
     var body: some View {
         NavigationStack {
-            ZStack {
-                Color.cashuBackground
-                    .ignoresSafeArea()
+            VStack(spacing: 20) {
+                Text("Import P2PK nsec")
+                    .font(.headline)
 
-                VStack(spacing: 20) {
-                    Text("Import P2PK nsec")
-                        .font(.headline)
-                        .foregroundColor(.white)
+                Text("Import an nsec key to add a P2PK locking key.")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal)
 
-                    Text("Import an nsec key to add a P2PK locking key.")
-                        .font(.subheadline)
-                        .foregroundColor(.cashuMutedText)
-                        .multilineTextAlignment(.center)
-                        .padding(.horizontal)
-
-                    TextField("nsec1...", text: $nsecText)
-                        .font(.system(.body, design: .monospaced))
-                        .textInputAutocapitalization(.never)
-                        .autocorrectionDisabled()
-                        .padding()
-                        .background(
-                            RoundedRectangle(cornerRadius: 12)
-                                .fill(Color.cashuCardBackground)
-                        )
-                        .foregroundColor(.white)
-                        .padding(.horizontal)
+                TextField("nsec1...", text: $nsecText)
+                    .font(.system(.body, design: .monospaced))
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+                    .textFieldStyle(.roundedBorder)
+                    .padding(.horizontal)
 
                     if let validationError {
                         Text(validationError)
                             .font(.caption)
-                            .foregroundColor(.cashuError)
+                            .foregroundStyle(.red)
                     }
 
                     Spacer()
@@ -382,32 +342,29 @@ struct ImportP2PKSheet: View {
                         }) {
                             Text("Import nsec")
                         }
-                        .buttonStyle(CashuPrimaryButtonStyle())
+                        .buttonStyle(.borderedProminent).controlSize(.large)
                         .disabled(nsecText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
 
                         Button(action: { dismiss() }) {
                             Text("Cancel")
                         }
-                        .buttonStyle(CashuSecondaryButtonStyle())
+                        .buttonStyle(.bordered).controlSize(.large)
                     }
                     .padding(.horizontal)
                     .padding(.bottom, 24)
-                }
-                .padding(.top, 24)
             }
+            .padding(.top, 24)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
                     Button(action: { dismiss() }) {
                         Image(systemName: "xmark")
-                            .foregroundColor(.white)
                     }
                 }
 
                 ToolbarItem(placement: .principal) {
                     Text("Import P2PK")
                         .font(.headline)
-                        .foregroundColor(.white)
                 }
             }
         }
@@ -429,87 +386,67 @@ struct ImportP2PKSheet: View {
 struct BackupView: View {
     @Environment(\.dismiss) private var dismiss
     @EnvironmentObject var walletManager: WalletManager
-    @ObservedObject var settings = SettingsManager.shared
 
     @State private var showWords = false
     @State private var copiedToClipboard = false
 
     var body: some View {
         NavigationStack {
-            ZStack {
-                Color.cashuBackground
-                    .ignoresSafeArea()
+            ScrollView {
+                VStack(spacing: 24) {
+                    // Warning
+                    VStack(spacing: 12) {
+                        Image(systemName: "exclamationmark.triangle.fill")
+                            .font(.system(size: 48))
+                            .foregroundStyle(.orange)
 
-                ScrollView {
-                    VStack(spacing: 24) {
-                        // Warning
-                        VStack(spacing: 12) {
-                            Image(systemName: "exclamationmark.triangle.fill")
-                                .font(.system(size: 48))
-                                .foregroundColor(.cashuWarning)
+                        Text("Keep Your Seed Phrase Safe")
+                            .font(.headline)
 
-                            Text("Keep Your Seed Phrase Safe")
-                                .font(.headline)
-                                .foregroundColor(.white)
+                        Text("Anyone with these words can access your funds. Never share them with anyone.")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                            .multilineTextAlignment(.center)
+                    }
+                    .padding()
 
-                            Text("Anyone with these words can access your funds. Never share them with anyone.")
-                                .font(.subheadline)
-                                .foregroundColor(.cashuMutedText)
-                                .multilineTextAlignment(.center)
-                        }
-                        .padding()
+                    let words = walletManager.getMnemonicWords()
+                    let mnemonic = words.joined(separator: " ")
+                    let hiddenMnemonic = words.map { String(repeating: "\u{2022}", count: max(3, $0.count)) }.joined(separator: " ")
 
-                        let words = walletManager.getMnemonicWords()
-                        let mnemonic = words.joined(separator: " ")
-                        let hiddenMnemonic = words.map { String(repeating: "\u{2022}", count: max(3, $0.count)) }.joined(separator: " ")
+                    GroupBox("Seed phrase") {
+                        HStack(spacing: 10) {
+                            Text(showWords ? mnemonic : hiddenMnemonic)
+                                .font(.system(.body, design: .monospaced))
+                                .foregroundColor(showWords ? .primary : .secondary)
+                                .lineLimit(4)
+                                .multilineTextAlignment(.leading)
 
-                        VStack(alignment: .leading, spacing: 8) {
-                            Text("Seed phrase")
-                                .font(.caption)
-                                .foregroundColor(.cashuMutedText)
+                            Spacer(minLength: 0)
 
-                            HStack(spacing: 10) {
-                                Text(showWords ? mnemonic : hiddenMnemonic)
-                                    .font(.system(.body, design: .monospaced))
-                                    .foregroundColor(showWords ? .white : .cashuMutedText)
-                                    .lineLimit(4)
-                                    .multilineTextAlignment(.leading)
+                            VStack(spacing: 8) {
+                                Button(action: { showWords.toggle() }) {
+                                    Image(systemName: showWords ? "eye.slash" : "eye")
+                                        .foregroundStyle(Color.accentColor)
+                                }
 
-                                Spacer(minLength: 0)
-
-                                VStack(spacing: 8) {
-                                    Button(action: { showWords.toggle() }) {
-                                        Image(systemName: showWords ? "eye.slash" : "eye")
-                                            .foregroundColor(settings.accentColor)
-                                    }
-
-                                    Button(action: copyToClipboard) {
-                                        Image(systemName: copiedToClipboard ? "checkmark" : "doc.on.doc")
-                                            .foregroundColor(copiedToClipboard ? .green : settings.accentColor)
-                                    }
+                                Button(action: copyToClipboard) {
+                                    Image(systemName: copiedToClipboard ? "checkmark" : "doc.on.doc")
+                                        .foregroundColor(copiedToClipboard ? .green : Color.accentColor)
                                 }
                             }
-                            .padding(12)
-                            .background(
-                                RoundedRectangle(cornerRadius: 12)
-                                    .fill(Color.cashuCardBackground)
-                                    .overlay(
-                                        RoundedRectangle(cornerRadius: 12)
-                                            .stroke(Color.cashuBorder, lineWidth: 1)
-                                    )
-                            )
                         }
-                        .padding(.horizontal)
-
-                        Spacer(minLength: 50)
-
-                        Button(action: { dismiss() }) {
-                            Text("DONE")
-                        }
-                        .buttonStyle(CashuSecondaryButtonStyle())
-                        .padding(.horizontal)
-                        .padding(.bottom, 30)
                     }
+                    .padding(.horizontal)
+
+                    Spacer(minLength: 50)
+
+                    Button(action: { dismiss() }) {
+                        Text("DONE")
+                    }
+                    .buttonStyle(.bordered).controlSize(.large)
+                    .padding(.horizontal)
+                    .padding(.bottom, 30)
                 }
             }
             .navigationBarTitleDisplayMode(.inline)
@@ -517,14 +454,12 @@ struct BackupView: View {
                 ToolbarItem(placement: .navigationBarLeading) {
                     Button(action: { dismiss() }) {
                         Image(systemName: "xmark")
-                            .foregroundColor(.white)
                     }
                 }
 
                 ToolbarItem(placement: .principal) {
                     Text("Backup")
                         .font(.headline)
-                        .foregroundColor(.white)
                 }
             }
         }
@@ -548,32 +483,27 @@ struct MintPickerSheet: View {
     let onSelect: (String) -> Void
 
     @Environment(\.dismiss) private var dismiss
-    @ObservedObject var settings = SettingsManager.shared
 
     var body: some View {
         NavigationStack {
-            ZStack {
-                Color.cashuBackground
-                    .ignoresSafeArea()
-
-                ScrollView {
-                    VStack(spacing: 12) {
-                        ForEach(mints, id: \.url) { mint in
-                            Button(action: {
-                                selectedMintUrl = mint.url
-                                onSelect(mint.url)
-                                dismiss()
-                            }) {
+            ScrollView {
+                VStack(spacing: 12) {
+                    ForEach(mints, id: \.url) { mint in
+                        Button(action: {
+                            selectedMintUrl = mint.url
+                            onSelect(mint.url)
+                            dismiss()
+                        }) {
+                            GroupBox {
                                 HStack {
                                     VStack(alignment: .leading, spacing: 4) {
                                         Text(mint.name)
                                             .font(.subheadline)
                                             .fontWeight(.medium)
-                                            .foregroundColor(.white)
 
                                         Text(mint.url)
                                             .font(.caption)
-                                            .foregroundColor(.cashuMutedText)
+                                            .foregroundStyle(.secondary)
                                             .lineLimit(1)
                                             .truncationMode(.middle)
                                     }
@@ -582,23 +512,14 @@ struct MintPickerSheet: View {
 
                                     if selectedMintUrl == mint.url {
                                         Image(systemName: "checkmark.circle.fill")
-                                            .foregroundColor(settings.accentColor)
+                                            .foregroundStyle(Color.accentColor)
                                     }
                                 }
-                                .padding()
-                                .background(
-                                    RoundedRectangle(cornerRadius: 12)
-                                        .fill(Color.cashuCardBackground)
-                                        .overlay(
-                                            RoundedRectangle(cornerRadius: 12)
-                                                .stroke(selectedMintUrl == mint.url ? settings.accentColor : Color.clear, lineWidth: 2)
-                                        )
-                                )
                             }
                         }
                     }
-                    .padding()
                 }
+                .padding()
             }
             .navigationTitle("Select Mint")
             .navigationBarTitleDisplayMode(.inline)
@@ -606,14 +527,12 @@ struct MintPickerSheet: View {
                 ToolbarItem(placement: .navigationBarLeading) {
                     Button(action: { dismiss() }) {
                         Image(systemName: "xmark")
-                            .foregroundColor(.white)
                     }
                 }
 
                 ToolbarItem(placement: .principal) {
                     Text("Select Mint")
                         .font(.headline)
-                        .foregroundColor(.white)
                 }
             }
         }
@@ -627,105 +546,91 @@ struct ImportNsecSheet: View {
     let onImport: () -> Void
 
     @Environment(\.dismiss) private var dismiss
-    @ObservedObject var settings = SettingsManager.shared
     @State private var errorMessage: String?
 
     var body: some View {
         NavigationStack {
-            ZStack {
-                Color.cashuBackground
-                    .ignoresSafeArea()
+            VStack(spacing: 24) {
+                // Instructions
+                VStack(spacing: 12) {
+                    Image(systemName: "key.fill")
+                        .font(.system(size: 48))
+                        .foregroundStyle(Color.accentColor)
 
-                VStack(spacing: 24) {
-                    // Instructions
-                    VStack(spacing: 12) {
-                        Image(systemName: "key.fill")
-                            .font(.system(size: 48))
-                            .foregroundColor(settings.accentColor)
+                    Text("Import Nostr Key")
+                        .font(.headline)
 
-                        Text("Import Nostr Key")
-                            .font(.headline)
-                            .foregroundColor(.white)
-
-                        Text("Enter your nsec (Nostr private key) to use it for your Lightning address.")
-                            .font(.subheadline)
-                            .foregroundColor(.cashuMutedText)
-                            .multilineTextAlignment(.center)
-                    }
-                    .padding()
-
-                    // nsec input
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text("nsec")
-                            .font(.caption)
-                            .foregroundColor(.cashuMutedText)
-
-                        TextField("nsec1...", text: $nsecText)
-                            .font(.system(.body, design: .monospaced))
-                            .textInputAutocapitalization(.never)
-                            .autocorrectionDisabled()
-                            .padding()
-                            .background(
-                                RoundedRectangle(cornerRadius: 12)
-                                    .fill(Color.cashuCardBackground)
-                            )
-                            .foregroundColor(.white)
-                    }
-                    .padding(.horizontal)
-
-                    // Paste from clipboard button
-                    Button(action: pasteFromClipboard) {
-                        HStack {
-                            Image(systemName: "doc.on.clipboard")
-                            Text("Paste from Clipboard")
-                        }
+                    Text("Enter your nsec (Nostr private key) to use it for your Lightning address.")
                         .font(.subheadline)
-                        .foregroundColor(settings.accentColor)
-                    }
-
-                    // Error message
-                    if let error = errorMessage {
-                        Text(error)
-                            .font(.caption)
-                            .foregroundColor(.cashuError)
-                    }
-
-                    Spacer()
-
-                    // Action buttons
-                    VStack(spacing: 12) {
-                        Button(action: {
-                            if validateNsec() {
-                                onImport()
-                            }
-                        }) {
-                            Text("Import Key")
-                        }
-                        .buttonStyle(CashuPrimaryButtonStyle())
-                        .disabled(nsecText.isEmpty)
-
-                        Button(action: { dismiss() }) {
-                            Text("Cancel")
-                        }
-                        .buttonStyle(CashuSecondaryButtonStyle())
-                    }
-                    .padding(.horizontal)
-                    .padding(.bottom, 30)
+                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.center)
                 }
+                .padding()
+
+                // nsec input
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("nsec")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+
+                    TextField("nsec1...", text: $nsecText)
+                        .font(.system(.body, design: .monospaced))
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled()
+                        .textFieldStyle(.roundedBorder)
+                }
+                .padding(.horizontal)
+
+                // Paste from clipboard button
+                Button(action: pasteFromClipboard) {
+                    HStack {
+                        Image(systemName: "doc.on.clipboard")
+                        Text("Paste from Clipboard")
+                    }
+                    .font(.subheadline)
+                    .foregroundStyle(Color.accentColor)
+                }
+
+                // Error message
+                if let error = errorMessage {
+                    Text(error)
+                        .font(.caption)
+                        .foregroundStyle(.red)
+                }
+
+                Spacer()
+
+                // Action buttons
+                VStack(spacing: 12) {
+                    Button(action: {
+                        if validateNsec() {
+                            onImport()
+                        }
+                    }) {
+                        Text("Import Key")
+                    }
+                    .buttonStyle(.borderedProminent).controlSize(.large)
+                    .disabled(nsecText.isEmpty)
+
+                    Button(action: { dismiss() }) {
+                        Text("Cancel")
+                    }
+                    .buttonStyle(.bordered).controlSize(.large)
+                }
+                .padding(.horizontal)
+                .padding(.bottom, 30)
             }
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
                     Button(action: { dismiss() }) {
                         Image(systemName: "xmark")
-                            .foregroundColor(.white)
                     }
                 }
 
                 ToolbarItem(placement: .principal) {
                     Text("Import Key")
                         .font(.headline)
-                        .foregroundColor(.white)
                 }
             }
         }

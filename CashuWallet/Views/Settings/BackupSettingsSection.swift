@@ -2,7 +2,6 @@ import SwiftUI
 
 struct BackupSettingsSection: View {
     @EnvironmentObject var walletManager: WalletManager
-    @ObservedObject var settings = SettingsManager.shared
 
     @Binding var showBackup: Bool
     @Binding var showRestoreFlowAlert: Bool
@@ -32,23 +31,22 @@ struct BackupSettingsSection: View {
             HStack(spacing: 16) {
                 Image(systemName: icon)
                     .font(.title3)
-                    .foregroundColor(settings.accentColor)
+                    .foregroundStyle(Color.accentColor)
                     .frame(width: 28)
 
                 VStack(alignment: .leading, spacing: 2) {
                     Text(title)
                         .font(.subheadline)
-                        .foregroundColor(.white)
                     Text(subtitle)
                         .font(.caption)
-                        .foregroundColor(.cashuMutedText)
+                        .foregroundStyle(.secondary)
                 }
 
                 Spacer()
 
                 Image(systemName: "chevron.right")
                     .font(.caption)
-                    .foregroundColor(.cashuMutedText)
+                    .foregroundStyle(.secondary)
             }
             .padding(.vertical, 12)
         }

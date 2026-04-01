@@ -6,7 +6,7 @@ struct ReceiveTokenDetailView: View {
     var onComplete: (() -> Void)? = nil  // Callback to dismiss entire flow
     @EnvironmentObject var walletManager: WalletManager
     @Environment(\.dismiss) var dismiss
-    @ObservedObject private var settings = SettingsManager.shared
+    @ObservedObject private var settings = SettingsManager.shared  // used for p2pkKeys
     
     @State private var decodedToken: Token?
     @State private var tokenAmount: UInt64 = 0
@@ -28,14 +28,12 @@ struct ReceiveTokenDetailView: View {
             HStack {
                 Button(action: { dismiss() }) {
                     Image(systemName: "xmark")
-                        .foregroundStyle(.primary)
                         .font(.system(size: 20, weight: .bold))
                 }
                 .accessibilityLabel("Close")
                 .accessibilityHint("Dismisses the token detail screen")
                 Spacer()
                 Text("Receive Ecash")
-                    .foregroundStyle(.primary)
                     .font(.headline)
                 Spacer()
                 // Placeholder for alignment
@@ -82,13 +80,11 @@ struct ReceiveTokenDetailView: View {
                             Spacer()
                             HStack(alignment: .bottom) {
                                 Text(shortMintUrl(mintUrl))
-                                    .foregroundStyle(.primary)
                                     .font(.subheadline)
-                                
+
                                 Spacer()
-                                
+
                                 Text("\(tokenAmount) sat")
-                                    .foregroundStyle(.primary)
                                     .font(.system(size: 32, weight: .bold))
                             }
                             .padding()
@@ -105,31 +101,22 @@ struct ReceiveTokenDetailView: View {
                     .accessibilityLabel("Ecash token card, \(tokenAmount) sats from \(shortMintUrl(mintUrl))")
                     
                     // Details List
-                    VStack(spacing: 20) {
+                    VStack(spacing: 12) {
                         if isLoadingFee {
-                            HStack {
-                                Image(systemName: "arrow.left.arrow.right")
-                                    .foregroundColor(.gray)
-                                    .frame(width: 24)
-                                Text("Fee")
-                                    .foregroundColor(.gray)
-                                Spacer()
+                            LabeledContent("Fee") {
                                 ProgressView()
                                     .scaleEffect(0.8)
                             }
                         } else {
-                            DetailRow(label: "Fee", value: "\(receiveFee) sat", icon: "arrow.left.arrow.right")
+                            LabeledContent("Fee", value: "\(receiveFee) sat")
                         }
-                        DetailRow(label: "Fiat", value: "$0.00", icon: "banknote")
-                        DetailRow(label: "Mint", value: shortMintUrl(mintUrl), icon: "building.columns")
+                        LabeledContent("Fiat", value: "$0.00")
+                        LabeledContent("Mint", value: shortMintUrl(mintUrl))
                         if !p2pkPubkeys.isEmpty {
-                            DetailRow(
-                                label: "P2PK",
-                                value: tokenLockedToKnownKey ? "Locked to your key" : "Locked to unknown key",
-                                icon: "lock.fill"
-                            )
+                            LabeledContent("P2PK", value: tokenLockedToKnownKey ? "Locked to your key" : "Locked to unknown key")
                         }
                     }
+                    .font(.subheadline)
                     .padding(.horizontal)
                     
                     if let error = errorMessage {
@@ -151,7 +138,7 @@ struct ReceiveTokenDetailView: View {
                 Button(action: receiveLater) {
                     Text("RECEIVE LATER")
                         .font(.headline)
-                        .foregroundColor(.cashuMutedText)
+                        .foregroundStyle(.secondary)
                         .frame(maxWidth: .infinity)
                 }
                 .accessibilityLabel("Receive later")
@@ -171,7 +158,7 @@ struct ReceiveTokenDetailView: View {
                     }
                     .frame(maxWidth: .infinity)
                     .frame(height: 56)
-                    .background(Color.cashuAccent)
+                    .background(Color.accentColor)
                     .cornerRadius(28)
                 }
                 .disabled(isReceiving || !tokenLockedToKnownKey)
@@ -347,25 +334,3 @@ struct ReceiveTokenDetailView: View {
     }
 }
 
-struct DetailRow: View {
-    let label: String
-    let value: String
-    let icon: String
-
-    var body: some View {
-        HStack {
-            Image(systemName: icon)
-                .foregroundColor(.gray)
-                .frame(width: 24)
-                .accessibilityHidden(true)
-            Text(label)
-                .foregroundColor(.gray)
-            Spacer()
-            Text(value)
-                .foregroundStyle(.primary)
-                .fontWeight(.medium)
-        }
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel("\(label): \(value)")
-    }
-}

@@ -13,10 +13,6 @@ struct HistoryView: View {
     
     var body: some View {
         NavigationStack {
-            ZStack {
-                Color.cashuBackground
-                    .ignoresSafeArea()
-                
                 VStack(spacing: 0) {
                     if filteredTransactions.isEmpty {
                         emptyStateView
@@ -34,16 +30,7 @@ struct HistoryView: View {
                             .padding(.bottom, 16)
                     }
                 }
-            }
             .navigationTitle("History")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .principal) {
-                    Text("History")
-                        .font(.headline)
-                        .foregroundColor(settings.accentColor)
-                }
-            }
             .sheet(item: $selectedTransaction) { transaction in
                 TransactionDetailView(transaction: transaction)
                     .environmentObject(walletManager)
@@ -94,13 +81,13 @@ struct HistoryView: View {
                 Spacer()
                 Image(systemName: "clock")
                     .font(.system(size: 48))
-                    .foregroundColor(.cashuMutedText)
+                    .foregroundStyle(.secondary)
                 Text("No Transactions Yet")
                     .font(.headline)
                     .foregroundStyle(.primary)
                 Text("Your transaction history will appear here")
                     .font(.subheadline)
-                    .foregroundColor(.cashuMutedText)
+                    .foregroundStyle(.secondary)
                 Spacer()
             }
             .padding()
@@ -144,7 +131,7 @@ struct HistoryView: View {
                         
                         Text(formatRelativeDate(transaction.date))
                             .font(.system(size: 14))
-                            .foregroundColor(.cashuMutedText)
+                            .foregroundStyle(.secondary)
                     }
                     
                     Spacer()
@@ -160,7 +147,7 @@ struct HistoryView: View {
                         if transaction.status == .pending {
                             Text("Pending")
                                 .font(.system(size: 14))
-                                .foregroundColor(.cashuMutedText)
+                                .foregroundStyle(.secondary)
                         } else {
                             // Empty space for consistent height matching Vue's &nbsp;
                             Text(" ")
@@ -184,12 +171,12 @@ struct HistoryView: View {
                 }) {
                     if isCheckingStatus == transaction.id {
                         ProgressView()
-                            .progressViewStyle(CircularProgressViewStyle(tint: .cashuMutedText))
+                            .progressViewStyle(CircularProgressViewStyle(tint: .secondary))
                             .frame(width: 24, height: 24)
                     } else {
                         Image(systemName: "arrow.triangle.2.circlepath")
                             .font(.system(size: 16))
-                            .foregroundColor(.cashuMutedText)
+                            .foregroundStyle(.secondary)
                             .frame(width: 24, height: 24)
                     }
                 }
@@ -210,9 +197,9 @@ struct HistoryView: View {
     private func transactionKindIcon(_ kind: WalletTransaction.TransactionKind) -> some View {
         switch kind {
         case .ecash:
-            EcashIcon(size: 20, color: settings.accentColor)
+            EcashIcon(size: 20, color: Color.accentColor)
         case .lightning:
-            LightningIcon(size: 20, color: settings.accentColor)
+            LightningIcon(size: 20, color: Color.accentColor)
         }
     }
     
@@ -223,7 +210,7 @@ struct HistoryView: View {
     
     private func amountColor(_ transaction: WalletTransaction) -> Color {
         if transaction.status == .pending {
-            return .cashuMutedText
+            return .secondary
         }
         
         if transaction.type == .incoming {
@@ -270,15 +257,15 @@ struct HistoryView: View {
             Text(filterPending ? "SHOW ALL" : "FILTER PENDING")
                 .font(.system(size: 12, weight: .semibold))
                 .tracking(0.5)
-                .foregroundColor(filterPending ? .black : settings.accentColor)
+                .foregroundColor(filterPending ? .black : Color.accentColor)
                 .padding(.horizontal, 20)
                 .padding(.vertical, 10)
                 .background(
                     Capsule()
-                        .fill(filterPending ? settings.accentColor : Color.clear)
+                        .fill(filterPending ? Color.accentColor : Color.clear)
                         .overlay(
                             Capsule()
-                                .stroke(settings.accentColor, lineWidth: 1.5)
+                                .stroke(Color.accentColor, lineWidth: 1.5)
                         )
                 )
         }
@@ -301,7 +288,7 @@ struct HistoryView: View {
                 if pageNum == -1 {
                     Text("...")
                         .font(.system(size: 14))
-                        .foregroundColor(.cashuMutedText)
+                        .foregroundStyle(.secondary)
                         .frame(width: 30)
                 } else {
                     pageNumberButton(pageNum)
@@ -353,7 +340,7 @@ struct HistoryView: View {
         Button(action: action) {
             Text(text)
                 .font(.system(size: 14, weight: .medium))
-                .foregroundColor(enabled ? settings.accentColor : .cashuMutedText.opacity(0.5))
+                .foregroundColor(enabled ? Color.accentColor : .secondary.opacity(0.5))
         }
         .disabled(!enabled)
         .frame(width: 30)
@@ -364,14 +351,14 @@ struct HistoryView: View {
         Button(action: { currentPage = page }) {
             Text("\(page)")
                 .font(.system(size: 14, weight: currentPage == page ? .bold : .medium))
-                .foregroundColor(currentPage == page ? .black : settings.accentColor)
+                .foregroundColor(currentPage == page ? .black : Color.accentColor)
                 .frame(width: 30, height: 30)
                 .background(
                     RoundedRectangle(cornerRadius: 4)
-                        .fill(currentPage == page ? settings.accentColor : Color.clear)
+                        .fill(currentPage == page ? Color.accentColor : Color.clear)
                         .overlay(
                             RoundedRectangle(cornerRadius: 4)
-                                .stroke(settings.accentColor, lineWidth: currentPage == page ? 0 : 1)
+                                .stroke(Color.accentColor, lineWidth: currentPage == page ? 0 : 1)
                         )
                 )
         }

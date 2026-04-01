@@ -12,23 +12,21 @@ struct NWCSettingsSection: View {
             Text("Nostr Wallet Connect (NWC)")
                 .font(.subheadline)
                 .fontWeight(.medium)
-                .foregroundColor(.white)
 
             Text("Use NWC to control your wallet from compatible applications.")
                 .font(.caption)
-                .foregroundColor(.cashuMutedText)
+                .foregroundStyle(.secondary)
 
             Toggle(isOn: $settings.enableNWC.animation(.easeInOut(duration: 0.2))) {
                 Text("Enable NWC")
                     .font(.subheadline)
-                    .foregroundColor(.white)
             }
-            .toggleStyle(SwitchToggleStyle(tint: settings.accentColor))
+            .toggleStyle(SwitchToggleStyle(tint: Color.accentColor))
 
             if settings.enableNWC {
                 Text("You can only use NWC for payments from your Bitcoin balance on your active mint.")
                     .font(.caption2)
-                    .foregroundColor(.cashuMutedText)
+                    .foregroundStyle(.secondary)
 
                 Button(action: createNWCConnection) {
                     HStack(spacing: 8) {
@@ -36,67 +34,59 @@ struct NWCSettingsSection: View {
                         Text(settings.nwcConnections.isEmpty ? "Create connection" : "Ensure connection")
                     }
                     .font(.subheadline)
-                    .foregroundColor(settings.accentColor)
+.foregroundStyle(Color.accentColor)
                 }
 
                 ForEach(settings.nwcConnections) { connection in
-                    VStack(alignment: .leading, spacing: 10) {
-                        HStack {
-                            Text("Connection")
-                                .font(.caption)
-                                .foregroundColor(.cashuMutedText)
+                    GroupBox {
+                        VStack(alignment: .leading, spacing: 10) {
+                            HStack {
+                                Text("Connection")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
 
-                            Spacer()
+                                Spacer()
 
-                            Button(action: { copyNWCConnection(connection) }) {
-                                Image(systemName: copiedNWCConnectionId == connection.id ? "checkmark" : "doc.on.doc")
-                                    .foregroundColor(copiedNWCConnectionId == connection.id ? .green : settings.accentColor)
+                                Button(action: { copyNWCConnection(connection) }) {
+                                    Image(systemName: copiedNWCConnectionId == connection.id ? "checkmark" : "doc.on.doc")
+                                        .foregroundColor(copiedNWCConnectionId == connection.id ? .green : Color.accentColor)
+                                }
+                                .accessibilityLabel("Copy connection string")
+
+                                Button(action: { showQRCode(title: "NWC Connection", content: settings.nwcConnectionString(for: connection)) }) {
+                                    Image(systemName: "qrcode")
+                                        .foregroundStyle(Color.accentColor)
+                                }
+                                .accessibilityLabel("Show connection QR")
+
+                                Button(action: { settings.removeNWCConnection(connection) }) {
+                                    Image(systemName: "trash")
+                                        .foregroundStyle(.red)
+                                }
+                                .accessibilityLabel("Remove connection")
                             }
-                            .accessibilityLabel("Copy connection string")
 
-                            Button(action: { showQRCode(title: "NWC Connection", content: settings.nwcConnectionString(for: connection)) }) {
-                                Image(systemName: "qrcode")
-                                    .foregroundColor(settings.accentColor)
+                            Text(settings.nwcConnectionString(for: connection))
+                                .font(.system(.caption2, design: .monospaced))
+                                .lineLimit(1)
+                                .truncationMode(.middle)
+
+                            LabeledContent("Allowance left (sat)") {
+                                TextField("0", text: allowanceBinding(for: connection))
+                                    .keyboardType(.numberPad)
+                                    .multilineTextAlignment(.trailing)
+                                    .font(.system(.caption, design: .monospaced))
+                                    .frame(maxWidth: 100)
                             }
-                            .accessibilityLabel("Show connection QR")
-
-                            Button(action: { settings.removeNWCConnection(connection) }) {
-                                Image(systemName: "trash")
-                                    .foregroundColor(.cashuError)
-                            }
-                            .accessibilityLabel("Remove connection")
-                        }
-
-                        Text(settings.nwcConnectionString(for: connection))
-                            .font(.system(.caption2, design: .monospaced))
-                            .foregroundColor(.white)
-                            .lineLimit(1)
-                            .truncationMode(.middle)
-
-                        HStack {
-                            Text("Allowance left (sat)")
-                                .font(.caption2)
-                                .foregroundColor(.cashuMutedText)
-                            Spacer()
-                            TextField("0", text: allowanceBinding(for: connection))
-                                .keyboardType(.numberPad)
-                                .multilineTextAlignment(.trailing)
-                                .font(.system(.caption, design: .monospaced))
-                                .foregroundColor(.white)
-                                .frame(maxWidth: 100)
+                            .font(.caption2)
                         }
                     }
-                    .padding(12)
-                    .background(
-                        RoundedRectangle(cornerRadius: 10)
-                            .fill(Color.cashuCardBackground)
-                    )
                 }
 
                 if let nwcError {
                     Text(nwcError)
                         .font(.caption2)
-                        .foregroundColor(.cashuError)
+                        .foregroundStyle(.red)
                 }
             }
         }

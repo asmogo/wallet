@@ -45,7 +45,7 @@ struct NotificationBadgeView: View {
         }
         .padding(.vertical, 12)
         .padding(.horizontal, 16)
-        .background(Color.green) // Cashu green
+        .background(Color.accentColor)
         .cornerRadius(8)
         .shadow(color: Color.black.opacity(0.2), radius: 4, x: 0, y: 2)
         .transition(.move(edge: .top).combined(with: .opacity))
@@ -66,14 +66,11 @@ struct NotificationBadgeView: View {
 }
 
 #Preview {
-    ZStack {
-        Color.black
-        NotificationBadgeView(
-            message: "Success",
-            amount: 21,
-            fee: 1,
-            onDismiss: {}
-        )
-        .padding()
-    }
+    NotificationBadgeView(
+        message: "Success",
+        amount: 21,
+        fee: 1,
+        onDismiss: {}
+    )
+    .padding()
 }

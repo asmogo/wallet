@@ -1,7 +1,6 @@
 import SwiftUI
 
 struct NostrKeysSettingsSection: View {
-    @ObservedObject var settings = SettingsManager.shared
     @ObservedObject var nostrService = NostrService.shared
 
     @Binding var showNsec: Bool
@@ -17,11 +16,10 @@ struct NostrKeysSettingsSection: View {
             Text("Nostr Key Source")
                 .font(.subheadline)
                 .fontWeight(.medium)
-                .foregroundColor(.white)
 
             Text("Your Lightning address is derived from your Nostr public key. Choose which key to use.")
                 .font(.caption)
-                .foregroundColor(.cashuMutedText)
+                .foregroundStyle(.secondary)
 
             // Signer type selection
             VStack(spacing: 8) {
@@ -36,63 +34,56 @@ struct NostrKeysSettingsSection: View {
                 VStack(alignment: .leading, spacing: 8) {
                     Text("Current Public Key")
                         .font(.caption)
-                        .foregroundColor(.cashuMutedText)
+                        .foregroundStyle(.secondary)
                         .padding(.top, 12)
 
                     // npub display
-                    Text(nostrService.npub)
-                        .font(.system(.caption, design: .monospaced))
-                        .foregroundColor(.white)
-                        .lineLimit(1)
-                        .truncationMode(.middle)
-                        .padding(8)
-                        .background(
-                            RoundedRectangle(cornerRadius: 6)
-                                .fill(Color.cashuCardBackground)
-                        )
+                    GroupBox {
+                        Text(nostrService.npub)
+                            .font(.system(.caption, design: .monospaced))
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+                    }
                 }
 
                 // nsec reveal/copy
                 VStack(alignment: .leading, spacing: 8) {
                     Text("Private Key (nsec)")
                         .font(.caption)
-                        .foregroundColor(.cashuMutedText)
+                        .foregroundStyle(.secondary)
                         .padding(.top, 8)
 
-                    HStack {
-                        if showNsec {
-                            Text(nostrService.nsec)
-                                .font(.system(.caption, design: .monospaced))
-                                .foregroundColor(.cashuWarning)
-                                .lineLimit(1)
-                                .truncationMode(.middle)
-                        } else {
-                            Text(String(repeating: "*", count: 20))
-                                .font(.system(.caption, design: .monospaced))
-                                .foregroundColor(.cashuMutedText)
-                        }
+                    GroupBox {
+                        HStack {
+                            if showNsec {
+                                Text(nostrService.nsec)
+                                    .font(.system(.caption, design: .monospaced))
+                                    .foregroundStyle(.orange)
+                                    .lineLimit(1)
+                                    .truncationMode(.middle)
+                            } else {
+                                Text(String(repeating: "*", count: 20))
+                                    .font(.system(.caption, design: .monospaced))
+                                    .foregroundStyle(.secondary)
+                            }
 
-                        Spacer()
+                            Spacer()
 
-                        Button(action: { showNsec.toggle() }) {
-                            Image(systemName: showNsec ? "eye.slash" : "eye")
-                                .foregroundColor(settings.accentColor)
-                        }
+                            Button(action: { showNsec.toggle() }) {
+                                Image(systemName: showNsec ? "eye.slash" : "eye")
+                                    .foregroundStyle(Color.accentColor)
+                            }
 
-                        Button(action: copyNsec) {
-                            Image(systemName: copiedNsec ? "checkmark" : "doc.on.doc")
-                                .foregroundColor(copiedNsec ? .green : settings.accentColor)
+                            Button(action: copyNsec) {
+                                Image(systemName: copiedNsec ? "checkmark" : "doc.on.doc")
+                                    .foregroundColor(copiedNsec ? .green : Color.accentColor)
+                            }
                         }
                     }
-                    .padding(8)
-                    .background(
-                        RoundedRectangle(cornerRadius: 6)
-                            .fill(Color.cashuCardBackground)
-                    )
 
                     Text("Keep your private key secret. Anyone with it can control your Lightning address.")
                         .font(.caption2)
-                        .foregroundColor(.cashuWarning)
+                        .foregroundStyle(.orange)
                 }
             }
 
@@ -104,7 +95,7 @@ struct NostrKeysSettingsSection: View {
                         Text("Generate")
                     }
                     .font(.subheadline)
-                    .foregroundColor(settings.accentColor)
+.foregroundStyle(Color.accentColor)
                 }
 
                 Spacer()
@@ -115,7 +106,7 @@ struct NostrKeysSettingsSection: View {
                         Text("Import")
                     }
                     .font(.subheadline)
-                    .foregroundColor(settings.accentColor)
+.foregroundStyle(Color.accentColor)
                 }
 
                 Spacer()
@@ -127,7 +118,7 @@ struct NostrKeysSettingsSection: View {
                             Text("Reset")
                         }
                         .font(.subheadline)
-                        .foregroundColor(.cashuWarning)
+                        .foregroundStyle(.orange)
                     }
                 }
             }
@@ -136,7 +127,7 @@ struct NostrKeysSettingsSection: View {
             if let error = nostrKeyError {
                 Text(error)
                     .font(.caption)
-                    .foregroundColor(.cashuError)
+                    .foregroundStyle(.red)
                     .padding(.top, 4)
             }
         }
@@ -171,30 +162,22 @@ struct NostrKeysSettingsSection: View {
         Button(action: {
             switchSignerType(to: type)
         }) {
-            HStack {
-                Image(systemName: nostrService.signerType == type ? "largecircle.fill.circle" : "circle")
-                    .foregroundColor(nostrService.signerType == type ? settings.accentColor : .cashuMutedText)
+            GroupBox {
+                HStack {
+                    Image(systemName: nostrService.signerType == type ? "largecircle.fill.circle" : "circle")
+                        .foregroundColor(nostrService.signerType == type ? Color.accentColor : .secondary)
 
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(type.displayName)
-                        .font(.subheadline)
-                        .foregroundColor(.white)
-                    Text(type.description)
-                        .font(.caption)
-                        .foregroundColor(.cashuMutedText)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(type.displayName)
+                            .font(.subheadline)
+                        Text(type.description)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+
+                    Spacer()
                 }
-
-                Spacer()
             }
-            .padding(12)
-            .background(
-                RoundedRectangle(cornerRadius: 8)
-                    .fill(Color.cashuCardBackground)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 8)
-                            .stroke(nostrService.signerType == type ? settings.accentColor : Color.clear, lineWidth: 2)
-                    )
-            )
         }
     }
 
@@ -271,70 +254,56 @@ struct NostrRelaysSettingsSection: View {
             Text("Relay servers")
                 .font(.subheadline)
                 .fontWeight(.medium)
-                .foregroundColor(.white)
 
             Text("Manage your Nostr relay list for compatible features like npub.cash and backups.")
                 .font(.caption)
-                .foregroundColor(.cashuMutedText)
+                .foregroundStyle(.secondary)
 
             HStack(spacing: 12) {
                 TextField("wss://relay.example.com", text: $relayInput)
                     .textInputAutocapitalization(.never)
                     .disableAutocorrection(true)
                     .font(.system(.caption, design: .monospaced))
-                    .foregroundColor(.white)
-                    .padding(10)
-                    .background(
-                        RoundedRectangle(cornerRadius: 8)
-                            .fill(Color.cashuCardBackground)
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 8)
-                                    .stroke(Color.cashuBorder, lineWidth: 1)
-                            )
-                    )
+                    .textFieldStyle(.roundedBorder)
 
                 Button(action: addRelay) {
                     Image(systemName: "plus.circle.fill")
                         .font(.title3)
-                        .foregroundColor(relayInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? .cashuMutedText : settings.accentColor)
+                        .foregroundColor(relayInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? .secondary : Color.accentColor)
                 }
                 .disabled(relayInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 .accessibilityLabel("Add relay")
             }
 
             ForEach(settings.nostrRelays, id: \.self) { relay in
-                HStack(spacing: 12) {
-                    Text(relay)
-                        .font(.system(.caption, design: .monospaced))
-                        .foregroundColor(.white)
-                        .lineLimit(1)
-                        .truncationMode(.middle)
+                GroupBox {
+                    HStack(spacing: 12) {
+                        Text(relay)
+                            .font(.system(.caption, design: .monospaced))
+                            .lineLimit(1)
+                            .truncationMode(.middle)
 
-                    Spacer()
+                        Spacer()
 
-                    Button(action: { copyRelay(relay) }) {
-                        Image(systemName: copiedRelay == relay ? "checkmark" : "doc.on.doc")
-                            .foregroundColor(copiedRelay == relay ? .green : settings.accentColor)
+                        Button(action: { copyRelay(relay) }) {
+                            Image(systemName: copiedRelay == relay ? "checkmark" : "doc.on.doc")
+                                .foregroundColor(copiedRelay == relay ? .green : Color.accentColor)
+                        }
+                        .accessibilityLabel("Copy relay URL")
+
+                        Button(action: { settings.removeNostrRelay(relay) }) {
+                            Image(systemName: "trash")
+                                .foregroundStyle(.red)
+                        }
+                        .accessibilityLabel("Remove relay")
                     }
-                    .accessibilityLabel("Copy relay URL")
-
-                    Button(action: { settings.removeNostrRelay(relay) }) {
-                        Image(systemName: "trash")
-                            .foregroundColor(.cashuError)
-                    }
-                    .accessibilityLabel("Remove relay")
                 }
-                .padding(10)
-                .background(
-                    RoundedRectangle(cornerRadius: 8)
-                        .fill(Color.cashuCardBackground)
-                )
             }
 
             if let relayError {
                 Text(relayError)
                     .font(.caption2)
-                    .foregroundColor(.cashuError)
+                    .foregroundStyle(.red)
             }
 
             Button(action: {
@@ -343,7 +312,7 @@ struct NostrRelaysSettingsSection: View {
             }) {
                 Text("Reset default relays")
                     .font(.caption)
-                    .foregroundColor(settings.accentColor)
+.foregroundStyle(Color.accentColor)
             }
             .padding(.top, 4)
         }

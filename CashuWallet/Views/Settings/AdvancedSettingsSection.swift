@@ -2,7 +2,6 @@ import SwiftUI
 
 struct AdvancedSettingsSection: View {
     @EnvironmentObject var walletManager: WalletManager
-    @ObservedObject var settings = SettingsManager.shared
 
     @Binding var showDeleteConfirm: Bool
 
@@ -12,7 +11,7 @@ struct AdvancedSettingsSection: View {
                 Image(systemName: "trash")
                 Text("Delete Wallet")
             }
-            .foregroundColor(.cashuError)
+            .foregroundStyle(.red)
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding()
         }

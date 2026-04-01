@@ -18,12 +18,10 @@ struct AnimatedBalanceView: View {
             if hideBalance {
                 Text("••••••")
                     .font(.system(size: fontSize, weight: fontWeight, design: .default))
-                    .foregroundColor(settings.accentColor)
                     .accessibilityLabel("Balance hidden")
             } else {
                 Text(formattedValue)
                     .font(.system(size: fontSize, weight: fontWeight, design: .default))
-                    .foregroundColor(settings.accentColor)
                     .animation(.spring(response: 0.5, dampingFraction: 0.8), value: displayValue)
                     .accessibilityLabel("Balance: \(formattedValue)")
                     .accessibilityValue(formattedValue)
@@ -66,7 +64,7 @@ struct AnimatedAmountDisplay: View {
             if showUnit && !hideBalance {
                 Text(settings.unitSuffix)
                     .font(.title3)
-                    .foregroundColor(.cashuMutedText)
+                    .foregroundStyle(.secondary)
             }
         }
     }
@@ -98,12 +96,12 @@ struct BalanceCardView: View {
                         .font(.caption)
                         .fontWeight(.bold)
                 }
-                .foregroundColor(settings.accentColor)
+.foregroundStyle(.primary)
                 .padding(.horizontal, 12)
                 .padding(.vertical, 6)
                 .overlay(
                     Capsule()
-                        .stroke(settings.accentColor, lineWidth: 1)
+                        .stroke(Color.accentColor, lineWidth: 1)
                 )
             }
             .accessibilityLabel("Unit: \(settings.unitLabel)")
@@ -128,14 +126,14 @@ struct BalanceCardView: View {
                 if !settings.useBitcoinSymbol {
                     Text("sat")
                         .font(.title3)
-                        .foregroundColor(.cashuMutedText)
+                        .foregroundStyle(.secondary)
                 }
                 
                 // Fiat conversion placeholder
                 if !isHidden {
                     Text("$0.00") // Placeholder - would need price feed
                         .font(.subheadline)
-                        .foregroundColor(.cashuMutedText)
+                        .foregroundStyle(.secondary)
                 }
             }
             .padding(.vertical, 24)
@@ -144,10 +142,10 @@ struct BalanceCardView: View {
             if let mintName = mintName {
                 HStack {
                     Text("Mint:")
-                        .foregroundColor(.cashuMutedText)
+                        .foregroundStyle(.secondary)
                     Text(mintName)
                         .fontWeight(.semibold)
-                        .foregroundColor(.cashuMutedText)
+                        .foregroundStyle(.secondary)
                 }
                 .font(.caption)
             }
@@ -180,12 +178,12 @@ struct PendingBalanceBadge: View {
                     .font(.caption)
                     .fontWeight(.medium)
             }
-            .foregroundColor(settings.accentColor)
+.foregroundStyle(.primary)
             .padding(.horizontal, 16)
             .padding(.vertical, 8)
             .background(
                 Capsule()
-                    .stroke(settings.accentColor, lineWidth: 1)
+                    .stroke(Color.accentColor, lineWidth: 1)
             )
         }
         .accessibilityElement(children: .combine)
@@ -222,23 +220,13 @@ struct TransactionAmountView: View {
 // MARK: - Preview
 
 #Preview("Balance Card") {
-    ZStack {
-        Color.cashuBackground
-            .ignoresSafeArea()
-        
-        BalanceCardView(
-            balance: 21000,
-            mintName: "mint.minibits.cash",
-            pendingBalance: 1000
-        )
-    }
+    BalanceCardView(
+        balance: 21000,
+        mintName: "mint.minibits.cash",
+        pendingBalance: 1000
+    )
 }
 
 #Preview("Animated Balance") {
-    ZStack {
-        Color.cashuBackground
-            .ignoresSafeArea()
-        
-        AnimatedBalanceView(value: 123456)
-    }
+    AnimatedBalanceView(value: 123456)
 }

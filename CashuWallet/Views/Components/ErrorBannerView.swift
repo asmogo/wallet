@@ -19,20 +19,16 @@ struct ErrorBannerView: View {
 
         var color: Color {
             switch self {
-            case .error: return .cashuError
-            case .warning: return .cashuWarning
-            case .info: return .cashuMutedText
+            case .error: return .red
+            case .warning: return .orange
+            case .info: return .secondary
             }
         }
     }
 
     var body: some View {
         HStack(spacing: 10) {
-            Image(systemName: type.icon)
-                .foregroundColor(type.color)
-                .accessibilityHidden(true)
-
-            Text(message)
+            Label(message, systemImage: type.icon)
                 .font(.footnote)
                 .foregroundStyle(type.color)
                 .multilineTextAlignment(.leading)
@@ -49,14 +45,6 @@ struct ErrorBannerView: View {
             }
         }
         .padding(12)
-        .background(
-            RoundedRectangle(cornerRadius: 10)
-                .fill(type.color.opacity(0.1))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 10)
-                        .stroke(type.color.opacity(0.3), lineWidth: 1)
-                )
-        )
         .accessibilityElement(children: .combine)
     }
 }

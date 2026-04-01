@@ -8,31 +8,28 @@ struct PaymentRequestsSettingsSection: View {
             Text("Payment requests")
                 .font(.subheadline)
                 .fontWeight(.medium)
-                .foregroundColor(.white)
 
             Text("Payment requests allow you to receive payments via Nostr relays.")
                 .font(.caption)
-                .foregroundColor(.cashuMutedText)
+                .foregroundStyle(.secondary)
 
             Toggle(isOn: $settings.enablePaymentRequests.animation(.easeInOut(duration: 0.2))) {
                 Text("Enable Payment Requests")
                     .font(.subheadline)
-                    .foregroundColor(.white)
             }
-            .toggleStyle(SwitchToggleStyle(tint: settings.accentColor))
+            .toggleStyle(SwitchToggleStyle(tint: Color.accentColor))
 
             if settings.enablePaymentRequests {
                 Toggle(isOn: $settings.receivePaymentRequestsAutomatically.animation(.easeInOut(duration: 0.2))) {
                     VStack(alignment: .leading, spacing: 2) {
                         Text("Claim automatically")
                             .font(.subheadline)
-                            .foregroundColor(.white)
-                        Text("Receive incoming payments automatically.")
+                                Text("Receive incoming payments automatically.")
                             .font(.caption)
-                            .foregroundColor(.cashuMutedText)
+                            .foregroundStyle(.secondary)
                     }
                 }
-                .toggleStyle(SwitchToggleStyle(tint: settings.accentColor))
+                .toggleStyle(SwitchToggleStyle(tint: Color.accentColor))
             }
         }
         .padding(.vertical, 8)

@@ -19,10 +19,6 @@ struct MainWalletView: View {
     
     var body: some View {
         NavigationStack {
-            ZStack {
-                Color.cashuBackground
-                    .ignoresSafeArea()
-                
                 VStack(spacing: 0) {
                     // Notification Badge
                     if showNotification, let notif = notification {
@@ -55,18 +51,20 @@ struct MainWalletView: View {
                     // Spacer for bottom
                     Spacer()
                 }
-            }
-            .fullScreenCover(isPresented: $showReceiveOptions) {
+            .sheet(isPresented: $showReceiveOptions) {
                 ReceiveView()
                     .environmentObject(walletManager)
+                    .presentationDetents([.large])
             }
-            .fullScreenCover(isPresented: $showSendOptions) {
+            .sheet(isPresented: $showSendOptions) {
                 SendView()
                     .environmentObject(walletManager)
+                    .presentationDetents([.large])
             }
-            .fullScreenCover(isPresented: $navigationManager.showScannerSheet) {
+            .sheet(isPresented: $navigationManager.showScannerSheet) {
                  ScannerWrapperView()
                     .environmentObject(walletManager)
+                    .presentationDetents([.large])
             }
         }
         .onReceive(NotificationCenter.default.publisher(for: .cashuTokenReceived)) { notification in
@@ -98,13 +96,13 @@ struct MainWalletView: View {
                 settings.useBitcoinSymbol.toggle()
             }) {
                 Text(settings.unitLabel)
-                    .font(.cashuUnitLabel)
-                    .foregroundColor(settings.accentColor)
+                    .font(.caption)
+.foregroundStyle(Color.accentColor)
                     .padding(.horizontal, 20)
                     .padding(.vertical, 8)
                     .overlay(
                         Capsule()
-                            .stroke(settings.accentColor, lineWidth: 1.5)
+                            .stroke(Color.accentColor, lineWidth: 1.5)
                     )
             }
             .accessibilityLabel("Display unit: \(settings.unitLabel)")
@@ -114,8 +112,8 @@ struct MainWalletView: View {
                 VStack(spacing: 8) {
                     // Balance with unit - using SF Pro (default) to match Inter font from cashu.me
                     Text(formatBalanceWithUnit(walletManager.balance))
-                        .font(.cashuBalance)
-                        .foregroundColor(settings.accentColor)
+                        .font(.largeTitle.bold())
+    .foregroundStyle(Color.accentColor)
                         .minimumScaleFactor(0.5)
                         .accessibilityLabel("Balance: \(formatBalanceWithUnit(walletManager.balance))")
                         .accessibilityValue(formatBalanceWithUnit(walletManager.balance))
@@ -123,8 +121,8 @@ struct MainWalletView: View {
                     // Fiat balance (if enabled)
                     if settings.showFiatBalance && priceService.btcPriceUSD > 0 {
                         Text(priceService.formatSatsAsFiat(walletManager.balance))
-                            .font(.cashuFiatPrice)
-                            .foregroundColor(settings.accentColor)
+                            .font(.headline)
+        .foregroundStyle(Color.accentColor)
                             .opacity(0.8)
                             .accessibilityLabel("Fiat value: \(priceService.formatSatsAsFiat(walletManager.balance))")
                     }
@@ -137,21 +135,21 @@ struct MainWalletView: View {
                     // Mint name
                     HStack(spacing: 4) {
                         Text("Mint:")
-                            .foregroundColor(.cashuMutedText)
+                            .foregroundStyle(.secondary)
                         Text(mint.name)
-                            .foregroundColor(settings.accentColor)
+        .foregroundStyle(Color.accentColor)
                     }
-                    .font(.cashuBody)
+                    .font(.body)
 
                     // Balance at this mint
                     HStack(spacing: 4) {
                         Text("Balance:")
-                            .foregroundColor(.cashuMutedText)
+                            .foregroundStyle(.secondary)
                         Text(formatBalanceWithUnit(mint.balance))
-                            .foregroundColor(settings.accentColor)
+        .foregroundStyle(Color.accentColor)
                             .fontWeight(.semibold)
                     }
-                    .font(.cashuBody)
+                    .font(.body)
                 }
                 .accessibilityElement(children: .combine)
                 .accessibilityLabel("Active mint: \(mint.name), balance: \(formatBalanceWithUnit(mint.balance))")
@@ -188,12 +186,12 @@ struct MainWalletView: View {
                     .font(.system(size: 10, weight: .medium, design: .default))
                     .accessibilityHidden(true)
             }
-            .foregroundColor(copiedLightningAddress ? .green : settings.accentColor)
+            .foregroundColor(copiedLightningAddress ? .green : Color.accentColor)
             .padding(.horizontal, 16)
             .padding(.vertical, 8)
             .background(
                 Capsule()
-                    .stroke(copiedLightningAddress ? Color.green : settings.accentColor, lineWidth: 1)
+                    .stroke(copiedLightningAddress ? Color.green : Color.accentColor, lineWidth: 1)
             )
         }
         .accessibilityLabel("Lightning address: \(npcService.lightningAddress)")
@@ -240,12 +238,12 @@ struct MainWalletView: View {
                 .font(.system(size: 12, weight: .bold, design: .default))
                 .tracking(0.5)
         }
-        .foregroundColor(settings.accentColor)
+        .foregroundStyle(Color.accentColor)
         .padding(.horizontal, 20)
         .padding(.vertical, 10)
         .background(
             Capsule()
-                .stroke(settings.accentColor, lineWidth: 1.5)
+                .stroke(Color.accentColor, lineWidth: 1.5)
         )
         .accessibilityElement(children: .combine)
         .accessibilityLabel("Pending balance: \(formatPendingAmount())")
@@ -282,13 +280,13 @@ struct MainWalletView: View {
             // Receive button
             Button(action: { showReceiveOptions = true }) {
                 Text("RECEIVE")
-                    .font(.cashuButton)
+                    .font(.callout.weight(.semibold))
                     .foregroundColor(.black)
                     .frame(maxWidth: .infinity)
                     .frame(height: 56) // Taller button
                     .background(
                         RoundedRectangle(cornerRadius: 28)
-                            .fill(settings.accentColor)
+                            .fill(Color.accentColor)
                     )
             }
             .accessibilityLabel("Receive")
@@ -298,11 +296,11 @@ struct MainWalletView: View {
             Button(action: { navigationManager.showScannerSheet = true }) {
                 Image(systemName: "viewfinder")
                     .font(.system(size: 24, weight: .medium, design: .default))
-                    .foregroundColor(settings.accentColor)
+.foregroundStyle(Color.accentColor)
                     .frame(width: 56, height: 56)
                     .overlay(
                         RoundedRectangle(cornerRadius: 16) // Squircle
-                            .stroke(settings.accentColor, lineWidth: 2)
+                            .stroke(Color.accentColor, lineWidth: 2)
                     )
             }
             .accessibilityLabel("Scan QR code")
@@ -311,13 +309,13 @@ struct MainWalletView: View {
             // Send button
             Button(action: { showSendOptions = true }) {
                 Text("SEND")
-                    .font(.cashuButton)
+                    .font(.callout.weight(.semibold))
                     .foregroundColor(.black)
                     .frame(maxWidth: .infinity)
                     .frame(height: 56) // Taller button
                     .background(
                         RoundedRectangle(cornerRadius: 28)
-                            .fill(settings.accentColor)
+                            .fill(Color.accentColor)
                     )
             }
             .accessibilityLabel("Send")
