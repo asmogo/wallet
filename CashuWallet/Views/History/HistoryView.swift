@@ -35,6 +35,7 @@ struct HistoryView: View {
                     }
                 }
             }
+            .listStyle(.plain)
             .navigationTitle("History")
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {

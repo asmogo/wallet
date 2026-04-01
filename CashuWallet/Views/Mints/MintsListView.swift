@@ -85,6 +85,7 @@ struct MintsListView: View {
                     Button("Paste URL from Clipboard", action: pasteMintUrlFromClipboard)
                 }
             }
+            .listStyle(.plain)
             .navigationTitle("Mints")
             .confirmationDialog(
                 "Remove Mint",

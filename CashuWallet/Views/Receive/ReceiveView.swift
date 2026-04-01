@@ -67,6 +67,7 @@ struct ReceiveView: View {
                     .accessibilityAddTraits(.isButton)
                 }
             }
+            .listStyle(.plain)
             .navigationTitle("Receive")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {

@@ -86,6 +86,7 @@ struct SettingsView: View {
                     }
                 }
             }
+            .listStyle(.plain)
             .navigationTitle("Settings")
             .sheet(isPresented: $showBackup) {
                 BackupView()
@@ -122,7 +123,7 @@ struct SettingsView: View {
     // MARK: - Detail Views
 
     private var backupDetailView: some View {
-        Form {
+        List {
             Section {
                 BackupSettingsSection(
                     showBackup: $showBackup,
@@ -130,11 +131,12 @@ struct SettingsView: View {
                 )
             }
         }
+        .listStyle(.plain)
         .navigationTitle("Backup & Restore")
     }
 
     private var lightningDetailView: some View {
-        Form {
+        List {
             Section {
                 LightningAddressSettingsSection(
                     copiedLightningAddress: $copiedLightningAddress,
@@ -143,11 +145,12 @@ struct SettingsView: View {
                 )
             }
         }
+        .listStyle(.plain)
         .navigationTitle("Lightning")
     }
 
     private var nostrDetailView: some View {
-        Form {
+        List {
             Section("Keys") {
                 NostrKeysSettingsSection(
                     showNsec: $showNsec,
@@ -167,20 +170,22 @@ struct SettingsView: View {
                 )
             }
         }
+        .listStyle(.plain)
         .navigationTitle("Nostr")
     }
 
     private var paymentRequestsDetailView: some View {
-        Form {
+        List {
             Section {
                 PaymentRequestsSettingsSection()
             }
         }
+        .listStyle(.plain)
         .navigationTitle("Payment Requests")
     }
 
     private var nwcDetailView: some View {
-        Form {
+        List {
             Section {
                 NWCSettingsSection(
                     nwcError: $nwcError,
@@ -189,11 +194,12 @@ struct SettingsView: View {
                 )
             }
         }
+        .listStyle(.plain)
         .navigationTitle("Nostr Wallet Connect")
     }
 
     private var p2pkDetailView: some View {
-        Form {
+        List {
             Section {
                 P2PKSettingsSection(
                     expandedP2PKKeys: $expandedP2PKKeys,
@@ -205,24 +211,27 @@ struct SettingsView: View {
                 )
             }
         }
+        .listStyle(.plain)
         .navigationTitle("P2PK")
     }
 
     private var privacyDetailView: some View {
-        Form {
+        List {
             Section {
                 PrivacySettingsSection()
             }
         }
+        .listStyle(.plain)
         .navigationTitle("Privacy")
     }
 
     private var appearanceDetailView: some View {
-        Form {
+        List {
             Section {
                 ThemeSettingsSection()
             }
         }
+        .listStyle(.plain)
         .navigationTitle("Appearance")
     }
 
