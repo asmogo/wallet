@@ -105,11 +105,11 @@ struct SendView: View {
                 TextField("0", text: $amountString)
                     .keyboardType(.numberPad)
                     .focused($amountFieldFocused)
-                    .font(.largeTitle.bold())
+                    .font(.title.bold())
                     .multilineTextAlignment(.center)
 
                 Text("sat")
-                    .font(.title3)
+                    .font(.subheadline)
                     .foregroundStyle(.secondary)
             }
             .accessibilityElement(children: .combine)

@@ -141,16 +141,16 @@ struct AmountEntryView: View {
             TextField("0", text: $amountString)
                 .keyboardType(.numberPad)
                 .focused($amountFieldFocused)
-                .font(.largeTitle.bold())
+                .font(.title.bold())
                 .foregroundColor(amountColor)
                 .multilineTextAlignment(.center)
                 .minimumScaleFactor(0.4)
                 .lineLimit(1)
-            
+
             // Unit label
             if !settings.useBitcoinSymbol {
                 Text("sat")
-                    .font(.title3)
+                    .font(.subheadline)
                     .foregroundStyle(.secondary)
             }
             
