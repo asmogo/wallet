@@ -121,7 +121,7 @@ struct ReceiveLightningView: View {
                     Text("CREATE INVOICE")
                 }
             }
-            .buttonStyle(.bordered).controlSize(.large)
+            .glassButton(prominent: true).controlSize(.large)
             .disabled(amountString.isEmpty || amountString == "0" || isCreatingInvoice)
             .accessibilityLabel(isCreatingInvoice ? "Creating invoice" : "Create invoice")
             .accessibilityHint("Creates a lightning invoice for \(amountString.isEmpty ? "0" : amountString) sats")
@@ -133,38 +133,38 @@ struct ReceiveLightningView: View {
     // MARK: - Lightning Address Card
     
     private var lightningAddressCard: some View {
-        GroupBox {
-            VStack(alignment: .leading, spacing: 8) {
-                Label("Lightning Address", systemImage: "bolt.fill")
-                    .font(.caption)
-                    .fontWeight(.medium)
-                    .foregroundStyle(.secondary)
+        VStack(alignment: .leading, spacing: 8) {
+            Label("Lightning Address", systemImage: "bolt.fill")
+                .font(.caption)
+                .fontWeight(.medium)
+                .foregroundStyle(.secondary)
 
-                Button(action: copyLightningAddress) {
-                    HStack {
-                        Text(npcService.lightningAddress)
-                            .font(.subheadline)
-                            .fontWeight(.medium)
-                            .lineLimit(1)
+            Button(action: copyLightningAddress) {
+                HStack {
+                    Text(npcService.lightningAddress)
+                        .font(.subheadline)
+                        .fontWeight(.medium)
+                        .lineLimit(1)
 
-                        Spacer()
+                    Spacer()
 
-                        Image(systemName: lightningAddressCopied ? "checkmark" : "doc.on.doc")
-                            .font(.caption)
-                            .foregroundColor(lightningAddressCopied ? .accentColor : .secondary)
-                            .accessibilityHidden(true)
-                    }
+                    Image(systemName: lightningAddressCopied ? "checkmark" : "doc.on.doc")
+                        .font(.caption)
+                        .foregroundColor(lightningAddressCopied ? .accentColor : .secondary)
+                        .accessibilityHidden(true)
                 }
-                .buttonStyle(PlainButtonStyle())
-                .accessibilityLabel("Lightning address: \(npcService.lightningAddress)")
-                .accessibilityHint("Copies lightning address to clipboard")
-                .accessibilityValue(lightningAddressCopied ? "Copied" : "")
-
-                Text("Anyone can send sats to this address")
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
             }
+            .buttonStyle(PlainButtonStyle())
+            .accessibilityLabel("Lightning address: \(npcService.lightningAddress)")
+            .accessibilityHint("Copies lightning address to clipboard")
+            .accessibilityValue(lightningAddressCopied ? "Copied" : "")
+
+            Text("Anyone can send sats to this address")
+                .font(.caption2)
+                .foregroundStyle(.secondary)
         }
+        .padding(12)
+        .liquidGlass(in: RoundedRectangle(cornerRadius: 10))
     }
     
     private func copyLightningAddress() {
@@ -181,28 +181,28 @@ struct ReceiveLightningView: View {
     
     private func mintSelector(mint: MintInfo) -> some View {
         Button(action: { showMintPicker = true }) {
-            GroupBox {
-                HStack(spacing: 12) {
-                    Image(systemName: "building.columns")
-                        .foregroundColor(.gray)
-                        .frame(width: 44, height: 44)
+            HStack(spacing: 12) {
+                Image(systemName: "building.columns")
+                    .foregroundColor(.gray)
+                    .frame(width: 44, height: 44)
 
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(mint.name)
-                            .font(.subheadline)
-                            .fontWeight(.medium)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(mint.name)
+                        .font(.subheadline)
+                        .fontWeight(.medium)
 
-                        Text("\(mint.balance) sat available")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-
-                    Spacer()
-
-                    Image(systemName: "chevron.down")
+                    Text("\(mint.balance) sat available")
+                        .font(.caption)
                         .foregroundStyle(.secondary)
                 }
+
+                Spacer()
+
+                Image(systemName: "chevron.down")
+                    .foregroundStyle(.secondary)
             }
+            .padding(12)
+            .liquidGlass(in: RoundedRectangle(cornerRadius: 10), interactive: true)
         }
         .buttonStyle(PlainButtonStyle())
         .accessibilityElement(children: .combine)
@@ -265,7 +265,7 @@ struct ReceiveLightningView: View {
                         Text(copyButtonText)
                     }
                 }
-                .buttonStyle(.bordered).controlSize(.large)
+                .glassButton().controlSize(.large)
                 .accessibilityLabel(copyButtonText == "COPIED" ? "Copied" : "Copy invoice")
                 .accessibilityHint("Copies the lightning invoice to clipboard")
                 .padding(.horizontal)
@@ -286,6 +286,7 @@ struct ReceiveLightningView: View {
             .foregroundColor(expiryTimeRemaining < 60 ? .red : .secondary)
             .padding(.horizontal, 12)
             .padding(.vertical, 6)
+            .liquidGlass(in: Capsule())
     }
     
     private func formatTimeRemaining(_ seconds: TimeInterval) -> String {

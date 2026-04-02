@@ -124,8 +124,7 @@ struct ReceiveTokenDetailView: View {
                             .foregroundColor(.red)
                             .font(.caption)
                             .padding()
-                            .background(Color.white.opacity(0.1))
-                            .cornerRadius(8)
+                            .liquidGlassMaterial(in: RoundedRectangle(cornerRadius: 8))
                     }
                 }
                 .padding()
@@ -152,7 +151,7 @@ struct ReceiveTokenDetailView: View {
                         Text("Receive")
                     }
                 }
-                .buttonStyle(.bordered)
+                .glassButton(prominent: true)
                 .controlSize(.large)
                 .disabled(isReceiving || !tokenLockedToKnownKey)
                 .accessibilityLabel(isReceiving ? "Receiving token" : "Receive \(tokenAmount) sats")

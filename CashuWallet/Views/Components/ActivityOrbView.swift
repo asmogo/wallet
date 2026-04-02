@@ -86,7 +86,7 @@ struct MutexLockOverlay: View {
                             .font(.headline)
                     }
                     .padding(40)
-                    .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 20))
+                    .liquidGlassMaterial(in: RoundedRectangle(cornerRadius: 20), material: .regularMaterial)
                 }
                 .transition(.opacity)
             }

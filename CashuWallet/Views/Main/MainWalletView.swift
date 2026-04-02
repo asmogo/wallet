@@ -86,7 +86,7 @@ struct MainWalletView: View {
                     .foregroundStyle(.secondary)
                     .padding(.horizontal, 16)
                     .padding(.vertical, 6)
-                    .background(.quaternary, in: Capsule())
+                    .liquidGlass(in: Capsule(), interactive: true)
             }
             .buttonStyle(.plain)
             .accessibilityLabel("Display unit: \(settings.unitLabel)")
@@ -160,13 +160,26 @@ struct MainWalletView: View {
     // MARK: - Action Buttons
 
     private var actionButtons: some View {
+        Group {
+            if #available(iOS 26, *) {
+                GlassEffectContainer(spacing: 12) {
+                    actionButtonsContent
+                }
+            } else {
+                actionButtonsContent
+            }
+        }
+        .padding(.horizontal, 24)
+    }
+
+    private var actionButtonsContent: some View {
         HStack(spacing: 12) {
             Button { showReceiveOptions = true } label: {
                 Text("Receive")
                     .font(.subheadline.weight(.medium))
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 14)
-                    .background(.quaternary, in: Capsule())
+                    .liquidGlass(in: Capsule(), interactive: true)
             }
             .accessibilityHint("Opens options to receive ecash or lightning payments")
 
@@ -174,7 +187,7 @@ struct MainWalletView: View {
                 Image(systemName: "viewfinder")
                     .font(.body)
                     .padding(14)
-                    .background(.quaternary, in: Circle())
+                    .liquidGlass(in: Circle(), interactive: true)
             }
             .accessibilityLabel("Scan QR code")
 
@@ -183,13 +196,12 @@ struct MainWalletView: View {
                     .font(.subheadline.weight(.medium))
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 14)
-                    .background(.quaternary, in: Capsule())
+                    .liquidGlass(in: Capsule(), interactive: true)
             }
             .accessibilityHint("Opens options to send ecash or pay lightning invoices")
         }
         .buttonStyle(.plain)
         .foregroundStyle(.primary)
-        .padding(.horizontal, 24)
     }
 
     // MARK: - Helpers

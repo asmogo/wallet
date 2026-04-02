@@ -98,38 +98,38 @@ struct AmountEntryView: View {
     
     private var mintSelectorSection: some View {
         Button(action: { showMintPicker = true }) {
-            GroupBox {
-                HStack(spacing: 12) {
-                    Image(systemName: "building.columns")
-                        .font(.callout)
-                        .foregroundStyle(.secondary)
-                        .frame(width: 40, height: 40)
+            HStack(spacing: 12) {
+                Image(systemName: "building.columns")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                    .frame(width: 40, height: 40)
 
-                    VStack(alignment: .leading, spacing: 2) {
-                        if let mint = walletManager.activeMint {
-                            Text(mint.name)
-                                .font(.subheadline)
-                                .fontWeight(.medium)
+                VStack(alignment: .leading, spacing: 2) {
+                    if let mint = walletManager.activeMint {
+                        Text(mint.name)
+                            .font(.subheadline)
+                            .fontWeight(.medium)
 
-                            if let maxAmount = maxAmount {
-                                Text("\(settings.formatAmountShort(maxAmount)) \(settings.unitSuffix) available")
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                            }
-                        } else {
-                            Text("Select Mint")
-                                .font(.subheadline)
+                        if let maxAmount = maxAmount {
+                            Text("\(settings.formatAmountShort(maxAmount)) \(settings.unitSuffix) available")
+                                .font(.caption)
                                 .foregroundStyle(.secondary)
                         }
+                    } else {
+                        Text("Select Mint")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
                     }
-
-                    Spacer()
-
-                    Image(systemName: "chevron.down")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
                 }
+
+                Spacer()
+
+                Image(systemName: "chevron.down")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
+            .padding(12)
+            .liquidGlass(in: RoundedRectangle(cornerRadius: 10), interactive: true)
         }
     }
     
@@ -184,7 +184,7 @@ struct AmountEntryView: View {
                 Text(buttonLabel)
             }
         }
-        .buttonStyle(.bordered).controlSize(.large)
+        .glassButton(prominent: true).controlSize(.large)
         .disabled(isButtonDisabled)
         .padding(.horizontal, 20)
         .padding(.bottom, 20)
@@ -233,29 +233,29 @@ struct MintPickerView: View {
                 dismiss()
             }
         }) {
-            GroupBox {
-                HStack(spacing: 12) {
-                    Image(systemName: "building.columns")
+            HStack(spacing: 12) {
+                Image(systemName: "building.columns")
+                    .foregroundStyle(Color.accentColor)
+                    .frame(width: 44, height: 44)
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(mint.name)
+                        .font(.headline)
+
+                    Text("\(mint.balance) sat")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+
+                Spacer()
+
+                if walletManager.activeMint?.id == mint.id {
+                    Image(systemName: "checkmark.circle.fill")
                         .foregroundStyle(Color.accentColor)
-                        .frame(width: 44, height: 44)
-
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(mint.name)
-                            .font(.headline)
-
-                        Text("\(mint.balance) sat")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-
-                    Spacer()
-
-                    if walletManager.activeMint?.id == mint.id {
-                        Image(systemName: "checkmark.circle.fill")
-                            .foregroundStyle(Color.accentColor)
-                    }
                 }
             }
+            .padding(12)
+            .liquidGlass(in: RoundedRectangle(cornerRadius: 10), interactive: true)
         }
     }
 }
@@ -374,7 +374,7 @@ struct TokenDisplayView: View {
                         Text(copied ? "Copied!" : "Copy")
                     }
                 }
-                .buttonStyle(.bordered).controlSize(.large)
+                .glassButton().controlSize(.large)
                 .padding(.horizontal, 20)
                 .padding(.bottom, 40)
         }

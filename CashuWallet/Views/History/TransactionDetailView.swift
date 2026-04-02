@@ -83,14 +83,14 @@ struct TransactionDetailView: View {
                                     Text(copyButtonText)
                                 }
                             }
-                            .buttonStyle(.bordered).controlSize(.large)
+                            .glassButton().controlSize(.large)
                             .accessibilityLabel(copyButtonText == "COPIED" ? "Copied" : "Copy \(transaction.kind == .ecash ? "token" : "invoice")")
                             .accessibilityHint("Copies the \(transaction.kind == .ecash ? "ecash token" : "lightning invoice") to clipboard")
 
                             Button(action: { showShareSheet = true }) {
                                 Image(systemName: "square.and.arrow.up")
                             }
-                            .buttonStyle(.bordered).controlSize(.large)
+                            .glassButton().controlSize(.large)
                             .frame(width: 50)
                             .accessibilityLabel("Share")
                             .accessibilityHint("Opens share sheet for this \(transaction.kind == .ecash ? "token" : "invoice")")

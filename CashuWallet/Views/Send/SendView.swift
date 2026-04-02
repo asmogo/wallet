@@ -140,7 +140,7 @@ struct SendView: View {
                     Text("SEND")
                 }
             }
-            .buttonStyle(.bordered).controlSize(.large)
+            .glassButton(prominent: true).controlSize(.large)
             .disabled(!canSend || isGenerating)
             .padding(.horizontal)
             .padding(.vertical, 20)
@@ -181,14 +181,9 @@ struct SendView: View {
     private func mintSelector(mint: MintInfo) -> some View {
         Button(action: { showMintPicker = true }) {
             HStack(spacing: 12) {
-                // Mint icon
-                Circle()
-                    .fill(Color(uiColor: .secondarySystemGroupedBackground))
+                Image(systemName: "building.columns")
+                    .foregroundColor(.gray)
                     .frame(width: 44, height: 44)
-                    .overlay(
-                        Image(systemName: "building.columns")
-                            .foregroundColor(.gray)
-                    )
 
                 VStack(alignment: .leading, spacing: 2) {
                     Text(mint.name)
@@ -205,10 +200,8 @@ struct SendView: View {
                 Image(systemName: "chevron.down")
                     .foregroundStyle(.secondary)
             }
-            .padding()
-            .background {
-                GroupBox { EmptyView() }
-            }
+            .padding(12)
+            .liquidGlass(in: RoundedRectangle(cornerRadius: 10), interactive: true)
         }
         .buttonStyle(PlainButtonStyle())
         .accessibilityElement(children: .combine)
@@ -224,8 +217,7 @@ struct SendView: View {
     }
 
     private var p2pkLockSection: some View {
-        GroupBox {
-            VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: 8) {
                 Toggle(isOn: $lockWithP2PK.animation(.easeInOut(duration: 0.2))) {
                     VStack(alignment: .leading, spacing: 2) {
                         Text("Lock ecash to P2PK key")
@@ -278,7 +270,8 @@ struct SendView: View {
                     }
                 }
             }
-        }
+        .padding(12)
+        .liquidGlass(in: RoundedRectangle(cornerRadius: 10))
     }
 
     // MARK: - Token Display View
@@ -352,17 +345,17 @@ struct SendView: View {
                 .accessibilityLabel("Amount: \(amountString) sats")
 
             // Details
-            GroupBox {
-                VStack(spacing: 12) {
-                    LabeledContent("Fee", value: "\(tokenFee) sat")
-                    LabeledContent("Unit", value: "SAT")
-                    LabeledContent("Status", value: tokenClaimed ? "Claimed" : "Pending")
-                    if let mint = walletManager.activeMint {
-                        LabeledContent("Mint", value: extractMintHost(mint.url))
-                    }
+            VStack(spacing: 12) {
+                LabeledContent("Fee", value: "\(tokenFee) sat")
+                LabeledContent("Unit", value: "SAT")
+                LabeledContent("Status", value: tokenClaimed ? "Claimed" : "Pending")
+                if let mint = walletManager.activeMint {
+                    LabeledContent("Mint", value: extractMintHost(mint.url))
                 }
-                .font(.subheadline)
             }
+            .font(.subheadline)
+            .padding(12)
+            .liquidGlass(in: RoundedRectangle(cornerRadius: 10))
             .padding(.horizontal)
 
             Spacer()
@@ -373,7 +366,7 @@ struct SendView: View {
                 Button(action: { dismiss() }) {
                     Text("DONE")
                 }
-                .buttonStyle(.bordered).controlSize(.large)
+                .glassButton().controlSize(.large)
                 .accessibilityLabel("Done")
                 .accessibilityHint("Closes the send screen")
                 .padding(.horizontal)
@@ -390,7 +383,7 @@ struct SendView: View {
                             Text("CHECK STATUS")
                         }
                     }
-                    .buttonStyle(.bordered).controlSize(.large)
+                    .glassButton().controlSize(.large)
                     .accessibilityLabel(isCheckingClaim ? "Checking status" : "Check status")
                     .accessibilityHint("Checks if the ecash token has been claimed")
                     .padding(.horizontal)
@@ -404,14 +397,14 @@ struct SendView: View {
                             Text(copyButtonText)
                         }
                     }
-                    .buttonStyle(.bordered).controlSize(.large)
+                    .glassButton().controlSize(.large)
                     .accessibilityLabel(copyButtonText == "COPIED" ? "Copied" : "Copy token")
                     .accessibilityHint("Copies the ecash token to clipboard")
 
                     Button(action: { showShareSheet = true }) {
                         Image(systemName: "square.and.arrow.up")
                     }
-                    .buttonStyle(.bordered).controlSize(.large)
+                    .glassButton().controlSize(.large)
                     .frame(width: 50)
                     .accessibilityLabel("Share token")
                     .accessibilityHint("Opens share sheet to share the ecash token")
@@ -650,9 +643,7 @@ struct MeltView: View {
                 .scrollContentBackground(.hidden)
                 .frame(height: 100)
                 .padding()
-                .background {
-                    GroupBox { EmptyView() }
-                }
+                .liquidGlass(in: RoundedRectangle(cornerRadius: 10))
                 .padding(.horizontal)
                 .accessibilityLabel("Lightning invoice or address")
                 .accessibilityHint("Enter a lightning invoice, offer, or BIP 353 address")
@@ -683,7 +674,7 @@ struct MeltView: View {
                     Text("Paste from Clipboard")
                 }
             }
-            .buttonStyle(.bordered).controlSize(.large)
+            .glassButton().controlSize(.large)
             .accessibilityLabel("Paste from Clipboard")
             .accessibilityHint("Pastes invoice or address from clipboard")
             .padding(.horizontal)
@@ -705,7 +696,7 @@ struct MeltView: View {
                     Text("GET QUOTE")
                 }
             }
-            .buttonStyle(.bordered).controlSize(.large)
+            .glassButton(prominent: true).controlSize(.large)
             .disabled(!canGetQuote || isGettingQuote)
             .accessibilityLabel(isGettingQuote ? "Getting quote" : "Get quote")
             .accessibilityHint("Fetches a payment quote for this invoice")
@@ -738,21 +729,21 @@ struct MeltView: View {
                 .foregroundStyle(.secondary)
                 .accessibilityHidden(true)
 
-            GroupBox {
-                VStack(spacing: 16) {
-                    LabeledContent("Amount", value: "\(quote.amount) sat")
-                    LabeledContent("Fee", value: "\(quote.feeReserve) sat")
-                    Divider()
-                    LabeledContent {
-                        Text("\(quote.totalAmount) sat")
-                            .fontWeight(.bold)
-                            .foregroundStyle(Color.accentColor)
-                    } label: {
-                        Text("Total")
-                    }
+            VStack(spacing: 16) {
+                LabeledContent("Amount", value: "\(quote.amount) sat")
+                LabeledContent("Fee", value: "\(quote.feeReserve) sat")
+                Divider()
+                LabeledContent {
+                    Text("\(quote.totalAmount) sat")
+                        .fontWeight(.bold)
+                        .foregroundStyle(Color.accentColor)
+                } label: {
+                    Text("Total")
                 }
-                .font(.subheadline)
             }
+            .font(.subheadline)
+            .padding(12)
+            .liquidGlass(in: RoundedRectangle(cornerRadius: 10))
             .padding(.horizontal)
 
             if let error = errorMessage {
@@ -770,7 +761,7 @@ struct MeltView: View {
                     Text("PAY \(quote.totalAmount) SAT")
                 }
             }
-            .buttonStyle(.bordered).controlSize(.large)
+            .glassButton(prominent: true).controlSize(.large)
             .disabled(isPaying)
             .accessibilityLabel(isPaying ? "Processing payment" : "Pay \(quote.totalAmount) sats")
             .accessibilityHint("Sends lightning payment")
@@ -799,7 +790,7 @@ struct MeltView: View {
             Button(action: { dismiss() }) {
                 Text("DONE")
             }
-            .buttonStyle(.bordered).controlSize(.large)
+            .glassButton().controlSize(.large)
             .accessibilityLabel("Done")
             .accessibilityHint("Closes the payment screen")
             .padding(.horizontal)
@@ -947,7 +938,7 @@ struct MeltViewWithInvoice: View {
             Button(action: getQuote) {
                 Text("TRY AGAIN")
             }
-            .buttonStyle(.bordered).controlSize(.large)
+            .glassButton().controlSize(.large)
             .accessibilityLabel("Try again")
             .accessibilityHint("Retries fetching the payment quote")
             .padding(.horizontal)
@@ -969,21 +960,21 @@ struct MeltViewWithInvoice: View {
                 .foregroundStyle(.secondary)
                 .accessibilityHidden(true)
 
-            GroupBox {
-                VStack(spacing: 16) {
-                    LabeledContent("Amount", value: "\(quote.amount) sat")
-                    LabeledContent("Fee", value: "\(quote.feeReserve) sat")
-                    Divider()
-                    LabeledContent {
-                        Text("\(quote.totalAmount) sat")
-                            .fontWeight(.bold)
-                            .foregroundStyle(Color.accentColor)
-                    } label: {
-                        Text("Total")
-                    }
+            VStack(spacing: 16) {
+                LabeledContent("Amount", value: "\(quote.amount) sat")
+                LabeledContent("Fee", value: "\(quote.feeReserve) sat")
+                Divider()
+                LabeledContent {
+                    Text("\(quote.totalAmount) sat")
+                        .fontWeight(.bold)
+                        .foregroundStyle(Color.accentColor)
+                } label: {
+                    Text("Total")
                 }
-                .font(.subheadline)
             }
+            .font(.subheadline)
+            .padding(12)
+            .liquidGlass(in: RoundedRectangle(cornerRadius: 10))
             .padding(.horizontal)
 
             if let error = errorMessage {
@@ -1001,7 +992,7 @@ struct MeltViewWithInvoice: View {
                     Text("PAY \(quote.totalAmount) SAT")
                 }
             }
-            .buttonStyle(.bordered).controlSize(.large)
+            .glassButton(prominent: true).controlSize(.large)
             .disabled(isPaying)
             .accessibilityLabel(isPaying ? "Processing payment" : "Pay \(quote.totalAmount) sats")
             .accessibilityHint("Sends lightning payment")
@@ -1031,7 +1022,7 @@ struct MeltViewWithInvoice: View {
             }) {
                 Text("DONE")
             }
-            .buttonStyle(.bordered).controlSize(.large)
+            .glassButton().controlSize(.large)
             .accessibilityLabel("Done")
             .accessibilityHint("Closes the payment screen")
             .padding(.horizontal)
@@ -1174,7 +1165,7 @@ struct MeltViewWithAddress: View {
                     Text("GET QUOTE")
                 }
             }
-            .buttonStyle(.bordered).controlSize(.large)
+            .glassButton(prominent: true).controlSize(.large)
             .disabled(!canGetQuote || isGettingQuote)
             .accessibilityLabel(isGettingQuote ? "Getting quote" : "Get quote")
             .accessibilityHint("Fetches a payment quote for this address")
@@ -1202,22 +1193,22 @@ struct MeltViewWithAddress: View {
                 .foregroundStyle(.secondary)
                 .accessibilityHidden(true)
 
-            GroupBox {
-                VStack(spacing: 16) {
-                    LabeledContent("To", value: address)
-                    LabeledContent("Amount", value: "\(quote.amount) sat")
-                    LabeledContent("Fee", value: "\(quote.feeReserve) sat")
-                    Divider()
-                    LabeledContent {
-                        Text("\(quote.totalAmount) sat")
-                            .fontWeight(.bold)
-                            .foregroundStyle(Color.accentColor)
-                    } label: {
-                        Text("Total")
-                    }
+            VStack(spacing: 16) {
+                LabeledContent("To", value: address)
+                LabeledContent("Amount", value: "\(quote.amount) sat")
+                LabeledContent("Fee", value: "\(quote.feeReserve) sat")
+                Divider()
+                LabeledContent {
+                    Text("\(quote.totalAmount) sat")
+                        .fontWeight(.bold)
+                        .foregroundStyle(Color.accentColor)
+                } label: {
+                    Text("Total")
                 }
-                .font(.subheadline)
             }
+            .font(.subheadline)
+            .padding(12)
+            .liquidGlass(in: RoundedRectangle(cornerRadius: 10))
             .padding(.horizontal)
 
             if let error = errorMessage {
@@ -1235,7 +1226,7 @@ struct MeltViewWithAddress: View {
                     Text("PAY \(quote.totalAmount) SAT")
                 }
             }
-            .buttonStyle(.bordered).controlSize(.large)
+            .glassButton(prominent: true).controlSize(.large)
             .disabled(isPaying)
             .accessibilityLabel(isPaying ? "Processing payment" : "Pay \(quote.totalAmount) sats")
             .accessibilityHint("Sends lightning payment to \(address)")
@@ -1265,7 +1256,7 @@ struct MeltViewWithAddress: View {
             }) {
                 Text("DONE")
             }
-            .buttonStyle(.bordered).controlSize(.large)
+            .glassButton().controlSize(.large)
             .accessibilityLabel("Done")
             .accessibilityHint("Closes the payment screen")
             .padding(.horizontal)

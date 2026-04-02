@@ -95,7 +95,7 @@ struct OnboardingView: View {
             Button(action: { currentStep = .createOrRestore }) {
                 Text("GET STARTED")
             }
-            .buttonStyle(.bordered).controlSize(.large)
+            .glassButton(prominent: true).controlSize(.large)
             .padding(.bottom, 40)
         }
         .padding()
@@ -139,7 +139,7 @@ struct OnboardingView: View {
                     }
                 }
             }
-            .buttonStyle(.bordered).controlSize(.large)
+            .glassButton(prominent: true).controlSize(.large)
             .disabled(isCreating)
 
             // Restore wallet
@@ -149,7 +149,7 @@ struct OnboardingView: View {
                     Text("RESTORE FROM SEED")
                 }
             }
-            .buttonStyle(.bordered).controlSize(.large)
+            .glassButton().controlSize(.large)
 
             Spacer()
 
@@ -185,19 +185,13 @@ struct OnboardingView: View {
             // Mnemonic words
             let words = walletManager.getMnemonicWords()
 
-            LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
-                ForEach(Array(words.enumerated()), id: \.offset) { index, word in
-                    GroupBox {
-                        HStack(spacing: 4) {
-                            Text("\(index + 1).")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                                .frame(width: 20, alignment: .trailing)
-
-                            Text(word)
-                                .font(.system(.body, design: .monospaced))
-                        }
+            Group {
+                if #available(iOS 26, *) {
+                    GlassEffectContainer(spacing: 12) {
+                        mnemonicWordsGrid(words: words)
                     }
+                } else {
+                    mnemonicWordsGrid(words: words)
                 }
             }
             .padding()
@@ -208,7 +202,7 @@ struct OnboardingView: View {
             Button(action: startVerification) {
                 Text("I'VE SAVED MY SEED PHRASE")
             }
-            .buttonStyle(.bordered).controlSize(.large)
+            .glassButton(prominent: true).controlSize(.large)
             .padding(.bottom, 40)
         }
         .padding()
@@ -241,7 +235,7 @@ struct OnboardingView: View {
             Button(action: checkVerification) {
                 Text("CONFIRM")
             }
-            .buttonStyle(.bordered).controlSize(.large)
+            .glassButton(prominent: true).controlSize(.large)
             .disabled(verificationAnswers.count < verificationIndices.count)
 
             Button(action: { currentStep = .showMnemonic }) {
@@ -275,11 +269,30 @@ struct OnboardingView: View {
                                     .frame(maxWidth: .infinity)
                                     .padding(.vertical, 10)
                             }
-                            .buttonStyle(.bordered)
+                            .glassButton()
                             .tint(verificationAnswers[index] == option ? .accentColor : .secondary)
                         }
                     }
                 }
+            }
+        }
+    }
+
+    private func mnemonicWordsGrid(words: [String]) -> some View {
+        LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
+            ForEach(Array(words.enumerated()), id: \.offset) { index, word in
+                HStack(spacing: 4) {
+                    Text("\(index + 1).")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .frame(width: 20, alignment: .trailing)
+
+                    Text(word)
+                        .font(.system(.body, design: .monospaced))
+                }
+                .padding(.horizontal, 8)
+                .padding(.vertical, 6)
+                .liquidGlass(in: RoundedRectangle(cornerRadius: 8))
             }
         }
     }
@@ -380,7 +393,7 @@ struct OnboardingView: View {
                     Text("NEXT")
                 }
             }
-            .buttonStyle(.bordered).controlSize(.large)
+            .glassButton(prominent: true).controlSize(.large)
             .disabled(wordCount != 12 || isRestoring)
 
             // Back button
@@ -419,15 +432,13 @@ struct OnboardingView: View {
                 Button(action: addMintUrl) {
                     Label("Add", systemImage: "plus")
                 }
-                .buttonStyle(.bordered)
-                .controlSize(.small)
+                .glassButton().controlSize(.small)
                 .disabled(mintUrlInput.isEmpty)
 
                 Button(action: pasteMintUrlsFromClipboard) {
                     Label("Paste from clipboard", systemImage: "doc.on.clipboard")
                 }
-                .buttonStyle(.bordered)
-                .controlSize(.small)
+                .glassButton().controlSize(.small)
                 .accessibilityLabel("Paste mint URLs from clipboard")
             }
             .padding(.horizontal)
@@ -477,26 +488,26 @@ struct OnboardingView: View {
                 let totalRecovered = restoreResults.reduce(UInt64(0)) { $0 + $1.unspent }
                 let totalPending = restoreResults.reduce(UInt64(0)) { $0 + $1.pending }
 
-                GroupBox {
-                    VStack(spacing: 6) {
-                        if totalRecovered > 0 {
-                            Label("Recovered: \(totalRecovered) sats", systemImage: "checkmark.circle.fill")
-                                .font(.subheadline)
-                                .fontWeight(.semibold)
-                                .foregroundStyle(.green)
-                        }
-                        if totalPending > 0 {
-                            Label("Pending: \(totalPending) sats", systemImage: "clock.fill")
-                                .font(.subheadline)
-                                .foregroundStyle(.orange)
-                        }
-                        if totalRecovered == 0 && totalPending == 0 {
-                            Label("No ecash found on these mints", systemImage: "info.circle")
-                                .font(.subheadline)
-                                .foregroundStyle(.secondary)
-                        }
+                VStack(spacing: 6) {
+                    if totalRecovered > 0 {
+                        Label("Recovered: \(totalRecovered) sats", systemImage: "checkmark.circle.fill")
+                            .font(.subheadline)
+                            .fontWeight(.semibold)
+                            .foregroundStyle(.green)
+                    }
+                    if totalPending > 0 {
+                        Label("Pending: \(totalPending) sats", systemImage: "clock.fill")
+                            .font(.subheadline)
+                            .foregroundStyle(.orange)
+                    }
+                    if totalRecovered == 0 && totalPending == 0 {
+                        Label("No ecash found on these mints", systemImage: "info.circle")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
                     }
                 }
+                .padding(12)
+                .liquidGlass(in: RoundedRectangle(cornerRadius: 10))
                 .padding(.horizontal)
             }
 
@@ -519,7 +530,7 @@ struct OnboardingView: View {
                             }
                         }
                     }
-                    .buttonStyle(.bordered).controlSize(.large)
+                    .glassButton().controlSize(.large)
                     .disabled(isRestoringMints)
                 }
 
@@ -528,13 +539,13 @@ struct OnboardingView: View {
                     Button(action: finishRestore) {
                         Text("SKIP")
                     }
-                    .buttonStyle(.bordered).controlSize(.large)
+                    .glassButton().controlSize(.large)
                     .disabled(isRestoringMints)
                 } else {
                     Button(action: finishRestore) {
                         Text("CONTINUE")
                     }
-                    .buttonStyle(.bordered).controlSize(.large)
+                    .glassButton(prominent: true).controlSize(.large)
                     .disabled(isRestoringMints)
                 }
             }
@@ -558,8 +569,7 @@ struct OnboardingView: View {
     // MARK: - Mint Row
 
     private func mintRow(url: String, result: RestoreMintResult?, isRestoring: Bool) -> some View {
-        GroupBox {
-            HStack(spacing: 12) {
+        HStack(spacing: 12) {
                 // Status icon
                 if isRestoring {
                     ProgressView()
@@ -612,7 +622,8 @@ struct OnboardingView: View {
                     }
                 }
             }
-        }
+        .padding(12)
+        .liquidGlass(in: RoundedRectangle(cornerRadius: 10))
     }
 
     private func shortenUrl(_ url: String) -> String {

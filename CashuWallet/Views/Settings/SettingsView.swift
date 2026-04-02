@@ -263,6 +263,7 @@ struct SettingsView: View {
         }
         .padding(.horizontal)
         .padding(.vertical, 12)
+        .liquidGlass(in: RoundedRectangle(cornerRadius: 12), interactive: true)
         .contentShape(Rectangle())
     }
 
@@ -323,7 +324,7 @@ struct QRCodeDetailSheet: View {
                         Text(copied ? "Copied" : "Copy")
                     }
                 }
-                .buttonStyle(.bordered).controlSize(.large)
+                .glassButton().controlSize(.large)
                 .padding(.horizontal)
 
                 Spacer()
@@ -438,7 +439,11 @@ struct BackupView: View {
                     let mnemonic = words.joined(separator: " ")
                     let hiddenMnemonic = words.map { String(repeating: "\u{2022}", count: max(3, $0.count)) }.joined(separator: " ")
 
-                    GroupBox("Seed phrase") {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Seed phrase")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .textCase(.uppercase)
                         HStack(spacing: 10) {
                             Text(showWords ? mnemonic : hiddenMnemonic)
                                 .font(.system(.body, design: .monospaced))
@@ -460,12 +465,14 @@ struct BackupView: View {
                             }
                         }
                     }
+                    .padding(12)
+                    .liquidGlass(in: RoundedRectangle(cornerRadius: 10))
                     .padding(.horizontal)
 
                     Spacer(minLength: 50)
 
                     Button("Done") { dismiss() }
-                        .buttonStyle(.bordered).controlSize(.large)
+                        .glassButton().controlSize(.large)
                         .padding(.horizontal)
                         .padding(.bottom, 30)
                 }

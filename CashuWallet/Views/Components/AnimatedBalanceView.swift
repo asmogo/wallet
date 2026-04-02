@@ -94,8 +94,7 @@ struct BalanceCardView: View {
                         .fontWeight(.bold)
                 }
             }
-            .buttonStyle(.bordered)
-            .controlSize(.small)
+            .glassButton().controlSize(.small)
             .accessibilityLabel("Unit: \(settings.unitLabel)")
             .accessibilityHint("Toggles the display unit")
             .padding(.top, 20)

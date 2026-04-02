@@ -22,6 +22,7 @@
 		110000000000000E /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 210000000000000E /* SettingsView.swift */; };
 		1100000000000010 /* QRCodeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2100000000000010 /* QRCodeView.swift */; };
 		1100000000000012 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 2100000000000012 /* Assets.xcassets */; };
+		264054F18D12335595328FBC /* LiquidGlassModifiers.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3DC08FE85DFC643906176894 /* LiquidGlassModifiers.swift */; };
 		6A0AAAF92F519448005FDBA1 /* CashuDevKit in Frameworks */ = {isa = PBXBuildFile; productRef = 6AC5D9892F43591D00A3E113 /* CashuDevKit */; };
 		6A8EC9302F2442F00058C21B /* SettingsManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6A8EC92F2F2442EF0058C21B /* SettingsManager.swift */; };
 		6A8EC9322F2448B60058C21B /* MintDiscoveryManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6A8EC9312F2448B60058C21B /* MintDiscoveryManager.swift */; };
@@ -79,6 +80,7 @@
 		210000000000000E /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
 		2100000000000010 /* QRCodeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QRCodeView.swift; sourceTree = "<group>"; };
 		2100000000000012 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		3DC08FE85DFC643906176894 /* LiquidGlassModifiers.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = LiquidGlassModifiers.swift; sourceTree = "<group>"; };
 		6A8EC92F2F2442EF0058C21B /* SettingsManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsManager.swift; sourceTree = "<group>"; };
 		6A8EC9312F2448B60058C21B /* MintDiscoveryManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MintDiscoveryManager.swift; sourceTree = "<group>"; };
 		6A8EC9332F244BD80058C21B /* ScannerWrapperView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScannerWrapperView.swift; sourceTree = "<group>"; };
@@ -290,6 +292,7 @@
 				2100000000000010 /* QRCodeView.swift */,
 				6A8EC9372F2450000058C21B /* NotificationBadgeView.swift */,
 				DD00000000000014 /* ErrorBannerView.swift */,
+				3DC08FE85DFC643906176894 /* LiquidGlassModifiers.swift */,
 			);
 			path = Components;
 			sourceTree = "<group>";
@@ -459,6 +462,7 @@
 				DD00000000000002 /* BIP39WordList.swift in Sources */,
 				DD00000000000003 /* HapticFeedback.swift in Sources */,
 				DD00000000000004 /* ErrorBannerView.swift in Sources */,
+				264054F18D12335595328FBC /* LiquidGlassModifiers.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
