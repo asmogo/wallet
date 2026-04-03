@@ -34,73 +34,74 @@ struct SettingsView: View {
 
     var body: some View {
         NavigationStack {
-            ScrollView {
-                VStack(spacing: 8) {
+            List {
+                Section {
                     NavigationLink { backupDetailView } label: {
-                        settingsRow("Backup & Restore", icon: "key.fill")
+                        settingsLabel("Backup & Restore", icon: "key.fill")
                     }
+                    .listRowSeparator(.hidden)
                     NavigationLink { lightningDetailView } label: {
-                        settingsRow("Lightning", icon: "bolt.fill")
+                        settingsLabel("Lightning", icon: "bolt.fill")
                     }
+                    .listRowSeparator(.hidden)
                     NavigationLink { nostrDetailView } label: {
-                        settingsRow("Nostr", icon: "person.circle")
+                        settingsLabel("Nostr", icon: "person.circle")
                     }
+                    .listRowSeparator(.hidden)
                     NavigationLink { paymentRequestsDetailView } label: {
-                        settingsRow("Payment Requests", icon: "arrow.left.arrow.right")
+                        settingsLabel("Payment Requests", icon: "arrow.left.arrow.right")
                     }
+                    .listRowSeparator(.hidden)
                     NavigationLink { nwcDetailView } label: {
-                        settingsRow("Nostr Wallet Connect", icon: "link")
+                        settingsLabel("Nostr Wallet Connect", icon: "link")
                     }
+                    .listRowSeparator(.hidden)
                     NavigationLink { p2pkDetailView } label: {
-                        settingsRow("P2PK", icon: "lock.fill")
+                        settingsLabel("P2PK", icon: "lock.fill")
                     }
+                    .listRowSeparator(.hidden)
                     NavigationLink { privacyDetailView } label: {
-                        settingsRow("Privacy", icon: "eye.slash")
+                        settingsLabel("Privacy", icon: "eye.slash")
                     }
+                    .listRowSeparator(.hidden)
                     NavigationLink { appearanceDetailView } label: {
-                        settingsRow("Appearance", icon: "paintbrush")
+                        settingsLabel("Appearance", icon: "paintbrush")
                     }
+                    .listRowSeparator(.hidden)
+                }
 
-                    Divider()
-                        .padding(.vertical, 12)
+                Section {
+                    LabeledContent("Balance", value: settings.formatAmount(walletManager.balance))
+                        .listRowSeparator(.hidden)
+                    LabeledContent("Mints", value: "\(walletManager.mints.count)")
+                        .listRowSeparator(.hidden)
+                    LabeledContent("Unit", value: settings.unitLabel)
+                        .listRowSeparator(.hidden)
+                    LabeledContent("Version", value: "1.0.0")
+                        .listRowSeparator(.hidden)
+                }
 
-                    VStack(spacing: 4) {
-                        LabeledContent("Balance", value: settings.formatAmount(walletManager.balance))
-                        LabeledContent("Mints", value: "\(walletManager.mints.count)")
-                        LabeledContent("Unit", value: settings.unitLabel)
-                        LabeledContent("Version", value: "1.0.0")
-                    }
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                    .padding(.horizontal)
-
-                    Divider()
-                        .padding(.vertical, 12)
-
+                Section {
                     Link(destination: URL(string: "https://cashu.space")!) {
-                        settingsRow("Learn about Cashu", icon: "globe")
+                        settingsLabel("Learn about Cashu", icon: "globe")
                     }
+                    .listRowSeparator(.hidden)
                     Link(destination: URL(string: "https://github.com/cashubtc/nuts")!) {
-                        settingsRow("Protocol Specs (NUTs)", icon: "doc.text")
+                        settingsLabel("Protocol Specs (NUTs)", icon: "doc.text")
                     }
+                    .listRowSeparator(.hidden)
+                }
 
-                    Divider()
-                        .padding(.vertical, 12)
-
+                Section {
                     Button(role: .destructive) {
                         showDeleteConfirm = true
                     } label: {
-                        HStack {
-                            Image(systemName: "trash")
-                            Text("Delete Wallet")
-                            Spacer()
-                        }
-                        .padding(.horizontal)
-                        .padding(.vertical, 12)
+                        settingsLabel("Delete Wallet", icon: "trash", role: .destructive)
                     }
+                    .listRowSeparator(.hidden)
                 }
-                .padding(.vertical)
             }
+            .listStyle(.plain)
             .navigationTitle("Settings")
             .sheet(isPresented: $showBackup) {
                 BackupView()
@@ -251,20 +252,15 @@ struct SettingsView: View {
 
     // MARK: - Helpers
 
-    private func settingsRow(_ title: String, icon: String) -> some View {
-        HStack(spacing: 14) {
-            Image(systemName: icon)
-                .frame(width: 24)
+    private func settingsLabel(_ title: String, icon: String, role: ButtonRole? = nil) -> some View {
+        Label {
             Text(title)
-            Spacer()
-            Image(systemName: "chevron.right")
-                .font(.caption)
-                .foregroundStyle(.secondary)
+        } icon: {
+            Image(systemName: icon)
+                .font(.system(size: 16, weight: .semibold))
+                .foregroundStyle(role == .destructive ? .red : .secondary)
         }
-        .padding(.horizontal)
-        .padding(.vertical, 12)
-        .liquidGlass(in: RoundedRectangle(cornerRadius: 12), interactive: true)
-        .contentShape(Rectangle())
+        .foregroundStyle(role == .destructive ? .red : .primary)
     }
 
     private func deleteWallet() {

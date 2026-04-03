@@ -8,8 +8,7 @@ struct MainWalletView: View {
     @ObservedObject var npcService = NPCService.shared
     @ObservedObject var nostrService = NostrService.shared
 
-    @State private var showReceiveOptions = false
-    @State private var showSendOptions = false
+    @State private var activeSheet: WalletSheet?
     @State private var notification: (message: String, amount: UInt64?, fee: UInt64?)?
     @State private var showNotification = false
     @State private var isRefreshing = false
@@ -44,20 +43,8 @@ struct MainWalletView: View {
                 actionButtons
                     .padding(.bottom, 40)
             }
-            .sheet(isPresented: $showReceiveOptions) {
-                ReceiveView()
-                    .environmentObject(walletManager)
-                    .presentationDetents([.large])
-            }
-            .sheet(isPresented: $showSendOptions) {
-                SendView()
-                    .environmentObject(walletManager)
-                    .presentationDetents([.large])
-            }
-            .sheet(isPresented: $navigationManager.showScannerSheet) {
-                ScannerWrapperView()
-                    .environmentObject(walletManager)
-                    .presentationDetents([.large])
+            .sheet(item: $activeSheet) { sheet in
+                sheetView(for: sheet)
             }
         }
         .onReceive(NotificationCenter.default.publisher(for: .cashuTokenReceived)) { notification in
@@ -174,7 +161,7 @@ struct MainWalletView: View {
 
     private var actionButtonsContent: some View {
         HStack(spacing: 12) {
-            Button { showReceiveOptions = true } label: {
+            Button { activeSheet = .chooser(.receive) } label: {
                 Text("Receive")
                     .font(.subheadline.weight(.medium))
                     .frame(maxWidth: .infinity)
@@ -183,7 +170,7 @@ struct MainWalletView: View {
             }
             .accessibilityHint("Opens options to receive ecash or lightning payments")
 
-            Button { navigationManager.showScannerSheet = true } label: {
+            Button { activeSheet = .scanner } label: {
                 Image(systemName: "viewfinder")
                     .font(.body)
                     .padding(14)
@@ -191,7 +178,7 @@ struct MainWalletView: View {
             }
             .accessibilityLabel("Scan QR code")
 
-            Button { showSendOptions = true } label: {
+            Button { activeSheet = .chooser(.send) } label: {
                 Text("Send")
                     .font(.subheadline.weight(.medium))
                     .frame(maxWidth: .infinity)
@@ -240,6 +227,173 @@ struct MainWalletView: View {
         await walletManager.loadTransactions()
         try? await Task.sleep(nanoseconds: 500_000_000)
         isRefreshing = false
+    }
+
+    @ViewBuilder
+    private func sheetView(for sheet: WalletSheet) -> some View {
+        switch sheet {
+        case .chooser(let action):
+            WalletActionSheetView(
+                action: action,
+                onClose: { activeSheet = nil },
+                onScan: { activeSheet = .scanner },
+                onSelect: { flow in activeSheet = .flow(flow) }
+            )
+            .presentationDragIndicator(.visible)
+            .modifier(ChooserSheetPresentation())
+        case .scanner:
+            ScannerWrapperView()
+                .environmentObject(walletManager)
+                .presentationDetents([.large])
+        case .flow(let flow):
+            flowView(for: flow)
+        }
+    }
+
+    @ViewBuilder
+    private func flowView(for flow: WalletFlow) -> some View {
+        switch flow {
+        case .receiveEcash:
+            ReceiveEcashView()
+                .environmentObject(walletManager)
+                .presentationDetents([.large])
+        case .receiveLightning:
+            ReceiveLightningView()
+                .environmentObject(walletManager)
+                .presentationDetents([.large])
+        case .sendEcash:
+            SendView()
+                .environmentObject(walletManager)
+                .presentationDetents([.large])
+        case .sendLightning:
+            MeltView()
+                .environmentObject(walletManager)
+                .presentationDetents([.large])
+        }
+    }
+}
+
+private enum WalletActionSheet: String, Identifiable {
+    case receive
+    case send
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .receive: return "Receive"
+        case .send: return "Send"
+        }
+    }
+
+    var primaryOption: WalletFlow {
+        switch self {
+        case .receive: return .receiveEcash
+        case .send: return .sendEcash
+        }
+    }
+
+    var secondaryOption: WalletFlow {
+        switch self {
+        case .receive: return .receiveLightning
+        case .send: return .sendLightning
+        }
+    }
+}
+
+private enum WalletFlow: String, Identifiable {
+    case receiveEcash
+    case receiveLightning
+    case sendEcash
+    case sendLightning
+
+    var id: String { rawValue }
+}
+
+private enum WalletSheet: Identifiable {
+    case chooser(WalletActionSheet)
+    case scanner
+    case flow(WalletFlow)
+
+    var id: String {
+        switch self {
+        case .chooser(let action):
+            return "chooser-\(action.id)"
+        case .scanner:
+            return "scanner"
+        case .flow(let flow):
+            return "flow-\(flow.id)"
+        }
+    }
+}
+
+private struct WalletActionSheetView: View {
+    let action: WalletActionSheet
+    let onClose: () -> Void
+    let onScan: () -> Void
+    let onSelect: (WalletFlow) -> Void
+
+    var body: some View {
+        NavigationStack {
+            VStack(alignment: .leading, spacing: 0) {
+                optionButton(title: "Ecash", icon: "bitcoinsign.circle", action: action.primaryOption)
+                optionButton(title: "Lightning", icon: "bolt.fill", action: action.secondaryOption)
+            }
+            .frame(maxWidth: .infinity, alignment: .topLeading)
+            .padding(.horizontal, 20)
+            .padding(.top, 12)
+            .padding(.bottom, 12)
+            .navigationTitle(action.title)
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button(action: onClose) {
+                        Image(systemName: "xmark")
+                    }
+                    .accessibilityLabel("Close")
+                }
+
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button(action: onScan) {
+                        Image(systemName: "qrcode.viewfinder")
+                    }
+                    .accessibilityLabel("Scan")
+                }
+            }
+        }
+    }
+
+    private func optionButton(title: String, icon: String, action flow: WalletFlow) -> some View {
+        Button {
+            onSelect(flow)
+        } label: {
+            optionLabel(title: title, icon: icon)
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func optionLabel(title: String, icon: String) -> some View {
+        HStack(spacing: 14) {
+            Image(systemName: icon)
+                .font(.title3.weight(.semibold))
+                .foregroundStyle(.secondary)
+                .frame(width: 24)
+
+            Text(title)
+                .font(.title3)
+
+            Spacer()
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.vertical, 18)
+        .foregroundStyle(.primary)
+        .contentShape(Rectangle())
+    }
+}
+
+private struct ChooserSheetPresentation: ViewModifier {
+    func body(content: Content) -> some View {
+        content.presentationDetents([.height(205)])
     }
 }
 

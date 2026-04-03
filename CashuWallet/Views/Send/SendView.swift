@@ -10,7 +10,6 @@ struct SendView: View {
     @State private var generatedToken: String?
     @State private var tokenFee: UInt64 = 0
     @State private var isGenerating = false
-    @State private var showMeltView = false
     @State private var errorMessage: String?
     @State private var showMintPicker = false
 
@@ -65,11 +64,6 @@ struct SendView: View {
                 .accessibilityElement(children: .combine)
                 .accessibilityLabel(lockWithP2PK ? "P2PK lock enabled" : "Unit: Satoshis")
             }
-        }
-        .sheet(isPresented: $showMeltView) {
-            MeltView()
-                .environmentObject(walletManager)
-                .presentationDetents([.large])
         }
         .sheet(isPresented: $showMintPicker) {
             MintSelectorSheet(selectedMint: $walletManager.activeMint)
@@ -162,18 +156,6 @@ struct SendView: View {
                     Text("Send \(amountString) sats")
                 }
             }
-
-            // Pay Lightning link
-            Button(action: { showMeltView = true }) {
-                HStack {
-                    Image(systemName: "bolt.fill")
-                        .accessibilityHidden(true)
-                    Text("Pay Lightning Request")
-                }
-                .font(.subheadline)
-            }
-            .accessibilityLabel("Pay Lightning Request")
-            .accessibilityHint("Opens lightning invoice payment screen")
             .padding(.bottom, 30)
         }
     }
