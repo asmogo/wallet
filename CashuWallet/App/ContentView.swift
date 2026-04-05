@@ -70,7 +70,7 @@ struct MainTabView: View {
             
             MintsListView()
                 .tabItem {
-                    Label("Mints", systemImage: "building.columns.fill")
+                    Label("Mints", systemImage: "bitcoinsign.bank.building.fill")
                 }
                 .tag(Tab.mints)
             

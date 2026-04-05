@@ -51,7 +51,7 @@ struct ReceiveTokenDetailView: View {
                             } else {
                                 detailRow(icon: "arrow.up.arrow.down", label: "Fee", value: "\(receiveFee) sat")
                             }
-                            detailRow(icon: "building.columns", label: "Mint", value: shortMintUrl(mintUrl))
+                            detailRow(icon: "bitcoinsign.bank.building", label: "Mint", value: shortMintUrl(mintUrl))
                             if !p2pkPubkeys.isEmpty {
                                 detailRow(icon: "lock.fill", label: "P2PK",
                                           value: tokenLockedToKnownKey ? "Your key" : "Unknown key")

@@ -34,14 +34,14 @@ struct MainWalletView: View {
 
                 Spacer()
 
-                // Balance area
+                // Balance + action buttons grouped together
                 balanceSection
 
-                Spacer()
-
-                // Action buttons pinned near bottom
                 actionButtons
-                    .padding(.bottom, 40)
+                    .padding(.top, 24)
+
+                Spacer()
+                Spacer()
             }
             .sheet(item: $activeSheet) { sheet in
                 sheetView(for: sheet)
@@ -332,7 +332,7 @@ private struct WalletActionSheetView: View {
     var body: some View {
         NavigationStack {
             VStack(alignment: .leading, spacing: 0) {
-                optionButton(title: "Ecash", icon: "bitcoinsign.circle", action: action.primaryOption)
+                optionButton(title: "Ecash", icon: "banknote", action: action.primaryOption)
                 optionButton(title: "Lightning", icon: "bolt.fill", action: action.secondaryOption)
             }
             .frame(maxWidth: .infinity, alignment: .topLeading)

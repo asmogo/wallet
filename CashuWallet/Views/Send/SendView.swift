@@ -231,12 +231,12 @@ struct SendView: View {
                     AsyncImage(url: url) { image in
                         image.resizable().aspectRatio(contentMode: .fill)
                     } placeholder: {
-                        Image(systemName: "building.columns").foregroundStyle(.secondary)
+                        Image(systemName: "bitcoinsign.bank.building").foregroundStyle(.secondary)
                     }
                     .frame(width: 40, height: 40)
                     .clipShape(Circle())
                 } else {
-                    Image(systemName: "building.columns")
+                    Image(systemName: "bitcoinsign.bank.building")
                         .foregroundStyle(.secondary)
                         .frame(width: 40, height: 40)
                 }
@@ -345,7 +345,7 @@ struct SendView: View {
                                   value: priceService.btcPriceUSD > 0
                                       ? priceService.formatSatsAsFiat(UInt64(amountString) ?? 0) : "$0.00")
                         if let mint = walletManager.activeMint {
-                            detailRow(icon: "building.columns", label: "Mint",
+                            detailRow(icon: "bitcoinsign.bank.building", label: "Mint",
                                       value: extractMintHost(mint.url))
                         }
                     }
@@ -671,12 +671,12 @@ struct MeltView: View {
                 AsyncImage(url: url) { image in
                     image.resizable().aspectRatio(contentMode: .fill)
                 } placeholder: {
-                    Image(systemName: "building.columns").foregroundStyle(.secondary)
+                    Image(systemName: "bitcoinsign.bank.building").foregroundStyle(.secondary)
                 }
                 .frame(width: 40, height: 40)
                 .clipShape(Circle())
             } else {
-                Image(systemName: "building.columns")
+                Image(systemName: "bitcoinsign.bank.building")
                     .foregroundStyle(.secondary)
                     .frame(width: 40, height: 40)
             }
@@ -1318,7 +1318,7 @@ struct MintSelectorSheet: View {
 
     private var emptyStateView: some View {
         VStack(spacing: 16) {
-            Image(systemName: "building.columns")
+            Image(systemName: "bitcoinsign.bank.building")
                 .font(.title)
                 .foregroundStyle(.secondary)
                 .accessibilityHidden(true)
@@ -1392,7 +1392,7 @@ struct MintSelectorSheet: View {
             .fill(.quaternary)
             .frame(width: 40, height: 40)
             .overlay(
-                Image(systemName: "building.columns")
+                Image(systemName: "bitcoinsign.bank.building")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             )

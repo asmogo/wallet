@@ -5,7 +5,7 @@ struct EcashIcon: View {
     var color: Color = .accentColor
 
     var body: some View {
-        Image(systemName: "bitcoinsign.circle")
+        Image(systemName: "banknote")
             .foregroundStyle(color)
             .accessibilityHidden(true)
     }

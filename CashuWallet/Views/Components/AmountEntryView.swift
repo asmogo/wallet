@@ -99,7 +99,7 @@ struct AmountEntryView: View {
     private var mintSelectorSection: some View {
         Button(action: { showMintPicker = true }) {
             HStack(spacing: 12) {
-                Image(systemName: "building.columns")
+                Image(systemName: "bitcoinsign.bank.building")
                     .font(.callout)
                     .foregroundStyle(.secondary)
                     .frame(width: 40, height: 40)
@@ -234,7 +234,7 @@ struct MintPickerView: View {
             }
         }) {
             HStack(spacing: 12) {
-                Image(systemName: "building.columns")
+                Image(systemName: "bitcoinsign.bank.building")
                     .foregroundStyle(Color.accentColor)
                     .frame(width: 44, height: 44)
 

@@ -208,13 +208,13 @@ struct ReceiveLightningView: View {
                     AsyncImage(url: url) { image in
                         image.resizable().aspectRatio(contentMode: .fill)
                     } placeholder: {
-                        Image(systemName: "building.columns")
+                        Image(systemName: "bitcoinsign.bank.building")
                             .foregroundStyle(.secondary)
                     }
                     .frame(width: 40, height: 40)
                     .clipShape(Circle())
                 } else {
-                    Image(systemName: "building.columns")
+                    Image(systemName: "bitcoinsign.bank.building")
                         .foregroundStyle(.secondary)
                         .frame(width: 40, height: 40)
                 }
@@ -274,7 +274,7 @@ struct ReceiveLightningView: View {
                         detailRow(icon: "info.circle", label: "State",
                                   value: isPaid ? "Paid" : (isExpired ? "Expired" : "Pending"))
                         if let mint = walletManager.activeMint {
-                            detailRow(icon: "building.columns", label: "Mint",
+                            detailRow(icon: "bitcoinsign.bank.building", label: "Mint",
                                       value: extractMintHost(mint.url))
                         }
                     }

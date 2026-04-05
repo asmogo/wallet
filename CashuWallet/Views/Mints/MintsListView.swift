@@ -216,7 +216,7 @@ struct MintsListView: View {
             .fill(.quaternary)
             .frame(width: 36, height: 36)
             .overlay(
-                Image(systemName: "building.columns")
+                Image(systemName: "bitcoinsign.bank.building")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             )

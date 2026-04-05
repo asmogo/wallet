@@ -463,7 +463,7 @@ struct OnboardingView: View {
             } else {
                 // Empty state
                 VStack(spacing: 12) {
-                    Image(systemName: "building.columns")
+                    Image(systemName: "bitcoinsign.bank.building")
                         .font(.title)
                         .foregroundStyle(.secondary.opacity(0.5))
                     Text("No mints added yet")
@@ -580,7 +580,7 @@ struct OnboardingView: View {
                         .foregroundStyle(result.totalRecovered > 0 ? .green : .secondary)
                         .frame(width: 24, height: 24)
                 } else {
-                    Image(systemName: "building.columns")
+                    Image(systemName: "bitcoinsign.bank.building")
                         .foregroundStyle(.secondary)
                         .frame(width: 24, height: 24)
                 }

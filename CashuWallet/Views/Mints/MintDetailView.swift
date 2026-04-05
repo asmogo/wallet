@@ -206,7 +206,7 @@ struct MintDetailView: View {
     // MARK: - Helpers
 
     private var mintIconPlaceholder: some View {
-        Image(systemName: "building.columns.fill")
+        Image(systemName: "bitcoinsign.bank.building.fill")
             .font(.title)
             .foregroundStyle(.secondary)
             .frame(width: 72, height: 72)
