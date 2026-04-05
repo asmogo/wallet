@@ -23,9 +23,8 @@ struct SendView: View {
     @State private var showShareSheet = false
     @State private var lockWithP2PK = false
     @State private var p2pkPubkeyInput = ""
-    @State private var showSendConfirmation = false
 
-    @FocusState private var amountFieldFocused: Bool
+    @ObservedObject private var priceService = PriceService.shared
 
     var body: some View {
         NavigationStack {
@@ -37,32 +36,55 @@ struct SendView: View {
         }
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
-            ToolbarItem(placement: .navigationBarLeading) {
+            ToolbarItem(placement: .cancellationAction) {
                 Button(action: { dismiss() }) {
                     Image(systemName: "xmark")
                 }
                 .accessibilityLabel("Close")
-                .accessibilityHint("Dismisses the send screen")
             }
 
             ToolbarItem(placement: .principal) {
-                Text("Send Ecash")
+                Text(generatedToken != nil ? "Pending Ecash" : "Send Ecash")
                     .font(.headline)
             }
 
-            ToolbarItem(placement: .topBarTrailing) {
-                HStack(spacing: 8) {
-                    Image(systemName: lockWithP2PK ? "lock.fill" : "lock.open")
-                        .font(.caption)
-                        .foregroundStyle(lockWithP2PK ? Color.accentColor : .secondary)
-                        .accessibilityHidden(true)
-                    Text(lockWithP2PK ? "P2PK" : "SAT")
-                        .font(.caption)
-                        .fontWeight(.bold)
-                        .foregroundStyle(lockWithP2PK ? Color.accentColor : .secondary)
+            if generatedToken == nil {
+                ToolbarItem(placement: .topBarTrailing) {
+                    HStack(spacing: 6) {
+                        Button(action: { lockWithP2PK.toggle() }) {
+                            Image(systemName: lockWithP2PK ? "lock.fill" : "lock.open")
+                                .font(.caption)
+                                .foregroundStyle(lockWithP2PK ? Color.accentColor : .secondary)
+                        }
+                        Button(action: { settings.useBitcoinSymbol.toggle() }) {
+                            Text(settings.unitLabel)
+                                .font(.caption)
+                                .fontWeight(.bold)
+                                .foregroundStyle(Color.accentColor)
+                        }
+                    }
                 }
-                .accessibilityElement(children: .combine)
-                .accessibilityLabel(lockWithP2PK ? "P2PK lock enabled" : "Unit: Satoshis")
+            }
+
+            if generatedToken != nil {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Menu {
+                        Button(action: { showShareSheet = true }) {
+                            Label("Share", systemImage: "square.and.arrow.up")
+                        }
+                        if !settings.checkSentTokens {
+                            Button(action: {
+                                if let token = generatedToken {
+                                    Task { await checkTokenClaimNow(token: token) }
+                                }
+                            }) {
+                                Label("Check Status", systemImage: "arrow.clockwise")
+                            }
+                        }
+                    } label: {
+                        Image(systemName: "ellipsis.circle")
+                    }
+                }
             }
         }
         .sheet(isPresented: $showMintPicker) {
@@ -76,7 +98,6 @@ struct SendView: View {
             }
         }
         .onDisappear {
-            // Cancel any running polling task when view disappears
             checkingTask?.cancel()
         }
     }
@@ -89,28 +110,29 @@ struct SendView: View {
             if let mint = walletManager.activeMint {
                 mintSelector(mint: mint)
                     .padding(.horizontal)
-                    .padding(.top, 16)
+                    .padding(.top, 12)
             }
 
-            Spacer(minLength: 24)
+            Spacer()
 
             // Amount display
-            VStack(spacing: 4) {
-                TextField("0", text: $amountString)
-                    .keyboardType(.numberPad)
-                    .focused($amountFieldFocused)
-                    .font(.largeTitle.bold())
-                    .multilineTextAlignment(.center)
+            VStack(spacing: 8) {
+                Text(formattedAmount)
+                    .font(.system(size: 56, weight: .bold))
+                    .minimumScaleFactor(0.5)
+                    .lineLimit(1)
+                    .contentTransition(.numericText())
 
-                Text("sat")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-            }
-            .accessibilityElement(children: .combine)
-            .accessibilityLabel("Send amount")
-            .accessibilityValue("\(amountString.isEmpty ? "0" : amountString) sats")
-            .onAppear {
-                amountFieldFocused = true
+                // Fiat conversion
+                if priceService.btcPriceUSD > 0, let sats = UInt64(amountString) {
+                    Text(priceService.formatSatsAsFiat(sats))
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                } else {
+                    Text("$0.00")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                }
             }
 
             if let error = errorMessage {
@@ -120,62 +142,107 @@ struct SendView: View {
                     .padding(.top, 8)
             }
 
-            Spacer(minLength: 24)
+            Spacer()
 
-            // P2PK + Send button
-            VStack(spacing: 16) {
-                p2pkLockSection
+            // P2PK section (only when enabled)
+            if lockWithP2PK {
+                p2pkInputSection
                     .padding(.horizontal)
+                    .padding(.bottom, 8)
+            }
 
-                // Send button
-                Button(action: { showSendConfirmation = true }) {
-                    if isGenerating {
-                        ProgressView()
-                    } else {
-                        Text("Send")
-                            .font(.body.weight(.semibold))
-                            .frame(maxWidth: .infinity)
-                    }
-                }
-                .glassButton(prominent: true).controlSize(.large)
-                .disabled(!canSend || isGenerating)
-                .padding(.horizontal)
-                .accessibilityLabel(isGenerating ? "Generating token" : "Send \(amountString.isEmpty ? "0" : amountString) sats")
-                .accessibilityHint("Confirms and sends the ecash token")
-                .confirmationDialog(
-                    "Confirm Send",
-                    isPresented: $showSendConfirmation,
-                    titleVisibility: .visible
-                ) {
-                    Button("Send \(amountString) sats") {
-                        generateToken()
-                    }
-                    Button("Cancel", role: .cancel) { }
-                } message: {
-                    if let mint = walletManager.activeMint {
-                        Text("Send \(amountString) sats from \(mint.name)\(lockWithP2PK ? " (P2PK locked)" : "")")
-                    } else {
-                        Text("Send \(amountString) sats")
-                    }
+            // Number pad
+            numberPad
+                .padding(.horizontal, 24)
+
+            // Send button
+            Button(action: generateToken) {
+                if isGenerating {
+                    ProgressView()
+                } else {
+                    Text("Send")
                 }
             }
+            .buttonStyle(.bordered)
+            .controlSize(.large)
+            .frame(maxWidth: .infinity)
+            .disabled(!canSend || isGenerating)
+            .padding(.horizontal)
+            .padding(.top, 16)
             .padding(.bottom, 16)
         }
     }
 
+    // MARK: - Number Pad
+
+    private var numberPad: some View {
+        VStack(spacing: 12) {
+            ForEach(numberRows, id: \.self) { row in
+                HStack(spacing: 12) {
+                    ForEach(row, id: \.self) { key in
+                        numberKey(key)
+                    }
+                }
+            }
+        }
+    }
+
+    private var numberRows: [[String]] {
+        [["1", "2", "3"], ["4", "5", "6"], ["7", "8", "9"], ["", "0", "⌫"]]
+    }
+
+    private func numberKey(_ key: String) -> some View {
+        Group {
+            if key.isEmpty {
+                Color.clear.frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else {
+                Button(action: { handleKeyPress(key) }) {
+                    Group {
+                        if key == "⌫" {
+                            Image(systemName: "delete.backward").font(.title3)
+                        } else {
+                            Text(key).font(.title2.weight(.medium))
+                        }
+                    }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .frame(height: 56)
+    }
+
+    private func handleKeyPress(_ key: String) {
+        if key == "⌫" {
+            if !amountString.isEmpty { amountString.removeLast() }
+        } else {
+            if amountString == "0" { amountString = key } else { amountString.append(key) }
+        }
+    }
+
+    // MARK: - Mint Selector
+
     private func mintSelector(mint: MintInfo) -> some View {
         Button(action: { showMintPicker = true }) {
             HStack(spacing: 12) {
-                Image(systemName: "building.columns")
-                    .foregroundStyle(.gray)
-                    .frame(width: 44, height: 44)
+                if let iconUrl = mint.iconUrl, let url = URL(string: iconUrl) {
+                    AsyncImage(url: url) { image in
+                        image.resizable().aspectRatio(contentMode: .fill)
+                    } placeholder: {
+                        Image(systemName: "building.columns").foregroundStyle(.secondary)
+                    }
+                    .frame(width: 40, height: 40)
+                    .clipShape(Circle())
+                } else {
+                    Image(systemName: "building.columns")
+                        .foregroundStyle(.secondary)
+                        .frame(width: 40, height: 40)
+                }
 
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(mint.name)
-                        .font(.subheadline)
-                        .fontWeight(.medium)
-
-                    Text("\(mint.balance) sat available")
+                    Text(mint.name).font(.subheadline.weight(.medium))
+                    Text(formatBalance(mint.balance))
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
@@ -183,15 +250,13 @@ struct SendView: View {
                 Spacer()
 
                 Image(systemName: "chevron.down")
+                    .font(.caption)
                     .foregroundStyle(.secondary)
             }
             .padding(12)
-            .liquidGlass(in: RoundedRectangle(cornerRadius: 10), interactive: true)
+            .liquidGlass(in: RoundedRectangle(cornerRadius: 12), interactive: true)
         }
         .buttonStyle(.plain)
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel("Mint: \(mint.name), \(mint.balance) sats available")
-        .accessibilityHint("Opens mint selector")
     }
 
     private var canSend: Bool {
@@ -201,46 +266,31 @@ struct SendView: View {
         return amount <= mint.balance
     }
 
-    private var p2pkLockSection: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Toggle(isOn: $lockWithP2PK.animation(.easeInOut(duration: 0.2))) {
-                Text("Lock with P2PK")
-                    .font(.subheadline)
+    @ViewBuilder
+    private var p2pkInputSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            TextField("02... public key", text: $p2pkPubkeyInput)
+                .font(.system(.caption, design: .monospaced))
+                .textInputAutocapitalization(.never)
+                .autocorrectionDisabled()
+                .padding(10)
+                .background(
+                    RoundedRectangle(cornerRadius: 8)
+                        .fill(Color(uiColor: .tertiarySystemGroupedBackground))
+                )
+
+            if let ownKey = settings.p2pkKeys.last {
+                Button(action: { p2pkPubkeyInput = ownKey.publicKey }) {
+                    Text("Use my latest key")
+                        .font(.caption)
+                }
             }
-            .toggleStyle(.switch)
-            .tint(.accentColor)
-            .accessibilityLabel("Lock ecash to P2PK key")
-            .accessibilityHint("When enabled, only the holder of the matching private key can claim this token")
-            .accessibilityValue(lockWithP2PK ? "On" : "Off")
 
-            if lockWithP2PK {
-                TextField("02... public key", text: $p2pkPubkeyInput)
-                    .font(.system(.caption, design: .monospaced))
-                    .textInputAutocapitalization(.never)
-                    .autocorrectionDisabled()
-                    .padding(10)
-                    .background(
-                        RoundedRectangle(cornerRadius: 8)
-                            .fill(Color(uiColor: .tertiarySystemGroupedBackground))
-                    )
-                    .accessibilityLabel("P2PK public key")
-                    .accessibilityHint("Enter the recipient's P2PK public key starting with 02")
-
-                if let ownKey = settings.p2pkKeys.last {
-                    Button(action: { p2pkPubkeyInput = ownKey.publicKey }) {
-                        Text("Use my latest key")
-                            .font(.caption)
-                    }
-                    .accessibilityLabel("Use my latest key")
-                    .accessibilityHint("Fills in your most recent P2PK public key")
-                }
-
-                if !p2pkPubkeyInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
-                   normalizedP2PKPubkeyInput == nil {
-                    Text("Invalid P2PK key format")
-                        .font(.caption2)
-                        .foregroundStyle(.red)
-                }
+            if !p2pkPubkeyInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+               normalizedP2PKPubkeyInput == nil {
+                Text("Invalid P2PK key format")
+                    .font(.caption2)
+                    .foregroundStyle(.red)
             }
         }
     }
@@ -248,141 +298,69 @@ struct SendView: View {
     // MARK: - Token Display View
 
     private func tokenDisplayView(token: String) -> some View {
-        VStack(spacing: 16) {
-            // Status header
-            if tokenClaimed {
-                HStack(spacing: 8) {
-                    Image(systemName: "checkmark.circle.fill")
-                        .accessibilityHidden(true)
-                    Text("Sent Ecash")
-                }
-                .foregroundStyle(Color.accentColor)
-                .font(.headline)
-                .padding(.top, 8)
-                .accessibilityElement(children: .combine)
-                .accessibilityLabel("Ecash token has been claimed")
-            } else {
-                HStack(spacing: 8) {
-                    if isCheckingClaim {
-                        ProgressView()
-                            .scaleEffect(0.8)
-                            .tint(.orange)
-                    } else {
-                        Image(systemName: "clock.fill")
-                            .foregroundStyle(.orange)
-                            .accessibilityHidden(true)
-                    }
-                    Text("Pending Ecash")
-                        .foregroundStyle(.orange)
-                }
-                .font(.headline)
-                .padding(.top, 8)
-                .accessibilityElement(children: .combine)
-                .accessibilityLabel(isCheckingClaim ? "Checking ecash token status" : "Ecash token pending")
+        VStack(spacing: 0) {
+            ScrollView {
+                VStack(spacing: 20) {
+                    // QR Code
+                    QRCodeView(content: token)
+                        .frame(width: 280, height: 280)
+                        .padding(16)
+                        .background(Color.white, in: RoundedRectangle(cornerRadius: 16))
+                        .padding(.top, 8)
 
-                if !settings.checkSentTokens {
-                    Text("Automatic status checks are off. Use CHECK STATUS to verify redemption.")
-                        .font(.caption)
+                    // Amount
+                    Text(formattedAmount)
+                        .font(.title.bold())
+
+                    // Status
+                    if tokenClaimed {
+                        HStack(spacing: 6) {
+                            Image(systemName: "checkmark.circle.fill")
+                            Text("Claimed")
+                        }
+                        .font(.subheadline.weight(.medium))
+                        .foregroundStyle(.green)
+                    } else if isCheckingClaim {
+                        HStack(spacing: 6) {
+                            ProgressView().scaleEffect(0.8)
+                            Text("Checking...")
+                        }
+                        .font(.subheadline)
                         .foregroundStyle(.secondary)
-                        .multilineTextAlignment(.center)
-                        .padding(.horizontal)
-                }
-            }
+                    } else {
+                        HStack(spacing: 6) {
+                            Image(systemName: "clock")
+                            Text("Pending")
+                        }
+                        .font(.subheadline)
+                        .foregroundStyle(.orange)
+                    }
 
-            // QR Code with border
-            ZStack {
-                RoundedRectangle(cornerRadius: 16)
-                    .fill(Color.white)
-                    .frame(width: 280, height: 280)
-
-                QRCodeView(content: token)
-                    .frame(width: 250, height: 250)
-            }
-            .overlay(
-                RoundedRectangle(cornerRadius: 16)
-                    .stroke(Color.secondary.opacity(0.3), lineWidth: 1)
-            )
-
-            // Checking progress bar
-            if isCheckingClaim && !tokenClaimed {
-                ProgressView()
-                    .progressViewStyle(LinearProgressViewStyle(tint: .accentColor))
-                    .frame(width: 280)
-            }
-
-            // Amount
-            Text("\(amountString) sat")
-                .font(.title2.bold())
-                .accessibilityLabel("Amount: \(amountString) sats")
-
-            // Details
-            VStack(spacing: 12) {
-                LabeledContent("Fee", value: "\(tokenFee) sat")
-                LabeledContent("Unit", value: "SAT")
-                LabeledContent("Status", value: tokenClaimed ? "Claimed" : "Pending")
-                if let mint = walletManager.activeMint {
-                    LabeledContent("Mint", value: extractMintHost(mint.url))
-                }
-            }
-            .font(.subheadline)
-            .padding(12)
-            .liquidGlass(in: RoundedRectangle(cornerRadius: 10))
-            .padding(.horizontal)
-
-            Spacer()
-
-            // Action buttons
-            if tokenClaimed {
-                // Token was claimed - show done button
-                Button(action: { dismiss() }) {
-                    Text("Done")
-                }
-                .glassButton().controlSize(.large)
-                .accessibilityLabel("Done")
-                .accessibilityHint("Closes the send screen")
-                .padding(.horizontal)
-                .padding(.bottom, 30)
-            } else {
-                // Show copy and share buttons
-                if !settings.checkSentTokens {
-                    Button(action: {
-                        Task { await checkTokenClaimNow(token: token) }
-                    }) {
-                        if isCheckingClaim {
-                            ProgressView()
-                                } else {
-                            Text("CHECK STATUS")
+                    // Details
+                    VStack(spacing: 12) {
+                        detailRow(icon: "arrow.up.arrow.down", label: "Fee", value: "\(tokenFee) sat")
+                        detailRow(icon: "banknote", label: "Unit", value: settings.unitLabel.uppercased())
+                        detailRow(icon: "banknote", label: "Fiat",
+                                  value: priceService.btcPriceUSD > 0
+                                      ? priceService.formatSatsAsFiat(UInt64(amountString) ?? 0) : "$0.00")
+                        if let mint = walletManager.activeMint {
+                            detailRow(icon: "building.columns", label: "Mint",
+                                      value: extractMintHost(mint.url))
                         }
                     }
-                    .glassButton().controlSize(.large)
-                    .accessibilityLabel(isCheckingClaim ? "Checking status" : "Check status")
-                    .accessibilityHint("Checks if the ecash token has been claimed")
                     .padding(.horizontal)
                 }
-
-                HStack(spacing: 12) {
-                    Button(action: { copyToken(token) }) {
-                        HStack {
-                            Image(systemName: copyButtonText == "COPIED" ? "checkmark" : "doc.on.doc")
-                                .accessibilityHidden(true)
-                            Text(copyButtonText)
-                        }
-                    }
-                    .glassButton().controlSize(.large)
-                    .accessibilityLabel(copyButtonText == "COPIED" ? "Copied" : "Copy token")
-                    .accessibilityHint("Copies the ecash token to clipboard")
-
-                    Button(action: { showShareSheet = true }) {
-                        Image(systemName: "square.and.arrow.up")
-                    }
-                    .glassButton().controlSize(.large)
-                    .frame(width: 50)
-                    .accessibilityLabel("Share token")
-                    .accessibilityHint("Opens share sheet to share the ecash token")
-                }
-                .padding(.horizontal)
-                .padding(.bottom, 30)
             }
+
+            // Copy button
+            Button(action: { copyToken(token) }) {
+                Label(copyButtonText, systemImage: copyButtonText == "Copied" ? "checkmark" : "doc.on.doc")
+            }
+            .buttonStyle(.bordered)
+            .controlSize(.large)
+            .frame(maxWidth: .infinity)
+            .padding(.horizontal)
+            .padding(.bottom, 16)
         }
         .onAppear {
             guard settings.checkSentTokens else { return }
@@ -390,11 +368,27 @@ struct SendView: View {
         }
     }
 
-    private func extractMintHost(_ url: String) -> String {
-        if let urlObj = URL(string: url) {
-            return urlObj.host ?? url
+    private func detailRow(icon: String, label: String, value: String) -> some View {
+        HStack {
+            Label(label, systemImage: icon)
+                .foregroundStyle(.secondary)
+            Spacer()
+            Text(value).fontWeight(.medium)
         }
-        return url
+        .font(.subheadline)
+    }
+
+    private var formattedAmount: String {
+        let amount = amountString.isEmpty ? "0" : amountString
+        return settings.useBitcoinSymbol ? "₿\(amount)" : "\(amount) sat"
+    }
+
+    private func formatBalance(_ sats: UInt64) -> String {
+        settings.useBitcoinSymbol ? "₿\(sats)" : "\(sats) sat"
+    }
+
+    private func extractMintHost(_ url: String) -> String {
+        URL(string: url)?.host ?? url
     }
 
     // MARK: - Actions
@@ -453,7 +447,7 @@ struct SendView: View {
         HapticFeedback.notification(.success)
 
         // Show "COPIED" feedback for 3 seconds
-        copyButtonText = "COPIED"
+        copyButtonText = "Copied"
         DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
             copyButtonText = "Copy"
         }
@@ -1321,34 +1315,15 @@ struct MintSelectorSheet: View {
     }
 
     private var mintListView: some View {
-        ScrollView {
-            LazyVStack(spacing: 0) {
-                ForEach(walletManager.mints) { mint in
-                    mintRow(mint: mint)
-                }
-            }
-            .padding(.top, 8)
-        }
-    }
-
-    private func mintRow(mint: MintInfo) -> some View {
-        VStack(spacing: 0) {
+        List(walletManager.mints) { mint in
             Button(action: { selectMint(mint) }) {
                 HStack(spacing: 12) {
-                    Circle()
-                        .fill(Color(uiColor: .secondarySystemGroupedBackground))
-                        .frame(width: 48, height: 48)
-                        .overlay(
-                            Image(systemName: "building.columns")
-                                .foregroundStyle(.gray)
-                        )
+                    mintIcon(for: mint)
 
-                    VStack(alignment: .leading, spacing: 4) {
+                    VStack(alignment: .leading, spacing: 2) {
                         Text(mint.name)
-                            .font(.body)
-                            .fontWeight(.medium)
-
-                        Text(formatBalance(mint))
+                            .font(.body.weight(.medium))
+                        Text(SettingsManager.shared.formatAmountBalance(mint.balance) + " sat")
                             .font(.subheadline)
                             .foregroundStyle(.secondary)
                     }
@@ -1356,29 +1331,40 @@ struct MintSelectorSheet: View {
                     Spacer()
 
                     if selectedMint?.id == mint.id {
-                        Image(systemName: "checkmark.circle.fill")
-                            .font(.title2)
+                        Image(systemName: "checkmark")
                             .foregroundStyle(Color.accentColor)
                     }
                 }
-                .padding(.horizontal, 16)
-                .padding(.vertical, 12)
-                .background(
-                    selectedMint?.id == mint.id
-                        ? Color.accentColor.opacity(0.1)
-                        : Color.clear
-                )
             }
-            .buttonStyle(.plain)
+            .listRowSeparator(.hidden)
+        }
+        .listStyle(.plain)
+    }
 
-            Divider()
-                .padding(.leading, 76)
+    @ViewBuilder
+    private func mintIcon(for mint: MintInfo) -> some View {
+        if let iconUrl = mint.iconUrl, let url = URL(string: iconUrl) {
+            AsyncImage(url: url) { image in
+                image.resizable().aspectRatio(contentMode: .fill)
+            } placeholder: {
+                mintIconPlaceholder
+            }
+            .frame(width: 40, height: 40)
+            .clipShape(Circle())
+        } else {
+            mintIconPlaceholder
         }
     }
 
-    private func formatBalance(_ mint: MintInfo) -> String {
-        let formatted = SettingsManager.shared.formatAmountBalance(mint.balance)
-        return "\(formatted) sat available"
+    private var mintIconPlaceholder: some View {
+        Circle()
+            .fill(.quaternary)
+            .frame(width: 40, height: 40)
+            .overlay(
+                Image(systemName: "building.columns")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            )
     }
 
     private func selectMint(_ mint: MintInfo) {

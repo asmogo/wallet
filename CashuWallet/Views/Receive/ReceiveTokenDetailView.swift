@@ -3,11 +3,12 @@ import CashuDevKit
 
 struct ReceiveTokenDetailView: View {
     let tokenString: String
-    var onComplete: (() -> Void)? = nil  // Callback to dismiss entire flow
+    var onComplete: (() -> Void)? = nil
     @EnvironmentObject var walletManager: WalletManager
     @Environment(\.dismiss) var dismiss
-    @ObservedObject private var settings = SettingsManager.shared  // used for p2pkKeys
-    
+    @ObservedObject private var settings = SettingsManager.shared
+    @ObservedObject private var priceService = PriceService.shared
+
     @State private var decodedToken: Token?
     @State private var tokenAmount: UInt64 = 0
     @State private var receiveFee: UInt64 = 0
@@ -17,104 +18,59 @@ struct ReceiveTokenDetailView: View {
     @State private var isLoadingFee = true
     @State private var p2pkPubkeys: [String] = []
     @State private var tokenLockedToKnownKey = true
-    
-    // Animation
-    @State private var displayedToken: String = ""
-    @State private var tokenAnimationTimer: Timer?
-    
+
     var body: some View {
         NavigationStack {
             VStack(spacing: 0) {
-                // Content
                 ScrollView {
-                    VStack(spacing: 24) {
-                        // Token Card
-                        ZStack {
-                            // Background gradient
-                            RoundedRectangle(cornerRadius: 16)
-                                .fill(.quaternary)
+                    VStack(spacing: 20) {
+                        // Amount
+                        Text(formattedAmount)
+                            .font(.system(size: 56, weight: .bold))
+                            .minimumScaleFactor(0.5)
+                            .lineLimit(1)
+                            .padding(.top, 24)
 
-                            // Scrambled Token Text Background
-                            GeometryReader { geo in
-                                Text(displayedToken)
-                                    .font(.system(.caption, design: .monospaced))
-                                    .foregroundStyle(.tertiary)
-                                    .frame(width: geo.size.width, height: geo.size.height, alignment: .topLeading)
-                                    .multilineTextAlignment(.leading)
-                                    .padding()
-                                    .mask(
-                                        LinearGradient(gradient: Gradient(stops: [
-                                            .init(color: .black, location: 0),
-                                            .init(color: .black, location: 0.5),
-                                            .init(color: .clear, location: 0.9)
-                                        ]), startPoint: .top, endPoint: .bottom)
-                                    )
-                            }
-
-                            // Overlay Content
-                            VStack {
-                                Spacer()
-                                HStack(alignment: .bottom) {
-                                    Text(shortMintUrl(mintUrl))
-                                        .font(.subheadline)
-                                        .foregroundStyle(.secondary)
-
-                                    Spacer()
-
-                                    Text("\(tokenAmount) sat")
-                                        .font(.title.bold())
-                                }
-                                .padding()
-                            }
+                        // Fiat
+                        if priceService.btcPriceUSD > 0 {
+                            Text(priceService.formatSatsAsFiat(tokenAmount))
+                                .font(.subheadline)
+                                .foregroundStyle(.secondary)
                         }
-                        .frame(height: 200)
-                        .clipShape(RoundedRectangle(cornerRadius: 16))
-                        .accessibilityElement(children: .combine)
-                        .accessibilityLabel("Ecash token card, \(tokenAmount) sats from \(shortMintUrl(mintUrl))")
 
-                        // Details List
+                        // Details
                         VStack(spacing: 12) {
                             if isLoadingFee {
-                                LabeledContent("Fee") {
-                                    ProgressView()
-                                        .scaleEffect(0.8)
+                                HStack {
+                                    Label("Fee", systemImage: "arrow.up.arrow.down")
+                                        .foregroundStyle(.secondary)
+                                    Spacer()
+                                    ProgressView().scaleEffect(0.8)
                                 }
+                                .font(.subheadline)
                             } else {
-                                LabeledContent("Fee", value: "\(receiveFee) sat")
+                                detailRow(icon: "arrow.up.arrow.down", label: "Fee", value: "\(receiveFee) sat")
                             }
-                            LabeledContent("Fiat", value: "$0.00")
-                            LabeledContent("Mint", value: shortMintUrl(mintUrl))
+                            detailRow(icon: "building.columns", label: "Mint", value: shortMintUrl(mintUrl))
                             if !p2pkPubkeys.isEmpty {
-                                LabeledContent("P2PK", value: tokenLockedToKnownKey ? "Locked to your key" : "Locked to unknown key")
+                                detailRow(icon: "lock.fill", label: "P2PK",
+                                          value: tokenLockedToKnownKey ? "Your key" : "Unknown key")
                             }
                         }
-                        .font(.subheadline)
                         .padding(.horizontal)
 
                         if let error = errorMessage {
                             Text(error)
                                 .foregroundStyle(.red)
                                 .font(.caption)
-                                .padding()
-                                .liquidGlassMaterial(in: RoundedRectangle(cornerRadius: 8))
+                                .multilineTextAlignment(.center)
+                                .padding(.horizontal)
                         }
                     }
-                    .padding()
                 }
 
-                Spacer()
-
                 // Buttons
-                VStack(spacing: 16) {
-                    Button(action: receiveLater) {
-                        Text("Receive Later")
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
-                            .frame(maxWidth: .infinity)
-                    }
-                    .accessibilityLabel("Receive later")
-                    .accessibilityHint("Saves this token to receive at a later time")
-
+                VStack(spacing: 12) {
                     Button(action: receiveToken) {
                         if isReceiving {
                             ProgressView()
@@ -122,13 +78,18 @@ struct ReceiveTokenDetailView: View {
                             Text("Receive")
                         }
                     }
-                    .glassButton(prominent: true)
+                    .buttonStyle(.bordered)
                     .controlSize(.large)
+                    .frame(maxWidth: .infinity)
                     .disabled(isReceiving || !tokenLockedToKnownKey)
-                    .accessibilityLabel(isReceiving ? "Receiving token" : "Receive \(tokenAmount) sats")
-                    .accessibilityHint("Claims this ecash token to your wallet")
+
+                    Button(action: receiveLater) {
+                        Text("Receive Later")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                    }
                 }
-                .padding()
+                .padding(.horizontal)
                 .padding(.bottom, 16)
             }
             .navigationTitle("Receive Ecash")
@@ -138,30 +99,40 @@ struct ReceiveTokenDetailView: View {
                     Button(action: { dismiss() }) {
                         Image(systemName: "xmark")
                     }
-                    .accessibilityLabel("Close")
-                    .accessibilityHint("Dismisses the token detail screen")
                 }
             }
         }
         .onAppear {
             parseToken()
-            animateToken()
-        }
-        .onDisappear {
-            tokenAnimationTimer?.invalidate()
-            tokenAnimationTimer = nil
         }
     }
-    
+
+    // MARK: - Helpers
+
+    private func detailRow(icon: String, label: String, value: String) -> some View {
+        HStack {
+            Label(label, systemImage: icon)
+                .foregroundStyle(.secondary)
+            Spacer()
+            Text(value).fontWeight(.medium)
+        }
+        .font(.subheadline)
+    }
+
+    private var formattedAmount: String {
+        settings.useBitcoinSymbol ? "₿\(tokenAmount)" : "\(tokenAmount) sat"
+    }
+
+    func shortMintUrl(_ url: String) -> String {
+        URL(string: url)?.host ?? url
+    }
+
+    // MARK: - Actions
+
     func parseToken() {
         do {
             let token = try walletManager.decodeToken(tokenString: tokenString)
             self.decodedToken = token
-            
-            // Token structure in cdk-swift:
-            // public let token: [TokenProof]
-            // public struct TokenProof: Codable { public let mint: String, public let proofs: [Proof] }
-
             let proofs = try token.proofsSimple()
             self.tokenAmount = proofs.reduce(0) { $0 + $1.amount.value }
             let mint = try token.mintUrl()
@@ -173,20 +144,16 @@ struct ReceiveTokenDetailView: View {
             let hasMatch = tokenP2PKPubkeys.contains { knownKeys.contains(normalizeP2PKForComparison($0)) }
             self.tokenLockedToKnownKey = tokenP2PKPubkeys.isEmpty || hasMatch
             if !self.tokenLockedToKnownKey {
-                errorMessage = "This token is P2PK locked and requires a matching key from Settings > P2PK Features."
-            }
-            
-            // Calculate receive fee asynchronously
-            Task {
-                await calculateFee()
+                errorMessage = "This token is P2PK locked and requires a matching key from Settings > P2PK."
             }
 
+            Task { await calculateFee() }
         } catch {
             errorMessage = "Invalid Token: \(error.localizedDescription)"
             isLoadingFee = false
         }
     }
-    
+
     func calculateFee() async {
         do {
             let fee = try await walletManager.calculateReceiveFee(tokenString: tokenString)
@@ -196,14 +163,12 @@ struct ReceiveTokenDetailView: View {
             }
         } catch {
             await MainActor.run {
-                // If we can't calculate fee, show 0
                 self.receiveFee = 0
                 self.isLoadingFee = false
-                print("Failed to calculate receive fee: \(error)")
             }
         }
     }
-    
+
     func receiveToken() {
         guard tokenLockedToKnownKey else {
             errorMessage = "Missing matching P2PK key for this token."
@@ -216,15 +181,11 @@ struct ReceiveTokenDetailView: View {
                 let receivedAmount = try await walletManager.receiveTokens(tokenString: tokenString)
                 await MainActor.run {
                     HapticFeedback.notification(.success)
-                    
-                    // Post notification to show badge on main screen
                     NotificationCenter.default.post(
                         name: .cashuTokenReceived,
                         object: nil,
-                        userInfo: ["amount": receivedAmount, "fee": UInt64(0)] // TODO: Calculate fee
+                        userInfo: ["amount": receivedAmount, "fee": UInt64(0)]
                     )
-                    
-                    // Dismiss entire scanner flow (not just this view)
                     if let onComplete = onComplete {
                         onComplete()
                     } else {
@@ -240,10 +201,21 @@ struct ReceiveTokenDetailView: View {
             }
         }
     }
-    
-    func shortMintUrl(_ url: String) -> String {
-        guard let urlObj = URL(string: url) else { return url }
-        return urlObj.host ?? url
+
+    func receiveLater() {
+        let pendingReceive = PendingReceiveToken(
+            tokenId: UUID().uuidString,
+            token: tokenString,
+            amount: tokenAmount,
+            date: Date(),
+            mintUrl: mintUrl
+        )
+        walletManager.savePendingReceiveToken(pendingReceive)
+        if let onComplete = onComplete {
+            onComplete()
+        } else {
+            dismiss()
+        }
     }
 
     private func normalizeP2PKForComparison(_ pubkey: String) -> String {
@@ -253,58 +225,4 @@ struct ReceiveTokenDetailView: View {
         }
         return normalized
     }
-    
-    func receiveLater() {
-        // Save token for later claiming
-        let pendingReceive = PendingReceiveToken(
-            tokenId: UUID().uuidString,
-            token: tokenString,
-            amount: tokenAmount,
-            date: Date(),
-            mintUrl: mintUrl
-        )
-        
-        walletManager.savePendingReceiveToken(pendingReceive)
-        
-        // Haptic feedback
-        let generator = UINotificationFeedbackGenerator()
-        generator.notificationOccurred(.success)
-        
-        // Dismiss
-        if let onComplete = onComplete {
-            onComplete()
-        } else {
-            dismiss()
-        }
-    }
-    
-    func animateToken() {
-        let chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*()-_=+[]{}<>?/\\|~"
-        let targetText = tokenString
-        var currentLength = 0
-        
-        tokenAnimationTimer?.invalidate()
-        tokenAnimationTimer = Timer.scheduledTimer(withTimeInterval: 0.03, repeats: true) { timer in
-            currentLength += 6
-            
-            if currentLength >= targetText.count {
-                displayedToken = targetText
-                timer.invalidate()
-                tokenAnimationTimer = nil
-                return
-            }
-            
-            let endIndex = targetText.index(targetText.startIndex, offsetBy: currentLength)
-            var text = String(targetText[..<endIndex])
-            
-            // Add some random chars at the end
-            for _ in 0..<5 {
-                if let randomChar = chars.randomElement() {
-                    text.append(randomChar)
-                }
-            }
-            displayedToken = text
-        }
-    }
 }
-

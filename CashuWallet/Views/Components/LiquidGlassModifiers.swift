@@ -24,17 +24,9 @@ extension View {
         }
     }
 
-    /// Glass button style on iOS 26+; falls back to `.bordered`.
+    /// Standard SwiftUI button style for all actions.
     @ViewBuilder
     func glassButton(prominent: Bool = false) -> some View {
-        if #available(iOS 26, *) {
-            if prominent {
-                self.buttonStyle(.glassProminent)
-            } else {
-                self.buttonStyle(.glass)
-            }
-        } else {
-            self.buttonStyle(.bordered)
-        }
+        self.buttonStyle(.bordered)
     }
 }

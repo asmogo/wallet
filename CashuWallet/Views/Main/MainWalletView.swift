@@ -256,11 +256,11 @@ struct MainWalletView: View {
         case .receiveLightning:
             ReceiveLightningView()
                 .environmentObject(walletManager)
-                .presentationDetents([.medium, .large])
+                .presentationDetents([.large])
         case .sendEcash:
             SendView()
                 .environmentObject(walletManager)
-                .presentationDetents([.medium, .large])
+                .presentationDetents([.large])
         case .sendLightning:
             MeltView()
                 .environmentObject(walletManager)
