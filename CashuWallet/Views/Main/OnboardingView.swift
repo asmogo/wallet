@@ -93,7 +93,7 @@ struct OnboardingView: View {
 
             // Get Started button
             Button(action: { currentStep = .createOrRestore }) {
-                Text("GET STARTED")
+                Text("Get Started")
             }
             .glassButton(prominent: true).controlSize(.large)
             .padding(.bottom, 40)
@@ -135,7 +135,7 @@ struct OnboardingView: View {
                 } else {
                     HStack {
                         Image(systemName: "plus.circle.fill")
-                        Text("CREATE NEW WALLET")
+                        Text("Create New Wallet")
                     }
                 }
             }
@@ -146,7 +146,7 @@ struct OnboardingView: View {
             Button(action: { currentStep = .restoreInput }) {
                 HStack {
                     Image(systemName: "arrow.counterclockwise.circle")
-                    Text("RESTORE FROM SEED")
+                    Text("Restore from Seed")
                 }
             }
             .glassButton()
@@ -200,7 +200,7 @@ struct OnboardingView: View {
 
             // Continue button — go to verification step
             Button(action: startVerification) {
-                Text("I'VE SAVED MY SEED PHRASE")
+                Text("I've Saved My Seed Phrase")
             }
             .glassButton(prominent: true).controlSize(.large)
             .padding(.bottom, 40)

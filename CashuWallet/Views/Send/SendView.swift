@@ -921,7 +921,7 @@ struct MeltViewWithInvoice: View {
             Spacer()
 
             Button(action: getQuote) {
-                Text("TRY AGAIN")
+                Text("Try Again")
             }
             .glassButton()
             .accessibilityLabel("Try again")
@@ -974,7 +974,7 @@ struct MeltViewWithInvoice: View {
                 if isPaying {
                     ProgressView()
                 } else {
-                    Text("PAY \(quote.totalAmount) SAT")
+                    Text("Pay \(quote.totalAmount) sat")
                 }
             }
             .glassButton(prominent: true).controlSize(.large)
@@ -1147,7 +1147,7 @@ struct MeltViewWithAddress: View {
                 if isGettingQuote {
                     ProgressView()
                 } else {
-                    Text("GET QUOTE")
+                    Text("Get Quote")
                 }
             }
             .glassButton(prominent: true).controlSize(.large)
@@ -1208,7 +1208,7 @@ struct MeltViewWithAddress: View {
                 if isPaying {
                     ProgressView()
                 } else {
-                    Text("PAY \(quote.totalAmount) SAT")
+                    Text("Pay \(quote.totalAmount) sat")
                 }
             }
             .glassButton(prominent: true).controlSize(.large)

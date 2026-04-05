@@ -24,16 +24,12 @@ extension View {
         }
     }
 
-    /// Full-width rounded button. Liquid glass on iOS 26+, bordered capsule on earlier.
-    @ViewBuilder
+    /// Full-width action button. Bordered capsule, large control size.
+    /// Use for all primary and secondary CTA buttons.
     func glassButton(prominent: Bool = false) -> some View {
-        if #available(iOS 26, *) {
-            self.buttonStyle(.glass)
-                .controlSize(.large)
-        } else {
-            self.buttonStyle(.bordered)
-                .buttonBorderShape(.capsule)
-                .controlSize(.large)
-        }
+        self.buttonStyle(.bordered)
+            .buttonBorderShape(.capsule)
+            .controlSize(.large)
+            .frame(maxWidth: .infinity)
     }
 }
