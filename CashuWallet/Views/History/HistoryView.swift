@@ -21,12 +21,14 @@ struct HistoryView: View {
                         Section {
                             ForEach(paginatedTransactions) { transaction in
                                 transactionRow(transaction: transaction)
+                                    .listRowSeparator(.hidden)
                             }
                         }
 
                         if maxPages > 1 {
                             Section {
                                 paginationControls
+                                    .listRowSeparator(.hidden)
                             }
                         }
                     }

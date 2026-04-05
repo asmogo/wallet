@@ -145,6 +145,7 @@ struct SettingsView: View {
                     showRestoreFlowAlert: $showRestoreFlowAlert
                 )
             }
+            .listRowSeparator(.hidden)
         }
         .listStyle(.plain)
         .navigationTitle("Backup & Restore")
@@ -159,6 +160,7 @@ struct SettingsView: View {
                     showMintPicker: $showMintPicker
                 )
             }
+            .listRowSeparator(.hidden)
         }
         .listStyle(.plain)
         .navigationTitle("Lightning")
@@ -177,6 +179,7 @@ struct SettingsView: View {
                     nostrKeyError: $nostrKeyError
                 )
             }
+            .listRowSeparator(.hidden)
             Section("Relays") {
                 NostrRelaysSettingsSection(
                     relayInput: $relayInput,
@@ -184,6 +187,7 @@ struct SettingsView: View {
                     copiedRelay: $copiedRelay
                 )
             }
+            .listRowSeparator(.hidden)
         }
         .listStyle(.plain)
         .navigationTitle("Nostr")
@@ -194,6 +198,7 @@ struct SettingsView: View {
             Section {
                 PaymentRequestsSettingsSection()
             }
+            .listRowSeparator(.hidden)
         }
         .listStyle(.plain)
         .navigationTitle("Payment Requests")
@@ -208,6 +213,7 @@ struct SettingsView: View {
                     activeQRPayload: $activeQRPayload
                 )
             }
+            .listRowSeparator(.hidden)
         }
         .listStyle(.plain)
         .navigationTitle("Nostr Wallet Connect")
@@ -225,6 +231,7 @@ struct SettingsView: View {
                     p2pkError: $p2pkError
                 )
             }
+            .listRowSeparator(.hidden)
         }
         .listStyle(.plain)
         .navigationTitle("P2PK")
@@ -235,6 +242,7 @@ struct SettingsView: View {
             Section {
                 PrivacySettingsSection()
             }
+            .listRowSeparator(.hidden)
         }
         .listStyle(.plain)
         .navigationTitle("Privacy")
@@ -245,6 +253,7 @@ struct SettingsView: View {
             Section {
                 ThemeSettingsSection()
             }
+            .listRowSeparator(.hidden)
         }
         .listStyle(.plain)
         .navigationTitle("Appearance")

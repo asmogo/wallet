@@ -109,26 +109,28 @@ struct MintsListView: View {
     }
 
     private func mintRow(mint: MintInfo) -> some View {
-        HStack {
-            VStack(alignment: .leading, spacing: 4) {
-                HStack(spacing: 6) {
-                    Text(mint.name)
-                        .font(.body)
-                    if walletManager.activeMint?.url == mint.url {
-                        Text("Active")
-                            .font(.caption2)
-                            .foregroundStyle(.secondary)
+        NavigationLink(destination: MintDetailView(mint: mint)) {
+            HStack {
+                VStack(alignment: .leading, spacing: 4) {
+                    HStack(spacing: 6) {
+                        Text(mint.name)
+                            .font(.body)
+                        if walletManager.activeMint?.url == mint.url {
+                            Text("Active")
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
+                        }
                     }
+                    Text(mint.url)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
                 }
-                Text(mint.url)
-                    .font(.caption)
+                Spacer()
+                Text("\(mint.balance) sat")
+                    .font(.subheadline)
                     .foregroundStyle(.secondary)
-                    .lineLimit(1)
             }
-            Spacer()
-            Text("\(mint.balance) sat")
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
         }
         .contextMenu {
             Button { setActive(mint) } label: {

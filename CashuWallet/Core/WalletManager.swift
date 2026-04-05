@@ -445,7 +445,17 @@ class WalletManager: ObservableObject {
         try await mintService.setActiveMint(mint)
         await refreshBalance()
     }
-    
+
+    /// Fetch full mint info from the mint's API via CashuDevKit
+    func fetchFullMintInfo(mintUrl: String) async throws -> CashuDevKit.MintInfo? {
+        guard let walletRepository = walletRepository else {
+            throw WalletError.notInitialized
+        }
+        let mintUrlObj = try MintUrl(url: mintUrl)
+        let wallet = try await walletRepository.getWallet(mintUrl: mintUrlObj, unit: .sat)
+        return try await wallet.fetchMintInfo()
+    }
+
     // MARK: - Balance Operations
     
     func refreshBalance() async {

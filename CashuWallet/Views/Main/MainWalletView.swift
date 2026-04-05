@@ -106,9 +106,6 @@ struct MainWalletView: View {
                 if walletManager.pendingBalance > 0 || !walletManager.pendingTokens.isEmpty {
                     pendingBadge
                 }
-                if npcService.isEnabled && npcService.isInitialized {
-                    lightningAddressBadge
-                }
             }
         }
     }
@@ -163,26 +160,26 @@ struct MainWalletView: View {
         HStack(spacing: 12) {
             Button { activeSheet = .chooser(.receive) } label: {
                 Text("Receive")
-                    .font(.subheadline.weight(.medium))
+                    .font(.body.weight(.medium))
                     .frame(maxWidth: .infinity)
-                    .padding(.vertical, 14)
+                    .padding(.vertical, 18)
                     .liquidGlass(in: Capsule(), interactive: true)
             }
             .accessibilityHint("Opens options to receive ecash or lightning payments")
 
             Button { activeSheet = .scanner } label: {
                 Image(systemName: "viewfinder")
-                    .font(.body)
-                    .padding(14)
+                    .font(.title3)
+                    .padding(18)
                     .liquidGlass(in: Circle(), interactive: true)
             }
             .accessibilityLabel("Scan QR code")
 
             Button { activeSheet = .chooser(.send) } label: {
                 Text("Send")
-                    .font(.subheadline.weight(.medium))
+                    .font(.body.weight(.medium))
                     .frame(maxWidth: .infinity)
-                    .padding(.vertical, 14)
+                    .padding(.vertical, 18)
                     .liquidGlass(in: Capsule(), interactive: true)
             }
             .accessibilityHint("Opens options to send ecash or pay lightning invoices")
