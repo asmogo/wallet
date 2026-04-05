@@ -19,7 +19,7 @@ struct SendView: View {
     @State private var checkingTask: Task<Void, Never>?
 
     // Copy button feedback
-    @State private var copyButtonText = "COPY"
+    @State private var copyButtonText = "Copy"
     @State private var showShareSheet = false
     @State private var lockWithP2PK = false
     @State private var p2pkPubkeyInput = ""
@@ -92,14 +92,14 @@ struct SendView: View {
                     .padding(.top, 16)
             }
 
-            Spacer()
+            Spacer(minLength: 24)
 
             // Amount display
             VStack(spacing: 4) {
                 TextField("0", text: $amountString)
                     .keyboardType(.numberPad)
                     .focused($amountFieldFocused)
-                    .font(.title.bold())
+                    .font(.largeTitle.bold())
                     .multilineTextAlignment(.center)
 
                 Text("sat")
@@ -120,43 +120,46 @@ struct SendView: View {
                     .padding(.top, 8)
             }
 
-            Spacer()
+            Spacer(minLength: 24)
 
-            p2pkLockSection
+            // P2PK + Send button
+            VStack(spacing: 16) {
+                p2pkLockSection
+                    .padding(.horizontal)
+
+                // Send button
+                Button(action: { showSendConfirmation = true }) {
+                    if isGenerating {
+                        ProgressView()
+                    } else {
+                        Text("Send")
+                            .font(.body.weight(.semibold))
+                            .frame(maxWidth: .infinity)
+                    }
+                }
+                .glassButton(prominent: true).controlSize(.large)
+                .disabled(!canSend || isGenerating)
                 .padding(.horizontal)
-                .padding(.bottom, 8)
-
-            // Send button
-            Button(action: { showSendConfirmation = true }) {
-                if isGenerating {
-                    ProgressView()
-                } else {
-                    Text("SEND")
+                .accessibilityLabel(isGenerating ? "Generating token" : "Send \(amountString.isEmpty ? "0" : amountString) sats")
+                .accessibilityHint("Confirms and sends the ecash token")
+                .confirmationDialog(
+                    "Confirm Send",
+                    isPresented: $showSendConfirmation,
+                    titleVisibility: .visible
+                ) {
+                    Button("Send \(amountString) sats") {
+                        generateToken()
+                    }
+                    Button("Cancel", role: .cancel) { }
+                } message: {
+                    if let mint = walletManager.activeMint {
+                        Text("Send \(amountString) sats from \(mint.name)\(lockWithP2PK ? " (P2PK locked)" : "")")
+                    } else {
+                        Text("Send \(amountString) sats")
+                    }
                 }
             }
-            .glassButton(prominent: true).controlSize(.large)
-            .disabled(!canSend || isGenerating)
-            .padding(.horizontal)
-            .padding(.vertical, 20)
-            .accessibilityLabel(isGenerating ? "Generating token" : "Send \(amountString.isEmpty ? "0" : amountString) sats")
-            .accessibilityHint("Confirms and sends the ecash token")
-            .confirmationDialog(
-                "Confirm Send",
-                isPresented: $showSendConfirmation,
-                titleVisibility: .visible
-            ) {
-                Button("Send \(amountString) sats") {
-                    generateToken()
-                }
-                Button("Cancel", role: .cancel) { }
-            } message: {
-                if let mint = walletManager.activeMint {
-                    Text("Send \(amountString) sats from \(mint.name)\(lockWithP2PK ? " (P2PK locked)" : "")")
-                } else {
-                    Text("Send \(amountString) sats")
-                }
-            }
-            .padding(.bottom, 30)
+            .padding(.bottom, 16)
         }
     }
 
@@ -199,61 +202,47 @@ struct SendView: View {
     }
 
     private var p2pkLockSection: some View {
-        VStack(alignment: .leading, spacing: 8) {
-                Toggle(isOn: $lockWithP2PK.animation(.easeInOut(duration: 0.2))) {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("Lock ecash to P2PK key")
-                            .font(.subheadline)
-                        Text("Receiver must have the matching private key to claim this token.")
-                            .font(.caption2)
-                            .foregroundStyle(.secondary)
+        VStack(alignment: .leading, spacing: 12) {
+            Toggle(isOn: $lockWithP2PK.animation(.easeInOut(duration: 0.2))) {
+                Text("Lock with P2PK")
+                    .font(.subheadline)
+            }
+            .toggleStyle(.switch)
+            .tint(.accentColor)
+            .accessibilityLabel("Lock ecash to P2PK key")
+            .accessibilityHint("When enabled, only the holder of the matching private key can claim this token")
+            .accessibilityValue(lockWithP2PK ? "On" : "Off")
+
+            if lockWithP2PK {
+                TextField("02... public key", text: $p2pkPubkeyInput)
+                    .font(.system(.caption, design: .monospaced))
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+                    .padding(10)
+                    .background(
+                        RoundedRectangle(cornerRadius: 8)
+                            .fill(Color(uiColor: .tertiarySystemGroupedBackground))
+                    )
+                    .accessibilityLabel("P2PK public key")
+                    .accessibilityHint("Enter the recipient's P2PK public key starting with 02")
+
+                if let ownKey = settings.p2pkKeys.last {
+                    Button(action: { p2pkPubkeyInput = ownKey.publicKey }) {
+                        Text("Use my latest key")
+                            .font(.caption)
                     }
+                    .accessibilityLabel("Use my latest key")
+                    .accessibilityHint("Fills in your most recent P2PK public key")
                 }
-                .toggleStyle(.switch)
-                .accessibilityLabel("Lock ecash to P2PK key")
-                .accessibilityHint("When enabled, only the holder of the matching private key can claim this token")
-                .accessibilityValue(lockWithP2PK ? "On" : "Off")
 
-                if lockWithP2PK {
-                    TextField("02... P2PK public key", text: $p2pkPubkeyInput)
-                        .font(.system(.caption, design: .monospaced))
-                        .textInputAutocapitalization(.never)
-                        .autocorrectionDisabled()
-                        .padding(10)
-                        .background(
-                            RoundedRectangle(cornerRadius: 10)
-                                .fill(Color(uiColor: .tertiarySystemGroupedBackground))
-                                .overlay(
-                                    RoundedRectangle(cornerRadius: 10)
-                                        .stroke(Color(uiColor: .separator), lineWidth: 1)
-                                )
-                        )
-                        .accessibilityLabel("P2PK public key")
-                        .accessibilityHint("Enter the recipient's P2PK public key starting with 02")
-
-                    HStack {
-                        if let ownKey = settings.p2pkKeys.last {
-                            Button(action: { p2pkPubkeyInput = ownKey.publicKey }) {
-                                Text("Use my latest key")
-                                    .font(.caption)
-                            }
-                            .accessibilityLabel("Use my latest key")
-                            .accessibilityHint("Fills in your most recent P2PK public key")
-                        }
-
-                        Spacer()
-                    }
-
-                    if !p2pkPubkeyInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
-                       normalizedP2PKPubkeyInput == nil {
-                        Text("Invalid P2PK key format")
-                            .font(.caption2)
-                            .foregroundStyle(.red)
-                    }
+                if !p2pkPubkeyInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+                   normalizedP2PKPubkeyInput == nil {
+                    Text("Invalid P2PK key format")
+                        .font(.caption2)
+                        .foregroundStyle(.red)
                 }
             }
-        .padding(12)
-        .liquidGlass(in: RoundedRectangle(cornerRadius: 10))
+        }
     }
 
     // MARK: - Token Display View
@@ -346,7 +335,7 @@ struct SendView: View {
             if tokenClaimed {
                 // Token was claimed - show done button
                 Button(action: { dismiss() }) {
-                    Text("DONE")
+                    Text("Done")
                 }
                 .glassButton().controlSize(.large)
                 .accessibilityLabel("Done")
@@ -466,7 +455,7 @@ struct SendView: View {
         // Show "COPIED" feedback for 3 seconds
         copyButtonText = "COPIED"
         DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
-            copyButtonText = "COPY"
+            copyButtonText = "Copy"
         }
     }
 
@@ -770,7 +759,7 @@ struct MeltView: View {
             Spacer()
 
             Button(action: { dismiss() }) {
-                Text("DONE")
+                Text("Done")
             }
             .glassButton().controlSize(.large)
             .accessibilityLabel("Done")
@@ -1002,7 +991,7 @@ struct MeltViewWithInvoice: View {
                 onComplete?()
                 dismiss()
             }) {
-                Text("DONE")
+                Text("Done")
             }
             .glassButton().controlSize(.large)
             .accessibilityLabel("Done")
@@ -1236,7 +1225,7 @@ struct MeltViewWithAddress: View {
                 onComplete?()
                 dismiss()
             }) {
-                Text("DONE")
+                Text("Done")
             }
             .glassButton().controlSize(.large)
             .accessibilityLabel("Done")

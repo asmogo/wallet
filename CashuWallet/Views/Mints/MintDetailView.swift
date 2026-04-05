@@ -219,7 +219,7 @@ struct MintDetailView: View {
             Text(nut)
                 .font(.caption2.weight(.semibold))
             Text(label)
-                .font(.system(size: 9))
+                .font(.caption2)
                 .foregroundStyle(.secondary)
         }
         .frame(maxWidth: .infinity)

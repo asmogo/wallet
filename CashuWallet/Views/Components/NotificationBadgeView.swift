@@ -23,7 +23,7 @@ struct NotificationBadgeView: View {
 
                     if let fee = fee, fee > 0 {
                         Text("(fee: \(fee) sat)")
-                            .foregroundColor(.white.opacity(0.8))
+                            .foregroundStyle(.secondary)
                             .font(.caption)
                     }
                 } else {

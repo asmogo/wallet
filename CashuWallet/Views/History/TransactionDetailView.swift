@@ -6,7 +6,7 @@ struct TransactionDetailView: View {
     let transaction: WalletTransaction
     @ObservedObject var settings = SettingsManager.shared
     
-    @State private var copyButtonText = "COPY"
+    @State private var copyButtonText = "Copy"
     @State private var showShareSheet = false
     
     /// Returns the content to display as QR code (token for Ecash, payment request for Lightning)
@@ -25,18 +25,10 @@ struct TransactionDetailView: View {
             VStack(spacing: 20) {
                     // QR Code (for token or lightning payment request)
                     if let content = qrContent {
-                        ZStack {
-                            RoundedRectangle(cornerRadius: 16)
-                                .fill(Color.white)
-                                .frame(width: 280, height: 280)
-                            
-                            QRCodeView(content: content)
-                                .frame(width: 250, height: 250)
-                        }
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 16)
-                                .stroke(Color.secondary.opacity(0.3), lineWidth: 1)
-                        )
+                        QRCodeView(content: content)
+                            .frame(width: 250, height: 250)
+                            .padding()
+                            .background(Color.white, in: RoundedRectangle(cornerRadius: 16))
                         .padding(.top, 20)
                     } else {
                         // Placeholder icon if no QR content
@@ -214,7 +206,7 @@ struct TransactionDetailView: View {
         // Show "COPIED" feedback for 3 seconds
         copyButtonText = "COPIED"
         DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
-            copyButtonText = "COPY"
+            copyButtonText = "Copy"
         }
     }
 }

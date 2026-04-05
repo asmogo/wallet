@@ -233,7 +233,7 @@ struct OnboardingView: View {
             Spacer()
 
             Button(action: checkVerification) {
-                Text("CONFIRM")
+                Text("Confirm")
             }
             .glassButton(prominent: true).controlSize(.large)
             .disabled(verificationAnswers.count < verificationIndices.count)
@@ -390,7 +390,7 @@ struct OnboardingView: View {
                 if isRestoring {
                     ProgressView()
                 } else {
-                    Text("NEXT")
+                    Text("Next")
                 }
             }
             .glassButton(prominent: true).controlSize(.large)
@@ -537,13 +537,13 @@ struct OnboardingView: View {
                 // Continue / Skip button
                 if restoreResults.isEmpty && mintsToRestore.isEmpty {
                     Button(action: finishRestore) {
-                        Text("SKIP")
+                        Text("Skip")
                     }
                     .glassButton().controlSize(.large)
                     .disabled(isRestoringMints)
                 } else {
                     Button(action: finishRestore) {
-                        Text("CONTINUE")
+                        Text("Continue")
                     }
                     .glassButton(prominent: true).controlSize(.large)
                     .disabled(isRestoringMints)

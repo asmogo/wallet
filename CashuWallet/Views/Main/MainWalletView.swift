@@ -65,7 +65,7 @@ struct MainWalletView: View {
     // MARK: - Balance Section
 
     private var balanceSection: some View {
-        VStack(spacing: 24) {
+        VStack(spacing: 16) {
             // Unit toggle
             Button(action: { settings.useBitcoinSymbol.toggle() }) {
                 Text(settings.unitLabel)
@@ -82,30 +82,29 @@ struct MainWalletView: View {
             // Primary balance
             VStack(spacing: 6) {
                 Text(formatBalanceWithUnit(walletManager.balance))
-                    .font(.title.bold())
+                    .font(.largeTitle.bold())
                     .minimumScaleFactor(0.5)
                     .lineLimit(1)
+                    .contentTransition(.numericText())
                     .accessibilityLabel("Balance: \(formatBalanceWithUnit(walletManager.balance))")
 
                 if settings.showFiatBalance && priceService.btcPriceUSD > 0 {
                     Text(priceService.formatSatsAsFiat(walletManager.balance))
-                        .font(.subheadline)
+                        .font(.body)
                         .foregroundStyle(.secondary)
                 }
             }
 
             // Mint info
             if let mint = walletManager.activeMint {
-                Text("\(mint.name)  ·  \(formatBalanceWithUnit(mint.balance))")
+                Text(mint.name)
                     .font(.footnote)
                     .foregroundStyle(.secondary)
             }
 
             // Status badges
-            VStack(spacing: 8) {
-                if walletManager.pendingBalance > 0 || !walletManager.pendingTokens.isEmpty {
-                    pendingBadge
-                }
+            if walletManager.pendingBalance > 0 || !walletManager.pendingTokens.isEmpty {
+                pendingBadge
             }
         }
     }

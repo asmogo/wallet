@@ -23,144 +23,126 @@ struct ReceiveTokenDetailView: View {
     @State private var tokenAnimationTimer: Timer?
     
     var body: some View {
-        VStack(spacing: 0) {
-            // Header
-            HStack {
-                Button(action: { dismiss() }) {
-                    Image(systemName: "xmark")
-                        .font(.title3.weight(.bold))
-                }
-                .accessibilityLabel("Close")
-                .accessibilityHint("Dismisses the token detail screen")
-                Spacer()
-                Text("Receive Ecash")
-                    .font(.headline)
-                Spacer()
-                // Placeholder for alignment
-                Color.clear.frame(width: 20, height: 20)
-                    .accessibilityHidden(true)
-            }
-            .padding()
-            .padding(.top, 20)
-            
-            // Content
-            ScrollView {
-                VStack(spacing: 24) {
-                    // Token Card
-                    ZStack {
-                        // Background gradient
-                        LinearGradient(
-                            gradient: Gradient(colors: [
-                                Color(red: 0.2, green: 0.2, blue: 0.3), // Approx primary dark
-                                Color.black.opacity(0.5)
-                            ]),
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        )
-                        
-                        // Scrambled Token Text Background
-                        GeometryReader { geo in
-                            Text(displayedToken)
-                                .font(.system(.caption, design: .monospaced))
-                                .foregroundColor(.gray.opacity(0.5))
-                                .frame(width: geo.size.width, height: geo.size.height, alignment: .topLeading)
-                                .multilineTextAlignment(.leading)
-                                .padding()
-                                .mask(
-                                    LinearGradient(gradient: Gradient(stops: [
-                                        .init(color: .black, location: 0),
-                                        .init(color: .black, location: 0.5),
-                                        .init(color: .clear, location: 0.9)
-                                    ]), startPoint: .top, endPoint: .bottom)
-                                )
-                        }
-                        
-                        // Overlay Content
-                        VStack {
-                            Spacer()
-                            HStack(alignment: .bottom) {
-                                Text(shortMintUrl(mintUrl))
-                                    .font(.subheadline)
+        NavigationStack {
+            VStack(spacing: 0) {
+                // Content
+                ScrollView {
+                    VStack(spacing: 24) {
+                        // Token Card
+                        ZStack {
+                            // Background gradient
+                            RoundedRectangle(cornerRadius: 16)
+                                .fill(.quaternary)
 
+                            // Scrambled Token Text Background
+                            GeometryReader { geo in
+                                Text(displayedToken)
+                                    .font(.system(.caption, design: .monospaced))
+                                    .foregroundStyle(.tertiary)
+                                    .frame(width: geo.size.width, height: geo.size.height, alignment: .topLeading)
+                                    .multilineTextAlignment(.leading)
+                                    .padding()
+                                    .mask(
+                                        LinearGradient(gradient: Gradient(stops: [
+                                            .init(color: .black, location: 0),
+                                            .init(color: .black, location: 0.5),
+                                            .init(color: .clear, location: 0.9)
+                                        ]), startPoint: .top, endPoint: .bottom)
+                                    )
+                            }
+
+                            // Overlay Content
+                            VStack {
                                 Spacer()
+                                HStack(alignment: .bottom) {
+                                    Text(shortMintUrl(mintUrl))
+                                        .font(.subheadline)
+                                        .foregroundStyle(.secondary)
 
-                                Text("\(tokenAmount) sat")
-                                    .font(.title.bold())
+                                    Spacer()
+
+                                    Text("\(tokenAmount) sat")
+                                        .font(.title.bold())
+                                }
+                                .padding()
                             }
-                            .padding()
+                        }
+                        .frame(height: 200)
+                        .clipShape(RoundedRectangle(cornerRadius: 16))
+                        .accessibilityElement(children: .combine)
+                        .accessibilityLabel("Ecash token card, \(tokenAmount) sats from \(shortMintUrl(mintUrl))")
+
+                        // Details List
+                        VStack(spacing: 12) {
+                            if isLoadingFee {
+                                LabeledContent("Fee") {
+                                    ProgressView()
+                                        .scaleEffect(0.8)
+                                }
+                            } else {
+                                LabeledContent("Fee", value: "\(receiveFee) sat")
+                            }
+                            LabeledContent("Fiat", value: "$0.00")
+                            LabeledContent("Mint", value: shortMintUrl(mintUrl))
+                            if !p2pkPubkeys.isEmpty {
+                                LabeledContent("P2PK", value: tokenLockedToKnownKey ? "Locked to your key" : "Locked to unknown key")
+                            }
+                        }
+                        .font(.subheadline)
+                        .padding(.horizontal)
+
+                        if let error = errorMessage {
+                            Text(error)
+                                .foregroundStyle(.red)
+                                .font(.caption)
+                                .padding()
+                                .liquidGlassMaterial(in: RoundedRectangle(cornerRadius: 8))
                         }
                     }
-                    .frame(height: 200)
-                    .cornerRadius(16)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 16)
-                            .stroke(Color.white.opacity(0.1), lineWidth: 1)
-                    )
-                    .shadow(color: Color.black.opacity(0.3), radius: 10, x: 0, y: 5)
-                    .accessibilityElement(children: .combine)
-                    .accessibilityLabel("Ecash token card, \(tokenAmount) sats from \(shortMintUrl(mintUrl))")
-                    
-                    // Details List
-                    VStack(spacing: 12) {
-                        if isLoadingFee {
-                            LabeledContent("Fee") {
-                                ProgressView()
-                                    .scaleEffect(0.8)
-                            }
+                    .padding()
+                }
+
+                Spacer()
+
+                // Buttons
+                VStack(spacing: 16) {
+                    Button(action: receiveLater) {
+                        Text("Receive Later")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                            .frame(maxWidth: .infinity)
+                    }
+                    .accessibilityLabel("Receive later")
+                    .accessibilityHint("Saves this token to receive at a later time")
+
+                    Button(action: receiveToken) {
+                        if isReceiving {
+                            ProgressView()
                         } else {
-                            LabeledContent("Fee", value: "\(receiveFee) sat")
-                        }
-                        LabeledContent("Fiat", value: "$0.00")
-                        LabeledContent("Mint", value: shortMintUrl(mintUrl))
-                        if !p2pkPubkeys.isEmpty {
-                            LabeledContent("P2PK", value: tokenLockedToKnownKey ? "Locked to your key" : "Locked to unknown key")
+                            Text("Receive")
                         }
                     }
-                    .font(.subheadline)
-                    .padding(.horizontal)
-                    
-                    if let error = errorMessage {
-                        Text(error)
-                            .foregroundColor(.red)
-                            .font(.caption)
-                            .padding()
-                            .liquidGlassMaterial(in: RoundedRectangle(cornerRadius: 8))
-                    }
+                    .glassButton(prominent: true)
+                    .controlSize(.large)
+                    .disabled(isReceiving || !tokenLockedToKnownKey)
+                    .accessibilityLabel(isReceiving ? "Receiving token" : "Receive \(tokenAmount) sats")
+                    .accessibilityHint("Claims this ecash token to your wallet")
                 }
                 .padding()
+                .padding(.bottom, 16)
             }
-            
-            Spacer()
-            
-            // Buttons
-            VStack(spacing: 16) {
-                Button(action: receiveLater) {
-                    Text("RECEIVE LATER")
-                        .font(.headline)
-                        .foregroundStyle(.secondary)
-                        .frame(maxWidth: .infinity)
-                }
-                .accessibilityLabel("Receive later")
-                .accessibilityHint("Saves this token to receive at a later time")
-                .padding(.bottom, 8)
-
-                Button(action: receiveToken) {
-                    if isReceiving {
-                        ProgressView()
-                    } else {
-                        Text("Receive")
+            .navigationTitle("Receive Ecash")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button(action: { dismiss() }) {
+                        Image(systemName: "xmark")
                     }
+                    .accessibilityLabel("Close")
+                    .accessibilityHint("Dismisses the token detail screen")
                 }
-                .glassButton(prominent: true)
-                .controlSize(.large)
-                .disabled(isReceiving || !tokenLockedToKnownKey)
-                .accessibilityLabel(isReceiving ? "Receiving token" : "Receive \(tokenAmount) sats")
-                .accessibilityHint("Claims this ecash token to your wallet")
             }
-            .padding()
-            .padding(.bottom, 20)
         }
-        .background(Color.black.ignoresSafeArea())
         .onAppear {
             parseToken()
             animateToken()

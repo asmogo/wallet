@@ -13,7 +13,7 @@ struct ReceiveLightningView: View {
     @State private var isPaid = false
     @State private var errorMessage: String?
     @State private var showMintPicker = false
-    @State private var copyButtonText = "COPY"
+    @State private var copyButtonText = "Copy"
     @State private var pollingTask: Task<Void, Never>?
     @State private var lightningAddressCopied = false
     @State private var expiryTimeRemaining: TimeInterval = 0
@@ -93,7 +93,7 @@ struct ReceiveLightningView: View {
                 TextField("0", text: $amountString)
                     .keyboardType(.numberPad)
                     .focused($amountFieldFocused)
-                    .font(.title.bold())
+                    .font(.largeTitle.bold())
                     .multilineTextAlignment(.center)
 
                 Text("sat")
@@ -118,7 +118,7 @@ struct ReceiveLightningView: View {
                 if isCreatingInvoice {
                     ProgressView()
                     } else {
-                    Text("CREATE INVOICE")
+                    Text("Create Invoice")
                 }
             }
             .glassButton(prominent: true).controlSize(.large)
@@ -126,7 +126,8 @@ struct ReceiveLightningView: View {
             .accessibilityLabel(isCreatingInvoice ? "Creating invoice" : "Create invoice")
             .accessibilityHint("Creates a lightning invoice for \(amountString.isEmpty ? "0" : amountString) sats")
             .padding(.horizontal)
-            .padding(.vertical, 30)
+            .padding(.horizontal)
+            .padding(.bottom, 16)
         }
     }
     
@@ -402,7 +403,7 @@ struct ReceiveLightningView: View {
         // Show "COPIED" feedback for 3 seconds
         copyButtonText = "COPIED"
         DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
-            copyButtonText = "COPY"
+            copyButtonText = "Copy"
         }
     }
     
