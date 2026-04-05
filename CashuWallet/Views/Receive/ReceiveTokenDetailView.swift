@@ -78,9 +78,7 @@ struct ReceiveTokenDetailView: View {
                             Text("Receive")
                         }
                     }
-                    .buttonStyle(.bordered)
-                    .controlSize(.large)
-                    .frame(maxWidth: .infinity)
+                    .glassButton()
                     .disabled(isReceiving || !tokenLockedToKnownKey)
 
                     Button(action: receiveLater) {

@@ -559,28 +559,41 @@ struct MeltView: View {
         return !user.isEmpty && domain.contains(".") && !domain.hasPrefix(".") && !domain.hasSuffix(".")
     }
 
+    @ObservedObject private var settings = SettingsManager.shared
+
     var body: some View {
         NavigationStack {
-            if isPaid {
-                paymentSuccessView
-            } else if let quote = meltQuote {
-                quoteConfirmView(quote: quote)
-            } else {
-                invoiceInputView
-            }
-        }
-        .navigationBarTitleDisplayMode(.inline)
-        .toolbar {
-            ToolbarItem(placement: .navigationBarLeading) {
-                Button(action: { dismiss() }) {
-                    Image(systemName: "xmark")
+            Group {
+                if isPaid {
+                    paymentSuccessView
+                } else if let quote = meltQuote {
+                    quoteConfirmView(quote: quote)
+                } else {
+                    invoiceInputView
                 }
-                .accessibilityLabel("Close")
             }
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button(action: { dismiss() }) {
+                        Image(systemName: "xmark")
+                    }
+                    .accessibilityLabel("Close")
+                }
 
-            ToolbarItem(placement: .principal) {
-                Text("Pay Lightning")
-                    .font(.headline)
+                ToolbarItem(placement: .principal) {
+                    Text("Pay Lightning")
+                        .font(.headline)
+                }
+
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button(action: { settings.useBitcoinSymbol.toggle() }) {
+                        Text(settings.unitLabel)
+                            .font(.caption)
+                            .fontWeight(.bold)
+                            .foregroundStyle(Color.accentColor)
+                    }
+                }
             }
         }
     }
@@ -588,31 +601,31 @@ struct MeltView: View {
     // MARK: - Invoice Input View
 
     private var invoiceInputView: some View {
-        VStack(spacing: 24) {
-            Spacer()
+        VStack(spacing: 0) {
+            // Mint selector
+            if let mint = walletManager.activeMint {
+                meltMintSelector(mint: mint)
+                    .padding(.horizontal)
+                    .padding(.top, 12)
+            }
 
-            Image(systemName: "bolt.fill")
-                .font(.title)
-                .foregroundStyle(Color.accentColor)
-                .accessibilityHidden(true)
+            // Invoice input
+            HStack(alignment: .top) {
+                TextField("Lightning address or invoice", text: $invoice, axis: .vertical)
+                    .font(.body)
+                    .lineLimit(3...5)
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
 
-            Text("Pay Lightning Request")
-                .font(.title2)
+                Button("Paste", action: pasteFromClipboard)
+                    .font(.subheadline.weight(.medium))
+            }
+            .padding()
+            .liquidGlass(in: RoundedRectangle(cornerRadius: 12))
+            .padding(.horizontal)
+            .padding(.top, 16)
 
-            Text("Paste a Lightning invoice/offer or BIP 353 address")
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-
-            TextEditor(text: $invoice)
-                .font(.system(.body, design: .monospaced))
-                .scrollContentBackground(.hidden)
-                .frame(height: 100)
-                .padding()
-                .liquidGlass(in: RoundedRectangle(cornerRadius: 10))
-                .padding(.horizontal)
-                .accessibilityLabel("Lightning invoice or address")
-                .accessibilityHint("Enter a lightning invoice, offer, or BIP 353 address")
-
+            // Amount field for lightning addresses
             if isHumanReadableAddress {
                 VStack(spacing: 4) {
                     TextField("0", text: $amountString)
@@ -621,53 +634,65 @@ struct MeltView: View {
                         .font(.largeTitle.bold())
                         .multilineTextAlignment(.center)
                     Text("sat")
-                        .font(.title3)
+                        .font(.subheadline)
                         .foregroundStyle(.secondary)
                 }
-                .accessibilityElement(children: .combine)
-                .accessibilityLabel("Payment amount")
-                .accessibilityValue("\(amountString.isEmpty ? "0" : amountString) sats")
-                .onAppear {
-                    meltAmountFieldFocused = true
-                }
+                .padding(.top, 24)
+                .onAppear { meltAmountFieldFocused = true }
             }
-
-            Button(action: pasteFromClipboard) {
-                HStack {
-                    Image(systemName: "doc.on.clipboard")
-                        .accessibilityHidden(true)
-                    Text("Paste from Clipboard")
-                }
-            }
-            .glassButton().controlSize(.large)
-            .accessibilityLabel("Paste from Clipboard")
-            .accessibilityHint("Pastes invoice or address from clipboard")
-            .padding(.horizontal)
 
             if let error = errorMessage {
                 Text(error)
                     .font(.caption)
                     .foregroundStyle(.red)
+                    .padding(.top, 12)
+                    .padding(.horizontal)
             }
 
-            if !isHumanReadableAddress {
-                Spacer()
-            }
+            Spacer()
 
+            // Get Quote button
             Button(action: getQuote) {
                 if isGettingQuote {
                     ProgressView()
                 } else {
-                    Text("GET QUOTE")
+                    Text("Get Quote")
                 }
             }
-            .glassButton(prominent: true).controlSize(.large)
+            .glassButton()
             .disabled(!canGetQuote || isGettingQuote)
-            .accessibilityLabel(isGettingQuote ? "Getting quote" : "Get quote")
-            .accessibilityHint("Fetches a payment quote for this invoice")
             .padding(.horizontal)
-            .padding(.bottom, 30)
+            .padding(.bottom, 16)
         }
+    }
+
+    private func meltMintSelector(mint: MintInfo) -> some View {
+        HStack(spacing: 12) {
+            if let iconUrl = mint.iconUrl, let url = URL(string: iconUrl) {
+                AsyncImage(url: url) { image in
+                    image.resizable().aspectRatio(contentMode: .fill)
+                } placeholder: {
+                    Image(systemName: "building.columns").foregroundStyle(.secondary)
+                }
+                .frame(width: 40, height: 40)
+                .clipShape(Circle())
+            } else {
+                Image(systemName: "building.columns")
+                    .foregroundStyle(.secondary)
+                    .frame(width: 40, height: 40)
+            }
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(mint.name).font(.subheadline.weight(.medium))
+                Text("\(mint.balance) sat")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            Spacer()
+        }
+        .padding(12)
+        .liquidGlass(in: RoundedRectangle(cornerRadius: 12))
     }
 
     private var canGetQuote: Bool {
@@ -681,85 +706,81 @@ struct MeltView: View {
     // MARK: - Quote Confirm View
 
     private func quoteConfirmView(quote: MeltQuoteInfo) -> some View {
-        VStack(spacing: 24) {
-            Spacer()
-
-            Text("\(quote.amount)")
-                .font(.title.bold())
-                .foregroundStyle(Color.accentColor)
-                .accessibilityLabel("\(quote.amount) sats")
-
-            Text("sat")
-                .font(.title3)
-                .foregroundStyle(.secondary)
-                .accessibilityHidden(true)
-
-            VStack(spacing: 16) {
-                LabeledContent("Amount", value: "\(quote.amount) sat")
-                LabeledContent("Fee", value: "\(quote.feeReserve) sat")
-                Divider()
-                LabeledContent {
+        VStack(spacing: 0) {
+            ScrollView {
+                VStack(spacing: 20) {
+                    // Amount
                     Text("\(quote.totalAmount) sat")
-                        .fontWeight(.bold)
-                        .foregroundStyle(Color.accentColor)
-                } label: {
-                    Text("Total")
+                        .font(.system(size: 48, weight: .bold))
+                        .padding(.top, 24)
+
+                    // Details
+                    VStack(spacing: 12) {
+                        meltDetailRow(label: "Amount", value: "\(quote.amount) sat")
+                        meltDetailRow(label: "Fee", value: "\(quote.feeReserve) sat")
+                        if let mint = walletManager.activeMint {
+                            meltDetailRow(label: "Mint", value: URL(string: mint.url)?.host ?? mint.url)
+                        }
+                    }
+                    .padding(.horizontal)
+
+                    if let error = errorMessage {
+                        Text(error)
+                            .font(.caption)
+                            .foregroundStyle(.red)
+                            .padding(.horizontal)
+                    }
                 }
             }
-            .font(.subheadline)
-            .padding(12)
-            .liquidGlass(in: RoundedRectangle(cornerRadius: 10))
-            .padding(.horizontal)
-
-            if let error = errorMessage {
-                Text(error)
-                    .font(.caption)
-                    .foregroundStyle(.red)
-            }
-
-            Spacer()
 
             Button(action: payInvoice) {
                 if isPaying {
                     ProgressView()
                 } else {
-                    Text("PAY \(quote.totalAmount) SAT")
+                    Text("Pay \(quote.totalAmount) sat")
                 }
             }
-            .glassButton(prominent: true).controlSize(.large)
+            .glassButton()
             .disabled(isPaying)
-            .accessibilityLabel(isPaying ? "Processing payment" : "Pay \(quote.totalAmount) sats")
-            .accessibilityHint("Sends lightning payment")
             .padding(.horizontal)
-            .padding(.bottom, 30)
+            .padding(.bottom, 16)
         }
+    }
+
+    private func meltDetailRow(label: String, value: String) -> some View {
+        HStack {
+            Text(label)
+                .foregroundStyle(.secondary)
+            Spacer()
+            Text(value)
+                .fontWeight(.medium)
+        }
+        .font(.subheadline)
     }
 
     // MARK: - Payment Success View
 
     private var paymentSuccessView: some View {
-        VStack(spacing: 24) {
+        VStack(spacing: 0) {
             Spacer()
 
-            Image(systemName: "checkmark.circle.fill")
-                .font(.largeTitle)
-                .foregroundStyle(Color.accentColor)
-                .accessibilityHidden(true)
+            VStack(spacing: 16) {
+                Image(systemName: "checkmark.circle.fill")
+                    .font(.system(size: 48))
+                    .foregroundStyle(.green)
 
-            Text("Payment Sent!")
-                .font(.title)
-                .fontWeight(.bold)
+                Text("Payment Sent!")
+                    .font(.title2.weight(.semibold))
+            }
 
             Spacer()
 
             Button(action: { dismiss() }) {
                 Text("Done")
             }
-            .glassButton().controlSize(.large)
-            .accessibilityLabel("Done")
-            .accessibilityHint("Closes the payment screen")
+            .glassButton()
             .padding(.horizontal)
-            .padding(.bottom, 30)
+            .padding(.bottom, 16)
         }
     }
 
@@ -1319,6 +1340,17 @@ struct MintSelectorSheet: View {
             Button(action: { selectMint(mint) }) {
                 HStack(spacing: 12) {
                     mintIcon(for: mint)
+                        .overlay(alignment: .bottomTrailing) {
+                            if selectedMint?.id == mint.id {
+                                Circle()
+                                    .fill(.green)
+                                    .frame(width: 12, height: 12)
+                                    .overlay(
+                                        Circle().stroke(Color(.systemBackground), lineWidth: 2)
+                                    )
+                                    .offset(x: 2, y: 2)
+                            }
+                        }
 
                     VStack(alignment: .leading, spacing: 2) {
                         Text(mint.name)

@@ -126,9 +126,7 @@ struct ReceiveLightningView: View {
                     Text("Create Invoice")
                 }
             }
-            .buttonStyle(.bordered)
-            .controlSize(.large)
-            .frame(maxWidth: .infinity)
+            .glassButton()
             .disabled(amountString.isEmpty || amountString == "0" || isCreatingInvoice)
             .padding(.horizontal)
             .padding(.top, 16)
@@ -288,9 +286,7 @@ struct ReceiveLightningView: View {
             Button(action: { copyInvoice(quote.request) }) {
                 Label(copyButtonText, systemImage: copyButtonText == "Copied" ? "checkmark" : "doc.on.doc")
             }
-            .buttonStyle(.bordered)
-            .controlSize(.large)
-            .frame(maxWidth: .infinity)
+            .glassButton()
             .padding(.horizontal)
             .padding(.bottom, 16)
         }

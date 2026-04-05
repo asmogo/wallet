@@ -108,21 +108,29 @@ struct MintsListView: View {
         }
     }
 
+    private var isActive: (MintInfo) -> Bool {
+        { mint in walletManager.activeMint?.url == mint.url }
+    }
+
     private func mintRow(mint: MintInfo) -> some View {
         NavigationLink(destination: MintDetailView(mint: mint)) {
             HStack(spacing: 12) {
                 mintIcon(for: mint)
-
-                VStack(alignment: .leading, spacing: 4) {
-                    HStack(spacing: 6) {
-                        Text(mint.name)
-                            .font(.body)
-                        if walletManager.activeMint?.url == mint.url {
-                            Text("Active")
-                                .font(.caption2)
-                                .foregroundStyle(.secondary)
+                    .overlay(alignment: .bottomTrailing) {
+                        if isActive(mint) {
+                            Circle()
+                                .fill(.green)
+                                .frame(width: 12, height: 12)
+                                .overlay(
+                                    Circle().stroke(Color(.systemBackground), lineWidth: 2)
+                                )
+                                .offset(x: 2, y: 2)
                         }
                     }
+
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(mint.name)
+                        .font(.body)
                     Text(mint.url)
                         .font(.caption)
                         .foregroundStyle(.secondary)

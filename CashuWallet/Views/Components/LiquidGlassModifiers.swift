@@ -24,9 +24,11 @@ extension View {
         }
     }
 
-    /// Standard SwiftUI button style for all actions.
+    /// Full-width prominent SwiftUI button.
     @ViewBuilder
     func glassButton(prominent: Bool = false) -> some View {
-        self.buttonStyle(.bordered)
+        self.frame(maxWidth: .infinity)
+            .buttonStyle(.borderedProminent)
+            .controlSize(.extraLarge)
     }
 }
