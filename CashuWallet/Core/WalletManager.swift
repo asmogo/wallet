@@ -229,7 +229,8 @@ class WalletManager: ObservableObject {
         await mintService.loadMints()
         await refreshBalance()
         await transactionService.loadTransactions()
-        
+        await mintService.refreshMintInfo()
+
         initializeNostrKeypair(mnemonic: mnemonic)
         setupNPCQuoteListener()
     }

@@ -71,7 +71,8 @@ class MintService: ObservableObject {
             name: info?.name ?? "Unknown Mint",
             description: info?.description,
             isActive: true,
-            balance: 0
+            balance: 0,
+            iconUrl: info?.iconUrl
         )
         
         mints.append(mintInfo)
@@ -140,6 +141,41 @@ class MintService: ObservableObject {
         }
     }
     
+    /// Refresh mint info (name, description, iconUrl) for all mints missing icons
+    func refreshMintInfo() async {
+        guard let repo = walletRepository() else { return }
+        var updated = false
+
+        for i in mints.indices {
+            if mints[i].iconUrl == nil {
+                do {
+                    let mintUrl = try MintUrl(url: mints[i].url)
+                    let wallet = try await repo.getWallet(mintUrl: mintUrl, unit: .sat)
+                    if let info = try await wallet.fetchMintInfo() {
+                        if let iconUrl = info.iconUrl {
+                            mints[i].iconUrl = iconUrl
+                            updated = true
+                        }
+                        if let name = info.name, mints[i].name == "Unknown Mint" {
+                            mints[i].name = name
+                            updated = true
+                        }
+                    }
+                } catch {
+                    // Skip — will retry next launch
+                }
+            }
+        }
+
+        if updated {
+            if let activeMintUrl = activeMint?.url,
+               let refreshed = mints.first(where: { $0.url == activeMintUrl }) {
+                activeMint = refreshed
+            }
+            saveMints()
+        }
+    }
+
     /// Update balance for a specific mint
     func updateMintBalance(url: String, balance: UInt64) {
         let normalizedUrl = normalizeUrl(url)

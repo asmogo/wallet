@@ -110,7 +110,9 @@ struct MintsListView: View {
 
     private func mintRow(mint: MintInfo) -> some View {
         NavigationLink(destination: MintDetailView(mint: mint)) {
-            HStack {
+            HStack(spacing: 12) {
+                mintIcon(for: mint)
+
                 VStack(alignment: .leading, spacing: 4) {
                     HStack(spacing: 6) {
                         Text(mint.name)
@@ -172,6 +174,32 @@ struct MintsListView: View {
                     .font(.title3)
             }
         }
+    }
+
+    @ViewBuilder
+    private func mintIcon(for mint: MintInfo) -> some View {
+        if let iconUrl = mint.iconUrl, let url = URL(string: iconUrl) {
+            AsyncImage(url: url) { image in
+                image.resizable().aspectRatio(contentMode: .fill)
+            } placeholder: {
+                mintIconPlaceholder
+            }
+            .frame(width: 36, height: 36)
+            .clipShape(Circle())
+        } else {
+            mintIconPlaceholder
+        }
+    }
+
+    private var mintIconPlaceholder: some View {
+        Circle()
+            .fill(.quaternary)
+            .frame(width: 36, height: 36)
+            .overlay(
+                Image(systemName: "building.columns")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            )
     }
 
     // MARK: - Actions

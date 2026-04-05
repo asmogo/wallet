@@ -176,9 +176,9 @@ struct SendView: View {
     // MARK: - Number Pad
 
     private var numberPad: some View {
-        VStack(spacing: 12) {
+        VStack(spacing: 8) {
             ForEach(numberRows, id: \.self) { row in
-                HStack(spacing: 12) {
+                HStack(spacing: 8) {
                     ForEach(row, id: \.self) { key in
                         numberKey(key)
                     }
@@ -199,7 +199,7 @@ struct SendView: View {
                 Button(action: { handleKeyPress(key) }) {
                     Group {
                         if key == "⌫" {
-                            Image(systemName: "delete.backward").font(.title3)
+                            Image(systemName: "chevron.left").font(.title3)
                         } else {
                             Text(key).font(.title2.weight(.medium))
                         }
