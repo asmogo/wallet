@@ -24,9 +24,9 @@ extension View {
         }
     }
 
-    /// Standard full-width rounded button. No custom colors — SwiftUI handles dark/light mode.
+    /// Full-width rounded button. Uses .bordered with capsule shape — works with black/white accent.
     func glassButton(prominent: Bool = false) -> some View {
-        self.buttonStyle(.borderedProminent)
+        self.buttonStyle(.bordered)
             .buttonBorderShape(.capsule)
             .controlSize(.large)
     }
