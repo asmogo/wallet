@@ -314,7 +314,7 @@ struct QRCodeDetailSheet: View {
                     .padding()
                     .frame(width: 280, height: 280)
                     .background(Color.white)
-                    .cornerRadius(12)
+                    .clipShape(.rect(cornerRadius: 12))
 
                 Text(content)
                     .font(.system(.caption, design: .monospaced))
@@ -452,7 +452,7 @@ struct BackupView: View {
                         HStack(spacing: 10) {
                             Text(showWords ? mnemonic : hiddenMnemonic)
                                 .font(.system(.body, design: .monospaced))
-                                .foregroundColor(showWords ? .primary : .secondary)
+                                .foregroundStyle(showWords ? .primary : .secondary)
                                 .lineLimit(4)
                                 .multilineTextAlignment(.leading)
 
@@ -465,7 +465,7 @@ struct BackupView: View {
 
                                 Button(action: copyToClipboard) {
                                     Image(systemName: copiedToClipboard ? "checkmark" : "doc.on.doc")
-                                        .foregroundColor(copiedToClipboard ? .green : .accentColor)
+                                        .foregroundStyle(copiedToClipboard ? .green : Color.accentColor)
                                 }
                             }
                         }

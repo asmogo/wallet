@@ -89,7 +89,7 @@ struct QRCodeView: View {
                         .overlay(
                             Image(systemName: "qrcode")
                                 .font(.title)
-                                .foregroundColor(.gray)
+                                .foregroundStyle(.gray)
                         )
                         .accessibilityLabel("QR code loading")
                 }
@@ -103,13 +103,13 @@ struct QRCodeView: View {
         .onAppear {
             prepareEncoder()
         }
-        .onChange(of: content) { _ in
+        .onChange(of: content) {
             prepareEncoder()
         }
-        .onChange(of: speed) { _ in
+        .onChange(of: speed) {
             restartTimer()
         }
-        .onChange(of: size) { _ in
+        .onChange(of: size) {
             prepareEncoder()
         }
         .onDisappear {
@@ -133,7 +133,7 @@ struct QRCodeView: View {
                         .font(.caption)
                         .fontWeight(.medium)
                 }
-                .foregroundColor(.gray)
+                .foregroundStyle(.gray)
             }
             .accessibilityLabel("QR animation speed: \(speed.rawValue)")
             .accessibilityHint("Cycles through fast, medium, and slow animation speeds")
@@ -150,7 +150,7 @@ struct QRCodeView: View {
                         .font(.caption)
                         .fontWeight(.medium)
                 }
-                .foregroundColor(.gray)
+                .foregroundStyle(.gray)
             }
             .accessibilityLabel("QR chunk size: \(size.rawValue)")
             .accessibilityHint("Cycles through small, medium, and large QR code chunk sizes")
@@ -270,7 +270,7 @@ struct QRCodeView: View {
             .frame(width: 250, height: 280)
             .padding()
             .background(Color.white)
-            .cornerRadius(12)
+            .clipShape(.rect(cornerRadius: 12))
     }
 }
 
@@ -284,6 +284,6 @@ struct QRCodeView: View {
             .frame(width: 250, height: 300)
             .padding()
             .background(Color.white)
-            .cornerRadius(12)
+            .clipShape(.rect(cornerRadius: 12))
     }
 }

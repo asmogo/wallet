@@ -140,12 +140,12 @@ struct TransactionDetailView: View {
     private var statusBadge: some View {
         HStack(spacing: 8) {
             Image(systemName: statusIcon)
-                .foregroundColor(statusColor)
+                .foregroundStyle(statusColor)
                 .accessibilityHidden(true)
             Text(statusText)
                 .font(.title3)
                 .fontWeight(.semibold)
-                .foregroundColor(statusColor)
+                .foregroundStyle(statusColor)
         }
         .accessibilityElement(children: .combine)
         .accessibilityLabel("Status: \(statusText)")

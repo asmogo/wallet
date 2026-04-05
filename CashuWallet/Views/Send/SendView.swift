@@ -54,12 +54,12 @@ struct SendView: View {
                 HStack(spacing: 8) {
                     Image(systemName: lockWithP2PK ? "lock.fill" : "lock.open")
                         .font(.caption)
-                        .foregroundColor(lockWithP2PK ? .accentColor : .secondary)
+                        .foregroundStyle(lockWithP2PK ? Color.accentColor : .secondary)
                         .accessibilityHidden(true)
                     Text(lockWithP2PK ? "P2PK" : "SAT")
                         .font(.caption)
                         .fontWeight(.bold)
-                        .foregroundColor(lockWithP2PK ? .accentColor : .secondary)
+                        .foregroundStyle(lockWithP2PK ? Color.accentColor : .secondary)
                 }
                 .accessibilityElement(children: .combine)
                 .accessibilityLabel(lockWithP2PK ? "P2PK lock enabled" : "Unit: Satoshis")
@@ -167,7 +167,7 @@ struct SendView: View {
         Button(action: { showMintPicker = true }) {
             HStack(spacing: 12) {
                 Image(systemName: "building.columns")
-                    .foregroundColor(.gray)
+                    .foregroundStyle(.gray)
                     .frame(width: 44, height: 44)
 
                 VStack(alignment: .leading, spacing: 2) {
@@ -188,7 +188,7 @@ struct SendView: View {
             .padding(12)
             .liquidGlass(in: RoundedRectangle(cornerRadius: 10), interactive: true)
         }
-        .buttonStyle(PlainButtonStyle())
+        .buttonStyle(.plain)
         .accessibilityElement(children: .combine)
         .accessibilityLabel("Mint: \(mint.name), \(mint.balance) sats available")
         .accessibilityHint("Opens mint selector")
@@ -1340,7 +1340,7 @@ struct MintSelectorSheet: View {
                         .frame(width: 48, height: 48)
                         .overlay(
                             Image(systemName: "building.columns")
-                                .foregroundColor(.gray)
+                                .foregroundStyle(.gray)
                         )
 
                     VStack(alignment: .leading, spacing: 4) {
@@ -1369,7 +1369,7 @@ struct MintSelectorSheet: View {
                         : Color.clear
                 )
             }
-            .buttonStyle(PlainButtonStyle())
+            .buttonStyle(.plain)
 
             Divider()
                 .padding(.leading, 76)

@@ -50,7 +50,7 @@ struct P2PKSettingsSection: View {
                             HStack(spacing: 10) {
                                 Button(action: { copyP2PKPublicKey(key.publicKey) }) {
                                     Image(systemName: copiedP2PKPublicKey == key.publicKey ? "checkmark" : "doc.on.doc")
-                                        .foregroundColor(copiedP2PKPublicKey == key.publicKey ? .green : Color.accentColor)
+                                        .foregroundStyle(copiedP2PKPublicKey == key.publicKey ? .green : Color.accentColor)
                                 }
 
                                 Text(key.publicKey)

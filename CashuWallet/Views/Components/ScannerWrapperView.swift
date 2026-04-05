@@ -104,11 +104,11 @@ struct ScannerWrapperView: View {
                             
                             Text("\(Int(scannerModel.scanProgress * 100))%")
                                 .font(.caption)
-                                .foregroundColor(.white.opacity(0.8))
+                                .foregroundStyle(.white.opacity(0.8))
                         }
                         .padding()
                         .background(Color.black.opacity(0.8))
-                        .cornerRadius(16)
+                        .clipShape(.rect(cornerRadius: 16))
                         .padding(.bottom, 50)
                         .padding(.horizontal, 40)
                     } else {
@@ -117,7 +117,7 @@ struct ScannerWrapperView: View {
                             .font(.caption)
                             .padding()
                             .background(Color.black.opacity(0.6))
-                            .cornerRadius(20)
+                            .clipShape(.rect(cornerRadius: 20))
                             .padding(.bottom, 50)
                     }
                 }
@@ -129,7 +129,7 @@ struct ScannerWrapperView: View {
                             .foregroundStyle(.primary)
                             .padding()
                             .background(Color.red)
-                            .cornerRadius(10)
+                            .clipShape(.rect(cornerRadius: 10))
                             .padding(.bottom, 100)
                     }
                 }

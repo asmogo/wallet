@@ -370,7 +370,7 @@ struct OnboardingView: View {
             HStack(spacing: 4) {
                 Text("\(wordCount) / 12 words")
                     .font(.caption)
-                    .foregroundColor(wordCount == 12 ? .accentColor : .secondary)
+                    .foregroundStyle(wordCount == 12 ? Color.accentColor : .secondary)
                 if wordCount > 0 && !invalidIndices.isEmpty {
                     Text("(\(invalidIndices.count) invalid)")
                         .font(.caption)
@@ -422,7 +422,7 @@ struct OnboardingView: View {
 
             GroupBox {
                 TextField("https://mint.example.com", text: $mintUrlInput)
-                    .autocapitalization(.none)
+                    .textInputAutocapitalization(.never)
                     .disableAutocorrection(true)
                     .keyboardType(.URL)
             }
@@ -465,7 +465,7 @@ struct OnboardingView: View {
                 VStack(spacing: 12) {
                     Image(systemName: "building.columns")
                         .font(.title)
-                        .foregroundColor(.secondary.opacity(0.5))
+                        .foregroundStyle(.secondary.opacity(0.5))
                     Text("No mints added yet")
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
@@ -577,7 +577,7 @@ struct OnboardingView: View {
                         .frame(width: 24, height: 24)
                 } else if let result = result {
                     Image(systemName: result.totalRecovered > 0 ? "checkmark.circle.fill" : "minus.circle")
-                        .foregroundColor(result.totalRecovered > 0 ? .green : .secondary)
+                        .foregroundStyle(result.totalRecovered > 0 ? .green : .secondary)
                         .frame(width: 24, height: 24)
                 } else {
                     Image(systemName: "building.columns")

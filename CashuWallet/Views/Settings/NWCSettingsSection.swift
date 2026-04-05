@@ -40,7 +40,7 @@ struct NWCSettingsSection: View {
 
                             Button(action: { copyNWCConnection(connection) }) {
                                 Image(systemName: copiedNWCConnectionId == connection.id ? "checkmark" : "doc.on.doc")
-                                    .foregroundColor(copiedNWCConnectionId == connection.id ? .green : Color.accentColor)
+                                    .foregroundStyle(copiedNWCConnectionId == connection.id ? .green : Color.accentColor)
                             }
                             .accessibilityLabel("Copy connection string")
 

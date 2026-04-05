@@ -24,7 +24,7 @@ struct NostrKeysSettingsSection: View {
                 }) {
                     HStack {
                         Image(systemName: nostrService.signerType == type ? "largecircle.fill.circle" : "circle")
-                            .foregroundColor(nostrService.signerType == type ? Color.accentColor : .secondary)
+                            .foregroundStyle(nostrService.signerType == type ? Color.accentColor : .secondary)
 
                         VStack(alignment: .leading, spacing: 2) {
                             Text(type.displayName)
@@ -80,7 +80,7 @@ struct NostrKeysSettingsSection: View {
 
                     Button(action: copyNsec) {
                         Image(systemName: copiedNsec ? "checkmark" : "doc.on.doc")
-                            .foregroundColor(copiedNsec ? .green : Color.accentColor)
+                            .foregroundStyle(copiedNsec ? .green : Color.accentColor)
                     }
                 }
 
@@ -228,7 +228,7 @@ struct NostrRelaysSettingsSection: View {
                 Button(action: addRelay) {
                     Image(systemName: "plus.circle.fill")
                         .font(.title3)
-                        .foregroundColor(relayInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? .secondary : Color.accentColor)
+                        .foregroundStyle(relayInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? .secondary : Color.accentColor)
                 }
                 .disabled(relayInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 .accessibilityLabel("Add relay")
@@ -245,7 +245,7 @@ struct NostrRelaysSettingsSection: View {
 
                     Button(action: { copyRelay(relay) }) {
                         Image(systemName: copiedRelay == relay ? "checkmark" : "doc.on.doc")
-                            .foregroundColor(copiedRelay == relay ? .green : Color.accentColor)
+                            .foregroundStyle(copiedRelay == relay ? .green : Color.accentColor)
                     }
                     .accessibilityLabel("Copy relay URL")
 

@@ -52,7 +52,7 @@ struct MintsListView: View {
 
                 Section {
                     TextField("Mint URL (https://...)", text: $newMintUrl)
-                        .autocapitalization(.none)
+                        .textInputAutocapitalization(.never)
                         .autocorrectionDisabled()
                         .keyboardType(.URL)
                     TextField("Nickname (optional)", text: $newMintNickname)

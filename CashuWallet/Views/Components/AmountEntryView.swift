@@ -142,7 +142,7 @@ struct AmountEntryView: View {
                 .keyboardType(.numberPad)
                 .focused($amountFieldFocused)
                 .font(.title.bold())
-                .foregroundColor(amountColor)
+                .foregroundStyle(amountColor)
                 .multilineTextAlignment(.center)
                 .minimumScaleFactor(0.4)
                 .lineLimit(1)

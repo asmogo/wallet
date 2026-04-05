@@ -45,7 +45,7 @@ struct HistoryView: View {
                         Label("Pending Only", systemImage: "line.3.horizontal.decrease.circle")
                     }
                     .toggleStyle(.button)
-                    .onChange(of: filterPending) { _ in
+                    .onChange(of: filterPending) {
                         currentPage = 1
                     }
                     .accessibilityLabel(filterPending ? "Show all transactions" : "Filter pending transactions")
@@ -138,7 +138,7 @@ struct HistoryView: View {
                 VStack(alignment: .trailing, spacing: 2) {
                     Text(formatAmount(transaction))
                         .font(.body.bold())
-                        .foregroundColor(amountColor(transaction))
+                        .foregroundStyle(amountColor(transaction))
 
                     if transaction.status == .pending {
                         Text("Pending")

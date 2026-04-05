@@ -26,7 +26,7 @@ struct AnimatedBalanceView: View {
                     .accessibilityValue(formattedValue)
             }
         }
-        .onChange(of: value) { newValue in
+        .onChange(of: value) { _, newValue in
             withAnimation(.spring(response: 0.5, dampingFraction: 0.8)) {
                 displayValue = newValue
             }
@@ -181,7 +181,7 @@ struct TransactionAmountView: View {
     var body: some View {
         Text(formattedAmount)
             .font(.callout.weight(.medium))
-            .foregroundColor(amountColor)
+            .foregroundStyle(amountColor)
     }
     
     private var formattedAmount: String {

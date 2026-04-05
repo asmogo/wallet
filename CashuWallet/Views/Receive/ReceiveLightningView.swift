@@ -151,11 +151,11 @@ struct ReceiveLightningView: View {
 
                     Image(systemName: lightningAddressCopied ? "checkmark" : "doc.on.doc")
                         .font(.caption)
-                        .foregroundColor(lightningAddressCopied ? .accentColor : .secondary)
+                        .foregroundStyle(lightningAddressCopied ? Color.accentColor : .secondary)
                         .accessibilityHidden(true)
                 }
             }
-            .buttonStyle(PlainButtonStyle())
+            .buttonStyle(.plain)
             .accessibilityLabel("Lightning address: \(npcService.lightningAddress)")
             .accessibilityHint("Copies lightning address to clipboard")
             .accessibilityValue(lightningAddressCopied ? "Copied" : "")
@@ -184,7 +184,7 @@ struct ReceiveLightningView: View {
         Button(action: { showMintPicker = true }) {
             HStack(spacing: 12) {
                 Image(systemName: "building.columns")
-                    .foregroundColor(.gray)
+                    .foregroundStyle(.gray)
                     .frame(width: 44, height: 44)
 
                 VStack(alignment: .leading, spacing: 2) {
@@ -205,7 +205,7 @@ struct ReceiveLightningView: View {
             .padding(12)
             .liquidGlass(in: RoundedRectangle(cornerRadius: 10), interactive: true)
         }
-        .buttonStyle(PlainButtonStyle())
+        .buttonStyle(.plain)
         .accessibilityElement(children: .combine)
         .accessibilityLabel("Mint: \(mint.name), \(mint.balance) sats available")
         .accessibilityHint("Opens mint selector")
@@ -284,7 +284,7 @@ struct ReceiveLightningView: View {
     private var expiryView: some View {
         Label("Expires in \(formatTimeRemaining(expiryTimeRemaining))", systemImage: "timer")
             .font(.caption)
-            .foregroundColor(expiryTimeRemaining < 60 ? .red : .secondary)
+            .foregroundStyle(expiryTimeRemaining < 60 ? .red : .secondary)
             .padding(.horizontal, 12)
             .padding(.vertical, 6)
             .liquidGlass(in: Capsule())

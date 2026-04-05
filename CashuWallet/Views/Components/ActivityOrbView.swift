@@ -21,7 +21,7 @@ struct ActivityOrbView: View {
             }
         }
         .animation(.easeInOut(duration: 0.3), value: isVisible)
-        .onChange(of: isActive) { newValue in
+        .onChange(of: isActive) { _, newValue in
             if newValue {
                 showOrb()
             } else {

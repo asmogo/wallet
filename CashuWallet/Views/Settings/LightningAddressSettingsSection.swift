@@ -32,7 +32,7 @@ struct LightningAddressSettingsSection: View {
                             Spacer()
 
                             Image(systemName: copiedLightningAddress ? "checkmark" : "doc.on.doc")
-                                .foregroundColor(copiedLightningAddress ? .green : Color.accentColor)
+                                .foregroundStyle(copiedLightningAddress ? .green : Color.accentColor)
                         }
                     }
 
