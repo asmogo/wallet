@@ -24,10 +24,16 @@ extension View {
         }
     }
 
-    /// Full-width rounded button. Uses .bordered with capsule shape — works with black/white accent.
+    /// Full-width rounded button. Liquid glass on iOS 26+, bordered capsule on earlier.
+    @ViewBuilder
     func glassButton(prominent: Bool = false) -> some View {
-        self.buttonStyle(.bordered)
-            .buttonBorderShape(.capsule)
-            .controlSize(.large)
+        if #available(iOS 26, *) {
+            self.buttonStyle(.glass)
+                .controlSize(.large)
+        } else {
+            self.buttonStyle(.bordered)
+                .buttonBorderShape(.capsule)
+                .controlSize(.large)
+        }
     }
 }

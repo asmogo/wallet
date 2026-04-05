@@ -90,12 +90,25 @@ struct ReceiveTokenDetailView: View {
                 .padding(.horizontal)
                 .padding(.bottom, 16)
             }
-            .navigationTitle("Receive Ecash")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button(action: { dismiss() }) {
                         Image(systemName: "xmark")
+                    }
+                }
+
+                ToolbarItem(placement: .principal) {
+                    Text("Receive Ecash")
+                        .font(.headline)
+                }
+
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button(action: { settings.useBitcoinSymbol.toggle() }) {
+                        Text(settings.unitLabel)
+                            .font(.caption)
+                            .fontWeight(.bold)
+                            .foregroundStyle(Color.accentColor)
                     }
                 }
             }

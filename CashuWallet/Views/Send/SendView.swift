@@ -28,77 +28,79 @@ struct SendView: View {
 
     var body: some View {
         NavigationStack {
-            if let token = generatedToken {
-                tokenDisplayView(token: token)
-            } else {
-                sendInputView
-            }
-        }
-        .navigationBarTitleDisplayMode(.inline)
-        .toolbar {
-            ToolbarItem(placement: .cancellationAction) {
-                Button(action: { dismiss() }) {
-                    Image(systemName: "xmark")
+            Group {
+                if let token = generatedToken {
+                    tokenDisplayView(token: token)
+                } else {
+                    sendInputView
                 }
-                .accessibilityLabel("Close")
             }
-
-            ToolbarItem(placement: .principal) {
-                Text(generatedToken != nil ? "Pending Ecash" : "Send Ecash")
-                    .font(.headline)
-            }
-
-            if generatedToken == nil {
-                ToolbarItem(placement: .topBarTrailing) {
-                    HStack(spacing: 6) {
-                        Button(action: { lockWithP2PK.toggle() }) {
-                            Image(systemName: lockWithP2PK ? "lock.fill" : "lock.open")
-                                .font(.caption)
-                                .foregroundStyle(lockWithP2PK ? Color.accentColor : .secondary)
-                        }
-                        Button(action: { settings.useBitcoinSymbol.toggle() }) {
-                            Text(settings.unitLabel)
-                                .font(.caption)
-                                .fontWeight(.bold)
-                                .foregroundStyle(Color.accentColor)
-                        }
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button(action: { dismiss() }) {
+                        Image(systemName: "xmark")
                     }
+                    .accessibilityLabel("Close")
                 }
-            }
 
-            if generatedToken != nil {
-                ToolbarItem(placement: .topBarTrailing) {
-                    Menu {
-                        Button(action: { showShareSheet = true }) {
-                            Label("Share", systemImage: "square.and.arrow.up")
-                        }
-                        if !settings.checkSentTokens {
-                            Button(action: {
-                                if let token = generatedToken {
-                                    Task { await checkTokenClaimNow(token: token) }
-                                }
-                            }) {
-                                Label("Check Status", systemImage: "arrow.clockwise")
+                ToolbarItem(placement: .principal) {
+                    Text(generatedToken != nil ? "Pending Ecash" : "Send Ecash")
+                        .font(.headline)
+                }
+
+                if generatedToken == nil {
+                    ToolbarItem(placement: .topBarTrailing) {
+                        HStack(spacing: 6) {
+                            Button(action: { lockWithP2PK.toggle() }) {
+                                Image(systemName: lockWithP2PK ? "lock.fill" : "lock.open")
+                                    .font(.caption)
+                                    .foregroundStyle(lockWithP2PK ? Color.accentColor : .secondary)
+                            }
+                            Button(action: { settings.useBitcoinSymbol.toggle() }) {
+                                Text(settings.unitLabel)
+                                    .font(.caption)
+                                    .fontWeight(.bold)
+                                    .foregroundStyle(Color.accentColor)
                             }
                         }
-                    } label: {
-                        Image(systemName: "ellipsis.circle")
+                    }
+                }
+
+                if generatedToken != nil {
+                    ToolbarItem(placement: .topBarTrailing) {
+                        Menu {
+                            Button(action: { showShareSheet = true }) {
+                                Label("Share", systemImage: "square.and.arrow.up")
+                            }
+                            if !settings.checkSentTokens {
+                                Button(action: {
+                                    if let token = generatedToken {
+                                        Task { await checkTokenClaimNow(token: token) }
+                                    }
+                                }) {
+                                    Label("Check Status", systemImage: "arrow.clockwise")
+                                }
+                            }
+                        } label: {
+                            Image(systemName: "ellipsis.circle")
+                        }
                     }
                 }
             }
-        }
-        .sheet(isPresented: $showMintPicker) {
-            MintSelectorSheet(selectedMint: $walletManager.activeMint)
-                .environmentObject(walletManager)
-                .presentationDetents([.medium])
-        }
-        .sheet(isPresented: $showShareSheet) {
-            if let token = generatedToken {
-                CashuTokenShareSheet(token: token)
+            .sheet(isPresented: $showMintPicker) {
+                MintSelectorSheet(selectedMint: $walletManager.activeMint)
+                    .environmentObject(walletManager)
+                    .presentationDetents([.medium])
             }
-        }
-        .onDisappear {
-            checkingTask?.cancel()
+            .sheet(isPresented: $showShareSheet) {
+                if let token = generatedToken {
+                    CashuTokenShareSheet(token: token)
+                }
+            }
+            .onDisappear {
+                checkingTask?.cancel()
+            }
         }
     }
 
