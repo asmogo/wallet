@@ -24,12 +24,26 @@ extension View {
         }
     }
 
-    /// Full-width action button. Bordered capsule, large control size.
-    /// Use for all primary and secondary CTA buttons.
+    /// Full-width capsule action button. Use for all primary and secondary CTAs.
     func glassButton(prominent: Bool = false) -> some View {
-        self.buttonStyle(.bordered)
-            .buttonBorderShape(.capsule)
-            .controlSize(.large)
+        self.buttonStyle(FullWidthCapsuleButtonStyle())
+    }
+}
+
+// MARK: - Full Width Capsule Button Style
+
+/// A button style that renders full-width with a capsule shape and subtle tinted background.
+/// Adapts to light/dark mode automatically via semantic colors.
+struct FullWidthCapsuleButtonStyle: ButtonStyle {
+    @Environment(\.isEnabled) private var isEnabled
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .font(.body.weight(.medium))
             .frame(maxWidth: .infinity)
+            .padding(.vertical, 14)
+            .background(.tertiary, in: Capsule())
+            .foregroundStyle(.primary)
+            .opacity(isEnabled ? (configuration.isPressed ? 0.7 : 1) : 0.4)
     }
 }

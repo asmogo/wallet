@@ -264,7 +264,7 @@ struct MainWalletView: View {
         case .sendLightning:
             MeltView()
                 .environmentObject(walletManager)
-                .presentationDetents([.medium, .large])
+                .presentationDetents([.large])
         }
     }
 }
@@ -342,7 +342,7 @@ private struct WalletActionSheetView: View {
             .navigationTitle(action.title)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
+                ToolbarItem(placement: .cancellationAction) {
                     Button(action: onClose) {
                         Image(systemName: "xmark")
                     }

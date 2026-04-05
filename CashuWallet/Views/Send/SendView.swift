@@ -655,7 +655,7 @@ struct MeltView: View {
                 if isGettingQuote {
                     ProgressView()
                 } else {
-                    Text("Get Quote")
+                    Text("Next")
                 }
             }
             .glassButton()
@@ -1147,7 +1147,7 @@ struct MeltViewWithAddress: View {
                 if isGettingQuote {
                     ProgressView()
                 } else {
-                    Text("Get Quote")
+                    Text("Next")
                 }
             }
             .glassButton(prominent: true).controlSize(.large)
