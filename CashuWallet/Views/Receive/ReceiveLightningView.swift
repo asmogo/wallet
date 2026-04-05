@@ -86,7 +86,7 @@ struct ReceiveLightningView: View {
             // Amount display
             VStack(spacing: 8) {
                 Text(formattedAmount)
-                    .font(.system(size: 56, weight: .bold))
+                    .font(.largeTitle.bold())
                     .minimumScaleFactor(0.5)
                     .lineLimit(1)
                     .contentTransition(.numericText())

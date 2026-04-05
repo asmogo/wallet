@@ -85,11 +85,11 @@ struct QRCodeView: View {
                         .accessibilityHint("Contains scannable payment data")
                 } else {
                     Rectangle()
-                        .fill(Color.gray.opacity(0.3))
+                        .fill(.tertiary)
                         .overlay(
                             Image(systemName: "qrcode")
                                 .font(.title)
-                                .foregroundStyle(.gray)
+                                .foregroundStyle(.secondary)
                         )
                         .accessibilityLabel("QR code loading")
                 }
@@ -133,7 +133,7 @@ struct QRCodeView: View {
                         .font(.caption)
                         .fontWeight(.medium)
                 }
-                .foregroundStyle(.gray)
+                .foregroundStyle(.secondary)
             }
             .accessibilityLabel("QR animation speed: \(speed.rawValue)")
             .accessibilityHint("Cycles through fast, medium, and slow animation speeds")
@@ -150,7 +150,7 @@ struct QRCodeView: View {
                         .font(.caption)
                         .fontWeight(.medium)
                 }
-                .foregroundStyle(.gray)
+                .foregroundStyle(.secondary)
             }
             .accessibilityLabel("QR chunk size: \(size.rawValue)")
             .accessibilityHint("Cycles through small, medium, and large QR code chunk sizes")

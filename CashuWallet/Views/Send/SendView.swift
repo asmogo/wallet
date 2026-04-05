@@ -120,7 +120,7 @@ struct SendView: View {
             // Amount display
             VStack(spacing: 8) {
                 Text(formattedAmount)
-                    .font(.system(size: 56, weight: .bold))
+                    .font(.largeTitle.bold())
                     .minimumScaleFactor(0.5)
                     .lineLimit(1)
                     .contentTransition(.numericText())
@@ -208,6 +208,7 @@ struct SendView: View {
                     .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
+                .accessibilityLabel(key == "⌫" ? "Delete" : key)
             }
         }
         .frame(height: 56)
@@ -276,7 +277,7 @@ struct SendView: View {
                 .padding(10)
                 .background(
                     RoundedRectangle(cornerRadius: 8)
-                        .fill(Color(uiColor: .tertiarySystemGroupedBackground))
+                        .fill(.quaternary)
                 )
 
             if let ownKey = settings.p2pkKeys.last {
@@ -709,7 +710,7 @@ struct MeltView: View {
                 VStack(spacing: 20) {
                     // Amount
                     Text("\(quote.totalAmount) sat")
-                        .font(.system(size: 48, weight: .bold))
+                        .font(.largeTitle.bold())
                         .padding(.top, 24)
 
                     // Details
@@ -764,7 +765,7 @@ struct MeltView: View {
 
             VStack(spacing: 16) {
                 Image(systemName: "checkmark.circle.fill")
-                    .font(.system(size: 48))
+                    .font(.largeTitle)
                     .foregroundStyle(.green)
 
                 Text("Payment Sent!")

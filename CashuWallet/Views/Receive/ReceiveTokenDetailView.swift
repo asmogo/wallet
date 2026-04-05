@@ -26,7 +26,7 @@ struct ReceiveTokenDetailView: View {
                     VStack(spacing: 20) {
                         // Amount
                         Text(formattedAmount)
-                            .font(.system(size: 56, weight: .bold))
+                            .font(.largeTitle.bold())
                             .minimumScaleFactor(0.5)
                             .lineLimit(1)
                             .padding(.top, 24)

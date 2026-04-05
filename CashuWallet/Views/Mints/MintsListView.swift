@@ -191,7 +191,9 @@ struct MintsListView: View {
                 Image(systemName: "plus.circle.fill")
                     .font(.title3)
             }
+            .accessibilityLabel("Add \(mint.name ?? "mint")")
         }
+        .accessibilityElement(children: .combine)
     }
 
     @ViewBuilder

@@ -106,15 +106,18 @@ struct SettingsView: View {
             .sheet(isPresented: $showBackup) {
                 BackupView()
                     .environmentObject(walletManager)
+                    .presentationDetents([.medium, .large])
             }
             .sheet(isPresented: $showImportP2PK) {
                 ImportP2PKSheet(
                     nsecText: $p2pkImportText,
                     onImport: importP2PKNsec
                 )
+                .presentationDetents([.medium])
             }
             .sheet(item: $activeQRPayload) { payload in
                 QRCodeDetailSheet(title: payload.title, content: payload.content)
+                    .presentationDetents([.medium, .large])
             }
             .alert("Open Restore Wizard", isPresented: $showRestoreFlowAlert) {
                 Button("Cancel", role: .cancel) {}
@@ -266,7 +269,7 @@ struct SettingsView: View {
             Text(title)
         } icon: {
             Image(systemName: icon)
-                .font(.system(size: 16, weight: .semibold))
+                .font(.subheadline.weight(.semibold))
                 .foregroundStyle(role == .destructive ? .red : .secondary)
         }
         .foregroundStyle(role == .destructive ? .red : .primary)

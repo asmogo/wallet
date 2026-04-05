@@ -101,16 +101,20 @@ struct BalanceCardView: View {
             
             // Main balance display
             VStack(spacing: 8) {
-                AnimatedBalanceView(
-                    value: balance,
-                    hideBalance: isHidden
-                )
-                .onTapGesture {
+                Button {
                     withAnimation(.easeInOut(duration: 0.2)) {
                         isHidden.toggle()
                         onHideToggle?()
                     }
+                } label: {
+                    AnimatedBalanceView(
+                        value: balance,
+                        hideBalance: isHidden
+                    )
                 }
+                .buttonStyle(.plain)
+                .accessibilityLabel(isHidden ? "Show balance" : "Hide balance")
+                .accessibilityHint("Toggles balance visibility")
                 
                 // Unit suffix
                 if !settings.useBitcoinSymbol {
