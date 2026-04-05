@@ -163,9 +163,7 @@ struct SendView: View {
                     Text("Send")
                 }
             }
-            .buttonStyle(.bordered)
-            .controlSize(.large)
-            .frame(maxWidth: .infinity)
+            .glassButton()
             .disabled(!canSend || isGenerating)
             .padding(.horizontal)
             .padding(.top, 16)
@@ -356,9 +354,7 @@ struct SendView: View {
             Button(action: { copyToken(token) }) {
                 Label(copyButtonText, systemImage: copyButtonText == "Copied" ? "checkmark" : "doc.on.doc")
             }
-            .buttonStyle(.bordered)
-            .controlSize(.large)
-            .frame(maxWidth: .infinity)
+            .glassButton()
             .padding(.horizontal)
             .padding(.bottom, 16)
         }
@@ -924,7 +920,7 @@ struct MeltViewWithInvoice: View {
             Button(action: getQuote) {
                 Text("TRY AGAIN")
             }
-            .glassButton().controlSize(.large)
+            .glassButton()
             .accessibilityLabel("Try again")
             .accessibilityHint("Retries fetching the payment quote")
             .padding(.horizontal)
@@ -1008,7 +1004,7 @@ struct MeltViewWithInvoice: View {
             }) {
                 Text("Done")
             }
-            .glassButton().controlSize(.large)
+            .glassButton()
             .accessibilityLabel("Done")
             .accessibilityHint("Closes the payment screen")
             .padding(.horizontal)
@@ -1242,7 +1238,7 @@ struct MeltViewWithAddress: View {
             }) {
                 Text("Done")
             }
-            .glassButton().controlSize(.large)
+            .glassButton()
             .accessibilityLabel("Done")
             .accessibilityHint("Closes the payment screen")
             .padding(.horizontal)

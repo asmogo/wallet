@@ -329,7 +329,7 @@ struct QRCodeDetailSheet: View {
                         Text(copied ? "Copied" : "Copy")
                     }
                 }
-                .glassButton().controlSize(.large)
+                .glassButton()
                 .padding(.horizontal)
 
                 Spacer()
@@ -477,7 +477,7 @@ struct BackupView: View {
                     Spacer(minLength: 50)
 
                     Button("Done") { dismiss() }
-                        .glassButton().controlSize(.large)
+                        .glassButton()
                         .padding(.horizontal)
                         .padding(.bottom, 30)
                 }

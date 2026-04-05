@@ -374,7 +374,7 @@ struct TokenDisplayView: View {
                         Text(copied ? "Copied!" : "Copy")
                     }
                 }
-                .glassButton().controlSize(.large)
+                .glassButton()
                 .padding(.horizontal, 20)
                 .padding(.bottom, 40)
         }

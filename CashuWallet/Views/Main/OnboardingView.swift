@@ -149,7 +149,7 @@ struct OnboardingView: View {
                     Text("RESTORE FROM SEED")
                 }
             }
-            .glassButton().controlSize(.large)
+            .glassButton()
 
             Spacer()
 
@@ -432,13 +432,13 @@ struct OnboardingView: View {
                 Button(action: addMintUrl) {
                     Label("Add", systemImage: "plus")
                 }
-                .glassButton().controlSize(.small)
+                .glassButton()
                 .disabled(mintUrlInput.isEmpty)
 
                 Button(action: pasteMintUrlsFromClipboard) {
                     Label("Paste from clipboard", systemImage: "doc.on.clipboard")
                 }
-                .glassButton().controlSize(.small)
+                .glassButton()
                 .accessibilityLabel("Paste mint URLs from clipboard")
             }
             .padding(.horizontal)
@@ -530,7 +530,7 @@ struct OnboardingView: View {
                             }
                         }
                     }
-                    .glassButton().controlSize(.large)
+                    .glassButton()
                     .disabled(isRestoringMints)
                 }
 
@@ -539,7 +539,7 @@ struct OnboardingView: View {
                     Button(action: finishRestore) {
                         Text("Skip")
                     }
-                    .glassButton().controlSize(.large)
+                    .glassButton()
                     .disabled(isRestoringMints)
                 } else {
                     Button(action: finishRestore) {

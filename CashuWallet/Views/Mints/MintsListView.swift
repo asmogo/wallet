@@ -161,6 +161,16 @@ struct MintsListView: View {
                 Label("Remove", systemImage: "trash")
             }
         }
+        .swipeActions(edge: .leading, allowsFullSwipe: true) {
+            if !isActive(mint) {
+                Button {
+                    setActive(mint)
+                } label: {
+                    Label("Set Active", systemImage: "checkmark.circle.fill")
+                }
+                .tint(.green)
+            }
+        }
     }
 
     private func discoveredMintRow(mint: DiscoveredMint) -> some View {

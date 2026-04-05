@@ -212,6 +212,9 @@ class MintService: ObservableObject {
     /// Normalize a mint URL
     private func normalizeUrl(_ url: String) -> String {
         var normalized = url.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !normalized.hasPrefix("http://") && !normalized.hasPrefix("https://") {
+            normalized = "https://" + normalized
+        }
         if normalized.hasSuffix("/") {
             normalized = String(normalized.dropLast())
         }
