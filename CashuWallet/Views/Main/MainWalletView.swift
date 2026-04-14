@@ -329,11 +329,20 @@ private struct WalletActionSheetView: View {
     let onScan: () -> Void
     let onSelect: (WalletFlow) -> Void
 
+    private var secondaryOptionTitle: String {
+        switch action {
+        case .receive:
+            return "Invoice / Address"
+        case .send:
+            return "Lightning / On-chain"
+        }
+    }
+
     var body: some View {
         NavigationStack {
             VStack(alignment: .leading, spacing: 0) {
                 optionButton(title: "Ecash", icon: "banknote", action: action.primaryOption)
-                optionButton(title: "Lightning", icon: "bolt.fill", action: action.secondaryOption)
+                optionButton(title: secondaryOptionTitle, icon: "bolt.fill", action: action.secondaryOption)
             }
             .frame(maxWidth: .infinity, alignment: .topLeading)
             .padding(.horizontal, 20)

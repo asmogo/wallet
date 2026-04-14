@@ -70,11 +70,11 @@ struct ScannerWrapperView: View {
     
     @StateObject private var scannerModel = ScannerViewModel()
     @State private var scannedToken: String?
-    @State private var scannedInvoice: String?
-    @State private var scannedAddress: String?
+    @State private var scannedMeltRequest: String?
+    @State private var scannedMeltMode: MeltView.MeltMode = .lightning
+    @State private var scannedMeltAutoQuote = false
     @State private var navigateToDetail = false
     @State private var navigateToMelt = false
-    @State private var navigateToMeltAddress = false
     
     var body: some View {
         NavigationStack {
@@ -112,7 +112,7 @@ struct ScannerWrapperView: View {
                         .padding(.bottom, 50)
                         .padding(.horizontal, 40)
                     } else {
-                        Text("Scan Cashu Token, Lightning Request, or Address")
+                        Text("Scan Cashu Token, Payment Request, or Bitcoin Address")
                             .foregroundStyle(.primary)
                             .font(.caption)
                             .padding()
@@ -154,53 +154,19 @@ struct ScannerWrapperView: View {
                 }
             }
             .fullScreenCover(isPresented: $navigateToMelt) {
-                if let invoice = scannedInvoice {
-                    MeltViewWithInvoice(invoice: invoice, onComplete: {
-                        dismiss()
-                    })
+                if let meltRequest = scannedMeltRequest {
+                    MeltView(
+                        initialRequest: meltRequest,
+                        initialMode: scannedMeltMode,
+                        autoQuoteOnAppear: scannedMeltAutoQuote,
+                        onComplete: {
+                            dismiss()
+                        }
+                    )
                     .environmentObject(walletManager)
                 }
             }
-            .fullScreenCover(isPresented: $navigateToMeltAddress) {
-                if let address = scannedAddress {
-                    MeltViewWithAddress(address: address, onComplete: {
-                        dismiss()
-                    })
-                    .environmentObject(walletManager)
-                }
-            }
         }
-    }
-    
-    private static func isHumanReadableAddress(_ content: String) -> Bool {
-        let trimmed = content.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard let atIndex = trimmed.firstIndex(of: "@") else { return false }
-        let user = trimmed[trimmed.startIndex..<atIndex]
-        let domain = trimmed[trimmed.index(after: atIndex)...]
-        return !user.isEmpty && domain.contains(".") && !domain.hasPrefix(".") && !domain.hasSuffix(".")
-    }
-    
-    private static func parseLightningPaymentRequest(_ content: String) -> String? {
-        let request = normalizedLightningRequest(content)
-        guard !request.isEmpty else { return nil }
-        
-        do {
-            _ = try decodeInvoice(invoiceStr: request)
-            return request
-        } catch {
-            return nil
-        }
-    }
-    
-    private static func normalizedLightningRequest(_ content: String) -> String {
-        let trimmed = content.trimmingCharacters(in: .whitespacesAndNewlines)
-        let lightningPrefix = "lightning:"
-        
-        if trimmed.lowercased().hasPrefix(lightningPrefix) {
-            return String(trimmed.dropFirst(lightningPrefix.count))
-        }
-        
-        return trimmed
     }
 
     private func handleScan(code: String) {
@@ -234,21 +200,25 @@ struct ScannerWrapperView: View {
             scannedToken = content
             navigateToDetail = true
             
-        } else if let paymentRequest = Self.parseLightningPaymentRequest(content) {
-            // Handle Lightning payment request (BOLT11/BOLT12) -> Navigate to MeltView for payment
+        } else if let paymentMethod = PaymentRequestParser.paymentMethod(for: content) {
             let generator = UINotificationFeedbackGenerator()
             generator.notificationOccurred(.success)
 
-            scannedInvoice = paymentRequest
+            scannedMeltRequest = paymentMethod == .onchain
+                ? PaymentRequestParser.normalizeBitcoinRequest(content)
+                : PaymentRequestParser.normalizeLightningRequest(content)
+            scannedMeltMode = paymentMethod == .onchain ? .onchain : .lightning
+            scannedMeltAutoQuote = paymentMethod != .onchain
             navigateToMelt = true
             
-        } else if Self.isHumanReadableAddress(content) {
-            // Handle BIP 353 / Lightning Address -> Navigate to MeltViewWithAddress
+        } else if PaymentRequestParser.isHumanReadableLightningAddress(content) {
             let generator = UINotificationFeedbackGenerator()
             generator.notificationOccurred(.success)
 
-            scannedAddress = content
-            navigateToMeltAddress = true
+            scannedMeltRequest = content
+            scannedMeltMode = .lightning
+            scannedMeltAutoQuote = false
+            navigateToMelt = true
 
         } else if content.lowercased().hasPrefix("https://") && content.contains("mint") {
             // Possibly a mint URL - copy for now, could add mint

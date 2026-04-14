@@ -33,6 +33,7 @@ struct HistoryView: View {
                         }
                     }
                     .refreshable {
+                        await walletManager.syncPendingMintQuotes()
                         await walletManager.checkAllPendingTokens()
                     }
                 }
@@ -57,7 +58,7 @@ struct HistoryView: View {
                     .environmentObject(walletManager)
             }
             .task {
-                await walletManager.loadTransactions()
+                await walletManager.syncPendingMintQuotes()
             }
             .onReceive(NotificationCenter.default.publisher(for: .cashuTransactionsUpdated)) { _ in
                 // Force view refresh when transactions are updated
@@ -147,10 +148,10 @@ struct HistoryView: View {
                     }
                 }
 
-                if transaction.status == .pending && transaction.kind == .ecash {
+                if transaction.status == .pending {
                     Button {
                         Task {
-                            await checkTransactionStatus(transaction)
+                            await refreshPendingTransaction(transaction)
                         }
                     } label: {
                         if isCheckingStatus == transaction.id {
@@ -162,7 +163,7 @@ struct HistoryView: View {
                     }
                     .buttonStyle(.borderless)
                     .accessibilityLabel(isCheckingStatus == transaction.id ? "Checking status" : "Refresh status")
-                    .accessibilityHint("Checks if this pending token has been claimed")
+                    .accessibilityHint(refreshHint(for: transaction))
                 }
             }
         }
@@ -178,6 +179,10 @@ struct HistoryView: View {
             EcashIcon()
         case .lightning:
             LightningIcon()
+        case .onchain:
+            Image(systemName: "bitcoinsign.circle.fill")
+                .font(.title3)
+                .foregroundStyle(.orange)
         }
     }
 
@@ -209,6 +214,17 @@ struct HistoryView: View {
     }
 
     // MARK: - Actions
+    
+    private func refreshPendingTransaction(_ transaction: WalletTransaction) async {
+        switch transaction.kind {
+        case .ecash:
+            await checkTransactionStatus(transaction)
+        case .lightning, .onchain:
+            isCheckingStatus = transaction.id
+            defer { isCheckingStatus = nil }
+            await walletManager.refreshPendingMintQuote(quoteId: transaction.id)
+        }
+    }
 
     private func checkTransactionStatus(_ transaction: WalletTransaction) async {
         guard let token = transaction.token else { return }
@@ -216,11 +232,20 @@ struct HistoryView: View {
         isCheckingStatus = transaction.id
         defer { isCheckingStatus = nil }
 
-        let isSpent = await walletManager.checkTokenSpendable(token: token)
+        let isSpent = await walletManager.checkTokenSpendable(token: token, mintUrl: transaction.mintUrl)
 
         if isSpent {
             walletManager.removePendingToken(tokenId: transaction.id)
             await walletManager.loadTransactions()
+        }
+    }
+
+    private func refreshHint(for transaction: WalletTransaction) -> String {
+        switch transaction.kind {
+        case .ecash:
+            return "Checks if this pending token has been claimed"
+        case .lightning, .onchain:
+            return "Refreshes this pending receive request"
         }
     }
 

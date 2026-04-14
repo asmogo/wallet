@@ -23,6 +23,7 @@ class TransactionService: ObservableObject {
     
     private var claimedTokens: [ClaimedToken] = []
     private let walletRepository: () -> WalletRepository?
+    private let walletDatabase: () -> WalletSqliteDatabase?
     private let getTrackedMintUrls: () -> [String]
     
     // Storage keys
@@ -31,15 +32,18 @@ class TransactionService: ObservableObject {
         static let pendingReceiveTokens = "pendingReceiveTokens"
         static let claimedTokens = "claimedTokens"
         static let savedTokens = "savedTokens"
+        static let mintQuoteTimestamps = "mintQuoteTimestamps"
     }
     
     // MARK: - Initialization
     
     init(
         walletRepository: @escaping () -> WalletRepository?,
+        walletDatabase: @escaping () -> WalletSqliteDatabase?,
         getTrackedMintUrls: @escaping () -> [String]
     ) {
         self.walletRepository = walletRepository
+        self.walletDatabase = walletDatabase
         self.getTrackedMintUrls = getTrackedMintUrls
     }
     
@@ -53,6 +57,7 @@ class TransactionService: ObservableObject {
         loadPendingTokens()
         loadPendingReceiveTokens()
         loadClaimedTokens()
+        var mintQuoteTimestamps = loadMintQuoteTimestamps()
         
         // Get transactions from tracked wallets
         var allTransactions: [WalletTransaction] = []
@@ -64,28 +69,56 @@ class TransactionService: ObservableObject {
                 let wallet = try await repo.getWallet(mintUrl: mintUrl, unit: .sat)
                 let txs = try await wallet.listTransactions(direction: nil)
                 let walletTxs: [WalletTransaction] = txs.map { tx in
-                    // Determine if this is a Lightning or Ecash transaction
-                    let isLightning = tx.paymentRequest != nil
-                    
-                    // Get stored token for ecash transactions
-                    let storedToken = !isLightning ? self.getToken(txId: tx.id.hex) : nil
-                    
-                    return WalletTransaction(
+                    let paymentMethod = tx.paymentMethod.flatMap(PaymentMethodKind.from)
+                    let kind: WalletTransaction.TransactionKind
+
+                    switch paymentMethod {
+                    case .onchain:
+                        kind = .onchain
+                    case .bolt11, .bolt12:
+                        kind = .lightning
+                    case nil:
+                        kind = tx.paymentRequest != nil ? .lightning : .ecash
+                    }
+
+                    let storedToken = kind == .ecash ? self.getToken(txId: tx.id.hex) : nil
+                    let storedPaymentProof = tx.paymentProof
+                        ?? tx.quoteId.flatMap { self.getPreimage(quoteId: $0) }
+
+                    var walletTransaction = WalletTransaction(
                         id: tx.id.hex,
                         amount: tx.amount.value,
                         type: tx.direction == .incoming ? .incoming : .outgoing,
-                        kind: isLightning ? .lightning : .ecash,
+                        kind: kind,
                         date: Date(timeIntervalSince1970: TimeInterval(tx.timestamp)),
                         memo: tx.memo,
                         status: .completed,
                         mintUrl: tx.mintUrl.url,
+                        preimage: storedPaymentProof,
                         token: storedToken,
                         invoice: tx.paymentRequest
                     )
+
+                    walletTransaction.fee = tx.fee.value
+                    return walletTransaction
                 }
                 allTransactions.append(contentsOf: walletTxs)
             } catch {
                 AppLogger.wallet.error("Failed to load transactions for mint \(mintUrlString): \(error)")
+            }
+        }
+
+        if let walletDatabase = walletDatabase() {
+            do {
+                let pendingMintQuotes = try await walletDatabase.getUnissuedMintQuotes()
+                let pendingQuoteTransactions = pendingTransactions(
+                    from: pendingMintQuotes,
+                    trackedMintUrls: trackedMintUrls,
+                    timestamps: &mintQuoteTimestamps
+                )
+                allTransactions.append(contentsOf: pendingQuoteTransactions)
+            } catch {
+                AppLogger.wallet.error("Failed to load pending mint quotes: \(error)")
             }
         }
         
@@ -124,6 +157,8 @@ class TransactionService: ObservableObject {
             allTransactions.append(claimedTx)
         }
         
+        persistMintQuoteTimestamps(for: allTransactions, using: mintQuoteTimestamps)
+
         // Sort by date descending (newest first)
         transactions = allTransactions.sorted { $0.date > $1.date }
         
@@ -305,6 +340,80 @@ class TransactionService: ObservableObject {
             UserDefaults.standard.set(data, forKey: StorageKeys.claimedTokens)
         } catch {
             AppLogger.wallet.error("Failed to save claimed tokens: \(error)")
+        }
+    }
+
+    private func pendingTransactions(
+        from quotes: [MintQuote],
+        trackedMintUrls: Set<String>,
+        timestamps: inout [String: TimeInterval]
+    ) -> [WalletTransaction] {
+        quotes.compactMap { quote in
+            guard trackedMintUrls.contains(quote.mintUrl.url) else {
+                return nil
+            }
+
+            let paymentMethod = PaymentMethodKind.from(quote.paymentMethod)
+            guard let paymentMethod else {
+                return nil
+            }
+
+            let amount = quote.amount?.value
+                ?? (quote.amountPaid.value > 0 ? quote.amountPaid.value : nil)
+                ?? (quote.amountIssued.value > 0 ? quote.amountIssued.value : nil)
+
+            guard let amount, amount > 0 else {
+                return nil
+            }
+
+            let timestamp = timestamps[quote.id] ?? Date().timeIntervalSince1970
+            timestamps[quote.id] = timestamp
+
+            return WalletTransaction(
+                id: quote.id,
+                amount: amount,
+                type: .incoming,
+                kind: paymentMethod == .onchain ? .onchain : .lightning,
+                date: Date(timeIntervalSince1970: timestamp),
+                memo: nil,
+                status: .pending,
+                mintUrl: quote.mintUrl.url,
+                token: nil,
+                invoice: quote.request
+            )
+        }
+    }
+
+    private func loadMintQuoteTimestamps() -> [String: TimeInterval] {
+        guard let data = UserDefaults.standard.data(forKey: StorageKeys.mintQuoteTimestamps) else {
+            return [:]
+        }
+
+        do {
+            return try JSONDecoder().decode([String: TimeInterval].self, from: data)
+        } catch {
+            AppLogger.wallet.error("Failed to load mint quote timestamps: \(error)")
+            return [:]
+        }
+    }
+
+    private func persistMintQuoteTimestamps(
+        for transactions: [WalletTransaction],
+        using timestamps: [String: TimeInterval]
+    ) {
+        let pendingQuoteIDs = Set(
+            transactions
+                .filter { $0.status == .pending && ($0.kind == .lightning || $0.kind == .onchain) }
+                .map(\.id)
+        )
+
+        let prunedTimestamps = timestamps.filter { pendingQuoteIDs.contains($0.key) }
+
+        do {
+            let data = try JSONEncoder().encode(prunedTimestamps)
+            UserDefaults.standard.set(data, forKey: StorageKeys.mintQuoteTimestamps)
+        } catch {
+            AppLogger.wallet.error("Failed to save mint quote timestamps: \(error)")
         }
     }
 }

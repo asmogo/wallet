@@ -40,6 +40,7 @@ class WalletManager: ObservableObject {
     /// Transaction history service
     private(set) lazy var transactionService = TransactionService(
         walletRepository: { [weak self] in self?.walletRepository },
+        walletDatabase: { [weak self] in self?.db },
         getTrackedMintUrls: { [weak self] in
             guard let self else { return [] }
             return self.trackedMintUrlsForWalletAccess()
@@ -55,6 +56,7 @@ class WalletManager: ObservableObject {
     /// Lightning operations service
     private(set) lazy var lightningService = LightningService(
         walletRepository: { [weak self] in self?.walletRepository },
+        walletDatabase: { [weak self] in self?.db },
         getActiveMint: { [weak self] in self?.activeMint }
     )
     
@@ -489,8 +491,17 @@ class WalletManager: ObservableObject {
     
     // MARK: - Lightning Operations (Delegate to LightningService)
     
-    func createMintQuote(amount: UInt64) async throws -> MintQuoteInfo {
-        return try await lightningService.createMintQuote(amount: amount)
+    func createMintQuote(
+        amount: UInt64?,
+        method: PaymentMethodKind = .bolt11
+    ) async throws -> MintQuoteInfo {
+        let quote = try await lightningService.createMintQuote(amount: amount, method: method)
+        await transactionService.loadTransactions()
+        return quote
+    }
+
+    func checkMintQuote(quoteId: String) async throws -> MintQuoteInfo {
+        return try await lightningService.checkMintQuote(quoteId: quoteId)
     }
     
     func mintTokens(quoteId: String) async throws -> UInt64 {
@@ -510,6 +521,20 @@ class WalletManager: ObservableObject {
 
     func createHumanReadableMeltQuote(address: String, amount: UInt64) async throws -> MeltQuoteInfo {
         return try await lightningService.createHumanReadableMeltQuote(address: address, amount: amount)
+    }
+
+    func createOnchainMeltQuote(address: String, amount: UInt64) async throws -> MeltQuoteInfo {
+        return try await lightningService.createOnchainMeltQuote(address: address, amount: amount)
+    }
+
+    func subscribeToMintQuote(
+        quoteId: String,
+        paymentMethod: PaymentMethodKind
+    ) async throws -> ActiveSubscription? {
+        return try await lightningService.subscribeToMintQuote(
+            quoteId: quoteId,
+            paymentMethod: paymentMethod
+        )
     }
     
     func meltTokens(quoteId: String) async throws -> String? {
@@ -627,6 +652,39 @@ class WalletManager: ObservableObject {
         }
         await transactionService.loadTransactions()
     }
+
+    func refreshPendingMintQuote(quoteId: String) async {
+        let minted = await syncPendingMintQuote(quoteId: quoteId)
+        if minted {
+            await refreshBalance()
+        }
+        await transactionService.loadTransactions()
+    }
+
+    func syncPendingMintQuotes() async {
+        guard let db else {
+            await transactionService.loadTransactions()
+            return
+        }
+
+        var mintedAny = false
+
+        do {
+            let pendingQuotes = try await db.getUnissuedMintQuotes()
+            for quote in pendingQuotes {
+                let minted = await syncPendingMintQuote(quoteId: quote.id)
+                mintedAny = mintedAny || minted
+            }
+        } catch {
+            AppLogger.wallet.error("Failed to sync pending mint quotes: \(error)")
+        }
+
+        if mintedAny {
+            await refreshBalance()
+        }
+
+        await transactionService.loadTransactions()
+    }
     
     func reclaimPendingToken(pendingToken: PendingToken) async throws -> UInt64 {
         let amount = try await receiveTokens(tokenString: pendingToken.token)
@@ -639,6 +697,33 @@ class WalletManager: ObservableObject {
     
     func loadTransactions() async {
         await transactionService.loadTransactions()
+    }
+
+    @discardableResult
+    private func syncPendingMintQuote(quoteId: String) async -> Bool {
+        do {
+            let updatedQuote = try await lightningService.checkMintQuote(quoteId: quoteId)
+
+            guard updatedQuote.state == .paid || updatedQuote.state == .issued else {
+                return false
+            }
+
+            do {
+                let _ = try await lightningService.mintTokens(quoteId: quoteId)
+                return true
+            } catch {
+                let errorString = error.localizedDescription.lowercased()
+                if errorString.contains("issued") || errorString.contains("already") {
+                    return true
+                }
+
+                AppLogger.wallet.error("Failed to mint pending quote \(quoteId): \(error)")
+                return false
+            }
+        } catch {
+            AppLogger.wallet.error("Failed to refresh pending quote \(quoteId): \(error)")
+            return false
+        }
     }
     
     // MARK: - Backup
@@ -711,4 +796,30 @@ enum MeltQuoteState {
     case unpaid
     case pending
     case paid
+}
+
+extension MintQuoteState {
+    init(_ quoteState: CashuDevKit.QuoteState) {
+        switch quoteState {
+        case .paid:
+            self = .paid
+        case .issued:
+            self = .issued
+        case .unpaid, .pending:
+            self = .pending
+        }
+    }
+}
+
+extension MeltQuoteState {
+    init(_ quoteState: CashuDevKit.QuoteState) {
+        switch quoteState {
+        case .unpaid:
+            self = .unpaid
+        case .pending:
+            self = .pending
+        case .paid, .issued:
+            self = .paid
+        }
+    }
 }

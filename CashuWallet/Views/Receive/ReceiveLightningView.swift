@@ -1,21 +1,23 @@
 import SwiftUI
+import CashuDevKit
 
 struct ReceiveLightningView: View {
     @Environment(\.dismiss) private var dismiss
     @EnvironmentObject var walletManager: WalletManager
-    @ObservedObject var settings = SettingsManager.shared
-    @ObservedObject var priceService = PriceService.shared
+    @ObservedObject private var settings = SettingsManager.shared
+    @ObservedObject private var priceService = PriceService.shared
 
     @State private var amountString = ""
+    @State private var selectedMethod: PaymentMethodKind = .bolt11
     @State private var mintQuote: MintQuoteInfo?
-    @State private var isCreatingInvoice = false
+    @State private var isCreatingRequest = false
     @State private var isMinting = false
     @State private var isCheckingPayment = false
     @State private var isPaid = false
     @State private var errorMessage: String?
     @State private var showMintPicker = false
-    @State private var copyButtonText = "Copy"
-    @State private var pollingTask: Task<Void, Never>?
+    @State private var copiedRequest = false
+    @State private var quoteStatusTask: Task<Void, Never>?
     @State private var expiryTimeRemaining: TimeInterval = 0
     @State private var expiryTimer: Timer?
     @State private var isExpired = false
@@ -24,7 +26,7 @@ struct ReceiveLightningView: View {
         NavigationStack {
             Group {
                 if let quote = mintQuote {
-                    invoiceDisplayView(quote: quote)
+                    requestDisplayView(quote: quote)
                 } else {
                     amountInputView
                 }
@@ -39,11 +41,11 @@ struct ReceiveLightningView: View {
                 }
 
                 ToolbarItem(placement: .principal) {
-                    Text(mintQuote != nil ? "Lightning Invoice" : "Receive Lightning")
+                    Text(screenTitle)
                         .font(.headline)
                 }
 
-                if mintQuote == nil {
+                if mintQuote == nil && selectedMethod.requiresMintAmount {
                     ToolbarItem(placement: .topBarTrailing) {
                         Button(action: { settings.useBitcoinSymbol.toggle() }) {
                             Text(settings.unitLabel)
@@ -61,77 +63,164 @@ struct ReceiveLightningView: View {
                     .environmentObject(walletManager)
                     .presentationDetents([.medium])
             }
+            .onAppear {
+                syncSelectedMethodWithActiveMint()
+            }
+            .onChange(of: walletManager.activeMint?.id) {
+                syncSelectedMethodWithActiveMint()
+            }
+            .onChange(of: selectedMethod) {
+                errorMessage = nil
+            }
             .onDisappear {
-                pollingTask?.cancel()
+                quoteStatusTask?.cancel()
                 expiryTimer?.invalidate()
-                pollingTask = nil
+                quoteStatusTask = nil
                 expiryTimer = nil
             }
         }
+    }
+
+    // MARK: - Computed Properties
+
+    private var availableMintMethods: [PaymentMethodKind] {
+        let methods = walletManager.activeMint?.supportedMintMethods ?? [.bolt11]
+        let orderedMethods = PaymentMethodKind.allCases.filter { methods.contains($0) }
+        return orderedMethods.isEmpty ? [.bolt11] : orderedMethods
+    }
+
+    private var shouldShowMethodPicker: Bool {
+        availableMintMethods.count > 1
+    }
+
+    private var screenTitle: String {
+        guard let quote = mintQuote else { return "Receive" }
+
+        switch quote.paymentMethod {
+        case .bolt11:
+            return "Lightning Invoice"
+        case .bolt12:
+            return "BOLT12 Offer"
+        case .onchain:
+            return "Bitcoin Address"
+        }
+    }
+
+    private var canCreateRequest: Bool {
+        if selectedMethod.requiresMintAmount {
+            guard let amount = UInt64(amountString), amount > 0 else { return false }
+        }
+        return !isCreatingRequest
+    }
+
+    private var formattedInputAmount: String {
+        formattedAmount(sats: UInt64(amountString))
     }
 
     // MARK: - Amount Input View
 
     private var amountInputView: some View {
         VStack(spacing: 0) {
-            // Mint selector
             if let mint = walletManager.activeMint {
                 mintSelector(mint: mint)
                     .padding(.horizontal)
                     .padding(.top, 12)
             }
 
+            if shouldShowMethodPicker {
+                paymentMethodPicker
+                    .padding(.horizontal)
+                    .padding(.top, 12)
+            }
+
             Spacer()
 
-            // Amount display
-            VStack(spacing: 8) {
-                Text(formattedAmount)
-                    .font(.largeTitle.bold())
-                    .minimumScaleFactor(0.5)
-                    .lineLimit(1)
-                    .contentTransition(.numericText())
-
-                // Fiat conversion
-                if priceService.btcPriceUSD > 0, let sats = UInt64(amountString) {
-                    Text(priceService.formatSatsAsFiat(sats))
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                } else {
-                    Text("$0.00")
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                }
+            if selectedMethod.requiresMintAmount {
+                amountDisplaySection
+            } else {
+                amountlessOfferSection
             }
-            .accessibilityElement(children: .combine)
-            .accessibilityLabel("Invoice amount: \(amountString.isEmpty ? "0" : amountString) sats")
 
             if let error = errorMessage {
                 Text(error)
                     .font(.caption)
                     .foregroundStyle(.red)
-                    .padding(.top, 8)
+                    .padding(.top, 12)
+                    .padding(.horizontal)
             }
 
             Spacer()
 
-            // Number pad
-            numberPad
-                .padding(.horizontal, 24)
+            if selectedMethod.requiresMintAmount {
+                numberPad
+                    .padding(.horizontal, 24)
+            }
 
-            // Create invoice button
-            Button(action: createInvoice) {
-                if isCreatingInvoice {
+            Button(action: createRequest) {
+                if isCreatingRequest {
                     ProgressView()
                 } else {
-                    Text("Create Invoice")
+                    Text("Create \(selectedMethod.requestDisplayName)")
                 }
             }
             .glassButton()
-            .disabled(amountString.isEmpty || amountString == "0" || isCreatingInvoice)
+            .disabled(!canCreateRequest)
             .padding(.horizontal)
             .padding(.top, 16)
             .padding(.bottom, 16)
         }
+    }
+
+    private var paymentMethodPicker: some View {
+        Picker("Payment Method", selection: $selectedMethod) {
+            ForEach(availableMintMethods, id: \.self) { method in
+                Text(method.displayName).tag(method)
+            }
+        }
+        .pickerStyle(.segmented)
+        .accessibilityLabel("Payment method")
+    }
+
+    private var amountDisplaySection: some View {
+        VStack(spacing: 8) {
+            Text(formattedInputAmount)
+                .font(.largeTitle.bold())
+                .minimumScaleFactor(0.5)
+                .lineLimit(1)
+                .contentTransition(.numericText())
+
+            if priceService.btcPriceUSD > 0, let sats = UInt64(amountString) {
+                Text(priceService.formatSatsAsFiat(sats))
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            } else {
+                Text("$0.00")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("Request amount: \(amountString.isEmpty ? "0" : amountString) sats")
+    }
+
+    private var amountlessOfferSection: some View {
+        VStack(spacing: 12) {
+            Image(systemName: "link.badge.plus")
+                .font(.largeTitle)
+                .foregroundStyle(Color.accentColor)
+                .accessibilityHidden(true)
+
+            Text("Amountless BOLT12 Offer")
+                .font(.title3.weight(.semibold))
+
+            Text("The sender chooses the amount when paying this offer.")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+                .padding(.horizontal, 32)
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("Amountless BOLT12 offer. The sender chooses the amount.")
     }
 
     // MARK: - Number Pad
@@ -153,7 +242,7 @@ struct ReceiveLightningView: View {
             ["1", "2", "3"],
             ["4", "5", "6"],
             ["7", "8", "9"],
-            ["", "0", "⌫"]
+            ["", "0", "\u{232B}"]
         ]
     }
 
@@ -165,7 +254,7 @@ struct ReceiveLightningView: View {
             } else {
                 Button(action: { handleKeyPress(key) }) {
                     Group {
-                        if key == "⌫" {
+                        if key == "\u{232B}" {
                             Image(systemName: "chevron.left")
                                 .font(.title3)
                         } else {
@@ -177,24 +266,21 @@ struct ReceiveLightningView: View {
                     .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
-                .accessibilityLabel(key == "⌫" ? "Delete" : key)
+                .accessibilityLabel(key == "\u{232B}" ? "Delete" : key)
             }
         }
         .frame(height: 56)
     }
 
     private func handleKeyPress(_ key: String) {
-        if key == "⌫" {
+        if key == "\u{232B}" {
             if !amountString.isEmpty {
                 amountString.removeLast()
             }
+        } else if amountString == "0" {
+            amountString = key
         } else {
-            // Prevent leading zeros
-            if amountString == "0" {
-                amountString = key
-            } else {
-                amountString.append(key)
-            }
+            amountString.append(key)
         }
     }
 
@@ -203,7 +289,6 @@ struct ReceiveLightningView: View {
     private func mintSelector(mint: MintInfo) -> some View {
         Button(action: { showMintPicker = true }) {
             HStack(spacing: 12) {
-                // Mint icon
                 if let iconUrl = mint.iconUrl, let url = URL(string: iconUrl) {
                     AsyncImage(url: url) { image in
                         image.resizable().aspectRatio(contentMode: .fill)
@@ -242,57 +327,81 @@ struct ReceiveLightningView: View {
         .accessibilityHint("Opens mint selector")
     }
 
-    // MARK: - Invoice Display View
+    // MARK: - Request Display View
 
-    private func invoiceDisplayView(quote: MintQuoteInfo) -> some View {
+    private func requestDisplayView(quote: MintQuoteInfo) -> some View {
         VStack(spacing: 0) {
             ScrollView {
                 VStack(spacing: 20) {
-                    // QR Code
                     QRCodeView(content: quote.request)
                         .frame(width: 280, height: 280)
                         .padding(16)
                         .background(Color.white, in: RoundedRectangle(cornerRadius: 16))
                         .padding(.top, 8)
 
-                    // Amount
-                    Text(formattedAmount)
-                        .font(.title.bold())
-                        .accessibilityLabel("Invoice amount: \(amountString) sats")
+                    amountSummary(for: quote)
 
-                    // Status
                     statusBadge
 
-                    // Expiry countdown
+                    if let explorerURL = blockExplorerURL(for: quote) {
+                        Link("View address in block explorer", destination: explorerURL)
+                            .font(.subheadline.weight(.medium))
+                    }
+
                     if !isPaid && !isExpired && expiryTimeRemaining > 0 {
                         expiryView
                     }
 
-                    // Details
                     VStack(spacing: 12) {
+                        detailRow(icon: "arrow.left.arrow.right", label: "Type", value: quote.paymentMethod.displayName)
                         detailRow(icon: "banknote", label: "Unit", value: settings.unitLabel.uppercased())
-                        detailRow(icon: "info.circle", label: "State",
-                                  value: isPaid ? "Paid" : (isExpired ? "Expired" : "Pending"))
+                        detailRow(
+                            icon: "number",
+                            label: "Amount",
+                            value: quote.amount.map { formattedAmount(sats: $0) } ?? "Set by sender"
+                        )
+                        detailRow(icon: "info.circle", label: "State", value: quoteStateText(for: quote))
                         if let mint = walletManager.activeMint {
-                            detailRow(icon: "bitcoinsign.bank.building", label: "Mint",
-                                      value: extractMintHost(mint.url))
+                            detailRow(
+                                icon: "bitcoinsign.bank.building",
+                                label: "Mint",
+                                value: extractMintHost(mint.url)
+                            )
                         }
                     }
                     .padding(.horizontal)
                 }
             }
 
-            // Copy button
-            Button(action: { copyInvoice(quote.request) }) {
-                Label(copyButtonText, systemImage: copyButtonText == "Copied" ? "checkmark" : "doc.on.doc")
+            Button(action: { copyRequest(quote.request) }) {
+                Label(copyButtonTitle(for: quote), systemImage: copiedRequest ? "checkmark" : "doc.on.doc")
             }
             .glassButton()
             .padding(.horizontal)
             .padding(.bottom, 16)
         }
         .onAppear {
-            startPaymentPolling()
+            startQuoteMonitoring(for: quote)
             startExpiryCountdown(quote: quote)
+        }
+    }
+
+    private func amountSummary(for quote: MintQuoteInfo) -> some View {
+        VStack(spacing: 6) {
+            if let amount = quote.amount {
+                Text(formattedAmount(sats: amount))
+                    .font(.title.bold())
+                    .accessibilityLabel("Request amount: \(amount) sats")
+            } else {
+                Text("Amount set by sender")
+                    .font(.title3.weight(.semibold))
+                    .multilineTextAlignment(.center)
+            }
+
+            Text(quote.paymentMethod.requestDisplayName)
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+                .textCase(.uppercase)
         }
     }
 
@@ -305,6 +414,7 @@ struct ReceiveLightningView: View {
             Spacer()
             Text(value)
                 .fontWeight(.medium)
+                .multilineTextAlignment(.trailing)
         }
         .font(.subheadline)
     }
@@ -338,14 +448,39 @@ struct ReceiveLightningView: View {
             }
             .font(.subheadline.weight(.medium))
             .foregroundStyle(.red)
+        } else if mintQuote?.state == .paid || mintQuote?.state == .issued {
+            HStack(spacing: 6) {
+                Image(systemName: "checkmark.seal.fill")
+                    .accessibilityHidden(true)
+                Text("Payment detected")
+            }
+            .font(.subheadline.weight(.medium))
+            .foregroundStyle(.green)
         } else {
             HStack(spacing: 6) {
                 Image(systemName: "clock")
                     .accessibilityHidden(true)
-                Text("Waiting for payment...")
+                Text(pendingStatusText)
             }
             .font(.subheadline)
             .foregroundStyle(.orange)
+        }
+    }
+
+    private var pendingStatusText: String {
+        guard let quote = mintQuote else {
+            return "Waiting for payment..."
+        }
+
+        switch quote.paymentMethod {
+        case .bolt11, .bolt12:
+            return "Waiting for payment..."
+        case .onchain:
+            if let confirmations = walletManager.activeMint?.onchainMintConfirmations {
+                let suffix = confirmations == 1 ? "" : "s"
+                return "Waiting for \(confirmations) confirmation\(suffix)..."
+            }
+            return "Waiting for on-chain payment..."
         }
     }
 
@@ -362,8 +497,8 @@ struct ReceiveLightningView: View {
 
     // MARK: - Helpers
 
-    private var formattedAmount: String {
-        let amount = amountString.isEmpty ? "0" : amountString
+    private func formattedAmount(sats: UInt64?) -> String {
+        let amount = sats ?? 0
         if settings.useBitcoinSymbol {
             return "₿\(amount)"
         }
@@ -388,35 +523,85 @@ struct ReceiveLightningView: View {
         return minutes > 0 ? String(format: "%d:%02d", minutes, secs) : String(format: "0:%02d", secs)
     }
 
+    private func quoteStateText(for quote: MintQuoteInfo) -> String {
+        if isPaid { return "Paid" }
+        if isExpired { return "Expired" }
+
+        switch quote.state {
+        case .issued:
+            return "Issued"
+        case .paid:
+            return "Paid"
+        case .pending:
+            return "Pending"
+        }
+    }
+
+    private func copyButtonTitle(for quote: MintQuoteInfo) -> String {
+        copiedRequest ? "Copied" : "Copy \(quote.paymentMethod.requestDisplayName)"
+    }
+
+    private func blockExplorerURL(for quote: MintQuoteInfo) -> URL? {
+        guard quote.paymentMethod == .onchain else { return nil }
+
+        let normalizedAddress = quote.request.trimmingCharacters(in: .whitespacesAndNewlines)
+        let lowercaseAddress = normalizedAddress.lowercased()
+        let baseURL: String
+
+        if lowercaseAddress.hasPrefix("bc1")
+            || lowercaseAddress.hasPrefix("1")
+            || lowercaseAddress.hasPrefix("3") {
+            baseURL = "https://mempool.space/address/"
+        } else {
+            baseURL = "https://mempool.space/signet/address/"
+        }
+
+        return URL(string: baseURL + normalizedAddress)
+    }
+
+    private func syncSelectedMethodWithActiveMint() {
+        guard availableMintMethods.contains(selectedMethod) else {
+            selectedMethod = availableMintMethods.first ?? .bolt11
+            return
+        }
+    }
+
     // MARK: - Actions
 
-    private func createInvoice() {
-        guard let amountValue = UInt64(amountString), amountValue > 0 else { return }
+    private func createRequest() {
+        let amountValue = UInt64(amountString)
 
-        isCreatingInvoice = true
+        if selectedMethod.requiresMintAmount, (amountValue ?? 0) == 0 {
+            return
+        }
+
+        isCreatingRequest = true
         errorMessage = nil
         isPaid = false
         isExpired = false
+        copiedRequest = false
         expiryTimeRemaining = 0
-        pollingTask?.cancel()
+        quoteStatusTask?.cancel()
         expiryTimer?.invalidate()
 
         Task { @MainActor in
             do {
-                let quote = try await walletManager.createMintQuote(amount: amountValue)
-                mintQuote = quote
+                mintQuote = try await walletManager.createMintQuote(
+                    amount: amountValue,
+                    method: selectedMethod
+                )
             } catch {
                 errorMessage = "Failed: \(error.localizedDescription)"
             }
-            isCreatingInvoice = false
+            isCreatingRequest = false
         }
     }
 
-    private func copyInvoice(_ invoice: String) {
-        UIPasteboard.general.string = invoice
-        copyButtonText = "Copied"
+    private func copyRequest(_ request: String) {
+        UIPasteboard.general.string = request
+        copiedRequest = true
         DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
-            copyButtonText = "Copy"
+            copiedRequest = false
         }
     }
 
@@ -436,44 +621,133 @@ struct ReceiveLightningView: View {
             if expiryTimeRemaining <= 0 {
                 isExpired = true
                 expiryTimer?.invalidate()
-                pollingTask?.cancel()
+                quoteStatusTask?.cancel()
             }
         }
     }
 
-    private func checkPayment() async {
-        guard let quote = mintQuote, !isExpired else { return }
+    private func startQuoteMonitoring(for quote: MintQuoteInfo) {
+        quoteStatusTask?.cancel()
+        quoteStatusTask = Task { @MainActor in
+            switch quote.paymentMethod {
+            case .bolt11:
+                await pollMintQuote(quoteId: quote.id, initialInterval: 5, maxInterval: 15)
+            case .bolt12:
+                await monitorMintQuoteViaSubscription(quoteId: quote.id, paymentMethod: .bolt12)
+            case .onchain:
+                await pollMintQuote(quoteId: quote.id, initialInterval: 30, maxInterval: 30)
+            }
+        }
+    }
+
+    @MainActor
+    private func monitorMintQuoteViaSubscription(
+        quoteId: String,
+        paymentMethod: PaymentMethodKind
+    ) async {
+        do {
+            if let subscription = try await walletManager.subscribeToMintQuote(
+                quoteId: quoteId,
+                paymentMethod: paymentMethod
+            ) {
+                while !Task.isCancelled && !isPaid && !isExpired {
+                    let notification = try await subscription.recv()
+                    guard !Task.isCancelled else { break }
+
+                    switch notification {
+                    case .mintQuoteUpdate(let quoteUpdate):
+                        guard quoteUpdate.quote == quoteId else { continue }
+                        await refreshMintQuoteStatus()
+                    case .proofState, .meltQuoteUpdate:
+                        continue
+                    }
+                }
+                return
+            }
+        } catch {
+            // Fall back to polling when subscriptions are unavailable or fail.
+        }
+
+        await pollMintQuote(quoteId: quoteId, initialInterval: 10, maxInterval: 30)
+    }
+
+    @MainActor
+    private func pollMintQuote(
+        quoteId: String,
+        initialInterval: UInt64,
+        maxInterval: UInt64
+    ) async {
+        var interval = initialInterval
+
+        while !Task.isCancelled && !isPaid && !isExpired && mintQuote?.id == quoteId {
+            try? await Task.sleep(nanoseconds: interval * 1_000_000_000)
+
+            guard !Task.isCancelled, !isPaid, !isExpired, mintQuote?.id == quoteId else { break }
+            await refreshMintQuoteStatus()
+
+            if interval < maxInterval {
+                interval = min(interval + 1, maxInterval)
+            }
+        }
+    }
+
+    @MainActor
+    private func refreshMintQuoteStatus() async {
+        guard let quote = mintQuote, !isExpired, !isMinting else { return }
 
         isCheckingPayment = true
         defer { isCheckingPayment = false }
+
+        do {
+            let updatedQuote = try await walletManager.checkMintQuote(quoteId: quote.id)
+            mintQuote = updatedQuote
+
+            switch updatedQuote.state {
+            case .pending:
+                return
+            case .paid:
+                await mintQuoteIfReady(updatedQuote)
+            case .issued:
+                await completeReceivedQuote(refreshWalletState: true)
+            }
+        } catch {
+            // Ignore transient polling failures and keep monitoring.
+        }
+    }
+
+    @MainActor
+    private func mintQuoteIfReady(_ quote: MintQuoteInfo) async {
+        guard !isMinting else { return }
+
         isMinting = true
         defer { isMinting = false }
 
         do {
             let _ = try await walletManager.mintTokens(quoteId: quote.id)
-            isPaid = true
-            pollingTask?.cancel()
-            expiryTimer?.invalidate()
-            try? await Task.sleep(nanoseconds: 2_000_000_000)
-            dismiss()
+            await completeReceivedQuote(refreshWalletState: false)
         } catch {
-            // Still unpaid, polling continues
+            let errorString = error.localizedDescription.lowercased()
+            if errorString.contains("issued") || errorString.contains("already") {
+                await completeReceivedQuote(refreshWalletState: true)
+            }
         }
     }
 
-    private func startPaymentPolling() {
-        pollingTask?.cancel()
-        pollingTask = Task {
-            let maxInterval: UInt64 = 15_000_000_000
-            var interval: UInt64 = 5_000_000_000
-            while !Task.isCancelled && !isPaid && mintQuote != nil && !isExpired {
-                try? await Task.sleep(nanoseconds: interval)
-                if !Task.isCancelled && !isPaid && !isCheckingPayment && !isExpired {
-                    await checkPayment()
-                }
-                interval = min(interval + 1_000_000_000, maxInterval)
-            }
+    @MainActor
+    private func completeReceivedQuote(refreshWalletState: Bool) async {
+        guard !isPaid else { return }
+
+        isPaid = true
+        quoteStatusTask?.cancel()
+        expiryTimer?.invalidate()
+
+        if refreshWalletState {
+            await walletManager.refreshBalance()
+            await walletManager.loadTransactions()
         }
+
+        try? await Task.sleep(nanoseconds: 2_000_000_000)
+        dismiss()
     }
 }
 

@@ -57,7 +57,7 @@ class MintService: ObservableObject {
         }
         
         // Parse and add to wallet repository
-        let mintUrlObj = try MintUrl(url: normalizedUrl)
+        let mintUrlObj = MintUrl(url: normalizedUrl)
         
         // Always call createWallet to ensure the unit is set
         try await repo.createWallet(mintUrl: mintUrlObj, unit: .sat, targetProofCount: nil)
@@ -65,14 +65,10 @@ class MintService: ObservableObject {
         // Get wallet and fetch mint info
         let wallet = try await repo.getWallet(mintUrl: mintUrlObj, unit: .sat)
         let info = try await wallet.fetchMintInfo()
-        
-        let mintInfo = MintInfo(
+        let mintInfo = await makeMintInfo(
             url: normalizedUrl,
-            name: info?.name ?? "Unknown Mint",
-            description: info?.description,
-            isActive: true,
-            balance: 0,
-            iconUrl: info?.iconUrl
+            existing: nil,
+            fetchedInfo: info
         )
         
         mints.append(mintInfo)
@@ -95,9 +91,8 @@ class MintService: ObservableObject {
             }
             
             // Remove from wallet repository
-            if let mintUrl = try? MintUrl(url: mint.url) {
-                try? await repo.removeWallet(mintUrl: mintUrl, currencyUnit: .sat)
-            }
+            let mintUrl = MintUrl(url: mint.url)
+            try? await repo.removeWallet(mintUrl: mintUrl, currencyUnit: .sat)
         }
         mints.remove(atOffsets: offsets)
         saveMints()
@@ -123,7 +118,7 @@ class MintService: ObservableObject {
                 // Always call addMint to ensure the unit is set, even if mint exists
                 for mint in mints {
                     do {
-                        let mintUrl = try MintUrl(url: mint.url)
+                        let mintUrl = MintUrl(url: mint.url)
                         // Call createWallet even if hasMint returns true, to ensure unit is set
                         try await repo.createWallet(mintUrl: mintUrl, unit: .sat, targetProofCount: nil)
                     } catch {
@@ -141,29 +136,28 @@ class MintService: ObservableObject {
         }
     }
     
-    /// Refresh mint info (name, description, iconUrl) for all mints missing icons
+    /// Refresh mint info and payment capabilities for all configured mints.
     func refreshMintInfo() async {
         guard let repo = walletRepository() else { return }
         var updated = false
 
         for i in mints.indices {
-            if mints[i].iconUrl == nil {
-                do {
-                    let mintUrl = try MintUrl(url: mints[i].url)
-                    let wallet = try await repo.getWallet(mintUrl: mintUrl, unit: .sat)
-                    if let info = try await wallet.fetchMintInfo() {
-                        if let iconUrl = info.iconUrl {
-                            mints[i].iconUrl = iconUrl
-                            updated = true
-                        }
-                        if let name = info.name, mints[i].name == "Unknown Mint" {
-                            mints[i].name = name
-                            updated = true
-                        }
-                    }
-                } catch {
-                    // Skip — will retry next launch
+            do {
+                let mintUrl = MintUrl(url: mints[i].url)
+                let wallet = try await repo.getWallet(mintUrl: mintUrl, unit: .sat)
+                let info = try await wallet.fetchMintInfo()
+                let refreshedMint = await makeMintInfo(
+                    url: mints[i].url,
+                    existing: mints[i],
+                    fetchedInfo: info
+                )
+
+                if refreshedMint != mints[i] {
+                    mints[i] = refreshedMint
+                    updated = true
                 }
+            } catch {
+                AppLogger.wallet.error("Failed to refresh mint info for \(self.mints[i].url): \(error)")
             }
         }
 
@@ -241,5 +235,101 @@ class MintService: ObservableObject {
         } catch {
             AppLogger.wallet.error("Failed to save mints: \(error)")
         }
+    }
+
+    private func makeMintInfo(
+        url: String,
+        existing: MintInfo?,
+        fetchedInfo: CashuDevKit.MintInfo?
+    ) async -> MintInfo {
+        var mintInfo = existing ?? MintInfo(
+            url: url,
+            name: fetchedInfo?.name ?? "Unknown Mint",
+            description: fetchedInfo?.description,
+            isActive: true,
+            balance: 0,
+            iconUrl: fetchedInfo?.iconUrl
+        )
+
+        if let fetchedInfo {
+            mintInfo.name = fetchedInfo.name ?? mintInfo.name
+            mintInfo.description = fetchedInfo.description ?? mintInfo.description
+            mintInfo.iconUrl = fetchedInfo.iconUrl ?? mintInfo.iconUrl
+
+            let mintMethods = supportedPaymentMethods(from: fetchedInfo.nuts.nut04.methods.map(\.method))
+            if !mintMethods.isEmpty {
+                mintInfo.supportedMintMethods = mintMethods
+            }
+
+            let meltMethods = supportedPaymentMethods(from: fetchedInfo.nuts.nut05.methods.map(\.method))
+            if !meltMethods.isEmpty {
+                mintInfo.supportedMeltMethods = meltMethods
+            }
+        }
+
+        if let confirmations = await fetchOnchainMintConfirmations(for: url) {
+            mintInfo.onchainMintConfirmations = confirmations
+        }
+
+        mintInfo.lastUpdated = Date()
+        return mintInfo
+    }
+
+    private func supportedPaymentMethods(from methods: [CashuDevKit.PaymentMethod]) -> [PaymentMethodKind] {
+        let mappedMethods = methods.compactMap(PaymentMethodKind.from)
+        return PaymentMethodKind.allCases.filter { mappedMethods.contains($0) }
+    }
+
+    private func fetchOnchainMintConfirmations(for url: String) async -> Int? {
+        guard let infoURL = URL(string: "\(url)/v1/info") else {
+            AppLogger.wallet.error("Invalid mint info URL for \(url)")
+            return nil
+        }
+
+        do {
+            let (data, response) = try await URLSession.shared.data(from: infoURL)
+            guard let httpResponse = response as? HTTPURLResponse else {
+                AppLogger.wallet.error("Mint info request for \(url) returned a non-HTTP response")
+                return nil
+            }
+
+            guard (200..<300).contains(httpResponse.statusCode) else {
+                AppLogger.wallet.error("Mint info request for \(url) failed with status \(httpResponse.statusCode)")
+                return nil
+            }
+
+            let rawInfo = try JSONDecoder().decode(RawMintInfoResponse.self, from: data)
+            return rawInfo.nuts.nut04?.methods.first(where: {
+                $0.method.lowercased() == PaymentMethodKind.onchain.rawValue
+            })?.options?.confirmations
+        } catch {
+            AppLogger.wallet.error("Failed to fetch raw mint info for \(url): \(error)")
+            return nil
+        }
+    }
+}
+
+private struct RawMintInfoResponse: Decodable {
+    let nuts: Nuts
+
+    struct Nuts: Decodable {
+        let nut04: Nut04?
+
+        enum CodingKeys: String, CodingKey {
+            case nut04 = "4"
+        }
+    }
+
+    struct Nut04: Decodable {
+        let methods: [Method]
+    }
+
+    struct Method: Decodable {
+        let method: String
+        let options: Options?
+    }
+
+    struct Options: Decodable {
+        let confirmations: Int?
     }
 }

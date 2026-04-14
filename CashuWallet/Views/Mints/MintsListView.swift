@@ -135,6 +135,22 @@ struct MintsListView: View {
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
+                    let featuredMethods = featuredPaymentMethods(for: mint)
+                    if !featuredMethods.isEmpty {
+                        HStack(spacing: 6) {
+                            ForEach(featuredMethods, id: \.self) { method in
+                                HStack(spacing: 4) {
+                                    Text(method.symbol)
+                                    Text(method.displayName)
+                                }
+                                .font(.caption2.weight(.semibold))
+                                .padding(.horizontal, 6)
+                                .padding(.vertical, 3)
+                                .background(methodBadgeColor(method).opacity(0.12), in: Capsule())
+                                .foregroundStyle(methodBadgeColor(method))
+                            }
+                        }
+                    }
                 }
                 Spacer()
                 Text("\(mint.balance) sat")
@@ -220,6 +236,23 @@ struct MintsListView: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
             )
+    }
+
+    private func featuredPaymentMethods(for mint: MintInfo) -> [PaymentMethodKind] {
+        Array(Set(mint.supportedMintMethods + mint.supportedMeltMethods))
+            .filter { $0 == .bolt12 || $0 == .onchain }
+            .sorted { $0.sortOrder < $1.sortOrder }
+    }
+
+    private func methodBadgeColor(_ method: PaymentMethodKind) -> Color {
+        switch method {
+        case .bolt11:
+            return .yellow
+        case .bolt12:
+            return .accentColor
+        case .onchain:
+            return .orange
+        }
     }
 
     // MARK: - Actions
