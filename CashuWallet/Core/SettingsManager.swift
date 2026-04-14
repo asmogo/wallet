@@ -24,10 +24,6 @@ class SettingsManager: ObservableObject {
     
     // MARK: - Published Settings
     
-    @Published var useNumericKeyboard: Bool {
-        didSet { UserDefaults.standard.set(useNumericKeyboard, forKey: "useNumericKeyboard") }
-    }
-    
     @Published var useBitcoinSymbol: Bool {
         didSet { UserDefaults.standard.set(useBitcoinSymbol, forKey: "useBitcoinSymbol") }
     }
@@ -140,7 +136,6 @@ class SettingsManager: ObservableObject {
     // MARK: - Initialization
     
     init() {
-        self.useNumericKeyboard = UserDefaults.standard.object(forKey: "useNumericKeyboard") as? Bool ?? true
         self.useBitcoinSymbol = UserDefaults.standard.object(forKey: "useBitcoinSymbol") as? Bool ?? false
         self.showFiatBalance = UserDefaults.standard.object(forKey: "showFiatBalance") as? Bool ?? false
         self.bitcoinPriceCurrency = UserDefaults.standard.string(forKey: "bitcoinPriceCurrency") ?? "USD"

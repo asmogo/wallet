@@ -68,14 +68,15 @@ class TokenService: ObservableObject {
             amount: Amount(value: amount),
             options: sendOptions
         )
-        
+
+        // Capture fee before confirm() consumes the prepared send.
+        // Avoids calling token.proofsSimple() after confirm, which fails for
+        // IDv2 keyset tokens because proofsSimple passes an empty keyset list
+        // to the underlying token.proofs() call and can't resolve the short ID.
+        let fee = prepared.fee().value
+
         let token = try await prepared.confirm(memo: memo)
         let tokenString = try token.encode()
-        
-        // Calculate the fee as: sum of proofs in token - requested amount
-        let proofs = try token.proofsSimple()
-        let tokenProofsSum = proofs.reduce(0) { $0 + $1.amount.value }
-        let fee = tokenProofsSum > amount ? tokenProofsSum - amount : 0
 
         if let normalizedP2PKPubkey,
            SettingsManager.shared.p2pkKeys.contains(where: {

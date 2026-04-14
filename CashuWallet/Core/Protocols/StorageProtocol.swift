@@ -87,9 +87,7 @@ enum StorageKeys {
     static let processedNPCQuotes = "wallet.processedNPCQuotes"
     
     // Settings
-    static let useNumericKeyboard = "settings.useNumericKeyboard"
     static let useBitcoinSymbol = "settings.useBitcoinSymbol"
-    static let selectedThemeIndex = "settings.selectedThemeIndex"
     static let showFiatBalance = "settings.showFiatBalance"
     
     // NPC
