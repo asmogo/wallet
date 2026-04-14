@@ -9,6 +9,7 @@ struct MainWalletView: View {
     @ObservedObject var nostrService = NostrService.shared
 
     @State private var activeSheet: WalletSheet?
+    @State private var pendingSheetKind: WalletSheet.Kind?
     @State private var notification: (message: String, amount: UInt64?, fee: UInt64?)?
     @State private var showNotification = false
     @State private var isRefreshing = false
@@ -43,7 +44,7 @@ struct MainWalletView: View {
                 Spacer()
                 Spacer()
             }
-            .sheet(item: $activeSheet) { sheet in
+            .sheet(item: $activeSheet, onDismiss: handleSheetDismiss) { sheet in
                 sheetView(for: sheet)
             }
         }
@@ -157,7 +158,7 @@ struct MainWalletView: View {
 
     private var actionButtonsContent: some View {
         HStack(spacing: 12) {
-            Button { activeSheet = .chooser(.receive) } label: {
+            Button { presentSheet(.chooser(.receive)) } label: {
                 Text("Receive")
                     .font(.body.weight(.medium))
                     .frame(maxWidth: .infinity)
@@ -166,7 +167,7 @@ struct MainWalletView: View {
             }
             .accessibilityHint("Opens options to receive ecash or lightning payments")
 
-            Button { activeSheet = .scanner } label: {
+            Button { presentSheet(.scanner) } label: {
                 Image(systemName: "viewfinder")
                     .font(.title3)
                     .padding(18)
@@ -174,7 +175,7 @@ struct MainWalletView: View {
             }
             .accessibilityLabel("Scan QR code")
 
-            Button { activeSheet = .chooser(.send) } label: {
+            Button { presentSheet(.chooser(.send)) } label: {
                 Text("Send")
                     .font(.body.weight(.medium))
                     .frame(maxWidth: .infinity)
@@ -225,15 +226,40 @@ struct MainWalletView: View {
         isRefreshing = false
     }
 
+    private func presentSheet(_ kind: WalletSheet.Kind) {
+        pendingSheetKind = nil
+        activeSheet = WalletSheet(kind: kind)
+    }
+
+    private func queueSheet(_ kind: WalletSheet.Kind) {
+        guard pendingSheetKind == nil else { return }
+        pendingSheetKind = kind
+        activeSheet = nil
+    }
+
+    private func dismissActiveSheet() {
+        pendingSheetKind = nil
+        activeSheet = nil
+    }
+
+    private func handleSheetDismiss() {
+        guard let nextKind = pendingSheetKind else { return }
+        pendingSheetKind = nil
+
+        DispatchQueue.main.async {
+            activeSheet = WalletSheet(kind: nextKind)
+        }
+    }
+
     @ViewBuilder
     private func sheetView(for sheet: WalletSheet) -> some View {
-        switch sheet {
+        switch sheet.kind {
         case .chooser(let action):
             WalletActionSheetView(
                 action: action,
-                onClose: { activeSheet = nil },
-                onScan: { activeSheet = .scanner },
-                onSelect: { flow in activeSheet = .flow(flow) }
+                onClose: dismissActiveSheet,
+                onScan: { queueSheet(.scanner) },
+                onSelect: { flow in queueSheet(.flow(flow)) }
             )
             .presentationDragIndicator(.visible)
             .modifier(ChooserSheetPresentation())
@@ -306,20 +332,14 @@ private enum WalletFlow: String, Identifiable {
     var id: String { rawValue }
 }
 
-private enum WalletSheet: Identifiable {
-    case chooser(WalletActionSheet)
-    case scanner
-    case flow(WalletFlow)
+private struct WalletSheet: Identifiable {
+    let kind: Kind
+    let id = UUID()
 
-    var id: String {
-        switch self {
-        case .chooser(let action):
-            return "chooser-\(action.id)"
-        case .scanner:
-            return "scanner"
-        case .flow(let flow):
-            return "flow-\(flow.id)"
-        }
+    enum Kind {
+        case chooser(WalletActionSheet)
+        case scanner
+        case flow(WalletFlow)
     }
 }
 
