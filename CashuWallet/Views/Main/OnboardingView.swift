@@ -18,32 +18,35 @@ struct OnboardingView: View {
     @State private var currentRestoringMint: String?
     @State private var restoreMintError: String?
 
+    // Seed phrase verification state
+    @State private var verificationIndices: [Int] = []
+    @State private var verificationAnswers: [Int: String] = [:]
+    @State private var verificationError: String?
+
     enum OnboardingStep {
         case welcome
         case createOrRestore
         case showMnemonic
+        case verifyMnemonic
         case restoreInput
         case restoreMints
     }
 
     var body: some View {
-        ZStack {
-            Color.cashuBackground
-                .ignoresSafeArea()
-
-            VStack {
-                switch currentStep {
-                case .welcome:
-                    welcomeView
-                case .createOrRestore:
-                    createOrRestoreView
-                case .showMnemonic:
-                    showMnemonicView
-                case .restoreInput:
-                    restoreInputView
-                case .restoreMints:
-                    restoreMintsView
-                }
+        VStack {
+            switch currentStep {
+            case .welcome:
+                welcomeView
+            case .createOrRestore:
+                createOrRestoreView
+            case .showMnemonic:
+                showMnemonicView
+            case .verifyMnemonic:
+                verifyMnemonicView
+            case .restoreInput:
+                restoreInputView
+            case .restoreMints:
+                restoreMintsView
             }
         }
     }
@@ -57,74 +60,47 @@ struct OnboardingView: View {
             // Logo
             VStack(spacing: 16) {
                 Image(systemName: "bitcoinsign.circle.fill")
-                    .font(.system(size: 80))
-                    .foregroundColor(.cashuAccent)
+                    .font(.largeTitle)
+.foregroundStyle(Color.accentColor)
 
                 Text("Cashu Wallet")
                     .font(.largeTitle)
                     .fontWeight(.bold)
-                    .foregroundColor(.white)
 
                 Text("Private digital cash for everyone")
                     .font(.subheadline)
-                    .foregroundColor(.cashuMutedText)
+                    .foregroundStyle(.secondary)
             }
 
             Spacer()
 
             // Error display
             if let error = walletManager.errorMessage {
-                VStack(spacing: 8) {
-                    Image(systemName: "exclamationmark.triangle.fill")
-                        .foregroundColor(.cashuError)
-                    Text("Initialization Error")
-                        .font(.headline)
-                        .foregroundColor(.cashuError)
-                    Text(error)
-                        .font(.caption)
-                        .foregroundColor(.cashuError)
-                        .multilineTextAlignment(.center)
-                }
-                .padding()
-                .background(Color.cashuCardBackground)
-                .cornerRadius(12)
-                .padding(.horizontal)
+                ErrorBannerView(message: "Initialization Error: \(error)", type: .error)
+                    .padding(.horizontal)
             }
 
             // Features
-            VStack(spacing: 16) {
-                featureRow(icon: "lock.shield", text: "Privacy-first ecash")
-                featureRow(icon: "bolt.fill", text: "Lightning Network payments")
-                featureRow(icon: "arrow.triangle.2.circlepath", text: "Deterministic wallet recovery")
+            VStack(alignment: .leading, spacing: 16) {
+                Label("Privacy-first ecash", systemImage: "lock.shield")
+                Label("Lightning Network payments", systemImage: "bolt.fill")
+                Label("Deterministic wallet recovery", systemImage: "arrow.triangle.2.circlepath")
             }
+            .font(.body)
+            .padding(.horizontal, 24)
 
             Spacer()
 
             // Get Started button
             Button(action: { currentStep = .createOrRestore }) {
-                Text("GET STARTED")
+                Text("Get Started")
             }
-            .buttonStyle(CashuPrimaryButtonStyle())
+            .glassButton(prominent: true).controlSize(.large)
             .padding(.bottom, 40)
         }
         .padding()
     }
 
-    private func featureRow(icon: String, text: String) -> some View {
-        HStack(spacing: 16) {
-            Image(systemName: icon)
-                .font(.title2)
-                .foregroundColor(.cashuAccent)
-                .frame(width: 32)
-
-            Text(text)
-                .font(.body)
-                .foregroundColor(.white)
-
-            Spacer()
-        }
-        .padding(.horizontal, 24)
-    }
 
     // MARK: - Create or Restore View
 
@@ -135,11 +111,10 @@ struct OnboardingView: View {
             Text("Welcome to Cashu")
                 .font(.title)
                 .fontWeight(.bold)
-                .foregroundColor(.white)
 
             Text("Create a new wallet or restore from your seed phrase")
                 .font(.subheadline)
-                .foregroundColor(.cashuMutedText)
+                .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
 
             Spacer()
@@ -148,7 +123,7 @@ struct OnboardingView: View {
             if let error = errorMessage {
                 Text(error)
                     .font(.caption)
-                    .foregroundColor(.cashuError)
+                    .foregroundStyle(.red)
                     .multilineTextAlignment(.center)
                     .padding()
             }
@@ -157,32 +132,31 @@ struct OnboardingView: View {
             Button(action: createWallet) {
                 if isCreating {
                     ProgressView()
-                        .tint(.black)
                 } else {
                     HStack {
                         Image(systemName: "plus.circle.fill")
-                        Text("CREATE NEW WALLET")
+                        Text("Create New Wallet")
                     }
                 }
             }
-            .buttonStyle(CashuPrimaryButtonStyle())
+            .glassButton(prominent: true).controlSize(.large)
             .disabled(isCreating)
 
             // Restore wallet
             Button(action: { currentStep = .restoreInput }) {
                 HStack {
                     Image(systemName: "arrow.counterclockwise.circle")
-                    Text("RESTORE FROM SEED")
+                    Text("Restore from Seed")
                 }
             }
-            .buttonStyle(CashuSecondaryButtonStyle())
+            .glassButton()
 
             Spacer()
 
             // Back button
             Button(action: { currentStep = .welcome }) {
                 Text("Back")
-                    .foregroundColor(.cashuMutedText)
+                    .foregroundStyle(.secondary)
             }
             .padding(.bottom, 40)
         }
@@ -196,62 +170,174 @@ struct OnboardingView: View {
             Text("Your Seed Phrase")
                 .font(.title2)
                 .fontWeight(.bold)
-                .foregroundColor(.white)
 
             Text("Write down these 12 words in order and keep them safe. This is the only way to recover your wallet.")
                 .font(.subheadline)
-                .foregroundColor(.cashuMutedText)
+                .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
 
             // Warning
-            HStack(spacing: 8) {
-                Image(systemName: "exclamationmark.triangle.fill")
-                    .foregroundColor(.cashuWarning)
-                Text("Never share these words with anyone!")
-                    .font(.caption)
-                    .foregroundColor(.cashuWarning)
-            }
-            .padding()
-            .background(
-                RoundedRectangle(cornerRadius: 12)
-                    .fill(Color.cashuWarning.opacity(0.1))
-            )
+            Label("Never share these words with anyone!", systemImage: "exclamationmark.triangle.fill")
+                .font(.caption)
+                .foregroundStyle(.orange)
+                .padding()
 
             // Mnemonic words
             let words = walletManager.getMnemonicWords()
 
-            LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
-                ForEach(Array(words.enumerated()), id: \.offset) { index, word in
-                    HStack(spacing: 4) {
-                        Text("\(index + 1).")
-                            .font(.caption)
-                            .foregroundColor(.cashuMutedText)
-                            .frame(width: 20, alignment: .trailing)
-
-                        Text(word)
-                            .font(.system(.body, design: .monospaced))
-                            .foregroundColor(.white)
+            Group {
+                if #available(iOS 26, *) {
+                    GlassEffectContainer(spacing: 12) {
+                        mnemonicWordsGrid(words: words)
                     }
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 8)
-                    .background(
-                        RoundedRectangle(cornerRadius: 8)
-                            .fill(Color.cashuCardBackground)
-                    )
+                } else {
+                    mnemonicWordsGrid(words: words)
                 }
             }
             .padding()
 
             Spacer()
 
-            // Continue button
-            Button(action: finishOnboarding) {
-                Text("I'VE SAVED MY SEED PHRASE")
+            // Continue button — go to verification step
+            Button(action: startVerification) {
+                Text("I've Saved My Seed Phrase")
             }
-            .buttonStyle(CashuPrimaryButtonStyle())
+            .glassButton(prominent: true).controlSize(.large)
             .padding(.bottom, 40)
         }
         .padding()
+    }
+
+    // MARK: - Verify Mnemonic View
+
+    private var verifyMnemonicView: some View {
+        VStack(spacing: 24) {
+            Text("Verify Seed Phrase")
+                .font(.title2)
+                .fontWeight(.bold)
+
+            Text("Select the correct word for each position to confirm you saved your seed phrase.")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+
+            verificationWordsGridView(indices: verificationIndices)
+            .padding()
+
+            if let error = verificationError {
+                Text(error)
+                    .font(.caption)
+                    .foregroundStyle(.red)
+            }
+
+            Spacer()
+
+            Button(action: checkVerification) {
+                Text("Confirm")
+            }
+            .glassButton(prominent: true).controlSize(.large)
+            .disabled(verificationAnswers.count < verificationIndices.count)
+
+            Button(action: { currentStep = .showMnemonic }) {
+                Text("Go back and check")
+                    .foregroundStyle(.secondary)
+            }
+            .padding(.bottom, 40)
+        }
+        .padding()
+    }
+
+    private func verificationWordsGridView(indices: [Int]) -> some View {
+        let words = walletManager.getMnemonicWords()
+        return VStack(spacing: 16) {
+            ForEach(Array(indices.enumerated()), id: \.offset) { _, index in
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Word #\(index + 1)")
+                        .font(.caption)
+                        .fontWeight(.semibold)
+                        .foregroundStyle(.secondary)
+
+                    let options = generateWordOptions(correctWord: words[index])
+                    LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible()), GridItem(.flexible())], spacing: 8) {
+                        ForEach(options, id: \.self) { option in
+                            Button(action: {
+                                verificationAnswers[index] = option
+                                verificationError = nil
+                            }) {
+                                Text(option)
+                                    .font(.system(.subheadline, design: .monospaced))
+                                    .frame(maxWidth: .infinity)
+                                    .padding(.vertical, 10)
+                            }
+                            .glassButton()
+                            .tint(verificationAnswers[index] == option ? .accentColor : .secondary)
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private func mnemonicWordsGrid(words: [String]) -> some View {
+        LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
+            ForEach(Array(words.enumerated()), id: \.offset) { index, word in
+                HStack(spacing: 4) {
+                    Text("\(index + 1).")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .frame(width: 20, alignment: .trailing)
+
+                    Text(word)
+                        .font(.system(.body, design: .monospaced))
+                }
+                .padding(.horizontal, 8)
+                .padding(.vertical, 6)
+                .liquidGlass(in: RoundedRectangle(cornerRadius: 8))
+            }
+        }
+    }
+
+    private func startVerification() {
+        let words = walletManager.getMnemonicWords()
+        guard words.count >= 3 else { return }
+        // Pick 3 random non-overlapping indices
+        var indices = Array(0..<words.count)
+        indices.shuffle()
+        verificationIndices = Array(indices.prefix(3)).sorted()
+        verificationAnswers = [:]
+        verificationError = nil
+        currentStep = .verifyMnemonic
+    }
+
+    private func generateWordOptions(correctWord: String) -> [String] {
+        let words = walletManager.getMnemonicWords()
+        var options: Set<String> = [correctWord]
+        // Add random wrong words from the mnemonic (different from correct)
+        let otherWords = words.filter { $0 != correctWord }
+        for word in otherWords.shuffled() where options.count < 3 {
+            options.insert(word)
+        }
+        // If not enough from mnemonic, add from BIP39 list
+        let sampleWords = ["abandon", "ability", "about", "abstract", "access", "account",
+                           "achieve", "adapt", "affair", "agent", "alarm", "anchor"]
+        for word in sampleWords.shuffled() where options.count < 3 {
+            if !words.contains(word) {
+                options.insert(word)
+            }
+        }
+        return Array(options).shuffled()
+    }
+
+    private func checkVerification() {
+        let words = walletManager.getMnemonicWords()
+        for index in verificationIndices {
+            if verificationAnswers[index] != words[index] {
+                verificationError = "Incorrect. Please go back and check your seed phrase."
+                verificationAnswers = [:]
+                return
+            }
+        }
+        finishOnboarding()
     }
 
     // MARK: - Restore Input View
@@ -261,42 +347,40 @@ struct OnboardingView: View {
             Text("Restore Wallet")
                 .font(.title2)
                 .fontWeight(.bold)
-                .foregroundColor(.white)
 
             Text("Enter your 12-word seed phrase to restore your wallet")
                 .font(.subheadline)
-                .foregroundColor(.cashuMutedText)
+                .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
 
             // Mnemonic input
-            TextEditor(text: $restoreMnemonic)
-                .font(.system(.body, design: .monospaced))
-                .foregroundColor(.white)
-                .scrollContentBackground(.hidden)
-                .frame(height: 150)
-                .padding()
-                .background(
-                    RoundedRectangle(cornerRadius: 12)
-                        .fill(Color.cashuCardBackground)
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 12)
-                                .stroke(Color.cashuBorder, lineWidth: 1)
-                        )
-                )
+            GroupBox {
+                TextEditor(text: $restoreMnemonic)
+                    .font(.system(.body, design: .monospaced))
+                    .scrollContentBackground(.hidden)
+                    .frame(height: 150)
+            }
 
             // Word count
             let wordCount = restoreMnemonic.trimmingCharacters(in: .whitespacesAndNewlines)
                 .split(separator: " ")
                 .count
 
-            Text("\(wordCount) / 12 words")
-                .font(.caption)
-                .foregroundColor(wordCount == 12 ? .cashuAccent : .cashuMutedText)
+            let invalidIndices = walletManager.invalidMnemonicWords(restoreMnemonic)
+            HStack(spacing: 4) {
+                Text("\(wordCount) / 12 words")
+                    .font(.caption)
+                    .foregroundStyle(wordCount == 12 ? Color.accentColor : .secondary)
+                if wordCount > 0 && !invalidIndices.isEmpty {
+                    Text("(\(invalidIndices.count) invalid)")
+                        .font(.caption)
+                        .foregroundStyle(.red)
+                }
+            }
 
             if let error = errorMessage {
-                Text(error)
-                    .font(.caption)
-                    .foregroundColor(.cashuError)
+                ErrorBannerView(message: error, type: .error)
+                    .padding(.horizontal)
             }
 
             Spacer()
@@ -305,18 +389,17 @@ struct OnboardingView: View {
             Button(action: initializeAndProceed) {
                 if isRestoring {
                     ProgressView()
-                        .tint(.black)
                 } else {
-                    Text("NEXT")
+                    Text("Next")
                 }
             }
-            .buttonStyle(CashuPrimaryButtonStyle(isDisabled: wordCount != 12))
+            .glassButton(prominent: true).controlSize(.large)
             .disabled(wordCount != 12 || isRestoring)
 
             // Back button
             Button(action: { currentStep = .createOrRestore }) {
                 Text("Back")
-                    .foregroundColor(.cashuMutedText)
+                    .foregroundStyle(.secondary)
             }
             .padding(.bottom, 40)
         }
@@ -330,51 +413,35 @@ struct OnboardingView: View {
             Text("Restore Ecash")
                 .font(.title2)
                 .fontWeight(.bold)
-                .foregroundColor(.white)
 
             Text("Add the mint URLs you used before to recover your ecash balance.")
                 .font(.subheadline)
-                .foregroundColor(.cashuMutedText)
+                .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
                 .padding(.horizontal)
 
-            // Mint URL input
-            HStack(spacing: 12) {
+            GroupBox {
                 TextField("https://mint.example.com", text: $mintUrlInput)
-                    .font(.system(.body, design: .monospaced))
-                    .foregroundColor(.white)
-                    .autocapitalization(.none)
+                    .textInputAutocapitalization(.never)
                     .disableAutocorrection(true)
                     .keyboardType(.URL)
-                    .padding(12)
-                    .background(
-                        RoundedRectangle(cornerRadius: 10)
-                            .fill(Color.cashuCardBackground)
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 10)
-                                    .stroke(Color.cashuBorder, lineWidth: 1)
-                            )
-                    )
+            }
+            .padding(.horizontal)
 
+            HStack(spacing: 12) {
                 Button(action: addMintUrl) {
-                    Image(systemName: "plus.circle.fill")
-                        .font(.title2)
-                        .foregroundColor(mintUrlInput.isEmpty ? .cashuMutedText : .cashuAccent)
+                    Label("Add", systemImage: "plus")
                 }
+                .glassButton()
                 .disabled(mintUrlInput.isEmpty)
-            }
-            .padding(.horizontal)
 
-            Button(action: pasteMintUrlsFromClipboard) {
-                HStack {
-                    Image(systemName: "doc.on.clipboard")
-                    Text("Paste mints from clipboard")
+                Button(action: pasteMintUrlsFromClipboard) {
+                    Label("Paste from clipboard", systemImage: "doc.on.clipboard")
                 }
-                .font(.subheadline)
-                .foregroundColor(.cashuMutedText)
+                .glassButton()
+                .accessibilityLabel("Paste mint URLs from clipboard")
             }
             .padding(.horizontal)
-            .accessibilityLabel("Paste mint URLs from clipboard")
 
             // Mints list
             if !mintsToRestore.isEmpty || !restoreResults.isEmpty {
@@ -396,12 +463,12 @@ struct OnboardingView: View {
             } else {
                 // Empty state
                 VStack(spacing: 12) {
-                    Image(systemName: "building.columns")
-                        .font(.system(size: 40))
-                        .foregroundColor(.cashuMutedText.opacity(0.5))
+                    Image(systemName: "bitcoinsign.bank.building")
+                        .font(.title)
+                        .foregroundStyle(.secondary.opacity(0.5))
                     Text("No mints added yet")
                         .font(.subheadline)
-                        .foregroundColor(.cashuMutedText)
+                        .foregroundStyle(.secondary)
                 }
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 40)
@@ -411,7 +478,7 @@ struct OnboardingView: View {
             if let error = restoreMintError {
                 Text(error)
                     .font(.caption)
-                    .foregroundColor(.cashuError)
+                    .foregroundStyle(.red)
                     .multilineTextAlignment(.center)
                     .padding(.horizontal)
             }
@@ -423,39 +490,24 @@ struct OnboardingView: View {
 
                 VStack(spacing: 6) {
                     if totalRecovered > 0 {
-                        HStack {
-                            Image(systemName: "checkmark.circle.fill")
-                                .foregroundColor(.cashuSuccess)
-                            Text("Recovered: \(totalRecovered) sats")
-                                .font(.subheadline)
-                                .fontWeight(.semibold)
-                                .foregroundColor(.cashuSuccess)
-                        }
+                        Label("Recovered: \(totalRecovered) sats", systemImage: "checkmark.circle.fill")
+                            .font(.subheadline)
+                            .fontWeight(.semibold)
+                            .foregroundStyle(.green)
                     }
                     if totalPending > 0 {
-                        HStack {
-                            Image(systemName: "clock.fill")
-                                .foregroundColor(.cashuWarning)
-                            Text("Pending: \(totalPending) sats")
-                                .font(.subheadline)
-                                .foregroundColor(.cashuWarning)
-                        }
+                        Label("Pending: \(totalPending) sats", systemImage: "clock.fill")
+                            .font(.subheadline)
+                            .foregroundStyle(.orange)
                     }
                     if totalRecovered == 0 && totalPending == 0 {
-                        HStack {
-                            Image(systemName: "info.circle")
-                                .foregroundColor(.cashuMutedText)
-                            Text("No ecash found on these mints")
-                                .font(.subheadline)
-                                .foregroundColor(.cashuMutedText)
-                        }
+                        Label("No ecash found on these mints", systemImage: "info.circle")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
                     }
                 }
-                .padding()
-                .background(
-                    RoundedRectangle(cornerRadius: 12)
-                        .fill(Color.cashuCardBackground)
-                )
+                .padding(12)
+                .liquidGlass(in: RoundedRectangle(cornerRadius: 10))
                 .padding(.horizontal)
             }
 
@@ -469,33 +521,31 @@ struct OnboardingView: View {
                         if isRestoringMints {
                             HStack(spacing: 8) {
                                 ProgressView()
-                                    .tint(.black)
                                 Text("Restoring...")
-                                    .foregroundColor(.black)
                             }
                         } else {
                             HStack {
                                 Image(systemName: "arrow.counterclockwise")
-                                Text("RESTORE FROM \(mintsToRestore.count) MINT\(mintsToRestore.count == 1 ? "" : "S")")
+                                Text("Restore from \(mintsToRestore.count) mint\(mintsToRestore.count == 1 ? "" : "s")")
                             }
                         }
                     }
-                    .buttonStyle(CashuPrimaryButtonStyle())
+                    .glassButton()
                     .disabled(isRestoringMints)
                 }
 
                 // Continue / Skip button
                 if restoreResults.isEmpty && mintsToRestore.isEmpty {
                     Button(action: finishRestore) {
-                        Text("SKIP")
+                        Text("Skip")
                     }
-                    .buttonStyle(CashuSecondaryButtonStyle())
+                    .glassButton()
                     .disabled(isRestoringMints)
                 } else {
                     Button(action: finishRestore) {
-                        Text("CONTINUE")
+                        Text("Continue")
                     }
-                    .buttonStyle(CashuPrimaryButtonStyle())
+                    .glassButton(prominent: true).controlSize(.large)
                     .disabled(isRestoringMints)
                 }
             }
@@ -508,7 +558,7 @@ struct OnboardingView: View {
                 restoreMintError = nil
             }) {
                 Text("Back")
-                    .foregroundColor(.cashuMutedText)
+                    .foregroundStyle(.secondary)
             }
             .disabled(isRestoringMints)
             .padding(.bottom, 20)
@@ -520,68 +570,60 @@ struct OnboardingView: View {
 
     private func mintRow(url: String, result: RestoreMintResult?, isRestoring: Bool) -> some View {
         HStack(spacing: 12) {
-            // Status icon
-            if isRestoring {
-                ProgressView()
-                    .scaleEffect(0.8)
-                    .frame(width: 24, height: 24)
-            } else if let result = result {
-                Image(systemName: result.totalRecovered > 0 ? "checkmark.circle.fill" : "minus.circle")
-                    .foregroundColor(result.totalRecovered > 0 ? .cashuSuccess : .cashuMutedText)
-                    .frame(width: 24, height: 24)
-            } else {
-                Image(systemName: "building.columns")
-                    .foregroundColor(.cashuMutedText)
-                    .frame(width: 24, height: 24)
-            }
-
-            // Mint info
-            VStack(alignment: .leading, spacing: 2) {
-                Text(result?.mintName ?? shortenUrl(url))
-                    .font(.subheadline)
-                    .fontWeight(.medium)
-                    .foregroundColor(.white)
-                    .lineLimit(1)
-
-                Text(url)
-                    .font(.caption2)
-                    .foregroundColor(.cashuMutedText)
-                    .lineLimit(1)
-            }
-
-            Spacer()
-
-            // Amount or pending status
-            if let result = result {
-                if result.unspent > 0 {
-                    Text("\(result.unspent) sats")
-                        .font(.subheadline)
-                        .fontWeight(.semibold)
-                        .foregroundColor(.cashuSuccess)
+                // Status icon
+                if isRestoring {
+                    ProgressView()
+                        .scaleEffect(0.8)
+                        .frame(width: 24, height: 24)
+                } else if let result = result {
+                    Image(systemName: result.totalRecovered > 0 ? "checkmark.circle.fill" : "minus.circle")
+                        .foregroundStyle(result.totalRecovered > 0 ? .green : .secondary)
+                        .frame(width: 24, height: 24)
                 } else {
-                    Text("0 sats")
-                        .font(.subheadline)
-                        .foregroundColor(.cashuMutedText)
+                    Image(systemName: "bitcoinsign.bank.building")
+                        .foregroundStyle(.secondary)
+                        .frame(width: 24, height: 24)
                 }
-            } else if !isRestoring {
-                // Remove button for pending mints
-                Button(action: {
-                    mintsToRestore.removeAll { $0 == url }
-                }) {
-                    Image(systemName: "xmark.circle")
-                        .foregroundColor(.cashuMutedText)
+
+                // Mint info
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(result?.mintName ?? shortenUrl(url))
+                        .font(.subheadline)
+                        .fontWeight(.medium)
+                        .lineLimit(1)
+
+                    Text(url)
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+
+                Spacer()
+
+                // Amount or pending status
+                if let result = result {
+                    if result.unspent > 0 {
+                        Text("\(result.unspent) sats")
+                            .font(.subheadline)
+                            .fontWeight(.semibold)
+                            .foregroundStyle(.green)
+                    } else {
+                        Text("0 sats")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                    }
+                } else if !isRestoring {
+                    // Remove button for pending mints
+                    Button(action: {
+                        mintsToRestore.removeAll { $0 == url }
+                    }) {
+                        Image(systemName: "xmark.circle")
+                            .foregroundStyle(.secondary)
+                    }
                 }
             }
-        }
         .padding(12)
-        .background(
-            RoundedRectangle(cornerRadius: 10)
-                .fill(Color.cashuCardBackground)
-                .overlay(
-                    RoundedRectangle(cornerRadius: 10)
-                        .stroke(Color.cashuBorder, lineWidth: 1)
-                )
-        )
+        .liquidGlass(in: RoundedRectangle(cornerRadius: 10))
     }
 
     private func shortenUrl(_ url: String) -> String {
@@ -606,7 +648,7 @@ struct OnboardingView: View {
                 currentStep = .showMnemonic
             } catch {
                 errorMessage = "Failed to create wallet: \(error.localizedDescription)"
-                print("Create wallet error: \(error)")
+                AppLogger.wallet.error("Create wallet error: \(error)")
             }
             isCreating = false
         }
@@ -730,7 +772,7 @@ struct OnboardingView: View {
                     mintsToRestore.removeAll { $0 == url }
                 } catch {
                     restoreMintError = "Failed to restore from \(shortenUrl(url)): \(error.localizedDescription)"
-                    print("Restore error for \(url): \(error)")
+                    AppLogger.wallet.error("Restore error for \(url): \(error)")
                 }
             }
             currentRestoringMint = nil

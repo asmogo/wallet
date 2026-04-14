@@ -18,7 +18,8 @@ struct AmountEntryView: View {
     // State
     @State private var amountString: String = ""
     @State private var showMintPicker: Bool = false
-    
+    @FocusState private var amountFieldFocused: Bool
+
     @EnvironmentObject var walletManager: WalletManager
     @ObservedObject var settings = SettingsManager.shared
     
@@ -37,29 +38,27 @@ struct AmountEntryView: View {
     }
     
     var body: some View {
-        ZStack {
-            Color.cashuBackground
-                .ignoresSafeArea()
-            
-            VStack(spacing: 0) {
-                // Header
-                headerSection
-                
-                // Mint selector
-                if showMintSelector {
-                    mintSelectorSection
-                        .padding(.horizontal, 20)
-                        .padding(.top, 8)
-                }
-                
-                // Amount display area
-                Spacer()
-                amountDisplaySection
-                Spacer()
-                
-                // Keyboard panel
-                keyboardSection
+        VStack(spacing: 0) {
+            // Header
+            headerSection
+
+            // Mint selector
+            if showMintSelector {
+                mintSelectorSection
+                    .padding(.horizontal, 20)
+                    .padding(.top, 8)
             }
+
+            // Amount display area
+            Spacer()
+            amountDisplaySection
+            Spacer()
+
+            // Action button
+            actionButtonSection
+        }
+        .onAppear {
+            amountFieldFocused = true
         }
     }
     
@@ -71,15 +70,15 @@ struct AmountEntryView: View {
             Button(action: { dismiss() }) {
                 Image(systemName: "xmark")
                     .font(.title3)
-                    .foregroundColor(.cashuMutedText)
+                    .foregroundStyle(.secondary)
             }
             
             Spacer()
             
             // Title
             Text(title)
-                .font(.cashuDialogHeader)
-                .foregroundColor(.white)
+                .font(.headline)
+                .foregroundStyle(.primary)
             
             Spacer()
             
@@ -88,7 +87,7 @@ struct AmountEntryView: View {
                 Text(settings.unitLabel)
                     .font(.subheadline)
                     .fontWeight(.bold)
-                    .foregroundColor(settings.accentColor)
+.foregroundStyle(Color.accentColor)
             }
         }
         .padding(.horizontal, 20)
@@ -100,47 +99,37 @@ struct AmountEntryView: View {
     private var mintSelectorSection: some View {
         Button(action: { showMintPicker = true }) {
             HStack(spacing: 12) {
-                // Mint icon
-                Circle()
-                    .fill(Color.cashuCardBackground)
+                Image(systemName: "bitcoinsign.bank.building")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
                     .frame(width: 40, height: 40)
-                    .overlay(
-                        Image(systemName: "building.columns")
-                            .font(.system(size: 16))
-                            .foregroundColor(.cashuMutedText)
-                    )
-                
-                // Mint info
+
                 VStack(alignment: .leading, spacing: 2) {
                     if let mint = walletManager.activeMint {
                         Text(mint.name)
                             .font(.subheadline)
                             .fontWeight(.medium)
-                            .foregroundColor(.white)
-                        
+
                         if let maxAmount = maxAmount {
                             Text("\(settings.formatAmountShort(maxAmount)) \(settings.unitSuffix) available")
                                 .font(.caption)
-                                .foregroundColor(.cashuMutedText)
+                                .foregroundStyle(.secondary)
                         }
                     } else {
                         Text("Select Mint")
                             .font(.subheadline)
-                            .foregroundColor(.cashuMutedText)
+                            .foregroundStyle(.secondary)
                     }
                 }
-                
+
                 Spacer()
-                
+
                 Image(systemName: "chevron.down")
                     .font(.caption)
-                    .foregroundColor(.cashuMutedText)
+                    .foregroundStyle(.secondary)
             }
             .padding(12)
-            .background(
-                RoundedRectangle(cornerRadius: 12)
-                    .fill(Color.cashuCardBackground)
-            )
+            .liquidGlass(in: RoundedRectangle(cornerRadius: 10), interactive: true)
         }
     }
     
@@ -149,25 +138,27 @@ struct AmountEntryView: View {
     private var amountDisplaySection: some View {
         VStack(spacing: 8) {
             // Main amount display
-            Text(amountString.isEmpty ? "0" : amountString)
-                .font(.system(size: 64, weight: .bold, design: .default))
-                .foregroundColor(amountColor)
+            TextField("0", text: $amountString)
+                .keyboardType(.numberPad)
+                .focused($amountFieldFocused)
+                .font(.title.bold())
+                .foregroundStyle(amountColor)
+                .multilineTextAlignment(.center)
                 .minimumScaleFactor(0.4)
                 .lineLimit(1)
-                .animation(.spring(response: 0.3), value: amountString)
-            
+
             // Unit label
             if !settings.useBitcoinSymbol {
                 Text("sat")
-                    .font(.title3)
-                    .foregroundColor(.cashuMutedText)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
             }
             
             // Warning message
             if insufficientFunds && amount > 0 {
                 Text("Insufficient balance")
                     .font(.subheadline)
-                    .foregroundColor(.cashuMutedText)
+                    .foregroundStyle(.secondary)
                     .padding(.top, 8)
                     .transition(.opacity.combined(with: .scale))
             }
@@ -178,42 +169,25 @@ struct AmountEntryView: View {
     
     private var amountColor: Color {
         if insufficientFunds && amount > 0 {
-            return .cashuMutedText
+            return .secondary
         }
-        return settings.accentColor
+        return .primary
     }
     
-    // MARK: - Keyboard Section
-    
-    private var keyboardSection: some View {
-        VStack(spacing: 0) {
-            // Numeric keyboard
-            NumericKeyboard(text: $amountString)
-            .padding(.top, 16)
-            .padding(.bottom, 16)
-            
-            // Action button
-            Button(action: submitAction) {
-                if isLoading {
-                    ProgressView()
-                        .tint(.black)
-                } else {
-                    Text(buttonLabel)
-                        .font(.system(size: 18, weight: .bold))
-                }
+    // MARK: - Action Button Section
+
+    private var actionButtonSection: some View {
+        Button(action: submitAction) {
+            if isLoading {
+                ProgressView()
+            } else {
+                Text(buttonLabel)
             }
-            .buttonStyle(CashuPrimaryButtonStyle(isDisabled: isButtonDisabled))
-            .disabled(isButtonDisabled)
-            .padding(.horizontal, 20)
-            .padding(.bottom, safeAreaBottom + 20)
         }
-        .background(Color.cashuBackground)
-    }
-    
-    private var safeAreaBottom: CGFloat {
-        let scenes = UIApplication.shared.connectedScenes
-        let windowScene = scenes.first as? UIWindowScene
-        return windowScene?.windows.first?.safeAreaInsets.bottom ?? 0
+        .glassButton(prominent: true).controlSize(.large)
+        .disabled(isButtonDisabled)
+        .padding(.horizontal, 20)
+        .padding(.bottom, 20)
     }
     
     // MARK: - Actions
@@ -229,22 +203,16 @@ struct AmountEntryView: View {
 struct MintPickerView: View {
     @Environment(\.dismiss) private var dismiss
     @EnvironmentObject var walletManager: WalletManager
-    @ObservedObject var settings = SettingsManager.shared
-    
+
     var body: some View {
         NavigationStack {
-            ZStack {
-                Color.cashuBackground
-                    .ignoresSafeArea()
-                
-                ScrollView {
-                    LazyVStack(spacing: 12) {
-                        ForEach(walletManager.mints) { mint in
-                            mintRow(mint)
-                        }
+            ScrollView {
+                LazyVStack(spacing: 12) {
+                    ForEach(walletManager.mints) { mint in
+                        mintRow(mint)
                     }
-                    .padding()
                 }
+                .padding()
             }
             .navigationTitle("Select Mint")
             .navigationBarTitleDisplayMode(.inline)
@@ -252,7 +220,6 @@ struct MintPickerView: View {
                 ToolbarItem(placement: .navigationBarLeading) {
                     Button(action: { dismiss() }) {
                         Image(systemName: "xmark")
-                            .foregroundColor(.white)
                     }
                 }
             }
@@ -267,43 +234,28 @@ struct MintPickerView: View {
             }
         }) {
             HStack(spacing: 12) {
-                Circle()
-                    .fill(Color.cashuCardBackground)
+                Image(systemName: "bitcoinsign.bank.building")
+                    .foregroundStyle(Color.accentColor)
                     .frame(width: 44, height: 44)
-                    .overlay(
-                        Image(systemName: "building.columns")
-                            .foregroundColor(settings.accentColor)
-                    )
-                
+
                 VStack(alignment: .leading, spacing: 2) {
                     Text(mint.name)
                         .font(.headline)
-                        .foregroundColor(.white)
-                    
+
                     Text("\(mint.balance) sat")
                         .font(.caption)
-                        .foregroundColor(.cashuMutedText)
+                        .foregroundStyle(.secondary)
                 }
-                
+
                 Spacer()
-                
+
                 if walletManager.activeMint?.id == mint.id {
                     Image(systemName: "checkmark.circle.fill")
-                        .foregroundColor(settings.accentColor)
+                        .foregroundStyle(Color.accentColor)
                 }
             }
-            .padding()
-            .background(
-                RoundedRectangle(cornerRadius: 12)
-                    .fill(Color.cashuCardBackground)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 12)
-                            .stroke(
-                                walletManager.activeMint?.id == mint.id ? settings.accentColor : Color.clear,
-                                lineWidth: 2
-                            )
-                    )
-            )
+            .padding(12)
+            .liquidGlass(in: RoundedRectangle(cornerRadius: 10), interactive: true)
         }
     }
 }
@@ -369,26 +321,21 @@ struct TokenDisplayView: View {
     
     @State private var copied = false
     @ObservedObject var settings = SettingsManager.shared
-    
+
     var body: some View {
-        ZStack {
-            Color.cashuBackground
-                .ignoresSafeArea()
-            
-            VStack(spacing: 24) {
+        VStack(spacing: 24) {
                 // Header
                 HStack {
                     Button(action: { onDismiss?() }) {
                         Image(systemName: "xmark")
                             .font(.title3)
-                            .foregroundColor(.cashuMutedText)
+                            .foregroundStyle(.secondary)
                     }
                     
                     Spacer()
                     
                     Text("Ecash Token")
-                        .font(.cashuDialogHeader)
-                        .foregroundColor(.white)
+                        .font(.headline)
                     
                     Spacer()
                     
@@ -396,7 +343,7 @@ struct TokenDisplayView: View {
                     ShareLink(item: token) {
                         Image(systemName: "square.and.arrow.up")
                             .font(.title3)
-                            .foregroundColor(settings.accentColor)
+        .foregroundStyle(Color.accentColor)
                     }
                 }
                 .padding(.horizontal, 20)
@@ -416,8 +363,7 @@ struct TokenDisplayView: View {
                 
                 // Amount
                 Text("\(settings.formatAmountShort(amount)) \(settings.unitSuffix)")
-                    .font(.cashuBalanceSmall)
-                    .foregroundColor(.white)
+                    .font(.title2.bold())
                 
                 Spacer()
                 
@@ -428,13 +374,12 @@ struct TokenDisplayView: View {
                         Text(copied ? "Copied!" : "Copy")
                     }
                 }
-                .buttonStyle(CashuPrimaryButtonStyle())
+                .glassButton()
                 .padding(.horizontal, 20)
                 .padding(.bottom, 40)
-            }
         }
     }
-    
+
     private func copyToken() {
         UIPasteboard.general.string = token
         copied = true

@@ -85,7 +85,7 @@ class TransactionService: ObservableObject {
                 }
                 allTransactions.append(contentsOf: walletTxs)
             } catch {
-                print("Failed to load transactions for mint \(mintUrlString): \(error)")
+                AppLogger.wallet.error("Failed to load transactions for mint \(mintUrlString): \(error)")
             }
         }
         
@@ -146,12 +146,31 @@ class TransactionService: ObservableObject {
         return tokens?[txId]
     }
     
+    // MARK: - Preimage Persistence
+
+    /// Save a Lightning payment preimage (proof of payment)
+    func savePreimage(quoteId: String, preimage: String) {
+        var preimages = UserDefaults.standard.dictionary(forKey: "paymentPreimages") as? [String: String] ?? [:]
+        preimages[quoteId] = preimage
+        UserDefaults.standard.set(preimages, forKey: "paymentPreimages")
+    }
+
+    /// Get a stored preimage by quote ID
+    func getPreimage(quoteId: String) -> String? {
+        let preimages = UserDefaults.standard.dictionary(forKey: "paymentPreimages") as? [String: String]
+        return preimages?[quoteId]
+    }
+
     // MARK: - Pending Token Management (Outgoing)
     
     /// Save a pending token (when sending ecash)
+    /// Uses index-based replacement to avoid non-atomic removeAll+append
     func savePendingToken(_ pendingToken: PendingToken) {
-        pendingTokens.removeAll { $0.tokenId == pendingToken.tokenId }
-        pendingTokens.append(pendingToken)
+        if let existingIndex = pendingTokens.firstIndex(where: { $0.tokenId == pendingToken.tokenId }) {
+            pendingTokens[existingIndex] = pendingToken
+        } else {
+            pendingTokens.append(pendingToken)
+        }
         persistPendingTokens()
     }
     
@@ -161,7 +180,7 @@ class TransactionService: ObservableObject {
             do {
                 pendingTokens = try JSONDecoder().decode([PendingToken].self, from: data)
             } catch {
-                print("Failed to load pending tokens: \(error)")
+                AppLogger.wallet.error("Failed to load pending tokens: \(error)")
                 pendingTokens = []
             }
         } else {
@@ -175,7 +194,7 @@ class TransactionService: ObservableObject {
             let data = try JSONEncoder().encode(pendingTokens)
             UserDefaults.standard.set(data, forKey: StorageKeys.pendingTokens)
         } catch {
-            print("Failed to save pending tokens: \(error)")
+            AppLogger.wallet.error("Failed to save pending tokens: \(error)")
         }
     }
     
@@ -212,9 +231,13 @@ class TransactionService: ObservableObject {
     // MARK: - Pending Receive Token Management (Incoming)
     
     /// Save a token for later claiming
+    /// Uses index-based replacement to avoid non-atomic removeAll+append
     func savePendingReceiveToken(_ token: PendingReceiveToken) {
-        pendingReceiveTokens.removeAll { $0.tokenId == token.tokenId }
-        pendingReceiveTokens.append(token)
+        if let existingIndex = pendingReceiveTokens.firstIndex(where: { $0.tokenId == token.tokenId }) {
+            pendingReceiveTokens[existingIndex] = token
+        } else {
+            pendingReceiveTokens.append(token)
+        }
         persistPendingReceiveTokens()
     }
     
@@ -224,7 +247,7 @@ class TransactionService: ObservableObject {
             do {
                 pendingReceiveTokens = try JSONDecoder().decode([PendingReceiveToken].self, from: data)
             } catch {
-                print("Failed to load pending receive tokens: \(error)")
+                AppLogger.wallet.error("Failed to load pending receive tokens: \(error)")
                 pendingReceiveTokens = []
             }
         } else {
@@ -238,7 +261,7 @@ class TransactionService: ObservableObject {
             let data = try JSONEncoder().encode(pendingReceiveTokens)
             UserDefaults.standard.set(data, forKey: StorageKeys.pendingReceiveTokens)
         } catch {
-            print("Failed to save pending receive tokens: \(error)")
+            AppLogger.wallet.error("Failed to save pending receive tokens: \(error)")
         }
     }
     
@@ -251,9 +274,13 @@ class TransactionService: ObservableObject {
     // MARK: - Claimed Token Management
     
     /// Save a claimed token
+    /// Uses index-based replacement to avoid non-atomic removeAll+append
     private func saveClaimedToken(_ claimedToken: ClaimedToken) {
-        claimedTokens.removeAll { $0.tokenId == claimedToken.tokenId }
-        claimedTokens.append(claimedToken)
+        if let existingIndex = claimedTokens.firstIndex(where: { $0.tokenId == claimedToken.tokenId }) {
+            claimedTokens[existingIndex] = claimedToken
+        } else {
+            claimedTokens.append(claimedToken)
+        }
         persistClaimedTokens()
     }
     
@@ -263,7 +290,7 @@ class TransactionService: ObservableObject {
             do {
                 claimedTokens = try JSONDecoder().decode([ClaimedToken].self, from: data)
             } catch {
-                print("Failed to load claimed tokens: \(error)")
+                AppLogger.wallet.error("Failed to load claimed tokens: \(error)")
                 claimedTokens = []
             }
         } else {
@@ -277,7 +304,7 @@ class TransactionService: ObservableObject {
             let data = try JSONEncoder().encode(claimedTokens)
             UserDefaults.standard.set(data, forKey: StorageKeys.claimedTokens)
         } catch {
-            print("Failed to save claimed tokens: \(error)")
+            AppLogger.wallet.error("Failed to save claimed tokens: \(error)")
         }
     }
 }

@@ -5,28 +5,28 @@ import SwiftUI
 
 struct AnimatedBalanceView: View {
     let value: UInt64
-    var fontSize: CGFloat = 48
-    var fontWeight: Font.Weight = .bold
+    var textStyle: Font = .largeTitle.bold()
     var hideBalance: Bool = false
-    
+
     @ObservedObject var settings = SettingsManager.shared
     @State private var displayValue: UInt64 = 0
     @State private var animationProgress: Double = 0
-    
+
     var body: some View {
         Group {
             if hideBalance {
                 Text("••••••")
-                    .font(.system(size: fontSize, weight: fontWeight, design: .default))
-                    .foregroundColor(settings.accentColor)
+                    .font(textStyle)
+                    .accessibilityLabel("Balance hidden")
             } else {
                 Text(formattedValue)
-                    .font(.system(size: fontSize, weight: fontWeight, design: .default))
-                    .foregroundColor(settings.accentColor)
+                    .font(textStyle)
                     .animation(.spring(response: 0.5, dampingFraction: 0.8), value: displayValue)
+                    .accessibilityLabel("Balance: \(formattedValue)")
+                    .accessibilityValue(formattedValue)
             }
         }
-        .onChange(of: value) { newValue in
+        .onChange(of: value) { _, newValue in
             withAnimation(.spring(response: 0.5, dampingFraction: 0.8)) {
                 displayValue = newValue
             }
@@ -46,24 +46,22 @@ struct AnimatedBalanceView: View {
 
 struct AnimatedAmountDisplay: View {
     let value: UInt64
-    var fontSize: CGFloat = 48
     var showUnit: Bool = true
     var hideBalance: Bool = false
-    
+
     @ObservedObject var settings = SettingsManager.shared
-    
+
     var body: some View {
         VStack(spacing: 4) {
             AnimatedBalanceView(
                 value: value,
-                fontSize: fontSize,
                 hideBalance: hideBalance
             )
             
             if showUnit && !hideBalance {
                 Text(settings.unitSuffix)
                     .font(.title3)
-                    .foregroundColor(.cashuMutedText)
+                    .foregroundStyle(.secondary)
             }
         }
     }
@@ -90,46 +88,46 @@ struct BalanceCardView: View {
                 HStack(spacing: 4) {
                     Image(systemName: "arrow.left.arrow.right")
                         .font(.caption2)
+                        .accessibilityHidden(true)
                     Text(settings.unitLabel)
                         .font(.caption)
                         .fontWeight(.bold)
                 }
-                .foregroundColor(settings.accentColor)
-                .padding(.horizontal, 12)
-                .padding(.vertical, 6)
-                .overlay(
-                    Capsule()
-                        .stroke(settings.accentColor, lineWidth: 1)
-                )
             }
+            .glassButton()
+            .accessibilityLabel("Unit: \(settings.unitLabel)")
+            .accessibilityHint("Toggles the display unit")
             .padding(.top, 20)
             
             // Main balance display
             VStack(spacing: 8) {
-                AnimatedBalanceView(
-                    value: balance,
-                    fontSize: 48,
-                    hideBalance: isHidden
-                )
-                .onTapGesture {
+                Button {
                     withAnimation(.easeInOut(duration: 0.2)) {
                         isHidden.toggle()
                         onHideToggle?()
                     }
+                } label: {
+                    AnimatedBalanceView(
+                        value: balance,
+                        hideBalance: isHidden
+                    )
                 }
+                .buttonStyle(.plain)
+                .accessibilityLabel(isHidden ? "Show balance" : "Hide balance")
+                .accessibilityHint("Toggles balance visibility")
                 
                 // Unit suffix
                 if !settings.useBitcoinSymbol {
                     Text("sat")
                         .font(.title3)
-                        .foregroundColor(.cashuMutedText)
+                        .foregroundStyle(.secondary)
                 }
                 
                 // Fiat conversion placeholder
                 if !isHidden {
                     Text("$0.00") // Placeholder - would need price feed
                         .font(.subheadline)
-                        .foregroundColor(.cashuMutedText)
+                        .foregroundStyle(.secondary)
                 }
             }
             .padding(.vertical, 24)
@@ -138,10 +136,10 @@ struct BalanceCardView: View {
             if let mintName = mintName {
                 HStack {
                     Text("Mint:")
-                        .foregroundColor(.cashuMutedText)
+                        .foregroundStyle(.secondary)
                     Text(mintName)
                         .fontWeight(.semibold)
-                        .foregroundColor(.cashuMutedText)
+                        .foregroundStyle(.secondary)
                 }
                 .font(.caption)
             }
@@ -165,22 +163,13 @@ struct PendingBalanceBadge: View {
     
     var body: some View {
         Button(action: { onTap?() }) {
-            HStack(spacing: 6) {
-                Image(systemName: "clock")
-                    .font(.caption)
-                
-                Text("Pending: \(settings.formatAmountShort(amount)) \(settings.unitSuffix)")
-                    .font(.caption)
-                    .fontWeight(.medium)
-            }
-            .foregroundColor(settings.accentColor)
-            .padding(.horizontal, 16)
-            .padding(.vertical, 8)
-            .background(
-                Capsule()
-                    .stroke(settings.accentColor, lineWidth: 1)
-            )
+            Label("Pending: \(settings.formatAmountShort(amount)) \(settings.unitSuffix)", systemImage: "clock")
+                .font(.caption)
+                .fontWeight(.medium)
+                .foregroundStyle(.secondary)
         }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("Pending balance: \(settings.formatAmountShort(amount)) \(settings.unitSuffix)")
     }
 }
 
@@ -190,14 +179,13 @@ struct PendingBalanceBadge: View {
 struct TransactionAmountView: View {
     let amount: Int64
     let isIncoming: Bool
-    var fontSize: CGFloat = 16
-    
+
     @ObservedObject var settings = SettingsManager.shared
-    
+
     var body: some View {
         Text(formattedAmount)
-            .font(.system(size: fontSize, weight: .medium))
-            .foregroundColor(amountColor)
+            .font(.callout.weight(.medium))
+            .foregroundStyle(amountColor)
     }
     
     private var formattedAmount: String {
@@ -206,30 +194,20 @@ struct TransactionAmountView: View {
     }
     
     private var amountColor: Color {
-        isIncoming ? .green : .white
+        isIncoming ? .green : .primary
     }
 }
 
 // MARK: - Preview
 
 #Preview("Balance Card") {
-    ZStack {
-        Color.cashuBackground
-            .ignoresSafeArea()
-        
-        BalanceCardView(
-            balance: 21000,
-            mintName: "mint.minibits.cash",
-            pendingBalance: 1000
-        )
-    }
+    BalanceCardView(
+        balance: 21000,
+        mintName: "mint.minibits.cash",
+        pendingBalance: 1000
+    )
 }
 
 #Preview("Animated Balance") {
-    ZStack {
-        Color.cashuBackground
-            .ignoresSafeArea()
-        
-        AnimatedBalanceView(value: 123456)
-    }
+    AnimatedBalanceView(value: 123456)
 }

@@ -7,20 +7,6 @@ import P256K
 class SettingsManager: ObservableObject {
     static let shared = SettingsManager()
     
-    // Theme colors matching cashu.me
-    static let themeColors: [ThemeColor] = [
-        ThemeColor(name: "Green", color: Color(red: 0, green: 0.9, blue: 0.46)),       // Cashu Green (#00E676)
-        ThemeColor(name: "Yellow", color: Color(red: 1, green: 0.84, blue: 0)),        // Yellow/Gold
-        ThemeColor(name: "Orange", color: Color(red: 1, green: 0.5, blue: 0)),         // Orange
-        ThemeColor(name: "Red", color: Color(red: 1, green: 0.3, blue: 0.3)),          // Red
-        ThemeColor(name: "Pink", color: Color(red: 1, green: 0.4, blue: 0.7)),         // Pink
-        ThemeColor(name: "Purple", color: Color(red: 0.7, green: 0.4, blue: 1)),       // Purple
-        ThemeColor(name: "Blue", color: Color(red: 0.4, green: 0.6, blue: 1)),         // Blue
-        ThemeColor(name: "Cyan", color: Color(red: 0, green: 0.9, blue: 0.9)),         // Cyan
-        ThemeColor(name: "Mint", color: Color(red: 0.4, green: 0.9, blue: 0.6)),       // Mint green
-        ThemeColor(name: "Olive", color: Color(red: 0.6, green: 0.7, blue: 0.3)),      // Olive
-    ]
-
     static let supportedFiatCurrencies: [String] = [
         "USD", "EUR", "AUD", "BRL", "CAD", "CHF", "CNY", "CZK", "DKK", "GBP",
         "HKD", "HUF", "ILS", "INR", "JPY", "KRW", "MXN", "NZD", "NOK", "PLN",
@@ -44,13 +30,6 @@ class SettingsManager: ObservableObject {
     
     @Published var useBitcoinSymbol: Bool {
         didSet { UserDefaults.standard.set(useBitcoinSymbol, forKey: "useBitcoinSymbol") }
-    }
-    
-    @Published var selectedThemeIndex: Int {
-        didSet { 
-            UserDefaults.standard.set(selectedThemeIndex, forKey: "selectedThemeIndex")
-            updateThemeColor()
-        }
     }
     
     @Published var showFiatBalance: Bool {
@@ -151,7 +130,6 @@ class SettingsManager: ObservableObject {
         }
     }
     
-    @Published var accentColor: Color = Color(red: 0, green: 1, blue: 0)
     private lazy var decimalFormatter: NumberFormatter = {
         let formatter = NumberFormatter()
         formatter.numberStyle = .decimal
@@ -164,7 +142,6 @@ class SettingsManager: ObservableObject {
     init() {
         self.useNumericKeyboard = UserDefaults.standard.object(forKey: "useNumericKeyboard") as? Bool ?? true
         self.useBitcoinSymbol = UserDefaults.standard.object(forKey: "useBitcoinSymbol") as? Bool ?? false
-        self.selectedThemeIndex = UserDefaults.standard.object(forKey: "selectedThemeIndex") as? Int ?? 0
         self.showFiatBalance = UserDefaults.standard.object(forKey: "showFiatBalance") as? Bool ?? false
         self.bitcoinPriceCurrency = UserDefaults.standard.string(forKey: "bitcoinPriceCurrency") ?? "USD"
         self.checkPendingOnStartup = UserDefaults.standard.object(forKey: "checkPendingOnStartup") as? Bool ?? true
@@ -181,8 +158,6 @@ class SettingsManager: ObservableObject {
         self.periodicallyCheckIncomingInvoices = UserDefaults.standard.object(forKey: "periodicallyCheckIncomingInvoices") as? Bool ?? true
         self.nostrRelays = UserDefaults.standard.stringArray(forKey: "nostrRelays") ?? Self.defaultNostrRelays
         
-        updateThemeColor()
-
         PriceService.shared.currencyCode = bitcoinPriceCurrency
         PriceService.shared.isEnabled = showFiatBalance
     }
@@ -291,12 +266,6 @@ class SettingsManager: ObservableObject {
         p2pkKeys.removeAll { $0.id == key.id }
     }
     
-    private func updateThemeColor() {
-        if selectedThemeIndex >= 0 && selectedThemeIndex < Self.themeColors.count {
-            accentColor = Self.themeColors[selectedThemeIndex].color
-        }
-    }
-
     private static func loadNWCConnections() -> [NWCConnection] {
         guard let data = UserDefaults.standard.data(forKey: "nwcConnections"),
               let decoded = try? JSONDecoder().decode([NWCConnection].self, from: data) else {
@@ -403,12 +372,6 @@ class SettingsManager: ObservableObject {
 
 // MARK: - Theme Color Model
 
-struct ThemeColor: Identifiable {
-    let id = UUID()
-    let name: String
-    let color: Color
-}
-
 struct NWCConnection: Identifiable, Codable, Hashable {
     let id: UUID
     let walletPublicKey: String
@@ -475,9 +438,3 @@ enum SettingsFeatureError: LocalizedError {
 
 // MARK: - Theme Colors Extension
 
-extension Color {
-    /// Dynamic accent color based on settings
-    @MainActor static var cashuAccent: Color {
-        SettingsManager.shared.accentColor
-    }
-}

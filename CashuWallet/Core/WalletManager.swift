@@ -127,7 +127,7 @@ class WalletManager: ObservableObject {
             }
             isInitialized = true
         } catch {
-            print("Wallet initialization error: \(error)")
+            AppLogger.wallet.error("Wallet initialization error: \(error)")
             isInitialized = true
             needsOnboarding = true
         }
@@ -229,7 +229,8 @@ class WalletManager: ObservableObject {
         await mintService.loadMints()
         await refreshBalance()
         await transactionService.loadTransactions()
-        
+        await mintService.refreshMintInfo()
+
         initializeNostrKeypair(mnemonic: mnemonic)
         setupNPCQuoteListener()
     }
@@ -294,7 +295,7 @@ class WalletManager: ObservableObject {
             }
             
             let backupURL = try backupCorruptedDatabase(at: databaseURL)
-            print("Wallet DB recovery: moved corrupted database to \(backupURL.path)")
+            AppLogger.wallet.info("Wallet DB recovery: moved corrupted database to \(backupURL.path)")
             return try createRepository(mnemonic: mnemonic, databaseURL: databaseURL)
         }
     }
@@ -372,7 +373,7 @@ class WalletManager: ObservableObject {
                 try NPCService.shared.initializeWithSeed(seedData)
                 await NPCService.shared.initializeIfEnabled()
             } catch {
-                print("Failed to initialize Nostr keypair: \(error)")
+                AppLogger.security.error("Failed to initialize Nostr keypair: \(error)")
             }
         }
     }
@@ -425,7 +426,7 @@ class WalletManager: ObservableObject {
             if errorString.contains("ISSUED") || errorString.contains("already") {
                 processedQuotes.insert(mintQuote.id)
             }
-            print("Failed to mint NPC quote: \(error)")
+            AppLogger.wallet.error("Failed to mint NPC quote: \(error)")
         }
     }
     
@@ -445,7 +446,17 @@ class WalletManager: ObservableObject {
         try await mintService.setActiveMint(mint)
         await refreshBalance()
     }
-    
+
+    /// Fetch full mint info from the mint's API via CashuDevKit
+    func fetchFullMintInfo(mintUrl: String) async throws -> CashuDevKit.MintInfo? {
+        guard let walletRepository = walletRepository else {
+            throw WalletError.notInitialized
+        }
+        let mintUrlObj = try MintUrl(url: mintUrl)
+        let wallet = try await walletRepository.getWallet(mintUrl: mintUrlObj, unit: .sat)
+        return try await wallet.fetchMintInfo()
+    }
+
     // MARK: - Balance Operations
     
     func refreshBalance() async {
@@ -469,7 +480,7 @@ class WalletManager: ObservableObject {
                 mintService.updateMintBalance(url: mintUrlString, balance: walletBalance.value)
             } catch {
                 mintService.updateMintBalance(url: mintUrlString, balance: 0)
-                print("Failed to refresh balance for mint \(mintUrlString): \(error)")
+                AppLogger.wallet.error("Failed to refresh balance for mint \(mintUrlString): \(error)")
             }
         }
         
@@ -503,6 +514,10 @@ class WalletManager: ObservableObject {
     
     func meltTokens(quoteId: String) async throws -> String? {
         let preimage = try await lightningService.meltTokens(quoteId: quoteId)
+        // Persist preimage as proof of payment
+        if let preimage = preimage {
+            transactionService.savePreimage(quoteId: quoteId, preimage: preimage)
+        }
         await refreshBalance()
         await transactionService.loadTransactions()
         return preimage
@@ -637,7 +652,19 @@ class WalletManager: ObservableObject {
             .lowercased()
             .split(separator: " ")
             .map(String.init)
-        return words.count == 12 || words.count == 24
+        guard words.count == 12 || words.count == 24 else { return false }
+        return words.allSatisfy { bip39WordList.contains($0) }
+    }
+
+    /// Validate individual words and return which ones are invalid
+    func invalidMnemonicWords(_ phrase: String) -> [Int] {
+        let words = phrase.trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
+            .split(separator: " ")
+            .map(String.init)
+        return words.enumerated().compactMap { index, word in
+            bip39WordList.contains(word) ? nil : index
+        }
     }
     
     deinit {

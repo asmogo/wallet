@@ -81,14 +81,17 @@ struct QRCodeView: View {
                         .interpolation(.none)
                         .resizable()
                         .scaledToFit()
+                        .accessibilityLabel("QR code")
+                        .accessibilityHint("Contains scannable payment data")
                 } else {
                     Rectangle()
-                        .fill(Color.gray.opacity(0.3))
+                        .fill(.tertiary)
                         .overlay(
                             Image(systemName: "qrcode")
-                                .font(.system(size: 48))
-                                .foregroundColor(.gray)
+                                .font(.title)
+                                .foregroundStyle(.secondary)
                         )
+                        .accessibilityLabel("QR code loading")
                 }
             }
             
@@ -100,13 +103,13 @@ struct QRCodeView: View {
         .onAppear {
             prepareEncoder()
         }
-        .onChange(of: content) { _ in
+        .onChange(of: content) {
             prepareEncoder()
         }
-        .onChange(of: speed) { _ in
+        .onChange(of: speed) {
             restartTimer()
         }
-        .onChange(of: size) { _ in
+        .onChange(of: size) {
             prepareEncoder()
         }
         .onDisappear {
@@ -125,13 +128,16 @@ struct QRCodeView: View {
                 HStack(spacing: 6) {
                     Image(systemName: "bolt.fill")
                         .font(.caption)
+                        .accessibilityHidden(true)
                     Text("SPEED: \(speed.rawValue)")
                         .font(.caption)
                         .fontWeight(.medium)
                 }
-                .foregroundColor(.gray)
+                .foregroundStyle(.secondary)
             }
-            
+            .accessibilityLabel("QR animation speed: \(speed.rawValue)")
+            .accessibilityHint("Cycles through fast, medium, and slow animation speeds")
+
             // Size toggle
             Button(action: {
                 size = size.next
@@ -139,12 +145,15 @@ struct QRCodeView: View {
                 HStack(spacing: 6) {
                     Image(systemName: "magnifyingglass")
                         .font(.caption)
+                        .accessibilityHidden(true)
                     Text("SIZE: \(size.rawValue)")
                         .font(.caption)
                         .fontWeight(.medium)
                 }
-                .foregroundColor(.gray)
+                .foregroundStyle(.secondary)
             }
+            .accessibilityLabel("QR chunk size: \(size.rawValue)")
+            .accessibilityHint("Cycles through small, medium, and large QR code chunk sizes")
         }
         .padding(.top, 4)
     }
@@ -261,7 +270,7 @@ struct QRCodeView: View {
             .frame(width: 250, height: 280)
             .padding()
             .background(Color.white)
-            .cornerRadius(12)
+            .clipShape(.rect(cornerRadius: 12))
     }
 }
 
@@ -275,6 +284,6 @@ struct QRCodeView: View {
             .frame(width: 250, height: 300)
             .padding()
             .background(Color.white)
-            .cornerRadius(12)
+            .clipShape(.rect(cornerRadius: 12))
     }
 }

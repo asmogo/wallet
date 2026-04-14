@@ -3,8 +3,9 @@ import SwiftUI
 struct ReceiveLightningView: View {
     @Environment(\.dismiss) private var dismiss
     @EnvironmentObject var walletManager: WalletManager
-    @ObservedObject var npcService = NPCService.shared
-    
+    @ObservedObject var settings = SettingsManager.shared
+    @ObservedObject var priceService = PriceService.shared
+
     @State private var amountString = ""
     @State private var mintQuote: MintQuoteInfo?
     @State private var isCreatingInvoice = false
@@ -13,19 +14,15 @@ struct ReceiveLightningView: View {
     @State private var isPaid = false
     @State private var errorMessage: String?
     @State private var showMintPicker = false
-    @State private var copyButtonText = "COPY"
+    @State private var copyButtonText = "Copy"
     @State private var pollingTask: Task<Void, Never>?
-    @State private var lightningAddressCopied = false
     @State private var expiryTimeRemaining: TimeInterval = 0
     @State private var expiryTimer: Timer?
     @State private var isExpired = false
-    
+
     var body: some View {
         NavigationStack {
-            ZStack {
-                Color.cashuBackground
-                    .ignoresSafeArea()
-                
+            Group {
                 if let quote = mintQuote {
                     invoiceDisplayView(quote: quote)
                 } else {
@@ -34,24 +31,29 @@ struct ReceiveLightningView: View {
             }
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .navigationBarLeading) {
+                ToolbarItem(placement: .cancellationAction) {
                     Button(action: { dismiss() }) {
                         Image(systemName: "xmark")
-                            .foregroundColor(.white)
                     }
+                    .accessibilityLabel("Close")
                 }
-                
+
                 ToolbarItem(placement: .principal) {
-                    Text("Receive Lightning")
+                    Text(mintQuote != nil ? "Lightning Invoice" : "Receive Lightning")
                         .font(.headline)
-                        .foregroundColor(.white)
                 }
-                
-                ToolbarItem(placement: .topBarTrailing) {
-                    Text("SAT")
-                        .font(.caption)
-                        .fontWeight(.bold)
-                        .foregroundColor(.cashuAccent)
+
+                if mintQuote == nil {
+                    ToolbarItem(placement: .topBarTrailing) {
+                        Button(action: { settings.useBitcoinSymbol.toggle() }) {
+                            Text(settings.unitLabel)
+                                .font(.caption)
+                                .fontWeight(.bold)
+                                .foregroundStyle(Color.accentColor)
+                        }
+                        .accessibilityLabel("Unit: \(settings.unitLabel)")
+                        .accessibilityHint("Toggles display unit")
+                    }
                 }
             }
             .sheet(isPresented: $showMintPicker) {
@@ -67,338 +69,330 @@ struct ReceiveLightningView: View {
             }
         }
     }
-    
+
     // MARK: - Amount Input View
-    
+
     private var amountInputView: some View {
         VStack(spacing: 0) {
             // Mint selector
             if let mint = walletManager.activeMint {
                 mintSelector(mint: mint)
                     .padding(.horizontal)
-                    .padding(.top, 16)
-            }
-            
-            // Lightning address card (if available)
-            if npcService.isEnabled && !npcService.lightningAddress.isEmpty {
-                lightningAddressCard
-                    .padding(.horizontal)
                     .padding(.top, 12)
             }
-            
+
             Spacer()
-            
+
             // Amount display
-            VStack(spacing: 4) {
-                Text(amountString.isEmpty ? "0" : amountString)
-                    .font(.cashuBalance)
-                    .foregroundColor(.white)
-                
-                Text("sat")
-                    .font(.title3)
-                    .foregroundColor(.cashuMutedText)
+            VStack(spacing: 8) {
+                Text(formattedAmount)
+                    .font(.largeTitle.bold())
+                    .minimumScaleFactor(0.5)
+                    .lineLimit(1)
+                    .contentTransition(.numericText())
+
+                // Fiat conversion
+                if priceService.btcPriceUSD > 0, let sats = UInt64(amountString) {
+                    Text(priceService.formatSatsAsFiat(sats))
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                } else {
+                    Text("$0.00")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                }
             }
-            
+            .accessibilityElement(children: .combine)
+            .accessibilityLabel("Invoice amount: \(amountString.isEmpty ? "0" : amountString) sats")
+
             if let error = errorMessage {
                 Text(error)
                     .font(.caption)
-                    .foregroundColor(.cashuError)
+                    .foregroundStyle(.red)
                     .padding(.top, 8)
             }
-            
+
             Spacer()
-            
-            // Numeric keypad
-            NumericKeyboard(text: $amountString)
-                .padding(.horizontal, 20)
-            
+
+            // Number pad
+            numberPad
+                .padding(.horizontal, 24)
+
             // Create invoice button
             Button(action: createInvoice) {
                 if isCreatingInvoice {
                     ProgressView()
-                        .tint(.black)
                 } else {
-                    Text("CREATE INVOICE")
+                    Text("Create Invoice")
                 }
             }
-            .buttonStyle(CashuPrimaryButtonStyle(isDisabled: amountString.isEmpty || amountString == "0"))
+            .glassButton()
             .disabled(amountString.isEmpty || amountString == "0" || isCreatingInvoice)
             .padding(.horizontal)
-            .padding(.vertical, 30)
+            .padding(.top, 16)
+            .padding(.bottom, 16)
         }
     }
-    
-    // MARK: - Lightning Address Card
-    
-    private var lightningAddressCard: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack {
-                Image(systemName: "bolt.fill")
-                    .foregroundColor(.cashuAccent)
-                Text("Lightning Address")
-                    .font(.caption)
-                    .fontWeight(.medium)
-                    .foregroundColor(.cashuMutedText)
-            }
-            
-            Button(action: copyLightningAddress) {
-                HStack {
-                    Text(npcService.lightningAddress)
-                        .font(.subheadline)
-                        .fontWeight(.medium)
-                        .foregroundColor(.white)
-                        .lineLimit(1)
-                    
-                    Spacer()
-                    
-                    Image(systemName: lightningAddressCopied ? "checkmark" : "doc.on.doc")
-                        .font(.caption)
-                        .foregroundColor(lightningAddressCopied ? .cashuAccent : .cashuMutedText)
+
+    // MARK: - Number Pad
+
+    private var numberPad: some View {
+        VStack(spacing: 8) {
+            ForEach(numberRows, id: \.self) { row in
+                HStack(spacing: 8) {
+                    ForEach(row, id: \.self) { key in
+                        numberKey(key)
+                    }
                 }
             }
-            .buttonStyle(PlainButtonStyle())
-            
-            Text("Anyone can send sats to this address")
-                .font(.caption2)
-                .foregroundColor(.cashuMutedText)
-        }
-        .padding()
-        .background(
-            RoundedRectangle(cornerRadius: 12)
-                .fill(Color.cashuCardBackground)
-                .overlay(
-                    RoundedRectangle(cornerRadius: 12)
-                        .stroke(Color.cashuAccent.opacity(0.3), lineWidth: 1)
-                )
-        )
-    }
-    
-    private func copyLightningAddress() {
-        UIPasteboard.general.string = npcService.lightningAddress
-        
-        let generator = UINotificationFeedbackGenerator()
-        generator.notificationOccurred(.success)
-        
-        lightningAddressCopied = true
-        DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
-            lightningAddressCopied = false
         }
     }
-    
+
+    private var numberRows: [[String]] {
+        [
+            ["1", "2", "3"],
+            ["4", "5", "6"],
+            ["7", "8", "9"],
+            ["", "0", "⌫"]
+        ]
+    }
+
+    private func numberKey(_ key: String) -> some View {
+        Group {
+            if key.isEmpty {
+                Color.clear
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else {
+                Button(action: { handleKeyPress(key) }) {
+                    Group {
+                        if key == "⌫" {
+                            Image(systemName: "chevron.left")
+                                .font(.title3)
+                        } else {
+                            Text(key)
+                                .font(.title2.weight(.medium))
+                        }
+                    }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(key == "⌫" ? "Delete" : key)
+            }
+        }
+        .frame(height: 56)
+    }
+
+    private func handleKeyPress(_ key: String) {
+        if key == "⌫" {
+            if !amountString.isEmpty {
+                amountString.removeLast()
+            }
+        } else {
+            // Prevent leading zeros
+            if amountString == "0" {
+                amountString = key
+            } else {
+                amountString.append(key)
+            }
+        }
+    }
+
+    // MARK: - Mint Selector
+
     private func mintSelector(mint: MintInfo) -> some View {
         Button(action: { showMintPicker = true }) {
             HStack(spacing: 12) {
-                Circle()
-                    .fill(Color.cashuCardBackground)
-                    .frame(width: 44, height: 44)
-                    .overlay(
-                        Image(systemName: "building.columns")
-                            .foregroundColor(.gray)
-                    )
-                
+                // Mint icon
+                if let iconUrl = mint.iconUrl, let url = URL(string: iconUrl) {
+                    AsyncImage(url: url) { image in
+                        image.resizable().aspectRatio(contentMode: .fill)
+                    } placeholder: {
+                        Image(systemName: "bitcoinsign.bank.building")
+                            .foregroundStyle(.secondary)
+                    }
+                    .frame(width: 40, height: 40)
+                    .clipShape(Circle())
+                } else {
+                    Image(systemName: "bitcoinsign.bank.building")
+                        .foregroundStyle(.secondary)
+                        .frame(width: 40, height: 40)
+                }
+
                 VStack(alignment: .leading, spacing: 2) {
                     Text(mint.name)
-                        .font(.subheadline)
-                        .fontWeight(.medium)
-                        .foregroundColor(.white)
-                    
-                    Text("\(mint.balance) sat available")
+                        .font(.subheadline.weight(.medium))
+                    Text(formatBalance(mint.balance))
                         .font(.caption)
-                        .foregroundColor(.cashuMutedText)
+                        .foregroundStyle(.secondary)
                 }
-                
+
                 Spacer()
-                
+
                 Image(systemName: "chevron.down")
-                    .foregroundColor(.cashuMutedText)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
-            .padding()
-            .background(
-                RoundedRectangle(cornerRadius: 12)
-                    .fill(Color.cashuCardBackground)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 12)
-                            .stroke(Color.cashuBorder, lineWidth: 1)
-                    )
-            )
+            .padding(12)
+            .liquidGlass(in: RoundedRectangle(cornerRadius: 12), interactive: true)
         }
-        .buttonStyle(PlainButtonStyle())
+        .buttonStyle(.plain)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("Mint: \(mint.name)")
+        .accessibilityHint("Opens mint selector")
     }
-    
+
     // MARK: - Invoice Display View
-    
+
     private func invoiceDisplayView(quote: MintQuoteInfo) -> some View {
-        ScrollView {
-            VStack(spacing: 20) {
-                // QR Code with border
-                ZStack {
-                    RoundedRectangle(cornerRadius: 16)
-                        .fill(Color.white)
-                        .frame(width: 280, height: 280)
-                    
+        VStack(spacing: 0) {
+            ScrollView {
+                VStack(spacing: 20) {
+                    // QR Code
                     QRCodeView(content: quote.request)
-                        .frame(width: 250, height: 250)
-                }
-                .overlay(
-                    RoundedRectangle(cornerRadius: 16)
-                        .stroke(Color.cashuMutedText.opacity(0.3), lineWidth: 1)
-                )
-                .padding(.top, 20)
-                
-                // Amount
-                Text("\(quote.amount) sat")
-                    .font(.cashuBalanceSmall)
-                    .foregroundColor(.white)
-                
-                // Status
-                statusBadge
-                
-                // Expiry countdown (if not paid and not expired)
-                if !isPaid && !isExpired && quote.expiry != nil {
-                    expiryView
-                }
-                
-                // Details
-                VStack(spacing: 12) {
-                    detailRow(icon: "arrow.up.arrow.down", label: "Fee", value: "0 sat")
-                    detailRow(icon: "square.grid.2x2", label: "Unit", value: "SAT")
-                    detailRow(icon: "info.circle", label: "State", value: isPaid ? "Paid" : (isExpired ? "Expired" : "Pending"), highlight: isPaid)
-                    if let mint = walletManager.activeMint {
-                        detailRow(icon: "building.columns", label: "Mint", value: extractMintHost(mint.url))
+                        .frame(width: 280, height: 280)
+                        .padding(16)
+                        .background(Color.white, in: RoundedRectangle(cornerRadius: 16))
+                        .padding(.top, 8)
+
+                    // Amount
+                    Text(formattedAmount)
+                        .font(.title.bold())
+                        .accessibilityLabel("Invoice amount: \(amountString) sats")
+
+                    // Status
+                    statusBadge
+
+                    // Expiry countdown
+                    if !isPaid && !isExpired && expiryTimeRemaining > 0 {
+                        expiryView
                     }
-                }
-                .padding(.horizontal)
-                
-                Spacer(minLength: 20)
-                
-                // Copy button
-                Button(action: { copyInvoice(quote.request) }) {
-                    HStack {
-                        Image(systemName: copyButtonText == "COPIED" ? "checkmark" : "doc.on.doc")
-                        Text(copyButtonText)
+
+                    // Details
+                    VStack(spacing: 12) {
+                        detailRow(icon: "banknote", label: "Unit", value: settings.unitLabel.uppercased())
+                        detailRow(icon: "info.circle", label: "State",
+                                  value: isPaid ? "Paid" : (isExpired ? "Expired" : "Pending"))
+                        if let mint = walletManager.activeMint {
+                            detailRow(icon: "bitcoinsign.bank.building", label: "Mint",
+                                      value: extractMintHost(mint.url))
+                        }
                     }
+                    .padding(.horizontal)
                 }
-                .buttonStyle(CashuPrimaryButtonStyle())
-                .padding(.horizontal)
-                .padding(.bottom, 30)
             }
+
+            // Copy button
+            Button(action: { copyInvoice(quote.request) }) {
+                Label(copyButtonText, systemImage: copyButtonText == "Copied" ? "checkmark" : "doc.on.doc")
+            }
+            .glassButton()
+            .padding(.horizontal)
+            .padding(.bottom, 16)
         }
         .onAppear {
             startPaymentPolling()
             startExpiryCountdown(quote: quote)
         }
     }
-    
-    // MARK: - Expiry View
-    
-    private var expiryView: some View {
-        HStack(spacing: 6) {
-            Image(systemName: "timer")
-                .foregroundColor(expiryTimeRemaining < 60 ? .cashuError : .cashuMutedText)
-            Text("Expires in \(formatTimeRemaining(expiryTimeRemaining))")
-                .font(.caption)
-                .foregroundColor(expiryTimeRemaining < 60 ? .cashuError : .cashuMutedText)
+
+    // MARK: - Detail Row
+
+    private func detailRow(icon: String, label: String, value: String) -> some View {
+        HStack {
+            Label(label, systemImage: icon)
+                .foregroundStyle(.secondary)
+            Spacer()
+            Text(value)
+                .fontWeight(.medium)
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 6)
-        .background(
-            Capsule()
-                .fill(expiryTimeRemaining < 60 ? Color.cashuError.opacity(0.2) : Color.cashuCardBackground)
-        )
+        .font(.subheadline)
     }
-    
-    private func formatTimeRemaining(_ seconds: TimeInterval) -> String {
-        if seconds <= 0 {
-            return "0:00"
-        }
-        let minutes = Int(seconds) / 60
-        let secs = Int(seconds) % 60
-        if minutes > 0 {
-            return String(format: "%d:%02d", minutes, secs)
-        } else {
-            return String(format: "0:%02d", secs)
-        }
-    }
-    
-    private func startExpiryCountdown(quote: MintQuoteInfo) {
-        guard let expiry = quote.expiry else { return }
-        
-        let expiryDate = Date(timeIntervalSince1970: Double(expiry))
-        expiryTimeRemaining = expiryDate.timeIntervalSince(Date())
-        
-        if expiryTimeRemaining <= 0 {
-            isExpired = true
-            return
-        }
-        
-        expiryTimer?.invalidate()
-        expiryTimer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { _ in
-            expiryTimeRemaining -= 1
-            if expiryTimeRemaining <= 0 {
-                isExpired = true
-                expiryTimer?.invalidate()
-                pollingTask?.cancel()
-            }
-        }
-    }
-    
+
+    // MARK: - Status Badge
+
     @ViewBuilder
     private var statusBadge: some View {
         if isPaid {
             HStack(spacing: 6) {
                 Image(systemName: "checkmark.circle.fill")
+                    .accessibilityHidden(true)
                 Text("Payment Received!")
             }
-            .font(.subheadline)
-            .fontWeight(.medium)
-            .foregroundColor(.cashuAccent)
+            .font(.subheadline.weight(.medium))
+            .foregroundStyle(.green)
         } else if isCheckingPayment || isMinting {
             HStack(spacing: 6) {
                 ProgressView()
-                    .tint(.cashuAccent)
+                    .tint(.accentColor)
                     .scaleEffect(0.8)
                 Text(isMinting ? "Minting..." : "Checking...")
             }
             .font(.subheadline)
-            .foregroundColor(.cashuMutedText)
+            .foregroundStyle(.secondary)
+        } else if isExpired {
+            HStack(spacing: 6) {
+                Image(systemName: "xmark.circle.fill")
+                    .accessibilityHidden(true)
+                Text("Expired")
+            }
+            .font(.subheadline.weight(.medium))
+            .foregroundStyle(.red)
         } else {
             HStack(spacing: 6) {
                 Image(systemName: "clock")
+                    .accessibilityHidden(true)
                 Text("Waiting for payment...")
             }
             .font(.subheadline)
-            .foregroundColor(.cashuWarning)
+            .foregroundStyle(.orange)
         }
     }
-    
-    private func detailRow(icon: String, label: String, value: String, highlight: Bool = false) -> some View {
-        HStack {
-            HStack(spacing: 8) {
-                Image(systemName: icon)
-                    .font(.caption)
-                    .foregroundColor(.cashuMutedText)
-                Text(label)
-                    .foregroundColor(.cashuMutedText)
-            }
-            Spacer()
-            Text(value)
-                .foregroundColor(highlight ? .cashuAccent : .white)
-        }
-        .font(.subheadline)
+
+    // MARK: - Expiry View
+
+    private var expiryView: some View {
+        Label("Expires in \(formatTimeRemaining(expiryTimeRemaining))", systemImage: "timer")
+            .font(.caption)
+            .foregroundStyle(expiryTimeRemaining < 60 ? .red : .secondary)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 6)
+            .liquidGlass(in: Capsule())
     }
-    
+
+    // MARK: - Helpers
+
+    private var formattedAmount: String {
+        let amount = amountString.isEmpty ? "0" : amountString
+        if settings.useBitcoinSymbol {
+            return "₿\(amount)"
+        }
+        return "\(amount) sat"
+    }
+
+    private func formatBalance(_ sats: UInt64) -> String {
+        if settings.useBitcoinSymbol {
+            return "₿\(sats)"
+        }
+        return "\(sats) sat"
+    }
+
     private func extractMintHost(_ url: String) -> String {
-        if let urlObj = URL(string: url) {
-            return urlObj.host ?? url
-        }
-        return url
+        URL(string: url)?.host ?? url
     }
-    
+
+    private func formatTimeRemaining(_ seconds: TimeInterval) -> String {
+        if seconds <= 0 { return "0:00" }
+        let minutes = Int(seconds) / 60
+        let secs = Int(seconds) % 60
+        return minutes > 0 ? String(format: "%d:%02d", minutes, secs) : String(format: "0:%02d", secs)
+    }
+
     // MARK: - Actions
-    
+
     private func createInvoice() {
         guard let amountValue = UInt64(amountString), amountValue > 0 else { return }
-        
+
         isCreatingInvoice = true
         errorMessage = nil
         isPaid = false
@@ -406,7 +400,7 @@ struct ReceiveLightningView: View {
         expiryTimeRemaining = 0
         pollingTask?.cancel()
         expiryTimer?.invalidate()
-        
+
         Task { @MainActor in
             do {
                 let quote = try await walletManager.createMintQuote(amount: amountValue)
@@ -417,51 +411,61 @@ struct ReceiveLightningView: View {
             isCreatingInvoice = false
         }
     }
-    
+
     private func copyInvoice(_ invoice: String) {
         UIPasteboard.general.string = invoice
-        
-        // Haptic feedback
-        let generator = UINotificationFeedbackGenerator()
-        generator.notificationOccurred(.success)
-        
-        // Show "COPIED" feedback for 3 seconds
-        copyButtonText = "COPIED"
+        copyButtonText = "Copied"
         DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
-            copyButtonText = "COPY"
+            copyButtonText = "Copy"
         }
     }
-    
+
+    private func startExpiryCountdown(quote: MintQuoteInfo) {
+        guard let expiry = quote.expiry else { return }
+        let expiryDate = Date(timeIntervalSince1970: Double(expiry))
+        expiryTimeRemaining = expiryDate.timeIntervalSince(Date())
+
+        if expiryTimeRemaining <= 0 {
+            isExpired = true
+            return
+        }
+
+        expiryTimer?.invalidate()
+        expiryTimer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { _ in
+            expiryTimeRemaining -= 1
+            if expiryTimeRemaining <= 0 {
+                isExpired = true
+                expiryTimer?.invalidate()
+                pollingTask?.cancel()
+            }
+        }
+    }
+
     private func checkPayment() async {
-        guard let quote = mintQuote else { return }
-        guard !isExpired else { return }
-        
+        guard let quote = mintQuote, !isExpired else { return }
+
         isCheckingPayment = true
         defer { isCheckingPayment = false }
         isMinting = true
         defer { isMinting = false }
-        
+
         do {
             let _ = try await walletManager.mintTokens(quoteId: quote.id)
             isPaid = true
             pollingTask?.cancel()
             expiryTimer?.invalidate()
-            
-            // Wait and dismiss
             try? await Task.sleep(nanoseconds: 2_000_000_000)
             dismiss()
         } catch {
-            // Quote is still likely unpaid; polling continues with backoff.
+            // Still unpaid, polling continues
         }
     }
-    
+
     private func startPaymentPolling() {
         pollingTask?.cancel()
-        
         pollingTask = Task {
             let maxInterval: UInt64 = 15_000_000_000
             var interval: UInt64 = 5_000_000_000
-            
             while !Task.isCancelled && !isPaid && mintQuote != nil && !isExpired {
                 try? await Task.sleep(nanoseconds: interval)
                 if !Task.isCancelled && !isPaid && !isCheckingPayment && !isExpired {

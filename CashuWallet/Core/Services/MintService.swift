@@ -45,7 +45,12 @@ class MintService: ObservableObject {
         
         // Normalize URL
         let normalizedUrl = normalizeUrl(url)
-        
+
+        // Validate HTTPS
+        if let validationError = validateMintUrl(normalizedUrl) {
+            throw WalletError.networkError(validationError)
+        }
+
         // Check if already exists locally
         if mints.contains(where: { $0.url == normalizedUrl }) {
             throw WalletError.mintAlreadyExists
@@ -66,7 +71,8 @@ class MintService: ObservableObject {
             name: info?.name ?? "Unknown Mint",
             description: info?.description,
             isActive: true,
-            balance: 0
+            balance: 0,
+            iconUrl: info?.iconUrl
         )
         
         mints.append(mintInfo)
@@ -121,7 +127,7 @@ class MintService: ObservableObject {
                         // Call createWallet even if hasMint returns true, to ensure unit is set
                         try await repo.createWallet(mintUrl: mintUrl, unit: .sat, targetProofCount: nil)
                     } catch {
-                        print("Failed to add mint \(mint.url): \(error)")
+                        AppLogger.wallet.error("Failed to add mint \(mint.url): \(error)")
                     }
                 }
                 
@@ -130,11 +136,46 @@ class MintService: ObservableObject {
                     activeMint = firstMint
                 }
             } catch {
-                print("Failed to load mints: \(error)")
+                AppLogger.wallet.error("Failed to load mints: \(error)")
             }
         }
     }
     
+    /// Refresh mint info (name, description, iconUrl) for all mints missing icons
+    func refreshMintInfo() async {
+        guard let repo = walletRepository() else { return }
+        var updated = false
+
+        for i in mints.indices {
+            if mints[i].iconUrl == nil {
+                do {
+                    let mintUrl = try MintUrl(url: mints[i].url)
+                    let wallet = try await repo.getWallet(mintUrl: mintUrl, unit: .sat)
+                    if let info = try await wallet.fetchMintInfo() {
+                        if let iconUrl = info.iconUrl {
+                            mints[i].iconUrl = iconUrl
+                            updated = true
+                        }
+                        if let name = info.name, mints[i].name == "Unknown Mint" {
+                            mints[i].name = name
+                            updated = true
+                        }
+                    }
+                } catch {
+                    // Skip — will retry next launch
+                }
+            }
+        }
+
+        if updated {
+            if let activeMintUrl = activeMint?.url,
+               let refreshed = mints.first(where: { $0.url == activeMintUrl }) {
+                activeMint = refreshed
+            }
+            saveMints()
+        }
+    }
+
     /// Update balance for a specific mint
     func updateMintBalance(url: String, balance: UInt64) {
         let normalizedUrl = normalizeUrl(url)
@@ -171,10 +212,25 @@ class MintService: ObservableObject {
     /// Normalize a mint URL
     private func normalizeUrl(_ url: String) -> String {
         var normalized = url.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !normalized.hasPrefix("http://") && !normalized.hasPrefix("https://") {
+            normalized = "https://" + normalized
+        }
         if normalized.hasSuffix("/") {
             normalized = String(normalized.dropLast())
         }
         return normalized
+    }
+
+    /// Validate that a mint URL uses HTTPS
+    func validateMintUrl(_ url: String) -> String? {
+        let normalized = normalizeUrl(url)
+        guard let parsedUrl = URL(string: normalized), parsedUrl.host != nil else {
+            return "Invalid URL format."
+        }
+        guard parsedUrl.scheme == "https" else {
+            return "Mint URL must use HTTPS for security."
+        }
+        return nil
     }
     
     /// Save mints to persistent storage
@@ -183,7 +239,7 @@ class MintService: ObservableObject {
             let data = try JSONEncoder().encode(mints)
             UserDefaults.standard.set(data, forKey: storageKey)
         } catch {
-            print("Failed to save mints: \(error)")
+            AppLogger.wallet.error("Failed to save mints: \(error)")
         }
     }
 }

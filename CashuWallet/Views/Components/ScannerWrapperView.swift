@@ -95,29 +95,29 @@ struct ScannerWrapperView: View {
                         VStack(spacing: 8) {
                             Text("Scanning Animated QR...")
                                 .font(.headline)
-                                .foregroundColor(.white)
+                                .foregroundStyle(.primary)
                             
                             ProgressView(value: scannerModel.scanProgress, total: 1.0)
-                                .progressViewStyle(LinearProgressViewStyle(tint: .green))
+                                .progressViewStyle(LinearProgressViewStyle(tint: .accentColor))
                                 .frame(height: 8)
                                 .padding(.horizontal)
                             
                             Text("\(Int(scannerModel.scanProgress * 100))%")
                                 .font(.caption)
-                                .foregroundColor(.white.opacity(0.8))
+                                .foregroundStyle(.white.opacity(0.8))
                         }
                         .padding()
                         .background(Color.black.opacity(0.8))
-                        .cornerRadius(16)
+                        .clipShape(.rect(cornerRadius: 16))
                         .padding(.bottom, 50)
                         .padding(.horizontal, 40)
                     } else {
                         Text("Scan Cashu Token, Lightning Request, or Address")
-                            .foregroundColor(.white)
+                            .foregroundStyle(.primary)
                             .font(.caption)
                             .padding()
                             .background(Color.black.opacity(0.6))
-                            .cornerRadius(20)
+                            .clipShape(.rect(cornerRadius: 20))
                             .padding(.bottom, 50)
                     }
                 }
@@ -126,10 +126,10 @@ struct ScannerWrapperView: View {
                     VStack {
                         Spacer()
                         Text(error)
-                            .foregroundColor(.white)
+                            .foregroundStyle(.primary)
                             .padding()
                             .background(Color.red)
-                            .cornerRadius(10)
+                            .clipShape(.rect(cornerRadius: 10))
                             .padding(.bottom, 100)
                     }
                 }
@@ -140,7 +140,7 @@ struct ScannerWrapperView: View {
                 ToolbarItem(placement: .navigationBarLeading) {
                     Button(action: { dismiss() }) {
                         Image(systemName: "xmark")
-                            .foregroundColor(.white)
+                            .foregroundStyle(.primary)
                     }
                 }
             }
@@ -360,7 +360,7 @@ class QRScannerViewController: UIViewController, AVCaptureMetadataOutputObjectsD
         // Initialize QR Code Frame View
         qrCodeFrameView = UIView()
         if let qrCodeFrameView = qrCodeFrameView {
-            qrCodeFrameView.layer.borderColor = UIColor.green.cgColor
+            qrCodeFrameView.layer.borderColor = UIColor.tintColor.cgColor
             qrCodeFrameView.layer.borderWidth = 2
             view.addSubview(qrCodeFrameView)
             view.bringSubviewToFront(qrCodeFrameView)

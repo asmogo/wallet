@@ -6,7 +6,7 @@ struct TransactionDetailView: View {
     let transaction: WalletTransaction
     @ObservedObject var settings = SettingsManager.shared
     
-    @State private var copyButtonText = "COPY"
+    @State private var copyButtonText = "Copy"
     @State private var showShareSheet = false
     
     /// Returns the content to display as QR code (token for Ecash, payment request for Lightning)
@@ -22,54 +22,45 @@ struct TransactionDetailView: View {
     
     var body: some View {
         NavigationStack {
-            ZStack {
-                Color.cashuBackground
-                    .ignoresSafeArea()
-                
-                VStack(spacing: 20) {
+            VStack(spacing: 20) {
                     // QR Code (for token or lightning payment request)
                     if let content = qrContent {
-                        ZStack {
-                            RoundedRectangle(cornerRadius: 16)
-                                .fill(Color.white)
-                                .frame(width: 280, height: 280)
-                            
-                            QRCodeView(content: content)
-                                .frame(width: 250, height: 250)
-                        }
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 16)
-                                .stroke(Color.cashuMutedText.opacity(0.3), lineWidth: 1)
-                        )
+                        QRCodeView(content: content)
+                            .frame(width: 250, height: 250)
+                            .padding()
+                            .background(Color.white, in: RoundedRectangle(cornerRadius: 16))
                         .padding(.top, 20)
                     } else {
                         // Placeholder icon if no QR content
                         Image(systemName: kindIcon)
-                            .font(.system(size: 80))
-                            .foregroundColor(settings.accentColor)
+                            .font(.largeTitle)
+        .foregroundStyle(Color.accentColor)
                             .padding(.top, 40)
+                            .accessibilityHidden(true)
                     }
                     
                     // Amount
                     Text(settings.formatAmountShort(transaction.amount))
-                        .font(.cashuBalanceMedium)
-                        .foregroundColor(.white)
+                        .font(.title.bold())
+                        .accessibilityLabel("Amount: \(settings.formatAmountShort(transaction.amount)) sats")
+                        .accessibilityValue("\(settings.formatAmountShort(transaction.amount)) sats")
                     
                     // Status badge with icon
                     statusBadge
                     
                     // Info Rows
-                    VStack(spacing: 16) {
+                    VStack(spacing: 12) {
                         // Show fee for outgoing ecash transactions
                         if transaction.kind == .ecash && transaction.type == .outgoing {
-                            detailRow(icon: "arrow.up.arrow.down", label: "Fee", value: "\(transaction.fee) sat")
+                            LabeledContent("Fee", value: "\(transaction.fee) sat")
                         }
-                        detailRow(icon: "camera.viewfinder", label: "Unit", value: settings.unitLabel.uppercased())
-                        detailRow(icon: "info.circle", label: "State", value: transaction.status.displayText, valueColor: statusColor)
+                        LabeledContent("Unit", value: settings.unitLabel.uppercased())
+                        LabeledContent("State", value: transaction.status.displayText)
                         if let mintUrl = transaction.mintUrl {
-                            detailRow(icon: "building.columns", label: "Mint", value: extractMintHost(mintUrl))
+                            LabeledContent("Mint", value: extractMintHost(mintUrl))
                         }
                     }
+                    .font(.subheadline)
                     .padding(.horizontal)
                     
                     Spacer()
@@ -80,22 +71,26 @@ struct TransactionDetailView: View {
                             Button(action: { copyContent(content) }) {
                                 HStack {
                                     Image(systemName: copyButtonText == "COPIED" ? "checkmark" : "doc.on.doc")
+                                        .accessibilityHidden(true)
                                     Text(copyButtonText)
                                 }
                             }
-                            .buttonStyle(CashuPrimaryButtonStyle())
-                            
+                            .glassButton()
+                            .accessibilityLabel(copyButtonText == "COPIED" ? "Copied" : "Copy \(transaction.kind == .ecash ? "token" : "invoice")")
+                            .accessibilityHint("Copies the \(transaction.kind == .ecash ? "ecash token" : "lightning invoice") to clipboard")
+
                             Button(action: { showShareSheet = true }) {
                                 Image(systemName: "square.and.arrow.up")
                             }
-                            .buttonStyle(CashuSecondaryButtonStyle())
+                            .glassButton()
                             .frame(width: 50)
+                            .accessibilityLabel("Share")
+                            .accessibilityHint("Opens share sheet for this \(transaction.kind == .ecash ? "token" : "invoice")")
                         }
                         .padding(.horizontal)
                     }
                     
                     Spacer(minLength: 20)
-                }
             }
             .navigationTitle(titleForTransaction)
             .navigationBarTitleDisplayMode(.inline)
@@ -112,14 +107,13 @@ struct TransactionDetailView: View {
                 ToolbarItem(placement: .navigationBarLeading) {
                     Button(action: { dismiss() }) {
                         Image(systemName: "xmark")
-                            .foregroundColor(.white)
                     }
+                    .accessibilityLabel("Close")
                 }
-                
+
                 ToolbarItem(placement: .principal) {
                     Text(titleForTransaction)
                         .font(.headline)
-                        .foregroundColor(.white)
                 }
             }
         }
@@ -146,12 +140,15 @@ struct TransactionDetailView: View {
     private var statusBadge: some View {
         HStack(spacing: 8) {
             Image(systemName: statusIcon)
-                .foregroundColor(statusColor)
+                .foregroundStyle(statusColor)
+                .accessibilityHidden(true)
             Text(statusText)
                 .font(.title3)
                 .fontWeight(.semibold)
-                .foregroundColor(statusColor)
+                .foregroundStyle(statusColor)
         }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("Status: \(statusText)")
     }
     
     private var statusIcon: String {
@@ -184,28 +181,12 @@ struct TransactionDetailView: View {
     private var statusColor: Color {
         switch transaction.status {
         case .completed:
-            return settings.accentColor
+            return Color.accentColor
         case .pending:
-            return .cashuWarning
+            return .orange
         case .failed:
-            return .cashuError
+            return .red
         }
-    }
-    
-    private func detailRow(icon: String, label: String, value: String, valueColor: Color = .white) -> some View {
-        HStack {
-            HStack(spacing: 8) {
-                Image(systemName: icon)
-                    .font(.caption)
-                    .foregroundColor(.cashuMutedText)
-                Text(label)
-                    .foregroundColor(.cashuMutedText)
-            }
-            Spacer()
-            Text(value)
-                .foregroundColor(valueColor)
-        }
-        .font(.subheadline)
     }
     
     private func extractMintHost(_ url: String) -> String {
@@ -225,7 +206,7 @@ struct TransactionDetailView: View {
         // Show "COPIED" feedback for 3 seconds
         copyButtonText = "COPIED"
         DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
-            copyButtonText = "COPY"
+            copyButtonText = "Copy"
         }
     }
 }
