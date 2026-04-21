@@ -111,7 +111,7 @@ class TransactionService: ObservableObject {
         if let walletDatabase = walletDatabase() {
             do {
                 let pendingMintQuotes = try await walletDatabase.getUnissuedMintQuotes()
-                let pendingQuoteTransactions = pendingTransactions(
+                let pendingQuoteTransactions = await pendingTransactions(
                     from: pendingMintQuotes,
                     trackedMintUrls: trackedMintUrls,
                     timestamps: &mintQuoteTimestamps
@@ -347,15 +347,17 @@ class TransactionService: ObservableObject {
         from quotes: [MintQuote],
         trackedMintUrls: Set<String>,
         timestamps: inout [String: TimeInterval]
-    ) -> [WalletTransaction] {
-        quotes.compactMap { quote in
+    ) async -> [WalletTransaction] {
+        var transactions: [WalletTransaction] = []
+
+        for quote in quotes {
             guard trackedMintUrls.contains(quote.mintUrl.url) else {
-                return nil
+                continue
             }
 
             let paymentMethod = PaymentMethodKind.from(quote.paymentMethod)
             guard let paymentMethod else {
-                return nil
+                continue
             }
 
             let amount = quote.amount?.value
@@ -363,25 +365,50 @@ class TransactionService: ObservableObject {
                 ?? (quote.amountIssued.value > 0 ? quote.amountIssued.value : nil)
 
             guard let amount, amount > 0 else {
-                return nil
+                continue
             }
 
             let timestamp = timestamps[quote.id] ?? Date().timeIntervalSince1970
             timestamps[quote.id] = timestamp
+            let createdAt = Date(timeIntervalSince1970: timestamp)
 
-            return WalletTransaction(
+            var storedPaymentProof = getPreimage(quoteId: quote.id)
+            var statusNote: String?
+
+            if paymentMethod == .onchain,
+               let observation = await OnchainExplorer.observePayment(
+                for: quote.request,
+                mintURL: quote.mintUrl.url,
+                expectedAmount: amount,
+                createdAfter: createdAt
+               ) {
+                storedPaymentProof = observation.txid
+                statusNote = observation.statusText
+
+                if getPreimage(quoteId: quote.id) != observation.txid {
+                    savePreimage(quoteId: quote.id, preimage: observation.txid)
+                }
+            } else if paymentMethod == .onchain, storedPaymentProof != nil {
+                statusNote = "Payment detected on-chain"
+            }
+
+            transactions.append(WalletTransaction(
                 id: quote.id,
                 amount: amount,
                 type: .incoming,
                 kind: paymentMethod == .onchain ? .onchain : .lightning,
-                date: Date(timeIntervalSince1970: timestamp),
+                date: createdAt,
                 memo: nil,
                 status: .pending,
+                statusNote: statusNote,
                 mintUrl: quote.mintUrl.url,
+                preimage: storedPaymentProof,
                 token: nil,
                 invoice: quote.request
-            )
+            ))
         }
+
+        return transactions
     }
 
     private func loadMintQuoteTimestamps() -> [String: TimeInterval] {

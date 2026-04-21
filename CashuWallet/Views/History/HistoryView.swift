@@ -142,9 +142,10 @@ struct HistoryView: View {
                         .foregroundStyle(amountColor(transaction))
 
                     if transaction.status == .pending {
-                        Text("Pending")
+                        Text(transaction.displayStatusText)
                             .font(.subheadline)
                             .foregroundStyle(.secondary)
+                            .multilineTextAlignment(.trailing)
                     }
                 }
 
@@ -168,7 +169,7 @@ struct HistoryView: View {
             }
         }
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("\(transaction.kind.displayName) transaction, \(formatAmount(transaction)) sats, \(transaction.status == .pending ? "pending" : "completed"), \(formatRelativeDate(transaction.date))")
+        .accessibilityLabel("\(transaction.kind.displayName) transaction, \(formatAmount(transaction)) sats, \(transaction.status == .pending ? transaction.displayStatusText.lowercased() : "completed"), \(formatRelativeDate(transaction.date))")
         .accessibilityHint("Opens transaction details")
     }
 

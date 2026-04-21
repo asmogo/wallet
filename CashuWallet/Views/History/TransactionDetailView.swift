@@ -76,7 +76,7 @@ struct TransactionDetailView: View {
                             LabeledContent("Fee", value: "\(transaction.fee) sat")
                         }
                         LabeledContent("Unit", value: settings.unitLabel.uppercased())
-                        LabeledContent("State", value: transaction.status.displayText)
+                        LabeledContent("State", value: transaction.displayStatusText)
                         if let mintUrl = transaction.mintUrl {
                             LabeledContent("Mint", value: extractMintHost(mintUrl))
                         }
@@ -92,6 +92,10 @@ struct TransactionDetailView: View {
                                 value: paymentProof,
                                 monospaced: true
                             )
+                        }
+                        if let explorerURL = onchainExplorerURL {
+                            Link("View in block explorer", destination: explorerURL)
+                                .font(.footnote.weight(.medium))
                         }
                     }
                     .font(.subheadline)
@@ -222,7 +226,7 @@ struct TransactionDetailView: View {
                 return transaction.type == .incoming ? "Received!" : "Sent!"
             }
         case .pending:
-            return "Pending"
+            return transaction.displayStatusText
         case .failed:
             return "Failed"
         }
@@ -255,6 +259,26 @@ struct TransactionDetailView: View {
             return urlObj.host ?? url
         }
         return url
+    }
+
+    private var onchainExplorerURL: URL? {
+        guard transaction.kind == .onchain else {
+            return nil
+        }
+
+        if let txid = transaction.preimage {
+            return OnchainExplorer.transactionWebURL(
+                for: txid,
+                address: transaction.invoice,
+                mintURL: transaction.mintUrl
+            )
+        }
+
+        guard let address = transaction.invoice else {
+            return nil
+        }
+
+        return OnchainExplorer.addressWebURL(for: address, mintURL: transaction.mintUrl)
     }
 
     private func detailValueRow(title: String, value: String, monospaced: Bool = false) -> some View {

@@ -154,6 +154,224 @@ enum PaymentRequestParser {
     }
 }
 
+struct OnchainPaymentObservation: Equatable {
+    let txid: String
+    let amount: UInt64
+    let confirmed: Bool
+    let confirmations: Int?
+
+    var statusText: String {
+        if let confirmations, confirmations > 0 {
+            let suffix = confirmations == 1 ? "" : "s"
+            return "Payment confirmed on-chain (\(confirmations) confirmation\(suffix))"
+        }
+
+        return confirmed ? "Payment detected on-chain" : "Payment seen in mempool"
+    }
+
+    func hasRequiredConfirmations(_ requiredConfirmations: Int?) -> Bool {
+        guard confirmed else { return false }
+        guard let requiredConfirmations, requiredConfirmations > 0 else {
+            return true
+        }
+        return (confirmations ?? 1) >= requiredConfirmations
+    }
+}
+
+enum OnchainExplorer {
+    private struct ExplorerDescriptor {
+        let webBaseURL: String
+        let apiBaseURL: String
+    }
+
+    private struct ExplorerTransaction: Decodable {
+        let txid: String
+        let status: ExplorerTransactionStatus
+        let vout: [ExplorerTransactionOutput]
+    }
+
+    private struct ExplorerTransactionStatus: Decodable {
+        let confirmed: Bool
+        let blockHeight: Int?
+        let blockTime: Int?
+
+        private enum CodingKeys: String, CodingKey {
+            case confirmed
+            case blockHeight = "block_height"
+            case blockTime = "block_time"
+        }
+    }
+
+    private struct ExplorerTransactionOutput: Decodable {
+        let scriptpubkeyAddress: String?
+        let value: UInt64
+
+        private enum CodingKeys: String, CodingKey {
+            case scriptpubkeyAddress = "scriptpubkey_address"
+            case value
+        }
+    }
+
+    static func addressWebURL(for address: String, mintURL: String?) -> URL? {
+        guard let descriptor = descriptor(for: address, mintURL: mintURL) else {
+            return nil
+        }
+
+        let normalizedAddress = PaymentRequestParser.normalizeBitcoinRequest(address)
+        return URL(string: "\(descriptor.webBaseURL)/address/\(normalizedAddress)")
+    }
+
+    static func transactionWebURL(for txid: String, address: String? = nil, mintURL: String?) -> URL? {
+        guard let descriptor = descriptor(for: address, mintURL: mintURL) else {
+            return nil
+        }
+
+        return URL(string: "\(descriptor.webBaseURL)/tx/\(txid)")
+    }
+
+    static func observePayment(
+        for address: String,
+        mintURL: String?,
+        expectedAmount: UInt64,
+        createdAfter: Date
+    ) async -> OnchainPaymentObservation? {
+        guard let descriptor = descriptor(for: address, mintURL: mintURL) else {
+            return nil
+        }
+
+        let normalizedAddress = PaymentRequestParser.normalizeBitcoinRequest(address)
+        guard let url = URL(string: "\(descriptor.apiBaseURL)/address/\(normalizedAddress)/txs") else {
+            return nil
+        }
+
+        do {
+            var request = URLRequest(url: url)
+            request.timeoutInterval = 10
+
+            let (data, response) = try await URLSession.shared.data(for: request)
+            if let httpResponse = response as? HTTPURLResponse,
+               !(200...299).contains(httpResponse.statusCode) {
+                AppLogger.wallet.error("Failed to inspect on-chain address activity: HTTP \(httpResponse.statusCode)")
+                return nil
+            }
+
+            let transactions = try JSONDecoder().decode([ExplorerTransaction].self, from: data)
+            let earliestBlockTime = Int(createdAfter.timeIntervalSince1970)
+            let normalizedAddressLowercased = normalizedAddress.lowercased()
+            let tipHeight = try await currentTipHeight(using: descriptor)
+
+            for transaction in transactions {
+                let matchingAmount = transaction.vout
+                    .filter { $0.scriptpubkeyAddress?.lowercased() == normalizedAddressLowercased }
+                    .map(\.value)
+                    .max() ?? 0
+
+                guard matchingAmount >= expectedAmount else {
+                    continue
+                }
+
+                if let blockTime = transaction.status.blockTime, blockTime < earliestBlockTime {
+                    continue
+                }
+
+                return OnchainPaymentObservation(
+                    txid: transaction.txid,
+                    amount: matchingAmount,
+                    confirmed: transaction.status.confirmed,
+                    confirmations: confirmations(
+                        for: transaction.status,
+                        tipHeight: tipHeight
+                    )
+                )
+            }
+        } catch {
+            AppLogger.wallet.error("Failed to inspect on-chain address activity: \(error)")
+        }
+
+        return nil
+    }
+
+    private static func descriptor(for address: String?, mintURL: String?) -> ExplorerDescriptor? {
+        let mintHost = mintURL.flatMap { URL(string: $0)?.host?.lowercased() }
+        if mintHost == "onchain.cashudevkit.org" {
+            return ExplorerDescriptor(
+                webBaseURL: "https://mutinynet.com",
+                apiBaseURL: "https://mutinynet.com/api"
+            )
+        }
+
+        let normalizedAddress = address.map(PaymentRequestParser.normalizeBitcoinRequest)?.lowercased() ?? ""
+
+        if normalizedAddress.hasPrefix("bc1")
+            || normalizedAddress.hasPrefix("1")
+            || normalizedAddress.hasPrefix("3") {
+            return ExplorerDescriptor(
+                webBaseURL: "https://mempool.space",
+                apiBaseURL: "https://mempool.space/api"
+            )
+        }
+
+        if normalizedAddress.hasPrefix("tb1")
+            || normalizedAddress.hasPrefix("m")
+            || normalizedAddress.hasPrefix("n")
+            || normalizedAddress.hasPrefix("2") {
+            return ExplorerDescriptor(
+                webBaseURL: "https://mempool.space/signet",
+                apiBaseURL: "https://mempool.space/signet/api"
+            )
+        }
+
+        guard mintHost != nil else {
+            return nil
+        }
+
+        return ExplorerDescriptor(
+            webBaseURL: "https://mempool.space/signet",
+            apiBaseURL: "https://mempool.space/signet/api"
+        )
+    }
+
+    private static func currentTipHeight(using descriptor: ExplorerDescriptor) async throws -> Int? {
+        guard let url = URL(string: "\(descriptor.apiBaseURL)/blocks/tip/height") else {
+            return nil
+        }
+
+        var request = URLRequest(url: url)
+        request.timeoutInterval = 10
+
+        let (data, response) = try await URLSession.shared.data(for: request)
+        if let httpResponse = response as? HTTPURLResponse,
+           !(200...299).contains(httpResponse.statusCode) {
+            return nil
+        }
+
+        guard let responseString = String(data: data, encoding: .utf8)?
+            .trimmingCharacters(in: .whitespacesAndNewlines),
+              let tipHeight = Int(responseString) else {
+            return nil
+        }
+
+        return tipHeight
+    }
+
+    private static func confirmations(
+        for status: ExplorerTransactionStatus,
+        tipHeight: Int?
+    ) -> Int? {
+        guard status.confirmed else {
+            return nil
+        }
+
+        guard let blockHeight = status.blockHeight,
+              let tipHeight,
+              tipHeight >= blockHeight else {
+            return 1
+        }
+
+        return tipHeight - blockHeight + 1
+    }
+}
+
 /// Mint information
 struct MintInfo: Identifiable, Equatable, Codable {
     var id: String { url }
@@ -279,6 +497,7 @@ struct WalletTransaction: Identifiable {
     let date: Date
     let memo: String?
     var status: TransactionStatus
+    var statusNote: String? = nil
     
     /// Associated mint URL
     var mintUrl: String?
@@ -297,6 +516,14 @@ struct WalletTransaction: Identifiable {
     
     /// Whether this is from pending storage vs. completed transactions
     var isPendingToken: Bool = false
+
+    var displayStatusText: String {
+        if status == .pending {
+            return statusNote ?? status.displayText
+        }
+
+        return status.displayText
+    }
     
     enum TransactionType {
         case incoming   // Mint or receive

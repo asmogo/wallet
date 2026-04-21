@@ -21,6 +21,8 @@ struct ReceiveLightningView: View {
     @State private var expiryTimeRemaining: TimeInterval = 0
     @State private var expiryTimer: Timer?
     @State private var isExpired = false
+    @State private var onchainObservation: OnchainPaymentObservation?
+    @State private var quoteCreatedAt: Date?
 
     var body: some View {
         NavigationStack {
@@ -71,6 +73,7 @@ struct ReceiveLightningView: View {
             }
             .onChange(of: selectedMethod) {
                 errorMessage = nil
+                onchainObservation = nil
             }
             .onDisappear {
                 quoteStatusTask?.cancel()
@@ -344,7 +347,7 @@ struct ReceiveLightningView: View {
                     statusBadge
 
                     if let explorerURL = blockExplorerURL(for: quote) {
-                        Link("View address in block explorer", destination: explorerURL)
+                        Link(blockExplorerLabel(for: quote), destination: explorerURL)
                             .font(.subheadline.weight(.medium))
                     }
 
@@ -476,6 +479,18 @@ struct ReceiveLightningView: View {
         case .bolt11, .bolt12:
             return "Waiting for payment..."
         case .onchain:
+            if let observation = onchainObservation {
+                if observation.hasRequiredConfirmations(walletManager.activeMint?.onchainMintConfirmations) {
+                    return "\(observation.statusText). Waiting for mint credit..."
+                }
+                if let requiredConfirmations = walletManager.activeMint?.onchainMintConfirmations,
+                   let confirmations = observation.confirmations {
+                    let remainingConfirmations = max(requiredConfirmations - confirmations, 0)
+                    let suffix = remainingConfirmations == 1 ? "" : "s"
+                    return "\(observation.statusText). Waiting for \(remainingConfirmations) more confirmation\(suffix)..."
+                }
+                return "\(observation.statusText). Waiting for mint credit..."
+            }
             if let confirmations = walletManager.activeMint?.onchainMintConfirmations {
                 let suffix = confirmations == 1 ? "" : "s"
                 return "Waiting for \(confirmations) confirmation\(suffix)..."
@@ -526,6 +541,11 @@ struct ReceiveLightningView: View {
     private func quoteStateText(for quote: MintQuoteInfo) -> String {
         if isPaid { return "Paid" }
         if isExpired { return "Expired" }
+        if quote.paymentMethod == .onchain,
+           quote.state == .pending,
+           let observation = onchainObservation {
+            return observation.statusText
+        }
 
         switch quote.state {
         case .issued:
@@ -544,19 +564,25 @@ struct ReceiveLightningView: View {
     private func blockExplorerURL(for quote: MintQuoteInfo) -> URL? {
         guard quote.paymentMethod == .onchain else { return nil }
 
-        let normalizedAddress = quote.request.trimmingCharacters(in: .whitespacesAndNewlines)
-        let lowercaseAddress = normalizedAddress.lowercased()
-        let baseURL: String
-
-        if lowercaseAddress.hasPrefix("bc1")
-            || lowercaseAddress.hasPrefix("1")
-            || lowercaseAddress.hasPrefix("3") {
-            baseURL = "https://mempool.space/address/"
-        } else {
-            baseURL = "https://mempool.space/signet/address/"
+        if let txid = onchainObservation?.txid {
+            return OnchainExplorer.transactionWebURL(
+                for: txid,
+                address: quote.request,
+                mintURL: walletManager.activeMint?.url
+            )
         }
 
-        return URL(string: baseURL + normalizedAddress)
+        return OnchainExplorer.addressWebURL(for: quote.request, mintURL: walletManager.activeMint?.url)
+    }
+
+    private func blockExplorerLabel(for quote: MintQuoteInfo) -> String {
+        guard quote.paymentMethod == .onchain else {
+            return "View in block explorer"
+        }
+
+        return onchainObservation == nil
+            ? "View address in block explorer"
+            : "View transaction in block explorer"
     }
 
     private func syncSelectedMethodWithActiveMint() {
@@ -580,16 +606,20 @@ struct ReceiveLightningView: View {
         isPaid = false
         isExpired = false
         copiedRequest = false
+        onchainObservation = nil
+        quoteCreatedAt = nil
         expiryTimeRemaining = 0
         quoteStatusTask?.cancel()
         expiryTimer?.invalidate()
 
         Task { @MainActor in
             do {
-                mintQuote = try await walletManager.createMintQuote(
+                let quote = try await walletManager.createMintQuote(
                     amount: amountValue,
                     method: selectedMethod
                 )
+                quoteCreatedAt = Date()
+                mintQuote = quote
             } catch {
                 errorMessage = "Failed: \(error.localizedDescription)"
             }
@@ -635,6 +665,7 @@ struct ReceiveLightningView: View {
             case .bolt12:
                 await monitorMintQuoteViaSubscription(quoteId: quote.id, paymentMethod: .bolt12)
             case .onchain:
+                await refreshMintQuoteStatus()
                 await pollMintQuote(quoteId: quote.id, initialInterval: 30, maxInterval: 30)
             }
         }
@@ -702,6 +733,20 @@ struct ReceiveLightningView: View {
             let updatedQuote = try await walletManager.checkMintQuote(quoteId: quote.id)
             mintQuote = updatedQuote
 
+            if updatedQuote.paymentMethod == .onchain, updatedQuote.state == .pending {
+                await refreshOnchainObservation(for: updatedQuote)
+                if let observation = onchainObservation,
+                   observation.hasRequiredConfirmations(walletManager.activeMint?.onchainMintConfirmations) {
+                    AppLogger.wallet.info(
+                        "On-chain quote \(updatedQuote.id, privacy: .public) has enough explorer confirmations; attempting mint even though quote state is still pending"
+                    )
+                    await mintQuoteIfReady(updatedQuote)
+                    return
+                }
+            } else {
+                onchainObservation = nil
+            }
+
             switch updatedQuote.state {
             case .pending:
                 return
@@ -713,6 +758,24 @@ struct ReceiveLightningView: View {
         } catch {
             // Ignore transient polling failures and keep monitoring.
         }
+    }
+
+    @MainActor
+    private func refreshOnchainObservation(for quote: MintQuoteInfo) async {
+        guard quote.paymentMethod == .onchain,
+              let amount = quote.amount,
+              let createdAt = quoteCreatedAt,
+              let mintURL = walletManager.activeMint?.url else {
+            onchainObservation = nil
+            return
+        }
+
+        onchainObservation = await OnchainExplorer.observePayment(
+            for: quote.request,
+            mintURL: mintURL,
+            expectedAmount: amount,
+            createdAfter: createdAt
+        )
     }
 
     @MainActor
