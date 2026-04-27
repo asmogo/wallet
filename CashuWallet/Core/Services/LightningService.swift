@@ -1,8 +1,6 @@
 import CryptoKit
 import Foundation
 import CashuDevKit
-import P256K
-import Security
 
 // MARK: - Lightning Service
 
@@ -107,13 +105,12 @@ class LightningService: ObservableObject {
         }
 
         if method == .onchain {
-            guard let walletDatabase = walletDatabase(), let amount else {
+            guard let amount else {
                 throw WalletError.notInitialized
             }
             return try await createOnchainMintQuote(
                 amount: amount,
-                activeMint: activeMint,
-                walletDatabase: walletDatabase
+                activeMint: activeMint
             )
         }
 
@@ -147,14 +144,6 @@ class LightningService: ObservableObject {
             AppLogger.wallet.info(
                 "Checking mint quote \(quoteId, privacy: .public) using stored mint \(existingQuote.mintUrl.url, privacy: .public) (active mint: \(activeMintURL, privacy: .public), method: \(storedPaymentMethod?.rawValue ?? "unknown", privacy: .public))"
             )
-
-            if storedPaymentMethod == .onchain {
-                return try await checkOnchainMintQuote(
-                    quoteId: quoteId,
-                    walletDatabase: walletDatabase,
-                    existingQuote: existingQuote
-                )
-            }
 
             let wallet = try await repo.getWallet(mintUrl: existingQuote.mintUrl, unit: .sat)
             let quote = try await wallet.checkMintQuote(quoteId: quoteId)
@@ -547,86 +536,23 @@ class LightningService: ObservableObject {
 
     private func createOnchainMintQuote(
         amount: UInt64,
-        activeMint: MintInfo,
-        walletDatabase: WalletSqliteDatabase
+        activeMint: MintInfo
     ) async throws -> MintQuoteInfo {
-        let quoteKeypair = try generateMintQuoteKeypair()
-        let requestBody = OnchainMintQuoteRequestBody(amount: amount, pubkey: quoteKeypair.pubkey)
-        let response: OnchainMintQuoteResponse = try await performOnchainRequest(
-            url: try onchainMintQuoteURL(for: activeMint.url),
-            method: "POST",
-            body: try JSONEncoder().encode(requestBody),
-            logContext: "On-chain mint quote create"
-        )
-
-        let storedQuote = makeStoredOnchainMintQuote(
-            response: response,
-            mintUrl: MintUrl(url: activeMint.url),
-            secretKeyHex: quoteKeypair.secretKeyHex,
-            amount: amount,
-            usedByOperation: nil,
-            version: 0
-        )
-        try await walletDatabase.addMintQuote(quote: storedQuote)
-
-        return MintQuoteInfo(
-            id: response.quote,
-            request: response.request,
-            amount: amount,
-            paymentMethod: .onchain,
-            state: MintQuoteState(onchainQuoteState(from: response)),
-            expiry: normalizedExpiry(response.expiry)
-        )
-    }
-
-    private func checkOnchainMintQuote(
-        quoteId: String,
-        walletDatabase: WalletSqliteDatabase,
-        existingQuote: MintQuote
-    ) async throws -> MintQuoteInfo {
-        let statusURL = try onchainMintQuoteURL(for: existingQuote.mintUrl.url, quoteId: quoteId)
-        let response: OnchainMintQuoteResponse
-        do {
-            response = try await performOnchainRequest(
-                url: statusURL,
-                method: "GET",
-                logContext: "On-chain mint quote status \(quoteId)"
-            )
-        } catch let error as WalletError {
-            if case .networkError(let detail) = error,
-               detail.localizedCaseInsensitiveContains("not found") {
-                AppLogger.wallet.info(
-                    "On-chain mint quote status \(quoteId, privacy: .public) is missing on the mint. Keeping the stored quote and falling back to local pending state."
-                )
-                return mintQuoteInfo(
-                    from: existingQuote,
-                    fallbackAmount: existingQuote.amount?.value,
-                    paymentMethod: .onchain
-                )
-            }
-
-            throw error
+        guard let repo = walletRepository() else {
+            throw WalletError.notInitialized
         }
 
-        let updatedQuote = makeStoredOnchainMintQuote(
-            response: response,
-            mintUrl: existingQuote.mintUrl,
-            secretKeyHex: existingQuote.secretKey,
-            amount: existingQuote.amount?.value ?? response.amountPaid
-                ?? response.amountIssued,
-            usedByOperation: existingQuote.usedByOperation,
-            version: existingQuote.version
-        )
-        try await walletDatabase.addMintQuote(quote: updatedQuote)
+        let mintUrl = MintUrl(url: activeMint.url)
+        let wallet = try await repo.getWallet(mintUrl: mintUrl, unit: .sat)
 
-        return MintQuoteInfo(
-            id: response.quote,
-            request: response.request,
-            amount: updatedQuote.amount?.value,
-            paymentMethod: .onchain,
-            state: MintQuoteState(updatedQuote.state),
-            expiry: normalizedExpiry(response.expiry)
+        let quote = try await wallet.mintQuote(
+            paymentMethod: PaymentMethodKind.onchain.cdkMethod,
+            amount: Amount(value: amount),
+            description: nil,
+            extra: "{}"
         )
+
+        return mintQuoteInfo(from: quote, fallbackAmount: amount, paymentMethod: .onchain)
     }
 
     private func performOnchainRequest<Response: Decodable>(
@@ -1038,23 +964,6 @@ class LightningService: ObservableObject {
             .joined()
     }
 
-    private func onchainMintQuoteURL(for mintURLString: String, quoteId: String? = nil) throws -> URL {
-        guard var url = URL(string: mintURLString) else {
-            throw WalletError.networkError("Invalid mint URL.")
-        }
-
-        url.appendPathComponent("v1")
-        url.appendPathComponent("mint")
-        url.appendPathComponent("quote")
-        url.appendPathComponent(PaymentMethodKind.onchain.rawValue)
-
-        if let quoteId {
-            url.appendPathComponent(quoteId)
-        }
-
-        return url
-    }
-
     private func onchainMeltQuoteURL(for mintURLString: String, quoteId: String? = nil) throws -> URL {
         guard var url = URL(string: mintURLString) else {
             throw WalletError.networkError("Invalid mint URL.")
@@ -1070,31 +979,6 @@ class LightningService: ObservableObject {
         }
 
         return url
-    }
-
-    private func makeStoredOnchainMintQuote(
-        response: OnchainMintQuoteResponse,
-        mintUrl: MintUrl,
-        secretKeyHex: String?,
-        amount: UInt64?,
-        usedByOperation: String?,
-        version: UInt32
-    ) -> MintQuote {
-        MintQuote(
-            id: response.quote,
-            amount: amount.map(Amount.init(value:)),
-            unit: .sat,
-            request: response.request,
-            state: onchainQuoteState(from: response),
-            expiry: response.expiry ?? 0,
-            mintUrl: mintUrl,
-            amountIssued: Amount(value: response.amountIssued ?? 0),
-            amountPaid: Amount(value: response.amountPaid ?? 0),
-            paymentMethod: PaymentMethodKind.onchain.cdkMethod,
-            secretKey: secretKeyHex,
-            usedByOperation: usedByOperation,
-            version: version
-        )
     }
 
     private func makeStoredOnchainMeltQuote(
@@ -1116,47 +1000,6 @@ class LightningService: ObservableObject {
         )
     }
 
-    private func onchainQuoteState(from response: OnchainMintQuoteResponse) -> QuoteState {
-        if (response.amountIssued ?? 0) > 0 {
-            return .issued
-        }
-        if (response.amountPaid ?? 0) > 0 {
-            return .paid
-        }
-        return .unpaid
-    }
-
-    private func normalizedExpiry(_ expiry: UInt64?) -> UInt64? {
-        guard let expiry, expiry > 0 else {
-            return nil
-        }
-        return expiry
-    }
-
-    private func generateMintQuoteKeypair() throws -> MintQuoteKeypair {
-        let privateKeyBytes = try generateRandomPrivateKeyBytes()
-        let privateKey = try P256K.Schnorr.PrivateKey(dataRepresentation: privateKeyBytes)
-        let secretKeyHex = privateKey.dataRepresentation.map { String(format: "%02x", $0) }.joined()
-        let publicKeyHex = privateKey.xonly.bytes.map { String(format: "%02x", $0) }.joined()
-        return MintQuoteKeypair(secretKeyHex: secretKeyHex, pubkey: "02\(publicKeyHex)")
-    }
-
-    private func generateRandomPrivateKeyBytes() throws -> [UInt8] {
-        for _ in 0..<10 {
-            var randomBytes = [UInt8](repeating: 0, count: 32)
-            let status = SecRandomCopyBytes(kSecRandomDefault, randomBytes.count, &randomBytes)
-
-            guard status == errSecSuccess else {
-                throw WalletError.networkError("Failed to generate a secure quote key.")
-            }
-
-            if (try? P256K.Schnorr.PrivateKey(dataRepresentation: randomBytes)) != nil {
-                return randomBytes
-            }
-        }
-
-        throw WalletError.networkError("Failed to generate a valid quote key.")
-    }
 }
 
 private extension PaymentMethodKind {
@@ -1169,34 +1012,6 @@ private extension PaymentMethodKind {
         case .onchain:
             return nil
         }
-    }
-}
-
-private struct MintQuoteKeypair {
-    let secretKeyHex: String
-    let pubkey: String
-}
-
-private struct OnchainMintQuoteRequestBody: Encodable {
-    let amount: UInt64
-    let unit = "sat"
-    let description: String? = nil
-    let pubkey: String
-}
-
-private struct OnchainMintQuoteResponse: Decodable {
-    let quote: String
-    let request: String
-    let expiry: UInt64?
-    let amountPaid: UInt64?
-    let amountIssued: UInt64?
-
-    enum CodingKeys: String, CodingKey {
-        case quote
-        case request
-        case expiry
-        case amountPaid = "amount_paid"
-        case amountIssued = "amount_issued"
     }
 }
 
