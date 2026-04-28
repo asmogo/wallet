@@ -56,8 +56,12 @@ final class UserDefaultsStorage: StorageProtocol {
     }
     
     func get<T: Codable>(forKey key: String) throws -> T? {
-        guard let data = defaults.data(forKey: key) else { return nil }
-        return try decoder.decode(T.self, from: data)
+        if let data = defaults.data(forKey: key) {
+            return try decoder.decode(T.self, from: data)
+        }
+
+        // Legacy compatibility for values previously written directly to UserDefaults.
+        return defaults.object(forKey: key) as? T
     }
     
     func remove(forKey key: String) throws {
@@ -84,6 +88,8 @@ enum StorageKeys {
     static let pendingReceiveTokens = "wallet.pendingReceiveTokens"
     static let claimedTokens = "wallet.claimedTokens"
     static let transactions = "wallet.transactions"
+    static let savedTokens = "wallet.savedTokens"
+    static let paymentPreimages = "wallet.paymentPreimages"
     static let processedNPCQuotes = "wallet.processedNPCQuotes"
     
     // Settings

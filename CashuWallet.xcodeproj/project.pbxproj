@@ -63,6 +63,7 @@
 		DD00000000000003 /* HapticFeedback.swift in Sources */ = {isa = PBXBuildFile; fileRef = DD00000000000013 /* HapticFeedback.swift */; };
 		DD00000000000004 /* ErrorBannerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DD00000000000014 /* ErrorBannerView.swift */; };
 		EE00000000000003 /* SettingsStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = EE00000000000013 /* SettingsStore.swift */; };
+		EE00000000000002 /* WalletStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = EE00000000000012 /* WalletStore.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -120,6 +121,7 @@
 		DD00000000000013 /* HapticFeedback.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HapticFeedback.swift; sourceTree = "<group>"; };
 		DD00000000000014 /* ErrorBannerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ErrorBannerView.swift; sourceTree = "<group>"; };
 		EE00000000000013 /* SettingsStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsStore.swift; sourceTree = "<group>"; };
+		EE00000000000012 /* WalletStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WalletStore.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -188,6 +190,7 @@
 				2100000000000004 /* WalletManager.swift */,
 				2100000000000005 /* KeychainService.swift */,
 				EE00000000000013 /* SettingsStore.swift */,
+				EE00000000000012 /* WalletStore.swift */,
 				DD00000000000011 /* AppLogger.swift */,
 				DD00000000000012 /* BIP39WordList.swift */,
 				DD00000000000013 /* HapticFeedback.swift */,
@@ -470,6 +473,7 @@
 				DD00000000000003 /* HapticFeedback.swift in Sources */,
 				DD00000000000004 /* ErrorBannerView.swift in Sources */,
 				EE00000000000003 /* SettingsStore.swift in Sources */,
+				EE00000000000002 /* WalletStore.swift in Sources */,
 				264054F18D12335595328FBC /* LiquidGlassModifiers.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
