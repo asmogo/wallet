@@ -33,9 +33,14 @@ class WalletManager: ObservableObject {
     @Published var activeUnit: String = "sat"
     
     // MARK: - Services
+
+    private let walletStore = WalletStore()
     
     /// Mint management service
-    private(set) lazy var mintService = MintService(walletRepository: { [weak self] in self?.walletRepository })
+    private(set) lazy var mintService = MintService(
+        walletRepository: { [weak self] in self?.walletRepository },
+        walletStore: walletStore
+    )
     
     /// Transaction history service
     private(set) lazy var transactionService = TransactionService(
@@ -43,7 +48,8 @@ class WalletManager: ObservableObject {
         getTrackedMintUrls: { [weak self] in
             guard let self else { return [] }
             return self.trackedMintUrlsForWalletAccess()
-        }
+        },
+        walletStore: walletStore
     )
     
     /// Token operations service
