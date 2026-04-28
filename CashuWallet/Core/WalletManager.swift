@@ -6,6 +6,7 @@ import CashuDevKit
 
 /// Central wallet coordinator that orchestrates all wallet operations.
 /// Delegates to specialized services for specific functionality.
+/// Views should observe this facade instead of individual services.
 @MainActor
 class WalletManager: ObservableObject {
     
