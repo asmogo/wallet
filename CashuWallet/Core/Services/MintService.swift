@@ -14,7 +14,11 @@ class MintService: ObservableObject {
     @Published var mints: [MintInfo] = []
     
     /// Currently active mint
-    @Published var activeMint: MintInfo?
+    @Published var activeMint: MintInfo? {
+        didSet {
+            persistActiveMint()
+        }
+    }
     
     /// Whether an operation is in progress
     @Published var isLoading = false
@@ -23,6 +27,7 @@ class MintService: ObservableObject {
     
     private let walletRepository: () -> WalletRepository?
     private let storageKey = "savedMints"
+    private let activeMintStorageKey = StorageKeys.activeMintUrl
     
     // MARK: - Initialization
     
@@ -131,13 +136,12 @@ class MintService: ObservableObject {
                     }
                 }
                 
-                // Set first mint as active if none set
-                if activeMint == nil, let firstMint = mints.first {
-                    activeMint = firstMint
-                }
+                restoreActiveMint()
             } catch {
                 AppLogger.wallet.error("Failed to load mints: \(error)")
             }
+        } else {
+            restoreActiveMint()
         }
     }
     
@@ -240,6 +244,24 @@ class MintService: ObservableObject {
             UserDefaults.standard.set(data, forKey: storageKey)
         } catch {
             AppLogger.wallet.error("Failed to save mints: \(error)")
+        }
+    }
+
+    private func restoreActiveMint() {
+        let savedActiveMintUrl = UserDefaults.standard.string(forKey: activeMintStorageKey)
+        if let savedActiveMintUrl,
+           let savedActiveMint = mints.first(where: { $0.url == savedActiveMintUrl }) {
+            activeMint = savedActiveMint
+        } else {
+            activeMint = mints.first
+        }
+    }
+
+    private func persistActiveMint() {
+        if let activeMint {
+            UserDefaults.standard.set(activeMint.url, forKey: activeMintStorageKey)
+        } else {
+            UserDefaults.standard.removeObject(forKey: activeMintStorageKey)
         }
     }
 }
