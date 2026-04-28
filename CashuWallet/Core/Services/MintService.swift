@@ -14,7 +14,11 @@ class MintService: ObservableObject {
     @Published var mints: [MintInfo] = []
     
     /// Currently active mint
-    @Published var activeMint: MintInfo?
+    @Published var activeMint: MintInfo? {
+        didSet {
+            persistActiveMint()
+        }
+    }
     
     /// Whether an operation is in progress
     @Published var isLoading = false
@@ -22,6 +26,8 @@ class MintService: ObservableObject {
     // MARK: - Dependencies
     
     private let walletRepository: () -> WalletRepository?
+    private let storageKey = "savedMints"
+    private let activeMintStorageKey = StorageKeys.activeMintUrl
     private let walletStore: WalletStore
     
     // MARK: - Initialization
@@ -125,11 +131,28 @@ class MintService: ObservableObject {
         // Always call createWallet to ensure the unit is set, even if mint exists.
         for mint in mints {
             do {
+                mints = try JSONDecoder().decode([MintInfo].self, from: data)
+                
+                // Add each mint to wallet repository (with unit)
+                // Always call addMint to ensure the unit is set, even if mint exists
+                for mint in mints {
+                    do {
+                        let mintUrl = try MintUrl(url: mint.url)
+                        // Call createWallet even if hasMint returns true, to ensure unit is set
+                        try await repo.createWallet(mintUrl: mintUrl, unit: .sat, targetProofCount: nil)
+                    } catch {
+                        AppLogger.wallet.error("Failed to add mint \(mint.url): \(error)")
+                    }
+                }
+                
+                restoreActiveMint()
                 let mintUrl = try MintUrl(url: mint.url)
                 try await repo.createWallet(mintUrl: mintUrl, unit: .sat, targetProofCount: nil)
             } catch {
                 AppLogger.wallet.error("Failed to add mint \(mint.url): \(error)")
             }
+        } else {
+            restoreActiveMint()
         }
 
         if activeMint == nil, let firstMint = mints.first {
@@ -232,5 +255,23 @@ class MintService: ObservableObject {
     /// Save mints to persistent storage
     func saveMints() {
         walletStore.saveMints(mints)
+    }
+
+    private func restoreActiveMint() {
+        let savedActiveMintUrl = UserDefaults.standard.string(forKey: activeMintStorageKey)
+        if let savedActiveMintUrl,
+           let savedActiveMint = mints.first(where: { $0.url == savedActiveMintUrl }) {
+            activeMint = savedActiveMint
+        } else {
+            activeMint = mints.first
+        }
+    }
+
+    private func persistActiveMint() {
+        if let activeMint {
+            UserDefaults.standard.set(activeMint.url, forKey: activeMintStorageKey)
+        } else {
+            UserDefaults.standard.removeObject(forKey: activeMintStorageKey)
+        }
     }
 }
