@@ -152,6 +152,9 @@ class SettingsManager: ObservableObject {
         self.checkIncomingInvoices = UserDefaults.standard.object(forKey: "checkIncomingInvoices") as? Bool ?? true
         self.periodicallyCheckIncomingInvoices = UserDefaults.standard.object(forKey: "periodicallyCheckIncomingInvoices") as? Bool ?? true
         self.nostrRelays = UserDefaults.standard.stringArray(forKey: "nostrRelays") ?? Self.defaultNostrRelays
+
+        persistNWCConnections()
+        persistP2PKKeys()
         
         PriceService.shared.currencyCode = bitcoinPriceCurrency
         PriceService.shared.isEnabled = showFiatBalance
@@ -217,6 +220,8 @@ class SettingsManager: ObservableObject {
     }
 
     func removeNWCConnection(_ connection: NWCConnection) {
+        try? KeychainService().deleteSecret(forKey: Self.secureNWCWalletPrivateKey(connection.id))
+        try? KeychainService().deleteSecret(forKey: Self.secureNWCConnectionSecret(connection.id))
         nwcConnections.removeAll { $0.id == connection.id }
     }
 
@@ -258,6 +263,7 @@ class SettingsManager: ObservableObject {
     }
 
     func removeP2PKKey(_ key: P2PKKey) {
+        try? KeychainService().deleteSecret(forKey: Self.secureP2PKPrivateKey(key.id))
         p2pkKeys.removeAll { $0.id == key.id }
     }
     
@@ -266,10 +272,35 @@ class SettingsManager: ObservableObject {
               let decoded = try? JSONDecoder().decode([NWCConnection].self, from: data) else {
             return []
         }
-        return decoded
+        let keychain = KeychainService()
+        return decoded.map { connection in
+            let walletPrivateKey = secureSecret(
+                key: secureNWCWalletPrivateKey(connection.id),
+                legacyValue: connection.walletPrivateKey,
+                keychain: keychain
+            )
+            let connectionSecret = secureSecret(
+                key: secureNWCConnectionSecret(connection.id),
+                legacyValue: connection.connectionSecret,
+                keychain: keychain
+            )
+            return NWCConnection(
+                id: connection.id,
+                walletPublicKey: connection.walletPublicKey,
+                walletPrivateKey: walletPrivateKey,
+                connectionSecret: connectionSecret,
+                connectionPublicKey: connection.connectionPublicKey,
+                allowanceLeft: connection.allowanceLeft
+            )
+        }
     }
 
     private func persistNWCConnections() {
+        let keychain = KeychainService()
+        for connection in nwcConnections {
+            try? keychain.saveSecret(connection.walletPrivateKey, forKey: Self.secureNWCWalletPrivateKey(connection.id))
+            try? keychain.saveSecret(connection.connectionSecret, forKey: Self.secureNWCConnectionSecret(connection.id))
+        }
         guard let data = try? JSONEncoder().encode(nwcConnections) else { return }
         UserDefaults.standard.set(data, forKey: "nwcConnections")
     }
@@ -279,12 +310,52 @@ class SettingsManager: ObservableObject {
               let decoded = try? JSONDecoder().decode([P2PKKey].self, from: data) else {
             return []
         }
-        return decoded
+        let keychain = KeychainService()
+        return decoded.map { key in
+            let privateKey = secureSecret(
+                key: secureP2PKPrivateKey(key.id),
+                legacyValue: key.privateKey,
+                keychain: keychain
+            )
+            return P2PKKey(
+                id: key.id,
+                publicKey: key.publicKey,
+                privateKey: privateKey,
+                used: key.used,
+                usedCount: key.usedCount
+            )
+        }
     }
 
     private func persistP2PKKeys() {
+        let keychain = KeychainService()
+        for key in p2pkKeys {
+            try? keychain.saveSecret(key.privateKey, forKey: Self.secureP2PKPrivateKey(key.id))
+        }
         guard let data = try? JSONEncoder().encode(p2pkKeys) else { return }
         UserDefaults.standard.set(data, forKey: "p2pkKeys")
+    }
+
+    private static func secureSecret(key: String, legacyValue: String, keychain: KeychainService) -> String {
+        if let secret = try? keychain.loadSecret(forKey: key) {
+            return secret
+        }
+        if !legacyValue.isEmpty {
+            try? keychain.saveSecret(legacyValue, forKey: key)
+        }
+        return legacyValue
+    }
+
+    private static func secureNWCWalletPrivateKey(_ id: UUID) -> String {
+        "settings.nwc.\(id.uuidString).walletPrivateKey"
+    }
+
+    private static func secureNWCConnectionSecret(_ id: UUID) -> String {
+        "settings.nwc.\(id.uuidString).connectionSecret"
+    }
+
+    private static func secureP2PKPrivateKey(_ id: UUID) -> String {
+        "settings.p2pk.\(id.uuidString).privateKey"
     }
 
     private func generateRandomPrivateKeyBytes() throws -> [UInt8] {
@@ -390,6 +461,33 @@ struct NWCConnection: Identifiable, Codable, Hashable {
         self.connectionPublicKey = connectionPublicKey
         self.allowanceLeft = allowanceLeft
     }
+
+    private enum CodingKeys: String, CodingKey {
+        case id
+        case walletPublicKey
+        case walletPrivateKey
+        case connectionSecret
+        case connectionPublicKey
+        case allowanceLeft
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.id = try container.decodeIfPresent(UUID.self, forKey: .id) ?? UUID()
+        self.walletPublicKey = try container.decode(String.self, forKey: .walletPublicKey)
+        self.walletPrivateKey = try container.decodeIfPresent(String.self, forKey: .walletPrivateKey) ?? ""
+        self.connectionSecret = try container.decodeIfPresent(String.self, forKey: .connectionSecret) ?? ""
+        self.connectionPublicKey = try container.decode(String.self, forKey: .connectionPublicKey)
+        self.allowanceLeft = try container.decode(Int.self, forKey: .allowanceLeft)
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(id, forKey: .id)
+        try container.encode(walletPublicKey, forKey: .walletPublicKey)
+        try container.encode(connectionPublicKey, forKey: .connectionPublicKey)
+        try container.encode(allowanceLeft, forKey: .allowanceLeft)
+    }
 }
 
 struct P2PKKey: Identifiable, Codable, Hashable {
@@ -412,6 +510,31 @@ struct P2PKKey: Identifiable, Codable, Hashable {
         self.used = used
         self.usedCount = usedCount
     }
+
+    private enum CodingKeys: String, CodingKey {
+        case id
+        case publicKey
+        case privateKey
+        case used
+        case usedCount
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.id = try container.decodeIfPresent(UUID.self, forKey: .id) ?? UUID()
+        self.publicKey = try container.decode(String.self, forKey: .publicKey)
+        self.privateKey = try container.decodeIfPresent(String.self, forKey: .privateKey) ?? ""
+        self.used = try container.decode(Bool.self, forKey: .used)
+        self.usedCount = try container.decode(Int.self, forKey: .usedCount)
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(id, forKey: .id)
+        try container.encode(publicKey, forKey: .publicKey)
+        try container.encode(used, forKey: .used)
+        try container.encode(usedCount, forKey: .usedCount)
+    }
 }
 
 enum SettingsFeatureError: LocalizedError {
@@ -432,4 +555,3 @@ enum SettingsFeatureError: LocalizedError {
 }
 
 // MARK: - Theme Colors Extension
-
