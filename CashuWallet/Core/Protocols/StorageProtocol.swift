@@ -112,6 +112,12 @@ enum StorageKeys {
     static let nostrSignerType = "settings.nostrSignerType"
 
     enum Legacy {
+        static let mints = "savedMints"
+        static let pendingTokens = "pendingTokens"
+        static let pendingReceiveTokens = "pendingReceiveTokens"
+        static let claimedTokens = "claimedTokens"
+        static let savedTokens = "savedTokens"
+        static let paymentPreimages = "paymentPreimages"
         static let useBitcoinSymbol = "useBitcoinSymbol"
         static let showFiatBalance = "showFiatBalance"
         static let bitcoinPriceCurrency = "bitcoinPriceCurrency"
