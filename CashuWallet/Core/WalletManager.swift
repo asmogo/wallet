@@ -1,5 +1,6 @@
 import Foundation
 import SwiftUI
+import Combine
 import CashuDevKit
 
 // MARK: - Wallet Manager
@@ -103,13 +104,33 @@ class WalletManager: ObservableObject {
     private var mnemonic: String?
     private var hasInitialized = false
     private var npcQuoteObserver: NSObjectProtocol?
+    private var serviceChangeCancellables: Set<AnyCancellable> = []
     private let walletDatabaseDirectoryName = "cashu-swift"
     private let walletDatabaseFilename = "wallet.db"
     
     // MARK: - Initialization
     
     init() {
-        // Empty init - wallet is initialized via initialize() called from App
+        bindServiceChanges()
+    }
+
+    private func bindServiceChanges() {
+        [
+            mintService.objectWillChange.eraseToAnyPublisher(),
+            transactionService.objectWillChange.eraseToAnyPublisher(),
+            tokenService.objectWillChange.eraseToAnyPublisher(),
+            lightningService.objectWillChange.eraseToAnyPublisher()
+        ]
+        .forEach { publisher in
+            publisher
+                .receive(on: RunLoop.main)
+                .sink { [weak self] _ in
+                    Task { @MainActor in
+                        self?.objectWillChange.send()
+                    }
+                }
+                .store(in: &serviceChangeCancellables)
+        }
     }
     
     // MARK: - Public Initialization
