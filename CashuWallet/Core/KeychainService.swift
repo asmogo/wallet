@@ -2,7 +2,7 @@ import Foundation
 import Security
 
 /// Secure storage for the mnemonic seed phrase using iOS Keychain
-class KeychainService {
+class KeychainService: SecureStorageProtocol {
     private let serviceName = "com.cashu.wallet"
     private let mnemonicKey = "wallet_mnemonic"
     private let nostrPrivateKeyKey = "nostr_private_key"
@@ -90,34 +90,53 @@ class KeychainService {
     
     /// Save Nostr private key to Keychain (hex format)
     func saveNostrPrivateKey(_ privateKeyHex: String) throws {
-        guard let data = privateKeyHex.data(using: .utf8) else {
-            throw KeychainError.encodingFailed
-        }
-        
-        // Delete existing item first
-        try? deleteNostrPrivateKey()
-        
-        let query: [String: Any] = [
-            kSecClass as String: kSecClassGenericPassword,
-            kSecAttrService as String: serviceName,
-            kSecAttrAccount as String: nostrPrivateKeyKey,
-            kSecValueData as String: data,
-            kSecAttrAccessible as String: kSecAttrAccessibleWhenUnlockedThisDeviceOnly
-        ]
-        
-        let status = SecItemAdd(query as CFDictionary, nil)
-        
-        guard status == errSecSuccess else {
-            throw KeychainError.saveFailed(status)
-        }
+        try saveSecret(privateKeyHex, forKey: nostrPrivateKeyKey)
     }
     
     /// Load Nostr private key from Keychain
     func loadNostrPrivateKey() throws -> String? {
+        try loadSecret(forKey: nostrPrivateKeyKey)
+    }
+    
+    /// Delete Nostr private key from Keychain
+    func deleteNostrPrivateKey() throws {
+        try deleteSecret(forKey: nostrPrivateKeyKey)
+    }
+    
+    /// Check if custom Nostr private key exists
+    func hasNostrPrivateKey() -> Bool {
+        hasSecret(forKey: nostrPrivateKeyKey)
+    }
+
+    // MARK: - Generic Secure Storage
+
+    func saveSecret(_ secret: String, forKey key: String) throws {
+        guard let data = secret.data(using: .utf8) else {
+            throw KeychainError.encodingFailed
+        }
+
+        try? deleteSecret(forKey: key)
+
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: serviceName,
-            kSecAttrAccount as String: nostrPrivateKeyKey,
+            kSecAttrAccount as String: key,
+            kSecValueData as String: data,
+            kSecAttrAccessible as String: kSecAttrAccessibleWhenUnlockedThisDeviceOnly
+        ]
+
+        let status = SecItemAdd(query as CFDictionary, nil)
+
+        guard status == errSecSuccess else {
+            throw KeychainError.saveFailed(status)
+        }
+    }
+
+    func loadSecret(forKey key: String) throws -> String? {
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: serviceName,
+            kSecAttrAccount as String: key,
             kSecReturnData as String: true,
             kSecMatchLimit as String: kSecMatchLimitOne
         ]
@@ -140,13 +159,12 @@ class KeychainService {
         
         return privateKey
     }
-    
-    /// Delete Nostr private key from Keychain
-    func deleteNostrPrivateKey() throws {
+
+    func deleteSecret(forKey key: String) throws {
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: serviceName,
-            kSecAttrAccount as String: nostrPrivateKeyKey
+            kSecAttrAccount as String: key
         ]
         
         let status = SecItemDelete(query as CFDictionary)
@@ -156,10 +174,9 @@ class KeychainService {
         }
     }
     
-    /// Check if custom Nostr private key exists
-    func hasNostrPrivateKey() -> Bool {
+    func hasSecret(forKey key: String) -> Bool {
         do {
-            return try loadNostrPrivateKey() != nil
+            return try loadSecret(forKey: key) != nil
         } catch {
             return false
         }
