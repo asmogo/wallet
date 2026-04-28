@@ -48,7 +48,7 @@ class NostrService: ObservableObject {
     /// Current signer type
     @Published var signerType: NostrSignerType = .seed {
         didSet {
-            UserDefaults.standard.set(signerType.rawValue, forKey: "nostr_signer_type")
+            settingsStore.nostrSignerType = signerType.rawValue
         }
     }
     
@@ -57,12 +57,13 @@ class NostrService: ObservableObject {
     private var privateKey: P256K.Schnorr.PrivateKey?
     private var currentSeed: Data?  // Store seed for switching back
     private let keychain = KeychainService()
+    private let settingsStore = SettingsStore.shared
     
     // MARK: - Initialization
     
     private init() {
         // Load saved signer type
-        if let savedType = UserDefaults.standard.string(forKey: "nostr_signer_type"),
+        if let savedType = settingsStore.nostrSignerType,
            let type = NostrSignerType(rawValue: savedType) {
             self.signerType = type
         }
