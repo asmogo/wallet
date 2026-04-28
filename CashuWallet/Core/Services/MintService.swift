@@ -28,11 +28,16 @@ class MintService: ObservableObject {
     private let walletRepository: () -> WalletRepository?
     private let storageKey = "savedMints"
     private let activeMintStorageKey = StorageKeys.activeMintUrl
+    private let walletStore: WalletStore
     
     // MARK: - Initialization
     
-    init(walletRepository: @escaping () -> WalletRepository?) {
+    init(
+        walletRepository: @escaping () -> WalletRepository?,
+        walletStore: WalletStore = WalletStore()
+    ) {
         self.walletRepository = walletRepository
+        self.walletStore = walletStore
     }
     
     // MARK: - Public Methods
@@ -120,7 +125,11 @@ class MintService: ObservableObject {
     func loadMints() async {
         guard let repo = walletRepository() else { return }
         
-        if let data = UserDefaults.standard.data(forKey: storageKey) {
+        mints = walletStore.loadMints()
+
+        // Add each mint to wallet repository (with unit)
+        // Always call createWallet to ensure the unit is set, even if mint exists.
+        for mint in mints {
             do {
                 mints = try JSONDecoder().decode([MintInfo].self, from: data)
                 
@@ -137,11 +146,17 @@ class MintService: ObservableObject {
                 }
                 
                 restoreActiveMint()
+                let mintUrl = try MintUrl(url: mint.url)
+                try await repo.createWallet(mintUrl: mintUrl, unit: .sat, targetProofCount: nil)
             } catch {
-                AppLogger.wallet.error("Failed to load mints: \(error)")
+                AppLogger.wallet.error("Failed to add mint \(mint.url): \(error)")
             }
         } else {
             restoreActiveMint()
+        }
+
+        if activeMint == nil, let firstMint = mints.first {
+            activeMint = firstMint
         }
     }
     
@@ -239,12 +254,7 @@ class MintService: ObservableObject {
     
     /// Save mints to persistent storage
     func saveMints() {
-        do {
-            let data = try JSONEncoder().encode(mints)
-            UserDefaults.standard.set(data, forKey: storageKey)
-        } catch {
-            AppLogger.wallet.error("Failed to save mints: \(error)")
-        }
+        walletStore.saveMints(mints)
     }
 
     private func restoreActiveMint() {
