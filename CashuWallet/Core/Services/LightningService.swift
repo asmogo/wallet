@@ -99,7 +99,7 @@ class LightningService: ObservableObject {
         
         let mintUrl = try MintUrl(url: activeMint.url)
         let wallet = try await repo.getWallet(mintUrl: mintUrl, unit: .sat)
-        let parsedRequest = try parseMeltRequest(request)
+        let parsedRequest = try LightningRequestParser.parse(request)
         
         let quote = try await wallet.meltQuote(
             method: parsedRequest.method,
@@ -150,39 +150,6 @@ class LightningService: ObservableObject {
         )
     }
     
-    // MARK: - Payment Request Parsing
-    
-    private struct ParsedMeltRequest {
-        let request: String
-        let method: PaymentMethod
-    }
-    
-    private func parseMeltRequest(_ request: String) throws -> ParsedMeltRequest {
-        let normalizedRequest = normalizeLightningRequest(request)
-        let decodedRequest = try decodeInvoice(invoiceStr: normalizedRequest)
-        
-        let method: PaymentMethod
-        switch decodedRequest.paymentType {
-        case .bolt11:
-            method = .bolt11
-        case .bolt12:
-            method = .bolt12
-        }
-        
-        return ParsedMeltRequest(request: normalizedRequest, method: method)
-    }
-    
-    private func normalizeLightningRequest(_ request: String) -> String {
-        let trimmedRequest = request.trimmingCharacters(in: .whitespacesAndNewlines)
-        let lightningPrefix = "lightning:"
-        
-        if trimmedRequest.lowercased().hasPrefix(lightningPrefix) {
-            return String(trimmedRequest.dropFirst(lightningPrefix.count))
-        }
-        
-        return trimmedRequest
-    }
-
     /// Pay a Lightning invoice (melt tokens)
     /// - Parameter quoteId: The quote ID to melt
     /// - Returns: Payment preimage if successful
