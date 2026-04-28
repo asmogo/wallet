@@ -126,13 +126,6 @@ class SettingsManager: ObservableObject {
         }
     }
     
-    private lazy var decimalFormatter: NumberFormatter = {
-        let formatter = NumberFormatter()
-        formatter.numberStyle = .decimal
-        formatter.groupingSeparator = ","
-        return formatter
-    }()
-    
     // MARK: - Initialization
     
     init() {
@@ -335,13 +328,7 @@ class SettingsManager: ObservableObject {
     // MARK: - Formatting Helpers
     
     func formatAmount(_ sats: UInt64) -> String {
-        let formatted = decimalFormatter.string(from: NSNumber(value: sats)) ?? "\(sats)"
-        
-        if useBitcoinSymbol {
-            return "₿\(formatted)"
-        } else {
-            return "\(formatted) sat"
-        }
+        AmountFormatter.sats(sats, useBitcoinSymbol: useBitcoinSymbol)
     }
     
     func formatAmountShort(_ sats: UInt64) -> String {
@@ -353,7 +340,7 @@ class SettingsManager: ObservableObject {
     }
     
     func formatAmountBalance(_ sats: UInt64) -> String {
-        return decimalFormatter.string(from: NSNumber(value: sats)) ?? "\(sats)"
+        AmountFormatter.sats(sats, useBitcoinSymbol: false, includeUnit: false)
     }
     
     var unitSuffix: String {

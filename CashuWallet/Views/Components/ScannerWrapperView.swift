@@ -181,26 +181,7 @@ struct ScannerWrapperView: View {
     }
     
     private static func parseLightningPaymentRequest(_ content: String) -> String? {
-        let request = normalizedLightningRequest(content)
-        guard !request.isEmpty else { return nil }
-        
-        do {
-            _ = try decodeInvoice(invoiceStr: request)
-            return request
-        } catch {
-            return nil
-        }
-    }
-    
-    private static func normalizedLightningRequest(_ content: String) -> String {
-        let trimmed = content.trimmingCharacters(in: .whitespacesAndNewlines)
-        let lightningPrefix = "lightning:"
-        
-        if trimmed.lowercased().hasPrefix(lightningPrefix) {
-            return String(trimmed.dropFirst(lightningPrefix.count))
-        }
-        
-        return trimmed
+        try? LightningRequestParser.parse(content).request
     }
 
     private func handleScan(code: String) {
@@ -226,7 +207,7 @@ struct ScannerWrapperView: View {
         scannerModel.isScanning = false
         
         // Determine content type: Token (Receive) or Invoice (Pay/Melt)
-        if content.hasPrefix("cashu") {
+        if TokenParser.isCashuToken(content) {
             // Handle Ecash Token -> Show Detail View
             let generator = UINotificationFeedbackGenerator()
             generator.notificationOccurred(.success)

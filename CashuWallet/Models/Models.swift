@@ -190,19 +190,7 @@ struct TokenInfo {
     
     /// Parse a cashu token string
     static func parse(_ tokenString: String) -> TokenInfo? {
-        // Basic parsing - cdk-swift handles the actual token parsing
-        // This is for display purposes
-        
-        guard tokenString.hasPrefix("cashu") else { return nil }
-        
-        // For now, return placeholder - actual parsing done by cdk-swift
-        return TokenInfo(
-            amount: 0,
-            mint: "",
-            unit: "sat",
-            memo: nil,
-            proofCount: 0
-        )
+        TokenParser.tokenInfo(from: tokenString)
     }
 }
 
