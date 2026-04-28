@@ -65,6 +65,8 @@
 		EE00000000000004 /* TokenParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = EE00000000000014 /* TokenParser.swift */; };
 		EE00000000000005 /* AmountFormatter.swift in Sources */ = {isa = PBXBuildFile; fileRef = EE00000000000015 /* AmountFormatter.swift */; };
 		EE00000000000006 /* LightningRequestParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = EE00000000000016 /* LightningRequestParser.swift */; };
+		EE00000000000003 /* SettingsStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = EE00000000000013 /* SettingsStore.swift */; };
+		EE00000000000002 /* WalletStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = EE00000000000012 /* WalletStore.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -124,6 +126,8 @@
 		EE00000000000014 /* TokenParser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TokenParser.swift; sourceTree = "<group>"; };
 		EE00000000000015 /* AmountFormatter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AmountFormatter.swift; sourceTree = "<group>"; };
 		EE00000000000016 /* LightningRequestParser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LightningRequestParser.swift; sourceTree = "<group>"; };
+		EE00000000000013 /* SettingsStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsStore.swift; sourceTree = "<group>"; };
+		EE00000000000012 /* WalletStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WalletStore.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -194,6 +198,8 @@
 				EE00000000000014 /* TokenParser.swift */,
 				EE00000000000015 /* AmountFormatter.swift */,
 				EE00000000000016 /* LightningRequestParser.swift */,
+				EE00000000000013 /* SettingsStore.swift */,
+				EE00000000000012 /* WalletStore.swift */,
 				DD00000000000011 /* AppLogger.swift */,
 				DD00000000000012 /* BIP39WordList.swift */,
 				DD00000000000013 /* HapticFeedback.swift */,
@@ -478,6 +484,8 @@
 				EE00000000000004 /* TokenParser.swift in Sources */,
 				EE00000000000005 /* AmountFormatter.swift in Sources */,
 				EE00000000000006 /* LightningRequestParser.swift in Sources */,
+				EE00000000000003 /* SettingsStore.swift in Sources */,
+				EE00000000000002 /* WalletStore.swift in Sources */,
 				264054F18D12335595328FBC /* LiquidGlassModifiers.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

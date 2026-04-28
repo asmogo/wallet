@@ -24,23 +24,18 @@ class TransactionService: ObservableObject {
     private var claimedTokens: [ClaimedToken] = []
     private let walletRepository: () -> WalletRepository?
     private let getTrackedMintUrls: () -> [String]
-    
-    // Storage keys
-    private enum StorageKeys {
-        static let pendingTokens = "pendingTokens"
-        static let pendingReceiveTokens = "pendingReceiveTokens"
-        static let claimedTokens = "claimedTokens"
-        static let savedTokens = "savedTokens"
-    }
+    private let walletStore: WalletStore
     
     // MARK: - Initialization
     
     init(
         walletRepository: @escaping () -> WalletRepository?,
-        getTrackedMintUrls: @escaping () -> [String]
+        getTrackedMintUrls: @escaping () -> [String],
+        walletStore: WalletStore = WalletStore()
     ) {
         self.walletRepository = walletRepository
         self.getTrackedMintUrls = getTrackedMintUrls
+        self.walletStore = walletStore
     }
     
     // MARK: - Transaction Loading
@@ -135,30 +130,28 @@ class TransactionService: ObservableObject {
     
     /// Save a token string for later retrieval
     func saveToken(txId: String, token: String) {
-        var tokens = UserDefaults.standard.dictionary(forKey: StorageKeys.savedTokens) as? [String: String] ?? [:]
+        var tokens = walletStore.loadSavedTokens()
         tokens[txId] = token
-        UserDefaults.standard.set(tokens, forKey: StorageKeys.savedTokens)
+        walletStore.saveSavedTokens(tokens)
     }
     
     /// Get a stored token by transaction ID
     func getToken(txId: String) -> String? {
-        let tokens = UserDefaults.standard.dictionary(forKey: StorageKeys.savedTokens) as? [String: String]
-        return tokens?[txId]
+        walletStore.loadSavedTokens()[txId]
     }
     
     // MARK: - Preimage Persistence
 
     /// Save a Lightning payment preimage (proof of payment)
     func savePreimage(quoteId: String, preimage: String) {
-        var preimages = UserDefaults.standard.dictionary(forKey: "paymentPreimages") as? [String: String] ?? [:]
+        var preimages = walletStore.loadPaymentPreimages()
         preimages[quoteId] = preimage
-        UserDefaults.standard.set(preimages, forKey: "paymentPreimages")
+        walletStore.savePaymentPreimages(preimages)
     }
 
     /// Get a stored preimage by quote ID
     func getPreimage(quoteId: String) -> String? {
-        let preimages = UserDefaults.standard.dictionary(forKey: "paymentPreimages") as? [String: String]
-        return preimages?[quoteId]
+        walletStore.loadPaymentPreimages()[quoteId]
     }
 
     // MARK: - Pending Token Management (Outgoing)
@@ -176,26 +169,12 @@ class TransactionService: ObservableObject {
     
     /// Load pending tokens from storage
     func loadPendingTokens() {
-        if let data = UserDefaults.standard.data(forKey: StorageKeys.pendingTokens) {
-            do {
-                pendingTokens = try JSONDecoder().decode([PendingToken].self, from: data)
-            } catch {
-                AppLogger.wallet.error("Failed to load pending tokens: \(error)")
-                pendingTokens = []
-            }
-        } else {
-            pendingTokens = []
-        }
+        pendingTokens = walletStore.loadPendingTokens()
     }
     
     /// Persist pending tokens to storage
     private func persistPendingTokens() {
-        do {
-            let data = try JSONEncoder().encode(pendingTokens)
-            UserDefaults.standard.set(data, forKey: StorageKeys.pendingTokens)
-        } catch {
-            AppLogger.wallet.error("Failed to save pending tokens: \(error)")
-        }
+        walletStore.savePendingTokens(pendingTokens)
     }
     
     /// Remove a pending token (when claimed or confirmed spent)
@@ -243,26 +222,12 @@ class TransactionService: ObservableObject {
     
     /// Load pending receive tokens from storage
     func loadPendingReceiveTokens() {
-        if let data = UserDefaults.standard.data(forKey: StorageKeys.pendingReceiveTokens) {
-            do {
-                pendingReceiveTokens = try JSONDecoder().decode([PendingReceiveToken].self, from: data)
-            } catch {
-                AppLogger.wallet.error("Failed to load pending receive tokens: \(error)")
-                pendingReceiveTokens = []
-            }
-        } else {
-            pendingReceiveTokens = []
-        }
+        pendingReceiveTokens = walletStore.loadPendingReceiveTokens()
     }
     
     /// Persist pending receive tokens to storage
     private func persistPendingReceiveTokens() {
-        do {
-            let data = try JSONEncoder().encode(pendingReceiveTokens)
-            UserDefaults.standard.set(data, forKey: StorageKeys.pendingReceiveTokens)
-        } catch {
-            AppLogger.wallet.error("Failed to save pending receive tokens: \(error)")
-        }
+        walletStore.savePendingReceiveTokens(pendingReceiveTokens)
     }
     
     /// Remove a pending receive token (after claiming)
@@ -286,25 +251,11 @@ class TransactionService: ObservableObject {
     
     /// Load claimed tokens from storage
     func loadClaimedTokens() {
-        if let data = UserDefaults.standard.data(forKey: StorageKeys.claimedTokens) {
-            do {
-                claimedTokens = try JSONDecoder().decode([ClaimedToken].self, from: data)
-            } catch {
-                AppLogger.wallet.error("Failed to load claimed tokens: \(error)")
-                claimedTokens = []
-            }
-        } else {
-            claimedTokens = []
-        }
+        claimedTokens = walletStore.loadClaimedTokens()
     }
     
     /// Persist claimed tokens to storage
     private func persistClaimedTokens() {
-        do {
-            let data = try JSONEncoder().encode(claimedTokens)
-            UserDefaults.standard.set(data, forKey: StorageKeys.claimedTokens)
-        } catch {
-            AppLogger.wallet.error("Failed to save claimed tokens: \(error)")
-        }
+        walletStore.saveClaimedTokens(claimedTokens)
     }
 }

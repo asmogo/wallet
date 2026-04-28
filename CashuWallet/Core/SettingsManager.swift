@@ -6,6 +6,7 @@ import P256K
 @MainActor
 class SettingsManager: ObservableObject {
     static let shared = SettingsManager()
+    private let settingsStore = SettingsStore.shared
     
     static let supportedFiatCurrencies: [String] = [
         "USD", "EUR", "AUD", "BRL", "CAD", "CHF", "CNY", "CZK", "DKK", "GBP",
@@ -25,12 +26,12 @@ class SettingsManager: ObservableObject {
     // MARK: - Published Settings
     
     @Published var useBitcoinSymbol: Bool {
-        didSet { UserDefaults.standard.set(useBitcoinSymbol, forKey: "useBitcoinSymbol") }
+        didSet { settingsStore.useBitcoinSymbol = useBitcoinSymbol }
     }
     
     @Published var showFiatBalance: Bool {
         didSet { 
-            UserDefaults.standard.set(showFiatBalance, forKey: "showFiatBalance")
+            settingsStore.showFiatBalance = showFiatBalance
             // Enable/disable price service based on this setting
             PriceService.shared.isEnabled = showFiatBalance
         }
@@ -38,50 +39,50 @@ class SettingsManager: ObservableObject {
 
     @Published var bitcoinPriceCurrency: String {
         didSet {
-            UserDefaults.standard.set(bitcoinPriceCurrency, forKey: "bitcoinPriceCurrency")
+            settingsStore.bitcoinPriceCurrency = bitcoinPriceCurrency
             PriceService.shared.currencyCode = bitcoinPriceCurrency
         }
     }
 
     @Published var checkPendingOnStartup: Bool {
         didSet {
-            UserDefaults.standard.set(checkPendingOnStartup, forKey: "checkPendingOnStartup")
+            settingsStore.checkPendingOnStartup = checkPendingOnStartup
         }
     }
 
     @Published var checkSentTokens: Bool {
         didSet {
-            UserDefaults.standard.set(checkSentTokens, forKey: "checkSentTokens")
+            settingsStore.checkSentTokens = checkSentTokens
         }
     }
 
     @Published var autoPasteEcashReceive: Bool {
         didSet {
-            UserDefaults.standard.set(autoPasteEcashReceive, forKey: "autoPasteEcashReceive")
+            settingsStore.autoPasteEcashReceive = autoPasteEcashReceive
         }
     }
 
     @Published var useWebsockets: Bool {
         didSet {
-            UserDefaults.standard.set(useWebsockets, forKey: "useWebsockets")
+            settingsStore.useWebsockets = useWebsockets
         }
     }
 
     @Published var enablePaymentRequests: Bool {
         didSet {
-            UserDefaults.standard.set(enablePaymentRequests, forKey: "enablePaymentRequests")
+            settingsStore.enablePaymentRequests = enablePaymentRequests
         }
     }
 
     @Published var receivePaymentRequestsAutomatically: Bool {
         didSet {
-            UserDefaults.standard.set(receivePaymentRequestsAutomatically, forKey: "receivePaymentRequestsAutomatically")
+            settingsStore.receivePaymentRequestsAutomatically = receivePaymentRequestsAutomatically
         }
     }
 
     @Published var enableNWC: Bool {
         didSet {
-            UserDefaults.standard.set(enableNWC, forKey: "enableNWC")
+            settingsStore.enableNWC = enableNWC
             if enableNWC {
                 _ = generateNWCConnection()
             }
@@ -96,7 +97,7 @@ class SettingsManager: ObservableObject {
 
     @Published var showP2PKButtonInDrawer: Bool {
         didSet {
-            UserDefaults.standard.set(showP2PKButtonInDrawer, forKey: "showP2PKButtonInDrawer")
+            settingsStore.showP2PKButtonInDrawer = showP2PKButtonInDrawer
         }
     }
 
@@ -108,43 +109,43 @@ class SettingsManager: ObservableObject {
 
     @Published var checkIncomingInvoices: Bool {
         didSet {
-            UserDefaults.standard.set(checkIncomingInvoices, forKey: "checkIncomingInvoices")
+            settingsStore.checkIncomingInvoices = checkIncomingInvoices
             NPCService.shared.applyPollingPreferences()
         }
     }
 
     @Published var periodicallyCheckIncomingInvoices: Bool {
         didSet {
-            UserDefaults.standard.set(periodicallyCheckIncomingInvoices, forKey: "periodicallyCheckIncomingInvoices")
+            settingsStore.periodicallyCheckIncomingInvoices = periodicallyCheckIncomingInvoices
             NPCService.shared.applyPollingPreferences()
         }
     }
 
     @Published var nostrRelays: [String] {
         didSet {
-            UserDefaults.standard.set(nostrRelays, forKey: "nostrRelays")
+            settingsStore.nostrRelays = nostrRelays
         }
     }
     
     // MARK: - Initialization
     
     init() {
-        self.useBitcoinSymbol = UserDefaults.standard.object(forKey: "useBitcoinSymbol") as? Bool ?? false
-        self.showFiatBalance = UserDefaults.standard.object(forKey: "showFiatBalance") as? Bool ?? false
-        self.bitcoinPriceCurrency = UserDefaults.standard.string(forKey: "bitcoinPriceCurrency") ?? "USD"
-        self.checkPendingOnStartup = UserDefaults.standard.object(forKey: "checkPendingOnStartup") as? Bool ?? true
-        self.checkSentTokens = UserDefaults.standard.object(forKey: "checkSentTokens") as? Bool ?? true
-        self.autoPasteEcashReceive = UserDefaults.standard.object(forKey: "autoPasteEcashReceive") as? Bool ?? true
-        self.useWebsockets = UserDefaults.standard.object(forKey: "useWebsockets") as? Bool ?? true
-        self.enablePaymentRequests = UserDefaults.standard.object(forKey: "enablePaymentRequests") as? Bool ?? false
-        self.receivePaymentRequestsAutomatically = UserDefaults.standard.object(forKey: "receivePaymentRequestsAutomatically") as? Bool ?? false
-        self.enableNWC = UserDefaults.standard.object(forKey: "enableNWC") as? Bool ?? false
+        self.useBitcoinSymbol = settingsStore.useBitcoinSymbol
+        self.showFiatBalance = settingsStore.showFiatBalance
+        self.bitcoinPriceCurrency = settingsStore.bitcoinPriceCurrency
+        self.checkPendingOnStartup = settingsStore.checkPendingOnStartup
+        self.checkSentTokens = settingsStore.checkSentTokens
+        self.autoPasteEcashReceive = settingsStore.autoPasteEcashReceive
+        self.useWebsockets = settingsStore.useWebsockets
+        self.enablePaymentRequests = settingsStore.enablePaymentRequests
+        self.receivePaymentRequestsAutomatically = settingsStore.receivePaymentRequestsAutomatically
+        self.enableNWC = settingsStore.enableNWC
         self.nwcConnections = Self.loadNWCConnections()
-        self.showP2PKButtonInDrawer = UserDefaults.standard.object(forKey: "showP2PKButtonInDrawer") as? Bool ?? false
+        self.showP2PKButtonInDrawer = settingsStore.showP2PKButtonInDrawer
         self.p2pkKeys = Self.loadP2PKKeys()
-        self.checkIncomingInvoices = UserDefaults.standard.object(forKey: "checkIncomingInvoices") as? Bool ?? true
-        self.periodicallyCheckIncomingInvoices = UserDefaults.standard.object(forKey: "periodicallyCheckIncomingInvoices") as? Bool ?? true
-        self.nostrRelays = UserDefaults.standard.stringArray(forKey: "nostrRelays") ?? Self.defaultNostrRelays
+        self.checkIncomingInvoices = settingsStore.checkIncomingInvoices
+        self.periodicallyCheckIncomingInvoices = settingsStore.periodicallyCheckIncomingInvoices
+        self.nostrRelays = settingsStore.nostrRelays
         
         PriceService.shared.currencyCode = bitcoinPriceCurrency
         PriceService.shared.isEnabled = showFiatBalance
@@ -255,29 +256,19 @@ class SettingsManager: ObservableObject {
     }
     
     private static func loadNWCConnections() -> [NWCConnection] {
-        guard let data = UserDefaults.standard.data(forKey: "nwcConnections"),
-              let decoded = try? JSONDecoder().decode([NWCConnection].self, from: data) else {
-            return []
-        }
-        return decoded
+        SettingsStore.shared.nwcConnections
     }
 
     private func persistNWCConnections() {
-        guard let data = try? JSONEncoder().encode(nwcConnections) else { return }
-        UserDefaults.standard.set(data, forKey: "nwcConnections")
+        settingsStore.nwcConnections = nwcConnections
     }
 
     private static func loadP2PKKeys() -> [P2PKKey] {
-        guard let data = UserDefaults.standard.data(forKey: "p2pkKeys"),
-              let decoded = try? JSONDecoder().decode([P2PKKey].self, from: data) else {
-            return []
-        }
-        return decoded
+        SettingsStore.shared.p2pkKeys
     }
 
     private func persistP2PKKeys() {
-        guard let data = try? JSONEncoder().encode(p2pkKeys) else { return }
-        UserDefaults.standard.set(data, forKey: "p2pkKeys")
+        settingsStore.p2pkKeys = p2pkKeys
     }
 
     private func generateRandomPrivateKeyBytes() throws -> [UInt8] {
@@ -419,4 +410,3 @@ enum SettingsFeatureError: LocalizedError {
 }
 
 // MARK: - Theme Colors Extension
-
