@@ -95,24 +95,73 @@ enum StorageKeys {
     // Settings
     static let useBitcoinSymbol = "settings.useBitcoinSymbol"
     static let showFiatBalance = "settings.showFiatBalance"
+    static let bitcoinPriceCurrency = "settings.bitcoinPriceCurrency"
+    static let checkPendingOnStartup = "settings.checkPendingOnStartup"
+    static let checkSentTokens = "settings.checkSentTokens"
+    static let autoPasteEcashReceive = "settings.autoPasteEcashReceive"
+    static let useWebsockets = "settings.useWebsockets"
+    static let enablePaymentRequests = "settings.enablePaymentRequests"
+    static let receivePaymentRequestsAutomatically = "settings.receivePaymentRequestsAutomatically"
+    static let enableNWC = "settings.enableNWC"
+    static let nwcConnections = "settings.nwcConnections"
+    static let showP2PKButtonInDrawer = "settings.showP2PKButtonInDrawer"
+    static let p2pkKeys = "settings.p2pkKeys"
+    static let checkIncomingInvoices = "settings.checkIncomingInvoices"
+    static let periodicallyCheckIncomingInvoices = "settings.periodicallyCheckIncomingInvoices"
+    static let nostrRelays = "settings.nostrRelays"
+    static let nostrSignerType = "settings.nostrSignerType"
 
     enum Legacy {
-        static let mints = "savedMints"
-        static let pendingTokens = "pendingTokens"
-        static let pendingReceiveTokens = "pendingReceiveTokens"
-        static let claimedTokens = "claimedTokens"
-        static let savedTokens = "savedTokens"
-        static let paymentPreimages = "paymentPreimages"
+        static let useBitcoinSymbol = "useBitcoinSymbol"
+        static let showFiatBalance = "showFiatBalance"
+        static let bitcoinPriceCurrency = "bitcoinPriceCurrency"
+        static let checkPendingOnStartup = "checkPendingOnStartup"
+        static let checkSentTokens = "checkSentTokens"
+        static let autoPasteEcashReceive = "autoPasteEcashReceive"
+        static let useWebsockets = "useWebsockets"
+        static let enablePaymentRequests = "enablePaymentRequests"
+        static let receivePaymentRequestsAutomatically = "receivePaymentRequestsAutomatically"
+        static let enableNWC = "enableNWC"
+        static let nwcConnections = "nwcConnections"
+        static let showP2PKButtonInDrawer = "showP2PKButtonInDrawer"
+        static let p2pkKeys = "p2pkKeys"
+        static let checkIncomingInvoices = "checkIncomingInvoices"
+        static let periodicallyCheckIncomingInvoices = "periodicallyCheckIncomingInvoices"
+        static let nostrRelays = "nostrRelays"
+        static let nostrSignerType = "nostr_signer_type"
+        static let priceEnabled = "priceServiceEnabled"
+        static let priceCurrencyCode = "priceServiceCurrencyCode"
+        static let cachedBTCPrice = "cachedBTCPrice"
+        static let cachedBTCPriceDate = "cachedBTCPriceDate"
+
+        static func cachedBTCPrice(currency: String) -> String {
+            "cachedBTCPrice.\(currency.uppercased())"
+        }
+
+        static func cachedBTCPriceDate(currency: String) -> String {
+            "cachedBTCPriceDate.\(currency.uppercased())"
+        }
     }
     
     // NPC
     static let npcEnabled = "npc.enabled"
-    static let npcLastCheck = "npc.lastCheckTimestamp"
+    static let npcAutomaticClaim = "npc.automaticClaim"
+    static let npcSelectedMint = "npc.selectedMint"
+    static let npcLastCheck = "npc.lastCheck"
     
     // Price
     static let priceEnabled = "price.enabled"
+    static let priceCurrencyCode = "price.currencyCode"
     static let cachedBTCPrice = "price.cachedBTC"
     static let cachedBTCPriceDate = "price.cachedBTCDate"
+
+    static func cachedBTCPrice(currency: String) -> String {
+        "price.cachedBTC.\(currency.uppercased())"
+    }
+
+    static func cachedBTCPriceDate(currency: String) -> String {
+        "price.cachedBTCDate.\(currency.uppercased())"
+    }
     
     // Keychain (Secure Storage)
     enum Secure {

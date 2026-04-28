@@ -12,7 +12,7 @@ class NPCService: ObservableObject {
     
     @Published var isEnabled: Bool {
         didSet {
-            UserDefaults.standard.set(isEnabled, forKey: "npc.enabled")
+            settingsStore.npcEnabled = isEnabled
             if isEnabled {
                 Task { await connect() }
             } else {
@@ -22,22 +22,18 @@ class NPCService: ObservableObject {
     }
     
     @Published var automaticClaim: Bool {
-        didSet { UserDefaults.standard.set(automaticClaim, forKey: "npc.automaticClaim") }
+        didSet { settingsStore.npcAutomaticClaim = automaticClaim }
     }
     
     @Published var selectedMintUrl: String? {
         didSet {
-            if let url = selectedMintUrl {
-                UserDefaults.standard.set(url, forKey: "npc.selectedMint")
-            }
+            settingsStore.npcSelectedMint = selectedMintUrl
         }
     }
     
     @Published var lastCheck: Date? {
         didSet {
-            if let date = lastCheck {
-                UserDefaults.standard.set(date, forKey: "npc.lastCheck")
-            }
+            settingsStore.npcLastCheck = lastCheck
         }
     }
     
@@ -67,21 +63,22 @@ class NPCService: ObservableObject {
     private var nostrSecretKey: String?
     private var nostrPubkey: String?
     private var refreshTimer: Timer?
+    private let settingsStore = SettingsStore.shared
     private let refreshInterval: TimeInterval = 120  // Check every 2 minutes
     private var shouldCheckIncomingInvoices: Bool {
-        UserDefaults.standard.object(forKey: "checkIncomingInvoices") as? Bool ?? true
+        settingsStore.checkIncomingInvoices
     }
     private var shouldPeriodicallyCheckIncomingInvoices: Bool {
-        UserDefaults.standard.object(forKey: "periodicallyCheckIncomingInvoices") as? Bool ?? true
+        settingsStore.periodicallyCheckIncomingInvoices
     }
     
     // MARK: - Initialization
     
     private init() {
-        self.isEnabled = UserDefaults.standard.bool(forKey: "npc.enabled")
-        self.automaticClaim = UserDefaults.standard.object(forKey: "npc.automaticClaim") as? Bool ?? true
-        self.selectedMintUrl = UserDefaults.standard.string(forKey: "npc.selectedMint")
-        self.lastCheck = UserDefaults.standard.object(forKey: "npc.lastCheck") as? Date
+        self.isEnabled = settingsStore.npcEnabled
+        self.automaticClaim = settingsStore.npcAutomaticClaim
+        self.selectedMintUrl = settingsStore.npcSelectedMint
+        self.lastCheck = settingsStore.npcLastCheck
     }
     
     /// Initialize connection on app startup if enabled
