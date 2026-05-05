@@ -24,7 +24,6 @@
 		1100000000000012 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 2100000000000012 /* Assets.xcassets */; };
 		11000000000000CC /* MintDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 21000000000000CC /* MintDetailView.swift */; };
 		264054F18D12335595328FBC /* LiquidGlassModifiers.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3DC08FE85DFC643906176894 /* LiquidGlassModifiers.swift */; };
-		6A0AAAF92F519448005FDBA1 /* CashuDevKit in Frameworks */ = {isa = PBXBuildFile; productRef = 6AC5D9892F43591D00A3E113 /* CashuDevKit */; };
 		6A8EC9302F2442F00058C21B /* SettingsManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6A8EC92F2F2442EF0058C21B /* SettingsManager.swift */; };
 		6A8EC9322F2448B60058C21B /* MintDiscoveryManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6A8EC9312F2448B60058C21B /* MintDiscoveryManager.swift */; };
 		6A8EC9342F244BD80058C21B /* ScannerWrapperView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6A8EC9332F244BD80058C21B /* ScannerWrapperView.swift */; };
@@ -40,6 +39,7 @@
 		6A8EC94C2F25A0000058C21B /* NostrService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6A8EC94D2F25A0000058C21B /* NostrService.swift */; };
 		6A8EC94E2F25A0000058C21B /* NPCService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6A8EC94F2F25A0000058C21B /* NPCService.swift */; };
 		6A8EC95B2F26983E0058C21B /* P256K in Frameworks */ = {isa = PBXBuildFile; productRef = 6A8EC95A2F26983E0058C21B /* P256K */; };
+		72DC8F142FA8E3E7005E35DD /* CashuDevKit in Frameworks */ = {isa = PBXBuildFile; productRef = 72DC8F132FA8E3E7005E35DD /* CashuDevKit */; };
 		AA00000000000001 /* PaymentMethodProtocol.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA00000000000011 /* PaymentMethodProtocol.swift */; };
 		AA00000000000002 /* CurrencyProtocol.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA00000000000012 /* CurrencyProtocol.swift */; };
 		AA00000000000003 /* WalletServiceProtocol.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA00000000000013 /* WalletServiceProtocol.swift */; };
@@ -125,9 +125,9 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				6A0AAAF92F519448005FDBA1 /* CashuDevKit in Frameworks */,
 				6A8EC93F2F256F350058C21B /* URKit in Frameworks */,
 				6A8EC95B2F26983E0058C21B /* P256K in Frameworks */,
+				72DC8F142FA8E3E7005E35DD /* CashuDevKit in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -356,7 +356,7 @@
 			packageProductDependencies = (
 				6A8EC93E2F256F350058C21B /* URKit */,
 				6A8EC95A2F26983E0058C21B /* P256K */,
-				6AC5D9892F43591D00A3E113 /* CashuDevKit */,
+				72DC8F132FA8E3E7005E35DD /* CashuDevKit */,
 			);
 			productName = CashuWallet;
 			productReference = 0100000000000001 /* CashuWallet.app */;
@@ -387,9 +387,9 @@
 			);
 			mainGroup = 4000000000000000;
 			packageReferences = (
-				6AC5D9882F43591D00A3E113 /* XCRemoteSwiftPackageReference "cdk-swift" */,
 				6A8EC93D2F256F350058C21B /* XCRemoteSwiftPackageReference "URKit" */,
 				7200000000000002 /* XCRemoteSwiftPackageReference "swift-secp256k1" */,
+				72DC8F122FA8E3E7005E35DD /* XCRemoteSwiftPackageReference "cdk-swift" */,
 			);
 			productRefGroup = 4100000000000002 /* Products */;
 			projectDirPath = "";
@@ -694,20 +694,20 @@
 				minimumVersion = 15.1.0;
 			};
 		};
-		6AC5D9882F43591D00A3E113 /* XCRemoteSwiftPackageReference "cdk-swift" */ = {
-			isa = XCRemoteSwiftPackageReference;
-			repositoryURL = "https://github.com/cashubtc/cdk-swift";
-			requirement = {
-				kind = revision;
-				revision = b79a160b70bcaa6aa7a98201ab1294409a97674f;
-			};
-		};
 		7200000000000002 /* XCRemoteSwiftPackageReference "swift-secp256k1" */ = {
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/21-DOT-DEV/swift-secp256k1.git";
 			requirement = {
 				kind = upToNextMajorVersion;
 				minimumVersion = 0.18.0;
+			};
+		};
+		72DC8F122FA8E3E7005E35DD /* XCRemoteSwiftPackageReference "cdk-swift" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/asmogo/cdk-swift";
+			requirement = {
+				kind = exactVersion;
+				version = 0.17.0;
 			};
 		};
 /* End XCRemoteSwiftPackageReference section */
@@ -723,9 +723,9 @@
 			package = 7200000000000002 /* XCRemoteSwiftPackageReference "swift-secp256k1" */;
 			productName = P256K;
 		};
-		6AC5D9892F43591D00A3E113 /* CashuDevKit */ = {
+		72DC8F132FA8E3E7005E35DD /* CashuDevKit */ = {
 			isa = XCSwiftPackageProductDependency;
-			package = 6AC5D9882F43591D00A3E113 /* XCRemoteSwiftPackageReference "cdk-swift" */;
+			package = 72DC8F122FA8E3E7005E35DD /* XCRemoteSwiftPackageReference "cdk-swift" */;
 			productName = CashuDevKit;
 		};
 /* End XCSwiftPackageProductDependency section */

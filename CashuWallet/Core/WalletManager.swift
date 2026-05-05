@@ -28,9 +28,11 @@ class WalletManager: ObservableObject {
     
     /// Error message
     @Published var errorMessage: String?
-    
+
     /// Active unit (sat, usd, etc.)
     @Published var activeUnit: String = "sat"
+
+    private var mintQuoteSyncsInFlight: Set<String> = []
     
     // MARK: - Services
     
@@ -183,7 +185,7 @@ class WalletManager: ObservableObject {
         let normalizedUrl = url.trimmingCharacters(in: .whitespacesAndNewlines)
             .trimmingCharacters(in: CharacterSet(charactersIn: "/"))
 
-        let mintUrl = try MintUrl(url: normalizedUrl)
+        let mintUrl = MintUrl(url: normalizedUrl)
 
         // Create wallet for this mint
         try await walletRepository.createWallet(mintUrl: mintUrl, unit: .sat, targetProofCount: nil)
@@ -312,7 +314,10 @@ class WalletManager: ObservableObject {
         databaseURL: URL
     ) throws -> (db: WalletSqliteDatabase, repository: WalletRepository) {
         let database = try WalletSqliteDatabase(filePath: databaseURL.path)
-        let repository = try WalletRepository(mnemonic: mnemonic, db: database)
+        let repository = try WalletRepository(
+            mnemonic: mnemonic,
+            store: customWalletStore(db: database)
+        )
         return (database, repository)
     }
     
@@ -459,7 +464,7 @@ class WalletManager: ObservableObject {
         guard let walletRepository = walletRepository else {
             throw WalletError.notInitialized
         }
-        let mintUrlObj = try MintUrl(url: mintUrl)
+        let mintUrlObj = MintUrl(url: mintUrl)
         let wallet = try await walletRepository.getWallet(mintUrl: mintUrlObj, unit: .sat)
         return try await wallet.fetchMintInfo()
     }
@@ -479,7 +484,7 @@ class WalletManager: ObservableObject {
         
         for mintUrlString in mintUrls {
             do {
-                let mintUrl = try MintUrl(url: mintUrlString)
+                let mintUrl = MintUrl(url: mintUrlString)
                 let wallet = try await walletRepository.getWallet(mintUrl: mintUrl, unit: .sat)
                 let walletBalance = try await wallet.totalBalance()
                 
@@ -549,13 +554,10 @@ class WalletManager: ObservableObject {
             transactionService.savePreimage(quoteId: quoteId, preimage: preimage)
         }
         AppLogger.wallet.info(
-            "Melt quote \(quoteId, privacy: .public) returned from LightningService; refreshing wallet state in the background"
+            "Melt quote \(quoteId, privacy: .public) returned from LightningService; refreshing wallet state"
         )
-        Task { [weak self] in
-            guard let self else { return }
-            await self.refreshBalance()
-            await self.loadTransactions()
-        }
+        await refreshBalance()
+        await loadTransactions()
         return preimage
     }
     
@@ -665,7 +667,10 @@ class WalletManager: ObservableObject {
     }
 
     func refreshPendingMintQuote(quoteId: String) async {
-        let minted = await syncPendingMintQuote(quoteId: quoteId)
+        let minted = await syncPendingMintQuote(
+            quoteId: quoteId,
+            allowPendingOnchainMintAttempt: true
+        )
         if minted {
             await refreshBalance()
         }
@@ -683,7 +688,10 @@ class WalletManager: ObservableObject {
         do {
             let pendingQuotes = try await db.getUnissuedMintQuotes()
             for quote in pendingQuotes {
-                let minted = await syncPendingMintQuote(quoteId: quote.id)
+                let minted = await syncPendingMintQuote(
+                    quoteId: quote.id,
+                    allowPendingOnchainMintAttempt: false
+                )
                 mintedAny = mintedAny || minted
             }
         } catch {
@@ -709,24 +717,66 @@ class WalletManager: ObservableObject {
     func loadTransactions() async {
         await lightningService.recoverPendingOnchainMeltQuotes()
         await transactionService.loadTransactions()
+        objectWillChange.send()
     }
 
     @discardableResult
-    private func syncPendingMintQuote(quoteId: String) async -> Bool {
+    private func syncPendingMintQuote(
+        quoteId: String,
+        allowPendingOnchainMintAttempt: Bool
+    ) async -> Bool {
+        guard !mintQuoteSyncsInFlight.contains(quoteId) else {
+            AppLogger.wallet.info(
+                "Skipping duplicate pending quote sync for \(quoteId, privacy: .public)"
+            )
+            return false
+        }
+
+        mintQuoteSyncsInFlight.insert(quoteId)
+        defer {
+            mintQuoteSyncsInFlight.remove(quoteId)
+        }
+
         do {
             let updatedQuote = try await lightningService.checkMintQuote(quoteId: quoteId)
 
-            guard updatedQuote.state == .paid || updatedQuote.state == .issued else {
+            guard updatedQuote.state == .paid
+                || updatedQuote.state == .issued
+                || (allowPendingOnchainMintAttempt && updatedQuote.paymentMethod == .onchain) else {
                 return false
             }
 
+            // BOLT12 quotes always appear in `getUnissuedMintQuotes()` because
+            // CDK's SQL filter is `amount_issued = 0 OR payment_method = 'bolt12'`.
+            // Skip them when nothing new has been paid since the last issuance,
+            // otherwise every history refresh would re-trigger `mint_bolt12` and
+            // could spawn duplicate transactions on any local/mint state drift.
+            if updatedQuote.paymentMethod == .bolt12, let db {
+                let storedQuote = try? await db.getMintQuote(quoteId: quoteId)
+                if let storedQuote,
+                   storedQuote.amountPaid.value > 0,
+                   storedQuote.amountIssued.value >= storedQuote.amountPaid.value {
+                    return false
+                }
+            }
+
             do {
-                let _ = try await lightningService.mintTokens(quoteId: quoteId)
+                let amount = try await lightningService.mintTokens(quoteId: quoteId)
+                AppLogger.wallet.info(
+                    "Minted pending quote \(quoteId, privacy: .public) for \(amount, privacy: .public) sats"
+                )
                 return true
             } catch {
                 let errorString = error.localizedDescription.lowercased()
                 if errorString.contains("issued") || errorString.contains("already") {
                     return true
+                }
+
+                if updatedQuote.paymentMethod == .onchain, updatedQuote.state == .pending {
+                    AppLogger.wallet.info(
+                        "Pending on-chain quote \(quoteId, privacy: .public) is not mintable yet: \(String(describing: error), privacy: .public)"
+                    )
+                    return false
                 }
 
                 AppLogger.wallet.error("Failed to mint pending quote \(quoteId): \(error)")

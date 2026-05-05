@@ -1,6 +1,22 @@
 import SwiftUI
 import CashuDevKit
 
+private enum Bolt12OfferAmountMode: String, CaseIterable, Identifiable {
+    case amountless
+    case fixedAmount
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .amountless:
+            return "Amountless"
+        case .fixedAmount:
+            return "Set Amount"
+        }
+    }
+}
+
 struct ReceiveLightningView: View {
     @Environment(\.dismiss) private var dismiss
     @EnvironmentObject var walletManager: WalletManager
@@ -9,6 +25,7 @@ struct ReceiveLightningView: View {
 
     @State private var amountString = ""
     @State private var selectedMethod: PaymentMethodKind = .bolt11
+    @State private var bolt12OfferAmountMode: Bolt12OfferAmountMode = .amountless
     @State private var mintQuote: MintQuoteInfo?
     @State private var isCreatingRequest = false
     @State private var isMinting = false
@@ -47,7 +64,7 @@ struct ReceiveLightningView: View {
                         .font(.headline)
                 }
 
-                if mintQuote == nil && selectedMethod.requiresMintAmount {
+                if mintQuote == nil && showsAmountEntry {
                     ToolbarItem(placement: .topBarTrailing) {
                         Button(action: { settings.useBitcoinSymbol.toggle() }) {
                             Text(settings.unitLabel)
@@ -110,10 +127,15 @@ struct ReceiveLightningView: View {
     }
 
     private var canCreateRequest: Bool {
-        if selectedMethod.requiresMintAmount {
+        if showsAmountEntry {
             guard let amount = UInt64(amountString), amount > 0 else { return false }
         }
         return !isCreatingRequest
+    }
+
+    private var showsAmountEntry: Bool {
+        selectedMethod.requiresMintAmount
+            || (selectedMethod.supportsOptionalMintAmount && bolt12OfferAmountMode == .fixedAmount)
     }
 
     private var formattedInputAmount: String {
@@ -136,9 +158,15 @@ struct ReceiveLightningView: View {
                     .padding(.top, 12)
             }
 
+            if selectedMethod.supportsOptionalMintAmount {
+                bolt12AmountModePicker
+                    .padding(.horizontal)
+                    .padding(.top, 12)
+            }
+
             Spacer()
 
-            if selectedMethod.requiresMintAmount {
+            if showsAmountEntry {
                 amountDisplaySection
             } else {
                 amountlessOfferSection
@@ -154,7 +182,7 @@ struct ReceiveLightningView: View {
 
             Spacer()
 
-            if selectedMethod.requiresMintAmount {
+            if showsAmountEntry {
                 numberPad
                     .padding(.horizontal, 24)
             }
@@ -182,6 +210,16 @@ struct ReceiveLightningView: View {
         }
         .pickerStyle(.segmented)
         .accessibilityLabel("Payment method")
+    }
+
+    private var bolt12AmountModePicker: some View {
+        Picker("Offer Amount", selection: $bolt12OfferAmountMode) {
+            ForEach(Bolt12OfferAmountMode.allCases) { mode in
+                Text(mode.title).tag(mode)
+            }
+        }
+        .pickerStyle(.segmented)
+        .accessibilityLabel("BOLT12 offer amount mode")
     }
 
     private var amountDisplaySection: some View {
@@ -213,10 +251,10 @@ struct ReceiveLightningView: View {
                 .foregroundStyle(Color.accentColor)
                 .accessibilityHidden(true)
 
-            Text("Amountless BOLT12 Offer")
+            Text("Amountless Offer")
                 .font(.title3.weight(.semibold))
 
-            Text("The sender chooses the amount when paying this offer.")
+            Text("Sender sets amount")
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
@@ -480,20 +518,7 @@ struct ReceiveLightningView: View {
             return "Waiting for payment..."
         case .onchain:
             if let observation = onchainObservation {
-                if observation.hasRequiredConfirmations(walletManager.activeMint?.onchainMintConfirmations) {
-                    return "\(observation.statusText). Waiting for mint credit..."
-                }
-                if let requiredConfirmations = walletManager.activeMint?.onchainMintConfirmations,
-                   let confirmations = observation.confirmations {
-                    let remainingConfirmations = max(requiredConfirmations - confirmations, 0)
-                    let suffix = remainingConfirmations == 1 ? "" : "s"
-                    return "\(observation.statusText). Waiting for \(remainingConfirmations) more confirmation\(suffix)..."
-                }
-                return "\(observation.statusText). Waiting for mint credit..."
-            }
-            if let confirmations = walletManager.activeMint?.onchainMintConfirmations {
-                let suffix = confirmations == 1 ? "" : "s"
-                return "Waiting for \(confirmations) confirmation\(suffix)..."
+                return "\(observation.statusText). Trying to mint..."
             }
             return "Waiting for on-chain payment..."
         }
@@ -596,8 +621,10 @@ struct ReceiveLightningView: View {
 
     private func createRequest() {
         let amountValue = UInt64(amountString)
+        let requestMethod = selectedMethod
+        let requestAmount = showsAmountEntry ? amountValue : nil
 
-        if selectedMethod.requiresMintAmount, (amountValue ?? 0) == 0 {
+        if showsAmountEntry, (amountValue ?? 0) == 0 {
             return
         }
 
@@ -615,8 +642,8 @@ struct ReceiveLightningView: View {
         Task { @MainActor in
             do {
                 let quote = try await walletManager.createMintQuote(
-                    amount: amountValue,
-                    method: selectedMethod
+                    amount: requestAmount,
+                    method: requestMethod
                 )
                 quoteCreatedAt = Date()
                 mintQuote = quote
@@ -636,7 +663,15 @@ struct ReceiveLightningView: View {
     }
 
     private func startExpiryCountdown(quote: MintQuoteInfo) {
-        guard let expiry = quote.expiry else { return }
+        expiryTimer?.invalidate()
+        expiryTimer = nil
+
+        guard let expiry = quote.expiry, expiry > 0 else {
+            expiryTimeRemaining = 0
+            isExpired = false
+            return
+        }
+
         let expiryDate = Date(timeIntervalSince1970: Double(expiry))
         expiryTimeRemaining = expiryDate.timeIntervalSince(Date())
 
@@ -735,14 +770,11 @@ struct ReceiveLightningView: View {
 
             if updatedQuote.paymentMethod == .onchain, updatedQuote.state == .pending {
                 await refreshOnchainObservation(for: updatedQuote)
-                if let observation = onchainObservation,
-                   observation.hasRequiredConfirmations(walletManager.activeMint?.onchainMintConfirmations) {
-                    AppLogger.wallet.info(
-                        "On-chain quote \(updatedQuote.id, privacy: .public) has enough explorer confirmations; attempting mint even though quote state is still pending"
-                    )
-                    await mintQuoteIfReady(updatedQuote)
-                    return
-                }
+                AppLogger.wallet.info(
+                    "Attempting to mint pending on-chain quote \(updatedQuote.id, privacy: .public); the mint will reject it if confirmations are not ready"
+                )
+                await mintQuoteIfReady(updatedQuote)
+                return
             } else {
                 onchainObservation = nil
             }
@@ -792,7 +824,19 @@ struct ReceiveLightningView: View {
             let errorString = error.localizedDescription.lowercased()
             if errorString.contains("issued") || errorString.contains("already") {
                 await completeReceivedQuote(refreshWalletState: true)
+                return
             }
+
+            if quote.paymentMethod == .onchain {
+                AppLogger.wallet.info(
+                    "On-chain quote \(quote.id, privacy: .public) is not mintable yet: \(String(describing: error), privacy: .public)"
+                )
+                return
+            }
+
+            AppLogger.wallet.error(
+                "Failed to mint quote \(quote.id, privacy: .public): \(String(describing: error), privacy: .public)"
+            )
         }
     }
 

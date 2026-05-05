@@ -6,6 +6,7 @@ struct HistoryView: View {
     @State private var filterPending: Bool = false
     @State private var selectedTransaction: WalletTransaction?
     @State private var isCheckingStatus: String? = nil
+    @State private var transactionUpdateRevision = 0
 
     // Pagination
     @State private var currentPage: Int = 1
@@ -58,10 +59,11 @@ struct HistoryView: View {
                     .environmentObject(walletManager)
             }
             .task {
-                await walletManager.syncPendingMintQuotes()
+                await walletManager.loadTransactions()
             }
             .onReceive(NotificationCenter.default.publisher(for: .cashuTransactionsUpdated)) { _ in
-                // Force view refresh when transactions are updated
+                transactionUpdateRevision += 1
+                currentPage = min(currentPage, maxPages)
             }
         }
     }

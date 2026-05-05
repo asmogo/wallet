@@ -43,7 +43,7 @@ class TokenService: ObservableObject {
         isLoading = true
         defer { isLoading = false }
         
-        let mintUrl = try MintUrl(url: activeMint.url)
+        let mintUrl = MintUrl(url: activeMint.url)
         let wallet = try await repo.getWallet(mintUrl: mintUrl, unit: .sat)
         
         let sendMemo = memo.map { SendMemo(memo: $0, includeMemo: true) }
@@ -60,6 +60,7 @@ class TokenService: ObservableObject {
             amountSplitTarget: SplitTarget.none,
             sendKind: SendKind.onlineExact,
             includeFee: false,
+            useP2bk: false,
             maxProofs: nil,
             metadata: [:]
         )
@@ -76,7 +77,7 @@ class TokenService: ObservableObject {
         let fee = prepared.fee().value
 
         let token = try await prepared.confirm(memo: memo)
-        let tokenString = try token.encode()
+        let tokenString = token.encode()
 
         if let normalizedP2PKPubkey,
            SettingsManager.shared.p2pkKeys.contains(where: {
@@ -198,7 +199,7 @@ class TokenService: ObservableObject {
         
         do {
             let tokenObj = try Token.decode(encodedToken: token)
-            let mintUrlObj = try MintUrl(url: mintUrl)
+            let mintUrlObj = MintUrl(url: mintUrl)
             
             let wallet = try await repo.getWallet(mintUrl: mintUrlObj, unit: .sat)
             

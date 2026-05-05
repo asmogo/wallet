@@ -61,14 +61,19 @@ class TransactionService: ObservableObject {
         
         // Get transactions from tracked wallets
         var allTransactions: [WalletTransaction] = []
+        var completedQuoteIds: Set<String> = []
         let trackedMintUrls = Set(getTrackedMintUrls().filter { !$0.isEmpty })
         
         for mintUrlString in trackedMintUrls {
             do {
-                let mintUrl = try MintUrl(url: mintUrlString)
+                let mintUrl = MintUrl(url: mintUrlString)
                 let wallet = try await repo.getWallet(mintUrl: mintUrl, unit: .sat)
                 let txs = try await wallet.listTransactions(direction: nil)
                 let walletTxs: [WalletTransaction] = txs.map { tx in
+                    if let quoteId = tx.quoteId {
+                        completedQuoteIds.insert(quoteId)
+                    }
+
                     let paymentMethod = tx.paymentMethod.flatMap(PaymentMethodKind.from)
                     let kind: WalletTransaction.TransactionKind
 
@@ -114,11 +119,21 @@ class TransactionService: ObservableObject {
                 let pendingQuoteTransactions = await pendingTransactions(
                     from: pendingMintQuotes,
                     trackedMintUrls: trackedMintUrls,
+                    completedQuoteIds: completedQuoteIds,
                     timestamps: &mintQuoteTimestamps
                 )
                 allTransactions.append(contentsOf: pendingQuoteTransactions)
+
+                let meltQuotes = try await walletDatabase.getMeltQuotes()
+                let meltQuoteTransactions = meltTransactions(
+                    from: meltQuotes,
+                    trackedMintUrls: trackedMintUrls,
+                    completedQuoteIds: completedQuoteIds,
+                    timestamps: &mintQuoteTimestamps
+                )
+                allTransactions.append(contentsOf: meltQuoteTransactions)
             } catch {
-                AppLogger.wallet.error("Failed to load pending mint quotes: \(error)")
+                AppLogger.wallet.error("Failed to load stored payment quotes: \(error)")
             }
         }
         
@@ -346,6 +361,7 @@ class TransactionService: ObservableObject {
     private func pendingTransactions(
         from quotes: [MintQuote],
         trackedMintUrls: Set<String>,
+        completedQuoteIds: Set<String>,
         timestamps: inout [String: TimeInterval]
     ) async -> [WalletTransaction] {
         var transactions: [WalletTransaction] = []
@@ -360,6 +376,17 @@ class TransactionService: ObservableObject {
                 continue
             }
 
+            // CDK's `getUnissuedMintQuotes()` always returns every BOLT12 quote
+            // (`amount_issued = 0 OR payment_method = 'bolt12'`) because offers
+            // are reusable. If CDK already surfaced the issued payment through
+            // `wallet.listTransactions()`, skip the quote-backed fallback.
+            if paymentMethod == .bolt12,
+               quote.amountPaid.value > 0,
+               quote.amountIssued.value >= quote.amountPaid.value,
+               completedQuoteIds.contains(quote.id) {
+                continue
+            }
+
             let amount = quote.amount?.value
                 ?? (quote.amountPaid.value > 0 ? quote.amountPaid.value : nil)
                 ?? (quote.amountIssued.value > 0 ? quote.amountIssued.value : nil)
@@ -371,6 +398,8 @@ class TransactionService: ObservableObject {
             let timestamp = timestamps[quote.id] ?? Date().timeIntervalSince1970
             timestamps[quote.id] = timestamp
             let createdAt = Date(timeIntervalSince1970: timestamp)
+            let status: WalletTransaction.TransactionStatus =
+                quote.state == .issued || quote.amountIssued.value >= amount ? .completed : .pending
 
             var storedPaymentProof = getPreimage(quoteId: quote.id)
             var statusNote: String?
@@ -399,13 +428,61 @@ class TransactionService: ObservableObject {
                 kind: paymentMethod == .onchain ? .onchain : .lightning,
                 date: createdAt,
                 memo: nil,
-                status: .pending,
+                status: status,
                 statusNote: statusNote,
                 mintUrl: quote.mintUrl.url,
                 preimage: storedPaymentProof,
                 token: nil,
                 invoice: quote.request
             ))
+        }
+
+        return transactions
+    }
+
+    private func meltTransactions(
+        from quotes: [MeltQuote],
+        trackedMintUrls: Set<String>,
+        completedQuoteIds: Set<String>,
+        timestamps: inout [String: TimeInterval]
+    ) -> [WalletTransaction] {
+        var transactions: [WalletTransaction] = []
+
+        for quote in quotes {
+            guard trackedMintUrls.contains(quote.mintUrl!.url),
+                  !completedQuoteIds.contains(quote.id),
+                  let paymentMethod = PaymentMethodKind.from(quote.paymentMethod) else {
+                continue
+            }
+
+            let status: WalletTransaction.TransactionStatus
+            switch quote.state {
+            case .paid, .issued:
+                status = .completed
+            case .pending:
+                status = .pending
+            case .unpaid:
+                continue
+            }
+
+            let timestamp = timestamps[quote.id] ?? Date().timeIntervalSince1970
+            timestamps[quote.id] = timestamp
+
+            var transaction = WalletTransaction(
+                id: quote.id,
+                amount: quote.amount.value,
+                type: .outgoing,
+                kind: paymentMethod == .onchain ? .onchain : .lightning,
+                date: Date(timeIntervalSince1970: timestamp),
+                memo: nil,
+                status: status,
+                mintUrl: quote.mintUrl?.url,
+                preimage: quote.paymentProof ?? getPreimage(quoteId: quote.id),
+                token: nil,
+                invoice: quote.request
+            )
+            transaction.fee = quote.feeReserve.value
+            transactions.append(transaction)
         }
 
         return transactions
@@ -430,7 +507,7 @@ class TransactionService: ObservableObject {
     ) {
         let pendingQuoteIDs = Set(
             transactions
-                .filter { $0.status == .pending && ($0.kind == .lightning || $0.kind == .onchain) }
+                .filter { $0.invoice != nil && ($0.kind == .lightning || $0.kind == .onchain) }
                 .map(\.id)
         )
 

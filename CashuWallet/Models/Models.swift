@@ -76,6 +76,10 @@ enum PaymentMethodKind: String, CaseIterable, Codable, Hashable {
         self != .bolt12
     }
 
+    var supportsOptionalMintAmount: Bool {
+        self == .bolt12
+    }
+
     var requiresMeltAmount: Bool {
         switch self {
         case .onchain:
@@ -190,6 +194,10 @@ enum OnchainExplorer {
         let vout: [ExplorerTransactionOutput]
     }
 
+    private struct ExplorerBlock: Decodable {
+        let height: Int
+    }
+
     private struct ExplorerTransactionStatus: Decodable {
         let confirmed: Bool
         let blockHeight: Int?
@@ -245,8 +253,7 @@ enum OnchainExplorer {
         }
 
         do {
-            var request = URLRequest(url: url)
-            request.timeoutInterval = 10
+            let request = explorerAPIRequest(url: url)
 
             let (data, response) = try await URLSession.shared.data(for: request)
             if let httpResponse = response as? HTTPURLResponse,
@@ -258,7 +265,7 @@ enum OnchainExplorer {
             let transactions = try JSONDecoder().decode([ExplorerTransaction].self, from: data)
             let earliestBlockTime = Int(createdAfter.timeIntervalSince1970)
             let normalizedAddressLowercased = normalizedAddress.lowercased()
-            let tipHeight = try await currentTipHeight(using: descriptor)
+            let tipHeight = await currentTipHeight(using: descriptor)
 
             for transaction in transactions {
                 let matchingAmount = transaction.vout
@@ -270,16 +277,18 @@ enum OnchainExplorer {
                     continue
                 }
 
-                if let blockTime = transaction.status.blockTime, blockTime < earliestBlockTime {
+                let status = await freshStatusIfNeeded(for: transaction, using: descriptor)
+
+                if let blockTime = status.blockTime, blockTime < earliestBlockTime {
                     continue
                 }
 
                 return OnchainPaymentObservation(
                     txid: transaction.txid,
                     amount: matchingAmount,
-                    confirmed: transaction.status.confirmed,
+                    confirmed: status.confirmed,
                     confirmations: confirmations(
-                        for: transaction.status,
+                        for: status,
                         tipHeight: tipHeight
                     )
                 )
@@ -331,27 +340,96 @@ enum OnchainExplorer {
         )
     }
 
-    private static func currentTipHeight(using descriptor: ExplorerDescriptor) async throws -> Int? {
-        guard let url = URL(string: "\(descriptor.apiBaseURL)/blocks/tip/height") else {
+    private static func currentTipHeight(using descriptor: ExplorerDescriptor) async -> Int? {
+        if let url = URL(string: "\(descriptor.apiBaseURL)/blocks/tip/height"),
+           let tipHeight = await tipHeight(from: url) {
+            return tipHeight
+        }
+
+        guard let url = URL(string: "\(descriptor.apiBaseURL)/blocks") else {
             return nil
         }
 
-        var request = URLRequest(url: url)
-        request.timeoutInterval = 10
+        do {
+            let (data, response) = try await URLSession.shared.data(for: explorerAPIRequest(url: url))
+            if let httpResponse = response as? HTTPURLResponse,
+               !(200...299).contains(httpResponse.statusCode) {
+                return nil
+            }
 
-        let (data, response) = try await URLSession.shared.data(for: request)
-        if let httpResponse = response as? HTTPURLResponse,
-           !(200...299).contains(httpResponse.statusCode) {
+            let blocks = try JSONDecoder().decode([ExplorerBlock].self, from: data)
+            return blocks.map(\.height).max()
+        } catch {
+            AppLogger.wallet.error("Failed to inspect on-chain tip height: \(error)")
             return nil
         }
+    }
 
-        guard let responseString = String(data: data, encoding: .utf8)?
-            .trimmingCharacters(in: .whitespacesAndNewlines),
-              let tipHeight = Int(responseString) else {
+    private static func tipHeight(from url: URL) async -> Int? {
+        do {
+            let (data, response) = try await URLSession.shared.data(for: explorerAPIRequest(url: url))
+            if let httpResponse = response as? HTTPURLResponse,
+               !(200...299).contains(httpResponse.statusCode) {
+                return nil
+            }
+
+            return String(data: data, encoding: .utf8)
+                .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                .flatMap(Int.init)
+        } catch {
             return nil
         }
+    }
 
-        return tipHeight
+    private static func freshStatusIfNeeded(
+        for transaction: ExplorerTransaction,
+        using descriptor: ExplorerDescriptor
+    ) async -> ExplorerTransactionStatus {
+        guard transaction.status.confirmed,
+              transaction.status.blockHeight == nil,
+              let url = URL(string: "\(descriptor.apiBaseURL)/tx/\(transaction.txid)/status") else {
+            return transaction.status
+        }
+
+        do {
+            let (data, response) = try await URLSession.shared.data(for: explorerAPIRequest(url: url))
+            if let httpResponse = response as? HTTPURLResponse,
+               !(200...299).contains(httpResponse.statusCode) {
+                return transaction.status
+            }
+
+            return try JSONDecoder().decode(ExplorerTransactionStatus.self, from: data)
+        } catch {
+            return transaction.status
+        }
+    }
+
+    private static func explorerAPIRequest(url: URL) -> URLRequest {
+        var request = URLRequest(
+            url: cacheBustedURL(url),
+            cachePolicy: .reloadIgnoringLocalAndRemoteCacheData,
+            timeoutInterval: 10
+        )
+        request.setValue("no-cache", forHTTPHeaderField: "Cache-Control")
+        request.setValue("no-cache", forHTTPHeaderField: "Pragma")
+        return request
+    }
+
+    private static func cacheBustedURL(_ url: URL) -> URL {
+        guard var components = URLComponents(url: url, resolvingAgainstBaseURL: false) else {
+            return url
+        }
+
+        var queryItems = components.queryItems ?? []
+        queryItems.append(
+            URLQueryItem(
+                name: "_",
+                value: String(Int(Date().timeIntervalSince1970 * 1_000))
+            )
+        )
+        components.queryItems = queryItems
+
+        return components.url ?? url
     }
 
     private static func confirmations(
@@ -463,7 +541,7 @@ struct MintQuoteInfo: Identifiable {
     let expiry: UInt64?
     
     var isExpired: Bool {
-        guard let expiry = expiry else { return false }
+        guard let expiry = expiry, expiry > 0 else { return false }
         return Date().timeIntervalSince1970 > Double(expiry)
     }
 }
@@ -483,7 +561,7 @@ struct MeltQuoteInfo: Identifiable {
     }
     
     var isExpired: Bool {
-        guard let expiry = expiry else { return false }
+        guard let expiry = expiry, expiry > 0 else { return false }
         return Date().timeIntervalSince1970 > Double(expiry)
     }
 }
