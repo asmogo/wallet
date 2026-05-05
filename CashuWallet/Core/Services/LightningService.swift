@@ -336,11 +336,13 @@ class LightningService: ObservableObject {
         
         let mintUrl = MintUrl(url: activeMint.url)
         let wallet = try await repo.getWallet(mintUrl: mintUrl, unit: .sat)
-        let parsedRequest = try parseMeltRequest(request)
 
-        if parsedRequest.paymentMethod == .onchain {
+        if PaymentRequestParser.isBitcoinAddress(request) {
             throw WalletError.networkError("On-chain payments require an amount before requesting a quote.")
         }
+
+        let parsedRequest = try LightningRequestParser.parse(request)
+        let paymentMethod = PaymentMethodKind.from(parsedRequest.method) ?? .bolt11
         
         let quote = try await wallet.meltQuote(
             method: parsedRequest.method,
@@ -349,7 +351,7 @@ class LightningService: ObservableObject {
             extra: nil
         )
 
-        return meltQuoteInfo(from: quote, paymentMethod: parsedRequest.paymentMethod)
+        return meltQuoteInfo(from: quote, paymentMethod: paymentMethod)
     }
     
     /// Backward-compatible wrapper for older bolt11-specific call sites.
@@ -436,41 +438,6 @@ class LightningService: ObservableObject {
         let wallet = try await repo.getWallet(mintUrl: mintUrl, unit: .sat)
         let params = SubscribeParams(kind: subscriptionKind, filters: [quoteId], id: nil)
         return try await wallet.subscribe(params: params)
-    }
-    
-    // MARK: - Payment Request Parsing
-    
-    private struct ParsedMeltRequest {
-        let request: String
-        let method: PaymentMethod
-        let paymentMethod: PaymentMethodKind
-    }
-    
-    private func parseMeltRequest(_ request: String) throws -> ParsedMeltRequest {
-        if PaymentRequestParser.isBitcoinAddress(request) {
-            return ParsedMeltRequest(
-                request: PaymentRequestParser.normalizeBitcoinRequest(request),
-                method: PaymentMethodKind.onchain.cdkMethod,
-                paymentMethod: .onchain
-            )
-        }
-
-        let normalizedRequest = PaymentRequestParser.normalizeLightningRequest(request)
-        let decodedRequest = try decodeInvoice(invoiceStr: normalizedRequest)
-        
-        let paymentMethod: PaymentMethodKind
-        switch decodedRequest.paymentType {
-        case .bolt11:
-            paymentMethod = .bolt11
-        case .bolt12:
-            paymentMethod = .bolt12
-        }
-        
-        return ParsedMeltRequest(
-            request: normalizedRequest,
-            method: paymentMethod.cdkMethod,
-            paymentMethod: paymentMethod
-        )
     }
     
     /// Pay a Lightning invoice (melt tokens)

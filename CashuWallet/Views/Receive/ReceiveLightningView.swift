@@ -546,10 +546,7 @@ struct ReceiveLightningView: View {
     }
 
     private func formatBalance(_ sats: UInt64) -> String {
-        if settings.useBitcoinSymbol {
-            return "₿\(sats)"
-        }
-        return "\(sats) sat"
+        AmountFormatter.sats(sats, useBitcoinSymbol: settings.useBitcoinSymbol)
     }
 
     private func extractMintHost(_ url: String) -> String {

@@ -50,7 +50,7 @@ class NavigationManager: ObservableObject {
         token = token.removingPercentEncoding ?? token
         
         // Validate it looks like a cashu token
-        guard token.hasPrefix("cashuA") || token.hasPrefix("cashuB") else {
+        guard TokenParser.isCashuDeepLinkToken(token) else {
             print("Invalid cashu token in deep link: \(token.prefix(20))...")
             return
         }

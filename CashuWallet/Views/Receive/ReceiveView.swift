@@ -95,7 +95,7 @@ struct ReceiveView: View {
 
     private func handleScannedCode(_ code: String) {
         Task { @MainActor in
-            if code.lowercased().hasPrefix("cashu") {
+            if TokenParser.isCashuToken(code) {
                 do {
                     let _ = try await walletManager.receiveTokens(tokenString: code)
                     dismiss()
@@ -174,7 +174,7 @@ struct ReceiveEcashView: View {
                 guard settings.autoPasteEcashReceive else { return }
                 guard tokenInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
                 guard let clipboardContent = UIPasteboard.general.string?.trimmingCharacters(in: .whitespacesAndNewlines),
-                      clipboardContent.lowercased().hasPrefix("cashu") else { return }
+                      TokenParser.isCashuToken(clipboardContent) else { return }
                 tokenInput = clipboardContent
             }
         }
@@ -193,8 +193,8 @@ struct ReceiveEcashView: View {
 
         let trimmedToken = tokenInput.trimmingCharacters(in: .whitespacesAndNewlines)
 
-        if trimmedToken.lowercased().hasPrefix("cashu") {
-            validatedToken = trimmedToken
+        if let token = TokenParser.normalizedToken(from: trimmedToken) {
+            validatedToken = token
             navigateToDetail = true
         } else {
             errorMessage = "Invalid token format. Token should start with 'cashu'"

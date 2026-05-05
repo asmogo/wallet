@@ -383,7 +383,7 @@ struct SendView: View {
     }
 
     private func formatBalance(_ sats: UInt64) -> String {
-        settings.useBitcoinSymbol ? "₿\(sats)" : "\(sats) sat"
+        AmountFormatter.sats(sats, useBitcoinSymbol: settings.useBitcoinSymbol)
     }
 
     private func extractMintHost(_ url: String) -> String {

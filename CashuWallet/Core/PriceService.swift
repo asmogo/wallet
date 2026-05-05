@@ -14,7 +14,7 @@ class PriceService: ObservableObject {
     /// Selected fiat currency code (e.g. USD, EUR)
     @Published var currencyCode: String {
         didSet {
-            UserDefaults.standard.set(currencyCode, forKey: "priceServiceCurrencyCode")
+            settingsStore.priceCurrencyCode = currencyCode
             if isEnabled {
                 Task { await fetchPrice() }
             }
@@ -24,7 +24,7 @@ class PriceService: ObservableObject {
     /// Whether price fetching is enabled
     @Published var isEnabled: Bool {
         didSet {
-            UserDefaults.standard.set(isEnabled, forKey: "priceServiceEnabled")
+            settingsStore.priceEnabled = isEnabled
             if isEnabled {
                 startAutoRefresh()
             } else {
@@ -47,6 +47,7 @@ class PriceService: ObservableObject {
     private var coinbaseSpotURL: String {
         "https://api.coinbase.com/v2/prices/BTC-\(currencyCode)/spot"
     }
+    private let settingsStore = SettingsStore.shared
     private var refreshTimer: Timer?
     private let refreshInterval: TimeInterval = 60 // Refresh every 60 seconds
     private lazy var fiatFormatter: NumberFormatter = {
@@ -60,19 +61,15 @@ class PriceService: ObservableObject {
     // MARK: - Initialization
     
     init() {
-        self.isEnabled = UserDefaults.standard.object(forKey: "priceServiceEnabled") as? Bool ?? false
-        self.currencyCode = UserDefaults.standard.string(forKey: "priceServiceCurrencyCode") ?? "USD"
+        self.isEnabled = settingsStore.priceEnabled
+        self.currencyCode = settingsStore.priceCurrencyCode
 
-        if let cachedPrice = UserDefaults.standard.object(forKey: cachedPriceKey(for: currencyCode)) as? Double {
+        if let cachedPrice = settingsStore.cachedPrice(currency: currencyCode) {
             self.btcPriceUSD = cachedPrice
-        } else if let legacyCachedPrice = UserDefaults.standard.object(forKey: "cachedBTCPrice") as? Double {
-            self.btcPriceUSD = legacyCachedPrice
         }
 
-        if let cachedDate = UserDefaults.standard.object(forKey: cachedPriceDateKey(for: currencyCode)) as? Date {
+        if let cachedDate = settingsStore.cachedPriceDate(currency: currencyCode) {
             self.lastUpdated = cachedDate
-        } else if let legacyDate = UserDefaults.standard.object(forKey: "cachedBTCPriceDate") as? Date {
-            self.lastUpdated = legacyDate
         }
         
         // Start auto-refresh if enabled
@@ -115,10 +112,8 @@ class PriceService: ObservableObject {
             lastUpdated = now
             
             // Cache the price
-            UserDefaults.standard.set(price, forKey: cachedPriceKey(for: currencyCode))
-            UserDefaults.standard.set(now, forKey: cachedPriceDateKey(for: currencyCode))
-            UserDefaults.standard.set(price, forKey: "cachedBTCPrice")
-            UserDefaults.standard.set(now, forKey: "cachedBTCPriceDate")
+            settingsStore.setCachedPrice(price, currency: currencyCode)
+            settingsStore.setCachedPriceDate(now, currency: currencyCode)
             
         } catch {
             errorMessage = error.localizedDescription
@@ -175,14 +170,6 @@ class PriceService: ObservableObject {
     
     deinit {
         refreshTimer?.invalidate()
-    }
-
-    private func cachedPriceKey(for currency: String) -> String {
-        "cachedBTCPrice.\(currency.uppercased())"
-    }
-
-    private func cachedPriceDateKey(for currency: String) -> String {
-        "cachedBTCPriceDate.\(currency.uppercased())"
     }
 }
 

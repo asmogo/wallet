@@ -169,6 +169,18 @@ struct ScannerWrapperView: View {
         }
     }
 
+    private static func isHumanReadableAddress(_ content: String) -> Bool {
+        let trimmed = content.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let atIndex = trimmed.firstIndex(of: "@") else { return false }
+        let user = trimmed[trimmed.startIndex..<atIndex]
+        let domain = trimmed[trimmed.index(after: atIndex)...]
+        return !user.isEmpty && domain.contains(".") && !domain.hasPrefix(".") && !domain.hasSuffix(".")
+    }
+
+    private static func parseLightningPaymentRequest(_ content: String) -> String? {
+        try? LightningRequestParser.parse(content).request
+    }
+
     private func handleScan(code: String) {
         guard scannerModel.isScanning else { return }
         
@@ -192,7 +204,7 @@ struct ScannerWrapperView: View {
         scannerModel.isScanning = false
         
         // Determine content type: Token (Receive) or Invoice (Pay/Melt)
-        if content.hasPrefix("cashu") {
+        if TokenParser.isCashuToken(content) {
             // Handle Ecash Token -> Show Detail View
             let generator = UINotificationFeedbackGenerator()
             generator.notificationOccurred(.success)
