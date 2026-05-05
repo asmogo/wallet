@@ -67,12 +67,7 @@ class WalletManager: ObservableObject {
     private(set) lazy var lightningService = LightningService(
         walletRepository: { [weak self] in self?.walletRepository },
         walletDatabase: { [weak self] in self?.db },
-        getActiveMint: { [weak self] in self?.activeMint },
-        onWalletStateUpdated: { [weak self] in
-            guard let self else { return }
-            await self.refreshBalance()
-            await self.loadTransactions()
-        }
+        getActiveMint: { [weak self] in self?.activeMint }
     )
     
     // MARK: - Computed Properties (Delegate to Services)
@@ -743,7 +738,6 @@ class WalletManager: ObservableObject {
     // MARK: - Transaction History
     
     func loadTransactions() async {
-        await lightningService.recoverPendingOnchainMeltQuotes()
         await transactionService.loadTransactions()
         objectWillChange.send()
     }
