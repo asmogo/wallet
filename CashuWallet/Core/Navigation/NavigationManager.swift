@@ -16,6 +16,7 @@ class NavigationManager: ObservableObject {
     
     /// Token received from deep link (cashu: URL)
     @Published var pendingDeepLinkToken: String?
+    @Published var pendingMeltInvoice: String?
     @Published var showReceiveTokenSheet = false
     
     // MARK: - Public Methods
@@ -28,6 +29,7 @@ class NavigationManager: ObservableObject {
         showBackupSheet = false
         showScannerSheet = false
         showReceiveTokenSheet = false
+        pendingMeltInvoice = nil
     }
     
     /// Handle incoming cashu: URL
