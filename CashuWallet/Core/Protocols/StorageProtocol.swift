@@ -90,6 +90,7 @@ enum StorageKeys {
     static let transactions = "wallet.transactions"
     static let savedTokens = "wallet.savedTokens"
     static let paymentPreimages = "wallet.paymentPreimages"
+    static let mintQuoteTimestamps = "wallet.mintQuoteTimestamps"
     static let processedNPCQuotes = "wallet.processedNPCQuotes"
     
     // Settings
@@ -118,6 +119,7 @@ enum StorageKeys {
         static let claimedTokens = "claimedTokens"
         static let savedTokens = "savedTokens"
         static let paymentPreimages = "paymentPreimages"
+        static let mintQuoteTimestamps = "mintQuoteTimestamps"
         static let useBitcoinSymbol = "useBitcoinSymbol"
         static let showFiatBalance = "showFiatBalance"
         static let bitcoinPriceCurrency = "bitcoinPriceCurrency"

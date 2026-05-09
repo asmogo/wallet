@@ -1,4 +1,5 @@
 import Foundation
+import CashuDevKit
 
 // MARK: - Wallet Service Protocol
 
@@ -80,23 +81,29 @@ protocol TransactionServiceProtocol {
 
 // MARK: - Quote Service Protocol
 
-/// Protocol for Lightning quote operations (mint/melt)
+/// Protocol for payment quote operations (mint/melt)
 protocol QuoteServiceProtocol {
-    /// Create a mint quote (receive via Lightning)
-    func createMintQuote(amount: UInt64) async throws -> MintQuoteInfo
+    /// Create a mint quote for the selected payment method.
+    func createMintQuote(amount: UInt64?, method: PaymentMethodKind) async throws -> MintQuoteInfo
     
     /// Check mint quote status
     func checkMintQuote(id: String) async throws -> MintQuoteInfo
+
+    /// Subscribe to quote updates when the mint and payment method support it.
+    func subscribeToMintQuote(quoteId: String, paymentMethod: PaymentMethodKind) async throws -> ActiveSubscription?
     
     /// Mint tokens from a paid quote
     func mintTokens(quoteId: String) async throws -> UInt64
     
-    /// Create a melt quote (pay via Lightning request: BOLT11 invoice or BOLT12 offer)
+    /// Create a melt quote for a payment request.
     func createMeltQuote(request: String) async throws -> MeltQuoteInfo
     
     /// Backward-compatible bolt11-specific entrypoint
     func createMeltQuote(invoice: String) async throws -> MeltQuoteInfo
+
+    /// Create a melt quote for an on-chain bitcoin address.
+    func createOnchainMeltQuote(address: String, amount: UInt64) async throws -> MeltQuoteInfo
     
-    /// Execute the melt (pay the invoice)
+    /// Execute the melt (pay the request)
     func meltTokens(quoteId: String) async throws -> PaymentResult
 }

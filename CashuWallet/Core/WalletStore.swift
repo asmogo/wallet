@@ -66,6 +66,17 @@ final class WalletStore {
         set(preimages, forKey: StorageKeys.paymentPreimages)
     }
 
+    func loadMintQuoteTimestamps() -> [String: TimeInterval] {
+        value(
+            forKey: StorageKeys.mintQuoteTimestamps,
+            legacyKeys: [StorageKeys.Legacy.mintQuoteTimestamps]
+        ) ?? [:]
+    }
+
+    func saveMintQuoteTimestamps(_ timestamps: [String: TimeInterval]) {
+        set(timestamps, forKey: StorageKeys.mintQuoteTimestamps)
+    }
+
     private func value<T: Codable>(forKey key: String, legacyKeys: [String] = []) -> T? {
         if let value: T = try? storage.get(forKey: key) {
             return value

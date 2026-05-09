@@ -36,7 +36,7 @@ struct ReceiveView: View {
                         Label {
                             VStack(alignment: .leading, spacing: 2) {
                                 Text("Scan QR Code")
-                                Text("Scan token or invoice")
+                                Text("Scan a token, payment request, or address")
                                     .font(.subheadline)
                                     .foregroundStyle(.secondary)
                             }
@@ -52,8 +52,8 @@ struct ReceiveView: View {
                     Button(action: { selectedOption = .lightning }) {
                         Label {
                             VStack(alignment: .leading, spacing: 2) {
-                                Text("Lightning Invoice")
-                                Text("Create invoice to receive sats")
+                                Text("Payment Request")
+                                Text("Create an invoice, offer, or address")
                                     .font(.subheadline)
                                     .foregroundStyle(.secondary)
                             }
@@ -62,8 +62,8 @@ struct ReceiveView: View {
                                 .foregroundStyle(Color.accentColor)
                         }
                     }
-                    .accessibilityLabel("Lightning Invoice")
-                    .accessibilityHint("Creates a lightning invoice to receive sats")
+                    .accessibilityLabel("Payment Request")
+                    .accessibilityHint("Creates a lightning invoice, BOLT12 offer, or bitcoin address to receive sats")
                     .accessibilityAddTraits(.isButton)
                 }
             }

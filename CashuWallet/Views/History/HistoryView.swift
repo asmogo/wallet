@@ -6,6 +6,7 @@ struct HistoryView: View {
     @State private var filterPending: Bool = false
     @State private var selectedTransaction: WalletTransaction?
     @State private var isCheckingStatus: String? = nil
+    @State private var transactionUpdateRevision = 0
 
     // Pagination
     @State private var currentPage: Int = 1
@@ -33,6 +34,7 @@ struct HistoryView: View {
                         }
                     }
                     .refreshable {
+                        await walletManager.syncPendingMintQuotes()
                         await walletManager.checkAllPendingTokens()
                     }
                 }
@@ -60,7 +62,8 @@ struct HistoryView: View {
                 await walletManager.loadTransactions()
             }
             .onReceive(NotificationCenter.default.publisher(for: .cashuTransactionsUpdated)) { _ in
-                // Force view refresh when transactions are updated
+                transactionUpdateRevision += 1
+                currentPage = min(currentPage, maxPages)
             }
         }
     }
@@ -141,16 +144,17 @@ struct HistoryView: View {
                         .foregroundStyle(amountColor(transaction))
 
                     if transaction.status == .pending {
-                        Text("Pending")
+                        Text(transaction.displayStatusText)
                             .font(.subheadline)
                             .foregroundStyle(.secondary)
+                            .multilineTextAlignment(.trailing)
                     }
                 }
 
-                if transaction.status == .pending && transaction.kind == .ecash {
+                if transaction.status == .pending {
                     Button {
                         Task {
-                            await checkTransactionStatus(transaction)
+                            await refreshPendingTransaction(transaction)
                         }
                     } label: {
                         if isCheckingStatus == transaction.id {
@@ -162,12 +166,12 @@ struct HistoryView: View {
                     }
                     .buttonStyle(.borderless)
                     .accessibilityLabel(isCheckingStatus == transaction.id ? "Checking status" : "Refresh status")
-                    .accessibilityHint("Checks if this pending token has been claimed")
+                    .accessibilityHint(refreshHint(for: transaction))
                 }
             }
         }
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("\(transaction.kind.displayName) transaction, \(formatAmount(transaction)) sats, \(transaction.status == .pending ? "pending" : "completed"), \(formatRelativeDate(transaction.date))")
+        .accessibilityLabel("\(transaction.kind.displayName) transaction, \(formatAmount(transaction)) sats, \(transaction.status == .pending ? transaction.displayStatusText.lowercased() : "completed"), \(formatRelativeDate(transaction.date))")
         .accessibilityHint("Opens transaction details")
     }
 
@@ -178,6 +182,10 @@ struct HistoryView: View {
             EcashIcon()
         case .lightning:
             LightningIcon()
+        case .onchain:
+            Image(systemName: "bitcoinsign.circle.fill")
+                .font(.title3)
+                .foregroundStyle(.orange)
         }
     }
 
@@ -210,17 +218,37 @@ struct HistoryView: View {
 
     // MARK: - Actions
 
+    private func refreshPendingTransaction(_ transaction: WalletTransaction) async {
+        switch transaction.kind {
+        case .ecash:
+            await checkTransactionStatus(transaction)
+        case .lightning, .onchain:
+            isCheckingStatus = transaction.id
+            defer { isCheckingStatus = nil }
+            await walletManager.refreshPendingMintQuote(quoteId: transaction.id)
+        }
+    }
+
     private func checkTransactionStatus(_ transaction: WalletTransaction) async {
         guard let token = transaction.token else { return }
 
         isCheckingStatus = transaction.id
         defer { isCheckingStatus = nil }
 
-        let isSpent = await walletManager.checkTokenSpendable(token: token)
+        let isSpent = await walletManager.checkTokenSpendable(token: token, mintUrl: transaction.mintUrl)
 
         if isSpent {
             walletManager.removePendingToken(tokenId: transaction.id)
             await walletManager.loadTransactions()
+        }
+    }
+
+    private func refreshHint(for transaction: WalletTransaction) -> String {
+        switch transaction.kind {
+        case .ecash:
+            return "Checks if this pending token has been claimed"
+        case .lightning, .onchain:
+            return "Refreshes this pending receive request"
         }
     }
 

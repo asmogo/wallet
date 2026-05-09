@@ -3,9 +3,9 @@
     {
       "identity" : "cdk-swift",
       "kind" : "remoteSourceControl",
-      "location" : "https://github.com/cashubtc/cdk-swift",
+      "location" : "https://github.com/asmogo/cdk-swift",
       "state" : {
-        "revision" : "b79a160b70bcaa6aa7a98201ab1294409a97674f"
+        "revision" : "66e8243fe33e8205af7f83862a5daf537317997d"
       }
     }
   ],

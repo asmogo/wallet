@@ -18,6 +18,7 @@ struct MintDetailView: View {
             motdSection
             contactSection
             softwareSection
+            paymentMethodsSection
             nutsSection
             walletSection
             tosSection
@@ -143,6 +144,22 @@ struct MintDetailView: View {
     }
 
     @ViewBuilder
+    private var paymentMethodsSection: some View {
+        if !receiveMethodSummaries.isEmpty || !sendMethodSummaries.isEmpty {
+            Section("Payment Methods") {
+                if !receiveMethodSummaries.isEmpty {
+                    paymentMethodGroup(title: "Receive", methods: receiveMethodSummaries)
+                        .listRowSeparator(.hidden)
+                }
+                if !sendMethodSummaries.isEmpty {
+                    paymentMethodGroup(title: "Send", methods: sendMethodSummaries)
+                        .listRowSeparator(.hidden)
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
     private var nutsSection: some View {
         if let nuts = cdkInfo?.nuts {
             Section("Supported NUTs") {
@@ -214,6 +231,113 @@ struct MintDetailView: View {
             .clipShape(RoundedRectangle(cornerRadius: 16))
     }
 
+    private var receiveMethodSummaries: [PaymentMethodSummary] {
+        if let cdkInfo {
+            return cdkInfo.nuts.nut04.methods
+                .compactMap { method in
+                    guard let paymentMethod = PaymentMethodKind.from(method.method) else {
+                        return nil
+                    }
+
+                    return PaymentMethodSummary(
+                        method: paymentMethod,
+                        minAmount: method.minAmount?.value,
+                        maxAmount: method.maxAmount?.value,
+                        detail: paymentMethodDetail(
+                            method: paymentMethod,
+                            minAmount: method.minAmount?.value,
+                            maxAmount: method.maxAmount?.value,
+                            confirmations: paymentMethod == .onchain ? mint.onchainMintConfirmations : nil
+                        )
+                    )
+                }
+                .sorted { $0.method.sortOrder < $1.method.sortOrder }
+        }
+
+        return mint.supportedMintMethods
+            .sorted { $0.sortOrder < $1.sortOrder }
+            .map { method in
+                PaymentMethodSummary(
+                    method: method,
+                    minAmount: nil,
+                    maxAmount: nil,
+                    detail: paymentMethodDetail(
+                        method: method,
+                        minAmount: nil,
+                        maxAmount: nil,
+                        confirmations: method == .onchain ? mint.onchainMintConfirmations : nil
+                    )
+                )
+            }
+    }
+
+    private var sendMethodSummaries: [PaymentMethodSummary] {
+        if let cdkInfo {
+            return cdkInfo.nuts.nut05.methods
+                .compactMap { method in
+                    guard let paymentMethod = PaymentMethodKind.from(method.method) else {
+                        return nil
+                    }
+
+                    return PaymentMethodSummary(
+                        method: paymentMethod,
+                        minAmount: method.minAmount?.value,
+                        maxAmount: method.maxAmount?.value,
+                        detail: paymentMethodDetail(
+                            method: paymentMethod,
+                            minAmount: method.minAmount?.value,
+                            maxAmount: method.maxAmount?.value
+                        )
+                    )
+                }
+                .sorted { $0.method.sortOrder < $1.method.sortOrder }
+        }
+
+        return mint.supportedMeltMethods
+            .sorted { $0.sortOrder < $1.sortOrder }
+            .map { method in
+                PaymentMethodSummary(
+                    method: method,
+                    minAmount: nil,
+                    maxAmount: nil,
+                    detail: paymentMethodDetail(method: method, minAmount: nil, maxAmount: nil)
+                )
+            }
+    }
+
+    private func paymentMethodGroup(title: String, methods: [PaymentMethodSummary]) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text(title)
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(.secondary)
+
+            VStack(spacing: 8) {
+                ForEach(methods) { summary in
+                    HStack(alignment: .top, spacing: 12) {
+                        Text(summary.method.symbol)
+                            .font(.headline)
+                            .frame(width: 22)
+
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(summary.method.displayName)
+                                .font(.subheadline.weight(.semibold))
+
+                            if let detail = summary.detail {
+                                Text(detail)
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+
+                        Spacer()
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.vertical, 4)
+                }
+            }
+        }
+    }
+
     private func nutBadge(_ nut: String, label: String, supported: Bool) -> some View {
         VStack(spacing: 2) {
             Text(nut)
@@ -232,6 +356,39 @@ struct MintDetailView: View {
     private func truncatePubkey(_ key: String) -> String {
         guard key.count > 16 else { return key }
         return "\(key.prefix(8))...\(key.suffix(8))"
+    }
+
+    private func paymentMethodDetail(
+        method: PaymentMethodKind,
+        minAmount: UInt64?,
+        maxAmount: UInt64?,
+        confirmations: Int? = nil
+    ) -> String? {
+        var parts: [String] = []
+
+        if let range = amountRange(minAmount: minAmount, maxAmount: maxAmount) {
+            parts.append(range)
+        }
+
+        if method == .onchain, let confirmations {
+            let suffix = confirmations == 1 ? "" : "s"
+            parts.append("\(confirmations) confirmation\(suffix)")
+        }
+
+        return parts.isEmpty ? nil : parts.joined(separator: " • ")
+    }
+
+    private func amountRange(minAmount: UInt64?, maxAmount: UInt64?) -> String? {
+        switch (minAmount, maxAmount) {
+        case let (.some(minimum), .some(maximum)):
+            return "\(minimum)-\(maximum) sat"
+        case let (.some(minimum), nil):
+            return "Min \(minimum) sat"
+        case let (nil, .some(maximum)):
+            return "Max \(maximum) sat"
+        case (nil, nil):
+            return nil
+        }
     }
 
     private func copyUrl() {
@@ -261,6 +418,15 @@ struct MintDetailView: View {
             }
         }
     }
+}
+
+private struct PaymentMethodSummary: Identifiable {
+    let method: PaymentMethodKind
+    let minAmount: UInt64?
+    let maxAmount: UInt64?
+    let detail: String?
+
+    var id: PaymentMethodKind { method }
 }
 
 #Preview {

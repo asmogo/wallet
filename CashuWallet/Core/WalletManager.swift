@@ -30,9 +30,11 @@ class WalletManager: ObservableObject {
     
     /// Error message
     @Published var errorMessage: String?
-    
+
     /// Active unit (sat, usd, etc.)
     @Published var activeUnit: String = "sat"
+
+    private var mintQuoteSyncsInFlight: Set<String> = []
     
     // MARK: - Services
 
@@ -47,6 +49,7 @@ class WalletManager: ObservableObject {
     /// Transaction history service
     private(set) lazy var transactionService = TransactionService(
         walletRepository: { [weak self] in self?.walletRepository },
+        walletDatabase: { [weak self] in self?.db },
         getTrackedMintUrls: { [weak self] in
             guard let self else { return [] }
             return self.trackedMintUrlsForWalletAccess()
@@ -63,6 +66,7 @@ class WalletManager: ObservableObject {
     /// Lightning operations service
     private(set) lazy var lightningService = LightningService(
         walletRepository: { [weak self] in self?.walletRepository },
+        walletDatabase: { [weak self] in self?.db },
         getActiveMint: { [weak self] in self?.activeMint }
     )
     
@@ -204,7 +208,7 @@ class WalletManager: ObservableObject {
         let normalizedUrl = url.trimmingCharacters(in: .whitespacesAndNewlines)
             .trimmingCharacters(in: CharacterSet(charactersIn: "/"))
 
-        let mintUrl = try MintUrl(url: normalizedUrl)
+        let mintUrl = MintUrl(url: normalizedUrl)
 
         // Create wallet for this mint
         try await walletRepository.createWallet(mintUrl: mintUrl, unit: .sat, targetProofCount: nil)
@@ -237,7 +241,7 @@ class WalletManager: ObservableObject {
     /// Restore wallet from mnemonic - Phase 3: Complete restore and dismiss onboarding
     func completeRestore() async {
         await refreshBalance()
-        await transactionService.loadTransactions()
+        await loadTransactions()
         needsOnboarding = false
     }
 
@@ -256,7 +260,7 @@ class WalletManager: ObservableObject {
         
         await mintService.loadMints()
         await refreshBalance()
-        await transactionService.loadTransactions()
+        await loadTransactions()
         await mintService.refreshMintInfo()
 
         initializeNostrKeypair(mnemonic: mnemonic)
@@ -333,7 +337,10 @@ class WalletManager: ObservableObject {
         databaseURL: URL
     ) throws -> (db: WalletSqliteDatabase, repository: WalletRepository) {
         let database = try WalletSqliteDatabase(filePath: databaseURL.path)
-        let repository = try WalletRepository(mnemonic: mnemonic, db: database)
+        let repository = try WalletRepository(
+            mnemonic: mnemonic,
+            store: customWalletStore(db: database)
+        )
         return (database, repository)
     }
     
@@ -442,7 +449,7 @@ class WalletManager: ObservableObject {
             processedQuotes.insert(mintQuote.id)
             
             await refreshBalance()
-            await transactionService.loadTransactions()
+            await loadTransactions()
             
             NotificationCenter.default.post(
                 name: .cashuTokenReceived,
@@ -450,8 +457,7 @@ class WalletManager: ObservableObject {
                 userInfo: ["amount": totalAmount, "source": "npub.cash"]
             )
         } catch {
-            let errorString = "\(error)"
-            if errorString.contains("ISSUED") || errorString.contains("already") {
+            if isAlreadyIssuedMintError(error) {
                 processedQuotes.insert(mintQuote.id)
             }
             AppLogger.wallet.error("Failed to mint NPC quote: \(error)")
@@ -480,7 +486,7 @@ class WalletManager: ObservableObject {
         guard let walletRepository = walletRepository else {
             throw WalletError.notInitialized
         }
-        let mintUrlObj = try MintUrl(url: mintUrl)
+        let mintUrlObj = MintUrl(url: mintUrl)
         let wallet = try await walletRepository.getWallet(mintUrl: mintUrlObj, unit: .sat)
         return try await wallet.fetchMintInfo()
     }
@@ -500,7 +506,7 @@ class WalletManager: ObservableObject {
         
         for mintUrlString in mintUrls {
             do {
-                let mintUrl = try MintUrl(url: mintUrlString)
+                let mintUrl = MintUrl(url: mintUrlString)
                 let wallet = try await walletRepository.getWallet(mintUrl: mintUrl, unit: .sat)
                 let walletBalance = try await wallet.totalBalance()
                 
@@ -517,14 +523,23 @@ class WalletManager: ObservableObject {
     
     // MARK: - Lightning Operations (Delegate to LightningService)
     
-    func createMintQuote(amount: UInt64) async throws -> MintQuoteInfo {
-        return try await lightningService.createMintQuote(amount: amount)
+    func createMintQuote(
+        amount: UInt64?,
+        method: PaymentMethodKind = .bolt11
+    ) async throws -> MintQuoteInfo {
+        let quote = try await lightningService.createMintQuote(amount: amount, method: method)
+        await loadTransactions()
+        return quote
+    }
+
+    func checkMintQuote(quoteId: String) async throws -> MintQuoteInfo {
+        return try await lightningService.checkMintQuote(quoteId: quoteId)
     }
     
     func mintTokens(quoteId: String) async throws -> UInt64 {
         let amount = try await lightningService.mintTokens(quoteId: quoteId)
         await refreshBalance()
-        await transactionService.loadTransactions()
+        await loadTransactions()
         return amount
     }
     
@@ -539,6 +554,20 @@ class WalletManager: ObservableObject {
     func createHumanReadableMeltQuote(address: String, amount: UInt64) async throws -> MeltQuoteInfo {
         return try await lightningService.createHumanReadableMeltQuote(address: address, amount: amount)
     }
+
+    func createOnchainMeltQuote(address: String, amount: UInt64) async throws -> MeltQuoteInfo {
+        return try await lightningService.createOnchainMeltQuote(address: address, amount: amount)
+    }
+
+    func subscribeToMintQuote(
+        quoteId: String,
+        paymentMethod: PaymentMethodKind
+    ) async throws -> ActiveSubscription? {
+        return try await lightningService.subscribeToMintQuote(
+            quoteId: quoteId,
+            paymentMethod: paymentMethod
+        )
+    }
     
     func meltTokens(quoteId: String) async throws -> String? {
         let preimage = try await lightningService.meltTokens(quoteId: quoteId)
@@ -547,7 +576,7 @@ class WalletManager: ObservableObject {
             transactionService.savePreimage(quoteId: quoteId, preimage: preimage)
         }
         await refreshBalance()
-        await transactionService.loadTransactions()
+        await loadTransactions()
         return preimage
     }
     
@@ -570,7 +599,7 @@ class WalletManager: ObservableObject {
         transactionService.savePendingToken(pendingToken)
         
         await refreshBalance()
-        await transactionService.loadTransactions()
+        await loadTransactions()
         
         return result
     }
@@ -579,7 +608,7 @@ class WalletManager: ObservableObject {
         try await ensureMintTrackedForToken(tokenString)
         let amount = try await tokenService.receiveTokens(tokenString: tokenString)
         await refreshBalance()
-        await transactionService.loadTransactions()
+        await loadTransactions()
         return amount
     }
     
@@ -608,7 +637,7 @@ class WalletManager: ObservableObject {
     
     func markTokenAsClaimed(token: String) async {
         transactionService.markTokenAsClaimed(token: token)
-        await transactionService.loadTransactions()
+        await loadTransactions()
     }
     
     func savePendingReceiveToken(_ token: PendingReceiveToken) {
@@ -626,7 +655,7 @@ class WalletManager: ObservableObject {
     func claimPendingReceiveToken(_ token: PendingReceiveToken) async throws -> UInt64 {
         let amount = try await receiveTokens(tokenString: token.token)
         transactionService.removePendingReceiveToken(tokenId: token.tokenId)
-        await transactionService.loadTransactions()
+        await loadTransactions()
         return amount
     }
     
@@ -653,13 +682,52 @@ class WalletManager: ObservableObject {
         for token in pendingTokens {
             await checkPendingTokenStatus(pendingToken: token)
         }
-        await transactionService.loadTransactions()
+        await loadTransactions()
+    }
+
+    func refreshPendingMintQuote(quoteId: String) async {
+        let minted = await syncPendingMintQuote(
+            quoteId: quoteId,
+            allowPendingOnchainMintAttempt: true
+        )
+        if minted {
+            await refreshBalance()
+        }
+        await loadTransactions()
+    }
+
+    func syncPendingMintQuotes() async {
+        guard let db else {
+            await loadTransactions()
+            return
+        }
+
+        var mintedAny = false
+
+        do {
+            let pendingQuotes = try await db.getUnissuedMintQuotes()
+            for quote in pendingQuotes {
+                let minted = await syncPendingMintQuote(
+                    quoteId: quote.id,
+                    allowPendingOnchainMintAttempt: false
+                )
+                mintedAny = mintedAny || minted
+            }
+        } catch {
+            AppLogger.wallet.error("Failed to sync pending mint quotes: \(error)")
+        }
+
+        if mintedAny {
+            await refreshBalance()
+        }
+
+        await loadTransactions()
     }
     
     func reclaimPendingToken(pendingToken: PendingToken) async throws -> UInt64 {
         let amount = try await receiveTokens(tokenString: pendingToken.token)
         transactionService.removePendingToken(tokenId: pendingToken.tokenId)
-        await transactionService.loadTransactions()
+        await loadTransactions()
         return amount
     }
     
@@ -667,6 +735,94 @@ class WalletManager: ObservableObject {
     
     func loadTransactions() async {
         await transactionService.loadTransactions()
+        objectWillChange.send()
+    }
+
+    @discardableResult
+    private func syncPendingMintQuote(
+        quoteId: String,
+        allowPendingOnchainMintAttempt: Bool
+    ) async -> Bool {
+        guard !mintQuoteSyncsInFlight.contains(quoteId) else {
+            return false
+        }
+
+        mintQuoteSyncsInFlight.insert(quoteId)
+        defer {
+            mintQuoteSyncsInFlight.remove(quoteId)
+        }
+
+        do {
+            let updatedQuote = try await lightningService.checkMintQuote(quoteId: quoteId)
+
+            guard updatedQuote.state == .paid
+                || updatedQuote.state == .issued
+                || (allowPendingOnchainMintAttempt && updatedQuote.paymentMethod == .onchain) else {
+                return false
+            }
+
+            // BOLT12 quotes always appear in `getUnissuedMintQuotes()` because
+            // CDK's SQL filter is `amount_issued = 0 OR payment_method = 'bolt12'`.
+            // Skip them when nothing new has been paid since the last issuance,
+            // otherwise every history refresh would re-trigger `mint_bolt12` and
+            // could spawn duplicate transactions on any local/mint state drift.
+            if updatedQuote.paymentMethod == .bolt12, let db {
+                let storedQuote = try? await db.getMintQuote(quoteId: quoteId)
+                if let storedQuote,
+                   storedQuote.amountPaid.value > 0,
+                   storedQuote.amountIssued.value >= storedQuote.amountPaid.value {
+                    return false
+                }
+            }
+
+            do {
+                _ = try await lightningService.mintTokens(quoteId: quoteId)
+                return true
+            } catch {
+                if isAlreadyIssuedMintError(error) {
+                    return true
+                }
+
+                if updatedQuote.paymentMethod == .onchain, updatedQuote.state == .pending {
+                    return false
+                }
+
+                AppLogger.wallet.error("Failed to mint pending quote \(quoteId): \(error)")
+                return false
+            }
+        } catch {
+            if isMissingQuoteError(error) {
+                return false
+            }
+            AppLogger.wallet.error("Failed to refresh pending quote \(quoteId): \(error)")
+            return false
+        }
+    }
+
+    private func isMissingQuoteError(_ error: Error) -> Bool {
+        if let walletError = error as? WalletError,
+           case .networkError(let message) = walletError,
+           message.localizedCaseInsensitiveContains("not found") {
+            return true
+        }
+
+        return String(describing: error).localizedCaseInsensitiveContains("not found")
+    }
+
+    private func isAlreadyIssuedMintError(_ error: Error) -> Bool {
+        let errorString = "\(error.localizedDescription) \(String(describing: error))".lowercased()
+
+        if errorString.contains("already being minted")
+            || errorString.contains("not issued")
+            || errorString.contains("not yet")
+            || errorString.contains("unissued") {
+            return false
+        }
+
+        return errorString.contains("already issued")
+            || errorString.contains("already minted")
+            || errorString.contains("quote is issued")
+            || errorString.contains("state=issued")
     }
     
     // MARK: - Backup
@@ -739,4 +895,30 @@ enum MeltQuoteState {
     case unpaid
     case pending
     case paid
+}
+
+extension MintQuoteState {
+    init(_ quoteState: CashuDevKit.QuoteState) {
+        switch quoteState {
+        case .paid:
+            self = .paid
+        case .issued:
+            self = .issued
+        case .unpaid, .pending:
+            self = .pending
+        }
+    }
+}
+
+extension MeltQuoteState {
+    init(_ quoteState: CashuDevKit.QuoteState) {
+        switch quoteState {
+        case .unpaid:
+            self = .unpaid
+        case .pending:
+            self = .pending
+        case .paid, .issued:
+            self = .paid
+        }
+    }
 }
