@@ -24,6 +24,10 @@ Built with SwiftUI, targets iOS 18+, and uses [cdk-swift](https://github.com/asm
 | :---: | :---: |
 | ![Send](docs/screenshots/04-send-options.png) | ![Settings](docs/screenshots/05-settings.png) |
 
+| Receive on-chain | Send on-chain |
+| :---: | :---: |
+| ![Receive on-chain](docs/screenshots/06-receive-onchain.png) | ![Send on-chain](docs/screenshots/07-send-onchain.png) |
+
 ## Building
 
 Open `CashuWallet.xcodeproj` in Xcode 16+ and run on an iOS 18 simulator or device. Swift Package Manager resolves `cdk-swift` automatically.
