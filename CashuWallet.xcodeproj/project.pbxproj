@@ -67,6 +67,10 @@
 		EE00000000000004 /* TokenParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = EE00000000000014 /* TokenParser.swift */; };
 		EE00000000000005 /* AmountFormatter.swift in Sources */ = {isa = PBXBuildFile; fileRef = EE00000000000015 /* AmountFormatter.swift */; };
 		EE00000000000006 /* LightningRequestParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = EE00000000000016 /* LightningRequestParser.swift */; };
+		F100000000000001 /* NDEFTextRecordCoder.swift in Sources */ = {isa = PBXBuildFile; fileRef = F200000000000001 /* NDEFTextRecordCoder.swift */; };
+		F100000000000002 /* NFCReaderDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = F200000000000002 /* NFCReaderDelegate.swift */; };
+		F100000000000003 /* NFCPaymentService.swift in Sources */ = {isa = PBXBuildFile; fileRef = F200000000000003 /* NFCPaymentService.swift */; };
+		F100000000000004 /* ContactlessPayView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F200000000000004 /* ContactlessPayView.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -128,6 +132,11 @@
 		EE00000000000014 /* TokenParser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TokenParser.swift; sourceTree = "<group>"; };
 		EE00000000000015 /* AmountFormatter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AmountFormatter.swift; sourceTree = "<group>"; };
 		EE00000000000016 /* LightningRequestParser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LightningRequestParser.swift; sourceTree = "<group>"; };
+		F200000000000001 /* NDEFTextRecordCoder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NDEFTextRecordCoder.swift; sourceTree = "<group>"; };
+		F200000000000002 /* NFCReaderDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NFCReaderDelegate.swift; sourceTree = "<group>"; };
+		F200000000000003 /* NFCPaymentService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NFCPaymentService.swift; sourceTree = "<group>"; };
+		F200000000000004 /* ContactlessPayView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContactlessPayView.swift; sourceTree = "<group>"; };
+		F200000000000005 /* CashuWallet.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = CashuWallet.entitlements; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -161,6 +170,7 @@
 				4200000000000003 /* Models */,
 				4200000000000004 /* Views */,
 				4200000000000005 /* Resources */,
+				F200000000000005 /* CashuWallet.entitlements */,
 			);
 			path = CashuWallet;
 			sourceTree = "<group>";
@@ -259,6 +269,7 @@
 		4300000000000003 /* Send */ = {
 			isa = PBXGroup;
 			children = (
+				F200000000000004 /* ContactlessPayView.swift */,
 				210000000000000B /* SendView.swift */,
 			);
 			path = Send;
@@ -345,6 +356,9 @@
 			isa = PBXGroup;
 			children = (
 				BB00000000000011 /* MintService.swift */,
+				F200000000000001 /* NDEFTextRecordCoder.swift */,
+				F200000000000002 /* NFCReaderDelegate.swift */,
+				F200000000000003 /* NFCPaymentService.swift */,
 				BB00000000000012 /* TransactionService.swift */,
 				BB00000000000013 /* TokenService.swift */,
 				BB00000000000014 /* LightningService.swift */,
@@ -389,6 +403,11 @@
 				TargetAttributes = {
 					5100000000000001 = {
 						CreatedOnToolsVersion = 15.0;
+						SystemCapabilities = {
+							com.apple.NearFieldCommunicationTagReading = {
+								enabled = 1;
+							};
+						};
 					};
 				};
 			};
@@ -487,6 +506,10 @@
 				EE00000000000003 /* SettingsStore.swift in Sources */,
 				EE00000000000002 /* WalletStore.swift in Sources */,
 				264054F18D12335595328FBC /* LiquidGlassModifiers.swift in Sources */,
+				F100000000000001 /* NDEFTextRecordCoder.swift in Sources */,
+				F100000000000002 /* NFCReaderDelegate.swift in Sources */,
+				F100000000000003 /* NFCPaymentService.swift in Sources */,
+				F100000000000004 /* ContactlessPayView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -617,12 +640,14 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = CashuWallet/CashuWallet.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = "";
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = CashuWallet/Info.plist;
+				INFOPLIST_KEY_NFCReaderUsageDescription = "Hold your iPhone near a payment terminal or NFC tag to send Cashu ecash.";
 				INFOPLIST_KEY_NSCameraUsageDescription = "Camera is used to scan QR codes for receiving ecash tokens and Lightning invoices.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
@@ -652,12 +677,14 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = CashuWallet/CashuWallet.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = "";
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = CashuWallet/Info.plist;
+				INFOPLIST_KEY_NFCReaderUsageDescription = "Hold your iPhone near a payment terminal or NFC tag to send Cashu ecash.";
 				INFOPLIST_KEY_NSCameraUsageDescription = "Camera is used to scan QR codes for receiving ecash tokens and Lightning invoices.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;

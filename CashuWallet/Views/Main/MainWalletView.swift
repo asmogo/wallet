@@ -1,3 +1,4 @@
+import CoreNFC
 import SwiftUI
 
 struct MainWalletView: View {
@@ -58,6 +59,13 @@ struct MainWalletView: View {
                 DispatchQueue.main.asyncAfter(deadline: .now() + 5) {
                     withAnimation { self.showNotification = false }
                 }
+            }
+        }
+        .onReceive(navigationManager.$pendingMeltInvoice.compactMap { $0 }) { invoice in
+            activeSheet = nil
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                activeSheet = .flow(.sendLightningWithInvoice(invoice))
+                navigationManager.pendingMeltInvoice = nil
             }
         }
     }
@@ -236,7 +244,7 @@ struct MainWalletView: View {
                 onSelect: { flow in activeSheet = .flow(flow) }
             )
             .presentationDragIndicator(.visible)
-            .modifier(ChooserSheetPresentation())
+            .modifier(ChooserSheetPresentation(height: action.detentHeight))
         case .scanner:
             ScannerWrapperView()
                 .environmentObject(walletManager)
@@ -265,6 +273,15 @@ struct MainWalletView: View {
             MeltView()
                 .environmentObject(walletManager)
                 .presentationDetents([.large])
+        case .sendLightningWithInvoice(let invoice):
+            MeltViewWithInvoice(invoice: invoice)
+                .environmentObject(walletManager)
+                .presentationDetents([.large])
+        case .contactlessPay:
+            ContactlessPayView()
+                .environmentObject(walletManager)
+                .environmentObject(navigationManager)
+                .presentationDetents([.medium, .large])
         }
     }
 }
@@ -295,15 +312,39 @@ private enum WalletActionSheet: String, Identifiable {
         case .send: return .sendLightning
         }
     }
+
+    var detentHeight: CGFloat {
+        if self == .send, NFCNDEFReaderSession.readingAvailable {
+            return 265
+        }
+        return 205
+    }
 }
 
-private enum WalletFlow: String, Identifiable {
+private enum WalletFlow: Identifiable {
     case receiveEcash
     case receiveLightning
     case sendEcash
     case sendLightning
+    case sendLightningWithInvoice(String)
+    case contactlessPay
 
-    var id: String { rawValue }
+    var id: String {
+        switch self {
+        case .receiveEcash:
+            return "receiveEcash"
+        case .receiveLightning:
+            return "receiveLightning"
+        case .sendEcash:
+            return "sendEcash"
+        case .sendLightning:
+            return "sendLightning"
+        case .sendLightningWithInvoice(let invoice):
+            return "sendLightningWithInvoice-\(invoice.prefix(64))"
+        case .contactlessPay:
+            return "contactlessPay"
+        }
+    }
 }
 
 private enum WalletSheet: Identifiable {
@@ -343,6 +384,9 @@ private struct WalletActionSheetView: View {
             VStack(alignment: .leading, spacing: 0) {
                 optionButton(title: "Ecash", icon: "banknote", action: action.primaryOption)
                 optionButton(title: secondaryOptionTitle, icon: "bolt.fill", action: action.secondaryOption)
+                if action == .send, NFCNDEFReaderSession.readingAvailable {
+                    optionButton(title: "Contactless", icon: "wave.3.right.circle.fill", action: .contactlessPay)
+                }
             }
             .frame(maxWidth: .infinity, alignment: .topLeading)
             .padding(.horizontal, 20)
@@ -397,8 +441,10 @@ private struct WalletActionSheetView: View {
 }
 
 private struct ChooserSheetPresentation: ViewModifier {
+    let height: CGFloat
+
     func body(content: Content) -> some View {
-        content.presentationDetents([.height(205)])
+        content.presentationDetents([.height(height)])
     }
 }
 
