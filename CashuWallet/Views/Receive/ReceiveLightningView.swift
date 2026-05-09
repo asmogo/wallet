@@ -40,6 +40,7 @@ struct ReceiveLightningView: View {
     @State private var isExpired = false
     @State private var onchainObservation: OnchainPaymentObservation?
     @State private var quoteCreatedAt: Date?
+    @State private var monitoredQuoteId: String?
 
     var body: some View {
         NavigationStack {
@@ -97,6 +98,7 @@ struct ReceiveLightningView: View {
                 expiryTimer?.invalidate()
                 quoteStatusTask = nil
                 expiryTimer = nil
+                monitoredQuoteId = nil
             }
         }
     }
@@ -632,6 +634,7 @@ struct ReceiveLightningView: View {
         copiedRequest = false
         onchainObservation = nil
         quoteCreatedAt = nil
+        monitoredQuoteId = nil
         expiryTimeRemaining = 0
         quoteStatusTask?.cancel()
         expiryTimer?.invalidate()
@@ -689,6 +692,9 @@ struct ReceiveLightningView: View {
     }
 
     private func startQuoteMonitoring(for quote: MintQuoteInfo) {
+        guard monitoredQuoteId != quote.id else { return }
+
+        monitoredQuoteId = quote.id
         quoteStatusTask?.cancel()
         quoteStatusTask = Task { @MainActor in
             switch quote.paymentMethod {
@@ -771,9 +777,6 @@ struct ReceiveLightningView: View {
 
             if updatedQuote.paymentMethod == .onchain, updatedQuote.state == .pending {
                 await refreshOnchainObservation(for: updatedQuote)
-                AppLogger.wallet.info(
-                    "Attempting to mint pending on-chain quote \(updatedQuote.id, privacy: .public); the mint will reject it if confirmations are not ready"
-                )
                 await mintQuoteIfReady(updatedQuote)
                 return
             } else {
@@ -822,16 +825,12 @@ struct ReceiveLightningView: View {
             let _ = try await walletManager.mintTokens(quoteId: quote.id)
             await completeReceivedQuote(refreshWalletState: false)
         } catch {
-            let errorString = error.localizedDescription.lowercased()
-            if errorString.contains("issued") || errorString.contains("already") {
+            if isAlreadyIssuedMintError(error) {
                 await completeReceivedQuote(refreshWalletState: true)
                 return
             }
 
             if quote.paymentMethod == .onchain {
-                AppLogger.wallet.info(
-                    "On-chain quote \(quote.id, privacy: .public) is not mintable yet: \(String(describing: error), privacy: .public)"
-                )
                 return
             }
 
@@ -856,6 +855,22 @@ struct ReceiveLightningView: View {
 
         try? await Task.sleep(nanoseconds: 2_000_000_000)
         dismiss()
+    }
+
+    private func isAlreadyIssuedMintError(_ error: Error) -> Bool {
+        let errorString = "\(error.localizedDescription) \(String(describing: error))".lowercased()
+
+        if errorString.contains("already being minted")
+            || errorString.contains("not issued")
+            || errorString.contains("not yet")
+            || errorString.contains("unissued") {
+            return false
+        }
+
+        return errorString.contains("already issued")
+            || errorString.contains("already minted")
+            || errorString.contains("quote is issued")
+            || errorString.contains("state=issued")
     }
 }
 

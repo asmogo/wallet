@@ -457,8 +457,7 @@ class WalletManager: ObservableObject {
                 userInfo: ["amount": totalAmount, "source": "npub.cash"]
             )
         } catch {
-            let errorString = "\(error)"
-            if errorString.contains("ISSUED") || errorString.contains("already") {
+            if isAlreadyIssuedMintError(error) {
                 processedQuotes.insert(mintQuote.id)
             }
             AppLogger.wallet.error("Failed to mint NPC quote: \(error)")
@@ -576,9 +575,6 @@ class WalletManager: ObservableObject {
         if let preimage = preimage {
             transactionService.savePreimage(quoteId: quoteId, preimage: preimage)
         }
-        AppLogger.wallet.info(
-            "Melt quote \(quoteId, privacy: .public) returned from LightningService; refreshing wallet state"
-        )
         await refreshBalance()
         await loadTransactions()
         return preimage
@@ -748,9 +744,6 @@ class WalletManager: ObservableObject {
         allowPendingOnchainMintAttempt: Bool
     ) async -> Bool {
         guard !mintQuoteSyncsInFlight.contains(quoteId) else {
-            AppLogger.wallet.info(
-                "Skipping duplicate pending quote sync for \(quoteId, privacy: .public)"
-            )
             return false
         }
 
@@ -783,21 +776,14 @@ class WalletManager: ObservableObject {
             }
 
             do {
-                let amount = try await lightningService.mintTokens(quoteId: quoteId)
-                AppLogger.wallet.info(
-                    "Minted pending quote \(quoteId, privacy: .public) for \(amount, privacy: .public) sats"
-                )
+                _ = try await lightningService.mintTokens(quoteId: quoteId)
                 return true
             } catch {
-                let errorString = error.localizedDescription.lowercased()
-                if errorString.contains("issued") || errorString.contains("already") {
+                if isAlreadyIssuedMintError(error) {
                     return true
                 }
 
                 if updatedQuote.paymentMethod == .onchain, updatedQuote.state == .pending {
-                    AppLogger.wallet.info(
-                        "Pending on-chain quote \(quoteId, privacy: .public) is not mintable yet: \(String(describing: error), privacy: .public)"
-                    )
                     return false
                 }
 
@@ -806,9 +792,6 @@ class WalletManager: ObservableObject {
             }
         } catch {
             if isMissingQuoteError(error) {
-                AppLogger.wallet.info(
-                    "Pending quote \(quoteId, privacy: .public) is missing on the mint. Keeping the local pending entry for fallback checks."
-                )
                 return false
             }
             AppLogger.wallet.error("Failed to refresh pending quote \(quoteId): \(error)")
@@ -824,6 +807,22 @@ class WalletManager: ObservableObject {
         }
 
         return String(describing: error).localizedCaseInsensitiveContains("not found")
+    }
+
+    private func isAlreadyIssuedMintError(_ error: Error) -> Bool {
+        let errorString = "\(error.localizedDescription) \(String(describing: error))".lowercased()
+
+        if errorString.contains("already being minted")
+            || errorString.contains("not issued")
+            || errorString.contains("not yet")
+            || errorString.contains("unissued") {
+            return false
+        }
+
+        return errorString.contains("already issued")
+            || errorString.contains("already minted")
+            || errorString.contains("quote is issued")
+            || errorString.contains("state=issued")
     }
     
     // MARK: - Backup

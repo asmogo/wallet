@@ -82,14 +82,6 @@ enum PaymentMethodKind: String, CaseIterable, Codable, Hashable {
         self == .bolt12
     }
 
-    var requiresMeltAmount: Bool {
-        switch self {
-        case .onchain:
-            return true
-        case .bolt11, .bolt12:
-            return false
-        }
-    }
 }
 
 enum PaymentRequestParser {
@@ -175,13 +167,6 @@ struct OnchainPaymentObservation: Equatable {
         return confirmed ? "Payment detected on-chain" : "Payment seen in mempool"
     }
 
-    func hasRequiredConfirmations(_ requiredConfirmations: Int?) -> Bool {
-        guard confirmed else { return false }
-        guard let requiredConfirmations, requiredConfirmations > 0 else {
-            return true
-        }
-        return (confirmations ?? 1) >= requiredConfirmations
-    }
 }
 
 enum OnchainExplorer {

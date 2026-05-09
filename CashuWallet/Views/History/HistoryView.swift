@@ -217,7 +217,7 @@ struct HistoryView: View {
     }
 
     // MARK: - Actions
-    
+
     private func refreshPendingTransaction(_ transaction: WalletTransaction) async {
         switch transaction.kind {
         case .ecash:
