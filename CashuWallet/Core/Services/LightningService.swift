@@ -351,12 +351,21 @@ class LightningService: ObservableObject {
         let mintUrl = MintUrl(url: activeMint.url)
         let wallet = try await repo.getWallet(mintUrl: mintUrl, unit: .sat)
         let normalizedAddress = PaymentRequestParser.normalizeBitcoinRequest(address)
-        let quote = try await wallet.meltQuote(
-            method: PaymentMethodKind.onchain.cdkMethod,
-            request: normalizedAddress,
-            options: nil,
-            extra: "{\"amount\":\(amount)}"
+        let quoteOptions = try await wallet.quoteOnchainMeltOptions(
+            address: normalizedAddress,
+            amount: Amount(value: amount),
+            maxFeeAmount: nil
         )
+
+        guard let quoteOption = quoteOptions.first else {
+            throw WalletError.networkError("Mint returned no on-chain melt fee options.")
+        }
+
+        AppLogger.wallet.info(
+            "Created on-chain melt quote options on mint \(activeMint.url, privacy: .public): address=\(normalizedAddress, privacy: .private), amount=\(amount, privacy: .public), options_count=\(quoteOptions.count, privacy: .public), selected_quote=\(quoteOption.id, privacy: .public), selected_fee_reserve=\(quoteOption.feeReserve.value, privacy: .public), selected_estimated_blocks=\(quoteOption.estimatedBlocks ?? 0, privacy: .public)"
+        )
+
+        let quote = try await wallet.selectOnchainMeltQuote(quote: quoteOption)
         trackOnchainMeltQuote(quoteId: quote.id, mintURLString: activeMint.url)
 
         return meltQuoteInfo(from: quote, paymentMethod: .onchain)
@@ -564,6 +573,7 @@ class LightningService: ObservableObject {
             mintUrl: quote.mintUrl,
             amountIssued: quote.amountIssued,
             amountPaid: quote.amountPaid,
+            estimatedBlocks: quote.estimatedBlocks,
             paymentMethod: quote.paymentMethod,
             secretKey: quote.secretKey,
             usedByOperation: quote.usedByOperation,
@@ -651,6 +661,7 @@ class LightningService: ObservableObject {
             mintUrl: quote.mintUrl,
             amountIssued: quote.amountIssued,
             amountPaid: quote.amountPaid,
+            estimatedBlocks: quote.estimatedBlocks,
             paymentMethod: quote.paymentMethod,
             secretKey: quote.secretKey,
             usedByOperation: nil,
@@ -672,6 +683,7 @@ class LightningService: ObservableObject {
             mintUrl: quote.mintUrl,
             amountIssued: quote.amountIssued,
             amountPaid: quote.amountPaid,
+            estimatedBlocks: quote.estimatedBlocks ?? existingQuote.estimatedBlocks,
             paymentMethod: quote.paymentMethod,
             secretKey: quote.secretKey ?? existingQuote.secretKey,
             usedByOperation: quote.usedByOperation ?? existingQuote.usedByOperation,
@@ -875,7 +887,7 @@ private extension PaymentMethodKind {
         case .bolt12:
             return .bolt12MintQuote
         case .onchain:
-            return nil
+            return .onchainMintQuote
         }
     }
 }

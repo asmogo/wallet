@@ -12,6 +12,8 @@ enum PaymentMethodKind: String, CaseIterable, Codable, Hashable {
             return .bolt11
         case .bolt12:
             return .bolt12
+        case .onchain:
+            return .onchain
         case .custom(let method):
             return method.lowercased() == PaymentMethodKind.onchain.rawValue ? .onchain : nil
         }
@@ -24,7 +26,7 @@ enum PaymentMethodKind: String, CaseIterable, Codable, Hashable {
         case .bolt12:
             return .bolt12
         case .onchain:
-            return .custom(method: rawValue)
+            return .onchain
         }
     }
 

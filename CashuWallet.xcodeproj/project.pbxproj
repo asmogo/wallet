@@ -39,7 +39,7 @@
 		6A8EC94C2F25A0000058C21B /* NostrService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6A8EC94D2F25A0000058C21B /* NostrService.swift */; };
 		6A8EC94E2F25A0000058C21B /* NPCService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6A8EC94F2F25A0000058C21B /* NPCService.swift */; };
 		6A8EC95B2F26983E0058C21B /* P256K in Frameworks */ = {isa = PBXBuildFile; productRef = 6A8EC95A2F26983E0058C21B /* P256K */; };
-		72DC8F142FA8E3E7005E35DD /* CashuDevKit in Frameworks */ = {isa = PBXBuildFile; productRef = 72DC8F132FA8E3E7005E35DD /* CashuDevKit */; };
+		72DC8F232FAF4A54005E35DD /* CashuDevKit in Frameworks */ = {isa = PBXBuildFile; productRef = 72DC8F222FAF4A54005E35DD /* CashuDevKit */; };
 		AA00000000000001 /* PaymentMethodProtocol.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA00000000000011 /* PaymentMethodProtocol.swift */; };
 		AA00000000000002 /* CurrencyProtocol.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA00000000000012 /* CurrencyProtocol.swift */; };
 		AA00000000000003 /* WalletServiceProtocol.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA00000000000013 /* WalletServiceProtocol.swift */; };
@@ -62,11 +62,11 @@
 		DD00000000000002 /* BIP39WordList.swift in Sources */ = {isa = PBXBuildFile; fileRef = DD00000000000012 /* BIP39WordList.swift */; };
 		DD00000000000003 /* HapticFeedback.swift in Sources */ = {isa = PBXBuildFile; fileRef = DD00000000000013 /* HapticFeedback.swift */; };
 		DD00000000000004 /* ErrorBannerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DD00000000000014 /* ErrorBannerView.swift */; };
+		EE00000000000002 /* WalletStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = EE00000000000012 /* WalletStore.swift */; };
+		EE00000000000003 /* SettingsStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = EE00000000000013 /* SettingsStore.swift */; };
 		EE00000000000004 /* TokenParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = EE00000000000014 /* TokenParser.swift */; };
 		EE00000000000005 /* AmountFormatter.swift in Sources */ = {isa = PBXBuildFile; fileRef = EE00000000000015 /* AmountFormatter.swift */; };
 		EE00000000000006 /* LightningRequestParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = EE00000000000016 /* LightningRequestParser.swift */; };
-		EE00000000000003 /* SettingsStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = EE00000000000013 /* SettingsStore.swift */; };
-		EE00000000000002 /* WalletStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = EE00000000000012 /* WalletStore.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -123,11 +123,11 @@
 		DD00000000000012 /* BIP39WordList.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BIP39WordList.swift; sourceTree = "<group>"; };
 		DD00000000000013 /* HapticFeedback.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HapticFeedback.swift; sourceTree = "<group>"; };
 		DD00000000000014 /* ErrorBannerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ErrorBannerView.swift; sourceTree = "<group>"; };
+		EE00000000000012 /* WalletStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WalletStore.swift; sourceTree = "<group>"; };
+		EE00000000000013 /* SettingsStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsStore.swift; sourceTree = "<group>"; };
 		EE00000000000014 /* TokenParser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TokenParser.swift; sourceTree = "<group>"; };
 		EE00000000000015 /* AmountFormatter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AmountFormatter.swift; sourceTree = "<group>"; };
 		EE00000000000016 /* LightningRequestParser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LightningRequestParser.swift; sourceTree = "<group>"; };
-		EE00000000000013 /* SettingsStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsStore.swift; sourceTree = "<group>"; };
-		EE00000000000012 /* WalletStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WalletStore.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -137,7 +137,7 @@
 			files = (
 				6A8EC93F2F256F350058C21B /* URKit in Frameworks */,
 				6A8EC95B2F26983E0058C21B /* P256K in Frameworks */,
-				72DC8F142FA8E3E7005E35DD /* CashuDevKit in Frameworks */,
+				72DC8F232FAF4A54005E35DD /* CashuDevKit in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -371,7 +371,7 @@
 			packageProductDependencies = (
 				6A8EC93E2F256F350058C21B /* URKit */,
 				6A8EC95A2F26983E0058C21B /* P256K */,
-				72DC8F132FA8E3E7005E35DD /* CashuDevKit */,
+				72DC8F222FAF4A54005E35DD /* CashuDevKit */,
 			);
 			productName = CashuWallet;
 			productReference = 0100000000000001 /* CashuWallet.app */;
@@ -404,7 +404,7 @@
 			packageReferences = (
 				6A8EC93D2F256F350058C21B /* XCRemoteSwiftPackageReference "URKit" */,
 				7200000000000002 /* XCRemoteSwiftPackageReference "swift-secp256k1" */,
-				72DC8F122FA8E3E7005E35DD /* XCRemoteSwiftPackageReference "cdk-swift" */,
+				72DC8F212FAF4A54005E35DD /* XCRemoteSwiftPackageReference "cdk-swift" */,
 			);
 			productRefGroup = 4100000000000002 /* Products */;
 			projectDirPath = "";
@@ -722,12 +722,12 @@
 				minimumVersion = 0.18.0;
 			};
 		};
-		72DC8F122FA8E3E7005E35DD /* XCRemoteSwiftPackageReference "cdk-swift" */ = {
+		72DC8F212FAF4A54005E35DD /* XCRemoteSwiftPackageReference "cdk-swift" */ = {
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/asmogo/cdk-swift";
 			requirement = {
 				kind = exactVersion;
-				version = 0.17.0;
+				version = 0.16.9;
 			};
 		};
 /* End XCRemoteSwiftPackageReference section */
@@ -743,9 +743,9 @@
 			package = 7200000000000002 /* XCRemoteSwiftPackageReference "swift-secp256k1" */;
 			productName = P256K;
 		};
-		72DC8F132FA8E3E7005E35DD /* CashuDevKit */ = {
+		72DC8F222FAF4A54005E35DD /* CashuDevKit */ = {
 			isa = XCSwiftPackageProductDependency;
-			package = 72DC8F122FA8E3E7005E35DD /* XCRemoteSwiftPackageReference "cdk-swift" */;
+			package = 72DC8F212FAF4A54005E35DD /* XCRemoteSwiftPackageReference "cdk-swift" */;
 			productName = CashuDevKit;
 		};
 /* End XCSwiftPackageProductDependency section */

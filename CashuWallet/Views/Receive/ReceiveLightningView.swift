@@ -698,7 +698,7 @@ struct ReceiveLightningView: View {
                 await monitorMintQuoteViaSubscription(quoteId: quote.id, paymentMethod: .bolt12)
             case .onchain:
                 await refreshMintQuoteStatus()
-                await pollMintQuote(quoteId: quote.id, initialInterval: 30, maxInterval: 30)
+                await monitorMintQuoteViaSubscription(quoteId: quote.id, paymentMethod: .onchain)
             }
         }
     }
@@ -721,7 +721,10 @@ struct ReceiveLightningView: View {
                     case .mintQuoteUpdate(let quoteUpdate):
                         guard quoteUpdate.quote == quoteId else { continue }
                         await refreshMintQuoteStatus()
-                    case .proofState, .meltQuoteUpdate:
+                    case .mintQuoteOnchainUpdate(let quoteUpdate):
+                        guard quoteUpdate.quote == quoteId else { continue }
+                        await refreshMintQuoteStatus()
+                    case .proofState, .meltQuoteUpdate, .meltQuoteOnchainUpdate:
                         continue
                     }
                 }
@@ -731,7 +734,8 @@ struct ReceiveLightningView: View {
             // Fall back to polling when subscriptions are unavailable or fail.
         }
 
-        await pollMintQuote(quoteId: quoteId, initialInterval: 10, maxInterval: 30)
+        let initialInterval: UInt64 = paymentMethod == .onchain ? 30 : 10
+        await pollMintQuote(quoteId: quoteId, initialInterval: initialInterval, maxInterval: 30)
     }
 
     @MainActor

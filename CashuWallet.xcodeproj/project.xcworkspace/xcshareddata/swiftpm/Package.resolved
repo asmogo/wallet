@@ -33,8 +33,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/asmogo/cdk-swift",
       "state" : {
-        "revision" : "66e8243fe33e8205af7f83862a5daf537317997d",
-        "version" : "0.17.0"
+        "revision" : "49563fefe3e23a8eff95b6f9c6dde9d12689178f",
+        "version" : "0.16.9"
       }
     },
     {
