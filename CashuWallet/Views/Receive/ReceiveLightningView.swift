@@ -47,7 +47,7 @@ struct ReceiveLightningView: View {
             Group {
                 if isPaid, let quote = mintQuote {
                     paymentReceivedSplash(quote: quote)
-                        .transition(.scale(scale: 0.94).combined(with: .opacity))
+                        .transition(.scale(scale: 0.7).combined(with: .opacity))
                 } else if let quote = mintQuote {
                     requestDisplayView(quote: quote)
                         .transition(.asymmetric(
@@ -63,10 +63,13 @@ struct ReceiveLightningView: View {
                 }
             }
             .animation(.snappy(duration: 0.35), value: mintQuote != nil)
-            .animation(.spring(response: 0.5, dampingFraction: 0.7), value: isPaid)
+            .animation(.spring(response: 0.55, dampingFraction: 0.72), value: isPaid)
             .navigationBarTitleDisplayMode(.inline)
-            .toolbarBackground(.visible, for: .navigationBar)
-            .toolbarBackground(.thinMaterial, for: .navigationBar)
+            // No nav bar chrome — the title + close button float over the
+            // black canvas. This kills the secondary gray bar the user was
+            // (rightly) complaining about. The content has enough top
+            // padding to clear the safe-area inset so nothing overlaps.
+            .toolbarBackground(.hidden, for: .navigationBar)
             .toolbar {
                 if !isPaid {
                     ToolbarItem(placement: .cancellationAction) {
@@ -343,11 +346,11 @@ struct ReceiveLightningView: View {
     private func requestDisplayView(quote: MintQuoteInfo) -> some View {
         VStack(spacing: 0) {
             ScrollView {
-                VStack(spacing: 20) {
+                VStack(spacing: 24) {
                     QRCodeView(content: quote.request, showControls: false, staticOnly: true)
                         .frame(width: 280, height: 280)
                         .padding(16)
-                        .background(Color.white, in: RoundedRectangle(cornerRadius: 16))
+                        .background(Color.white, in: RoundedRectangle(cornerRadius: 20))
                         .padding(.top, 8)
                         .contextMenu {
                             Button(action: { copyRequest(quote.request) }) {
@@ -362,27 +365,37 @@ struct ReceiveLightningView: View {
 
                     statusBadge
 
+                    if !isPaid && !isExpired && expiryTimeRemaining > 0 {
+                        // Plain caption, no pill — fewer surfaces.
+                        HStack(spacing: 5) {
+                            Image(systemName: "timer")
+                                .font(.caption2)
+                            Text("Expires in \(formatTimeRemaining(expiryTimeRemaining))")
+                                .font(.footnote)
+                        }
+                        .foregroundStyle(expiryTimeRemaining < 60 ? Color.red : Color.primary.opacity(0.5))
+                    }
+
                     if let explorerURL = blockExplorerURL(for: quote) {
                         Link(blockExplorerLabel(for: quote), destination: explorerURL)
                             .font(.subheadline.weight(.medium))
                     }
 
-                    if !isPaid && !isExpired && expiryTimeRemaining > 0 {
-                        expiryView
-                    }
-
+                    // Detail rows live directly on the canvas — no gray card.
+                    // Hairline dividers separate them; eye flows down the
+                    // page without competing surfaces.
                     VStack(spacing: 0) {
                         detailRow(icon: "arrow.left.arrow.right", label: "Type", value: quote.paymentMethod.displayName)
-                        Divider().padding(.leading)
+                        canvasDivider
                         detailRow(
                             icon: "number",
                             label: "Amount",
                             value: quote.amount.map { formattedAmount(sats: $0) } ?? "Set by sender"
                         )
-                        Divider().padding(.leading)
+                        canvasDivider
                         detailRow(icon: "info.circle", label: "State", value: quoteStateText(for: quote))
                         if let mint = walletManager.activeMint {
-                            Divider().padding(.leading)
+                            canvasDivider
                             detailRow(
                                 icon: "bitcoinsign.bank.building",
                                 label: "Mint",
@@ -390,33 +403,26 @@ struct ReceiveLightningView: View {
                             )
                         }
                     }
-                    .padding(.vertical, 4)
-                    .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 14))
-                    .padding(.horizontal)
+                    .padding(.top, 8)
+                    .padding(.horizontal, 4)
                 }
+                .padding(.horizontal)
             }
 
-            HStack(spacing: 10) {
-                ShareLink(item: quote.request) {
-                    Image(systemName: "square.and.arrow.up")
-                        .font(.body.weight(.semibold))
-                        .frame(width: 52, height: 52)
-                        .background(.thinMaterial, in: Capsule())
-                        .foregroundStyle(.primary)
-                }
-                .accessibilityLabel("Share invoice")
-
-                Button(action: { copyRequest(quote.request) }) {
-                    Label(copyButtonTitle(for: quote), systemImage: copiedRequest ? "checkmark" : "doc.on.doc")
-                        .font(.body.weight(.semibold))
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 14)
-                }
-                .buttonStyle(.borderedProminent)
-                .buttonBorderShape(.capsule)
-                .controlSize(.large)
-                .tint(.accentColor)
+            // Single primary action — Copy. Long-press the QR for Share.
+            Button(action: { copyRequest(quote.request) }) {
+                Label(copyButtonTitle(for: quote), systemImage: copiedRequest ? "checkmark" : "doc.on.doc")
+                    .font(.body.weight(.semibold))
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 16)
+                    // Inverted-fill: primary color as surface, system
+                    // background as content. Works in both light/dark
+                    // regardless of accent color (the app's accent is pure
+                    // white in dark mode, which breaks .borderedProminent).
+                    .background(Color.primary, in: Capsule())
+                    .foregroundStyle(Color(.systemBackground))
             }
+            .buttonStyle(.plain)
             .padding(.horizontal)
             .padding(.bottom, 16)
         }
@@ -448,25 +454,27 @@ struct ReceiveLightningView: View {
     // MARK: - Payment Received Splash
 
     private func paymentReceivedSplash(quote: MintQuoteInfo) -> some View {
-        VStack(spacing: 24) {
+        VStack(spacing: 28) {
             Spacer()
 
             Image(systemName: "checkmark.circle.fill")
-                .font(.system(size: 96))
+                .font(.system(size: 120, weight: .semibold))
                 .foregroundStyle(.green)
-                .symbolEffect(.bounce, value: isPaid)
+                .symbolEffect(.bounce.up.byLayer, options: .repeat(2), value: isPaid)
                 .accessibilityHidden(true)
 
-            VStack(spacing: 4) {
+            VStack(spacing: 8) {
                 Text("Received")
-                    .font(.title2.weight(.semibold))
+                    .font(.title3.weight(.semibold))
                     .foregroundStyle(.secondary)
+                    .textCase(.uppercase)
+                    .tracking(1.2)
 
                 if let amount = quote.amount {
                     CurrencyAmountDisplay(
                         sats: amount,
                         primary: $settings.amountDisplayPrimary,
-                        primarySize: 56
+                        primarySize: 64
                     )
                 }
             }
@@ -495,8 +503,15 @@ struct ReceiveLightningView: View {
                 .truncationMode(.middle)
         }
         .font(.subheadline)
-        .padding(.horizontal, 14)
-        .padding(.vertical, 12)
+        .padding(.horizontal, 4)
+        .padding(.vertical, 14)
+    }
+
+    private var canvasDivider: some View {
+        Rectangle()
+            .fill(Color.primary.opacity(0.08))
+            .frame(height: 0.5)
+            .padding(.leading, 28)
     }
 
     // MARK: - Status Badge
@@ -575,17 +590,6 @@ struct ReceiveLightningView: View {
             }
             return "Waiting for on-chain payment..."
         }
-    }
-
-    // MARK: - Expiry View
-
-    private var expiryView: some View {
-        Label("Expires in \(formatTimeRemaining(expiryTimeRemaining))", systemImage: "timer")
-            .font(.caption)
-            .foregroundStyle(expiryTimeRemaining < 60 ? .red : .secondary)
-            .padding(.horizontal, 12)
-            .padding(.vertical, 6)
-            .liquidGlass(in: Capsule())
     }
 
     // MARK: - Helpers
@@ -918,7 +922,9 @@ struct ReceiveLightningView: View {
             await walletManager.loadTransactions()
         }
 
-        try? await Task.sleep(nanoseconds: 2_000_000_000)
+        // Longer dwell so the success splash actually registers as a moment
+        // (entrance spring eats ~0.55s, then user has ~3s of clear splash).
+        try? await Task.sleep(nanoseconds: 3_500_000_000)
         dismiss()
     }
 
