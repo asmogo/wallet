@@ -134,8 +134,10 @@ struct ReceiveTokenDetailView: View {
         do {
             let token = try walletManager.decodeToken(tokenString: tokenString)
             self.decodedToken = token
-            let proofs = try token.proofsSimple()
-            self.tokenAmount = proofs.reduce(0) { $0 + $1.amount.value }
+            // Token.value() is the canonical "total value of the token" API;
+            // proofsSimple() is documented as "simplified - no keyset filtering"
+            // and returns 0 / empty for some token formats.
+            self.tokenAmount = try token.value().value
             let mint = try token.mintUrl()
             self.mintUrl = mint.url
 
