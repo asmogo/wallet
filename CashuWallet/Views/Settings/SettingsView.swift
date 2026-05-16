@@ -34,75 +34,84 @@ struct SettingsView: View {
 
     var body: some View {
         NavigationStack {
-            List {
-                Section {
-                    NavigationLink { backupDetailView } label: {
-                        settingsLabel("Backup & Restore", icon: "key.fill")
-                    }
-                    .listRowSeparator(.hidden)
-                    NavigationLink { lightningDetailView } label: {
-                        settingsLabel("Lightning", icon: "bolt.fill")
-                    }
-                    .listRowSeparator(.hidden)
-                    NavigationLink { nostrDetailView } label: {
-                        settingsLabel("Nostr", icon: "person.circle")
-                    }
-                    .listRowSeparator(.hidden)
-                    NavigationLink { paymentRequestsDetailView } label: {
-                        settingsLabel("Payment Requests", icon: "arrow.left.arrow.right")
-                    }
-                    .listRowSeparator(.hidden)
-                    NavigationLink { nwcDetailView } label: {
-                        settingsLabel("Nostr Wallet Connect", icon: "link")
-                    }
-                    .listRowSeparator(.hidden)
-                    NavigationLink { p2pkDetailView } label: {
-                        settingsLabel("P2PK", icon: "lock.fill")
-                    }
-                    .listRowSeparator(.hidden)
-                    NavigationLink { privacyDetailView } label: {
-                        settingsLabel("Privacy", icon: "eye.slash")
-                    }
-                    .listRowSeparator(.hidden)
-                    NavigationLink { appearanceDetailView } label: {
-                        settingsLabel("Appearance", icon: "paintbrush")
-                    }
-                    .listRowSeparator(.hidden)
-                }
+            ScrollView {
+                LazyVStack(spacing: 0) {
+                    accountHeader
+                        .padding(.top, 8)
+                        .padding(.bottom, 16)
 
-                Section {
-                    LabeledContent("Balance", value: settings.formatAmount(walletManager.balance))
-                        .listRowSeparator(.hidden)
-                    LabeledContent("Mints", value: "\(walletManager.mints.count)")
-                        .listRowSeparator(.hidden)
-                    LabeledContent("Unit", value: settings.unitLabel)
-                        .listRowSeparator(.hidden)
-                    LabeledContent("Version", value: "1.0.0")
-                        .listRowSeparator(.hidden)
-                }
+                    sectionGroup(title: "Backup") {
+                        navRow("Backup & Restore", icon: "key.fill", tint: .green) {
+                            backupDetailView
+                        }
+                    }
 
-                Section {
-                    Link(destination: URL(string: "https://cashu.space")!) {
-                        settingsLabel("Learn about Cashu", icon: "globe")
+                    sectionGroup(title: "Payments") {
+                        navRow("Lightning", icon: "bolt.fill", tint: .orange) {
+                            lightningDetailView
+                        }
+                        CanvasDivider()
+                        navRow("Payment Requests", icon: "arrow.left.arrow.right", tint: .orange) {
+                            paymentRequestsDetailView
+                        }
+                        CanvasDivider()
+                        navRow("P2PK", icon: "lock.fill", tint: .blue) {
+                            p2pkDetailView
+                        }
                     }
-                    .listRowSeparator(.hidden)
-                    Link(destination: URL(string: "https://github.com/cashubtc/nuts")!) {
-                        settingsLabel("Protocol Specs (NUTs)", icon: "doc.text")
-                    }
-                    .listRowSeparator(.hidden)
-                }
 
-                Section {
-                    Button(role: .destructive) {
-                        showDeleteConfirm = true
-                    } label: {
-                        settingsLabel("Delete Wallet", icon: "trash", role: .destructive)
+                    sectionGroup(title: "Integrations") {
+                        navRow("Nostr", icon: "person.circle", tint: .purple) {
+                            nostrDetailView
+                        }
+                        CanvasDivider()
+                        navRow("Nostr Wallet Connect", icon: "link", tint: .purple) {
+                            nwcDetailView
+                        }
                     }
-                    .listRowSeparator(.hidden)
+
+                    sectionGroup(title: "Privacy & Display") {
+                        navRow("Privacy", icon: "eye.slash", tint: .gray) {
+                            privacyDetailView
+                        }
+                        CanvasDivider()
+                        navRow("Appearance", icon: "paintbrush", tint: .pink) {
+                            appearanceDetailView
+                        }
+                    }
+
+                    sectionGroup(title: "About") {
+                        externalLinkRow("Learn about Cashu",
+                                        icon: "globe",
+                                        url: URL(string: "https://cashu.space")!)
+                        CanvasDivider()
+                        externalLinkRow("Protocol Specs (NUTs)",
+                                        icon: "doc.text",
+                                        url: URL(string: "https://github.com/cashubtc/nuts")!)
+                    }
+
+                    sectionGroup(title: "Danger") {
+                        Button(role: .destructive) {
+                            HapticFeedback.selection()
+                            showDeleteConfirm = true
+                        } label: {
+                            settingsRow("Delete Wallet", icon: "trash", tint: .red, isDestructive: true)
+                        }
+                        .buttonStyle(.plain)
+                    }
+
+                    Text("Cashu Wallet · 1.0.0")
+                        .font(.caption2)
+                        .foregroundStyle(.tertiary)
+                        .frame(maxWidth: .infinity)
+                        .padding(.top, 24)
+                        .padding(.bottom, 32)
                 }
+                .padding(.horizontal)
             }
-            .listStyle(.plain)
             .navigationTitle("Settings")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbarBackground(.hidden, for: .navigationBar)
             .sheet(isPresented: $showBackup) {
                 BackupView()
                     .environmentObject(walletManager)
@@ -138,6 +147,120 @@ struct SettingsView: View {
         }
     }
 
+    // MARK: - Account Header
+
+    private var accountHeader: some View {
+        VStack(spacing: 14) {
+            // Avatar
+            Image(systemName: "person.crop.circle.fill")
+                .font(.system(size: 64))
+                .foregroundStyle(.secondary)
+                .symbolRenderingMode(.hierarchical)
+
+            VStack(spacing: 4) {
+                if let mint = walletManager.activeMint {
+                    Text(mint.name)
+                        .font(.title3.weight(.semibold))
+                } else {
+                    Text("Cashu Wallet")
+                        .font(.title3.weight(.semibold))
+                }
+
+                Text(settings.formatAmount(walletManager.balance))
+                    .font(.system(.title2, design: .rounded).weight(.semibold))
+                    .contentTransition(.numericText(value: Double(walletManager.balance)))
+
+                if !npcService.lightningAddress.isEmpty {
+                    Text(npcService.lightningAddress)
+                        .font(.caption.monospaced())
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                        .padding(.top, 2)
+                }
+            }
+        }
+        .frame(maxWidth: .infinity)
+    }
+
+    // MARK: - Section + Row Helpers
+
+    @ViewBuilder
+    private func sectionGroup<Content: View>(
+        title: String,
+        @ViewBuilder content: () -> Content
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Text(title)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.secondary)
+                .textCase(.uppercase)
+                .tracking(1.2)
+                .padding(.horizontal, 4)
+                .padding(.top, 16)
+                .padding(.bottom, 8)
+
+            VStack(spacing: 0) {
+                content()
+            }
+            .padding(.horizontal, 4)
+        }
+    }
+
+    private func navRow<Destination: View>(
+        _ title: String,
+        icon: String,
+        tint: Color,
+        @ViewBuilder destination: () -> Destination
+    ) -> some View {
+        NavigationLink {
+            destination()
+        } label: {
+            settingsRow(title, icon: icon, tint: tint, showChevron: true)
+        }
+        .buttonStyle(.plain)
+        .simultaneousGesture(TapGesture().onEnded { HapticFeedback.selection() })
+    }
+
+    private func externalLinkRow(_ title: String, icon: String, url: URL) -> some View {
+        Link(destination: url) {
+            settingsRow(title, icon: icon, tint: .gray, showChevron: true, isExternal: true)
+        }
+        .simultaneousGesture(TapGesture().onEnded { HapticFeedback.selection() })
+    }
+
+    private func settingsRow(
+        _ title: String,
+        icon: String,
+        tint: Color,
+        showChevron: Bool = false,
+        isExternal: Bool = false,
+        isDestructive: Bool = false
+    ) -> some View {
+        HStack(spacing: 14) {
+            Image(systemName: icon)
+                .font(.callout.weight(.semibold))
+                .foregroundStyle(.white)
+                .frame(width: 30, height: 30)
+                .background(isDestructive ? Color.red : tint, in: RoundedRectangle(cornerRadius: 7))
+
+            Text(title)
+                .font(.body)
+                .foregroundStyle(isDestructive ? .red : .primary)
+
+            Spacer(minLength: 8)
+
+            if showChevron {
+                Image(systemName: isExternal ? "arrow.up.right" : "chevron.right")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.tertiary)
+            }
+        }
+        .padding(.horizontal, 4)
+        .padding(.vertical, 12)
+        .contentShape(Rectangle())
+    }
+
     // MARK: - Detail Views
 
     private var backupDetailView: some View {
@@ -152,6 +275,7 @@ struct SettingsView: View {
         }
         .listStyle(.plain)
         .navigationTitle("Backup & Restore")
+        .toolbarBackground(.hidden, for: .navigationBar)
     }
 
     private var lightningDetailView: some View {
@@ -167,6 +291,7 @@ struct SettingsView: View {
         }
         .listStyle(.plain)
         .navigationTitle("Lightning")
+        .toolbarBackground(.hidden, for: .navigationBar)
     }
 
     private var nostrDetailView: some View {
@@ -194,6 +319,7 @@ struct SettingsView: View {
         }
         .listStyle(.plain)
         .navigationTitle("Nostr")
+        .toolbarBackground(.hidden, for: .navigationBar)
     }
 
     private var paymentRequestsDetailView: some View {
@@ -205,6 +331,7 @@ struct SettingsView: View {
         }
         .listStyle(.plain)
         .navigationTitle("Payment Requests")
+        .toolbarBackground(.hidden, for: .navigationBar)
     }
 
     private var nwcDetailView: some View {
@@ -220,6 +347,7 @@ struct SettingsView: View {
         }
         .listStyle(.plain)
         .navigationTitle("Nostr Wallet Connect")
+        .toolbarBackground(.hidden, for: .navigationBar)
     }
 
     private var p2pkDetailView: some View {
@@ -238,6 +366,7 @@ struct SettingsView: View {
         }
         .listStyle(.plain)
         .navigationTitle("P2PK")
+        .toolbarBackground(.hidden, for: .navigationBar)
     }
 
     private var privacyDetailView: some View {
@@ -249,6 +378,7 @@ struct SettingsView: View {
         }
         .listStyle(.plain)
         .navigationTitle("Privacy")
+        .toolbarBackground(.hidden, for: .navigationBar)
     }
 
     private var appearanceDetailView: some View {
@@ -260,19 +390,7 @@ struct SettingsView: View {
         }
         .listStyle(.plain)
         .navigationTitle("Appearance")
-    }
-
-    // MARK: - Helpers
-
-    private func settingsLabel(_ title: String, icon: String, role: ButtonRole? = nil) -> some View {
-        Label {
-            Text(title)
-        } icon: {
-            Image(systemName: icon)
-                .font(.subheadline.weight(.semibold))
-                .foregroundStyle(role == .destructive ? .red : .secondary)
-        }
-        .foregroundStyle(role == .destructive ? .red : .primary)
+        .toolbarBackground(.hidden, for: .navigationBar)
     }
 
     private func deleteWallet() {
@@ -327,12 +445,11 @@ struct QRCodeDetailSheet: View {
                     .padding(.horizontal)
 
                 Button(action: copyToClipboard) {
-                    HStack {
-                        Image(systemName: copied ? "checkmark" : "doc.on.doc")
-                        Text(copied ? "Copied" : "Copy")
-                    }
+                    Label(copied ? "Copied" : "Copy",
+                          systemImage: copied ? "checkmark" : "doc.on.doc")
+                        .primaryFillCapsule()
                 }
-                .glassButton()
+                .buttonStyle(.plain)
                 .padding(.horizontal)
 
                 Spacer()
@@ -340,6 +457,7 @@ struct QRCodeDetailSheet: View {
             .padding(.top, 24)
             .navigationTitle(title)
             .navigationBarTitleDisplayMode(.inline)
+            .toolbarBackground(.hidden, for: .navigationBar)
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
                     Button(action: { dismiss() }) {
@@ -479,14 +597,17 @@ struct BackupView: View {
 
                     Spacer(minLength: 50)
 
-                    Button("Done") { dismiss() }
-                        .glassButton()
-                        .padding(.horizontal)
-                        .padding(.bottom, 30)
+                    Button(action: { dismiss() }) {
+                        Text("Done").primaryFillCapsule()
+                    }
+                    .buttonStyle(.plain)
+                    .padding(.horizontal)
+                    .padding(.bottom, 30)
                 }
             }
             .navigationTitle("Backup")
             .navigationBarTitleDisplayMode(.inline)
+            .toolbarBackground(.hidden, for: .navigationBar)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") { dismiss() }
