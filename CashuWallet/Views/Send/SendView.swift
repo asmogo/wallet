@@ -534,6 +534,12 @@ struct MeltView: View {
     @State private var showAuthorizingOverlay = false
     @State private var authorizingState: AuthorizingOverlay.FlowState = .authorizing
 
+    // Inline scan + clipboard suggestion
+    @State private var showingScanner = false
+    @State private var clipboardSuggestion: PaymentRequestDecodeResult?
+    @State private var clipboardSuggestionRaw: String?
+    @State private var dismissedClipboardSuggestion = false
+
     private var meltViewStateKey: String {
         if isPaid { return "paid" }
         if meltQuote != nil { return "quote" }
@@ -614,8 +620,13 @@ struct MeltView: View {
                 .presentationBackgroundInteraction(.disabled)
                 .interactiveDismissDisabled()
             }
+            .sheet(isPresented: $showingScanner) {
+                ScannerWrapperView(onScanned: handleScannedRequest)
+                    .environmentObject(walletManager)
+            }
             .onAppear {
                 syncMeltModeWithActiveMint()
+                detectClipboardSuggestion()
                 if autoQuoteOnAppear,
                    !requestInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
                    !amountRequired {
@@ -691,42 +702,43 @@ struct MeltView: View {
                     .padding(.top, 12)
             }
 
-            HStack(alignment: .top) {
+            HStack(alignment: .top, spacing: 12) {
                 TextField(requestPlaceholder, text: $requestInput, axis: .vertical)
                     .font(.body)
                     .lineLimit(3...5)
                     .textInputAutocapitalization(.never)
                     .autocorrectionDisabled()
 
-                Button("Paste", action: pasteFromClipboard)
-                    .font(.subheadline.weight(.medium))
+                HStack(spacing: 6) {
+                    Button(action: openScanner) {
+                        Image(systemName: "qrcode.viewfinder")
+                            .font(.title3)
+                            .foregroundStyle(.primary)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Scan QR code")
+
+                    Button(action: pasteFromClipboard) {
+                        Image(systemName: "doc.on.clipboard")
+                            .font(.title3)
+                            .foregroundStyle(.primary)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Paste from clipboard")
+                }
             }
             .padding()
             .liquidGlass(in: RoundedRectangle(cornerRadius: 12))
             .padding(.horizontal)
             .padding(.top, 16)
 
-            if meltMode == .onchain {
-                Text("Enter a Bitcoin address and the amount to send.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .padding(.top, 8)
-                    .padding(.horizontal)
-            }
+            liveDecodeFeedback
+                .padding(.top, 6)
+                .padding(.horizontal)
 
             if amountRequired {
                 amountEntrySection
                     .padding(.top, 16)
-            }
-
-            if meltMode == .onchain,
-               !requestInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
-               !isBitcoinAddress {
-                Text("Enter a valid Bitcoin address.")
-                    .font(.caption)
-                    .foregroundStyle(.red)
-                    .padding(.top, 8)
-                    .padding(.horizontal)
             }
 
             if let error = errorMessage {
@@ -742,7 +754,10 @@ struct MeltView: View {
                     .padding(.horizontal, 24)
                     .padding(.top, 12)
             } else {
-                Spacer()
+                launchpadSection
+                    .padding(.top, 16)
+                    .padding(.horizontal)
+                Spacer(minLength: 0)
             }
 
             Button(action: getQuote) {
@@ -758,6 +773,93 @@ struct MeltView: View {
             .padding(.top, 12)
             .padding(.bottom, 16)
         }
+    }
+
+    // MARK: - Launchpad (clipboard chip + recent recipients)
+
+    @ViewBuilder
+    private var launchpadSection: some View {
+        VStack(spacing: 12) {
+            if let suggestion = clipboardSuggestion,
+               let raw = clipboardSuggestionRaw,
+               !dismissedClipboardSuggestion,
+               requestInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                ClipboardPaymentChip(
+                    raw: raw,
+                    result: suggestion,
+                    onTap: { applyDecodedSuggestion(suggestion, raw: raw) },
+                    onDismiss: {
+                        withAnimation(.easeOut(duration: 0.2)) {
+                            dismissedClipboardSuggestion = true
+                        }
+                    }
+                )
+            }
+
+            if requestInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+               !recentRecipients.isEmpty {
+                RecentRecipientsList(
+                    recipients: recentRecipients,
+                    onTap: applyRecentRecipient
+                )
+            }
+        }
+        .animation(.easeInOut(duration: 0.2), value: requestInput.isEmpty)
+        .animation(.easeInOut(duration: 0.2), value: dismissedClipboardSuggestion)
+    }
+
+    @ViewBuilder
+    private var liveDecodeFeedback: some View {
+        let trimmed = requestInput.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !trimmed.isEmpty {
+            let result = PaymentRequestDecoder.decode(trimmed)
+            HStack(spacing: 6) {
+                Image(systemName: result == .unrecognized ? "exclamationmark.circle" : "checkmark.circle.fill")
+                    .font(.caption.weight(.semibold))
+                Text(liveDecodeText(for: result))
+                    .font(.caption)
+            }
+            .foregroundStyle(result == .unrecognized ? Color.red : Color.secondary)
+            .transition(.opacity)
+            .accessibilityLabel(liveDecodeText(for: result))
+        }
+    }
+
+    private func liveDecodeText(for result: PaymentRequestDecodeResult) -> String {
+        switch result {
+        case .lightningAddress:
+            return "Lightning address"
+        case .bolt11(let amount, _):
+            return amount.map { "BOLT11 invoice — \($0) sat" } ?? "BOLT11 invoice — set amount"
+        case .bolt12(let amount, _):
+            return amount.map { "BOLT12 offer — \($0) sat" } ?? "BOLT12 offer — set amount"
+        case .onchain:
+            return "Bitcoin address"
+        case .unrecognized:
+            return "Unrecognized — try a Lightning address, invoice, or Bitcoin address"
+        }
+    }
+
+    private var recentRecipients: [RecentRecipientsList.Recipient] {
+        var seen = Set<String>()
+        var out: [RecentRecipientsList.Recipient] = []
+        for tx in walletManager.transactions {
+            guard tx.type == .outgoing,
+                  tx.kind == .lightning || tx.kind == .onchain,
+                  let invoice = tx.invoice,
+                  !invoice.isEmpty,
+                  !seen.contains(invoice) else { continue }
+            seen.insert(invoice)
+            out.append(RecentRecipientsList.Recipient(
+                id: tx.id,
+                invoice: invoice,
+                kind: tx.kind,
+                amount: tx.amount,
+                date: tx.date
+            ))
+            if out.count >= 3 { break }
+        }
+        return out
     }
 
     private var meltModePicker: some View {
@@ -939,9 +1041,86 @@ struct MeltView: View {
     }
 
     private func pasteFromClipboard() {
-        if let content = UIPasteboard.general.string {
-            requestInput = content.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let content = UIPasteboard.general.string else { return }
+        let trimmed = content.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        HapticFeedback.selection()
+        let result = PaymentRequestDecoder.decode(trimmed)
+        applyDecodedSuggestion(result, raw: trimmed)
+    }
+
+    private func openScanner() {
+        HapticFeedback.selection()
+        showingScanner = true
+    }
+
+    private func handleScannedRequest(_ scanned: String) {
+        let trimmed = scanned.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        let result = PaymentRequestDecoder.decode(trimmed)
+        applyDecodedSuggestion(result, raw: trimmed)
+    }
+
+    private func detectClipboardSuggestion() {
+        guard !dismissedClipboardSuggestion,
+              clipboardSuggestion == nil,
+              requestInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+              let content = UIPasteboard.general.string else { return }
+        let trimmed = content.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        let result = PaymentRequestDecoder.decode(trimmed)
+        guard result != .unrecognized else { return }
+        clipboardSuggestion = result
+        clipboardSuggestionRaw = trimmed
+    }
+
+    private func applyDecodedSuggestion(_ result: PaymentRequestDecodeResult, raw: String) {
+        // Choose mode based on suggestion (if we can switch).
+        if let suggested = PaymentRequestDecoder.suggestedMode(result),
+           suggested != meltMode,
+           suggested != .onchain || supportsOnchainMelt {
+            withAnimation(.snappy) { meltMode = suggested }
         }
+
+        // Fill input with normalized request.
+        switch result {
+        case .onchain:
+            requestInput = PaymentRequestParser.normalizeBitcoinRequest(raw)
+        case .bolt11, .bolt12:
+            requestInput = PaymentRequestParser.normalizeLightningRequest(raw)
+        default:
+            requestInput = raw
+        }
+
+        // Hide the chip after a tap.
+        dismissedClipboardSuggestion = true
+        errorMessage = nil
+
+        // Auto-quote when amount is locked.
+        if PaymentRequestDecoder.amountLocked(result) {
+            getQuote()
+        }
+    }
+
+    private func applyRecentRecipient(_ recipient: RecentRecipientsList.Recipient) {
+        HapticFeedback.selection()
+        let result = PaymentRequestDecoder.decode(recipient.invoice)
+        // Reuse the same routing as suggestion tap, but never auto-quote: the
+        // user is reusing a destination at a (likely) new amount.
+        if let suggested = PaymentRequestDecoder.suggestedMode(result),
+           suggested != meltMode,
+           suggested != .onchain || supportsOnchainMelt {
+            withAnimation(.snappy) { meltMode = suggested }
+        }
+        switch result {
+        case .onchain:
+            requestInput = PaymentRequestParser.normalizeBitcoinRequest(recipient.invoice)
+        case .bolt11, .bolt12:
+            requestInput = PaymentRequestParser.normalizeLightningRequest(recipient.invoice)
+        default:
+            requestInput = recipient.invoice
+        }
+        errorMessage = nil
     }
 
     private func getQuote() {

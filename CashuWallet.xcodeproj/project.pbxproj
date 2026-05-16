@@ -74,6 +74,9 @@
 		F300000000000001 /* CurrencyAmountDisplay.swift in Sources */ = {isa = PBXBuildFile; fileRef = F400000000000001 /* CurrencyAmountDisplay.swift */; };
 		F300000000000002 /* NumberPadAmountInput.swift in Sources */ = {isa = PBXBuildFile; fileRef = F400000000000002 /* NumberPadAmountInput.swift */; };
 		F300000000000003 /* AuthorizingOverlay.swift in Sources */ = {isa = PBXBuildFile; fileRef = F400000000000003 /* AuthorizingOverlay.swift */; };
+		F300000000000004 /* ClipboardPaymentChip.swift in Sources */ = {isa = PBXBuildFile; fileRef = F400000000000004 /* ClipboardPaymentChip.swift */; };
+		F300000000000005 /* RecentRecipientsList.swift in Sources */ = {isa = PBXBuildFile; fileRef = F400000000000005 /* RecentRecipientsList.swift */; };
+		F300000000000006 /* PaymentRequestDecoder.swift in Sources */ = {isa = PBXBuildFile; fileRef = F400000000000006 /* PaymentRequestDecoder.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -142,6 +145,9 @@
 		F400000000000001 /* CurrencyAmountDisplay.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CurrencyAmountDisplay.swift; sourceTree = "<group>"; };
 		F400000000000002 /* NumberPadAmountInput.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NumberPadAmountInput.swift; sourceTree = "<group>"; };
 		F400000000000003 /* AuthorizingOverlay.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthorizingOverlay.swift; sourceTree = "<group>"; };
+		F400000000000004 /* ClipboardPaymentChip.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClipboardPaymentChip.swift; sourceTree = "<group>"; };
+		F400000000000005 /* RecentRecipientsList.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecentRecipientsList.swift; sourceTree = "<group>"; };
+		F400000000000006 /* PaymentRequestDecoder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PaymentRequestDecoder.swift; sourceTree = "<group>"; };
 		F200000000000005 /* CashuWallet.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = CashuWallet.entitlements; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
@@ -219,6 +225,7 @@
 				DD00000000000011 /* AppLogger.swift */,
 				DD00000000000012 /* BIP39WordList.swift */,
 				DD00000000000013 /* HapticFeedback.swift */,
+				F400000000000006 /* PaymentRequestDecoder.swift */,
 			);
 			path = Core;
 			sourceTree = "<group>";
@@ -288,6 +295,8 @@
 				F400000000000001 /* CurrencyAmountDisplay.swift */,
 				F400000000000002 /* NumberPadAmountInput.swift */,
 				F400000000000003 /* AuthorizingOverlay.swift */,
+				F400000000000004 /* ClipboardPaymentChip.swift */,
+				F400000000000005 /* RecentRecipientsList.swift */,
 			);
 			path = Components;
 			sourceTree = "<group>";
@@ -530,6 +539,9 @@
 				F300000000000001 /* CurrencyAmountDisplay.swift in Sources */,
 				F300000000000002 /* NumberPadAmountInput.swift in Sources */,
 				F300000000000003 /* AuthorizingOverlay.swift in Sources */,
+				F300000000000004 /* ClipboardPaymentChip.swift in Sources */,
+				F300000000000005 /* RecentRecipientsList.swift in Sources */,
+				F300000000000006 /* PaymentRequestDecoder.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
