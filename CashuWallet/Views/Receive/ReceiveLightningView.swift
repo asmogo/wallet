@@ -878,6 +878,18 @@ struct ReceiveLightningView: View {
             await walletManager.loadTransactions()
         }
 
+        // Fire the home-screen toast (same notification the NPC mint flow
+        // posts from WalletManager). Without this the user lands on the
+        // home screen after dismiss with no confirmation that the mint
+        // succeeded.
+        if let amount = mintQuote?.amount {
+            NotificationCenter.default.post(
+                name: .cashuTokenReceived,
+                object: nil,
+                userInfo: ["amount": amount]
+            )
+        }
+
         // Brief dwell so the user sees the "Payment Received!" badge flip
         // before the sheet dismisses and the home-screen toast appears.
         try? await Task.sleep(nanoseconds: 2_000_000_000)

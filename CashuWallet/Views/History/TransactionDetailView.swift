@@ -5,141 +5,148 @@ struct TransactionDetailView: View {
     @EnvironmentObject var walletManager: WalletManager
     let transaction: WalletTransaction
     @ObservedObject var settings = SettingsManager.shared
-    
+
     @State private var copyButtonText = "Copy"
     @State private var showShareSheet = false
-    
+
     /// Returns the content to display as a QR code.
     private var qrContent: String? {
-        if let token = transaction.token {
-            return token
-        }
-        if let invoice = transaction.invoice {
-            return invoice
-        }
+        if let token = transaction.token { return token }
+        if let invoice = transaction.invoice { return invoice }
         return nil
     }
 
     private var qrContentTypeLabel: String {
         switch transaction.kind {
-        case .ecash:
-            return "token"
-        case .lightning:
-            return "request"
-        case .onchain:
-            return "address"
+        case .ecash:     return "token"
+        case .lightning: return "request"
+        case .onchain:   return "address"
         }
     }
 
     private var qrContentAccessibilityLabel: String {
         switch transaction.kind {
-        case .ecash:
-            return "ecash token"
-        case .lightning:
-            return "payment request"
-        case .onchain:
-            return "bitcoin address"
+        case .ecash:     return "ecash token"
+        case .lightning: return "payment request"
+        case .onchain:   return "bitcoin address"
         }
     }
-    
+
     var body: some View {
         NavigationStack {
-            VStack(spacing: 20) {
-                    // QR Code (for token or lightning payment request)
-                    if let content = qrContent {
-                        QRCodeView(content: content)
-                            .frame(width: 250, height: 250)
-                            .padding()
-                            .background(Color.white, in: RoundedRectangle(cornerRadius: 16))
-                        .padding(.top, 20)
-                    } else {
-                        // Placeholder icon if no QR content
-                        Image(systemName: kindIcon)
-                            .font(.largeTitle)
-        .foregroundStyle(Color.accentColor)
-                            .padding(.top, 40)
-                            .accessibilityHidden(true)
-                    }
-                    
-                    // Amount
-                    Text(settings.formatAmountShort(transaction.amount))
-                        .font(.title.bold())
-                        .accessibilityLabel("Amount: \(settings.formatAmountShort(transaction.amount)) sats")
-                        .accessibilityValue("\(settings.formatAmountShort(transaction.amount)) sats")
-                    
-                    kindBadge
-                    statusBadge
-                    
-                    // Info Rows
-                    VStack(spacing: 12) {
-                        if transaction.fee > 0 {
-                            LabeledContent("Fee", value: "\(transaction.fee) sat")
-                        }
-                        LabeledContent("Unit", value: settings.unitLabel.uppercased())
-                        LabeledContent("State", value: transaction.displayStatusText)
-                        if let mintUrl = transaction.mintUrl {
-                            LabeledContent("Mint", value: extractMintHost(mintUrl))
-                        }
-                        if let request = transaction.invoice {
-                            detailValueRow(
-                                title: transaction.kind == .onchain ? "Address" : "Request",
-                                value: request
+            VStack(spacing: 0) {
+                ScrollView {
+                    VStack(spacing: 24) {
+                        // QR (if there's content to show).
+                        if let content = qrContent {
+                            QRCodeView(
+                                content: content,
+                                showControls: false,
+                                // Lightning invoices and Bitcoin addresses are
+                                // standard QR formats; ecash tokens can be
+                                // long and benefit from UR-animated encoding.
+                                staticOnly: transaction.kind != .ecash
                             )
-                        }
-                        if let paymentProof = transaction.preimage {
-                            detailValueRow(
-                                title: transaction.kind == .onchain ? "Transaction ID" : "Payment Proof",
-                                value: paymentProof,
-                                monospaced: true
-                            )
-                        }
-                        if let explorerURL = onchainExplorerURL {
-                            Link("View in block explorer", destination: explorerURL)
-                                .font(.footnote.weight(.medium))
-                        }
-                    }
-                    .font(.subheadline)
-                    .padding(.horizontal)
-                    
-                    Spacer()
-                    
-                    // Copy and Share buttons (if there's content)
-                    if let content = qrContent {
-                        HStack(spacing: 12) {
-                            Button(action: { copyContent(content) }) {
-                                HStack {
-                                    Image(systemName: copyButtonText == "COPIED" ? "checkmark" : "doc.on.doc")
-                                        .accessibilityHidden(true)
-                                    Text(copyButtonText)
+                            .frame(width: 280, height: 280)
+                            .padding(16)
+                            .background(Color.white, in: RoundedRectangle(cornerRadius: 20))
+                            .padding(.top, 8)
+                            .contextMenu {
+                                Button(action: { copyContent(content) }) {
+                                    Label("Copy", systemImage: "doc.on.doc")
+                                }
+                                Button(action: { showShareSheet = true }) {
+                                    Label("Share", systemImage: "square.and.arrow.up")
                                 }
                             }
-                            .glassButton()
-                            .accessibilityLabel(copyButtonText == "COPIED" ? "Copied" : "Copy \(qrContentTypeLabel)")
-                            .accessibilityHint("Copies the \(qrContentAccessibilityLabel) to clipboard")
-
-                            Button(action: { showShareSheet = true }) {
-                                Image(systemName: "square.and.arrow.up")
-                            }
-                            .glassButton()
-                            .frame(width: 50)
-                            .accessibilityLabel("Share")
-                            .accessibilityHint("Opens share sheet for this \(qrContentTypeLabel)")
+                        } else {
+                            Image(systemName: kindIcon)
+                                .font(.system(size: 64))
+                                .foregroundStyle(Color.accentColor)
+                                .padding(.top, 32)
+                                .accessibilityHidden(true)
                         }
-                        .padding(.horizontal)
+
+                        // Amount — same scale as Lightning Invoice / Pending Ecash.
+                        CurrencyAmountDisplay(
+                            sats: transaction.amount,
+                            primary: $settings.amountDisplayPrimary,
+                            primarySize: 32
+                        )
+                        .accessibilityLabel("Amount: \(transaction.amount) sats")
+
+                        // Animated status.
+                        statusBadge
+
+                        // Detail rows on canvas with hairline dividers.
+                        VStack(spacing: 0) {
+                            detailRow(icon: "arrow.left.arrow.right", label: "Type",
+                                      value: transaction.kind.displayName)
+                            if transaction.fee > 0 {
+                                canvasDivider
+                                detailRow(icon: "arrow.up.arrow.down", label: "Fee",
+                                          value: "\(transaction.fee) sat")
+                            }
+                            canvasDivider
+                            detailRow(icon: "banknote", label: "Unit",
+                                      value: settings.unitLabel.uppercased())
+                            canvasDivider
+                            detailRow(icon: "info.circle", label: "State",
+                                      value: transaction.displayStatusText)
+                            if let mintUrl = transaction.mintUrl {
+                                canvasDivider
+                                detailRow(icon: "bitcoinsign.bank.building", label: "Mint",
+                                          value: extractMintHost(mintUrl))
+                            }
+                            if let request = transaction.invoice {
+                                canvasDivider
+                                detailRow(
+                                    icon: transaction.kind == .onchain ? "qrcode" : "doc.text",
+                                    label: transaction.kind == .onchain ? "Address" : "Request",
+                                    value: request
+                                )
+                            }
+                            if let preimage = transaction.preimage {
+                                canvasDivider
+                                detailRow(
+                                    icon: transaction.kind == .onchain ? "checkmark.seal" : "key",
+                                    label: transaction.kind == .onchain ? "Transaction ID" : "Payment Proof",
+                                    value: preimage
+                                )
+                            }
+                        }
+                        .padding(.top, 8)
+                        .padding(.horizontal, 4)
+
+                        if let explorerURL = onchainExplorerURL {
+                            Link("View in block explorer", destination: explorerURL)
+                                .font(.subheadline.weight(.medium))
+                                .padding(.top, 4)
+                        }
                     }
-                    
-                    Spacer(minLength: 20)
-            }
-            .navigationTitle(titleForTransaction)
-            .navigationBarTitleDisplayMode(.inline)
-            .sheet(isPresented: $showShareSheet) {
-                if let token = transaction.token {
-                    // For ecash tokens, use cashu: URL scheme
-                    CashuTokenShareSheet(token: token)
-                } else if let invoice = transaction.invoice {
-                    ShareSheet(items: [invoice])
+                    .padding(.horizontal)
+                }
+
+                // Single primary action — Copy. Share via long-press on the
+                // QR (context menu). Mirrors the Lightning Invoice screen.
+                if let content = qrContent {
+                    Button(action: { copyContent(content) }) {
+                        Label(copyButtonText, systemImage: copyButtonText == "Copied" ? "checkmark" : "doc.on.doc")
+                            .font(.body.weight(.semibold))
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 16)
+                            .background(Color.primary, in: Capsule())
+                            .foregroundStyle(Color(.systemBackground))
+                    }
+                    .buttonStyle(.plain)
+                    .padding(.horizontal)
+                    .padding(.bottom, 16)
+                    .accessibilityLabel(copyButtonText == "Copied" ? "Copied" : "Copy \(qrContentTypeLabel)")
+                    .accessibilityHint("Copies the \(qrContentAccessibilityLabel) to clipboard")
                 }
             }
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbarBackground(.hidden, for: .navigationBar)
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
                     Button(action: { dismiss() }) {
@@ -147,15 +154,61 @@ struct TransactionDetailView: View {
                     }
                     .accessibilityLabel("Close")
                 }
-
                 ToolbarItem(placement: .principal) {
-                    Text(titleForTransaction)
-                        .font(.headline)
+                    Text(titleForTransaction).font(.headline)
+                }
+            }
+            .sheet(isPresented: $showShareSheet) {
+                if let token = transaction.token {
+                    CashuTokenShareSheet(token: token)
+                } else if let invoice = transaction.invoice {
+                    ShareSheet(items: [invoice])
                 }
             }
         }
     }
-    
+
+    // MARK: - Subviews
+
+    @ViewBuilder
+    private var statusBadge: some View {
+        HStack(spacing: 6) {
+            Image(systemName: statusIcon)
+                .modifier(StatusSymbolEffect(status: transaction.status))
+            Text(statusText)
+        }
+        .font(.subheadline.weight(.medium))
+        .foregroundStyle(statusColor)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("Status: \(statusText)")
+    }
+
+    private func detailRow(icon: String, label: String, value: String) -> some View {
+        HStack {
+            Label(label, systemImage: icon)
+                .foregroundStyle(.secondary)
+            Spacer()
+            Text(value)
+                .fontWeight(.medium)
+                .multilineTextAlignment(.trailing)
+                .lineLimit(1)
+                .truncationMode(.middle)
+                .textSelection(.enabled)
+        }
+        .font(.subheadline)
+        .padding(.horizontal, 4)
+        .padding(.vertical, 14)
+    }
+
+    private var canvasDivider: some View {
+        Rectangle()
+            .fill(Color.primary.opacity(0.08))
+            .frame(height: 0.5)
+            .padding(.leading, 28)
+    }
+
+    // MARK: - Helpers
+
     private var titleForTransaction: String {
         switch transaction.kind {
         case .lightning:
@@ -166,106 +219,50 @@ struct TransactionDetailView: View {
             return transaction.status == .pending ? "Pending Ecash" : "Ecash"
         }
     }
-    
+
     private var kindIcon: String {
         switch transaction.kind {
-        case .lightning:
-            return "bolt.fill"
-        case .onchain:
-            return "bitcoinsign.circle.fill"
-        case .ecash:
-            return "link.circle"
+        case .lightning: return "bolt.fill"
+        case .onchain:   return "bitcoinsign.circle.fill"
+        case .ecash:     return "link.circle"
         }
     }
 
-    private var kindBadge: some View {
-        Label(transaction.kind.displayName, systemImage: kindIcon)
-            .font(.subheadline.weight(.semibold))
-            .padding(.horizontal, 12)
-            .padding(.vertical, 6)
-            .background(kindBadgeColor.opacity(0.14), in: Capsule())
-            .foregroundStyle(kindBadgeColor)
-            .accessibilityElement(children: .combine)
-            .accessibilityLabel("Payment method: \(transaction.kind.displayName)")
-    }
-    
-    private var statusBadge: some View {
-        HStack(spacing: 8) {
-            Image(systemName: statusIcon)
-                .foregroundStyle(statusColor)
-                .accessibilityHidden(true)
-            Text(statusText)
-                .font(.title3)
-                .fontWeight(.semibold)
-                .foregroundStyle(statusColor)
-        }
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel("Status: \(statusText)")
-    }
-    
     private var statusIcon: String {
         switch transaction.status {
-        case .completed:
-            return "checkmark.circle.fill"
-        case .pending:
-            return "clock.fill"
-        case .failed:
-            return "xmark.circle.fill"
+        case .completed: return "checkmark.circle.fill"
+        case .pending:   return "clock"
+        case .failed:    return "xmark.circle.fill"
         }
     }
-    
+
     private var statusText: String {
         switch transaction.status {
         case .completed:
             switch transaction.kind {
-            case .ecash:
-                return transaction.type == .incoming ? "Received!" : "Sent!"
-            case .lightning:
-                return transaction.type == .incoming ? "Received!" : "Paid!"
-            case .onchain:
-                return transaction.type == .incoming ? "Received!" : "Sent!"
+            case .ecash:     return transaction.type == .incoming ? "Received" : "Sent"
+            case .lightning: return transaction.type == .incoming ? "Received" : "Paid"
+            case .onchain:   return transaction.type == .incoming ? "Received" : "Sent"
             }
-        case .pending:
-            return transaction.displayStatusText
-        case .failed:
-            return "Failed"
-        }
-    }
-    
-    private var statusColor: Color {
-        switch transaction.status {
-        case .completed:
-            return Color.accentColor
-        case .pending:
-            return .orange
-        case .failed:
-            return .red
+        case .pending: return transaction.displayStatusText
+        case .failed:  return "Failed"
         }
     }
 
-    private var kindBadgeColor: Color {
-        switch transaction.kind {
-        case .ecash:
-            return .accentColor
-        case .lightning:
-            return .yellow
-        case .onchain:
-            return .orange
+    private var statusColor: Color {
+        switch transaction.status {
+        case .completed: return .green
+        case .pending:   return .orange
+        case .failed:    return .red
         }
     }
-    
+
     private func extractMintHost(_ url: String) -> String {
-        if let urlObj = URL(string: url) {
-            return urlObj.host ?? url
-        }
-        return url
+        URL(string: url)?.host ?? url
     }
 
     private var onchainExplorerURL: URL? {
-        guard transaction.kind == .onchain else {
-            return nil
-        }
-
+        guard transaction.kind == .onchain else { return nil }
         if let txid = transaction.preimage {
             return OnchainExplorer.transactionWebURL(
                 for: txid,
@@ -273,42 +270,35 @@ struct TransactionDetailView: View {
                 mintURL: transaction.mintUrl
             )
         }
-
-        guard let address = transaction.invoice else {
-            return nil
-        }
-
+        guard let address = transaction.invoice else { return nil }
         return OnchainExplorer.addressWebURL(for: address, mintURL: transaction.mintUrl)
     }
 
-    private func detailValueRow(title: String, value: String, monospaced: Bool = false) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(title)
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .frame(maxWidth: .infinity, alignment: .leading)
-
-            Text(value)
-                .font(monospaced ? .system(.footnote, design: .monospaced) : .footnote)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .textSelection(.enabled)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-    }
-    
     // MARK: - Actions
-    
+
     private func copyContent(_ content: String) {
         UIPasteboard.general.string = content
-        let generator = UINotificationFeedbackGenerator()
-        generator.notificationOccurred(.success)
-        
-        // Show "COPIED" feedback for 3 seconds
-        copyButtonText = "COPIED"
+        HapticFeedback.notification(.success)
+        copyButtonText = "Copied"
         DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
             copyButtonText = "Copy"
         }
     }
 }
 
-// ShareSheet is defined in SendView.swift
+/// Applies the right SF Symbol effect for the transaction status:
+/// pulsing clock while pending, bouncing checkmark on success.
+private struct StatusSymbolEffect: ViewModifier {
+    let status: WalletTransaction.TransactionStatus
+
+    func body(content: Content) -> some View {
+        switch status {
+        case .pending:
+            content.symbolEffect(.pulse, options: .repeating)
+        case .completed:
+            content.symbolEffect(.bounce, value: status)
+        case .failed:
+            content
+        }
+    }
+}
