@@ -57,15 +57,15 @@ struct OnboardingView: View {
         VStack(spacing: 40) {
             Spacer()
 
-            // Logo
+            // Logo + headline
             VStack(spacing: 16) {
                 Image(systemName: "bitcoinsign.circle.fill")
-                    .font(.largeTitle)
-.foregroundStyle(Color.accentColor)
+                    .font(.system(size: 64))
+                    .foregroundStyle(.primary)
+                    .symbolRenderingMode(.hierarchical)
 
                 Text("Cashu Wallet")
-                    .font(.largeTitle)
-                    .fontWeight(.bold)
+                    .font(.largeTitle.weight(.semibold))
 
                 Text("Private digital cash for everyone")
                     .font(.subheadline)
@@ -91,11 +91,13 @@ struct OnboardingView: View {
 
             Spacer()
 
-            // Get Started button
-            Button(action: { currentStep = .createOrRestore }) {
-                Text("Get Started")
+            Button(action: {
+                HapticFeedback.selection()
+                currentStep = .createOrRestore
+            }) {
+                Text("Get Started").primaryFillCapsule()
             }
-            .glassButton(prominent: true).controlSize(.large)
+            .buttonStyle(.plain)
             .padding(.bottom, 40)
         }
         .padding()
@@ -128,32 +130,36 @@ struct OnboardingView: View {
                     .padding()
             }
 
-            // Create new wallet
+            // Create new wallet (primary)
             Button(action: createWallet) {
-                if isCreating {
-                    ProgressView()
-                } else {
-                    HStack {
-                        Image(systemName: "plus.circle.fill")
-                        Text("Create New Wallet")
+                Group {
+                    if isCreating {
+                        ProgressView().tint(Color(.systemBackground))
+                    } else {
+                        Label("Create New Wallet", systemImage: "plus.circle.fill")
                     }
                 }
+                .primaryFillCapsule()
             }
-            .glassButton(prominent: true).controlSize(.large)
+            .buttonStyle(.plain)
             .disabled(isCreating)
 
-            // Restore wallet
-            Button(action: { currentStep = .restoreInput }) {
-                HStack {
-                    Image(systemName: "arrow.counterclockwise.circle")
-                    Text("Restore from Seed")
-                }
+            // Restore wallet (secondary — outlined capsule)
+            Button(action: {
+                HapticFeedback.selection()
+                currentStep = .restoreInput
+            }) {
+                Label("Restore from Seed", systemImage: "arrow.counterclockwise.circle")
+                    .font(.body.weight(.semibold))
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 16)
+                    .overlay(Capsule().strokeBorder(Color.primary.opacity(0.18), lineWidth: 1))
+                    .foregroundStyle(.primary)
             }
-            .glassButton()
+            .buttonStyle(.plain)
 
             Spacer()
 
-            // Back button
             Button(action: { currentStep = .welcome }) {
                 Text("Back")
                     .foregroundStyle(.secondary)
@@ -168,41 +174,32 @@ struct OnboardingView: View {
     private var showMnemonicView: some View {
         VStack(spacing: 24) {
             Text("Your Seed Phrase")
-                .font(.title2)
-                .fontWeight(.bold)
+                .font(.title.weight(.semibold))
 
             Text("Write down these 12 words in order and keep them safe. This is the only way to recover your wallet.")
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
 
-            // Warning
-            Label("Never share these words with anyone!", systemImage: "exclamationmark.triangle.fill")
-                .font(.caption)
+            Label("Never share these words with anyone", systemImage: "exclamationmark.triangle.fill")
+                .font(.caption.weight(.medium))
                 .foregroundStyle(.orange)
-                .padding()
+                .padding(.top, 4)
 
-            // Mnemonic words
-            let words = walletManager.getMnemonicWords()
-
-            Group {
-                if #available(iOS 26, *) {
-                    GlassEffectContainer(spacing: 12) {
-                        mnemonicWordsGrid(words: words)
-                    }
-                } else {
-                    mnemonicWordsGrid(words: words)
-                }
-            }
-            .padding()
+            // Mnemonic words — plain on canvas, no per-word material
+            mnemonicWordsGrid(words: walletManager.getMnemonicWords())
+                .padding(.horizontal)
+                .padding(.top, 8)
 
             Spacer()
 
-            // Continue button — go to verification step
-            Button(action: startVerification) {
-                Text("I've Saved My Seed Phrase")
+            Button(action: {
+                HapticFeedback.selection()
+                startVerification()
+            }) {
+                Text("I've Saved My Seed Phrase").primaryFillCapsule()
             }
-            .glassButton(prominent: true).controlSize(.large)
+            .buttonStyle(.plain)
             .padding(.bottom, 40)
         }
         .padding()
@@ -213,30 +210,37 @@ struct OnboardingView: View {
     private var verifyMnemonicView: some View {
         VStack(spacing: 24) {
             Text("Verify Seed Phrase")
-                .font(.title2)
-                .fontWeight(.bold)
+                .font(.title.weight(.semibold))
 
             Text("Select the correct word for each position to confirm you saved your seed phrase.")
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
+                .padding(.horizontal)
 
             verificationWordsGridView(indices: verificationIndices)
-            .padding()
+                .padding(.horizontal)
+                .padding(.top, 8)
 
             if let error = verificationError {
                 Text(error)
                     .font(.caption)
                     .foregroundStyle(.red)
+                    .transition(.opacity)
             }
 
             Spacer()
 
-            Button(action: checkVerification) {
-                Text("Confirm")
+            Button(action: {
+                HapticFeedback.selection()
+                checkVerification()
+            }) {
+                Text("Confirm").primaryFillCapsule()
             }
-            .glassButton(prominent: true).controlSize(.large)
+            .buttonStyle(.plain)
             .disabled(verificationAnswers.count < verificationIndices.count)
+            .opacity(verificationAnswers.count < verificationIndices.count ? 0.4 : 1)
+            .animation(.easeOut(duration: 0.2), value: verificationAnswers.count)
 
             Button(action: { currentStep = .showMnemonic }) {
                 Text("Go back and check")
@@ -249,28 +253,19 @@ struct OnboardingView: View {
 
     private func verificationWordsGridView(indices: [Int]) -> some View {
         let words = walletManager.getMnemonicWords()
-        return VStack(spacing: 16) {
+        return VStack(spacing: 20) {
             ForEach(Array(indices.enumerated()), id: \.offset) { _, index in
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("Word #\(index + 1)")
-                        .font(.caption)
-                        .fontWeight(.semibold)
+                VStack(alignment: .leading, spacing: 10) {
+                    Text("Word \(String(format: "#%02d", index + 1))")
+                        .font(.caption.weight(.semibold))
                         .foregroundStyle(.secondary)
+                        .textCase(.uppercase)
+                        .tracking(1.2)
 
                     let options = generateWordOptions(correctWord: words[index])
-                    LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible()), GridItem(.flexible())], spacing: 8) {
+                    LazyVGrid(columns: [GridItem(.flexible(), spacing: 8), GridItem(.flexible(), spacing: 8), GridItem(.flexible(), spacing: 8)], spacing: 8) {
                         ForEach(options, id: \.self) { option in
-                            Button(action: {
-                                verificationAnswers[index] = option
-                                verificationError = nil
-                            }) {
-                                Text(option)
-                                    .font(.system(.subheadline, design: .monospaced))
-                                    .frame(maxWidth: .infinity)
-                                    .padding(.vertical, 10)
-                            }
-                            .glassButton()
-                            .tint(verificationAnswers[index] == option ? .accentColor : .secondary)
+                            verificationChip(option: option, index: index)
                         }
                     }
                 }
@@ -278,21 +273,52 @@ struct OnboardingView: View {
         }
     }
 
+    @ViewBuilder
+    private func verificationChip(option: String, index: Int) -> some View {
+        let selected = verificationAnswers[index] == option
+        Button(action: {
+            HapticFeedback.selection()
+            withAnimation(.snappy) {
+                verificationAnswers[index] = option
+                verificationError = nil
+            }
+        }) {
+            Text(option)
+                .font(.system(.subheadline, design: .monospaced).weight(.medium))
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 12)
+                .background(
+                    Capsule().fill(selected ? Color.primary.opacity(0.12) : Color.clear)
+                )
+                .overlay(
+                    Capsule().strokeBorder(
+                        selected ? Color.primary.opacity(0.5) : Color.primary.opacity(0.12),
+                        lineWidth: 1
+                    )
+                )
+                .foregroundStyle(selected ? .primary : .secondary)
+        }
+        .buttonStyle(.plain)
+    }
+
     private func mnemonicWordsGrid(words: [String]) -> some View {
-        LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
+        // Family-style: plain words on the canvas, monospaced, with the
+        // number in tertiary. The seed phrase deserves quiet treatment — no
+        // glass material per word, no busy backgrounds.
+        LazyVGrid(columns: [GridItem(.flexible(), spacing: 12), GridItem(.flexible(), spacing: 12), GridItem(.flexible(), spacing: 12)], spacing: 14) {
             ForEach(Array(words.enumerated()), id: \.offset) { index, word in
-                HStack(spacing: 4) {
-                    Text("\(index + 1).")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .frame(width: 20, alignment: .trailing)
+                HStack(spacing: 6) {
+                    Text(String(format: "%02d", index + 1))
+                        .font(.system(.footnote, design: .monospaced))
+                        .foregroundStyle(.tertiary)
+                        .frame(width: 22, alignment: .trailing)
 
                     Text(word)
-                        .font(.system(.body, design: .monospaced))
+                        .font(.system(.body, design: .monospaced).weight(.medium))
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.7)
                 }
-                .padding(.horizontal, 8)
-                .padding(.vertical, 6)
-                .liquidGlass(in: RoundedRectangle(cornerRadius: 8))
             }
         }
     }
@@ -343,36 +369,65 @@ struct OnboardingView: View {
     // MARK: - Restore Input View
 
     private var restoreInputView: some View {
-        VStack(spacing: 24) {
-            Text("Restore Wallet")
-                .font(.title2)
-                .fontWeight(.bold)
+        let wordCount = restoreMnemonic.trimmingCharacters(in: .whitespacesAndNewlines)
+            .split(separator: " ")
+            .count
+        let invalidIndices = walletManager.invalidMnemonicWords(restoreMnemonic)
 
-            Text("Enter your 12-word seed phrase to restore your wallet")
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-                .multilineTextAlignment(.center)
+        return VStack(spacing: 16) {
+            VStack(spacing: 6) {
+                Text("Restore Wallet")
+                    .font(.title.weight(.semibold))
 
-            // Mnemonic input
-            GroupBox {
-                TextEditor(text: $restoreMnemonic)
-                    .font(.system(.body, design: .monospaced))
-                    .scrollContentBackground(.hidden)
-                    .frame(height: 150)
+                Text("Enter your 12-word seed phrase to restore your wallet")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
             }
+            .padding(.top, 8)
 
-            // Word count
-            let wordCount = restoreMnemonic.trimmingCharacters(in: .whitespacesAndNewlines)
-                .split(separator: " ")
-                .count
+            // Mnemonic input — same pattern as Receive Ecash paste screen
+            ZStack(alignment: .bottomTrailing) {
+                ZStack(alignment: .topLeading) {
+                    TextEditor(text: $restoreMnemonic)
+                        .font(.system(.body, design: .monospaced))
+                        .scrollContentBackground(.hidden)
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled()
+                        .padding(.horizontal, 12)
+                        .padding(.top, 12)
+                        .padding(.bottom, 56)
 
-            let invalidIndices = walletManager.invalidMnemonicWords(restoreMnemonic)
-            HStack(spacing: 4) {
+                    if restoreMnemonic.isEmpty {
+                        Text("word1 word2 word3 …")
+                            .font(.system(.body, design: .monospaced))
+                            .foregroundStyle(.tertiary)
+                            .padding(.horizontal, 17)
+                            .padding(.vertical, 20)
+                            .allowsHitTesting(false)
+                    }
+                }
+
+                Button(action: restoreMnemonic.isEmpty ? pasteMnemonicFromClipboard : { clearMnemonic() }) {
+                    Image(systemName: restoreMnemonic.isEmpty ? "doc.on.clipboard" : "xmark.circle.fill")
+                        .font(.title3.weight(.medium))
+                        .foregroundStyle(.secondary)
+                        .padding(14)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(restoreMnemonic.isEmpty ? "Paste from clipboard" : "Clear")
+            }
+            .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 14))
+            .frame(maxHeight: .infinity)
+            .padding(.horizontal)
+
+            HStack(spacing: 6) {
                 Text("\(wordCount) / 12 words")
-                    .font(.caption)
-                    .foregroundStyle(wordCount == 12 ? Color.accentColor : .secondary)
+                    .font(.caption.weight(.medium))
+                    .foregroundStyle(wordCount == 12 && invalidIndices.isEmpty ? .green : .secondary)
                 if wordCount > 0 && !invalidIndices.isEmpty {
-                    Text("(\(invalidIndices.count) invalid)")
+                    Text("· \(invalidIndices.count) invalid")
                         .font(.caption)
                         .foregroundStyle(.red)
                 }
@@ -383,27 +438,40 @@ struct OnboardingView: View {
                     .padding(.horizontal)
             }
 
-            Spacer()
-
-            // Next button - initializes wallet then goes to mint restore step
             Button(action: initializeAndProceed) {
-                if isRestoring {
-                    ProgressView()
-                } else {
-                    Text("Next")
+                Group {
+                    if isRestoring {
+                        ProgressView().tint(Color(.systemBackground))
+                    } else {
+                        Text("Next")
+                    }
                 }
+                .primaryFillCapsule()
             }
-            .glassButton(prominent: true).controlSize(.large)
+            .buttonStyle(.plain)
             .disabled(wordCount != 12 || isRestoring)
+            .opacity(wordCount != 12 || isRestoring ? 0.4 : 1)
+            .padding(.horizontal)
 
-            // Back button
             Button(action: { currentStep = .createOrRestore }) {
                 Text("Back")
                     .foregroundStyle(.secondary)
             }
-            .padding(.bottom, 40)
+            .padding(.bottom, 32)
         }
-        .padding()
+        .padding(.top)
+    }
+
+    private func pasteMnemonicFromClipboard() {
+        guard let content = UIPasteboard.general.string else { return }
+        HapticFeedback.selection()
+        restoreMnemonic = content.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private func clearMnemonic() {
+        HapticFeedback.selection()
+        restoreMnemonic = ""
+        errorMessage = nil
     }
 
     // MARK: - Restore Mints View
@@ -428,33 +496,49 @@ struct OnboardingView: View {
             }
             .padding(.horizontal)
 
-            HStack(spacing: 12) {
+            HStack(spacing: 8) {
                 Button(action: addMintUrl) {
                     Label("Add", systemImage: "plus")
+                        .font(.subheadline.weight(.semibold))
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 12)
+                        .background(.thinMaterial, in: Capsule())
+                        .foregroundStyle(.primary)
                 }
-                .glassButton()
+                .buttonStyle(.plain)
                 .disabled(mintUrlInput.isEmpty)
+                .opacity(mintUrlInput.isEmpty ? 0.4 : 1)
 
                 Button(action: pasteMintUrlsFromClipboard) {
-                    Label("Paste from clipboard", systemImage: "doc.on.clipboard")
+                    Label("Paste", systemImage: "doc.on.clipboard")
+                        .font(.subheadline.weight(.semibold))
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 12)
+                        .background(.thinMaterial, in: Capsule())
+                        .foregroundStyle(.primary)
                 }
-                .glassButton()
+                .buttonStyle(.plain)
                 .accessibilityLabel("Paste mint URLs from clipboard")
             }
             .padding(.horizontal)
 
-            // Mints list
+            // Mints list — rows on canvas with hairline dividers between
             if !mintsToRestore.isEmpty || !restoreResults.isEmpty {
                 ScrollView {
-                    VStack(spacing: 10) {
-                        // Pending mints (not yet restored)
-                        ForEach(mintsToRestore, id: \.self) { mintUrl in
-                            mintRow(url: mintUrl, result: nil, isRestoring: currentRestoringMint == mintUrl)
-                        }
+                    VStack(spacing: 0) {
+                        let allItems: [(url: String, result: RestoreMintResult?)] =
+                            mintsToRestore.map { ($0, nil) }
+                            + restoreResults.map { ($0.mintUrl, $0) }
 
-                        // Completed restore results
-                        ForEach(restoreResults) { result in
-                            mintRow(url: result.mintUrl, result: result, isRestoring: false)
+                        ForEach(Array(allItems.enumerated()), id: \.offset) { index, item in
+                            mintRow(
+                                url: item.url,
+                                result: item.result,
+                                isRestoring: item.result == nil && currentRestoringMint == item.url
+                            )
+                            if index < allItems.count - 1 {
+                                CanvasDivider()
+                            }
                         }
                     }
                     .padding(.horizontal)
@@ -483,20 +567,21 @@ struct OnboardingView: View {
                     .padding(.horizontal)
             }
 
-            // Restore summary
+            // Restore summary — plain on canvas, no glass
             if !restoreResults.isEmpty {
                 let totalRecovered = restoreResults.reduce(UInt64(0)) { $0 + $1.unspent }
                 let totalPending = restoreResults.reduce(UInt64(0)) { $0 + $1.pending }
 
-                VStack(spacing: 6) {
+                VStack(spacing: 8) {
                     if totalRecovered > 0 {
                         Label("Recovered: \(totalRecovered) sats", systemImage: "checkmark.circle.fill")
-                            .font(.subheadline)
-                            .fontWeight(.semibold)
+                            .font(.subheadline.weight(.semibold))
                             .foregroundStyle(.green)
+                            .contentTransition(.numericText(value: Double(totalRecovered)))
                     }
                     if totalPending > 0 {
-                        Label("Pending: \(totalPending) sats", systemImage: "clock.fill")
+                        Label("Pending: \(totalPending) sats", systemImage: "clock")
+                            .symbolEffect(.pulse, options: .repeating)
                             .font(.subheadline)
                             .foregroundStyle(.orange)
                     }
@@ -506,48 +591,46 @@ struct OnboardingView: View {
                             .foregroundStyle(.secondary)
                     }
                 }
-                .padding(12)
-                .liquidGlass(in: RoundedRectangle(cornerRadius: 10))
                 .padding(.horizontal)
+                .padding(.top, 4)
             }
 
             Spacer()
 
-            // Action buttons
-            VStack(spacing: 12) {
-                // Restore button
+            VStack(spacing: 10) {
+                // Restore button (secondary capsule when mints are pending)
                 if !mintsToRestore.isEmpty {
                     Button(action: startRestore) {
-                        if isRestoringMints {
-                            HStack(spacing: 8) {
-                                ProgressView()
-                                Text("Restoring...")
-                            }
-                        } else {
-                            HStack {
-                                Image(systemName: "arrow.counterclockwise")
-                                Text("Restore from \(mintsToRestore.count) mint\(mintsToRestore.count == 1 ? "" : "s")")
+                        Group {
+                            if isRestoringMints {
+                                HStack(spacing: 8) {
+                                    ProgressView().controlSize(.small)
+                                    Text("Restoring...")
+                                }
+                            } else {
+                                Label("Restore from \(mintsToRestore.count) mint\(mintsToRestore.count == 1 ? "" : "s")",
+                                      systemImage: "arrow.counterclockwise")
                             }
                         }
+                        .font(.body.weight(.semibold))
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 14)
+                        .overlay(Capsule().strokeBorder(Color.primary.opacity(0.18), lineWidth: 1))
+                        .foregroundStyle(.primary)
                     }
-                    .glassButton()
+                    .buttonStyle(.plain)
                     .disabled(isRestoringMints)
+                    .padding(.horizontal)
                 }
 
                 // Continue / Skip button
-                if restoreResults.isEmpty && mintsToRestore.isEmpty {
-                    Button(action: finishRestore) {
-                        Text("Skip")
-                    }
-                    .glassButton()
-                    .disabled(isRestoringMints)
-                } else {
-                    Button(action: finishRestore) {
-                        Text("Continue")
-                    }
-                    .glassButton(prominent: true).controlSize(.large)
-                    .disabled(isRestoringMints)
+                Button(action: finishRestore) {
+                    Text(restoreResults.isEmpty && mintsToRestore.isEmpty ? "Skip" : "Continue")
+                        .primaryFillCapsule()
                 }
+                .buttonStyle(.plain)
+                .disabled(isRestoringMints)
+                .padding(.horizontal)
             }
 
             // Back button
@@ -613,7 +696,6 @@ struct OnboardingView: View {
                             .foregroundStyle(.secondary)
                     }
                 } else if !isRestoring {
-                    // Remove button for pending mints
                     Button(action: {
                         mintsToRestore.removeAll { $0 == url }
                     }) {
@@ -622,8 +704,9 @@ struct OnboardingView: View {
                     }
                 }
             }
-        .padding(12)
-        .liquidGlass(in: RoundedRectangle(cornerRadius: 10))
+        .padding(.horizontal, 4)
+        .padding(.vertical, 12)
+        .contentShape(Rectangle())
     }
 
     private func shortenUrl(_ url: String) -> String {
