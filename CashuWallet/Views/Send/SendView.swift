@@ -153,7 +153,6 @@ struct SendView: View {
             NumberPadAmountInput(amountString: $amountString)
                 .padding(.horizontal, 24)
 
-            // Send button
             Button(action: {
                 HapticFeedback.impact(.light)
                 generateToken()

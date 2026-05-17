@@ -77,17 +77,11 @@ spacing:
   section: "24px"
   page: "28px"
 components:
-  button-primary:
-    backgroundColor: "{colors.primary-text}"
-    textColor: "{colors.surface}"
-    rounded: "{rounded.capsule}"
-    padding: "16px 24px"
-    typography: "{typography.body-emphasis}"
   button-glass:
     backgroundColor: "{colors.selection-tint}"
     textColor: "{colors.primary-text}"
     rounded: "{rounded.capsule}"
-    padding: "14px 20px"
+    padding: "18px 24px"
     typography: "{typography.body-emphasis}"
   button-utility:
     backgroundColor: "transparent"
@@ -168,10 +162,10 @@ on dark.
 ### Primary
 
 - **System Ink** (light `#000000` / dark `#FFFFFF`): the `AccentColor` defined in
-  `CashuWallet/Resources/Assets.xcassets/AccentColor.colorset`. Used for tints,
-  primary action fills, and the foreground of `primaryFillCapsule()`. Inverted
-  polarity is deliberate: the most important affordance always reads as ink, never
-  as a brand hue.
+  `CashuWallet/Resources/Assets.xcassets/AccentColor.colorset`. Used for tints and
+  the 15% primary-color frost behind every `glassButton()` capsule (see
+  `FullWidthCapsuleButtonStyle`). The ink reads as system label everywhere; there
+  is no inverted-fill variant — Liquid Glass is the singular primary surface.
 
 ### Neutral
 
@@ -181,8 +175,8 @@ on dark.
   timestamps, captions, hint text, the truncated Lightning address chip, the
   unit-toggle ("sats" / "₿") label.
 - **Surface** (`Color(.systemBackground)`, light `#FFFFFF` / dark `#000000`): the
-  inverse fill in `primaryFillCapsule()` and every background that needs to
-  contrast with `.primary` ink.
+  canvas behind every screen, and every background that needs to contrast with
+  `.primary` ink.
 - **Hairline** (`Color(.separator)`, light `#3C3C4349` / dark `#54545899`): the
   fill of `CanvasDivider` (0.5pt). The only separator on a canvas.
 
@@ -255,7 +249,7 @@ because every layout uses `.frame(maxWidth: .infinity)` rather than fixed widths
 - **Title3** (`.title3.weight(.medium)`): in-flow section heads such as the
   send/receive transaction-type label, modal titles. `MainWalletView.swift:165`.
 - **Body Emphasis** (`.body.weight(.semibold)`): primary button labels (inside
-  `glassButton()` and `primaryFillCapsule()`), history row title.
+  `glassButton()` / `FullWidthCapsuleButtonStyle`), history row title.
 - **Body** (`.body`): default for prose, settings rows, detail values.
 - **Callout** (`.callout`): supporting descriptive text under hero headings,
   e.g. "An ecash wallet for Bitcoin and Lightning." `OnboardingView.swift:135`.
@@ -321,28 +315,34 @@ right tool for the job.
 
 ### Buttons
 
-- **Shape:** `Capsule()` is the default for full-width primary and secondary
-  actions. `RoundedRectangle(cornerRadius: 12)` for inline pill chips and
-  notification cards. No rectangular buttons.
-- **Primary — `primaryFillCapsule()`**: applied to the *label* inside a Button
-  (not the Button itself). Inverted ink fill (`Color.primary` background,
-  `Color(.systemBackground)` text), `.body.weight(.semibold)`,
-  `.padding(.vertical, 16)`, `.frame(maxWidth: .infinity)`, `Capsule()` shape.
-  Use for the single highest-emphasis action on a sheet (Receive, Send Now,
-  Continue). Defined in `CashuWallet/Views/Components/LiquidGlassModifiers.swift`.
-- **Secondary — `.glassButton()`**: `FullWidthCapsuleButtonStyle` — full-width
-  capsule with `.tertiary` (system gray) background, `Color.primary` text,
-  `.body.weight(.medium)`, `.padding(.vertical, 14)`. Press opacity 0.7,
-  disabled 0.4. The gold-standard usage lives in
-  `CashuWallet/Views/Receive/ReceiveTokenDetailView.swift`.
+- **Shape:** `Capsule()` is the default for every full-width action — primary
+  and otherwise. `RoundedRectangle(cornerRadius: 12)` for inline pill chips
+  and notification cards. No rectangular buttons.
+- **Primary & Secondary — `.glassButton()`** (= `FullWidthCapsuleButtonStyle`):
+  full-width Liquid Glass capsule rendered with `.regular.tint(Color.primary
+  .opacity(0.15)).interactive()` on iOS 26+, falling back to `.quaternary` on
+  iOS 18–25. `.body.weight(.semibold)`, `.padding(.vertical, 18)`. Pressed
+  state: opacity 0.85 with a `.snappy(0.18)` animation. Disabled: opacity 0.4.
+  **This is the only button surface vocabulary in the app.** Defined in
+  `CashuWallet/Views/Components/LiquidGlassModifiers.swift`. Used everywhere a
+  button needs a visible affordance: Create Wallet, Continue, Pay, Send,
+  Receive, Copy, Restore, etc.
 - **Utility — `.buttonStyle(.plain)`** with an SF Symbol + label combo, often
-  wrapped in `.liquidGlass(in: Capsule(), interactive: true)`. Used for the
-  unit-symbol toggle on the main wallet, the truncated Lightning address copy
-  chip, and small inline chevron actions.
+  wrapped in `.liquidGlass(in: Capsule(), interactive: true)` when the symbol
+  earns a glass surface. Used for the unit-symbol toggle on the main wallet,
+  the truncated Lightning address copy chip, "Skip", "Back", "Got it" text
+  links, and inline chevron actions.
+- **Home action row — raw `.liquidGlass(in: Capsule(), interactive: true)`**:
+  the Receive / Scan / Send triptych in `MainWalletView` uses inline glass
+  rather than `glassButton()` because it needs `GlassEffectContainer` (iOS 26
+  merged-glass effect) and three different shapes (Capsule + Circle + Capsule).
+  Typography and padding match `FullWidthCapsuleButtonStyle` exactly
+  (`.body.weight(.semibold)`, `.padding(.vertical, 18)`) so it reads as one
+  family.
 - **Press feedback — `PressableButtonStyle`**: 0.97 scale on press down
-  (`.easeOut(duration: 0.09)`), spring back on release (`response: 0.45,
-  dampingFraction: 0.7`). Apply only where the system style doesn't already
-  carry feedback (the chooser cascade, the EcashIcon tap target).
+  (`.snappy(0.09)`), spring back on release (`.snappy(0.18)`). Apply only
+  where the glass style doesn't already carry feedback (the chooser cascade,
+  the EcashIcon tap target).
 
 ### History Rows
 
@@ -420,6 +420,15 @@ chevron disclosure) use `.buttonStyle(.plain)` with an SF Symbol. They do not
 wear glass material unless the symbol genuinely needs the affordance of being
 "an interactive surface" (the unit toggle, the lightning address chip). Most
 of the time, plain is correct.
+
+**The Singular-Button Rule.** When a button needs a surface, that surface is
+Liquid Glass via `.glassButton()` (or, for the home action row, the inline
+`.liquidGlass(in: Capsule(), interactive: true)` that matches it). There is no
+stroked-capsule outline variant, no inverted-ink fill variant, no
+`.buttonStyle(.bordered)`. Hierarchy between two CTAs comes from **order,
+copy, and disabled state** — never from a parallel button vocabulary. A
+"secondary" Liquid Glass button stacked under a "primary" one is intentional:
+they are siblings, not parent-and-child.
 
 ## 6. Do's and Don'ts
 

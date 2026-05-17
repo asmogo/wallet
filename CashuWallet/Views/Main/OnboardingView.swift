@@ -174,13 +174,8 @@ struct OnboardingView: View {
                     advance(to: .restoreInput)
                 }) {
                     Text("I have a seed phrase")
-                        .font(.body.weight(.semibold))
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 16)
-                        .overlay(Capsule().strokeBorder(Color.primary.opacity(0.18), lineWidth: 1))
-                        .foregroundStyle(.primary)
                 }
-                .buttonStyle(.plain)
+                .glassButton()
                 .disabled(isCreating)
 
                 Button(action: {
@@ -889,32 +884,23 @@ struct OnboardingView: View {
             Spacer()
 
             VStack(spacing: 10) {
-                // Restore button (secondary capsule when mints are pending)
                 if !mintsToRestore.isEmpty {
                     Button(action: startRestore) {
-                        Group {
-                            if isRestoringMints {
-                                HStack(spacing: 8) {
-                                    ProgressView().controlSize(.small)
-                                    Text("Restoring...")
-                                }
-                            } else {
-                                Label("Restore from \(mintsToRestore.count) mint\(mintsToRestore.count == 1 ? "" : "s")",
-                                      systemImage: "arrow.counterclockwise")
+                        if isRestoringMints {
+                            HStack(spacing: 8) {
+                                ProgressView().controlSize(.small)
+                                Text("Restoring...")
                             }
+                        } else {
+                            Label("Restore from \(mintsToRestore.count) mint\(mintsToRestore.count == 1 ? "" : "s")",
+                                  systemImage: "arrow.counterclockwise")
                         }
-                        .font(.body.weight(.semibold))
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 14)
-                        .overlay(Capsule().strokeBorder(Color.primary.opacity(0.18), lineWidth: 1))
-                        .foregroundStyle(.primary)
                     }
-                    .buttonStyle(.plain)
+                    .glassButton()
                     .disabled(isRestoringMints)
                     .padding(.horizontal)
                 }
 
-                // Continue / Skip button
                 Button(action: finishRestore) {
                     Text(restoreResults.isEmpty && mintsToRestore.isEmpty ? "Skip" : "Continue")
                 }

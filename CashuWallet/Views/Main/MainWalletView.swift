@@ -167,7 +167,7 @@ struct MainWalletView: View {
         HStack(spacing: 12) {
             Button { activeSheet = .chooser(.receive) } label: {
                 Text("Receive")
-                    .font(.body.weight(.medium))
+                    .font(.body.weight(.semibold))
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 18)
                     .liquidGlass(in: Capsule(), interactive: true)
@@ -176,7 +176,7 @@ struct MainWalletView: View {
 
             Button { activeSheet = .scanner } label: {
                 Image(systemName: "viewfinder")
-                    .font(.title3)
+                    .font(.title3.weight(.semibold))
                     .padding(18)
                     .liquidGlass(in: Circle(), interactive: true)
             }
@@ -184,7 +184,7 @@ struct MainWalletView: View {
 
             Button { activeSheet = .chooser(.send) } label: {
                 Text("Send")
-                    .font(.body.weight(.medium))
+                    .font(.body.weight(.semibold))
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 18)
                     .liquidGlass(in: Capsule(), interactive: true)
