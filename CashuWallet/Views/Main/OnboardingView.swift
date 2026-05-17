@@ -160,14 +160,13 @@ struct OnboardingView: View {
                 Button(action: createWallet) {
                     Group {
                         if isCreating {
-                            ProgressView().tint(Color(.systemBackground))
+                            ProgressView().tint(.primary)
                         } else {
                             Text("Create Wallet")
                         }
                     }
-                    .primaryFillCapsule()
                 }
-                .buttonStyle(.plain)
+                .glassButton()
                 .disabled(isCreating)
 
                 Button(action: {
@@ -225,9 +224,9 @@ struct OnboardingView: View {
                 HapticFeedback.selection()
                 showConceptSheet = false
             }) {
-                Text("Got it").primaryFillCapsule()
+                Text("Got it")
             }
-            .buttonStyle(.plain)
+            .glassButton()
             .padding(.bottom, 8)
         }
         .padding(28)
@@ -263,9 +262,9 @@ struct OnboardingView: View {
                 HapticFeedback.selection()
                 startVerification()
             }) {
-                Text("I've Saved My Seed Phrase").primaryFillCapsule()
+                Text("I've Saved My Seed Phrase")
             }
-            .buttonStyle(.plain)
+            .glassButton()
             .padding(.bottom, 40)
         }
         .padding()
@@ -301,11 +300,10 @@ struct OnboardingView: View {
                 HapticFeedback.selection()
                 checkVerification()
             }) {
-                Text("Confirm").primaryFillCapsule()
+                Text("Confirm")
             }
-            .buttonStyle(.plain)
+            .glassButton()
             .disabled(verificationAnswers.count < verificationIndices.count)
-            .opacity(verificationAnswers.count < verificationIndices.count ? 0.4 : 1)
             .animation(.easeOut(duration: 0.2), value: verificationAnswers.count)
 
             Button(action: { retreat(to: .showMnemonic) }) {
@@ -512,16 +510,14 @@ struct OnboardingView: View {
                 Button(action: continueFromFirstMint) {
                     Group {
                         if isAddingFirstMints {
-                            ProgressView().tint(Color(.systemBackground))
+                            ProgressView().tint(.primary)
                         } else {
                             Text("Continue")
                         }
                     }
-                    .primaryFillCapsule()
                 }
-                .buttonStyle(.plain)
+                .glassButton()
                 .disabled(selectedMintUrls.isEmpty || isAddingFirstMints)
-                .opacity(selectedMintUrls.isEmpty || isAddingFirstMints ? 0.4 : 1)
                 .animation(.easeOut(duration: 0.2), value: selectedMintUrls.isEmpty)
 
                 Button(action: skipFirstMint) {
@@ -738,16 +734,14 @@ struct OnboardingView: View {
             Button(action: initializeAndProceed) {
                 Group {
                     if isRestoring {
-                        ProgressView().tint(Color(.systemBackground))
+                        ProgressView().tint(.primary)
                     } else {
                         Text("Next")
                     }
                 }
-                .primaryFillCapsule()
             }
-            .buttonStyle(.plain)
+            .glassButton()
             .disabled(wordCount != 12 || isRestoring)
-            .opacity(wordCount != 12 || isRestoring ? 0.4 : 1)
             .padding(.horizontal)
 
             Button(action: { retreat(to: .welcome) }) {
@@ -923,9 +917,8 @@ struct OnboardingView: View {
                 // Continue / Skip button
                 Button(action: finishRestore) {
                     Text(restoreResults.isEmpty && mintsToRestore.isEmpty ? "Skip" : "Continue")
-                        .primaryFillCapsule()
                 }
-                .buttonStyle(.plain)
+                .glassButton()
                 .disabled(isRestoringMints)
                 .padding(.horizontal)
             }

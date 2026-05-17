@@ -379,8 +379,6 @@ struct ReceiveLightningView: View {
                     // Hairline dividers separate them; eye flows down the
                     // page without competing surfaces.
                     VStack(spacing: 0) {
-                        detailRow(icon: "arrow.left.arrow.right", label: "Type", value: quote.paymentMethod.displayName)
-                        canvasDivider
                         detailRow(
                             icon: "number",
                             label: "Amount",
@@ -406,23 +404,14 @@ struct ReceiveLightningView: View {
             HStack(spacing: 12) {
                 Button(action: { copyRequest(quote.request) }) {
                     Label(copyButtonTitle(for: quote), systemImage: copiedRequest ? "checkmark" : "doc.on.doc")
-                        .font(.body.weight(.semibold))
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 16)
-                        // Inverted-fill: primary color as surface, system
-                        // background as content. Works in light/dark
-                        // regardless of accent color.
-                        .background(Color.primary, in: Capsule())
-                        .foregroundStyle(Color(.systemBackground))
                 }
-                .buttonStyle(.plain)
+                .glassButton()
 
                 ShareLink(item: quote.request) {
                     Image(systemName: "square.and.arrow.up")
                         .font(.body.weight(.semibold))
                         .frame(width: 52, height: 52)
-                        .background(.thinMaterial, in: Circle())
-                        .foregroundStyle(.primary)
+                        .liquidGlass(in: Circle(), interactive: true)
                 }
                 .accessibilityLabel("Share request")
             }

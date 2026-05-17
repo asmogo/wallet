@@ -184,7 +184,7 @@ struct AmountEntryView: View {
                 Text(buttonLabel)
             }
         }
-        .glassButton(prominent: true).controlSize(.large)
+        .glassButton().controlSize(.large)
         .disabled(isButtonDisabled)
         .padding(.horizontal, 20)
         .padding(.bottom, 20)

@@ -404,9 +404,8 @@ struct QRCodeDetailSheet: View {
                 Button(action: copyToClipboard) {
                     Label(copied ? "Copied" : "Copy",
                           systemImage: copied ? "checkmark" : "doc.on.doc")
-                        .primaryFillCapsule()
                 }
-                .buttonStyle(.plain)
+                .glassButton()
                 .padding(.horizontal)
 
                 Spacer()
@@ -555,9 +554,9 @@ struct BackupView: View {
                     Spacer(minLength: 50)
 
                     Button(action: { dismiss() }) {
-                        Text("Done").primaryFillCapsule()
+                        Text("Done")
                     }
-                    .buttonStyle(.plain)
+                    .glassButton()
                     .padding(.horizontal)
                     .padding(.bottom, 30)
                 }

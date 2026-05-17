@@ -132,13 +132,8 @@ struct TransactionDetailView: View {
                 if let content = qrContent {
                     Button(action: { copyContent(content) }) {
                         Label(copyButtonText, systemImage: copyButtonText == "Copied" ? "checkmark" : "doc.on.doc")
-                            .font(.body.weight(.semibold))
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 16)
-                            .background(Color.primary, in: Capsule())
-                            .foregroundStyle(Color(.systemBackground))
                     }
-                    .buttonStyle(.plain)
+                    .glassButton()
                     .padding(.horizontal)
                     .padding(.bottom, 16)
                     .accessibilityLabel(copyButtonText == "Copied" ? "Copied" : "Copy \(qrContentTypeLabel)")

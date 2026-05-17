@@ -126,8 +126,7 @@ struct ReceiveEcashView: View {
                             .font(.system(.body, design: .monospaced))
                             .scrollContentBackground(.hidden)
                             .padding(.horizontal, 12)
-                            .padding(.top, 12)
-                            .padding(.bottom, 56) // room for the corner icon
+                            .padding(.vertical, 12)
                             .accessibilityLabel("Ecash token input")
                             .accessibilityHint("Enter or paste a cashu ecash token")
 
@@ -144,7 +143,9 @@ struct ReceiveEcashView: View {
                         LinearGradient(
                             stops: [
                                 .init(color: .black, location: 0),
-                                .init(color: .black, location: 0.78),
+                                .init(color: .black, location: 0.55),
+                                .init(color: .black.opacity(0.85), location: 0.72),
+                                .init(color: .black.opacity(0.35), location: 0.88),
                                 .init(color: .clear, location: 1.0),
                             ],
                             startPoint: .top,
@@ -181,15 +182,9 @@ struct ReceiveEcashView: View {
 
                 Button(action: validateAndContinue) {
                     Text("Continue")
-                        .font(.body.weight(.semibold))
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 16)
-                        .background(Color.primary, in: Capsule())
-                        .foregroundStyle(Color(.systemBackground))
                 }
-                .buttonStyle(.plain)
+                .glassButton()
                 .disabled(tokenInput.isEmpty)
-                .opacity(tokenInput.isEmpty ? 0.4 : 1)
                 .animation(.easeOut(duration: 0.2), value: tokenInput.isEmpty)
                 .padding(.horizontal)
                 .padding(.bottom, 16)
