@@ -85,6 +85,14 @@ final class WalletStore {
         set(timestamps, forKey: StorageKeys.mintQuoteTimestamps)
     }
 
+    func loadProcessedNPCQuotes() -> [String] {
+        value(forKey: StorageKeys.processedNPCQuotes) ?? []
+    }
+
+    func saveProcessedNPCQuotes(_ quoteIds: [String]) {
+        set(quoteIds, forKey: StorageKeys.processedNPCQuotes)
+    }
+
     private func value<T: Codable>(forKey key: String, legacyKeys: [String] = []) -> T? {
         if let value: T = try? storage.get(forKey: key) {
             return value

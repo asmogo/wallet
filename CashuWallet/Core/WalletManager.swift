@@ -39,6 +39,8 @@ class WalletManager: ObservableObject {
     // MARK: - Services
 
     private let walletStore = WalletStore()
+    private var processedQuotes: Set<String>
+    private var npcQuotesInFlight: Set<String> = []
     
     /// Mint management service
     private(set) lazy var mintService = MintService(
@@ -116,6 +118,7 @@ class WalletManager: ObservableObject {
     // MARK: - Initialization
     
     init() {
+        processedQuotes = Set(walletStore.loadProcessedNPCQuotes())
         bindServiceChanges()
     }
 
@@ -423,16 +426,27 @@ class WalletManager: ObservableObject {
             guard let self = self,
                   let userInfo = notification.userInfo,
                   let mintQuote = userInfo["mintQuote"] as? MintQuote else { return }
+            let spendingConditions = userInfo["spendingConditions"] as? SpendingConditions
             Task {
-                await self.mintNPCQuote(mintQuote: mintQuote)
+                await self.mintNPCQuote(
+                    mintQuote: mintQuote,
+                    spendingConditions: spendingConditions
+                )
             }
         }
     }
     
-    private var processedQuotes: Set<String> = []
-    
-    func mintNPCQuote(mintQuote: MintQuote) async {
-        guard !processedQuotes.contains(mintQuote.id) else { return }
+    func mintNPCQuote(
+        mintQuote: MintQuote,
+        spendingConditions: SpendingConditions? = nil
+    ) async {
+        guard !processedQuotes.contains(mintQuote.id),
+              !npcQuotesInFlight.contains(mintQuote.id) else { return }
+
+        npcQuotesInFlight.insert(mintQuote.id)
+        defer {
+            npcQuotesInFlight.remove(mintQuote.id)
+        }
         
         do {
             guard let walletRepository = walletRepository else {
@@ -441,13 +455,21 @@ class WalletManager: ObservableObject {
             
             let mintUrl = mintQuote.mintUrl
             await mintService.ensureMintExists(url: mintUrl.url)
+
+            if let db {
+                try await replaceStoredNPCMintQuote(mintQuote, in: db)
+            }
             
             let wallet = try await walletRepository.getWallet(mintUrl: mintUrl, unit: .sat)
             
-            let proofs = try await wallet.mint(quoteId: mintQuote.id, amountSplitTarget: SplitTarget.none, spendingConditions: nil)
+            let proofs = try await wallet.mintUnified(
+                quoteId: mintQuote.id,
+                amountSplitTarget: SplitTarget.none,
+                spendingConditions: spendingConditions
+            )
             let totalAmount = proofs.reduce(UInt64(0)) { $0 + $1.amount.value }
             
-            processedQuotes.insert(mintQuote.id)
+            markNPCQuoteProcessed(mintQuote.id)
             
             await refreshBalance()
             await loadTransactions()
@@ -459,10 +481,27 @@ class WalletManager: ObservableObject {
             )
         } catch {
             if isAlreadyIssuedMintError(error) {
-                processedQuotes.insert(mintQuote.id)
+                markNPCQuoteProcessed(mintQuote.id)
             }
             AppLogger.wallet.error("Failed to mint NPC quote: \(error)")
         }
+    }
+
+    private func replaceStoredNPCMintQuote(
+        _ quote: MintQuote,
+        in walletDatabase: WalletSqliteDatabase
+    ) async throws {
+        do {
+            try await walletDatabase.addMintQuote(quote: quote)
+        } catch {
+            try await walletDatabase.removeMintQuote(quoteId: quote.id)
+            try await walletDatabase.addMintQuote(quote: quote)
+        }
+    }
+
+    private func markNPCQuoteProcessed(_ quoteId: String) {
+        processedQuotes.insert(quoteId)
+        walletStore.saveProcessedNPCQuotes(processedQuotes.sorted())
     }
     
     // MARK: - Mint Operations (Delegate to MintService)
@@ -999,6 +1038,285 @@ class WalletManager: ObservableObject {
 }
 
 // MARK: - Error Types
+
+enum WalletErrorMessage {
+    static func message(for error: Error) -> String {
+        if let walletError = error as? WalletError {
+            return message(for: walletError)
+        }
+
+        if let ffiError = error as? CashuDevKit.FfiError {
+            return message(for: ffiError)
+        }
+
+        if let mappedMessage = message(forRawMessage: String(describing: error)) {
+            return mappedMessage
+        }
+
+        if let localizedError = error as? LocalizedError,
+           let description = localizedError.errorDescription,
+           !description.isEmpty,
+           !looksLikeRawCDKError(description) {
+            return description
+        }
+
+        let localizedDescription = error.localizedDescription
+        if !localizedDescription.isEmpty,
+           !looksLikeRawCDKError(localizedDescription),
+           localizedDescription != "The operation couldn’t be completed. (Swift.Error error 1.)" {
+            return localizedDescription
+        }
+
+        return "Something went wrong. Try again in a moment."
+    }
+
+    private static func message(for error: WalletError) -> String {
+        switch error {
+        case .notInitialized:
+            return "The wallet is still starting up. Try again in a moment."
+        case .mintAlreadyExists:
+            return "This mint is already in your wallet."
+        case .invalidMnemonic:
+            return "That seed phrase doesn't look right. Check the spelling and try again."
+        case .insufficientBalance:
+            return "Not enough spendable ecash for this payment."
+        case .networkError(let message):
+            return self.message(forRawMessage: message) ?? message
+        }
+    }
+
+    private static func message(for ffiError: CashuDevKit.FfiError) -> String {
+        switch ffiError {
+        case .Cdk(let code, let errorMessage):
+            return message(forCDKCode: code, rawMessage: errorMessage)
+        case .Internal(let errorMessage):
+            return message(forRawMessage: errorMessage)
+                ?? "The wallet could not complete that request. Try again in a moment."
+        }
+    }
+
+    private static func message(forCDKCode code: UInt32, rawMessage: String) -> String {
+        switch code {
+        case 10002:
+            return "This token has already been processed by the mint."
+        case 10003:
+            return "This token could not be verified. Ask the sender for a new token."
+        case 11001:
+            return "This token was already redeemed."
+        case 11002:
+            return "The mint rejected this transaction because the amounts did not balance. Try again."
+        case 11005:
+            return "This mint does not support that unit."
+        case 11006:
+            return "This amount is outside the mint's allowed limits."
+        case 11007:
+            return "This token contains duplicate proofs and cannot be redeemed."
+        case 11008:
+            return "The mint rejected duplicate outputs. Try again."
+        case 11009:
+            return "This token mixes multiple units and cannot be redeemed here."
+        case 11010:
+            return "The token unit does not match this wallet action."
+        case 11012:
+            return "This token is still pending. Try again shortly."
+        case 12001:
+            return "This token uses an unknown keyset for this mint."
+        case 12002:
+            return "This mint no longer accepts this token's keyset."
+        case 20000:
+            return "The mint could not complete the Lightning payment. Try again or use another mint."
+        case 20001:
+            return "The invoice has not been paid yet."
+        case 20002:
+            return "Ecash has already been issued for this quote."
+        case 20003:
+            return "This mint has disabled receiving new ecash."
+        case 20005:
+            return "The payment is still pending. Try again shortly."
+        case 20006:
+            return "This invoice has already been paid."
+        case 20007:
+            return "This quote has expired. Create a new request."
+        case 20008:
+            return "The token lock signature is missing or invalid."
+        case 30001:
+            return "This mint requires authentication before this action."
+        case 30002:
+            return "Mint authentication failed. Check your mint credentials."
+        case 31001:
+            return "This mint requires blind authentication before this action."
+        case 31002:
+            return "Blind authentication failed. Check the mint and try again."
+        default:
+            return message(forRawMessage: rawMessage)
+                ?? "The mint rejected the request. Try again or choose another mint."
+        }
+    }
+
+    private static func message(forRawMessage rawMessage: String) -> String? {
+        let message = extractedCDKMessage(from: rawMessage)
+        let normalized = message.lowercased()
+
+        guard !normalized.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            return nil
+        }
+
+        if normalized.contains("already being minted") {
+            return "This payment is already being claimed. Give it a moment and refresh."
+        }
+
+        if normalized.contains("already issued")
+            || normalized.contains("already minted")
+            || normalized.contains("quote is issued")
+            || normalized.contains("tokens already issued") {
+            return "Ecash has already been issued for this quote."
+        }
+
+        if normalized.contains("already paid")
+            || normalized.contains("request already paid")
+            || normalized.contains("invoice already paid") {
+            return "This invoice has already been paid."
+        }
+
+        if normalized.contains("not paid")
+            || normalized.contains("unpaid quote")
+            || normalized.contains("quote is not paid") {
+            return "The invoice has not been paid yet."
+        }
+
+        if normalized.contains("pending quote")
+            || normalized.contains("payment pending")
+            || normalized.contains("quote pending") {
+            return "The payment is still pending. Try again shortly."
+        }
+
+        if normalized.contains("expired quote")
+            || normalized.contains("quote expired")
+            || normalized.contains("invoice expired") {
+            return "This quote has expired. Create a new request."
+        }
+
+        if normalized.contains("insufficient")
+            || normalized.contains("not enough")
+            || normalized.contains("no spendable")
+            || normalized.contains("no available proofs")
+            || normalized.contains("balance too low") {
+            return "Not enough spendable ecash for this payment."
+        }
+
+        if normalized.contains("token already spent")
+            || normalized.contains("proof already used")
+            || normalized.contains("already redeemed")
+            || normalized.contains("proofs are spent") {
+            return "This token was already redeemed."
+        }
+
+        if normalized.contains("token not verified")
+            || normalized.contains("invalid proof")
+            || normalized.contains("could not verify")
+            || normalized.contains("dleq") {
+            return "This token could not be verified. Ask the sender for a new token."
+        }
+
+        if normalized.contains("keyset not found")
+            || normalized.contains("unknown keyset")
+            || normalized.contains("keyset id not known") {
+            return "This token uses an unknown keyset for this mint."
+        }
+
+        if normalized.contains("keyset inactive")
+            || normalized.contains("inactive keyset") {
+            return "This mint no longer accepts this token's keyset."
+        }
+
+        if normalized.contains("unsupported unit")
+            || normalized.contains("unit unsupported") {
+            return "This mint does not support that unit."
+        }
+
+        if normalized.contains("amount out")
+            || normalized.contains("outside of allowed")
+            || normalized.contains("amount is outside")
+            || normalized.contains("amountless invoice") {
+            return "This amount is outside the mint's allowed limits."
+        }
+
+        if normalized.contains("minting disabled") {
+            return "This mint has disabled receiving new ecash."
+        }
+
+        if normalized.contains("melting disabled") {
+            return "This mint has disabled payments."
+        }
+
+        if normalized.contains("invalid payment request")
+            || normalized.contains("invalid invoice")
+            || normalized.contains("invoice amount undefined")
+            || normalized.contains("bolt11")
+            || normalized.contains("bolt12") && normalized.contains("parse") {
+            return "This payment request does not look valid."
+        }
+
+        if normalized.contains("timeout")
+            || normalized.contains("timed out") {
+            return "The mint took too long to respond. Check your connection and try again."
+        }
+
+        if normalized.contains("network")
+            || normalized.contains("http")
+            || normalized.contains("connection")
+            || normalized.contains("connect")
+            || normalized.contains("dns")
+            || normalized.contains("resolve")
+            || normalized.contains("offline")
+            || normalized.contains("tls")
+            || normalized.contains("ssl")
+            || normalized.contains("certificate")
+            || normalized.contains("couldn't reach")
+            || normalized.contains("could not reach") {
+            return "Couldn't reach the mint. Check your connection and try again."
+        }
+
+        if normalized.contains("not found") {
+            return "The mint could not find that quote. Create a new request and try again."
+        }
+
+        if normalized.contains("sqlite")
+            || normalized.contains("database")
+            || normalized.contains("corrupt")
+            || normalized.contains("malformed") {
+            return "The wallet database could not be opened. Restart the app and try again."
+        }
+
+        return nil
+    }
+
+    private static func extractedCDKMessage(from rawMessage: String) -> String {
+        let keys = ["errorMessage: \"", "error_message: \"", "message: \""]
+        for key in keys {
+            guard let keyRange = rawMessage.range(of: key) else { continue }
+            let remainder = rawMessage[keyRange.upperBound...]
+            if let end = remainder.firstIndex(of: "\"") {
+                return String(remainder[..<end])
+            }
+        }
+
+        return rawMessage
+    }
+
+    private static func looksLikeRawCDKError(_ message: String) -> Bool {
+        message.contains("FfiError")
+            || message.contains("CashuDevKit")
+            || message.contains("errorMessage:")
+            || message.contains("CALL_ERROR")
+    }
+}
+
+extension Error {
+    var userFacingWalletMessage: String {
+        WalletErrorMessage.message(for: self)
+    }
+}
 
 enum WalletError: LocalizedError {
     case notInitialized

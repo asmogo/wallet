@@ -668,7 +668,7 @@ struct ReceiveLightningView: View {
                 quoteCreatedAt = Date()
                 mintQuote = quote
             } catch {
-                errorMessage = "Failed: \(error.localizedDescription)"
+                errorMessage = "Failed. \(error.userFacingWalletMessage)"
             }
             isCreatingRequest = false
         }

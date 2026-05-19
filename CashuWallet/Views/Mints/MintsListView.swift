@@ -242,7 +242,7 @@ struct MintsListView: View {
                     newMintNickname = ""
                 }
             } catch {
-                errorMessage = error.localizedDescription
+                errorMessage = error.userFacingWalletMessage
             }
             isAddingMint = false
         }

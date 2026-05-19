@@ -412,7 +412,7 @@ struct SendView: View {
                 tokenFee = result.fee
                 HapticFeedback.notification(.success)
             } catch {
-                errorMessage = error.localizedDescription
+                errorMessage = error.userFacingWalletMessage
                 HapticFeedback.notification(.error)
             }
             isGenerating = false
@@ -1250,7 +1250,7 @@ struct MeltView: View {
                     )
                 }
             } catch {
-                errorMessage = error.localizedDescription
+                errorMessage = error.userFacingWalletMessage
             }
         }
     }
@@ -1274,7 +1274,7 @@ struct MeltView: View {
                 isPaid = true
                 showAuthorizingOverlay = false
             } catch {
-                let message = error.localizedDescription
+                let message = error.userFacingWalletMessage
                 authorizingState = .error(message)
                 errorMessage = message
                 // Let the user read the error in the sheet, then dismiss after 2s.

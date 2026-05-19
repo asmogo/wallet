@@ -82,7 +82,7 @@ final class NFCPaymentService {
                     }
                 } catch {
                     if lightningFallback == nil {
-                        throw NFCPaymentError.invalidPaymentRequest(error.localizedDescription)
+                        throw NFCPaymentError.invalidPaymentRequest(error.userFacingWalletMessage)
                     }
                 }
             }
@@ -106,7 +106,7 @@ final class NFCPaymentService {
         do {
             return .creq(try decodePaymentRequest(encoded: input))
         } catch {
-            throw NFCPaymentError.invalidPaymentRequest(error.localizedDescription)
+            throw NFCPaymentError.invalidPaymentRequest(error.userFacingWalletMessage)
         }
     }
 
@@ -135,7 +135,7 @@ final class NFCPaymentService {
             let result = try await walletManager.sendTokens(amount: amount, memo: nil, p2pkPubkey: nil)
             return result.token
         } catch {
-            throw NFCPaymentError.tokenCreationFailed(error.localizedDescription)
+            throw NFCPaymentError.tokenCreationFailed(error.userFacingWalletMessage)
         }
     }
 
