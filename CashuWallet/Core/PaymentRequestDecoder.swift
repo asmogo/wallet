@@ -47,12 +47,12 @@ enum PaymentRequestDecoder {
             return decoded
         }
 
-        if PaymentRequestParser.isBitcoinAddress(trimmed) {
-            return .onchain(PaymentRequestParser.normalizeBitcoinRequest(trimmed))
-        }
-
         if PaymentRequestParser.isHumanReadableLightningAddress(trimmed) {
             return .lightningAddress(trimmed)
+        }
+
+        if PaymentRequestParser.isBitcoinAddress(trimmed) {
+            return .onchain(PaymentRequestParser.normalizeBitcoinRequest(trimmed))
         }
 
         if includeCashuPaymentRequests,

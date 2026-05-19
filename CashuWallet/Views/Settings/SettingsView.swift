@@ -31,6 +31,7 @@ struct SettingsView: View {
     @State private var activeQRPayload: QRPayload?
     @State private var copiedNWCConnectionId: UUID?
     @State private var copiedP2PKPublicKey: String?
+    @State private var walletActionError: String?
 
     var body: some View {
         NavigationStack {
@@ -135,6 +136,14 @@ struct SettingsView: View {
                 }
             } message: {
                 Text("Are you sure you want to delete your wallet? This action cannot be undone. Make sure you have backed up your seed phrase!")
+            }
+            .alert("Wallet Action Failed", isPresented: Binding(
+                get: { walletActionError != nil },
+                set: { if !$0 { walletActionError = nil } }
+            )) {
+                Button("OK", role: .cancel) {}
+            } message: {
+                Text(walletActionError ?? "Something went wrong. Try again.")
             }
         }
     }
@@ -335,8 +344,13 @@ struct SettingsView: View {
     }
 
     private func deleteWallet() {
-        try? KeychainService().deleteMnemonic()
-        walletManager.needsOnboarding = true
+        Task { @MainActor in
+            do {
+                try await walletManager.deleteWallet()
+            } catch {
+                walletActionError = error.userFacingWalletMessage
+            }
+        }
     }
 
     private func importP2PKNsec() {

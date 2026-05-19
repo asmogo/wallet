@@ -133,6 +133,12 @@ class MintService: ObservableObject {
 
         restoreActiveMint()
     }
+
+    func clearState() {
+        mints = []
+        activeMint = nil
+        isLoading = false
+    }
     
     /// Refresh mint info and payment capabilities for all configured mints.
     func refreshMintInfo() async {

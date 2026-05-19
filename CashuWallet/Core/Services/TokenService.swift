@@ -27,6 +27,10 @@ class TokenService: ObservableObject {
         self.walletRepository = walletRepository
         self.getActiveMint = getActiveMint
     }
+
+    func clearState() {
+        isLoading = false
+    }
     
     // MARK: - Send Operations
     

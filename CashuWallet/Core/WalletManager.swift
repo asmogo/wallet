@@ -177,10 +177,7 @@ class WalletManager: ObservableObject {
         defer { isLoading = false }
         
         let newMnemonic = try generateMnemonic()
-        mnemonic = newMnemonic
-        
-        try keychainService.saveMnemonic(newMnemonic)
-        try await initializeWallet(mnemonic: newMnemonic)
+        try await installCleanWallet(mnemonic: newMnemonic)
         
         // No default mint added - user must add mints manually
         // This avoids connection errors during wallet creation
@@ -195,11 +192,13 @@ class WalletManager: ObservableObject {
         isLoading = true
         defer { isLoading = false }
 
-        let normalizedMnemonic = mnemonic.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        self.mnemonic = normalizedMnemonic
+        let normalizedMnemonic = normalizeMnemonic(mnemonic)
+        guard validateMnemonic(normalizedMnemonic) else {
+            throw WalletError.invalidMnemonic
+        }
 
-        try keychainService.saveMnemonic(normalizedMnemonic)
-        try await initializeWallet(mnemonic: normalizedMnemonic)
+        try proveWalletCanInitialize(mnemonic: normalizedMnemonic)
+        try await installCleanWallet(mnemonic: normalizedMnemonic)
     }
 
     /// Restore wallet from mnemonic - Phase 2: Recover proofs from a mint via NUT-09
@@ -254,6 +253,65 @@ class WalletManager: ObservableObject {
         try await initializeRestoredWallet(mnemonic: mnemonic)
         await completeRestore()
     }
+
+    func deleteWallet() async throws {
+        isLoading = true
+        defer { isLoading = false }
+
+        resetRuntimeState()
+        try keychainService.deleteMnemonic()
+        try? keychainService.deleteNostrPrivateKey()
+        try removeWalletDatabaseFiles()
+        walletStore.removeAllWalletData()
+        SettingsManager.shared.resetWalletScopedData()
+        processedQuotes.removeAll()
+        needsOnboarding = true
+        isInitialized = true
+    }
+
+    private struct UserDefaultsSnapshot {
+        let keys: Set<String>
+        let values: [String: Any]
+    }
+
+    private struct WalletFileBackup {
+        let originalURL: URL
+        let backupURL: URL
+    }
+
+    private func installCleanWallet(mnemonic newMnemonic: String) async throws {
+        let previousMnemonic = mnemonic ?? (try? keychainService.loadMnemonic())
+        let defaultsSnapshot = walletBoundaryDefaultsSnapshot()
+        let fileBackups = try backupWalletDatabaseFiles()
+
+        do {
+            resetRuntimeState()
+            removeWalletBoundaryDefaults(defaultsSnapshot)
+            walletStore.removeAllWalletData()
+            SettingsStore.shared.clearWalletScopedData()
+            NostrService.shared.resetForWalletBoundary(deleteStoredKey: false)
+            NPCService.shared.resetForWalletBoundary()
+            SettingsStore.shared.clearWalletScopedData()
+
+            try await initializeWallet(mnemonic: newMnemonic)
+            try keychainService.saveMnemonic(newMnemonic)
+            mnemonic = newMnemonic
+            SettingsManager.shared.resetWalletScopedData(resetRuntimeServices: false)
+            try removeWalletFileBackups(fileBackups)
+        } catch {
+            resetRuntimeState()
+            restoreWalletBoundaryDefaults(defaultsSnapshot)
+            try? removeWalletDatabaseFiles()
+            try? restoreWalletFileBackups(fileBackups)
+
+            if let previousMnemonic {
+                mnemonic = previousMnemonic
+                try? await initializeWallet(mnemonic: previousMnemonic)
+            }
+
+            throw error
+        }
+    }
     
     private func initializeWallet(mnemonic: String) async throws {
         let databaseURL = try walletDatabaseURL()
@@ -261,6 +319,7 @@ class WalletManager: ObservableObject {
         
         db = repository.db
         walletRepository = repository.repository
+        processedQuotes = Set(walletStore.loadProcessedNPCQuotes())
         
         await mintService.loadMints()
         await refreshBalance()
@@ -270,6 +329,42 @@ class WalletManager: ObservableObject {
         initializeNostrKeypair(mnemonic: mnemonic)
         setupNPCQuoteListener()
     }
+
+    private func proveWalletCanInitialize(mnemonic: String) throws {
+        _ = try CashuDevKit.mnemonicToEntropy(mnemonic: mnemonic)
+
+        let fileManager = FileManager.default
+        let temporaryDirectory = try temporaryWalletDirectoryURL()
+        try fileManager.createDirectory(at: temporaryDirectory, withIntermediateDirectories: true)
+        defer {
+            try? fileManager.removeItem(at: temporaryDirectory)
+        }
+
+        let temporaryDatabaseURL = temporaryDirectory.appendingPathComponent(walletDatabaseFilename)
+        _ = try createRepository(mnemonic: mnemonic, databaseURL: temporaryDatabaseURL)
+    }
+
+    private func resetRuntimeState() {
+        if let npcQuoteObserver {
+            NotificationCenter.default.removeObserver(npcQuoteObserver)
+            self.npcQuoteObserver = nil
+        }
+
+        walletRepository = nil
+        db = nil
+        mnemonic = nil
+        balance = 0
+        pendingBalance = 0
+        activeUnit = "sat"
+        errorMessage = nil
+        mintQuoteSyncsInFlight.removeAll()
+        npcQuotesInFlight.removeAll()
+        processedQuotes.removeAll()
+        mintService.clearState()
+        transactionService.clearState()
+        tokenService.clearState()
+        lightningService.clearState()
+    }
     
     private func generateMnemonic() throws -> String {
         // Use CDK's built-in BIP39 mnemonic generation
@@ -277,21 +372,43 @@ class WalletManager: ObservableObject {
     }
     
     private func walletDatabaseURL() throws -> URL {
+        let walletDirectoryURL = try walletDirectoryURL(create: true)
+        let currentDatabaseURL = walletDirectoryURL.appendingPathComponent(walletDatabaseFilename)
+        try migrateLegacyWalletDatabaseIfNeeded(to: currentDatabaseURL)
+        return currentDatabaseURL
+    }
+
+    private func applicationSupportURL(create: Bool = true) throws -> URL {
+        try FileManager.default.url(
+            for: .applicationSupportDirectory,
+            in: .userDomainMask,
+            appropriateFor: nil,
+            create: create
+        )
+    }
+
+    private func walletDirectoryURL(create: Bool) throws -> URL {
         let applicationSupportURL = try FileManager.default.url(
             for: .applicationSupportDirectory,
             in: .userDomainMask,
             appropriateFor: nil,
-            create: true
+            create: create
         )
         
         let walletDirectoryURL = applicationSupportURL.appendingPathComponent(walletDatabaseDirectoryName, isDirectory: true)
-        if !FileManager.default.fileExists(atPath: walletDirectoryURL.path) {
+        if create && !FileManager.default.fileExists(atPath: walletDirectoryURL.path) {
             try FileManager.default.createDirectory(at: walletDirectoryURL, withIntermediateDirectories: true)
         }
-        
-        let currentDatabaseURL = walletDirectoryURL.appendingPathComponent(walletDatabaseFilename)
-        try migrateLegacyWalletDatabaseIfNeeded(to: currentDatabaseURL)
-        return currentDatabaseURL
+
+        return walletDirectoryURL
+    }
+
+    private func temporaryWalletDirectoryURL() throws -> URL {
+        let applicationSupportURL = try applicationSupportURL()
+        return applicationSupportURL.appendingPathComponent(
+            "\(walletDatabaseDirectoryName).restore.\(UUID().uuidString)",
+            isDirectory: true
+        )
     }
     
     private func legacyWalletDatabaseURL() -> URL {
@@ -316,6 +433,102 @@ class WalletManager: ObservableObject {
                 try FileManager.default.removeItem(at: currentSidecarURL)
             }
             try FileManager.default.moveItem(at: legacySidecarURL, to: currentSidecarURL)
+        }
+    }
+
+    private func walletBoundaryDefaultsSnapshot() -> UserDefaultsSnapshot {
+        let defaults = UserDefaults.standard
+        let prefixKeys = defaults.dictionaryRepresentation().keys.filter {
+            $0.hasPrefix(StorageKeys.walletDataPrefix) || $0.hasPrefix(StorageKeys.npcDataPrefix)
+        }
+        let keys = Set(StorageKeys.walletBoundaryKeys + prefixKeys)
+        var values: [String: Any] = [:]
+
+        for key in keys {
+            if let value = defaults.object(forKey: key) {
+                values[key] = value
+            }
+        }
+
+        return UserDefaultsSnapshot(keys: keys, values: values)
+    }
+
+    private func removeWalletBoundaryDefaults(_ snapshot: UserDefaultsSnapshot) {
+        for key in snapshot.keys {
+            UserDefaults.standard.removeObject(forKey: key)
+        }
+    }
+
+    private func restoreWalletBoundaryDefaults(_ snapshot: UserDefaultsSnapshot) {
+        for key in snapshot.keys {
+            if let value = snapshot.values[key] {
+                UserDefaults.standard.set(value, forKey: key)
+            } else {
+                UserDefaults.standard.removeObject(forKey: key)
+            }
+        }
+    }
+
+    private func walletDatabaseBoundaryURLs() throws -> [URL] {
+        let walletDirectoryURL = try walletDirectoryURL(create: false)
+        let legacyDatabaseURL = legacyWalletDatabaseURL()
+        let legacySidecars = ["-wal", "-shm", "-journal"].map {
+            URL(fileURLWithPath: legacyDatabaseURL.path + $0)
+        }
+
+        return [walletDirectoryURL, legacyDatabaseURL] + legacySidecars
+    }
+
+    private func backupWalletDatabaseFiles() throws -> [WalletFileBackup] {
+        let fileManager = FileManager.default
+        let timestamp = Int(Date().timeIntervalSince1970)
+        var backups: [WalletFileBackup] = []
+
+        for originalURL in try walletDatabaseBoundaryURLs() {
+            guard fileManager.fileExists(atPath: originalURL.path) else { continue }
+
+            let backupURL = originalURL.deletingLastPathComponent()
+                .appendingPathComponent("\(originalURL.lastPathComponent).replacing.\(timestamp).\(UUID().uuidString)")
+
+            if fileManager.fileExists(atPath: backupURL.path) {
+                try fileManager.removeItem(at: backupURL)
+            }
+
+            try fileManager.moveItem(at: originalURL, to: backupURL)
+            backups.append(WalletFileBackup(originalURL: originalURL, backupURL: backupURL))
+        }
+
+        return backups
+    }
+
+    private func restoreWalletFileBackups(_ backups: [WalletFileBackup]) throws {
+        let fileManager = FileManager.default
+
+        for backup in backups.reversed() {
+            if fileManager.fileExists(atPath: backup.originalURL.path) {
+                try fileManager.removeItem(at: backup.originalURL)
+            }
+
+            guard fileManager.fileExists(atPath: backup.backupURL.path) else { continue }
+            try fileManager.moveItem(at: backup.backupURL, to: backup.originalURL)
+        }
+    }
+
+    private func removeWalletFileBackups(_ backups: [WalletFileBackup]) throws {
+        let fileManager = FileManager.default
+
+        for backup in backups {
+            guard fileManager.fileExists(atPath: backup.backupURL.path) else { continue }
+            try fileManager.removeItem(at: backup.backupURL)
+        }
+    }
+
+    private func removeWalletDatabaseFiles() throws {
+        let fileManager = FileManager.default
+
+        for url in try walletDatabaseBoundaryURLs() {
+            guard fileManager.fileExists(atPath: url.path) else { continue }
+            try fileManager.removeItem(at: url)
         }
     }
     
@@ -1011,23 +1224,27 @@ class WalletManager: ObservableObject {
     }
     
     func validateMnemonic(_ phrase: String) -> Bool {
-        let words = phrase.trimmingCharacters(in: .whitespacesAndNewlines)
-            .lowercased()
-            .split(separator: " ")
-            .map(String.init)
+        let normalizedPhrase = normalizeMnemonic(phrase)
+        let words = normalizedPhrase.split(separator: " ").map(String.init)
         guard words.count == 12 || words.count == 24 else { return false }
-        return words.allSatisfy { bip39WordList.contains($0) }
+        guard words.allSatisfy({ bip39WordList.contains($0) }) else { return false }
+        return (try? CashuDevKit.mnemonicToEntropy(mnemonic: normalizedPhrase)) != nil
     }
 
     /// Validate individual words and return which ones are invalid
     func invalidMnemonicWords(_ phrase: String) -> [Int] {
-        let words = phrase.trimmingCharacters(in: .whitespacesAndNewlines)
-            .lowercased()
-            .split(separator: " ")
-            .map(String.init)
+        let words = normalizeMnemonic(phrase).split(separator: " ").map(String.init)
         return words.enumerated().compactMap { index, word in
             bip39WordList.contains(word) ? nil : index
         }
+    }
+
+    private func normalizeMnemonic(_ phrase: String) -> String {
+        phrase
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
+            .split(whereSeparator: { $0.isWhitespace })
+            .joined(separator: " ")
     }
     
     deinit {
@@ -1063,7 +1280,7 @@ enum WalletErrorMessage {
         let localizedDescription = error.localizedDescription
         if !localizedDescription.isEmpty,
            !looksLikeRawCDKError(localizedDescription),
-           localizedDescription != "The operation couldn’t be completed. (Swift.Error error 1.)" {
+           !localizedDescription.contains("Swift.Error error 1") {
             return localizedDescription
         }
 
@@ -1081,7 +1298,18 @@ enum WalletErrorMessage {
         case .insufficientBalance:
             return "Not enough spendable ecash for this payment."
         case .networkError(let message):
-            return self.message(forRawMessage: message) ?? message
+            if let mappedMessage = self.message(forRawMessage: message) {
+                return mappedMessage
+            }
+
+            let trimmedMessage = message.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !trimmedMessage.isEmpty,
+               !looksLikeRawCDKError(trimmedMessage),
+               !trimmedMessage.contains("Swift.Error error 1") {
+                return trimmedMessage
+            }
+
+            return "The wallet could not complete that request. Try again in a moment."
         }
     }
 
@@ -1184,6 +1412,11 @@ enum WalletErrorMessage {
             return "The invoice has not been paid yet."
         }
 
+        if normalized.contains("not credited this on-chain quote yet")
+            || (normalized.contains("not credited") && normalized.contains("on-chain")) {
+            return "The mint has not credited this on-chain payment yet. Try again shortly."
+        }
+
         if normalized.contains("pending quote")
             || normalized.contains("payment pending")
             || normalized.contains("quote pending") {
@@ -1194,6 +1427,16 @@ enum WalletErrorMessage {
             || normalized.contains("quote expired")
             || normalized.contains("invoice expired") {
             return "This quote has expired. Create a new request."
+        }
+
+        if normalized.contains("payment failed") {
+            return "The payment failed. Try again or use another mint."
+        }
+
+        if normalized.contains("max fee exceeded")
+            || normalized.contains("fee exceeded")
+            || normalized.contains("fee is higher") {
+            return "The fee is higher than the wallet limit for this payment."
         }
 
         if normalized.contains("insufficient")
@@ -1234,10 +1477,27 @@ enum WalletErrorMessage {
             return "This mint does not support that unit."
         }
 
+        if normalized.contains("unsupported payment method")
+            || normalized.contains("invalid payment method")
+            || normalized.contains("payment method not supported") {
+            return "This mint does not support that payment method."
+        }
+
+        if normalized.contains("no key for amount")
+            || normalized.contains("amount key")
+            || normalized.contains("no active keyset") {
+            return "This mint cannot issue ecash for that amount right now."
+        }
+
+        if normalized.contains("amountless invoice")
+            || normalized.contains("invoice amount undefined")
+            || normalized.contains("amount is required") {
+            return "This payment request does not include an amount."
+        }
+
         if normalized.contains("amount out")
             || normalized.contains("outside of allowed")
-            || normalized.contains("amount is outside")
-            || normalized.contains("amountless invoice") {
+            || normalized.contains("amount is outside") {
             return "This amount is outside the mint's allowed limits."
         }
 
@@ -1249,11 +1509,30 @@ enum WalletErrorMessage {
             return "This mint has disabled payments."
         }
 
+        if normalized.contains("clear auth required") {
+            return "This mint requires authentication before this action."
+        }
+
+        if normalized.contains("clear auth failed") {
+            return "Mint authentication failed. Check your mint credentials."
+        }
+
+        if normalized.contains("blind auth required") {
+            return "This mint requires blind authentication before this action."
+        }
+
+        if normalized.contains("blind auth failed") {
+            return "Blind authentication failed. Check the mint and try again."
+        }
+
+        if normalized.contains("no on-chain melt fee options") {
+            return "This mint cannot quote an on-chain payment right now. Try another mint."
+        }
+
         if normalized.contains("invalid payment request")
             || normalized.contains("invalid invoice")
-            || normalized.contains("invoice amount undefined")
-            || normalized.contains("bolt11")
-            || normalized.contains("bolt12") && normalized.contains("parse") {
+            || (normalized.contains("bolt11") && normalized.contains("parse"))
+            || (normalized.contains("bolt12") && normalized.contains("parse")) {
             return "This payment request does not look valid."
         }
 
@@ -1328,15 +1607,15 @@ enum WalletError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .notInitialized:
-            return "Wallet is not initialized"
+            return "The wallet is still starting up. Try again in a moment."
         case .mintAlreadyExists:
-            return "This mint is already added"
+            return "This mint is already in your wallet."
         case .invalidMnemonic:
-            return "Invalid mnemonic phrase"
+            return "That seed phrase doesn't look right. Check the spelling and try again."
         case .insufficientBalance:
-            return "Insufficient balance"
-        case .networkError(let message):
-            return "Network error: \(message)"
+            return "Not enough spendable ecash for this payment."
+        case .networkError:
+            return WalletErrorMessage.message(for: self)
         }
     }
 }

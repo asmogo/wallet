@@ -210,6 +210,20 @@ class NostrService: ObservableObject {
     func hasCustomPrivateKey() -> Bool {
         return keychain.hasNostrPrivateKey()
     }
+
+    func resetForWalletBoundary(deleteStoredKey: Bool = true) {
+        if deleteStoredKey {
+            try? keychain.deleteNostrPrivateKey()
+        }
+        settingsStore.nostrSignerType = nil
+        signerType = .seed
+        privateKey = nil
+        currentSeed = nil
+        publicKeyHex = ""
+        npub = ""
+        nsec = ""
+        isInitialized = false
+    }
     
     /// Get the current nsec for copying
     func getNsec() -> String {

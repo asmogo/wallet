@@ -38,6 +38,11 @@ class LightningService: ObservableObject {
         self.getActiveMint = getActiveMint
         self.getMints = getMints
     }
+
+    func clearState() {
+        isLoading = false
+        mintQuotesInFlight.removeAll()
+    }
     
     // MARK: - Minting (NUT-04) - Receive via Lightning
     

@@ -81,6 +81,9 @@ final class UserDefaultsStorage: StorageProtocol {
 
 /// Centralized storage key definitions
 enum StorageKeys {
+    static let walletDataPrefix = "wallet."
+    static let npcDataPrefix = "npc."
+
     // Wallet
     static let mints = "wallet.mints"
     static let activeMintUrl = "wallet.activeMintUrl"
@@ -171,6 +174,58 @@ enum StorageKeys {
 
     static func cachedBTCPriceDate(currency: String) -> String {
         "price.cachedBTCDate.\(currency.uppercased())"
+    }
+
+    static let walletDataKeys = [
+        mints,
+        activeMintUrl,
+        pendingTokens,
+        pendingReceiveTokens,
+        claimedTokens,
+        transactions,
+        savedTokens,
+        paymentPreimages,
+        meltQuoteFees,
+        mintQuoteTimestamps,
+        processedNPCQuotes
+    ]
+
+    static let walletDataLegacyKeys = [
+        Legacy.mints,
+        Legacy.pendingTokens,
+        Legacy.pendingReceiveTokens,
+        Legacy.claimedTokens,
+        Legacy.savedTokens,
+        Legacy.paymentPreimages,
+        Legacy.mintQuoteTimestamps
+    ]
+
+    static let walletScopedSettingsKeys = [
+        enablePaymentRequests,
+        receivePaymentRequestsAutomatically,
+        enableNWC,
+        nwcConnections,
+        showP2PKButtonInDrawer,
+        p2pkKeys,
+        nostrSignerType,
+        npcEnabled,
+        npcAutomaticClaim,
+        npcSelectedMint,
+        npcLastCheck
+    ]
+
+    static let walletScopedSettingsLegacyKeys = [
+        Legacy.enablePaymentRequests,
+        Legacy.receivePaymentRequestsAutomatically,
+        Legacy.enableNWC,
+        Legacy.nwcConnections,
+        Legacy.showP2PKButtonInDrawer,
+        Legacy.p2pkKeys,
+        Legacy.nostrSignerType
+    ]
+
+    static var walletBoundaryKeys: [String] {
+        walletDataKeys + walletDataLegacyKeys + walletScopedSettingsKeys + walletScopedSettingsLegacyKeys
     }
     
     // Keychain (Secure Storage)

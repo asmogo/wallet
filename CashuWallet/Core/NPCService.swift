@@ -328,6 +328,23 @@ class NPCService: ObservableObject {
         startBackgroundRefresh()
     }
 
+    func resetForWalletBoundary() {
+        stopBackgroundRefresh()
+        disconnect()
+        nostrSecretKey = nil
+        nostrPubkey = nil
+        client = nil
+        lightningAddress = ""
+        configuredMintUrl = ""
+        errorMessage = nil
+        isLoading = false
+        paymentCheckInProgress = false
+        selectedMintUrl = nil
+        lastCheck = nil
+        automaticClaim = true
+        isEnabled = false
+    }
+
     deinit {
         refreshTimer?.invalidate()
     }

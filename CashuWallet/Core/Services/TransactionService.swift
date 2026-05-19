@@ -174,6 +174,14 @@ class TransactionService: ObservableObject {
         // Post notification that transactions were updated
         NotificationCenter.default.post(name: .cashuTransactionsUpdated, object: nil)
     }
+
+    func clearState() {
+        transactions = []
+        pendingTokens = []
+        pendingReceiveTokens = []
+        claimedTokens = []
+        NotificationCenter.default.post(name: .cashuTransactionsUpdated, object: nil)
+    }
     
     // MARK: - Token Persistence
     

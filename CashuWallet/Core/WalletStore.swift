@@ -93,6 +93,11 @@ final class WalletStore {
         set(quoteIds, forKey: StorageKeys.processedNPCQuotes)
     }
 
+    func removeAllWalletData() {
+        remove(keys: StorageKeys.walletDataKeys + StorageKeys.walletDataLegacyKeys)
+        remove(keys: storage.keys(withPrefix: StorageKeys.walletDataPrefix))
+    }
+
     private func value<T: Codable>(forKey key: String, legacyKeys: [String] = []) -> T? {
         if let value: T = try? storage.get(forKey: key) {
             return value
@@ -125,6 +130,16 @@ final class WalletStore {
             }
         } catch {
             AppLogger.wallet.error("Failed to update \(key): \(error)")
+        }
+    }
+
+    private func remove(keys: [String]) {
+        for key in Set(keys) {
+            do {
+                try storage.remove(forKey: key)
+            } catch {
+                AppLogger.wallet.error("Failed to remove \(key): \(error)")
+            }
         }
     }
 }
