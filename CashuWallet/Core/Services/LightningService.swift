@@ -501,7 +501,6 @@ class LightningService: ObservableObject {
             amount: quote.amount.value,
             feeReserve: quote.feeReserve.value,
             paymentMethod: paymentMethod,
-            mintUrl: quote.mintUrl?.url ?? fallbackMintUrl,
             state: MeltQuoteState(quote.state),
             expiry: displayExpiry(quote.expiry)
         )

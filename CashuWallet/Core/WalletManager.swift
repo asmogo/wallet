@@ -841,8 +841,8 @@ class WalletManager: ObservableObject {
     }
 
     private func syncActiveMintWithMeltQuote(_ quote: MeltQuoteInfo) async {
-        guard let quoteMintUrl = quote.mintUrl,
-              activeMint?.url != quoteMintUrl,
+        let quoteMintUrl = quote.mintUrl
+        guard activeMint?.url != quoteMintUrl,
               let mint = mints.first(where: { normalizedMintURL($0.url) == normalizedMintURL(quoteMintUrl) }) else {
             return
         }
