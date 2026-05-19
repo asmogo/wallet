@@ -263,12 +263,14 @@ class MintService: ObservableObject {
             mintInfo.description = fetchedInfo.description ?? mintInfo.description
             mintInfo.iconUrl = fetchedInfo.iconUrl ?? mintInfo.iconUrl
 
-            let mintMethods = supportedPaymentMethods(from: fetchedInfo.nuts.nut04.methods.map(\.method))
+            mintInfo.units = supportedUnits(from: fetchedInfo.nuts)
+
+            let mintMethods = supportedMintPaymentMethods(from: fetchedInfo.nuts.nut04.methods)
             if !mintMethods.isEmpty {
                 mintInfo.supportedMintMethods = mintMethods
             }
 
-            let meltMethods = supportedPaymentMethods(from: fetchedInfo.nuts.nut05.methods.map(\.method))
+            let meltMethods = supportedMeltPaymentMethods(from: fetchedInfo.nuts.nut05.methods)
             if !meltMethods.isEmpty {
                 mintInfo.supportedMeltMethods = meltMethods
             }
@@ -282,9 +284,32 @@ class MintService: ObservableObject {
         return mintInfo
     }
 
-    private func supportedPaymentMethods(from methods: [CashuDevKit.PaymentMethod]) -> [PaymentMethodKind] {
-        let mappedMethods = methods.compactMap(PaymentMethodKind.from)
+    private func supportedMintPaymentMethods(from methods: [CashuDevKit.MintMethodSettings]) -> [PaymentMethodKind] {
+        let mappedMethods = methods
+            .filter { isSatUnit($0.unit) }
+            .compactMap { PaymentMethodKind.from($0.method) }
         return PaymentMethodKind.allCases.filter { mappedMethods.contains($0) }
+    }
+
+    private func supportedMeltPaymentMethods(from methods: [CashuDevKit.MeltMethodSettings]) -> [PaymentMethodKind] {
+        let mappedMethods = methods
+            .filter { isSatUnit($0.unit) }
+            .compactMap { PaymentMethodKind.from($0.method) }
+        return PaymentMethodKind.allCases.filter { mappedMethods.contains($0) }
+    }
+
+    private func supportedUnits(from nuts: CashuDevKit.Nuts) -> [String] {
+        let units = (nuts.mintUnits + nuts.meltUnits)
+            .map(PaymentRequestDecoder.unitDescription)
+        let uniqueUnits = Array(Set(units)).sorted()
+        return uniqueUnits.isEmpty ? ["sat"] : uniqueUnits
+    }
+
+    private func isSatUnit(_ unit: CashuDevKit.CurrencyUnit) -> Bool {
+        if case .sat = unit {
+            return true
+        }
+        return false
     }
 
     private func fetchOnchainMintConfirmations(for url: String) async -> Int? {

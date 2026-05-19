@@ -541,6 +541,7 @@ struct MeltQuoteInfo: Identifiable {
     let amount: UInt64
     let feeReserve: UInt64
     let paymentMethod: PaymentMethodKind
+    let mintUrl: String?
     var state: MeltQuoteState
     let expiry: UInt64?
     

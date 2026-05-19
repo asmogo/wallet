@@ -67,7 +67,8 @@ class WalletManager: ObservableObject {
     private(set) lazy var lightningService = LightningService(
         walletRepository: { [weak self] in self?.walletRepository },
         walletDatabase: { [weak self] in self?.db },
-        getActiveMint: { [weak self] in self?.activeMint }
+        getActiveMint: { [weak self] in self?.activeMint },
+        getMints: { [weak self] in self?.mints ?? [] }
     )
     
     // MARK: - Computed Properties (Delegate to Services)
@@ -544,7 +545,9 @@ class WalletManager: ObservableObject {
     }
     
     func createMeltQuote(request: String) async throws -> MeltQuoteInfo {
-        return try await lightningService.createMeltQuote(request: request)
+        let quote = try await lightningService.createMeltQuote(request: request)
+        await syncActiveMintWithMeltQuote(quote)
+        return quote
     }
     
     func createMeltQuote(invoice: String) async throws -> MeltQuoteInfo {
@@ -552,11 +555,15 @@ class WalletManager: ObservableObject {
     }
 
     func createHumanReadableMeltQuote(address: String, amount: UInt64) async throws -> MeltQuoteInfo {
-        return try await lightningService.createHumanReadableMeltQuote(address: address, amount: amount)
+        let quote = try await lightningService.createHumanReadableMeltQuote(address: address, amount: amount)
+        await syncActiveMintWithMeltQuote(quote)
+        return quote
     }
 
     func createOnchainMeltQuote(address: String, amount: UInt64) async throws -> MeltQuoteInfo {
-        return try await lightningService.createOnchainMeltQuote(address: address, amount: amount)
+        let quote = try await lightningService.createOnchainMeltQuote(address: address, amount: amount)
+        await syncActiveMintWithMeltQuote(quote)
+        return quote
     }
 
     func subscribeToMintQuote(
@@ -578,6 +585,16 @@ class WalletManager: ObservableObject {
         await refreshBalance()
         await loadTransactions()
         return preimage
+    }
+
+    private func syncActiveMintWithMeltQuote(_ quote: MeltQuoteInfo) async {
+        guard let quoteMintUrl = quote.mintUrl,
+              activeMint?.url != quoteMintUrl,
+              let mint = mints.first(where: { normalizedMintURL($0.url) == normalizedMintURL(quoteMintUrl) }) else {
+            return
+        }
+
+        try? await setActiveMint(mint)
     }
 
     // MARK: - Cashu Payment Requests

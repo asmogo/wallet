@@ -22,6 +22,7 @@ class LightningService: ObservableObject {
     private let walletRepository: () -> WalletRepository?
     private let walletDatabase: () -> WalletSqliteDatabase?
     private let getActiveMint: () -> MintInfo?
+    private let getMints: () -> [MintInfo]
     private var mintQuotesInFlight: Set<String> = []
     
     // MARK: - Initialization
@@ -29,11 +30,13 @@ class LightningService: ObservableObject {
     init(
         walletRepository: @escaping () -> WalletRepository?,
         walletDatabase: @escaping () -> WalletSqliteDatabase?,
-        getActiveMint: @escaping () -> MintInfo?
+        getActiveMint: @escaping () -> MintInfo?,
+        getMints: @escaping () -> [MintInfo] = { [] }
     ) {
         self.walletRepository = walletRepository
         self.walletDatabase = walletDatabase
         self.getActiveMint = getActiveMint
+        self.getMints = getMints
     }
     
     // MARK: - Minting (NUT-04) - Receive via Lightning
@@ -241,15 +244,12 @@ class LightningService: ObservableObject {
     /// - Parameter request: The BOLT11 invoice or BOLT12 offer to pay
     /// - Returns: Melt quote with fee information
     func createMeltQuote(request: String) async throws -> MeltQuoteInfo {
-        guard let repo = walletRepository(), let activeMint = getActiveMint() else {
+        guard let repo = walletRepository() else {
             throw WalletError.notInitialized
         }
         
         isLoading = true
         defer { isLoading = false }
-        
-        let mintUrl = MintUrl(url: activeMint.url)
-        let wallet = try await repo.getWallet(mintUrl: mintUrl, unit: .sat)
 
         let normalizedRequest = PaymentRequestDecoder.encodedLightningRequest(from: request) ?? request
 
@@ -259,15 +259,46 @@ class LightningService: ObservableObject {
 
         let parsedRequest = try LightningRequestParser.parse(normalizedRequest)
         let paymentMethod = PaymentMethodKind.from(parsedRequest.method) ?? .bolt11
-        
-        let quote = try await wallet.meltQuote(
-            method: parsedRequest.method,
-            request: parsedRequest.request,
-            options: nil,
-            extra: nil
+        let decodedInvoice = try? decodeInvoice(invoiceStr: parsedRequest.request)
+        let invoiceAmountSats = decodedInvoice?.amountMsat.map { ($0 + 999) / 1000 }
+        let candidates = meltQuoteCandidateMints(
+            paymentMethod: paymentMethod,
+            minimumAmount: invoiceAmountSats
         )
 
-        return meltQuoteInfo(from: quote, paymentMethod: paymentMethod)
+        guard !candidates.isEmpty else {
+            throw WalletError.networkError("No mint with BOLT11 sat melt support is available.")
+        }
+
+        var lastError: Error?
+        for mint in candidates {
+            do {
+                let mintUrl = MintUrl(url: mint.url)
+                let wallet = try await repo.getWallet(mintUrl: mintUrl, unit: .sat)
+                let quote = try await wallet.meltQuote(
+                    method: parsedRequest.method,
+                    request: parsedRequest.request,
+                    options: nil,
+                    extra: nil
+                )
+
+                let totalRequired = quote.amount.value + quote.feeReserve.value
+                guard mint.balance >= totalRequired else {
+                    lastError = NFCPaymentError.insufficientBalance(required: totalRequired, available: mint.balance)
+                    continue
+                }
+
+                return meltQuoteInfo(from: quote, paymentMethod: paymentMethod, fallbackMintUrl: mint.url)
+            } catch {
+                lastError = error
+                AppLogger.wallet.error("Failed to create \(paymentMethod.rawValue) melt quote with mint \(mint.url): \(error)")
+            }
+        }
+
+        if let lastError {
+            throw lastError
+        }
+        throw WalletError.networkError("No mint could create a melt quote for this payment request.")
     }
     
     /// Backward-compatible wrapper for older bolt11-specific call sites.
@@ -298,7 +329,7 @@ class LightningService: ObservableObject {
             network: bitcoinNetwork(for: activeMint.url)
         )
 
-        return meltQuoteInfo(from: quote, paymentMethod: .bolt11)
+        return meltQuoteInfo(from: quote, paymentMethod: .bolt11, fallbackMintUrl: activeMint.url)
     }
 
     func createOnchainMeltQuote(address: String, amount: UInt64) async throws -> MeltQuoteInfo {
@@ -325,7 +356,7 @@ class LightningService: ObservableObject {
 
         let quote = try await wallet.selectOnchainMeltQuote(quote: quoteOption)
 
-        return meltQuoteInfo(from: quote, paymentMethod: .onchain)
+        return meltQuoteInfo(from: quote, paymentMethod: .onchain, fallbackMintUrl: activeMint.url)
     }
 
     func subscribeToMintQuote(
@@ -341,6 +372,52 @@ class LightningService: ObservableObject {
         let params = SubscribeParams(kind: paymentMethod.subscriptionKind, filters: [quoteId], id: nil)
         return try await wallet.subscribe(params: params)
     }
+
+    private func meltQuoteCandidateMints(
+        paymentMethod: PaymentMethodKind,
+        minimumAmount: UInt64?
+    ) -> [MintInfo] {
+        let activeMint = getActiveMint()
+        let allMints = getMints()
+        let mints = allMints.isEmpty
+            ? activeMint.map { [$0] } ?? []
+            : allMints
+
+        let compatibleMints = mints.filter { $0.supportedMeltMethods.contains(paymentMethod) }
+        let methodCandidates = compatibleMints.isEmpty ? mints : compatibleMints
+        let affordableCandidates = methodCandidates.filter { mint in
+            guard let minimumAmount else { return true }
+            return mint.balance >= minimumAmount
+        }
+        let candidates = affordableCandidates.isEmpty ? methodCandidates : affordableCandidates
+
+        var ordered: [MintInfo] = []
+        if let activeMint,
+           candidates.contains(where: { $0.id == activeMint.id }) {
+            let activeCanCover = minimumAmount.map { activeMint.balance >= $0 } ?? true
+            if activeCanCover {
+                ordered.append(activeMint)
+            }
+        }
+
+        if ordered.isEmpty,
+           let activeMint,
+           candidates.contains(where: { $0.id == activeMint.id }) {
+            ordered.append(activeMint)
+        }
+
+        ordered.append(contentsOf: candidates
+            .filter { candidate in !ordered.contains(where: { $0.id == candidate.id }) }
+            .sorted { lhs, rhs in
+                if lhs.balance == rhs.balance {
+                    return lhs.name.localizedCaseInsensitiveCompare(rhs.name) == .orderedAscending
+                }
+                return lhs.balance > rhs.balance
+            }
+        )
+
+        return ordered
+    }
     
     /// Pay a Lightning invoice (melt tokens)
     /// - Parameter quoteId: The quote ID to melt
@@ -354,10 +431,7 @@ class LightningService: ObservableObject {
         defer { isLoading = false }
 
         let storedMeltQuote = try await walletDatabase()?.getMeltQuote(quoteId: quoteId)
-        let isOnchainMelt = storedMeltQuote.flatMap { PaymentMethodKind.from($0.paymentMethod) } == .onchain
-        let mintURLString = isOnchainMelt
-            ? storedMeltQuote?.mintUrl?.url ?? activeMint.url
-            : activeMint.url
+        let mintURLString = storedMeltQuote?.mintUrl?.url ?? activeMint.url
         let mintUrl = MintUrl(url: mintURLString)
         let wallet = try await repo.getWallet(mintUrl: mintUrl, unit: .sat)
 
@@ -406,13 +480,15 @@ class LightningService: ObservableObject {
 
     private func meltQuoteInfo(
         from quote: MeltQuote,
-        paymentMethod: PaymentMethodKind
+        paymentMethod: PaymentMethodKind,
+        fallbackMintUrl: String
     ) -> MeltQuoteInfo {
         MeltQuoteInfo(
             id: quote.id,
             amount: quote.amount.value,
             feeReserve: quote.feeReserve.value,
             paymentMethod: paymentMethod,
+            mintUrl: quote.mintUrl?.url ?? fallbackMintUrl,
             state: MeltQuoteState(quote.state),
             expiry: displayExpiry(quote.expiry)
         )
