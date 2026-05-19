@@ -64,10 +64,7 @@ struct P2PKSettingsSection: View {
                                         .foregroundStyle(.secondary)
                                         .padding(.horizontal, 6)
                                         .padding(.vertical, 2)
-                                        .background(
-                                            Capsule()
-                                                .stroke(.secondary, lineWidth: 1)
-                                        )
+                                        .background(.secondary.opacity(0.15), in: Capsule())
                                 }
 
                                 Spacer()

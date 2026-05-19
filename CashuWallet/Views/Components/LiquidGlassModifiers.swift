@@ -24,26 +24,59 @@ extension View {
         }
     }
 
-    /// Full-width capsule action button. Use for all primary and secondary CTAs.
-    func glassButton(prominent: Bool = false) -> some View {
+    /// Full-width Liquid Glass capsule. Used for all primary CTAs in the app.
+    /// Matches the home-screen action row (Receive / Scan / Send) — neutral
+    /// glass with a primary-color label, readable in both light and dark mode.
+    func glassButton() -> some View {
         self.buttonStyle(FullWidthCapsuleButtonStyle())
+    }
+
+}
+
+// MARK: - Canvas Divider
+
+/// Hairline divider used between rows on the single-canvas screens
+/// (Lightning Invoice, Pending Ecash, Settings groups, History rows, etc.).
+/// Sits directly on the canvas with a subtle inset to the label baseline.
+struct CanvasDivider: View {
+    var inset: CGFloat = 28
+
+    var body: some View {
+        Rectangle()
+            .fill(Color(.separator))
+            .frame(height: 0.5)
+            .padding(.leading, inset)
     }
 }
 
 // MARK: - Full Width Capsule Button Style
 
-/// A button style that renders full-width with a capsule shape and subtle tinted background.
-/// Adapts to light/dark mode automatically via semantic colors.
+/// Full-width capsule rendered as subtly-frosted Liquid Glass on iOS 26+,
+/// with a `.quaternary` fill fallback on iOS 18–25. The 15% primary-color
+/// tint keeps the surface visible even when sitting over an empty dark
+/// canvas (where untinted `.regular` glass would nearly disappear).
 struct FullWidthCapsuleButtonStyle: ButtonStyle {
     @Environment(\.isEnabled) private var isEnabled
 
     func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            .font(.body.weight(.medium))
+        let label = configuration.label
+            .font(.body.weight(.semibold))
             .frame(maxWidth: .infinity)
-            .padding(.vertical, 14)
-            .background(.tertiary, in: Capsule())
+            .padding(.vertical, 18)
             .foregroundStyle(.primary)
-            .opacity(isEnabled ? (configuration.isPressed ? 0.7 : 1) : 0.4)
+            .contentShape(Capsule())
+
+        return Group {
+            if #available(iOS 26, *) {
+                label.glassEffect(
+                    .regular.tint(Color.primary.opacity(0.15)).interactive(),
+                    in: Capsule()
+                )
+            } else {
+                label.background(.quaternary, in: Capsule())
+            }
+        }
+        .opacity(isEnabled ? (configuration.isPressed ? 0.85 : 1) : 0.4)
+        .animation(.snappy(duration: 0.18), value: configuration.isPressed)
     }
 }

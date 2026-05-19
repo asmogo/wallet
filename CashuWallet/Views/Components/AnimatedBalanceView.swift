@@ -17,17 +17,19 @@ struct AnimatedBalanceView: View {
             if hideBalance {
                 Text("••••••")
                     .font(textStyle)
+                    .monospacedDigit()
                     .accessibilityLabel("Balance hidden")
             } else {
                 Text(formattedValue)
                     .font(textStyle)
-                    .animation(.spring(response: 0.5, dampingFraction: 0.8), value: displayValue)
+                    .monospacedDigit()
+                    .contentTransition(.numericText(value: Double(displayValue)))
                     .accessibilityLabel("Balance: \(formattedValue)")
                     .accessibilityValue(formattedValue)
             }
         }
         .onChange(of: value) { _, newValue in
-            withAnimation(.spring(response: 0.5, dampingFraction: 0.8)) {
+            withAnimation(.snappy) {
                 displayValue = newValue
             }
         }

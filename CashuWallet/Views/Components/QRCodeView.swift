@@ -58,7 +58,12 @@ struct QRCodeView: View {
     private static let ciContext = CIContext()
     let content: String
     var showControls: Bool = true
-    
+    /// When true, never UR-encode the content. Use for standardized payloads
+    /// (BOLT11 invoices, BOLT12 offers, Bitcoin addresses) that other wallets
+    /// expect to scan as a single static frame. UR-animated QRs only make
+    /// sense for our own long Cashu tokens.
+    var staticOnly: Bool = false
+
     // Local settings per QR instance
     @State private var speed: QRSpeed = .fast
     @State private var size: QRSize = .large
@@ -162,10 +167,18 @@ struct QRCodeView: View {
     
     private func prepareEncoder() {
         stopTimer()
-        
+
+        // Static-only mode short-circuits UR encoding entirely so scanners
+        // receive a single standard QR frame.
+        if staticOnly {
+            currentQRCodeString = content
+            totalParts = 1
+            return
+        }
+
         #if canImport(URKit)
         let chunkSize = size.chunkSize
-        
+
         if content.count > chunkSize {
             // Encode as UR for animated QR
             let data = Data(content.utf8)

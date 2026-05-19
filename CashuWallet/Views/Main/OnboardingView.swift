@@ -8,7 +8,6 @@ struct OnboardingView: View {
     @State private var isCreating = false
     @State private var isRestoring = false
     @State private var errorMessage: String?
-    @State private var showMnemonicWords = false
 
     // Restore mints state
     @State private var mintUrlInput = ""
@@ -23,144 +22,211 @@ struct OnboardingView: View {
     @State private var verificationAnswers: [Int: String] = [:]
     @State private var verificationError: String?
 
+    // First-mint state (create path)
+    @State private var showConceptSheet = false
+    @State private var selectedMintUrls: Set<String> = []
+    @State private var customMintUrls: [String] = []
+    @State private var showCustomMintInput = false
+    @State private var customMintInput = ""
+    @State private var isAddingFirstMints = false
+    @State private var currentAddingMint: String?
+    @State private var firstMintError: String?
+
+    // Transition direction for step changes
+    @State private var stepDirection: StepDirection = .forward
+
+    enum StepDirection { case forward, backward }
+
     enum OnboardingStep {
         case welcome
-        case createOrRestore
         case showMnemonic
         case verifyMnemonic
+        case firstMint
         case restoreInput
         case restoreMints
     }
 
+    private struct RecommendedMint: Identifiable {
+        let name: String
+        let url: String
+        var id: String { url }
+    }
+
+    private let recommendedMints: [RecommendedMint] = [
+        RecommendedMint(name: "Minibits", url: "https://mint.minibits.cash/Bitcoin"),
+        RecommendedMint(name: "Coinos", url: "https://mint.coinos.io"),
+        RecommendedMint(name: "Macadamia", url: "https://mint.macadamia.cash")
+    ]
+
     var body: some View {
-        VStack {
+        ZStack {
             switch currentStep {
             case .welcome:
                 welcomeView
-            case .createOrRestore:
-                createOrRestoreView
+                    .transition(stepTransition)
             case .showMnemonic:
                 showMnemonicView
+                    .transition(stepTransition)
             case .verifyMnemonic:
                 verifyMnemonicView
+                    .transition(stepTransition)
+            case .firstMint:
+                firstMintView
+                    .transition(stepTransition)
             case .restoreInput:
                 restoreInputView
+                    .transition(stepTransition)
             case .restoreMints:
                 restoreMintsView
+                    .transition(stepTransition)
             }
+        }
+        .sheet(isPresented: $showConceptSheet) {
+            conceptSheet
+        }
+    }
+
+    private var stepTransition: AnyTransition {
+        let forward = AnyTransition.asymmetric(
+            insertion: .opacity.combined(with: .move(edge: .trailing)),
+            removal: .opacity.combined(with: .move(edge: .leading))
+        )
+        let backward = AnyTransition.asymmetric(
+            insertion: .opacity.combined(with: .move(edge: .leading)),
+            removal: .opacity.combined(with: .move(edge: .trailing))
+        )
+        return stepDirection == .forward ? forward : backward
+    }
+
+    private func advance(to step: OnboardingStep) {
+        withAnimation(.snappy(duration: 0.35)) {
+            stepDirection = .forward
+            currentStep = step
+        }
+    }
+
+    private func retreat(to step: OnboardingStep) {
+        withAnimation(.snappy(duration: 0.35)) {
+            stepDirection = .backward
+            currentStep = step
         }
     }
 
     // MARK: - Welcome View
 
     private var welcomeView: some View {
-        VStack(spacing: 40) {
+        VStack(spacing: 0) {
             Spacer()
 
-            // Logo
-            VStack(spacing: 16) {
-                Image(systemName: "bitcoinsign.circle.fill")
-                    .font(.largeTitle)
-.foregroundStyle(Color.accentColor)
-
-                Text("Cashu Wallet")
-                    .font(.largeTitle)
-                    .fontWeight(.bold)
-
-                Text("Private digital cash for everyone")
-                    .font(.subheadline)
+            VStack(alignment: .leading, spacing: 14) {
+                Text("CASHU")
+                    .font(.caption2.weight(.semibold))
+                    .tracking(3)
                     .foregroundStyle(.secondary)
+
+                Text("Private cash.\nIn your pocket.")
+                    .font(.largeTitle.weight(.heavy))
+                    .tracking(-0.5)
+                    .lineSpacing(-2)
+                    .foregroundStyle(.primary)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                Text("An ecash wallet for Bitcoin and Lightning.")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                    .padding(.top, 4)
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, 28)
 
             Spacer()
 
-            // Error display
             if let error = walletManager.errorMessage {
-                ErrorBannerView(message: "Initialization Error: \(error)", type: .error)
+                ErrorBannerView(message: "Couldn't start the wallet. \(error)", type: .error)
                     .padding(.horizontal)
+                    .padding(.bottom, 8)
             }
 
-            // Features
-            VStack(alignment: .leading, spacing: 16) {
-                Label("Privacy-first ecash", systemImage: "lock.shield")
-                Label("Lightning Network payments", systemImage: "bolt.fill")
-                Label("Deterministic wallet recovery", systemImage: "arrow.triangle.2.circlepath")
-            }
-            .font(.body)
-            .padding(.horizontal, 24)
-
-            Spacer()
-
-            // Get Started button
-            Button(action: { currentStep = .createOrRestore }) {
-                Text("Get Started")
-            }
-            .glassButton(prominent: true).controlSize(.large)
-            .padding(.bottom, 40)
-        }
-        .padding()
-    }
-
-
-    // MARK: - Create or Restore View
-
-    private var createOrRestoreView: some View {
-        VStack(spacing: 32) {
-            Spacer()
-
-            Text("Welcome to Cashu")
-                .font(.title)
-                .fontWeight(.bold)
-
-            Text("Create a new wallet or restore from your seed phrase")
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-                .multilineTextAlignment(.center)
-
-            Spacer()
-
-            // Error display
             if let error = errorMessage {
                 Text(error)
                     .font(.caption)
                     .foregroundStyle(.red)
                     .multilineTextAlignment(.center)
-                    .padding()
+                    .padding(.horizontal)
+                    .padding(.bottom, 8)
             }
 
-            // Create new wallet
-            Button(action: createWallet) {
-                if isCreating {
-                    ProgressView()
-                } else {
-                    HStack {
-                        Image(systemName: "plus.circle.fill")
-                        Text("Create New Wallet")
+            VStack(spacing: 12) {
+                Button(action: createWallet) {
+                    Group {
+                        if isCreating {
+                            ProgressView().tint(.primary)
+                        } else {
+                            Text("Create Wallet")
+                        }
                     }
                 }
-            }
-            .glassButton(prominent: true).controlSize(.large)
-            .disabled(isCreating)
+                .glassButton()
+                .disabled(isCreating)
 
-            // Restore wallet
-            Button(action: { currentStep = .restoreInput }) {
-                HStack {
-                    Image(systemName: "arrow.counterclockwise.circle")
-                    Text("Restore from Seed")
+                Button(action: {
+                    HapticFeedback.selection()
+                    advance(to: .restoreInput)
+                }) {
+                    Text("I have a seed phrase")
                 }
+                .glassButton()
+                .disabled(isCreating)
+
+                Button(action: {
+                    HapticFeedback.selection()
+                    showConceptSheet = true
+                }) {
+                    Text("What is ecash?")
+                        .font(.footnote.weight(.medium))
+                        .foregroundStyle(.secondary)
+                        .padding(.top, 4)
+                }
+                .buttonStyle(.plain)
             }
-            .glassButton()
+            .padding(.horizontal, 24)
+            .padding(.bottom, 40)
+        }
+    }
+
+    // MARK: - Concept Sheet
+
+    private var conceptSheet: some View {
+        VStack(alignment: .leading, spacing: 20) {
+            Text("Ecash is bearer cash\nfor Bitcoin.")
+                .font(.title.weight(.heavy))
+                .tracking(-0.3)
+                .lineSpacing(-1)
+                .padding(.top, 8)
+
+            VStack(alignment: .leading, spacing: 16) {
+                Text("Whoever holds it, owns it. Your balance stays on this device, hidden from everyone else.")
+                Text("Mints hold the Bitcoin behind your ecash. You can use several at once.")
+                Text("Send instantly. Cash out to Lightning anytime.")
+            }
+            .font(.callout)
+            .foregroundStyle(.secondary)
+            .fixedSize(horizontal: false, vertical: true)
 
             Spacer()
 
-            // Back button
-            Button(action: { currentStep = .welcome }) {
-                Text("Back")
-                    .foregroundStyle(.secondary)
+            Button(action: {
+                HapticFeedback.selection()
+                showConceptSheet = false
+            }) {
+                Text("Got it")
             }
-            .padding(.bottom, 40)
+            .glassButton()
+            .padding(.bottom, 8)
         }
-        .padding()
+        .padding(28)
+        .presentationDetents([.medium, .large])
+        .presentationDragIndicator(.visible)
     }
 
     // MARK: - Show Mnemonic View
@@ -168,41 +234,32 @@ struct OnboardingView: View {
     private var showMnemonicView: some View {
         VStack(spacing: 24) {
             Text("Your Seed Phrase")
-                .font(.title2)
-                .fontWeight(.bold)
+                .font(.title.weight(.semibold))
 
-            Text("Write down these 12 words in order and keep them safe. This is the only way to recover your wallet.")
+            Text("Write these 12 words down in order. This is the only way to recover your wallet.")
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
 
-            // Warning
-            Label("Never share these words with anyone!", systemImage: "exclamationmark.triangle.fill")
-                .font(.caption)
+            Label("Never share these words with anyone", systemImage: "exclamationmark.triangle.fill")
+                .font(.caption.weight(.medium))
                 .foregroundStyle(.orange)
-                .padding()
+                .padding(.top, 4)
 
-            // Mnemonic words
-            let words = walletManager.getMnemonicWords()
-
-            Group {
-                if #available(iOS 26, *) {
-                    GlassEffectContainer(spacing: 12) {
-                        mnemonicWordsGrid(words: words)
-                    }
-                } else {
-                    mnemonicWordsGrid(words: words)
-                }
-            }
-            .padding()
+            // Mnemonic words — plain on canvas, no per-word material
+            mnemonicWordsGrid(words: walletManager.getMnemonicWords())
+                .padding(.horizontal)
+                .padding(.top, 8)
 
             Spacer()
 
-            // Continue button — go to verification step
-            Button(action: startVerification) {
+            Button(action: {
+                HapticFeedback.selection()
+                startVerification()
+            }) {
                 Text("I've Saved My Seed Phrase")
             }
-            .glassButton(prominent: true).controlSize(.large)
+            .glassButton()
             .padding(.bottom, 40)
         }
         .padding()
@@ -213,32 +270,38 @@ struct OnboardingView: View {
     private var verifyMnemonicView: some View {
         VStack(spacing: 24) {
             Text("Verify Seed Phrase")
-                .font(.title2)
-                .fontWeight(.bold)
+                .font(.title.weight(.semibold))
 
-            Text("Select the correct word for each position to confirm you saved your seed phrase.")
+            Text("Tap the right word for each position.")
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
+                .padding(.horizontal)
 
             verificationWordsGridView(indices: verificationIndices)
-            .padding()
+                .padding(.horizontal)
+                .padding(.top, 8)
 
             if let error = verificationError {
                 Text(error)
                     .font(.caption)
                     .foregroundStyle(.red)
+                    .transition(.opacity)
             }
 
             Spacer()
 
-            Button(action: checkVerification) {
+            Button(action: {
+                HapticFeedback.selection()
+                checkVerification()
+            }) {
                 Text("Confirm")
             }
-            .glassButton(prominent: true).controlSize(.large)
+            .glassButton()
             .disabled(verificationAnswers.count < verificationIndices.count)
+            .animation(.easeOut(duration: 0.2), value: verificationAnswers.count)
 
-            Button(action: { currentStep = .showMnemonic }) {
+            Button(action: { retreat(to: .showMnemonic) }) {
                 Text("Go back and check")
                     .foregroundStyle(.secondary)
             }
@@ -249,28 +312,19 @@ struct OnboardingView: View {
 
     private func verificationWordsGridView(indices: [Int]) -> some View {
         let words = walletManager.getMnemonicWords()
-        return VStack(spacing: 16) {
+        return VStack(spacing: 20) {
             ForEach(Array(indices.enumerated()), id: \.offset) { _, index in
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("Word #\(index + 1)")
-                        .font(.caption)
-                        .fontWeight(.semibold)
+                VStack(alignment: .leading, spacing: 10) {
+                    Text("Word \(String(format: "#%02d", index + 1))")
+                        .font(.caption.weight(.semibold))
                         .foregroundStyle(.secondary)
+                        .textCase(.uppercase)
+                        .tracking(1.2)
 
                     let options = generateWordOptions(correctWord: words[index])
-                    LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible()), GridItem(.flexible())], spacing: 8) {
+                    LazyVGrid(columns: [GridItem(.flexible(), spacing: 8), GridItem(.flexible(), spacing: 8), GridItem(.flexible(), spacing: 8)], spacing: 8) {
                         ForEach(options, id: \.self) { option in
-                            Button(action: {
-                                verificationAnswers[index] = option
-                                verificationError = nil
-                            }) {
-                                Text(option)
-                                    .font(.system(.subheadline, design: .monospaced))
-                                    .frame(maxWidth: .infinity)
-                                    .padding(.vertical, 10)
-                            }
-                            .glassButton()
-                            .tint(verificationAnswers[index] == option ? .accentColor : .secondary)
+                            verificationChip(option: option, index: index)
                         }
                     }
                 }
@@ -278,21 +332,52 @@ struct OnboardingView: View {
         }
     }
 
+    @ViewBuilder
+    private func verificationChip(option: String, index: Int) -> some View {
+        let selected = verificationAnswers[index] == option
+        Button(action: {
+            HapticFeedback.selection()
+            withAnimation(.snappy) {
+                verificationAnswers[index] = option
+                verificationError = nil
+            }
+        }) {
+            Text(option)
+                .font(.system(.subheadline, design: .monospaced).weight(.medium))
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 12)
+                .background(
+                    Capsule().fill(selected ? Color.secondary.opacity(0.18) : Color.clear)
+                )
+                .overlay(
+                    Capsule().strokeBorder(
+                        selected ? Color.primary.opacity(0.4) : Color.secondary.opacity(0.25),
+                        lineWidth: 1
+                    )
+                )
+                .foregroundStyle(selected ? .primary : .secondary)
+        }
+        .buttonStyle(.plain)
+    }
+
     private func mnemonicWordsGrid(words: [String]) -> some View {
-        LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
+        // Family-style: plain words on the canvas, monospaced, with the
+        // number in tertiary. The seed phrase deserves quiet treatment — no
+        // glass material per word, no busy backgrounds.
+        LazyVGrid(columns: [GridItem(.flexible(), spacing: 12), GridItem(.flexible(), spacing: 12), GridItem(.flexible(), spacing: 12)], spacing: 14) {
             ForEach(Array(words.enumerated()), id: \.offset) { index, word in
-                HStack(spacing: 4) {
-                    Text("\(index + 1).")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .frame(width: 20, alignment: .trailing)
+                HStack(spacing: 6) {
+                    Text(String(format: "%02d", index + 1))
+                        .font(.system(.footnote, design: .monospaced))
+                        .foregroundStyle(.tertiary)
+                        .frame(width: 22, alignment: .trailing)
 
                     Text(word)
-                        .font(.system(.body, design: .monospaced))
+                        .font(.system(.body, design: .monospaced).weight(.medium))
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.7)
                 }
-                .padding(.horizontal, 8)
-                .padding(.vertical, 6)
-                .liquidGlass(in: RoundedRectangle(cornerRadius: 8))
             }
         }
     }
@@ -306,7 +391,7 @@ struct OnboardingView: View {
         verificationIndices = Array(indices.prefix(3)).sorted()
         verificationAnswers = [:]
         verificationError = nil
-        currentStep = .verifyMnemonic
+        advance(to: .verifyMnemonic)
     }
 
     private func generateWordOptions(correctWord: String) -> [String] {
@@ -332,47 +417,305 @@ struct OnboardingView: View {
         let words = walletManager.getMnemonicWords()
         for index in verificationIndices {
             if verificationAnswers[index] != words[index] {
-                verificationError = "Incorrect. Please go back and check your seed phrase."
+                verificationError = "That's not right. Go back and check your seed phrase."
                 verificationAnswers = [:]
                 return
             }
         }
+        HapticFeedback.notification(.success)
+        advance(to: .firstMint)
+    }
+
+    // MARK: - First Mint View
+
+    private var firstMintView: some View {
+        VStack(spacing: 16) {
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Pick your first mint")
+                    .font(.title.weight(.semibold))
+
+                Text("Mints issue your ecash and redeem it for Bitcoin. Add more anytime in Settings.")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, 28)
+            .padding(.top, 8)
+
+            ScrollView {
+                VStack(spacing: 0) {
+                    let allRows: [String] = recommendedMints.map(\.url) + customMintUrls
+
+                    ForEach(Array(allRows.enumerated()), id: \.element) { index, url in
+                        firstMintRow(url: url)
+                        if index < allRows.count - 1 {
+                            CanvasDivider()
+                        }
+                    }
+                }
+                .padding(.horizontal, 28)
+                .padding(.top, 12)
+
+                if showCustomMintInput {
+                    customMintInputRow
+                        .padding(.horizontal, 28)
+                        .padding(.top, 12)
+                        .transition(.opacity.combined(with: .move(edge: .top)))
+                } else {
+                    Button(action: {
+                        HapticFeedback.selection()
+                        withAnimation(.snappy) { showCustomMintInput = true }
+                    }) {
+                        HStack(spacing: 6) {
+                            Image(systemName: "plus")
+                            Text("Add custom mint URL")
+                        }
+                        .font(.footnote.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                        .padding(.vertical, 14)
+                        .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.plain)
+                    .padding(.top, 4)
+                }
+
+                if let error = firstMintError {
+                    Text(error)
+                        .font(.caption)
+                        .foregroundStyle(.red)
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal, 28)
+                        .padding(.top, 8)
+                }
+
+                if let current = currentAddingMint, isAddingFirstMints {
+                    HStack(spacing: 8) {
+                        ProgressView().controlSize(.small)
+                        Text("Connecting to \(shortenUrl(current))…")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    .padding(.top, 8)
+                }
+            }
+
+            Spacer(minLength: 0)
+
+            VStack(spacing: 10) {
+                Button(action: continueFromFirstMint) {
+                    Group {
+                        if isAddingFirstMints {
+                            ProgressView().tint(.primary)
+                        } else {
+                            Text("Continue")
+                        }
+                    }
+                }
+                .glassButton()
+                .disabled(selectedMintUrls.isEmpty || isAddingFirstMints)
+                .animation(.easeOut(duration: 0.2), value: selectedMintUrls.isEmpty)
+
+                Button(action: skipFirstMint) {
+                    Text("Skip for now")
+                        .font(.footnote.weight(.medium))
+                        .foregroundStyle(.secondary)
+                        .padding(.top, 2)
+                }
+                .buttonStyle(.plain)
+                .disabled(isAddingFirstMints)
+            }
+            .padding(.horizontal, 24)
+            .padding(.bottom, 32)
+        }
+    }
+
+    @ViewBuilder
+    private func firstMintRow(url: String) -> some View {
+        let selected = selectedMintUrls.contains(url)
+        let recommended = recommendedMints.first(where: { $0.url == url })
+
+        Button(action: {
+            HapticFeedback.selection()
+            withAnimation(.snappy) {
+                if selected {
+                    selectedMintUrls.remove(url)
+                } else {
+                    selectedMintUrls.insert(url)
+                }
+            }
+        }) {
+            HStack(spacing: 12) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(recommended?.name ?? shortenUrl(url))
+                        .font(.subheadline.weight(.medium))
+                        .foregroundStyle(.primary)
+                        .lineLimit(1)
+
+                    Text(url)
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+
+                Spacer()
+
+                Image(systemName: selected ? "checkmark.circle.fill" : "circle")
+                    .font(.title3)
+                    .foregroundStyle(selected ? .primary : Color.primary.opacity(0.25))
+                    .symbolRenderingMode(.hierarchical)
+            }
+            .padding(.vertical, 14)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+    }
+
+    private var customMintInputRow: some View {
+        HStack(spacing: 8) {
+            TextField("https://mint.example.com", text: $customMintInput)
+                .textInputAutocapitalization(.never)
+                .autocorrectionDisabled()
+                .keyboardType(.URL)
+                .font(.system(.subheadline, design: .monospaced))
+                .padding(.vertical, 12)
+                .padding(.horizontal, 14)
+                .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 12))
+
+            Button(action: commitCustomMintInput) {
+                Image(systemName: customMintInput.isEmpty ? "doc.on.clipboard" : "arrow.right.circle.fill")
+                    .font(.title3)
+                    .foregroundStyle(.primary)
+                    .padding(8)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(customMintInput.isEmpty ? "Paste from clipboard" : "Add mint")
+            .accessibilityHint(customMintInput.isEmpty ? "Pastes mint URL from clipboard" : "Adds mint to restore list")
+        }
+    }
+
+    private func commitCustomMintInput() {
+        if customMintInput.isEmpty {
+            if let pasted = UIPasteboard.general.string {
+                customMintInput = pasted.trimmingCharacters(in: .whitespacesAndNewlines)
+            }
+            return
+        }
+        guard let normalized = normalizedMintURL(from: customMintInput) else {
+            firstMintError = "That doesn't look like a mint URL."
+            return
+        }
+        if recommendedMints.contains(where: { $0.url == normalized }) || customMintUrls.contains(normalized) {
+            firstMintError = "That mint is already in the list."
+            return
+        }
+        HapticFeedback.selection()
+        firstMintError = nil
+        withAnimation(.snappy) {
+            customMintUrls.append(normalized)
+            selectedMintUrls.insert(normalized)
+            customMintInput = ""
+            showCustomMintInput = false
+        }
+    }
+
+    private func continueFromFirstMint() {
+        guard !selectedMintUrls.isEmpty else { return }
+        isAddingFirstMints = true
+        firstMintError = nil
+
+        Task { @MainActor in
+            // Preserve recommended list order; custom URLs go last in entry order.
+            let ordered = recommendedMints.map(\.url).filter { selectedMintUrls.contains($0) }
+                + customMintUrls.filter { selectedMintUrls.contains($0) }
+
+            for url in ordered {
+                currentAddingMint = url
+                do {
+                    try await walletManager.addMint(url: url)
+                } catch {
+                    firstMintError = "Couldn't connect to \(shortenUrl(url)). \(error.localizedDescription)"
+                    AppLogger.wallet.error("First-mint add error for \(url): \(error)")
+                    isAddingFirstMints = false
+                    currentAddingMint = nil
+                    return
+                }
+            }
+            currentAddingMint = nil
+            isAddingFirstMints = false
+            HapticFeedback.notification(.success)
+            finishOnboarding()
+        }
+    }
+
+    private func skipFirstMint() {
+        HapticFeedback.selection()
         finishOnboarding()
     }
 
     // MARK: - Restore Input View
 
     private var restoreInputView: some View {
-        VStack(spacing: 24) {
-            Text("Restore Wallet")
-                .font(.title2)
-                .fontWeight(.bold)
+        let wordCount = restoreMnemonic.trimmingCharacters(in: .whitespacesAndNewlines)
+            .split(separator: " ")
+            .count
+        let invalidIndices = walletManager.invalidMnemonicWords(restoreMnemonic)
 
-            Text("Enter your 12-word seed phrase to restore your wallet")
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-                .multilineTextAlignment(.center)
+        return VStack(spacing: 16) {
+            VStack(spacing: 6) {
+                Text("Restore Wallet")
+                    .font(.title.weight(.semibold))
 
-            // Mnemonic input
-            GroupBox {
-                TextEditor(text: $restoreMnemonic)
-                    .font(.system(.body, design: .monospaced))
-                    .scrollContentBackground(.hidden)
-                    .frame(height: 150)
+                Text("Enter your 12 words in order.")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
             }
+            .padding(.top, 8)
 
-            // Word count
-            let wordCount = restoreMnemonic.trimmingCharacters(in: .whitespacesAndNewlines)
-                .split(separator: " ")
-                .count
+            // Mnemonic input — same pattern as Receive Ecash paste screen
+            ZStack(alignment: .bottomTrailing) {
+                ZStack(alignment: .topLeading) {
+                    TextEditor(text: $restoreMnemonic)
+                        .font(.system(.body, design: .monospaced))
+                        .scrollContentBackground(.hidden)
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled()
+                        .padding(.horizontal, 12)
+                        .padding(.top, 12)
+                        .padding(.bottom, 56)
 
-            let invalidIndices = walletManager.invalidMnemonicWords(restoreMnemonic)
-            HStack(spacing: 4) {
+                    if restoreMnemonic.isEmpty {
+                        Text("word1 word2 word3 …")
+                            .font(.system(.body, design: .monospaced))
+                            .foregroundStyle(.tertiary)
+                            .padding(.horizontal, 17)
+                            .padding(.vertical, 20)
+                            .allowsHitTesting(false)
+                    }
+                }
+
+                Button(action: restoreMnemonic.isEmpty ? pasteMnemonicFromClipboard : { clearMnemonic() }) {
+                    Image(systemName: restoreMnemonic.isEmpty ? "doc.on.clipboard" : "xmark.circle.fill")
+                        .font(.title3.weight(.medium))
+                        .foregroundStyle(.secondary)
+                        .padding(14)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(restoreMnemonic.isEmpty ? "Paste from clipboard" : "Clear")
+                .accessibilityHint(restoreMnemonic.isEmpty ? "Pastes seed phrase from clipboard" : "Clears the entered seed phrase")
+            }
+            .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 14))
+            .frame(maxHeight: .infinity)
+            .padding(.horizontal)
+
+            HStack(spacing: 6) {
                 Text("\(wordCount) / 12 words")
-                    .font(.caption)
-                    .foregroundStyle(wordCount == 12 ? Color.accentColor : .secondary)
+                    .font(.caption.weight(.medium))
+                    .foregroundStyle(wordCount == 12 && invalidIndices.isEmpty ? .green : .secondary)
                 if wordCount > 0 && !invalidIndices.isEmpty {
-                    Text("(\(invalidIndices.count) invalid)")
+                    Text("· \(invalidIndices.count) invalid")
                         .font(.caption)
                         .foregroundStyle(.red)
                 }
@@ -383,27 +726,38 @@ struct OnboardingView: View {
                     .padding(.horizontal)
             }
 
-            Spacer()
-
-            // Next button - initializes wallet then goes to mint restore step
             Button(action: initializeAndProceed) {
-                if isRestoring {
-                    ProgressView()
-                } else {
-                    Text("Next")
+                Group {
+                    if isRestoring {
+                        ProgressView().tint(.primary)
+                    } else {
+                        Text("Next")
+                    }
                 }
             }
-            .glassButton(prominent: true).controlSize(.large)
+            .glassButton()
             .disabled(wordCount != 12 || isRestoring)
+            .padding(.horizontal)
 
-            // Back button
-            Button(action: { currentStep = .createOrRestore }) {
+            Button(action: { retreat(to: .welcome) }) {
                 Text("Back")
                     .foregroundStyle(.secondary)
             }
-            .padding(.bottom, 40)
+            .padding(.bottom, 32)
         }
-        .padding()
+        .padding(.top)
+    }
+
+    private func pasteMnemonicFromClipboard() {
+        guard let content = UIPasteboard.general.string else { return }
+        HapticFeedback.selection()
+        restoreMnemonic = content.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private func clearMnemonic() {
+        HapticFeedback.selection()
+        restoreMnemonic = ""
+        errorMessage = nil
     }
 
     // MARK: - Restore Mints View
@@ -414,7 +768,7 @@ struct OnboardingView: View {
                 .font(.title2)
                 .fontWeight(.bold)
 
-            Text("Add the mint URLs you used before to recover your ecash balance.")
+            Text("Add the mints you used before to recover your ecash.")
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
@@ -428,33 +782,49 @@ struct OnboardingView: View {
             }
             .padding(.horizontal)
 
-            HStack(spacing: 12) {
+            HStack(spacing: 8) {
                 Button(action: addMintUrl) {
                     Label("Add", systemImage: "plus")
+                        .font(.subheadline.weight(.semibold))
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 12)
+                        .background(.thinMaterial, in: Capsule())
+                        .foregroundStyle(.primary)
                 }
-                .glassButton()
+                .buttonStyle(.plain)
                 .disabled(mintUrlInput.isEmpty)
+                .opacity(mintUrlInput.isEmpty ? 0.4 : 1)
 
                 Button(action: pasteMintUrlsFromClipboard) {
-                    Label("Paste from clipboard", systemImage: "doc.on.clipboard")
+                    Label("Paste", systemImage: "doc.on.clipboard")
+                        .font(.subheadline.weight(.semibold))
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 12)
+                        .background(.thinMaterial, in: Capsule())
+                        .foregroundStyle(.primary)
                 }
-                .glassButton()
+                .buttonStyle(.plain)
                 .accessibilityLabel("Paste mint URLs from clipboard")
             }
             .padding(.horizontal)
 
-            // Mints list
+            // Mints list — rows on canvas with hairline dividers between
             if !mintsToRestore.isEmpty || !restoreResults.isEmpty {
                 ScrollView {
-                    VStack(spacing: 10) {
-                        // Pending mints (not yet restored)
-                        ForEach(mintsToRestore, id: \.self) { mintUrl in
-                            mintRow(url: mintUrl, result: nil, isRestoring: currentRestoringMint == mintUrl)
-                        }
+                    VStack(spacing: 0) {
+                        let allItems: [(url: String, result: RestoreMintResult?)] =
+                            mintsToRestore.map { ($0, nil) }
+                            + restoreResults.map { ($0.mintUrl, $0) }
 
-                        // Completed restore results
-                        ForEach(restoreResults) { result in
-                            mintRow(url: result.mintUrl, result: result, isRestoring: false)
+                        ForEach(Array(allItems.enumerated()), id: \.offset) { index, item in
+                            mintRow(
+                                url: item.url,
+                                result: item.result,
+                                isRestoring: item.result == nil && currentRestoringMint == item.url
+                            )
+                            if index < allItems.count - 1 {
+                                CanvasDivider()
+                            }
                         }
                     }
                     .padding(.horizontal)
@@ -483,79 +853,68 @@ struct OnboardingView: View {
                     .padding(.horizontal)
             }
 
-            // Restore summary
+            // Restore summary — plain on canvas, no glass
             if !restoreResults.isEmpty {
                 let totalRecovered = restoreResults.reduce(UInt64(0)) { $0 + $1.unspent }
                 let totalPending = restoreResults.reduce(UInt64(0)) { $0 + $1.pending }
 
-                VStack(spacing: 6) {
+                VStack(spacing: 8) {
                     if totalRecovered > 0 {
                         Label("Recovered: \(totalRecovered) sats", systemImage: "checkmark.circle.fill")
-                            .font(.subheadline)
-                            .fontWeight(.semibold)
+                            .font(.subheadline.weight(.semibold))
                             .foregroundStyle(.green)
+                            .contentTransition(.numericText(value: Double(totalRecovered)))
                     }
                     if totalPending > 0 {
-                        Label("Pending: \(totalPending) sats", systemImage: "clock.fill")
+                        Label("Pending: \(totalPending) sats", systemImage: "clock")
+                            .symbolEffect(.pulse, options: .repeating)
                             .font(.subheadline)
                             .foregroundStyle(.orange)
                     }
                     if totalRecovered == 0 && totalPending == 0 {
-                        Label("No ecash found on these mints", systemImage: "info.circle")
+                        Label("No ecash to recover from these mints.", systemImage: "info.circle")
                             .font(.subheadline)
                             .foregroundStyle(.secondary)
                     }
                 }
-                .padding(12)
-                .liquidGlass(in: RoundedRectangle(cornerRadius: 10))
                 .padding(.horizontal)
+                .padding(.top, 4)
             }
 
             Spacer()
 
-            // Action buttons
-            VStack(spacing: 12) {
-                // Restore button
+            VStack(spacing: 10) {
                 if !mintsToRestore.isEmpty {
                     Button(action: startRestore) {
                         if isRestoringMints {
                             HStack(spacing: 8) {
-                                ProgressView()
+                                ProgressView().controlSize(.small)
                                 Text("Restoring...")
                             }
                         } else {
-                            HStack {
-                                Image(systemName: "arrow.counterclockwise")
-                                Text("Restore from \(mintsToRestore.count) mint\(mintsToRestore.count == 1 ? "" : "s")")
-                            }
+                            Label("Restore from \(mintsToRestore.count) mint\(mintsToRestore.count == 1 ? "" : "s")",
+                                  systemImage: "arrow.counterclockwise")
                         }
                     }
                     .glassButton()
                     .disabled(isRestoringMints)
+                    .padding(.horizontal)
                 }
 
-                // Continue / Skip button
-                if restoreResults.isEmpty && mintsToRestore.isEmpty {
-                    Button(action: finishRestore) {
-                        Text("Skip")
-                    }
-                    .glassButton()
-                    .disabled(isRestoringMints)
-                } else {
-                    Button(action: finishRestore) {
-                        Text("Continue")
-                    }
-                    .glassButton(prominent: true).controlSize(.large)
-                    .disabled(isRestoringMints)
+                Button(action: finishRestore) {
+                    Text(restoreResults.isEmpty && mintsToRestore.isEmpty ? "Skip" : "Continue")
                 }
+                .glassButton()
+                .disabled(isRestoringMints)
+                .padding(.horizontal)
             }
 
             // Back button
             Button(action: {
-                currentStep = .restoreInput
                 mintsToRestore.removeAll()
                 restoreResults.removeAll()
                 restoreMintError = nil
+                retreat(to: .restoreInput)
             }) {
                 Text("Back")
                     .foregroundStyle(.secondary)
@@ -613,17 +972,19 @@ struct OnboardingView: View {
                             .foregroundStyle(.secondary)
                     }
                 } else if !isRestoring {
-                    // Remove button for pending mints
                     Button(action: {
                         mintsToRestore.removeAll { $0 == url }
                     }) {
                         Image(systemName: "xmark.circle")
                             .foregroundStyle(.secondary)
                     }
+                    .accessibilityLabel("Remove mint")
+                    .accessibilityHint("Skips this mint during restore")
                 }
             }
-        .padding(12)
-        .liquidGlass(in: RoundedRectangle(cornerRadius: 10))
+        .padding(.horizontal, 4)
+        .padding(.vertical, 12)
+        .contentShape(Rectangle())
     }
 
     private func shortenUrl(_ url: String) -> String {
@@ -645,9 +1006,9 @@ struct OnboardingView: View {
         Task { @MainActor in
             do {
                 try await walletManager.createNewWallet()
-                currentStep = .showMnemonic
+                advance(to: .showMnemonic)
             } catch {
-                errorMessage = "Failed to create wallet: \(error.localizedDescription)"
+                errorMessage = "Couldn't create the wallet. \(error.localizedDescription)"
                 AppLogger.wallet.error("Create wallet error: \(error)")
             }
             isCreating = false
@@ -662,7 +1023,7 @@ struct OnboardingView: View {
             .joined(separator: " ")
 
         guard walletManager.validateMnemonic(cleanedMnemonic) else {
-            errorMessage = "Invalid seed phrase. Please check your words."
+            errorMessage = "That seed phrase doesn't look right. Check the spelling and try again."
             return
         }
 
@@ -672,9 +1033,9 @@ struct OnboardingView: View {
         Task {
             do {
                 try await walletManager.initializeRestoredWallet(mnemonic: cleanedMnemonic)
-                currentStep = .restoreMints
+                advance(to: .restoreMints)
             } catch {
-                errorMessage = "Failed to initialize wallet: \(error.localizedDescription)"
+                errorMessage = "Couldn't open the wallet. \(error.localizedDescription)"
             }
             isRestoring = false
         }
@@ -710,9 +1071,9 @@ struct OnboardingView: View {
         }
 
         if addedCount == 0 {
-            restoreMintError = invalidCount > 0 ? "No valid mint URLs found in clipboard." : "No new mint URLs found in clipboard."
+            restoreMintError = invalidCount > 0 ? "Nothing in the clipboard looked like a mint URL." : "No new mint URLs to add."
         } else if invalidCount > 0 {
-            restoreMintError = "Added \(addedCount) mint URL\(addedCount == 1 ? "" : "s"). Skipped \(invalidCount) invalid entr\(invalidCount == 1 ? "y" : "ies")."
+            restoreMintError = "Added \(addedCount) mint URL\(addedCount == 1 ? "" : "s"). Skipped \(invalidCount) that didn't look like a mint URL."
         } else {
             restoreMintError = nil
         }
@@ -722,7 +1083,7 @@ struct OnboardingView: View {
     private func addMintUrlToRestoreList(_ rawUrl: String, showDuplicateError: Bool, showValidationError: Bool) -> Bool {
         guard let url = normalizedMintURL(from: rawUrl) else {
             if showValidationError {
-                restoreMintError = "Invalid mint URL."
+                restoreMintError = "That doesn't look like a mint URL."
             }
             return false
         }
@@ -771,7 +1132,7 @@ struct OnboardingView: View {
                     restoreResults.append(result)
                     mintsToRestore.removeAll { $0 == url }
                 } catch {
-                    restoreMintError = "Failed to restore from \(shortenUrl(url)): \(error.localizedDescription)"
+                    restoreMintError = "Couldn't reach \(shortenUrl(url)). \(error.localizedDescription)"
                     AppLogger.wallet.error("Restore error for \(url): \(error)")
                 }
             }

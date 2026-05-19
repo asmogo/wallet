@@ -1,0 +1,316 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-05-17T00:00:00Z",
+  "title": "Design System: Cashu Wallet",
+  "extensions": {
+    "colorMeta": {
+      "accent-ink": {
+        "role": "primary",
+        "displayName": "System Ink",
+        "canonical": "#000000 (light) / #FFFFFF (dark)",
+        "tonalRamp": ["#000000", "#1C1C1E", "#2C2C2E", "#3A3A3C", "#48484A", "#636366", "#8E8E93", "#FFFFFF"]
+      },
+      "primary-text": {
+        "role": "neutral",
+        "displayName": "Label",
+        "canonical": "Color.primary (auto-adapts black <-> white)",
+        "tonalRamp": ["#000000", "#1C1C1E", "#2C2C2E", "#3A3A3C", "#48484A", "#636366", "#AEAEB2", "#FFFFFF"]
+      },
+      "secondary-text": {
+        "role": "neutral",
+        "displayName": "Secondary Label",
+        "canonical": "Color.secondary @ 60% (iOS systemGray equivalent)",
+        "tonalRamp": ["#1C1C1E", "#2C2C2E", "#48484A", "#636366", "#8E8E93", "#AEAEB2", "#C7C7CC", "#E5E5EA"]
+      },
+      "separator-hair": {
+        "role": "neutral",
+        "displayName": "Hairline",
+        "canonical": "Color(.separator) (~29% on light, ~60% on dark)",
+        "tonalRamp": ["#1C1C1E", "#3A3A3C", "#48484A", "#636366", "#8E8E93", "#C7C7CC", "#D1D1D6", "#E5E5EA"]
+      },
+      "surface": {
+        "role": "neutral",
+        "displayName": "Surface",
+        "canonical": "Color(.systemBackground) (auto-adapts white <-> black)",
+        "tonalRamp": ["#000000", "#1C1C1E", "#2C2C2E", "#3A3A3C", "#48484A", "#F2F2F7", "#F9F9FB", "#FFFFFF"]
+      },
+      "state-confirmed": {
+        "role": "secondary",
+        "displayName": "Confirmed Green",
+        "canonical": "Color.green (iOS systemGreen: #34C759 light / #30D158 dark)",
+        "tonalRamp": ["#0F3D1B", "#175B27", "#1E7A33", "#249740", "#2CB54C", "#34C759", "#5BD476", "#A7E8B6"]
+      },
+      "state-pending": {
+        "role": "tertiary",
+        "displayName": "Pending Orange",
+        "canonical": "Color.orange (iOS systemOrange: #FF9500 light / #FF9F0A dark)",
+        "tonalRamp": ["#3D2400", "#5B3600", "#7A4800", "#975A00", "#B56C00", "#FF9500", "#FFB04B", "#FFD9A0"]
+      },
+      "state-error": {
+        "role": "tertiary",
+        "displayName": "Error Red",
+        "canonical": "Color.red (iOS systemRed: #FF3B30 light / #FF453A dark)",
+        "tonalRamp": ["#3D0B07", "#5B100B", "#7A1610", "#971B14", "#B52119", "#FF3B30", "#FF6F66", "#FFB4AD"]
+      },
+      "selection-tint": {
+        "role": "neutral",
+        "displayName": "Selection Tint",
+        "canonical": "Color.primary @ 12%",
+        "tonalRamp": ["#0000000A", "#00000014", "#0000001F", "#00000029", "#00000033", "#0000003D", "#00000052", "#00000066"]
+      },
+      "pending-tint": {
+        "role": "tertiary",
+        "displayName": "Pending Tint",
+        "canonical": "Color.orange @ 10%",
+        "tonalRamp": ["#FF95000A", "#FF950014", "#FF95001A", "#FF950026", "#FF950033", "#FF950040", "#FF95004D", "#FF950066"]
+      },
+      "error-tint": {
+        "role": "tertiary",
+        "displayName": "Error Tint",
+        "canonical": "Color.red @ 18%",
+        "tonalRamp": ["#FF3B300A", "#FF3B3014", "#FF3B302E", "#FF3B3040", "#FF3B3052", "#FF3B3066", "#FF3B3080", "#FF3B309A"]
+      }
+    },
+    "typographyMeta": {
+      "balance": {
+        "displayName": "Balance",
+        "purpose": "The wallet's primary balance and the recovered-amount counter. SF Pro Bold at iOS .largeTitle with tabular figures and .contentTransition(.numericText())."
+      },
+      "title": {
+        "displayName": "Title",
+        "purpose": "Onboarding hero headings only."
+      },
+      "title3": {
+        "displayName": "Title 3",
+        "purpose": "In-flow section heads, sheet/modal titles, transaction-type label."
+      },
+      "body": {
+        "displayName": "Body",
+        "purpose": "Default prose, settings rows, detail values."
+      },
+      "body-emphasis": {
+        "displayName": "Body Emphasis",
+        "purpose": "Primary and secondary button labels, history row title."
+      },
+      "callout": {
+        "displayName": "Callout",
+        "purpose": "Supporting descriptive text under hero headings."
+      },
+      "caption": {
+        "displayName": "Caption",
+        "purpose": "Timestamps, pending badges, unit toggle, hint text."
+      },
+      "caption-emphasis": {
+        "displayName": "Caption Emphasis",
+        "purpose": "Uppercase section headers in History (TODAY, YESTERDAY, THIS WEEK)."
+      },
+      "mono-caption": {
+        "displayName": "Mono Caption",
+        "purpose": "Truncated Lightning addresses, token IDs, hex/base58 fragments."
+      }
+    },
+    "shadows": [],
+    "motion": [
+      {
+        "name": "smooth-medium",
+        "value": "cubic-bezier(0.4, 0.0, 0.2, 1) 320ms",
+        "purpose": "Row stagger entrance on the History list (first 8 rows, delay = index * 35ms)."
+      },
+      {
+        "name": "snappy-fast",
+        "value": "cubic-bezier(0.2, 0.0, 0.0, 1) 250ms",
+        "purpose": "Primary state flips (tab change, list filter, send/receive view swap)."
+      },
+      {
+        "name": "ease-out-quart",
+        "value": "cubic-bezier(0.25, 1, 0.5, 1) 200-300ms",
+        "purpose": "Toggle states, balance updates, error message fade. The default ease curve."
+      },
+      {
+        "name": "press-down",
+        "value": "cubic-bezier(0, 0, 0.2, 1) 90ms",
+        "purpose": "PressableButtonStyle scale 1.0 -> 0.97 on touch-down."
+      },
+      {
+        "name": "press-up",
+        "value": "spring(response: 0.45, dampingFraction: 0.7)",
+        "purpose": "PressableButtonStyle scale 0.97 -> 1.0 on touch-up release."
+      },
+      {
+        "name": "symbol-replace",
+        "value": "symbolEffect(.replace.downUp)",
+        "purpose": "SF Symbol morph for the history badge (clock <-> checkmark.circle.fill) when a transaction confirms."
+      },
+      {
+        "name": "numeric-text",
+        "value": "contentTransition(.numericText(value:))",
+        "purpose": "Per-digit animation for every monetary value when it changes."
+      }
+    ],
+    "breakpoints": [
+      {
+        "name": "iphone-compact",
+        "value": "375px",
+        "purpose": "iPhone SE / mini width baseline."
+      },
+      {
+        "name": "iphone-regular",
+        "value": "393px",
+        "purpose": "iPhone 15/16 Pro standard width."
+      },
+      {
+        "name": "iphone-max",
+        "value": "430px",
+        "purpose": "iPhone Pro Max / Plus width."
+      }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary Fill Capsule",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "The single highest-emphasis action on a sheet. Inverted ink fill: primary text color as background, system background as foreground.",
+      "html": "<button class=\"ds-btn-primary\">Receive</button>",
+      "css": ".ds-btn-primary { display: block; width: 100%; background: #000000; color: #FFFFFF; font-family: -apple-system, BlinkMacSystemFont, 'SF Pro', system-ui, sans-serif; font-size: 17px; font-weight: 600; line-height: 1.29; padding: 16px 24px; border: none; border-radius: 9999px; cursor: pointer; transition: opacity 90ms cubic-bezier(0, 0, 0.2, 1), transform 90ms cubic-bezier(0, 0, 0.2, 1); } .ds-btn-primary:hover { opacity: 0.92; } .ds-btn-primary:active { opacity: 0.7; transform: scale(0.97); } .ds-btn-primary:disabled { opacity: 0.4; cursor: not-allowed; } .ds-btn-primary:focus-visible { outline: 2px solid #000000; outline-offset: 3px; }"
+    },
+    {
+      "name": "Glass Button (Secondary)",
+      "kind": "button",
+      "refersTo": "button-glass",
+      "description": "Full-width capsule used for secondary actions and as the default action on most sheets. FullWidthCapsuleButtonStyle with system .tertiary background.",
+      "html": "<button class=\"ds-btn-glass\">Cancel</button>",
+      "css": ".ds-btn-glass { display: block; width: 100%; background: rgba(0, 0, 0, 0.08); color: #000000; font-family: -apple-system, BlinkMacSystemFont, 'SF Pro', system-ui, sans-serif; font-size: 17px; font-weight: 500; line-height: 1.29; padding: 14px 20px; border: none; border-radius: 9999px; cursor: pointer; transition: opacity 90ms cubic-bezier(0, 0, 0.2, 1); backdrop-filter: blur(20px) saturate(140%); -webkit-backdrop-filter: blur(20px) saturate(140%); } .ds-btn-glass:hover { background: rgba(0, 0, 0, 0.12); } .ds-btn-glass:active { opacity: 0.7; } .ds-btn-glass:disabled { opacity: 0.4; cursor: not-allowed; } .ds-btn-glass:focus-visible { outline: 2px solid #000000; outline-offset: 3px; }"
+    },
+    {
+      "name": "Utility Chip",
+      "kind": "button",
+      "refersTo": "button-utility",
+      "description": "Small inline chip used for the unit toggle (sats / Bitcoin symbol) and the truncated Lightning address copy action. Wraps an SF Symbol + short label in an interactive Liquid Glass capsule.",
+      "html": "<button class=\"ds-chip-utility\"><svg class=\"ds-chip-icon\" viewBox=\"0 0 24 24\" fill=\"currentColor\" aria-hidden=\"true\"><path d=\"M13 2 L4 14 h7 l-1 8 9-12 h-7 z\"/></svg><span>sats</span></button>",
+      "css": ".ds-chip-utility { display: inline-flex; align-items: center; gap: 6px; background: rgba(0, 0, 0, 0.04); color: rgba(60, 60, 67, 0.6); font-family: -apple-system, BlinkMacSystemFont, 'SF Pro', system-ui, sans-serif; font-size: 13px; font-weight: 500; line-height: 1.3; padding: 6px 16px; border: none; border-radius: 9999px; cursor: pointer; transition: background 90ms cubic-bezier(0, 0, 0.2, 1); backdrop-filter: blur(20px) saturate(140%); -webkit-backdrop-filter: blur(20px) saturate(140%); } .ds-chip-utility:hover { background: rgba(0, 0, 0, 0.08); } .ds-chip-utility:active { background: rgba(0, 0, 0, 0.12); } .ds-chip-icon { width: 12px; height: 12px; }"
+    },
+    {
+      "name": "History Row",
+      "kind": "card",
+      "refersTo": "row-history",
+      "description": "The canonical list row: leading icon stack with a status badge, title + relative timestamp, trailing amount in tabular figures colored by status. Confirmed amount is the only green element on the row.",
+      "html": "<div class=\"ds-row-history\"><div class=\"ds-row-icon\"><svg class=\"ds-row-glyph\" viewBox=\"0 0 24 24\" fill=\"currentColor\" aria-hidden=\"true\"><circle cx=\"12\" cy=\"12\" r=\"10\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.5\"/></svg><svg class=\"ds-row-badge\" viewBox=\"0 0 24 24\" fill=\"currentColor\" aria-hidden=\"true\"><circle cx=\"12\" cy=\"12\" r=\"10\"/><path d=\"M8 12 l3 3 l5 -6\" stroke=\"#FFFFFF\" stroke-width=\"2\" fill=\"none\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/></svg></div><div class=\"ds-row-text\"><div class=\"ds-row-title\">Received ecash</div><div class=\"ds-row-time\">2 min ago</div></div><div class=\"ds-row-amount\">+ 2,500</div></div>",
+      "css": ".ds-row-history { display: flex; align-items: center; gap: 12px; padding: 12px 16px; background: #FFFFFF; color: #000000; font-family: -apple-system, BlinkMacSystemFont, 'SF Pro', system-ui, sans-serif; border-bottom: 0.5px solid rgba(60, 60, 67, 0.29); } .ds-row-icon { position: relative; width: 32px; height: 32px; flex-shrink: 0; color: #000000; } .ds-row-glyph { width: 32px; height: 32px; } .ds-row-badge { position: absolute; right: -4px; bottom: -4px; width: 16px; height: 16px; color: #34C759; } .ds-row-text { flex: 1; min-width: 0; } .ds-row-title { font-size: 17px; font-weight: 500; line-height: 1.29; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } .ds-row-time { font-size: 12px; font-weight: 400; line-height: 1.33; color: rgba(60, 60, 67, 0.6); margin-top: 2px; } .ds-row-amount { font-size: 17px; font-weight: 600; font-variant-numeric: tabular-nums; line-height: 1.29; color: #34C759; }"
+    },
+    {
+      "name": "Pending Badge",
+      "kind": "chip",
+      "refersTo": "badge-pending",
+      "description": "Quiet pending indicator on a history row. Muted orange tint at 10% opacity with a clock SF Symbol foreground. Replaces any 'PENDING' wordmark.",
+      "html": "<span class=\"ds-badge-pending\"><svg class=\"ds-badge-icon\" viewBox=\"0 0 24 24\" fill=\"currentColor\" aria-hidden=\"true\"><circle cx=\"12\" cy=\"12\" r=\"9\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.5\"/><path d=\"M12 7 v5 l3 2\" stroke=\"currentColor\" stroke-width=\"1.5\" fill=\"none\" stroke-linecap=\"round\"/></svg>pending</span>",
+      "css": ".ds-badge-pending { display: inline-flex; align-items: center; gap: 4px; background: rgba(255, 149, 0, 0.1); color: #FF9500; font-family: -apple-system, BlinkMacSystemFont, 'SF Pro', system-ui, sans-serif; font-size: 12px; font-weight: 600; line-height: 1.33; letter-spacing: 0.06em; padding: 4px 8px; border-radius: 9999px; } .ds-badge-icon { width: 12px; height: 12px; }"
+    },
+    {
+      "name": "Confirmed Badge",
+      "kind": "chip",
+      "refersTo": "badge-confirmed",
+      "description": "Confirmed-state marker. Green checkmark foreground with no fill. Paired with the green-colored amount on the row.",
+      "html": "<span class=\"ds-badge-confirmed\"><svg class=\"ds-badge-icon\" viewBox=\"0 0 24 24\" fill=\"currentColor\" aria-hidden=\"true\"><circle cx=\"12\" cy=\"12\" r=\"10\"/><path d=\"M8 12 l3 3 l5 -6\" stroke=\"#FFFFFF\" stroke-width=\"2\" fill=\"none\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/></svg>confirmed</span>",
+      "css": ".ds-badge-confirmed { display: inline-flex; align-items: center; gap: 4px; background: transparent; color: #34C759; font-family: -apple-system, BlinkMacSystemFont, 'SF Pro', system-ui, sans-serif; font-size: 12px; font-weight: 600; line-height: 1.33; letter-spacing: 0.06em; padding: 4px 8px; border-radius: 9999px; } .ds-badge-icon { width: 12px; height: 12px; }"
+    },
+    {
+      "name": "Canvas Divider",
+      "kind": "custom",
+      "refersTo": "divider-canvas",
+      "description": "The single-canvas separator. A 0.5pt hairline at Color(.separator) with a default 28pt leading inset that aligns to the row icon column. The only divider this system uses.",
+      "html": "<hr class=\"ds-divider-canvas\" />",
+      "css": ".ds-divider-canvas { display: block; height: 0.5px; margin: 0 0 0 28px; padding: 0; border: 0; background: rgba(60, 60, 67, 0.29); }"
+    },
+    {
+      "name": "Plain Input",
+      "kind": "input",
+      "refersTo": null,
+      "description": "Bare TextField placed inside a .thinMaterial RoundedRectangle(cornerRadius: 14). No textFieldStyle modifier in Send/Receive flows; the material container is the affordance.",
+      "html": "<label class=\"ds-input-shell\"><input class=\"ds-input\" type=\"text\" placeholder=\"Paste token\" /></label>",
+      "css": ".ds-input-shell { display: block; padding: 14px 16px; border-radius: 14px; background: rgba(120, 120, 128, 0.16); backdrop-filter: blur(20px) saturate(140%); -webkit-backdrop-filter: blur(20px) saturate(140%); } .ds-input { display: block; width: 100%; background: transparent; border: none; outline: none; color: #000000; font-family: -apple-system, BlinkMacSystemFont, 'SF Pro', system-ui, sans-serif; font-size: 17px; font-weight: 400; line-height: 1.29; } .ds-input::placeholder { color: rgba(60, 60, 67, 0.6); } .ds-input-shell:focus-within { box-shadow: 0 0 0 2px #000000 inset; }"
+    }
+  ],
+  "narrative": {
+    "northStar": "The System Utility",
+    "overview": "Cashu Wallet should feel like one of Apple's own first-party apps (Wallet, Notes, Find My, Health), quietly slotted into iOS rather than painted on top of it. The target sensation when a user picks it up for the first time: 'this is the wallet Apple would have shipped if Apple shipped ecash.' Identity is deliberately absent, because the identity is 'behaves correctly on iPhone.' The system commits to native materials, native typography, native motion, and the native semantic palette. Liquid Glass on iOS 26+ is the single concession to the current OS generation; below 26, the same surfaces fall back to system materials without losing structural intent. Color is reserved for state, never for brand. Numbers get the typographic care of a chronograph face. Pending values stay quiet; only confirmed values are allowed green.",
+    "keyCharacteristics": [
+      "Semantic-only palette. Zero custom color extensions. Color.primary, Color.secondary, Color.accentColor plus three state hues (green, orange, red).",
+      "Inverted-ink AccentColor: pure black in light mode, pure white in dark mode. Pure black/white appears here, in scanner overlays, and inside QR codes only.",
+      "One sans family: San Francisco at native iOS text styles. No display pairings, no custom fonts, no fluid clamps.",
+      "Liquid Glass on iOS 26+ for primary interactive surfaces. Quiet fallbacks below.",
+      "Hairline CanvasDivider (0.5pt at Color(.separator)) as the single-canvas separator. No card stacks, no nested containers.",
+      "Motion is exponential ease-out, in the 200-350ms range. The four named animations (row stagger, badge symbol-replace, chooser cascade, press feedback) are the full motion vocabulary; nothing decorative."
+    ],
+    "rules": [
+      {
+        "name": "The Semantic-Only Rule",
+        "body": "No file in CashuWallet/ defines a custom extension Color. If a new color is needed, it is either a system semantic (Color.primary, Color.secondary, Color.accentColor, Color(.systemBackground), Color(.separator)) or one of three state hues at a stated opacity. There is no fourth case.",
+        "section": "colors"
+      },
+      {
+        "name": "The One Green Rule",
+        "body": "A confirmed transaction is the only thing on its row that gets to be green. Not the icon, not the chevron, not the amount in pending state. Green is the reward the row earns by clearing.",
+        "section": "colors"
+      },
+      {
+        "name": "The Quiet Pending Rule",
+        "body": "Pending is Color.orange muted to .opacity(0.1) as a background and the clock SF Symbol as a leading badge. Never a full-saturation pill, never a loud 'PENDING' wordmark.",
+        "section": "colors"
+      },
+      {
+        "name": "The Tabular Figure Rule",
+        "body": "Every balance, amount, and fee chains .monospacedDigit(). Every numeric value that changes chains .contentTransition(.numericText(value:)) so digits slide rather than reflow. This is non-negotiable; numeric jitter on a money value reads as broken.",
+        "section": "typography"
+      },
+      {
+        "name": "The System-Style Rule",
+        "body": "Text uses named iOS text styles (.body, .largeTitle, .caption) so Dynamic Type works from xSmall through AX5. .system(size:) is reserved for monospaced fragments and the ActivityOrb glyph.",
+        "section": "typography"
+      },
+      {
+        "name": "The Flat-By-Default Rule",
+        "body": "No drop shadows. No glow rings. Depth is conveyed by translucent materials and hairline CanvasDividers, not by elevation geometry. If you reach for .shadow(...), the layout is wrong.",
+        "section": "elevation"
+      },
+      {
+        "name": "The Glass-As-Surface Rule",
+        "body": "Liquid Glass is a surface, not a decoration. It belongs on container shapes (Capsule, RoundedRectangle(cornerRadius: 12)) that hold real interactive content. It never wraps text purely for visual texture.",
+        "section": "elevation"
+      },
+      {
+        "name": "The CanvasDivider Rule",
+        "body": "Single-canvas screens (History, Settings, Lightning Invoice detail) use CanvasDivider between rows. Raw Divider() is legacy. There are no card stacks; rows sit directly on the canvas, separated only by the hairline.",
+        "section": "components"
+      },
+      {
+        "name": "The Plain-Button Rule",
+        "body": "Utility actions (close xmark, copy, refresh, chevron disclosure) use .buttonStyle(.plain) with an SF Symbol. They do not wear glass material unless the symbol genuinely needs the affordance of being an interactive surface.",
+        "section": "components"
+      }
+    ],
+    "dos": [
+      "Do reach for system semantic colors first: Color.primary, Color.secondary, Color.accentColor, Color(.systemBackground), Color(.separator). The only acceptable state colors are .green, .orange, .red, and they appear at full opacity for foreground or at the stated tints (10% for pending, 18% for error).",
+      "Do apply .monospacedDigit() and .contentTransition(.numericText()) to every value that represents money, every time. Balance, amount, fee.",
+      "Do use Capsule() for full-width primary and secondary buttons, and RoundedRectangle(cornerRadius: 12) for inline chips and notifications. Stick to the spacing scale (4, 6, 8, 12, 16, 20, 24, 28).",
+      "Do branch with if #available(iOS 26.0, *) for Liquid Glass and provide a quiet .thinMaterial or .quaternary fallback. Never ship a Liquid Glass surface that breaks on iOS 18.",
+      "Do use CanvasDivider() between rows on single-canvas screens. The default 28pt leading inset already aligns to the icon column.",
+      "Do name iOS text styles (.body, .largeTitle, .caption) so Dynamic Type scales for free. Pair balance/amount text with .minimumScaleFactor(0.5) and .lineLimit(1) so AX5 doesn't truncate a money value.",
+      "Do stagger the first eight history rows on entrance and morph the pending/confirmed badge with .contentTransition(.symbolEffect(.replace.downUp)). Reuse the existing motion vocabulary; do not invent more.",
+      "Do honor accessibilityReduceMotion on every custom animation. The current four custom animations do not yet check this; new code must."
+    ],
+    "donts": [
+      "Don't define a custom extension Color. There is no Color.cashuOrange, no Color.brandInk. If you reach for one, the design has drifted.",
+      "Don't use .black or .white outside the scanner overlay and QR code contexts. Use Color.primary and Color(.systemBackground) instead.",
+      "Don't color a pending row green, an icon green, a chevron green, or anything other than the confirmed-amount text green. The One Green Rule.",
+      "Don't ship a loud 'PENDING' pill or any full-saturation orange chip. The quiet-pending principle is encoded in .opacity(0.1) and the clock SF Symbol.",
+      "Don't drop a .shadow(...) modifier on a card, a button, or a row. The Flat-By-Default Rule. Depth is materials and hairlines.",
+      "Don't ship the hero-metric SaaS panel: big number on tinted card, small label below, supporting stats around it. The balance is the only hero number the wallet gets, and it lives on the bare canvas.",
+      "Don't wrap a screen's content in nested cards or in a single full-bleed container with cornerRadius: 16. Use the bare canvas + CanvasDivider.",
+      "Don't introduce a display font, a serif pairing, a custom-loaded .otf, or a Font.system(size: N) for body text. SF system styles only.",
+      "Don't reach for .fullScreenCover for a confirmation, a settings flow, or any modal that is not the camera. Use a sheet with the right detent.",
+      "Don't add bounce, elastic, or .spring(response:, dampingFraction:) values outside the existing vocabulary (.smooth(0.32), .snappy(0.25-0.35), .easeOut(0.2-0.3)). Motion is exponential ease-out, in that range.",
+      "Don't echo the anti-references from PRODUCT.md: no gamified crypto-app confetti, no neon-on-black 'crypto default' palette, no mascots, no signature gradients, no holographic borders, no glowing rings. Money is not a game and the wallet should not fight iOS for attention."
+    ]
+  }
+}

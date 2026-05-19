@@ -111,6 +111,7 @@ enum StorageKeys {
     static let periodicallyCheckIncomingInvoices = "settings.periodicallyCheckIncomingInvoices"
     static let nostrRelays = "settings.nostrRelays"
     static let nostrSignerType = "settings.nostrSignerType"
+    static let amountDisplayPrimary = "settings.amountDisplayPrimary"
 
     enum Legacy {
         static let mints = "savedMints"

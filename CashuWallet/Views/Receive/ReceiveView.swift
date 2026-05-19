@@ -119,38 +119,78 @@ struct ReceiveEcashView: View {
 
     var body: some View {
         NavigationStack {
-            Form {
-                Section {
-                    TextEditor(text: $tokenInput)
-                        .font(.system(.body, design: .monospaced))
-                        .frame(height: 120)
-                        .accessibilityLabel("Ecash token input")
-                        .accessibilityHint("Enter or paste a cashu ecash token")
-                }
+            VStack(spacing: 16) {
+                ZStack(alignment: .bottomTrailing) {
+                    ZStack(alignment: .topLeading) {
+                        TextEditor(text: $tokenInput)
+                            .font(.system(.body, design: .monospaced))
+                            .scrollContentBackground(.hidden)
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 12)
+                            .accessibilityLabel("Ecash token input")
+                            .accessibilityHint("Enter or paste a cashu ecash token")
 
-                Section {
-                    Button(action: pasteFromClipboard) {
-                        Label("Paste from Clipboard", systemImage: "doc.on.clipboard")
+                        if tokenInput.isEmpty {
+                            Text("cashuB…")
+                                .font(.system(.body, design: .monospaced))
+                                .foregroundStyle(.tertiary)
+                                .padding(.horizontal, 17)
+                                .padding(.vertical, 20)
+                                .allowsHitTesting(false)
+                        }
                     }
-                    .accessibilityHint("Pastes ecash token from clipboard")
+                    .mask(
+                        LinearGradient(
+                            stops: [
+                                .init(color: .black, location: 0),
+                                .init(color: .black, location: 0.55),
+                                .init(color: .black.opacity(0.85), location: 0.72),
+                                .init(color: .black.opacity(0.35), location: 0.88),
+                                .init(color: .clear, location: 1.0),
+                            ],
+                            startPoint: .top,
+                            endPoint: .bottom
+                        )
+                    )
+
+                    // Smart corner icon: paste when empty, clear when full.
+                    // Plain SF Symbol (no circle bg) so we don't stack a
+                    // gray dot on the gray text field.
+                    Button(action: tokenInput.isEmpty ? pasteFromClipboard : clearInput) {
+                        Image(systemName: tokenInput.isEmpty ? "doc.on.clipboard" : "xmark.circle.fill")
+                            .font(.title3.weight(.medium))
+                            .foregroundStyle(.secondary)
+                            .padding(14)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel(tokenInput.isEmpty ? "Paste from clipboard" : "Clear")
                 }
+                .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 14))
+                .frame(maxHeight: .infinity)
+                .padding(.horizontal)
+                .padding(.top, 12)
 
                 if let error = errorMessage {
-                    Section {
-                        Text(error)
-                            .foregroundStyle(.red)
-                    }
+                    Text(error)
+                        .foregroundStyle(.red)
+                        .font(.caption)
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal)
+                        .transition(.opacity.combined(with: .scale))
                 }
 
-                Section {
-                    Button(action: validateAndContinue) {
-                        Text("Continue")
-                            .frame(maxWidth: .infinity)
-                    }
-                    .disabled(tokenInput.isEmpty)
-                    .accessibilityHint("Validates the token and proceeds to details")
+                Button(action: validateAndContinue) {
+                    Text("Continue")
                 }
+                .glassButton()
+                .disabled(tokenInput.isEmpty)
+                .animation(.easeOut(duration: 0.2), value: tokenInput.isEmpty)
+                .padding(.horizontal)
+                .padding(.bottom, 16)
+                .accessibilityHint("Validates the token and proceeds to details")
             }
+            .animation(.easeInOut(duration: 0.2), value: errorMessage)
             .navigationTitle("Receive Ecash")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -182,8 +222,15 @@ struct ReceiveEcashView: View {
 
     private func pasteFromClipboard() {
         if let clipboardContent = UIPasteboard.general.string {
+            HapticFeedback.selection()
             tokenInput = clipboardContent
         }
+    }
+
+    private func clearInput() {
+        HapticFeedback.selection()
+        tokenInput = ""
+        errorMessage = nil
     }
 
     private func validateAndContinue() {

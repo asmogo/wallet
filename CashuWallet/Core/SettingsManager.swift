@@ -126,7 +126,13 @@ class SettingsManager: ObservableObject {
             settingsStore.nostrRelays = nostrRelays
         }
     }
-    
+
+    @Published var amountDisplayPrimary: AmountDisplayPrimary {
+        didSet {
+            settingsStore.amountDisplayPrimary = amountDisplayPrimary.rawValue
+        }
+    }
+
     // MARK: - Initialization
     
     init() {
@@ -146,6 +152,7 @@ class SettingsManager: ObservableObject {
         self.checkIncomingInvoices = UserDefaults.standard.object(forKey: "checkIncomingInvoices") as? Bool ?? true
         self.periodicallyCheckIncomingInvoices = UserDefaults.standard.object(forKey: "periodicallyCheckIncomingInvoices") as? Bool ?? true
         self.nostrRelays = UserDefaults.standard.stringArray(forKey: "nostrRelays") ?? Self.defaultNostrRelays
+        self.amountDisplayPrimary = AmountDisplayPrimary(rawValue: settingsStore.amountDisplayPrimary) ?? .fiat
 
         persistNWCConnections()
         persistP2PKKeys()
@@ -522,6 +529,15 @@ struct P2PKKey: Identifiable, Codable, Hashable {
         try container.encode(publicKey, forKey: .publicKey)
         try container.encode(used, forKey: .used)
         try container.encode(usedCount, forKey: .usedCount)
+    }
+}
+
+enum AmountDisplayPrimary: String, Codable {
+    case fiat
+    case sats
+
+    mutating func toggle() {
+        self = (self == .fiat) ? .sats : .fiat
     }
 }
 

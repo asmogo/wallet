@@ -112,6 +112,11 @@ final class SettingsStore {
         set { setOptional(newValue, forKey: StorageKeys.nostrSignerType) }
     }
 
+    var amountDisplayPrimary: String {
+        get { value(StorageKeys.amountDisplayPrimary) ?? "fiat" }
+        set { set(newValue, forKey: StorageKeys.amountDisplayPrimary) }
+    }
+
     var priceEnabled: Bool {
         get { bool(StorageKeys.priceEnabled, legacy: StorageKeys.Legacy.priceEnabled, default: false) }
         set { set(newValue, forKey: StorageKeys.priceEnabled) }

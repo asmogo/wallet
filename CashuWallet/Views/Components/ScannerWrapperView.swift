@@ -67,7 +67,12 @@ class ScannerViewModel: ObservableObject {
 struct ScannerWrapperView: View {
     @Environment(\.dismiss) private var dismiss
     @EnvironmentObject var walletManager: WalletManager
-    
+
+    /// Optional callback. When provided, the scanner short-circuits its default
+    /// routing (Receive detail / fresh MeltView) and just returns the raw
+    /// scanned string so the caller can decide what to do.
+    var onScanned: ((String) -> Void)? = nil
+
     @StateObject private var scannerModel = ScannerViewModel()
     @State private var scannedToken: String?
     @State private var scannedMeltRequest: String?
@@ -202,7 +207,17 @@ struct ScannerWrapperView: View {
     
     private func processCompleteContent(_ content: String) {
         scannerModel.isScanning = false
-        
+
+        // If the caller provided a direct callback (e.g. MeltView's inline
+        // scan icon), hand back the raw string and dismiss — no routing.
+        if let onScanned {
+            let generator = UINotificationFeedbackGenerator()
+            generator.notificationOccurred(.success)
+            onScanned(content)
+            dismiss()
+            return
+        }
+
         // Determine content type: Token (Receive) or Invoice (Pay/Melt)
         if TokenParser.isCashuToken(content) {
             // Handle Ecash Token -> Show Detail View

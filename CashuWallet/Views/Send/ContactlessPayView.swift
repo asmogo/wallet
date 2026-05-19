@@ -13,6 +13,8 @@ struct ContactlessPayView: View {
     @State private var errorMessage: String?
     @State private var lastPaymentAmount: UInt64?
 
+    @ObservedObject private var settings = SettingsManager.shared
+
     private var isNFCAvailable: Bool {
         NFCNDEFReaderSession.readingAvailable
     }
@@ -43,16 +45,26 @@ struct ContactlessPayView: View {
                     }
 
                     if paymentComplete, let lastPaymentAmount {
-                        VStack(spacing: 8) {
-                            Label("Payment sent!", systemImage: "checkmark.circle.fill")
-                                .font(.headline)
-                                .foregroundStyle(.green)
-                            Text("\(lastPaymentAmount) sat")
-                                .font(.title2.bold().monospacedDigit())
+                        VStack(spacing: 12) {
+                            HStack(spacing: 8) {
+                                Image(systemName: "checkmark.circle.fill")
+                                    .symbolEffect(.bounce, value: paymentComplete)
+                                Text("Payment sent!")
+                            }
+                            .font(.headline)
+                            .foregroundStyle(.green)
+
+                            CurrencyAmountDisplay(
+                                sats: lastPaymentAmount,
+                                primary: $settings.amountDisplayPrimary,
+                                primarySize: 40
+                            )
                         }
                         .padding()
+                        .transition(.scale.combined(with: .opacity))
                     }
                 }
+                .animation(.spring(response: 0.55, dampingFraction: 0.7), value: paymentComplete)
                 .accessibilityElement(children: .combine)
 
                 Spacer()

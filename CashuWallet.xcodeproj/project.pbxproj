@@ -56,6 +56,7 @@
 		CC00000000000005 /* NostrSettingsSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC00000000000015 /* NostrSettingsSection.swift */; };
 		CC00000000000006 /* PrivacySettingsSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC00000000000016 /* PrivacySettingsSection.swift */; };
 		CC00000000000007 /* AdvancedSettingsSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC00000000000017 /* AdvancedSettingsSection.swift */; };
+		CC00000000000020 /* PressableButtonStyle.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC00000000000021 /* PressableButtonStyle.swift */; };
 		CC00000000000008 /* LightningAddressSettingsSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC00000000000018 /* LightningAddressSettingsSection.swift */; };
 		CC00000000000009 /* PaymentRequestsSettingsSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC00000000000019 /* PaymentRequestsSettingsSection.swift */; };
 		DD00000000000001 /* AppLogger.swift in Sources */ = {isa = PBXBuildFile; fileRef = DD00000000000011 /* AppLogger.swift */; };
@@ -71,6 +72,12 @@
 		F100000000000002 /* NFCReaderDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = F200000000000002 /* NFCReaderDelegate.swift */; };
 		F100000000000003 /* NFCPaymentService.swift in Sources */ = {isa = PBXBuildFile; fileRef = F200000000000003 /* NFCPaymentService.swift */; };
 		F100000000000004 /* ContactlessPayView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F200000000000004 /* ContactlessPayView.swift */; };
+		F300000000000001 /* CurrencyAmountDisplay.swift in Sources */ = {isa = PBXBuildFile; fileRef = F400000000000001 /* CurrencyAmountDisplay.swift */; };
+		F300000000000002 /* NumberPadAmountInput.swift in Sources */ = {isa = PBXBuildFile; fileRef = F400000000000002 /* NumberPadAmountInput.swift */; };
+		F300000000000003 /* AuthorizingOverlay.swift in Sources */ = {isa = PBXBuildFile; fileRef = F400000000000003 /* AuthorizingOverlay.swift */; };
+		F300000000000004 /* ClipboardPaymentChip.swift in Sources */ = {isa = PBXBuildFile; fileRef = F400000000000004 /* ClipboardPaymentChip.swift */; };
+		F300000000000005 /* RecentRecipientsList.swift in Sources */ = {isa = PBXBuildFile; fileRef = F400000000000005 /* RecentRecipientsList.swift */; };
+		F300000000000006 /* PaymentRequestDecoder.swift in Sources */ = {isa = PBXBuildFile; fileRef = F400000000000006 /* PaymentRequestDecoder.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -121,6 +128,7 @@
 		CC00000000000015 /* NostrSettingsSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NostrSettingsSection.swift; sourceTree = "<group>"; };
 		CC00000000000016 /* PrivacySettingsSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PrivacySettingsSection.swift; sourceTree = "<group>"; };
 		CC00000000000017 /* AdvancedSettingsSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AdvancedSettingsSection.swift; sourceTree = "<group>"; };
+		CC00000000000021 /* PressableButtonStyle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PressableButtonStyle.swift; sourceTree = "<group>"; };
 		CC00000000000018 /* LightningAddressSettingsSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LightningAddressSettingsSection.swift; sourceTree = "<group>"; };
 		CC00000000000019 /* PaymentRequestsSettingsSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PaymentRequestsSettingsSection.swift; sourceTree = "<group>"; };
 		DD00000000000011 /* AppLogger.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppLogger.swift; sourceTree = "<group>"; };
@@ -137,6 +145,12 @@
 		F200000000000003 /* NFCPaymentService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NFCPaymentService.swift; sourceTree = "<group>"; };
 		F200000000000004 /* ContactlessPayView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContactlessPayView.swift; sourceTree = "<group>"; };
 		F200000000000005 /* CashuWallet.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = CashuWallet.entitlements; sourceTree = "<group>"; };
+		F400000000000001 /* CurrencyAmountDisplay.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CurrencyAmountDisplay.swift; sourceTree = "<group>"; };
+		F400000000000002 /* NumberPadAmountInput.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NumberPadAmountInput.swift; sourceTree = "<group>"; };
+		F400000000000003 /* AuthorizingOverlay.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthorizingOverlay.swift; sourceTree = "<group>"; };
+		F400000000000004 /* ClipboardPaymentChip.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClipboardPaymentChip.swift; sourceTree = "<group>"; };
+		F400000000000005 /* RecentRecipientsList.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecentRecipientsList.swift; sourceTree = "<group>"; };
+		F400000000000006 /* PaymentRequestDecoder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PaymentRequestDecoder.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -213,6 +227,7 @@
 				DD00000000000011 /* AppLogger.swift */,
 				DD00000000000012 /* BIP39WordList.swift */,
 				DD00000000000013 /* HapticFeedback.swift */,
+				F400000000000006 /* PaymentRequestDecoder.swift */,
 			);
 			path = Core;
 			sourceTree = "<group>";
@@ -269,6 +284,7 @@
 		4300000000000003 /* Send */ = {
 			isa = PBXGroup;
 			children = (
+				F500000000000001 /* Components */,
 				F200000000000004 /* ContactlessPayView.swift */,
 				210000000000000B /* SendView.swift */,
 			);
@@ -322,6 +338,7 @@
 				6A8EC9372F2450000058C21B /* NotificationBadgeView.swift */,
 				DD00000000000014 /* ErrorBannerView.swift */,
 				3DC08FE85DFC643906176894 /* LiquidGlassModifiers.swift */,
+				CC00000000000021 /* PressableButtonStyle.swift */,
 			);
 			path = Components;
 			sourceTree = "<group>";
@@ -366,6 +383,18 @@
 			path = Services;
 			sourceTree = "<group>";
 		};
+		F500000000000001 /* Components */ = {
+			isa = PBXGroup;
+			children = (
+				F400000000000001 /* CurrencyAmountDisplay.swift */,
+				F400000000000002 /* NumberPadAmountInput.swift */,
+				F400000000000003 /* AuthorizingOverlay.swift */,
+				F400000000000004 /* ClipboardPaymentChip.swift */,
+				F400000000000005 /* RecentRecipientsList.swift */,
+			);
+			path = Components;
+			sourceTree = "<group>";
+		};
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
@@ -399,7 +428,7 @@
 			attributes = {
 				BuildIndependentTargetsInParallel = 1;
 				LastSwiftUpdateCheck = 1500;
-				LastUpgradeCheck = 1500;
+				LastUpgradeCheck = 2650;
 				TargetAttributes = {
 					5100000000000001 = {
 						CreatedOnToolsVersion = 15.0;
@@ -494,6 +523,7 @@
 				CC00000000000005 /* NostrSettingsSection.swift in Sources */,
 				CC00000000000006 /* PrivacySettingsSection.swift in Sources */,
 				CC00000000000007 /* AdvancedSettingsSection.swift in Sources */,
+				CC00000000000020 /* PressableButtonStyle.swift in Sources */,
 				CC00000000000008 /* LightningAddressSettingsSection.swift in Sources */,
 				CC00000000000009 /* PaymentRequestsSettingsSection.swift in Sources */,
 				DD00000000000001 /* AppLogger.swift in Sources */,
@@ -510,6 +540,12 @@
 				F100000000000002 /* NFCReaderDelegate.swift in Sources */,
 				F100000000000003 /* NFCPaymentService.swift in Sources */,
 				F100000000000004 /* ContactlessPayView.swift in Sources */,
+				F300000000000001 /* CurrencyAmountDisplay.swift in Sources */,
+				F300000000000002 /* NumberPadAmountInput.swift in Sources */,
+				F300000000000003 /* AuthorizingOverlay.swift in Sources */,
+				F300000000000004 /* ClipboardPaymentChip.swift in Sources */,
+				F300000000000005 /* RecentRecipientsList.swift in Sources */,
+				F300000000000006 /* PaymentRequestDecoder.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -574,6 +610,7 @@
 				MTL_FAST_MATH = YES;
 				ONLY_ACTIVE_ARCH = YES;
 				SDKROOT = iphoneos;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
 			};
@@ -630,6 +667,7 @@
 				MTL_ENABLE_DEBUG_INFO = NO;
 				MTL_FAST_MATH = YES;
 				SDKROOT = iphoneos;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_COMPILATION_MODE = wholemodule;
 				VALIDATE_PRODUCT = YES;
 			};

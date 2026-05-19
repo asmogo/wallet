@@ -46,5 +46,9 @@ struct ErrorBannerView: View {
         }
         .padding(12)
         .accessibilityElement(children: .combine)
+        .onAppear {
+            guard type != .info else { return }
+            AccessibilityNotification.Announcement(message).post()
+        }
     }
 }

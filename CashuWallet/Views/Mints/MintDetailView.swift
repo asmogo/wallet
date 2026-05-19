@@ -185,8 +185,17 @@ struct MintDetailView: View {
         Section("Wallet") {
             LabeledContent("Balance", value: "\(mint.balance) sat")
                 .listRowSeparator(.hidden)
-            LabeledContent("Status", value: walletManager.activeMint?.url == mint.url ? "Active" : "Inactive")
-                .listRowSeparator(.hidden)
+            LabeledContent("Status") {
+                let active = walletManager.activeMint?.url == mint.url
+                HStack(spacing: 6) {
+                    Circle()
+                        .fill(active ? Color.green : Color.secondary)
+                        .frame(width: 8, height: 8)
+                    Text(active ? "Active" : "Inactive")
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .listRowSeparator(.hidden)
             if !mint.units.isEmpty {
                 LabeledContent("Units", value: mint.units.joined(separator: ", "))
                     .listRowSeparator(.hidden)

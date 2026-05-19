@@ -20,11 +20,13 @@ struct NotificationBadgeView: View {
                     Text("Received \(amount) sat")
                         .foregroundStyle(.primary)
                         .font(.callout.weight(.medium))
+                        .monospacedDigit()
 
                     if let fee = fee, fee > 0 {
                         Text("(fee: \(fee) sat)")
                             .foregroundStyle(.secondary)
                             .font(.caption)
+                            .monospacedDigit()
                     }
                 } else {
                     Text(message)

@@ -167,7 +167,7 @@ struct MainWalletView: View {
         HStack(spacing: 12) {
             Button { activeSheet = .chooser(.receive) } label: {
                 Text("Receive")
-                    .font(.body.weight(.medium))
+                    .font(.body.weight(.semibold))
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 18)
                     .liquidGlass(in: Capsule(), interactive: true)
@@ -176,7 +176,7 @@ struct MainWalletView: View {
 
             Button { activeSheet = .scanner } label: {
                 Image(systemName: "viewfinder")
-                    .font(.title3)
+                    .font(.title3.weight(.semibold))
                     .padding(18)
                     .liquidGlass(in: Circle(), interactive: true)
             }
@@ -184,7 +184,7 @@ struct MainWalletView: View {
 
             Button { activeSheet = .chooser(.send) } label: {
                 Text("Send")
-                    .font(.body.weight(.medium))
+                    .font(.body.weight(.semibold))
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 18)
                     .liquidGlass(in: Capsule(), interactive: true)
@@ -315,9 +315,9 @@ private enum WalletActionSheet: String, Identifiable {
 
     var detentHeight: CGFloat {
         if self == .send, NFCNDEFReaderSession.readingAvailable {
-            return 265
+            return 245
         }
-        return 205
+        return 195
     }
 }
 
@@ -370,22 +370,43 @@ private struct WalletActionSheetView: View {
     let onScan: () -> Void
     let onSelect: (WalletFlow) -> Void
 
+    @State private var revealed = false
+
     private var secondaryOptionTitle: String {
-        switch action {
-        case .receive:
-            return "Invoice / Address"
-        case .send:
-            return "Lightning / On-chain"
+        // Lightning + on-chain are both "Bitcoin" from the user's mental model;
+        // the protocol choice happens inside the flow itself.
+        "Bitcoin"
+    }
+
+    private struct Option: Identifiable {
+        let id = UUID()
+        let title: String
+        let icon: String
+        let flow: WalletFlow
+    }
+
+    private var options: [Option] {
+        var result: [Option] = [
+            .init(title: "Ecash", icon: "banknote", flow: action.primaryOption),
+            .init(title: secondaryOptionTitle, icon: "bitcoinsign.circle.fill", flow: action.secondaryOption),
+        ]
+        if action == .send, NFCNDEFReaderSession.readingAvailable {
+            result.append(.init(title: "Contactless", icon: "wave.3.right.circle.fill", flow: .contactlessPay))
         }
+        return result
     }
 
     var body: some View {
         NavigationStack {
             VStack(alignment: .leading, spacing: 0) {
-                optionButton(title: "Ecash", icon: "banknote", action: action.primaryOption)
-                optionButton(title: secondaryOptionTitle, icon: "bolt.fill", action: action.secondaryOption)
-                if action == .send, NFCNDEFReaderSession.readingAvailable {
-                    optionButton(title: "Contactless", icon: "wave.3.right.circle.fill", action: .contactlessPay)
+                ForEach(Array(options.enumerated()), id: \.element.id) { index, option in
+                    optionButton(title: option.title, icon: option.icon, action: option.flow)
+                        .opacity(revealed ? 1 : 0)
+                        .offset(x: revealed ? 0 : -12)
+                        .animation(
+                            .smooth(duration: 0.32).delay(Double(index) * 0.07),
+                            value: revealed
+                        )
                 }
             }
             .frame(maxWidth: .infinity, alignment: .topLeading)
@@ -410,31 +431,34 @@ private struct WalletActionSheetView: View {
                 }
             }
         }
+        .onAppear { revealed = true }
     }
 
     private func optionButton(title: String, icon: String, action flow: WalletFlow) -> some View {
         Button {
+            HapticFeedback.selection()
             onSelect(flow)
         } label: {
             optionLabel(title: title, icon: icon)
         }
-        .buttonStyle(.plain)
+        .buttonStyle(PressableButtonStyle())
     }
 
     private func optionLabel(title: String, icon: String) -> some View {
         HStack(spacing: 14) {
             Image(systemName: icon)
-                .font(.title3.weight(.semibold))
-                .foregroundStyle(.secondary)
-                .frame(width: 24)
+                .font(.body.weight(.semibold))
+                .foregroundStyle(.primary)
+                .frame(width: 36, height: 36)
+                .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 10))
 
             Text(title)
-                .font(.title3)
+                .font(.title3.weight(.medium))
 
             Spacer()
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.vertical, 18)
+        .padding(.vertical, 14)
         .foregroundStyle(.primary)
         .contentShape(Rectangle())
     }

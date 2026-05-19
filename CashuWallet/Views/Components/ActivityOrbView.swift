@@ -20,6 +20,7 @@ struct ActivityOrbView: View {
                     .transition(.opacity.combined(with: .scale))
             }
         }
+        .accessibilityHidden(true)
         .animation(.easeInOut(duration: 0.3), value: isVisible)
         .onChange(of: isActive) { _, newValue in
             if newValue {

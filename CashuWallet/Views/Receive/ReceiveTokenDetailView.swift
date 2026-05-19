@@ -7,7 +7,6 @@ struct ReceiveTokenDetailView: View {
     @EnvironmentObject var walletManager: WalletManager
     @Environment(\.dismiss) var dismiss
     @ObservedObject private var settings = SettingsManager.shared
-    @ObservedObject private var priceService = PriceService.shared
 
     @State private var decodedToken: Token?
     @State private var tokenAmount: UInt64 = 0
@@ -23,23 +22,16 @@ struct ReceiveTokenDetailView: View {
         NavigationStack {
             VStack(spacing: 0) {
                 ScrollView {
-                    VStack(spacing: 20) {
+                    VStack(spacing: 24) {
                         // Amount
-                        Text(formattedAmount)
-                            .font(.largeTitle.bold())
-                            .minimumScaleFactor(0.5)
-                            .lineLimit(1)
-                            .padding(.top, 24)
-
-                        // Fiat
-                        if priceService.btcPriceUSD > 0 {
-                            Text(priceService.formatSatsAsFiat(tokenAmount))
-                                .font(.subheadline)
-                                .foregroundStyle(.secondary)
-                        }
+                        CurrencyAmountDisplay(
+                            sats: tokenAmount,
+                            primary: $settings.amountDisplayPrimary
+                        )
+                        .padding(.top, 24)
 
                         // Details
-                        VStack(spacing: 12) {
+                        VStack(spacing: 0) {
                             if isLoadingFee {
                                 HStack {
                                     Label("Fee", systemImage: "arrow.up.arrow.down")
@@ -48,15 +40,21 @@ struct ReceiveTokenDetailView: View {
                                     ProgressView().scaleEffect(0.8)
                                 }
                                 .font(.subheadline)
+                                .padding(.horizontal, 14)
+                                .padding(.vertical, 12)
                             } else {
                                 detailRow(icon: "arrow.up.arrow.down", label: "Fee", value: "\(receiveFee) sat")
                             }
+                            Divider().padding(.leading)
                             detailRow(icon: "bitcoinsign.bank.building", label: "Mint", value: shortMintUrl(mintUrl))
                             if !p2pkPubkeys.isEmpty {
+                                Divider().padding(.leading)
                                 detailRow(icon: "lock.fill", label: "P2PK",
                                           value: tokenLockedToKnownKey ? "Your key" : "Unknown key")
                             }
                         }
+                        .padding(.vertical, 4)
+                        .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 14))
                         .padding(.horizontal)
 
                         if let error = errorMessage {
@@ -102,15 +100,6 @@ struct ReceiveTokenDetailView: View {
                     Text("Receive Ecash")
                         .font(.headline)
                 }
-
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button(action: { settings.useBitcoinSymbol.toggle() }) {
-                        Text(settings.unitLabel)
-                            .font(.caption)
-                            .fontWeight(.bold)
-                            .foregroundStyle(Color.accentColor)
-                    }
-                }
             }
         }
         .onAppear {
@@ -125,13 +114,14 @@ struct ReceiveTokenDetailView: View {
             Label(label, systemImage: icon)
                 .foregroundStyle(.secondary)
             Spacer()
-            Text(value).fontWeight(.medium)
+            Text(value)
+                .fontWeight(.medium)
+                .lineLimit(1)
+                .truncationMode(.middle)
         }
         .font(.subheadline)
-    }
-
-    private var formattedAmount: String {
-        settings.useBitcoinSymbol ? "₿\(tokenAmount)" : "\(tokenAmount) sat"
+        .padding(.horizontal, 14)
+        .padding(.vertical, 12)
     }
 
     func shortMintUrl(_ url: String) -> String {
@@ -144,8 +134,10 @@ struct ReceiveTokenDetailView: View {
         do {
             let token = try walletManager.decodeToken(tokenString: tokenString)
             self.decodedToken = token
-            let proofs = try token.proofsSimple()
-            self.tokenAmount = proofs.reduce(0) { $0 + $1.amount.value }
+            // Token.value() is the canonical "total value of the token" API;
+            // proofsSimple() is documented as "simplified - no keyset filtering"
+            // and returns 0 / empty for some token formats.
+            self.tokenAmount = try token.value().value
             let mint = try token.mintUrl()
             self.mintUrl = mint.url
 
