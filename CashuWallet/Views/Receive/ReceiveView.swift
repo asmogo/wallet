@@ -118,12 +118,27 @@ struct ReceiveEcashView: View {
     @State private var errorMessage: String?
     @State private var navigateToDetail = false
     @State private var validatedToken: String?
-    @State private var navigateToRequest = false
     @State private var currentRequest: CashuRequest?
 
     var body: some View {
         NavigationStack {
-            VStack(spacing: 16) {
+            ZStack {
+                if let request = currentRequest {
+                    CashuRequestDetailView(request: request, onClose: { dismiss() })
+                        .environmentObject(walletManager)
+                        .transition(.opacity)
+                } else {
+                    formContent
+                        .transition(.opacity)
+                }
+            }
+            .animation(.easeInOut(duration: 0.25), value: currentRequest?.id)
+        }
+    }
+
+    @ViewBuilder
+    private var formContent: some View {
+        VStack(spacing: 16) {
                 ZStack(alignment: .bottomTrailing) {
                     ZStack(alignment: .topLeading) {
                         TextEditor(text: $tokenInput)
@@ -222,12 +237,6 @@ struct ReceiveEcashView: View {
                     .navigationBarBackButtonHidden(true)
                 }
             }
-            .navigationDestination(isPresented: $navigateToRequest) {
-                if let request = currentRequest {
-                    CashuRequestDetailView(request: request, onClose: { dismiss() })
-                        .environmentObject(walletManager)
-                }
-            }
             .onAppear {
                 guard settings.autoPasteEcashReceive else { return }
                 guard tokenInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
@@ -235,7 +244,6 @@ struct ReceiveEcashView: View {
                       TokenParser.isCashuToken(clipboardContent) else { return }
                 tokenInput = clipboardContent
             }
-        }
     }
 
     private func pasteFromClipboard() {
@@ -276,9 +284,8 @@ struct ReceiveEcashView: View {
                 memo: nil,
                 encoded: encoded
             )
-            currentRequest = request
             sheetDetent?.wrappedValue = .large
-            navigateToRequest = true
+            currentRequest = request
         } catch {
             errorMessage = "Could not build request: \(error)"
         }
