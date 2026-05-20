@@ -68,18 +68,6 @@ class SettingsManager: ObservableObject {
         }
     }
 
-    @Published var enablePaymentRequests: Bool {
-        didSet {
-            settingsStore.enablePaymentRequests = enablePaymentRequests
-        }
-    }
-
-    @Published var receivePaymentRequestsAutomatically: Bool {
-        didSet {
-            settingsStore.receivePaymentRequestsAutomatically = receivePaymentRequestsAutomatically
-        }
-    }
-
     @Published var enableNWC: Bool {
         didSet {
             settingsStore.enableNWC = enableNWC
@@ -143,8 +131,6 @@ class SettingsManager: ObservableObject {
         self.checkSentTokens = settingsStore.checkSentTokens
         self.autoPasteEcashReceive = settingsStore.autoPasteEcashReceive
         self.useWebsockets = settingsStore.useWebsockets
-        self.enablePaymentRequests = settingsStore.enablePaymentRequests
-        self.receivePaymentRequestsAutomatically = settingsStore.receivePaymentRequestsAutomatically
         self.enableNWC = settingsStore.enableNWC
         self.nwcConnections = Self.loadNWCConnections()
         self.showP2PKButtonInDrawer = settingsStore.showP2PKButtonInDrawer

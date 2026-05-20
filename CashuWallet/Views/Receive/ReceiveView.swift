@@ -116,6 +116,8 @@ struct ReceiveEcashView: View {
     @State private var errorMessage: String?
     @State private var navigateToDetail = false
     @State private var validatedToken: String?
+    @State private var navigateToRequest = false
+    @State private var currentRequest: CashuRequest?
 
     var body: some View {
         NavigationStack {
@@ -180,15 +182,23 @@ struct ReceiveEcashView: View {
                         .transition(.opacity.combined(with: .scale))
                 }
 
-                Button(action: validateAndContinue) {
-                    Text("Continue")
+                VStack(spacing: 10) {
+                    Button(action: validateAndContinue) {
+                        Text("Continue")
+                    }
+                    .glassButton()
+                    .disabled(tokenInput.isEmpty)
+                    .animation(.easeOut(duration: 0.2), value: tokenInput.isEmpty)
+                    .accessibilityHint("Validates the token and proceeds to details")
+
+                    Button(action: createNewRequest) {
+                        Text("New Request")
+                    }
+                    .glassButton()
+                    .accessibilityHint("Generate a Cashu Request to receive ecash")
                 }
-                .glassButton()
-                .disabled(tokenInput.isEmpty)
-                .animation(.easeOut(duration: 0.2), value: tokenInput.isEmpty)
                 .padding(.horizontal)
                 .padding(.bottom, 16)
-                .accessibilityHint("Validates the token and proceeds to details")
             }
             .animation(.easeInOut(duration: 0.2), value: errorMessage)
             .navigationTitle("Receive Ecash")
@@ -208,6 +218,12 @@ struct ReceiveEcashView: View {
                     })
                     .environmentObject(walletManager)
                     .navigationBarBackButtonHidden(true)
+                }
+            }
+            .navigationDestination(isPresented: $navigateToRequest) {
+                if let request = currentRequest {
+                    CashuRequestDetailView(request: request, onClose: { dismiss() })
+                        .environmentObject(walletManager)
                 }
             }
             .onAppear {
@@ -231,6 +247,38 @@ struct ReceiveEcashView: View {
         HapticFeedback.selection()
         tokenInput = ""
         errorMessage = nil
+    }
+
+    private func createNewRequest() {
+        HapticFeedback.selection()
+        let nostr = NostrService.shared
+        guard nostr.isInitialized, !nostr.publicKeyHex.isEmpty else {
+            errorMessage = "Nostr identity not initialized"
+            return
+        }
+        let id = CashuRequest.newId()
+        do {
+            let encoded = try PaymentRequestBuilder.build(
+                id: id,
+                amount: nil,
+                unit: "sat",
+                mints: [],
+                description: nil,
+                nostrPubkeyHex: nostr.publicKeyHex,
+                relays: SettingsManager.shared.nostrRelays
+            )
+            let request = CashuRequestStore.shared.createNew(
+                amount: nil,
+                unit: "sat",
+                mints: [],
+                memo: nil,
+                encoded: encoded
+            )
+            currentRequest = request
+            navigateToRequest = true
+        } catch {
+            errorMessage = "Could not build request: \(error)"
+        }
     }
 
     private func validateAndContinue() {

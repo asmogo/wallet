@@ -50,22 +50,6 @@ final class SettingsStore {
         set { set(newValue, forKey: StorageKeys.useWebsockets) }
     }
 
-    var enablePaymentRequests: Bool {
-        get { bool(StorageKeys.enablePaymentRequests, legacy: StorageKeys.Legacy.enablePaymentRequests, default: false) }
-        set { set(newValue, forKey: StorageKeys.enablePaymentRequests) }
-    }
-
-    var receivePaymentRequestsAutomatically: Bool {
-        get {
-            bool(
-                StorageKeys.receivePaymentRequestsAutomatically,
-                legacy: StorageKeys.Legacy.receivePaymentRequestsAutomatically,
-                default: false
-            )
-        }
-        set { set(newValue, forKey: StorageKeys.receivePaymentRequestsAutomatically) }
-    }
-
     var enableNWC: Bool {
         get { bool(StorageKeys.enableNWC, legacy: StorageKeys.Legacy.enableNWC, default: false) }
         set { set(newValue, forKey: StorageKeys.enableNWC) }

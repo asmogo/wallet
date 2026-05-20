@@ -704,6 +704,23 @@ class WalletManager: ObservableObject {
         await loadTransactions()
         return amount
     }
+
+    /// Auto-claim a token that arrived via a NUT-18 Cashu Request, optionally attributing
+    /// the payment to a specific request in CashuRequestStore.
+    @discardableResult
+    func receiveCashuRequestPayment(tokenString: String, requestId: String?) async throws -> UInt64 {
+        let amount = try await receiveTokens(tokenString: tokenString)
+        if let requestId {
+            let historyId = UUID().uuidString
+            CashuRequestStore.shared.attachPayment(requestId: requestId, historyId: historyId)
+        }
+        NotificationCenter.default.post(
+            name: .cashuTokenReceived,
+            object: nil,
+            userInfo: ["amount": amount, "source": "cashu-request"]
+        )
+        return amount
+    }
     
     func decodeToken(tokenString: String) throws -> Token {
         return try tokenService.decodeToken(tokenString: tokenString)

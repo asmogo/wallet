@@ -45,6 +45,16 @@
 		AA00000000000003 /* WalletServiceProtocol.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA00000000000013 /* WalletServiceProtocol.swift */; };
 		AA00000000000004 /* StorageProtocol.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA00000000000014 /* StorageProtocol.swift */; };
 		AA00000000000005 /* NavigationManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA00000000000015 /* NavigationManager.swift */; };
+		AB00000000000001 /* CashuRequest.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC00000000000001 /* CashuRequest.swift */; };
+		AB00000000000002 /* CashuRequestStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC00000000000002 /* CashuRequestStore.swift */; };
+		AB00000000000003 /* PaymentRequestBuilder.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC00000000000003 /* PaymentRequestBuilder.swift */; };
+		AB00000000000004 /* NIP44.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC00000000000004 /* NIP44.swift */; };
+		AB00000000000005 /* NIP17.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC00000000000005 /* NIP17.swift */; };
+		AB00000000000006 /* NostrInboxClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC00000000000006 /* NostrInboxClient.swift */; };
+		AB00000000000007 /* CashuRequestListener.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC00000000000007 /* CashuRequestListener.swift */; };
+		AB00000000000008 /* CashuRequestDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC00000000000008 /* CashuRequestDetailView.swift */; };
+		AB0000000000000A /* CashuRequestMintPickerSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC0000000000000A /* CashuRequestMintPickerSheet.swift */; };
+		AB0000000000000B /* CashuRequestAmountPickerSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC0000000000000B /* CashuRequestAmountPickerSheet.swift */; };
 		BB00000000000001 /* MintService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000011 /* MintService.swift */; };
 		BB00000000000002 /* TransactionService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000012 /* TransactionService.swift */; };
 		BB00000000000003 /* TokenService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000013 /* TokenService.swift */; };
@@ -57,7 +67,6 @@
 		CC00000000000006 /* PrivacySettingsSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC00000000000016 /* PrivacySettingsSection.swift */; };
 		CC00000000000007 /* AdvancedSettingsSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC00000000000017 /* AdvancedSettingsSection.swift */; };
 		CC00000000000008 /* LightningAddressSettingsSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC00000000000018 /* LightningAddressSettingsSection.swift */; };
-		CC00000000000009 /* PaymentRequestsSettingsSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC00000000000019 /* PaymentRequestsSettingsSection.swift */; };
 		CC00000000000020 /* PressableButtonStyle.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC00000000000021 /* PressableButtonStyle.swift */; };
 		DD00000000000001 /* AppLogger.swift in Sources */ = {isa = PBXBuildFile; fileRef = DD00000000000011 /* AppLogger.swift */; };
 		DD00000000000002 /* BIP39WordList.swift in Sources */ = {isa = PBXBuildFile; fileRef = DD00000000000012 /* BIP39WordList.swift */; };
@@ -117,6 +126,16 @@
 		AA00000000000013 /* WalletServiceProtocol.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WalletServiceProtocol.swift; sourceTree = "<group>"; };
 		AA00000000000014 /* StorageProtocol.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StorageProtocol.swift; sourceTree = "<group>"; };
 		AA00000000000015 /* NavigationManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NavigationManager.swift; sourceTree = "<group>"; };
+		AC00000000000001 /* CashuRequest.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CashuRequest.swift; sourceTree = "<group>"; };
+		AC00000000000002 /* CashuRequestStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CashuRequestStore.swift; sourceTree = "<group>"; };
+		AC00000000000003 /* PaymentRequestBuilder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PaymentRequestBuilder.swift; sourceTree = "<group>"; };
+		AC00000000000004 /* NIP44.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NIP44.swift; sourceTree = "<group>"; };
+		AC00000000000005 /* NIP17.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NIP17.swift; sourceTree = "<group>"; };
+		AC00000000000006 /* NostrInboxClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NostrInboxClient.swift; sourceTree = "<group>"; };
+		AC00000000000007 /* CashuRequestListener.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CashuRequestListener.swift; sourceTree = "<group>"; };
+		AC00000000000008 /* CashuRequestDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CashuRequestDetailView.swift; sourceTree = "<group>"; };
+		AC0000000000000A /* CashuRequestMintPickerSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CashuRequestMintPickerSheet.swift; sourceTree = "<group>"; };
+		AC0000000000000B /* CashuRequestAmountPickerSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CashuRequestAmountPickerSheet.swift; sourceTree = "<group>"; };
 		BB00000000000011 /* MintService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MintService.swift; sourceTree = "<group>"; };
 		BB00000000000012 /* TransactionService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TransactionService.swift; sourceTree = "<group>"; };
 		BB00000000000013 /* TokenService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TokenService.swift; sourceTree = "<group>"; };
@@ -129,7 +148,6 @@
 		CC00000000000016 /* PrivacySettingsSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PrivacySettingsSection.swift; sourceTree = "<group>"; };
 		CC00000000000017 /* AdvancedSettingsSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AdvancedSettingsSection.swift; sourceTree = "<group>"; };
 		CC00000000000018 /* LightningAddressSettingsSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LightningAddressSettingsSection.swift; sourceTree = "<group>"; };
-		CC00000000000019 /* PaymentRequestsSettingsSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PaymentRequestsSettingsSection.swift; sourceTree = "<group>"; };
 		CC00000000000021 /* PressableButtonStyle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PressableButtonStyle.swift; sourceTree = "<group>"; };
 		DD00000000000011 /* AppLogger.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppLogger.swift; sourceTree = "<group>"; };
 		DD00000000000012 /* BIP39WordList.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BIP39WordList.swift; sourceTree = "<group>"; };
@@ -215,6 +233,7 @@
 				6A8EC9312F2448B60058C21B /* MintDiscoveryManager.swift */,
 				6A8EC94D2F25A0000058C21B /* NostrService.swift */,
 				6A8EC94F2F25A0000058C21B /* NPCService.swift */,
+				AC00000000000002 /* CashuRequestStore.swift */,
 				6A8EC94B2F2590000058C21B /* PriceService.swift */,
 				6A8EC92F2F2442EF0058C21B /* SettingsManager.swift */,
 				2100000000000004 /* WalletManager.swift */,
@@ -228,6 +247,11 @@
 				DD00000000000012 /* BIP39WordList.swift */,
 				DD00000000000013 /* HapticFeedback.swift */,
 				F400000000000006 /* PaymentRequestDecoder.swift */,
+				AC00000000000003 /* PaymentRequestBuilder.swift */,
+				AC00000000000004 /* NIP44.swift */,
+				AC00000000000005 /* NIP17.swift */,
+				AC00000000000006 /* NostrInboxClient.swift */,
+				AC00000000000007 /* CashuRequestListener.swift */,
 			);
 			path = Core;
 			sourceTree = "<group>";
@@ -236,6 +260,7 @@
 			isa = PBXGroup;
 			children = (
 				2100000000000006 /* Models.swift */,
+				AC00000000000001 /* CashuRequest.swift */,
 			);
 			path = Models;
 			sourceTree = "<group>";
@@ -277,6 +302,9 @@
 				6A8EC9402F2576800058C21B /* ReceiveTokenDetailView.swift */,
 				2100000000000009 /* ReceiveView.swift */,
 				210000000000000A /* ReceiveLightningView.swift */,
+				AC00000000000008 /* CashuRequestDetailView.swift */,
+				AC0000000000000A /* CashuRequestMintPickerSheet.swift */,
+				AC0000000000000B /* CashuRequestAmountPickerSheet.swift */,
 			);
 			path = Receive;
 			sourceTree = "<group>";
@@ -316,7 +344,6 @@
 				CC00000000000012 /* BackupSettingsSection.swift */,
 				CC00000000000018 /* LightningAddressSettingsSection.swift */,
 				CC00000000000015 /* NostrSettingsSection.swift */,
-				CC00000000000019 /* PaymentRequestsSettingsSection.swift */,
 				CC00000000000013 /* NWCSettingsSection.swift */,
 				CC00000000000014 /* P2PKSettingsSection.swift */,
 				CC00000000000016 /* PrivacySettingsSection.swift */,
@@ -486,6 +513,7 @@
 				1100000000000004 /* WalletManager.swift in Sources */,
 				1100000000000005 /* KeychainService.swift in Sources */,
 				1100000000000006 /* Models.swift in Sources */,
+				AB00000000000001 /* CashuRequest.swift in Sources */,
 				1100000000000007 /* MainWalletView.swift in Sources */,
 				1100000000000008 /* OnboardingView.swift in Sources */,
 				6A8EC9412F2576800058C21B /* ReceiveTokenDetailView.swift in Sources */,
@@ -507,6 +535,7 @@
 				6A8EC94A2F2590000058C21B /* PriceService.swift in Sources */,
 				6A8EC94C2F25A0000058C21B /* NostrService.swift in Sources */,
 				6A8EC94E2F25A0000058C21B /* NPCService.swift in Sources */,
+				AB00000000000002 /* CashuRequestStore.swift in Sources */,
 				AA00000000000001 /* PaymentMethodProtocol.swift in Sources */,
 				AA00000000000002 /* CurrencyProtocol.swift in Sources */,
 				AA00000000000003 /* WalletServiceProtocol.swift in Sources */,
@@ -525,7 +554,6 @@
 				CC00000000000007 /* AdvancedSettingsSection.swift in Sources */,
 				CC00000000000020 /* PressableButtonStyle.swift in Sources */,
 				CC00000000000008 /* LightningAddressSettingsSection.swift in Sources */,
-				CC00000000000009 /* PaymentRequestsSettingsSection.swift in Sources */,
 				DD00000000000001 /* AppLogger.swift in Sources */,
 				DD00000000000002 /* BIP39WordList.swift in Sources */,
 				DD00000000000003 /* HapticFeedback.swift in Sources */,
@@ -546,6 +574,14 @@
 				F300000000000004 /* ClipboardPaymentChip.swift in Sources */,
 				F300000000000005 /* RecentRecipientsList.swift in Sources */,
 				F300000000000006 /* PaymentRequestDecoder.swift in Sources */,
+				AB00000000000003 /* PaymentRequestBuilder.swift in Sources */,
+				AB00000000000004 /* NIP44.swift in Sources */,
+				AB00000000000005 /* NIP17.swift in Sources */,
+				AB00000000000006 /* NostrInboxClient.swift in Sources */,
+				AB00000000000007 /* CashuRequestListener.swift in Sources */,
+				AB00000000000008 /* CashuRequestDetailView.swift in Sources */,
+				AB0000000000000A /* CashuRequestMintPickerSheet.swift in Sources */,
+				AB0000000000000B /* CashuRequestAmountPickerSheet.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -681,7 +717,7 @@
 				CODE_SIGN_ENTITLEMENTS = CashuWallet/CashuWallet.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = D7AHD3GLH6;
+				DEVELOPMENT_TEAM = JQ4WB222T4;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = CashuWallet/Info.plist;
@@ -702,7 +738,7 @@
 					"-framework",
 					SystemConfiguration,
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = com.jcashu.wallet;
+				PRODUCT_BUNDLE_IDENTIFIER = com.cashu.wallet;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_VERSION = 5.0;
@@ -718,7 +754,7 @@
 				CODE_SIGN_ENTITLEMENTS = CashuWallet/CashuWallet.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = D7AHD3GLH6;
+				DEVELOPMENT_TEAM = JQ4WB222T4;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = CashuWallet/Info.plist;
@@ -739,7 +775,7 @@
 					"-framework",
 					SystemConfiguration,
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = com.jcashu.wallet;
+				PRODUCT_BUNDLE_IDENTIFIER = com.cashu.wallet;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_VERSION = 5.0;

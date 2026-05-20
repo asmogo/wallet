@@ -3,6 +3,7 @@ import SwiftUI
 struct HistoryView: View {
     @EnvironmentObject var walletManager: WalletManager
     @ObservedObject var settings = SettingsManager.shared
+    @ObservedObject private var requestStore = CashuRequestStore.shared
 
     enum FilterMode: String, CaseIterable, Identifiable {
         case all
@@ -35,7 +36,7 @@ struct HistoryView: View {
     var body: some View {
         NavigationStack {
             Group {
-                if filteredTransactions.isEmpty {
+                if filteredTransactions.isEmpty && requestStore.requests.isEmpty {
                     emptyStateView
                 } else {
                     historyList
@@ -85,6 +86,20 @@ struct HistoryView: View {
     private var historyList: some View {
         ScrollView {
             LazyVStack(spacing: 0, pinnedViews: []) {
+                if !requestStore.requests.isEmpty {
+                    sectionHeader("Cashu Requests")
+                    VStack(spacing: 0) {
+                        ForEach(Array(requestStore.requests.enumerated()), id: \.element.id) { index, request in
+                            cashuRequestRow(request: request)
+                            if index < requestStore.requests.count - 1 {
+                                CanvasDivider()
+                            }
+                        }
+                    }
+                    .padding(.horizontal, 4)
+                    .padding(.bottom, 12)
+                }
+
                 ForEach(sectionsWithOffsets, id: \.group.title) { entry in
                     sectionHeader(entry.group.title)
 
@@ -236,6 +251,52 @@ struct HistoryView: View {
             Spacer()
         }
         .padding(.horizontal, 32)
+    }
+
+    // MARK: - Cashu Request Row
+
+    private func cashuRequestRow(request: CashuRequest) -> some View {
+        NavigationLink {
+            CashuRequestDetailView(request: request, onClose: {})
+                .environmentObject(walletManager)
+                .navigationBarBackButtonHidden(false)
+        } label: {
+            HStack(spacing: 14) {
+                Image(systemName: "arrow.triangle.2.circlepath")
+                    .font(.body.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                    .frame(width: 36, height: 36)
+                    .background(
+                        Circle().fill(Color.secondary.opacity(0.12))
+                    )
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Cashu Request")
+                        .font(.subheadline.weight(.medium))
+                    Text(requestSubtitle(request))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+
+                Spacer()
+
+                Text(request.createdAt.formatted(.relative(presentation: .numeric)))
+                    .font(.caption2)
+                    .foregroundStyle(.tertiary)
+            }
+            .padding(.vertical, 10)
+            .padding(.horizontal, 8)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Cashu Request, \(requestSubtitle(request))")
+    }
+
+    private func requestSubtitle(_ request: CashuRequest) -> String {
+        let count = request.receivedPaymentIds.count
+        if count == 0 { return "Waiting for payment" }
+        if count == 1 { return "1 payment received" }
+        return "\(count) payments received"
     }
 
     // MARK: - Transaction Row

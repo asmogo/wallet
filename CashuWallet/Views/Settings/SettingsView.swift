@@ -47,10 +47,6 @@ struct SettingsView: View {
                             lightningDetailView
                         }
                         CanvasDivider()
-                        navRow("Payment Requests", icon: "arrow.left.arrow.right") {
-                            paymentRequestsDetailView
-                        }
-                        CanvasDivider()
                         navRow("P2PK", icon: "lock.fill") {
                             p2pkDetailView
                         }
@@ -276,18 +272,6 @@ struct SettingsView: View {
         }
         .listStyle(.plain)
         .navigationTitle("Nostr")
-        .toolbarBackground(.hidden, for: .navigationBar)
-    }
-
-    private var paymentRequestsDetailView: some View {
-        List {
-            Section {
-                PaymentRequestsSettingsSection()
-            }
-            .listRowSeparator(.hidden)
-        }
-        .listStyle(.plain)
-        .navigationTitle("Payment Requests")
         .toolbarBackground(.hidden, for: .navigationBar)
     }
 
