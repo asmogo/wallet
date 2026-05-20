@@ -112,6 +112,8 @@ struct ReceiveEcashView: View {
     @EnvironmentObject var walletManager: WalletManager
     @ObservedObject private var settings = SettingsManager.shared
 
+    var sheetDetent: Binding<PresentationDetent>? = nil
+
     @State private var tokenInput = ""
     @State private var errorMessage: String?
     @State private var navigateToDetail = false
@@ -275,6 +277,11 @@ struct ReceiveEcashView: View {
                 encoded: encoded
             )
             currentRequest = request
+            if let sheetDetent {
+                withAnimation(.snappy) {
+                    sheetDetent.wrappedValue = .large
+                }
+            }
             navigateToRequest = true
         } catch {
             errorMessage = "Could not build request: \(error)"

@@ -149,7 +149,7 @@ struct CashuRequestDetailView: View {
                 .padding(.horizontal)
             }
 
-            VStack(spacing: 10) {
+            HStack(spacing: 12) {
                 Button(action: { copy(request.encoded) }) {
                     Text(showCopied ? "Copied" : "Copy")
                 }

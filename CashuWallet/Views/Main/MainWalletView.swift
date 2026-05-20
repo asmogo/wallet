@@ -14,6 +14,7 @@ struct MainWalletView: View {
     @State private var showNotification = false
     @State private var isRefreshing = false
     @State private var copiedLightningAddress = false
+    @State private var receiveEcashDetent: PresentationDetent = .medium
 
     var body: some View {
         NavigationStack {
@@ -258,9 +259,10 @@ struct MainWalletView: View {
     private func flowView(for flow: WalletFlow) -> some View {
         switch flow {
         case .receiveEcash:
-            ReceiveEcashView()
+            ReceiveEcashView(sheetDetent: $receiveEcashDetent)
                 .environmentObject(walletManager)
-                .presentationDetents([.medium, .large])
+                .presentationDetents([.medium, .large], selection: $receiveEcashDetent)
+                .onAppear { receiveEcashDetent = .medium }
         case .receiveLightning:
             ReceiveLightningView()
                 .environmentObject(walletManager)
