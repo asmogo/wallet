@@ -275,8 +275,6 @@ class SettingsManager: ObservableObject {
 
         try? keychain.deleteNostrPrivateKey()
 
-        enablePaymentRequests = false
-        receivePaymentRequestsAutomatically = false
         enableNWC = false
         nwcConnections = []
         showP2PKButtonInDrawer = false
