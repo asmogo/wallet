@@ -369,10 +369,7 @@ struct TokenDisplayView: View {
                 
                 // Copy button
                 Button(action: copyToken) {
-                    HStack {
-                        Image(systemName: copied ? "checkmark" : "doc.on.doc")
-                        Text(copied ? "Copied!" : "Copy")
-                    }
+                    Text(copied ? "Copied!" : "Copy")
                 }
                 .glassButton()
                 .padding(.horizontal, 20)

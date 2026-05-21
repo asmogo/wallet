@@ -23,6 +23,7 @@
 		1100000000000010 /* QRCodeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2100000000000010 /* QRCodeView.swift */; };
 		1100000000000012 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 2100000000000012 /* Assets.xcassets */; };
 		11000000000000CC /* MintDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 21000000000000CC /* MintDetailView.swift */; };
+		11000000000000CD /* MintDiscoverySheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 21000000000000CD /* MintDiscoverySheet.swift */; };
 		264054F18D12335595328FBC /* LiquidGlassModifiers.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3DC08FE85DFC643906176894 /* LiquidGlassModifiers.swift */; };
 		6A8EC9302F2442F00058C21B /* SettingsManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6A8EC92F2F2442EF0058C21B /* SettingsManager.swift */; };
 		6A8EC9322F2448B60058C21B /* MintDiscoveryManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6A8EC9312F2448B60058C21B /* MintDiscoveryManager.swift */; };
@@ -80,7 +81,7 @@
 		F100000000000001 /* NDEFTextRecordCoder.swift in Sources */ = {isa = PBXBuildFile; fileRef = F200000000000001 /* NDEFTextRecordCoder.swift */; };
 		F100000000000002 /* NFCReaderDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = F200000000000002 /* NFCReaderDelegate.swift */; };
 		F100000000000003 /* NFCPaymentService.swift in Sources */ = {isa = PBXBuildFile; fileRef = F200000000000003 /* NFCPaymentService.swift */; };
-		F100000000000004 /* ContactlessPayView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F200000000000004 /* ContactlessPayView.swift */; };
+		F100000000000004 /* ContactlessPaymentCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = F200000000000004 /* ContactlessPaymentCoordinator.swift */; };
 		F300000000000001 /* CurrencyAmountDisplay.swift in Sources */ = {isa = PBXBuildFile; fileRef = F400000000000001 /* CurrencyAmountDisplay.swift */; };
 		F300000000000002 /* NumberPadAmountInput.swift in Sources */ = {isa = PBXBuildFile; fileRef = F400000000000002 /* NumberPadAmountInput.swift */; };
 		F300000000000003 /* AuthorizingOverlay.swift in Sources */ = {isa = PBXBuildFile; fileRef = F400000000000003 /* AuthorizingOverlay.swift */; };
@@ -107,6 +108,7 @@
 		2100000000000010 /* QRCodeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QRCodeView.swift; sourceTree = "<group>"; };
 		2100000000000012 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		21000000000000CC /* MintDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MintDetailView.swift; sourceTree = "<group>"; };
+		21000000000000CD /* MintDiscoverySheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MintDiscoverySheet.swift; sourceTree = "<group>"; };
 		3DC08FE85DFC643906176894 /* LiquidGlassModifiers.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = LiquidGlassModifiers.swift; sourceTree = "<group>"; };
 		6A8EC92F2F2442EF0058C21B /* SettingsManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsManager.swift; sourceTree = "<group>"; };
 		6A8EC9312F2448B60058C21B /* MintDiscoveryManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MintDiscoveryManager.swift; sourceTree = "<group>"; };
@@ -161,7 +163,7 @@
 		F200000000000001 /* NDEFTextRecordCoder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NDEFTextRecordCoder.swift; sourceTree = "<group>"; };
 		F200000000000002 /* NFCReaderDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NFCReaderDelegate.swift; sourceTree = "<group>"; };
 		F200000000000003 /* NFCPaymentService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NFCPaymentService.swift; sourceTree = "<group>"; };
-		F200000000000004 /* ContactlessPayView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContactlessPayView.swift; sourceTree = "<group>"; };
+		F200000000000004 /* ContactlessPaymentCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContactlessPaymentCoordinator.swift; sourceTree = "<group>"; };
 		F200000000000005 /* CashuWallet.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = CashuWallet.entitlements; sourceTree = "<group>"; };
 		F400000000000001 /* CurrencyAmountDisplay.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CurrencyAmountDisplay.swift; sourceTree = "<group>"; };
 		F400000000000002 /* NumberPadAmountInput.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NumberPadAmountInput.swift; sourceTree = "<group>"; };
@@ -313,7 +315,6 @@
 			isa = PBXGroup;
 			children = (
 				F500000000000001 /* Components */,
-				F200000000000004 /* ContactlessPayView.swift */,
 				210000000000000B /* SendView.swift */,
 			);
 			path = Send;
@@ -324,6 +325,7 @@
 			children = (
 				210000000000000C /* MintsListView.swift */,
 				21000000000000CC /* MintDetailView.swift */,
+				21000000000000CD /* MintDiscoverySheet.swift */,
 			);
 			path = Mints;
 			sourceTree = "<group>";
@@ -403,6 +405,7 @@
 				F200000000000001 /* NDEFTextRecordCoder.swift */,
 				F200000000000002 /* NFCReaderDelegate.swift */,
 				F200000000000003 /* NFCPaymentService.swift */,
+				F200000000000004 /* ContactlessPaymentCoordinator.swift */,
 				BB00000000000012 /* TransactionService.swift */,
 				BB00000000000013 /* TokenService.swift */,
 				BB00000000000014 /* LightningService.swift */,
@@ -527,6 +530,7 @@
 				110000000000000B /* SendView.swift in Sources */,
 				110000000000000C /* MintsListView.swift in Sources */,
 				11000000000000CC /* MintDetailView.swift in Sources */,
+				11000000000000CD /* MintDiscoverySheet.swift in Sources */,
 				110000000000000D /* HistoryView.swift in Sources */,
 				110000000000000E /* SettingsView.swift in Sources */,
 				1100000000000010 /* QRCodeView.swift in Sources */,
@@ -567,7 +571,7 @@
 				F100000000000001 /* NDEFTextRecordCoder.swift in Sources */,
 				F100000000000002 /* NFCReaderDelegate.swift in Sources */,
 				F100000000000003 /* NFCPaymentService.swift in Sources */,
-				F100000000000004 /* ContactlessPayView.swift in Sources */,
+				F100000000000004 /* ContactlessPaymentCoordinator.swift in Sources */,
 				F300000000000001 /* CurrencyAmountDisplay.swift in Sources */,
 				F300000000000002 /* NumberPadAmountInput.swift in Sources */,
 				F300000000000003 /* AuthorizingOverlay.swift in Sources */,

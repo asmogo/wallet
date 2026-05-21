@@ -584,6 +584,11 @@ struct WalletTransaction: Identifiable {
     /// Whether this is from pending storage vs. completed transactions
     var isPendingToken: Bool = false
 
+    /// Source Cashu Request id when this incoming ecash transaction was
+    /// auto-claimed via NUT-18. History uses this to suppress the duplicate
+    /// row in favor of the request row.
+    var cashuRequestId: String? = nil
+
     var displayStatusText: String {
         if status == .pending {
             return statusNote ?? status.displayText

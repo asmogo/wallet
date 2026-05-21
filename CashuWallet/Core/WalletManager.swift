@@ -707,19 +707,48 @@ class WalletManager: ObservableObject {
 
     /// Auto-claim a token that arrived via a NUT-18 Cashu Request, optionally attributing
     /// the payment to a specific request in CashuRequestStore.
+    /// Identifies the CDK transaction id by diffing wallet.listTransactions() before
+    /// and after the receive, then links it to the request so History can suppress
+    /// the duplicate "Received ecash" row.
     @discardableResult
     func receiveCashuRequestPayment(tokenString: String, requestId: String?) async throws -> UInt64 {
+        let beforeIds = await incomingTxIds(forTokenString: tokenString)
         let amount = try await receiveTokens(tokenString: tokenString)
-        if let requestId {
-            let historyId = UUID().uuidString
-            CashuRequestStore.shared.attachPayment(requestId: requestId, historyId: historyId)
+        let afterIds = await incomingTxIds(forTokenString: tokenString)
+        let newTxId = afterIds.subtracting(beforeIds).first
+
+        if let requestId, let txId = newTxId {
+            CashuRequestStore.shared.attachPayment(
+                requestId: requestId,
+                transactionId: txId,
+                amount: amount
+            )
         }
+
         NotificationCenter.default.post(
             name: .cashuTokenReceived,
             object: nil,
             userInfo: ["amount": amount, "source": "cashu-request"]
         )
         return amount
+    }
+
+    /// Lists incoming transaction ids for the mint encoded in a token string.
+    /// Used by `receiveCashuRequestPayment` to identify the CDK tx id created by
+    /// the receive. Returns an empty set on any failure so the diff degrades to
+    /// "could not attribute payment" rather than crashing the receive.
+    private func incomingTxIds(forTokenString tokenString: String) async -> Set<String> {
+        guard let repo = walletRepository else { return [] }
+        do {
+            let token = try Token.decode(encodedToken: tokenString)
+            let mintUrl = try token.mintUrl()
+            let wallet = try await repo.getWallet(mintUrl: mintUrl, unit: .sat)
+            let txs = try await wallet.listTransactions(direction: .incoming)
+            return Set(txs.map { $0.id.hex })
+        } catch {
+            AppLogger.wallet.debug("incomingTxIds lookup failed: \(String(describing: error))")
+            return []
+        }
     }
     
     func decodeToken(tokenString: String) throws -> Token {

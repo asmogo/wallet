@@ -346,7 +346,7 @@ struct SendView: View {
             }
 
             Button(action: { copyToken(token) }) {
-                Label(copyButtonText, systemImage: copyButtonText == "Copied" ? "checkmark" : "doc.on.doc")
+                Text(copyButtonText)
             }
             .glassButton()
             .padding(.horizontal)

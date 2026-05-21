@@ -15,6 +15,7 @@ struct MainWalletView: View {
     @State private var isRefreshing = false
     @State private var copiedLightningAddress = false
     @State private var receiveEcashDetent: PresentationDetent = .medium
+    @State private var contactlessCoordinator = ContactlessPaymentCoordinator()
 
     var body: some View {
         NavigationStack {
@@ -242,7 +243,20 @@ struct MainWalletView: View {
                 action: action,
                 onClose: { activeSheet = nil },
                 onScan: { activeSheet = .scanner },
-                onSelect: { flow in activeSheet = .flow(flow) }
+                onSelect: { flow in
+                    if case .contactlessPay = flow {
+                        // Contactless has no custom SwiftUI sheet — iOS's native
+                        // NFC scan sheet is the entire surface. Dismiss the
+                        // chooser and start the reader directly.
+                        activeSheet = nil
+                        contactlessCoordinator.start(
+                            walletManager: walletManager,
+                            navigationManager: navigationManager
+                        )
+                    } else {
+                        activeSheet = .flow(flow)
+                    }
+                }
             )
             .presentationDragIndicator(.visible)
             .modifier(ChooserSheetPresentation(height: action.detentHeight))
@@ -280,10 +294,10 @@ struct MainWalletView: View {
                 .environmentObject(walletManager)
                 .presentationDetents([.large])
         case .contactlessPay:
-            ContactlessPayView()
-                .environmentObject(walletManager)
-                .environmentObject(navigationManager)
-                .presentationDetents([.medium, .large])
+            // Routed via ContactlessPaymentCoordinator before activeSheet
+            // is ever set; this branch is unreachable but kept so the enum
+            // remains exhaustive without a default clause.
+            EmptyView()
         }
     }
 }

@@ -40,10 +40,18 @@ class CashuRequestStore: ObservableObject {
         return request
     }
 
-    func attachPayment(requestId: String, historyId: String) {
+    func attachPayment(requestId: String, transactionId: String, amount: UInt64) {
         guard let index = requests.firstIndex(where: { $0.id == requestId }) else { return }
-        guard !requests[index].receivedPaymentIds.contains(historyId) else { return }
-        requests[index].receivedPaymentIds.append(historyId)
+        guard !requests[index].receivedPayments.contains(where: { $0.transactionId == transactionId }) else { return }
+        requests[index].receivedPayments.append(
+            CashuRequestPayment(transactionId: transactionId, amount: amount, receivedAt: Date())
+        )
+        persist()
+    }
+
+    func delete(id: String) {
+        requests.removeAll { $0.id == id }
+        if currentRequestId == id { currentRequestId = nil }
         persist()
     }
 

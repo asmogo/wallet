@@ -411,7 +411,7 @@ struct ReceiveLightningView: View {
             }
 
             Button(action: { copyRequest(quote.request) }) {
-                Label(copyButtonTitle(for: quote), systemImage: copiedRequest ? "checkmark" : "doc.on.doc")
+                Text(copyButtonTitle(for: quote))
             }
             .glassButton()
             .padding(.horizontal)

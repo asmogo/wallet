@@ -25,7 +25,7 @@ struct CashuRequestDetailView: View {
     }
 
     private var paymentCount: Int {
-        request?.receivedPaymentIds.count ?? 0
+        request?.receivedPayments.count ?? 0
     }
 
     var body: some View {

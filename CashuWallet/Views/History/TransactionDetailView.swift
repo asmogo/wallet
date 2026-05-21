@@ -132,7 +132,7 @@ struct TransactionDetailView: View {
                 // long-press discovery). See DESIGN.md → Share-At-Top Rule.
                 if let content = qrContent {
                     Button(action: { copyContent(content) }) {
-                        Label(copyButtonText, systemImage: copyButtonText == "Copied" ? "checkmark" : "doc.on.doc")
+                        Text(copyButtonText)
                     }
                     .glassButton()
                     .padding(.horizontal)

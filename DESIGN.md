@@ -440,25 +440,52 @@ The canonical list pattern. Defined in
   appearance staggers — subsequent re-renders (filter change, pagination) animate
   via `.snappy(0.25)` on `value: filter` / `value: currentPage`.
 
-### Cashu Request Rows (History header)
+### Cashu Request Rows (inline in the timeline)
 
-Cashu Requests pin to the top of `HistoryView` in their own "Cashu Requests"
-section above the dated transactions, because they are *open* rather than
-*resolved* — fundamentally a different row class. Defined in
-`HistoryView.swift` → `cashuRequestRow(request:)`.
+Cashu Requests sit **inline in the chronological transaction timeline**,
+anchored to `request.createdAt`, grouped into the same TODAY / YESTERDAY /
+THIS WEEK / … buckets as transactions. They are not pinned to a separate
+section. Defined in `HistoryView.swift` → `cashuRequestRow(request:, staggerIndex:)`.
 
-- **Leading**: 36×36 `arrow.triangle.2.circlepath` SF Symbol over a
-  `Color.secondary.opacity(0.12)` circle fill. No stacked badge — the request
-  is the activity, not a transaction with a status.
-- **Title**: "Cashu Request", `.subheadline.weight(.medium)`.
-- **Subtitle**: derived from `receivedPaymentIds.count` — "Waiting for payment",
-  "1 payment received", or "N payments received". `.caption`, `.secondary`.
-- **Trailing**: relative time (`.caption2`, `.tertiary`) — quieter than a
-  transaction timestamp because a request's recency matters less than its
-  status.
-- **Tap target**: a `NavigationLink` to `CashuRequestDetailView`, *not* a
-  `Button` that pushes a sheet. Requests are content; transactions are
-  modals — that asymmetry is intentional.
+- **Leading**: 36×36 stacked icon — `EcashIcon()` as the kind glyph (because
+  a Cashu Request is, structurally, an incoming-ecash event in waiting) with
+  a directional badge overlay in the bottom-trailing corner, 14pt bold, on a
+  `Color(.systemBackground)` circle. Uses the same
+  `.contentTransition(.symbolEffect(.replace.downUp))` + `.snappy(0.28)` morph
+  as transaction badges:
+  - `clock.circle.fill` in `Color.orange` while `receivedPayments.isEmpty`
+  - `arrow.down.circle.fill` in `Color.green` once any payment has landed
+  Visually parallel to a Lightning row's pending → confirmed flip.
+- **Title**: "Cashu Request", `.body.weight(.medium)`, single line. Stays
+  the same across all states; the badge carries status.
+- **Subtitle**: `formatRelativeDate(request.createdAt)`, `.caption`,
+  `.secondary` — matches transaction rows exactly. The payment count
+  ("3 payments received") is no longer surfaced on the row; it lives in
+  `CashuRequestDetailView`.
+- **Trailing amount**:
+  - Fixed-amount + waiting: `+amount` in `.secondary` (the target is
+    visible while pending — parallel to a Lightning invoice).
+  - Fixed-amount + received: `+amount` in `Color.green`, monospaced digit,
+    `.contentTransition(.numericText(value:))`. Cumulative for multi-payment.
+  - Any-amount + waiting: no trailing element at all.
+  - Any-amount + received: `+\(totalReceived)` in `Color.green`, cumulative.
+- **Duplicate suppression**: when a payment lands, `WalletManager
+  .receiveCashuRequestPayment` diffs the mint's incoming transaction ids
+  before/after the receive, identifies the new CDK tx id, and stores it on
+  `CashuRequest.receivedPayments`. `HistoryView` computes
+  `requestClaimedTxIds` from the store and drops those transactions from the
+  unified `filteredItems` list, so the request row is the *single*
+  representation of the event. The CDK transaction record stays in storage
+  (balance math intact); only the row is hidden.
+- **Tap target**: a `NavigationLink` to `CashuRequestDetailView`. Transaction
+  rows still open as a `.sheet(item:)`. The "requests are navigable content;
+  transactions are modal records" asymmetry stays.
+- **Long-press delete**: a `.contextMenu` exposes a destructive
+  "Remove from history" entry that sets a `requestPendingDeletion` state,
+  driving a `.confirmationDialog`. Confirm calls
+  `CashuRequestStore.delete(id:)`. The deletion is local only — the encoded
+  request remains valid for any sender still holding the QR; only the row
+  goes away.
 
 ### Inputs
 
@@ -585,6 +612,18 @@ stroked-capsule outline variant, no inverted-ink fill variant, no
 copy, and disabled state** — never from a parallel button vocabulary. A
 "secondary" Liquid Glass button stacked under a "primary" one is intentional:
 they are siblings, not parent-and-child.
+
+**The Iconless-CTA Rule.** Primary `glassButton()` CTAs at the bottom of a
+sheet are **text-only**. No leading SF Symbol, no `Label(_:systemImage:)`,
+no `HStack { Image + Text }`. The verb already lives in the label
+("Copy Invoice", "New Request", "Send", "Pay"), so an icon next to it is
+visual noise that reduces the typographic weight of the action. The "Copied"
+post-tap confirmation is also text-only — the label flips ("Copy" →
+"Copied"), no checkmark icon. Context-menu entries are the exception: they
+use `Label(_:systemImage:)` because iOS context menus expect an icon column
+and look wrong without one. Small inline copy chips (Settings rows, the
+truncated Lightning-address chip on the main wallet) also keep their icons
+— there, the SF Symbol *is* the affordance because there is no text label.
 
 **The Share-At-Top Rule.** Any sheet that displays a shareable QR artifact —
 Lightning Invoice (`ReceiveLightningView`), Cashu Request

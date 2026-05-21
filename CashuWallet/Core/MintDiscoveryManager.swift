@@ -39,6 +39,10 @@ class MintDiscoveryManager: ObservableObject {
         return relays.isEmpty ? SettingsManager.defaultNostrRelays : relays
     }
     
+    func clearDiscoveredMints() {
+        discoveredMints = []
+    }
+
     func discoverMints() async {
         guard !isDiscovering else { return }
         guard SettingsManager.shared.useWebsockets else { return }

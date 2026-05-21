@@ -2,8 +2,6 @@ import SwiftUI
 
 struct MintsListView: View {
     @EnvironmentObject var walletManager: WalletManager
-    @ObservedObject var settings = SettingsManager.shared
-    @ObservedObject var discoveryManager = MintDiscoveryManager.shared
 
     @State private var newMintUrl = ""
     @State private var newMintNickname = ""
@@ -11,6 +9,7 @@ struct MintsListView: View {
     @State private var errorMessage: String?
     @State private var mintToRemove: MintInfo?
     @State private var showRemoveConfirmation = false
+    @State private var showDiscoverySheet = false
 
     var body: some View {
         NavigationStack {
@@ -25,28 +24,17 @@ struct MintsListView: View {
 
                 Section {
                     Button {
-                        guard settings.useWebsockets else {
-                            errorMessage = "Enable WebSocket connections in Settings to discover mints."
-                            return
-                        }
                         errorMessage = nil
-                        Task { await discoveryManager.discoverMints() }
+                        showDiscoverySheet = true
                     } label: {
                         HStack {
-                            Label(
-                                discoveryManager.isDiscovering ? "Discovering..." : "Discover Mints",
-                                systemImage: "magnifyingglass"
-                            )
-                            if discoveryManager.isDiscovering {
-                                Spacer()
-                                ProgressView()
-                            }
+                            Label("Discover Mints", systemImage: "magnifyingglass")
+                                .foregroundStyle(.primary)
+                            Spacer()
+                            Image(systemName: "chevron.right")
+                                .font(.footnote.weight(.semibold))
+                                .foregroundStyle(.tertiary)
                         }
-                    }
-                    .disabled(discoveryManager.isDiscovering)
-
-                    ForEach(discoveryManager.discoveredMints) { mint in
-                        discoveredMintRow(mint: mint)
                     }
                 }
 
@@ -71,7 +59,9 @@ struct MintsListView: View {
                 }
 
                 Section {
-                    Button(action: addMint) {
+                    Button {
+                        addMint()
+                    } label: {
                         HStack {
                             Text("Add Mint")
                             if isAddingMint {
@@ -86,6 +76,10 @@ struct MintsListView: View {
                 }
             }
             .navigationTitle("Mints")
+            .sheet(isPresented: $showDiscoverySheet) {
+                MintDiscoverySheet { url in addMint(url: url) }
+                    .environmentObject(walletManager)
+            }
             .confirmationDialog(
                 "Remove Mint",
                 isPresented: $showRemoveConfirmation,
@@ -189,29 +183,6 @@ struct MintsListView: View {
         }
     }
 
-    private func discoveredMintRow(mint: DiscoveredMint) -> some View {
-        HStack {
-            VStack(alignment: .leading, spacing: 2) {
-                Text(mint.name ?? "Unknown Mint")
-                    .font(.body)
-                Text(mint.url)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-            }
-            Spacer()
-            Button {
-                newMintUrl = mint.url
-                addMint()
-            } label: {
-                Image(systemName: "plus.circle.fill")
-                    .font(.title3)
-            }
-            .accessibilityLabel("Add \(mint.name ?? "mint")")
-        }
-        .accessibilityElement(children: .combine)
-    }
-
     @ViewBuilder
     private func mintIcon(for mint: MintInfo) -> some View {
         if let iconUrl = mint.iconUrl, let url = URL(string: iconUrl) {
@@ -257,15 +228,19 @@ struct MintsListView: View {
 
     // MARK: - Actions
 
-    private func addMint() {
-        guard !newMintUrl.isEmpty else { return }
+    private func addMint(url: String? = nil) {
+        let urlToAdd = url ?? newMintUrl
+        guard !urlToAdd.isEmpty else { return }
+        let clearForm = (url == nil)
         isAddingMint = true
         errorMessage = nil
         Task { @MainActor in
             do {
-                try await walletManager.addMint(url: newMintUrl)
-                newMintUrl = ""
-                newMintNickname = ""
+                try await walletManager.addMint(url: urlToAdd)
+                if clearForm {
+                    newMintUrl = ""
+                    newMintNickname = ""
+                }
             } catch {
                 errorMessage = error.localizedDescription
             }
