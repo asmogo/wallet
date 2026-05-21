@@ -49,6 +49,64 @@ struct CanvasDivider: View {
     }
 }
 
+// MARK: - Settings Canvas Components
+
+/// Section grouping on a single-canvas Settings screen. Renders an
+/// uppercase tracking-spaced title above its content; matches the
+/// shape used by the root `SettingsView` so detail screens read as
+/// the same family.
+struct SettingsSectionGroup<Content: View>: View {
+    let title: String?
+    let content: () -> Content
+
+    init(_ title: String? = nil, @ViewBuilder content: @escaping () -> Content) {
+        self.title = title
+        self.content = content
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            if let title {
+                Text(title)
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                    .textCase(.uppercase)
+                    .tracking(1.2)
+                    .padding(.horizontal, 4)
+                    .padding(.top, 16)
+                    .padding(.bottom, 8)
+            } else {
+                Color.clear.frame(height: 8)
+            }
+
+            VStack(spacing: 0) {
+                content()
+            }
+            .padding(.horizontal, 4)
+        }
+    }
+}
+
+/// Section footer text on a single-canvas Settings screen. Visual
+/// weight matches an iOS Form section footer without nesting cards.
+struct SettingsSectionFooter<Content: View>: View {
+    let content: () -> Content
+
+    init(@ViewBuilder content: @escaping () -> Content) {
+        self.content = content
+    }
+
+    var body: some View {
+        content()
+            .font(.caption)
+            .foregroundStyle(.secondary)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, 6)
+            .padding(.top, 8)
+            .padding(.bottom, 12)
+    }
+}
+
 // MARK: - Full Width Capsule Button Style
 
 /// Full-width capsule rendered as subtly-frosted Liquid Glass on iOS 26+,

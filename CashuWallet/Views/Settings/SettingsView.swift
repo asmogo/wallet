@@ -232,17 +232,18 @@ struct SettingsView: View {
     }
 
     private var lightningDetailView: some View {
-        List {
-            Section {
-                LightningAddressSettingsSection(
-                    copiedLightningAddress: $copiedLightningAddress,
-                    isCheckingPayments: $isCheckingPayments,
-                    showMintPicker: $showMintPicker
-                )
-            }
-            .listRowSeparator(.hidden)
+        ScrollView {
+            LightningAddressSettingsSection(
+                copiedLightningAddress: $copiedLightningAddress,
+                isCheckingPayments: $isCheckingPayments,
+                showMintPicker: $showMintPicker
+            )
+            .padding(.horizontal)
+            .padding(.bottom, 32)
         }
-        .listStyle(.plain)
+        .refreshable {
+            await npcService.checkAndClaimPayments()
+        }
         .navigationTitle("Lightning")
         .toolbarBackground(.hidden, for: .navigationBar)
     }
@@ -385,11 +386,17 @@ struct QRCodeDetailSheet: View {
                     .truncationMode(.middle)
                     .padding(.horizontal)
 
-                Button(action: copyToClipboard) {
-                    Label(copied ? "Copied" : "Copy",
-                          systemImage: copied ? "checkmark" : "doc.on.doc")
+                HStack(spacing: 12) {
+                    Button(action: copyToClipboard) {
+                        Text(copied ? "Copied" : "Copy")
+                    }
+                    .glassButton()
+
+                    ShareLink(item: content) {
+                        Text("Share")
+                    }
+                    .glassButton()
                 }
-                .glassButton()
                 .padding(.horizontal)
 
                 Spacer()
