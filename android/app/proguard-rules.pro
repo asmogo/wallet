@@ -1,0 +1,7 @@
+-keep class org.cashudevkit.** { *; }
+-keep class uniffi.** { *; }
+-keep class com.sun.jna.** { *; }
+-keep class kotlin.coroutines.** { *; }
+-dontwarn org.cashudevkit.**
+-dontwarn com.sun.jna.**
+-dontwarn java.awt.**

@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<data-extraction-rules>
+    <cloud-backup>
+        <exclude domain="sharedpref" path="secure_store.xml" />
+        <exclude domain="file" path="cashu-kotlin/" />
+    </cloud-backup>
+    <device-transfer>
+        <exclude domain="sharedpref" path="secure_store.xml" />
+        <exclude domain="file" path="cashu-kotlin/" />
+    </device-transfer>
+</data-extraction-rules>
