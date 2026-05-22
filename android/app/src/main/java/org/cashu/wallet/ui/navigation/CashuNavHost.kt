@@ -14,7 +14,6 @@ import java.net.URLEncoder
 import java.nio.charset.StandardCharsets
 import androidx.navigation.NavType
 import androidx.navigation.navArgument
-import org.cashu.wallet.Views.Settings.SettingsView
 import org.cashu.wallet.ui.history.HistoryScreen
 import org.cashu.wallet.ui.history.TransactionDetailScreen
 import org.cashu.wallet.ui.home.HomeScreen
@@ -27,6 +26,14 @@ import org.cashu.wallet.ui.receive.ReceiveEcashScreen
 import org.cashu.wallet.ui.receive.ReceiveLightningScreen
 import org.cashu.wallet.ui.send.SendEcashScreen
 import org.cashu.wallet.ui.send.SendLightningScreen
+import org.cashu.wallet.ui.settings.AppearanceScreen
+import org.cashu.wallet.ui.settings.BackupScreen
+import org.cashu.wallet.ui.settings.LightningScreen
+import org.cashu.wallet.ui.settings.NWCScreen
+import org.cashu.wallet.ui.settings.NostrScreen
+import org.cashu.wallet.ui.settings.P2PKScreen
+import org.cashu.wallet.ui.settings.PrivacyScreen
+import org.cashu.wallet.ui.settings.SettingsScreen
 
 /**
  * The NavHost. For PR #1, top-level destinations call legacy Views composables;
@@ -131,6 +138,53 @@ fun CashuNavHost(
                 onClose = { navController.popBackStack() },
             )
         }
+
+        // Settings sub-screens
+        composable(Routes.SETTINGS_BACKUP) {
+            BackupScreen(
+                walletManager = container.walletManager,
+                onClose = { navController.popBackStack() },
+            )
+        }
+        composable(Routes.SETTINGS_LIGHTNING) {
+            LightningScreen(
+                walletManager = container.walletManager,
+                npcService = container.npcService,
+                onClose = { navController.popBackStack() },
+            )
+        }
+        composable(Routes.SETTINGS_P2PK) {
+            P2PKScreen(
+                settingsManager = container.settingsManager,
+                onClose = { navController.popBackStack() },
+            )
+        }
+        composable(Routes.SETTINGS_NOSTR) {
+            NostrScreen(
+                nostrService = container.nostrService,
+                settingsManager = container.settingsManager,
+                onClose = { navController.popBackStack() },
+            )
+        }
+        composable(Routes.SETTINGS_NWC) {
+            NWCScreen(
+                settingsManager = container.settingsManager,
+                onClose = { navController.popBackStack() },
+            )
+        }
+        composable(Routes.SETTINGS_PRIVACY) {
+            PrivacyScreen(
+                settingsManager = container.settingsManager,
+                onClose = { navController.popBackStack() },
+            )
+        }
+        composable(Routes.SETTINGS_APPEARANCE) {
+            AppearanceScreen(
+                settingsManager = container.settingsManager,
+                priceService = container.priceService,
+                onClose = { navController.popBackStack() },
+            )
+        }
     }
 }
 
@@ -208,15 +262,15 @@ private fun NavGraphBuilder.tabDestinations(
         )
     }
     composable(Routes.SETTINGS) {
-        SettingsView(
+        SettingsScreen(
             walletManager = container.walletManager,
-            settingsManager = container.settingsManager,
-            nostrService = container.nostrService,
-            priceService = container.priceService,
-            npcService = container.npcService,
-            connectivityState = connectivityState,
-            onRefreshConnectivity = { container.connectivityObserver.refresh() },
-            onOpenMints = { navController.navigateToTab(TopTab.Mints) },
+            onOpenBackup = { navController.navigate(Routes.SETTINGS_BACKUP) },
+            onOpenLightning = { navController.navigate(Routes.SETTINGS_LIGHTNING) },
+            onOpenP2PK = { navController.navigate(Routes.SETTINGS_P2PK) },
+            onOpenNostr = { navController.navigate(Routes.SETTINGS_NOSTR) },
+            onOpenNWC = { navController.navigate(Routes.SETTINGS_NWC) },
+            onOpenPrivacy = { navController.navigate(Routes.SETTINGS_PRIVACY) },
+            onOpenAppearance = { navController.navigate(Routes.SETTINGS_APPEARANCE) },
             contentPadding = contentPadding,
         )
     }
