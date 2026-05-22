@@ -417,19 +417,8 @@ struct HistoryView: View {
 
     @ViewBuilder
     private func requestRowIcon(received: Bool) -> some View {
-        ZStack(alignment: .bottomTrailing) {
-            EcashIcon()
-                .frame(width: 36, height: 36)
-
-            Image(systemName: received ? "arrow.down.circle.fill" : "clock.circle.fill")
-                .font(.system(size: 14, weight: .bold))
-                .foregroundStyle(received ? Color.green : Color.orange)
-                .background(Color(.systemBackground), in: Circle())
-                .offset(x: 4, y: 4)
-                .contentTransition(.symbolEffect(.replace.downUp))
-                .animation(.snappy(duration: 0.28), value: received)
-                .accessibilityHidden(true)
-        }
+        EcashIcon()
+            .frame(width: 36, height: 36)
     }
 
 
@@ -479,24 +468,10 @@ struct HistoryView: View {
 
     // MARK: - Row content
 
-    /// Icon stack: leading kind icon with a small direction-overlay bubble in
-    /// the bottom-trailing corner. Family-style.
     @ViewBuilder
     private func rowIcon(for transaction: WalletTransaction) -> some View {
-        ZStack(alignment: .bottomTrailing) {
-            kindIcon(transaction.kind)
-                .frame(width: 36, height: 36)
-
-            Image(systemName: badgeSymbol(for: transaction))
-                .font(.system(size: 14, weight: .bold))
-                .foregroundStyle(badgeColor(for: transaction))
-                .background(Color(.systemBackground), in: Circle())
-                .offset(x: 4, y: 4)
-                .contentTransition(.symbolEffect(.replace.downUp))
-                .animation(.snappy(duration: 0.28), value: transaction.status)
-                .animation(.snappy(duration: 0.28), value: transaction.type)
-                .accessibilityHidden(true)
-        }
+        kindIcon(transaction.kind)
+            .frame(width: 36, height: 36)
     }
 
     @ViewBuilder
@@ -529,16 +504,6 @@ struct HistoryView: View {
     private func formatAmount(_ transaction: WalletTransaction) -> String {
         let prefix = transaction.type == .incoming ? "+" : "−"
         return "\(prefix)\(settings.formatAmountShort(transaction.amount))"
-    }
-
-    private func badgeSymbol(for transaction: WalletTransaction) -> String {
-        if transaction.status == .pending { return "clock.circle.fill" }
-        return transaction.type == .incoming ? "arrow.down.circle.fill" : "arrow.up.circle.fill"
-    }
-
-    private func badgeColor(for transaction: WalletTransaction) -> Color {
-        if transaction.status == .pending { return .orange }
-        return transaction.type == .incoming ? .green : .primary
     }
 
     private static let shortTimeFormatter: DateFormatter = {

@@ -440,20 +440,8 @@ struct MainWalletView: View {
 
     @ViewBuilder
     private func rowIcon(for transaction: WalletTransaction) -> some View {
-        ZStack(alignment: .bottomTrailing) {
-            kindIcon(transaction.kind)
-                .frame(width: 36, height: 36)
-
-            Image(systemName: badgeSymbol(for: transaction))
-                .font(.system(size: 14, weight: .bold))
-                .foregroundStyle(badgeColor(for: transaction))
-                .background(Color(.systemBackground), in: Circle())
-                .offset(x: 4, y: 4)
-                .contentTransition(.symbolEffect(.replace.downUp))
-                .animation(.snappy(duration: 0.28), value: transaction.status)
-                .animation(.snappy(duration: 0.28), value: transaction.type)
-                .accessibilityHidden(true)
-        }
+        kindIcon(transaction.kind)
+            .frame(width: 36, height: 36)
     }
 
     @ViewBuilder
@@ -486,16 +474,6 @@ struct MainWalletView: View {
         return "\(prefix)\(settings.formatAmountShort(transaction.amount))"
     }
 
-    private func badgeSymbol(for transaction: WalletTransaction) -> String {
-        if transaction.status == .pending { return "clock.circle.fill" }
-        return transaction.type == .incoming ? "arrow.down.circle.fill" : "arrow.up.circle.fill"
-    }
-
-    private func badgeColor(for transaction: WalletTransaction) -> Color {
-        if transaction.status == .pending { return .orange }
-        return transaction.type == .incoming ? .green : .primary
-    }
-
     // MARK: - Cashu Request row
 
     private func cashuRequestRow(request: CashuRequest) -> some View {
@@ -505,20 +483,8 @@ struct MainWalletView: View {
             selectedRequest = request
         } label: {
             HStack(spacing: 14) {
-                ZStack(alignment: .bottomTrailing) {
-                    EcashIcon()
-                        .frame(width: 36, height: 36)
-
-                    Image(systemName: isReceived ? "arrow.down.circle.fill" : "clock.circle.fill")
-                        .font(.system(size: 14, weight: .bold))
-                        .foregroundStyle(isReceived ? Color.green : Color.orange)
-                        .background(Color(.systemBackground), in: Circle())
-                        .offset(x: 4, y: 4)
-                        .contentTransition(.symbolEffect(.replace.downUp))
-                        .animation(.snappy(duration: 0.28), value: isReceived)
-                        .accessibilityHidden(true)
-                }
-                .frame(width: 36, height: 36)
+                EcashIcon()
+                    .frame(width: 36, height: 36)
 
                 VStack(alignment: .leading, spacing: 4) {
                     Text("Cashu Request")
