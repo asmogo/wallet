@@ -21,6 +21,7 @@ import androidx.compose.material.icons.outlined.Link
 import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material.icons.outlined.Palette
 import androidx.compose.material.icons.outlined.Public
+import androidx.compose.material.icons.outlined.Restore
 import androidx.compose.material.icons.outlined.VisibilityOff
 import androidx.compose.material.icons.outlined.VpnKey
 import androidx.compose.material3.AlertDialog
@@ -64,6 +65,7 @@ fun SettingsScreen(
 ) {
     val context = LocalContext.current
     var confirmDelete by remember { mutableStateOf(false) }
+    var confirmRestore by remember { mutableStateOf(false) }
 
     val topBarState = rememberTopAppBarState()
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior(state = topBarState)
@@ -92,9 +94,17 @@ fun SettingsScreen(
             item("backup-header") { SectionHeader("Backup") }
             item("backup") {
                 NavRow(
-                    title = "Backup & Restore",
+                    title = "Backup seed phrase",
                     leadingIcon = Icons.Outlined.VpnKey,
                     onClick = onOpenBackup,
+                )
+            }
+            item("backup-divider") { CanvasDivider(leadingInset = 16) }
+            item("restore") {
+                NavRow(
+                    title = "Restore ecash",
+                    leadingIcon = Icons.Outlined.Restore,
+                    onClick = { confirmRestore = true },
                 )
             }
 
@@ -203,6 +213,28 @@ fun SettingsScreen(
                 }
             }
         }
+    }
+
+    if (confirmRestore) {
+        AlertDialog(
+            onDismissRequest = { confirmRestore = false },
+            title = { Text("Open Restore Wizard") },
+            text = {
+                Text(
+                    "This will open the restore flow used during onboarding.",
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    confirmRestore = false
+                    walletManager.reopenOnboarding()
+                }) { Text("Open") }
+            },
+            dismissButton = {
+                TextButton(onClick = { confirmRestore = false }) { Text("Cancel") }
+            },
+        )
     }
 
     if (confirmDelete) {

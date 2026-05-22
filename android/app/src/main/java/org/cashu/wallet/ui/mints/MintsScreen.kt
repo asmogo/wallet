@@ -32,6 +32,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.MediumTopAppBar
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SwipeToDismissBox
@@ -40,6 +41,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.material3.rememberSwipeToDismissBoxState
 import androidx.compose.material3.rememberTopAppBarState
 import androidx.compose.runtime.Composable
@@ -60,6 +62,7 @@ import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
+import org.cashu.wallet.Core.MintDiscoveryManager
 import org.cashu.wallet.Core.SettingsManager
 import org.cashu.wallet.Core.WalletManager
 import org.cashu.wallet.Core.mintUrlCandidates
@@ -79,8 +82,8 @@ import org.cashu.wallet.ui.theme.withMonoDigits
 fun MintsScreen(
     walletManager: WalletManager,
     settingsManager: SettingsManager,
+    mintDiscoveryManager: MintDiscoveryManager,
     onOpenMint: (MintInfo) -> Unit,
-    onOpenDiscovery: () -> Unit,
     onScan: () -> Unit,
     contentPadding: PaddingValues,
     scannedMintUrl: String? = null,
@@ -94,6 +97,7 @@ fun MintsScreen(
     var nickname by remember { mutableStateOf("") }
     var error by remember { mutableStateOf<String?>(null) }
     var pendingRemoval by remember { mutableStateOf<MintInfo?>(null) }
+    var discoveryOpen by remember { mutableStateOf(false) }
 
     LaunchedEffect(scannedMintUrl) {
         val payload = scannedMintUrl?.trim().orEmpty()
@@ -193,7 +197,7 @@ fun MintsScreen(
                     },
                     title = "Discover mints",
                     subtitle = "Browse mints announced over Nostr",
-                    onClick = onOpenDiscovery,
+                    onClick = { discoveryOpen = true },
                 )
             }
 
@@ -276,6 +280,28 @@ fun MintsScreen(
                         modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
                     )
                 }
+            }
+        }
+    }
+
+    if (discoveryOpen) {
+        val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+        ModalBottomSheet(
+            onDismissRequest = { discoveryOpen = false },
+            sheetState = sheetState,
+        ) {
+            Column(modifier = Modifier.fillMaxWidth()) {
+                Text(
+                    text = "Discover Mints",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                )
+                MintDiscoveryContent(
+                    walletManager = walletManager,
+                    settingsManager = settingsManager,
+                    mintDiscoveryManager = mintDiscoveryManager,
+                )
             }
         }
     }

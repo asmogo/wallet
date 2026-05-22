@@ -12,21 +12,16 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.outlined.Check
 import androidx.compose.material.icons.outlined.SignalCellularConnectedNoInternet0Bar
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextFieldDefaults
-import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -55,11 +50,10 @@ import org.cashu.wallet.ui.theme.CashuTheme
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun MintDiscoveryScreen(
+fun MintDiscoveryContent(
     walletManager: WalletManager,
     settingsManager: SettingsManager,
     mintDiscoveryManager: MintDiscoveryManager,
-    onClose: () -> Unit,
 ) {
     val walletState by walletManager.state.collectAsState()
     val settings by settingsManager.state.collectAsState()
@@ -95,85 +89,62 @@ fun MintDiscoveryScreen(
         onDispose { mintDiscoveryManager.clearDiscoveredMints() }
     }
 
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text("Discover", style = MaterialTheme.typography.titleMedium) },
-                navigationIcon = {
-                    IconButton(onClick = onClose) {
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Outlined.ArrowBack,
-                            contentDescription = "Back",
-                        )
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.background,
-                ),
-            )
-        },
-    ) { padding ->
-        Column(
+    Column(modifier = Modifier.fillMaxSize()) {
+        OutlinedTextField(
+            value = query,
+            onValueChange = { query = it },
             modifier = Modifier
-                .fillMaxSize()
-                .padding(padding),
-        ) {
-            OutlinedTextField(
-                value = query,
-                onValueChange = { query = it },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 8.dp),
-                placeholder = { Text("Search mints") },
-                singleLine = true,
-                shape = MaterialTheme.shapes.medium,
-                colors = TextFieldDefaults.colors(
-                    focusedContainerColor = MaterialTheme.colorScheme.surfaceContainer,
-                    unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainer,
-                ),
-            )
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 8.dp),
+            placeholder = { Text("Search mints") },
+            singleLine = true,
+            shape = MaterialTheme.shapes.medium,
+            colors = TextFieldDefaults.colors(
+                focusedContainerColor = MaterialTheme.colorScheme.surfaceContainer,
+                unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainer,
+            ),
+        )
 
-            if (!settings.useWebsockets) {
+        if (!settings.useWebsockets) {
+            EmptyState(
+                icon = Icons.Outlined.SignalCellularConnectedNoInternet0Bar,
+                title = "Discovery disabled",
+                supporting = "Discovery uses Nostr relays over WebSockets. Enable it in Settings → Privacy.",
+            )
+            return@Column
+        }
+
+        when {
+            discoveryState.isDiscovering && discoveryState.discoveredMints.isEmpty() -> {
+                Box(
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    CircularProgressIndicator()
+                }
+            }
+            filtered.isEmpty() -> {
                 EmptyState(
                     icon = Icons.Outlined.SignalCellularConnectedNoInternet0Bar,
-                    title = "Discovery disabled",
-                    supporting = "Discovery uses Nostr relays over WebSockets. Enable it in Settings → Privacy.",
+                    title = if (query.isBlank()) "Listening on Nostr…" else "No matches",
+                    supporting = if (query.isBlank())
+                        "Mints announced on Nostr show up here as they arrive."
+                    else null,
                 )
-                return@Column
             }
-
-            when {
-                discoveryState.isDiscovering && discoveryState.discoveredMints.isEmpty() -> {
-                    Box(
-                        modifier = Modifier.fillMaxSize(),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        CircularProgressIndicator()
-                    }
-                }
-                filtered.isEmpty() -> {
-                    EmptyState(
-                        icon = Icons.Outlined.SignalCellularConnectedNoInternet0Bar,
-                        title = if (query.isBlank()) "Listening on Nostr…" else "No matches",
-                        supporting = if (query.isBlank())
-                            "Mints announced on Nostr show up here as they arrive."
-                        else null,
-                    )
-                }
-                else -> {
-                    LazyColumn(modifier = Modifier.fillMaxSize()) {
-                        items(filtered, key = { it.url }) { mint ->
-                            val isConfigured = mint.url in configuredUrls
-                            DiscoveryRow(
-                                mint = mint,
-                                isConfigured = isConfigured,
-                                isBusy = walletState.isLoading,
-                                onAdd = {
-                                    scope.launch { runCatching { walletManager.addMint(mint.url) } }
-                                },
-                            )
-                            if (mint != filtered.last()) CanvasDivider(leadingInset = 64)
-                        }
+            else -> {
+                LazyColumn(modifier = Modifier.fillMaxSize()) {
+                    items(filtered, key = { it.url }) { mint ->
+                        val isConfigured = mint.url in configuredUrls
+                        DiscoveryRow(
+                            mint = mint,
+                            isConfigured = isConfigured,
+                            isBusy = walletState.isLoading,
+                            onAdd = {
+                                scope.launch { runCatching { walletManager.addMint(mint.url) } }
+                            },
+                        )
+                        if (mint != filtered.last()) CanvasDivider(leadingInset = 64)
                     }
                 }
             }

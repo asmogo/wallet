@@ -20,7 +20,6 @@ import org.cashu.wallet.ui.home.HomeScreen
 import org.cashu.wallet.ui.home.ReceiveAction
 import org.cashu.wallet.ui.home.SendAction
 import org.cashu.wallet.ui.mints.MintDetailScreen
-import org.cashu.wallet.ui.mints.MintDiscoveryScreen
 import org.cashu.wallet.ui.mints.MintsScreen
 import org.cashu.wallet.ui.receive.CashuRequestDetailScreen
 import org.cashu.wallet.ui.receive.ReceiveEcashScreen
@@ -104,14 +103,6 @@ fun CashuNavHost(
                 onClose = { navController.popBackStack() },
                 prefilledPayload = pendingSendScan,
                 onPrefilledConsumed = onPendingSendScanConsumed,
-            )
-        }
-        composable(Routes.MINT_DISCOVERY) {
-            MintDiscoveryScreen(
-                walletManager = container.walletManager,
-                settingsManager = container.settingsManager,
-                mintDiscoveryManager = container.mintDiscoveryManager,
-                onClose = { navController.popBackStack() },
             )
         }
         composable(
@@ -281,8 +272,8 @@ private fun NavGraphBuilder.tabDestinations(
         MintsScreen(
             walletManager = container.walletManager,
             settingsManager = container.settingsManager,
+            mintDiscoveryManager = container.mintDiscoveryManager,
             onOpenMint = { mint -> navController.navigate(mintDetailRouteFor(mint.url)) },
-            onOpenDiscovery = { navController.navigate(Routes.MINT_DISCOVERY) },
             onScan = onScan,
             contentPadding = contentPadding,
             scannedMintUrl = pendingMintScan,

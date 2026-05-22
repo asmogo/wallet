@@ -1,41 +1,58 @@
 package org.cashu.wallet.ui.settings
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
+import androidx.compose.material.icons.outlined.QrCode2
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import org.cashu.wallet.Core.NPCService
+import org.cashu.wallet.Core.NPCState
 import org.cashu.wallet.Core.WalletManager
 import org.cashu.wallet.ui.components.CanvasDivider
 import org.cashu.wallet.ui.components.GhostButton
 import org.cashu.wallet.ui.components.InspectorRow
 import org.cashu.wallet.ui.components.MintPickerSheet
 import org.cashu.wallet.ui.components.PrimaryButton
+import org.cashu.wallet.ui.components.QrCard
 import org.cashu.wallet.ui.components.SectionHeader
 import org.cashu.wallet.ui.components.ToggleRow
+import org.cashu.wallet.ui.theme.CashuTheme
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -49,6 +66,7 @@ fun LightningScreen(
     val clipboard = LocalClipboardManager.current
 
     var mintPickerOpen by remember { mutableStateOf(false) }
+    var addressQrOpen by remember { mutableStateOf(false) }
 
     Scaffold(
         topBar = {
@@ -71,10 +89,10 @@ fun LightningScreen(
         ) {
             SectionHeader("Lightning address")
             if (npcState.lightningAddress.isNotBlank()) {
-                InspectorRow(
-                    label = "Address",
-                    value = npcState.lightningAddress,
-                    valueMonospaced = true,
+                LightningAddressRow(
+                    address = npcState.lightningAddress,
+                    statusColor = npcStatusColor(npcState),
+                    onShowQr = { addressQrOpen = true },
                 )
                 CanvasDivider(leadingInset = 16)
                 Column(
@@ -157,5 +175,82 @@ fun LightningScreen(
             onDismiss = { mintPickerOpen = false },
             title = "Mint for Lightning",
         )
+    }
+
+    if (addressQrOpen) {
+        val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+        ModalBottomSheet(
+            onDismissRequest = { addressQrOpen = false },
+            sheetState = sheetState,
+        ) {
+            Column(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                Text(
+                    text = "Lightning Address",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.onSurface,
+                )
+                QrCard(
+                    content = npcState.lightningAddress,
+                    shareSubject = "Lightning address",
+                    staticOnly = true,
+                )
+                Text(
+                    text = npcState.lightningAddress,
+                    style = MaterialTheme.typography.bodyMedium.copy(fontFamily = FontFamily.Monospace),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Spacer(Modifier.height(8.dp))
+            }
+        }
+    }
+}
+
+@Composable
+private fun LightningAddressRow(
+    address: String,
+    statusColor: Color,
+    onShowQr: () -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onShowQr)
+            .padding(horizontal = 16.dp, vertical = 14.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        Box(
+            modifier = Modifier
+                .size(8.dp)
+                .clip(CircleShape)
+                .background(statusColor),
+        )
+        Text(
+            text = address,
+            style = MaterialTheme.typography.bodyLarge.copy(fontFamily = FontFamily.Monospace),
+            color = MaterialTheme.colorScheme.onSurface,
+            modifier = Modifier.weight(1f),
+            maxLines = 1,
+            overflow = TextOverflow.MiddleEllipsis,
+        )
+        Icon(
+            imageVector = Icons.Outlined.QrCode2,
+            contentDescription = "Show QR",
+            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.size(20.dp),
+        )
+    }
+}
+
+@Composable
+private fun npcStatusColor(state: NPCState): Color {
+    return when {
+        state.errorMessage != null -> MaterialTheme.colorScheme.error
+        state.isConnected -> CashuTheme.colors.received
+        else -> CashuTheme.colors.pending
     }
 }

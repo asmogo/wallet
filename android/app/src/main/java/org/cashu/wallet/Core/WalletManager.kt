@@ -883,6 +883,10 @@ class WalletManager(
     fun launch(block: suspend CoroutineScope.() -> Unit) {
         scope.launch { block() }
     }
+
+    fun reopenOnboarding() {
+        update { copy(needsOnboarding = true, canExitOnboarding = true) }
+    }
 }
 
 internal fun WalletTransaction.withStoredMeltMetadata(

@@ -274,7 +274,7 @@ private fun HeaderBlock(mint: MintInfo, isActive: Boolean) {
                 )
                 AmountText(
                     text = "${mint.balance} sat",
-                    style = MaterialTheme.typography.titleMedium.withMonoDigits(),
+                    style = MaterialTheme.typography.bodyMedium.withMonoDigits(),
                 )
             }
         }
