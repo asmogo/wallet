@@ -18,6 +18,6 @@ fun SectionHeader(
         text = text.uppercase(),
         style = MaterialTheme.typography.labelMedium.asOverline(),
         color = MaterialTheme.colorScheme.onSurfaceVariant,
-        modifier = modifier.padding(start = 16.dp, end = 16.dp, top = 24.dp, bottom = 8.dp),
+        modifier = modifier.padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 8.dp),
     )
 }
