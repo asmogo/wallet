@@ -24,6 +24,8 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowRight
+import androidx.compose.material.icons.filled.Bolt
 import androidx.compose.material.icons.outlined.AccountBalance
 import androidx.compose.material.icons.outlined.History
 import androidx.compose.material.icons.outlined.QrCodeScanner
@@ -46,15 +48,19 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import org.cashu.wallet.Core.AmountDisplayPrimary
 import org.cashu.wallet.Core.AmountFormatter
+import org.cashu.wallet.Core.CashuRequestStore
 import org.cashu.wallet.Core.PriceService
 import org.cashu.wallet.Core.SettingsManager
+import org.cashu.wallet.Core.TransactionDisplay
 import org.cashu.wallet.Core.WalletManager
 import org.cashu.wallet.Core.displayText
-import org.cashu.wallet.Models.TransactionType
+import org.cashu.wallet.Models.CashuRequest
+import org.cashu.wallet.Models.TransactionStatus
 import org.cashu.wallet.Models.WalletTransaction
 import org.cashu.wallet.ui.components.AmountText
 import org.cashu.wallet.ui.components.BalanceDisplay
 import org.cashu.wallet.ui.components.CanvasDivider
+import org.cashu.wallet.ui.components.CashuRequestRow
 import org.cashu.wallet.ui.components.EmptyState
 import org.cashu.wallet.ui.components.GhostButton
 import org.cashu.wallet.ui.components.MintChip
@@ -70,9 +76,11 @@ fun HomeScreen(
     walletManager: WalletManager,
     settingsManager: SettingsManager,
     priceService: PriceService,
+    cashuRequestStore: CashuRequestStore,
     onOpenMints: () -> Unit,
     onOpenHistory: () -> Unit,
     onOpenTransaction: (WalletTransaction) -> Unit,
+    onOpenCashuRequest: (CashuRequest) -> Unit,
     onReceive: (ReceiveAction) -> Unit,
     onSend: (SendAction) -> Unit,
     onScan: () -> Unit,
@@ -82,6 +90,7 @@ fun HomeScreen(
     val walletState by walletManager.state.collectAsState()
     val settings by settingsManager.state.collectAsState()
     val priceState by priceService.state.collectAsState()
+    val requestState by cashuRequestStore.state.collectAsState()
     val formatter = remember { AmountFormatter() }
 
     val context = LocalContext.current
@@ -89,6 +98,7 @@ fun HomeScreen(
 
     var receiveChooserOpen by remember { mutableStateOf(false) }
     var sendChooserOpen by remember { mutableStateOf(false) }
+    var checkingTxId by remember { mutableStateOf<String?>(null) }
 
     val balanceDisplay = remember(walletState.balance, settings, priceState) {
         formatter.displayText(
@@ -101,8 +111,10 @@ fun HomeScreen(
         )
     }
 
-    val recentTransactions = remember(walletState.transactions) {
-        walletState.transactions.take(RECENT_LIMIT)
+    // Unified timeline: merge transactions + Cashu Requests, dedup claim-tx ids,
+    // sort by date descending, cap at RECENT_LIMIT.
+    val recentItems = remember(walletState.transactions, requestState.requests) {
+        unifiedRecent(walletState.transactions, requestState.requests, RECENT_LIMIT)
     }
 
     Box(modifier = Modifier.fillMaxSize().padding(contentPadding)) {
@@ -115,9 +127,9 @@ fun HomeScreen(
             ),
         ) {
             item("section-header") {
-                if (recentTransactions.isNotEmpty()) {
+                if (recentItems.isNotEmpty()) {
                     Text(
-                        text = "RECENT ACTIVITY",
+                        text = "RECENT",
                         style = MaterialTheme.typography.labelMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier
@@ -125,13 +137,13 @@ fun HomeScreen(
                     )
                 }
             }
-            if (recentTransactions.isEmpty()) {
+            if (recentItems.isEmpty()) {
                 item("empty") {
                     val hasMints = walletState.mints.isNotEmpty()
                     EmptyState(
-                        icon = if (hasMints) Icons.Outlined.History else Icons.Outlined.AccountBalance,
-                        title = if (hasMints) "No transactions yet" else "Add a mint to get started",
-                        supporting = if (hasMints) "Your activity will show up here."
+                        icon = if (hasMints) Icons.Filled.Bolt else Icons.Outlined.AccountBalance,
+                        title = if (hasMints) "No activity yet" else "Add a mint to get started",
+                        supporting = if (hasMints) "Your first payment will show up here."
                         else "Mints custody your ecash. Add one to begin.",
                         actionLabel = if (!hasMints) "Add mint" else null,
                         onAction = if (!hasMints) onOpenMints else null,
@@ -139,29 +151,74 @@ fun HomeScreen(
                     )
                 }
             } else {
-                items(recentTransactions, key = { it.id }) { tx ->
-                    TransactionRow(
-                        model = TransactionRowModel(
-                            transaction = tx,
-                            title = tx.kind.displayName + if (tx.type == TransactionType.Incoming) " received" else " sent",
-                            timestamp = formatRelativeTimestamp(tx.dateEpochMillis),
-                            primaryAmount = formatter.formatWalletSats(tx.amount, settings.useBitcoinSymbol),
-                            secondaryAmount = if (settings.showFiatBalance && priceState.btcPrice > 0)
-                                formatter.formatFiat(tx.amount, priceState.btcPrice, settings.bitcoinPriceCurrency)
-                            else null,
-                        ),
-                        onClick = { onOpenTransaction(tx) },
-                    )
-                    if (tx != recentTransactions.last()) CanvasDivider()
+                items(recentItems, key = { it.key }) { item ->
+                    when (item) {
+                        is HomeRecentItem.Tx -> {
+                            val tx = item.transaction
+                            TransactionRow(
+                                model = TransactionRowModel(
+                                    transaction = tx,
+                                    title = TransactionDisplay.title(tx),
+                                    timestamp = formatRelativeTimestamp(tx.dateEpochMillis),
+                                    primaryAmount = formatter.formatWalletSats(
+                                        tx.amount, settings.useBitcoinSymbol,
+                                    ),
+                                    secondaryAmount = if (settings.showFiatBalance && priceState.btcPrice > 0)
+                                        formatter.formatFiat(tx.amount, priceState.btcPrice, settings.bitcoinPriceCurrency)
+                                    else null,
+                                ),
+                                onClick = { onOpenTransaction(tx) },
+                                isChecking = checkingTxId == tx.id,
+                                onRefresh = if (tx.status == TransactionStatus.Pending) {
+                                    {
+                                        checkingTxId = tx.id
+                                        walletManager.launch {
+                                            try {
+                                                walletManager.loadTransactions()
+                                            } finally {
+                                                checkingTxId = null
+                                            }
+                                        }
+                                    }
+                                } else null,
+                            )
+                        }
+                        is HomeRecentItem.Req -> {
+                            val req = item.request
+                            CashuRequestRow(
+                                request = req,
+                                timestamp = formatRelativeTimestamp(req.createdAtEpochMillis),
+                                primaryAmountText = when {
+                                    req.totalReceived > 0L -> formatter.formatWalletSats(
+                                        req.totalReceived, settings.useBitcoinSymbol,
+                                    )
+                                    req.amount != null && req.amount > 0L -> formatter.formatWalletSats(
+                                        req.amount, settings.useBitcoinSymbol,
+                                    )
+                                    else -> null
+                                },
+                                secondaryAmountText = null,
+                                onClick = { onOpenCashuRequest(req) },
+                            )
+                        }
+                    }
+                    if (item != recentItems.last()) CanvasDivider()
                 }
                 item("view-all") {
-                    Box(
+                    Row(
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(top = 8.dp),
-                        contentAlignment = Alignment.Center,
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.Center,
                     ) {
                         GhostButton(text = "View all activity", onClick = onOpenHistory)
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Outlined.KeyboardArrowRight,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.size(16.dp),
+                        )
                     }
                 }
             }
@@ -353,4 +410,40 @@ private fun PendingBalanceRow(
 private fun Context.hasNfcFeature(): Boolean {
     if (!packageManager.hasSystemFeature(PackageManager.FEATURE_NFC)) return false
     return NfcAdapter.getDefaultAdapter(this) != null
+}
+
+/** Unified Home/History timeline item. Mirrors iOS HistoryItem enum. */
+internal sealed interface HomeRecentItem {
+    val date: Long
+    val key: String
+    data class Tx(val transaction: WalletTransaction) : HomeRecentItem {
+        override val date: Long get() = transaction.dateEpochMillis
+        override val key: String get() = "tx:${transaction.id}"
+    }
+    data class Req(val request: CashuRequest) : HomeRecentItem {
+        override val date: Long get() = request.createdAtEpochMillis
+        override val key: String get() = "req:${request.id}"
+    }
+}
+
+/**
+ * Merge transactions + Cashu Requests, suppress transactions that are already
+ * claim-attached to a request (so the request is the single representation),
+ * sort by date desc, return up to [limit].
+ */
+internal fun unifiedRecent(
+    transactions: List<WalletTransaction>,
+    requests: List<CashuRequest>,
+    limit: Int,
+): List<HomeRecentItem> {
+    val claimedTxIds = buildSet {
+        requests.forEach { req ->
+            req.receivedPayments.forEach { add(it.transactionId) }
+        }
+    }
+    val txItems = transactions
+        .filterNot { it.id in claimedTxIds }
+        .map { HomeRecentItem.Tx(it) as HomeRecentItem }
+    val reqItems = requests.map { HomeRecentItem.Req(it) as HomeRecentItem }
+    return (txItems + reqItems).sortedByDescending { it.date }.take(limit)
 }

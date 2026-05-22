@@ -22,6 +22,7 @@ import org.cashu.wallet.ui.home.SendAction
 import org.cashu.wallet.ui.mints.MintDetailScreen
 import org.cashu.wallet.ui.mints.MintDiscoveryScreen
 import org.cashu.wallet.ui.mints.MintsScreen
+import org.cashu.wallet.ui.receive.CashuRequestDetailScreen
 import org.cashu.wallet.ui.receive.ReceiveEcashScreen
 import org.cashu.wallet.ui.receive.ReceiveLightningScreen
 import org.cashu.wallet.ui.send.SendEcashScreen
@@ -138,6 +139,20 @@ fun CashuNavHost(
                 onClose = { navController.popBackStack() },
             )
         }
+        composable(
+            route = Routes.CASHU_REQUEST_DETAIL,
+            arguments = listOf(navArgument("requestId") { type = NavType.StringType }),
+        ) { entry ->
+            val encoded = entry.arguments?.getString("requestId").orEmpty()
+            val requestId = URLDecoder.decode(encoded, StandardCharsets.UTF_8.name())
+            CashuRequestDetailScreen(
+                walletManager = container.walletManager,
+                settingsManager = container.settingsManager,
+                cashuRequestStore = container.cashuRequestStore,
+                requestId = requestId,
+                onClose = { navController.popBackStack() },
+            )
+        }
 
         // Settings sub-screens
         composable(Routes.SETTINGS_BACKUP) {
@@ -198,6 +213,11 @@ internal fun transactionDetailRouteFor(transactionId: String): String {
     return Routes.TRANSACTION_DETAIL.replace("{transactionId}", encoded)
 }
 
+internal fun cashuRequestDetailRouteFor(requestId: String): String {
+    val encoded = URLEncoder.encode(requestId, StandardCharsets.UTF_8.name())
+    return Routes.CASHU_REQUEST_DETAIL.replace("{requestId}", encoded)
+}
+
 private fun NavGraphBuilder.tabDestinations(
     navController: NavHostController,
     container: AppContainer,
@@ -213,10 +233,14 @@ private fun NavGraphBuilder.tabDestinations(
             walletManager = container.walletManager,
             settingsManager = container.settingsManager,
             priceService = container.priceService,
+            cashuRequestStore = container.cashuRequestStore,
             onOpenMints = { navController.navigateToTab(TopTab.Mints) },
             onOpenHistory = { navController.navigateToTab(TopTab.History) },
             onOpenTransaction = { tx ->
                 navController.navigate(transactionDetailRouteFor(tx.id))
+            },
+            onOpenCashuRequest = { req ->
+                navController.navigate(cashuRequestDetailRouteFor(req.id))
             },
             onReceive = { action ->
                 val route = when (action) {
@@ -243,8 +267,12 @@ private fun NavGraphBuilder.tabDestinations(
             walletManager = container.walletManager,
             settingsManager = container.settingsManager,
             priceService = container.priceService,
+            cashuRequestStore = container.cashuRequestStore,
             onOpenTransaction = { tx ->
                 navController.navigate(transactionDetailRouteFor(tx.id))
+            },
+            onOpenCashuRequest = { req ->
+                navController.navigate(cashuRequestDetailRouteFor(req.id))
             },
             contentPadding = contentPadding,
         )

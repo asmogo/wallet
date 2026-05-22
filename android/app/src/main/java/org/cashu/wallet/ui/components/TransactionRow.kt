@@ -20,13 +20,16 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Sync
 import androidx.compose.material.icons.filled.ArrowDownward
 import androidx.compose.material.icons.filled.ArrowUpward
 import androidx.compose.material.icons.filled.Bolt
 import androidx.compose.material.icons.outlined.CurrencyBitcoin
 import androidx.compose.material.icons.outlined.Money
 import androidx.compose.material.icons.outlined.Schedule
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -56,6 +59,8 @@ fun TransactionRow(
     model: TransactionRowModel,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
+    onRefresh: (() -> Unit)? = null,
+    isChecking: Boolean = false,
 ) {
     val tx = model.transaction
     val incoming = tx.type == TransactionType.Incoming
@@ -89,6 +94,28 @@ fun TransactionRow(
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
+        }
+        // Pending-refresh affordance per iOS TransactionAmountColumn.
+        if (tx.status == TransactionStatus.Pending && onRefresh != null) {
+            if (isChecking) {
+                CircularProgressIndicator(
+                    modifier = Modifier.size(16.dp),
+                    strokeWidth = 1.5.dp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            } else {
+                IconButton(
+                    onClick = onRefresh,
+                    modifier = Modifier.size(24.dp),
+                ) {
+                    Icon(
+                        imageVector = Icons.Outlined.Sync,
+                        contentDescription = "Refresh status",
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.size(16.dp),
+                    )
+                }
+            }
         }
         Column(horizontalAlignment = Alignment.End) {
             Text(

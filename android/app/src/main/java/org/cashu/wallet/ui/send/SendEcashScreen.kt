@@ -87,6 +87,7 @@ fun SendEcashScreen(
 
     val activeMintUrl = selectedMintUrl ?: walletState.activeMint?.url
     val activeMint = walletState.mints.firstOrNull { it.url == activeMintUrl } ?: walletState.activeMint
+    val mintBalance = activeMint?.balance ?: 0L
     val amountValue = amount.toLongOrNull() ?: 0L
 
     Scaffold(
@@ -152,6 +153,12 @@ fun SendEcashScreen(
                     activeMintName = activeMint?.name ?: "No mint",
                     mintCount = walletState.mints.size,
                     onPickMint = { pickerOpen = true },
+                    onUseMax = {
+                        if (mintBalance > 0L) amount = mintBalance.toString()
+                    },
+                    mintBalanceText = if (mintBalance > 0L) {
+                        formatter.formatWalletSats(mintBalance, settings.useBitcoinSymbol)
+                    } else null,
                     amountValue = amountValue,
                     balanceText = formatter.formatWalletSats(walletState.balance, settings.useBitcoinSymbol),
                     sending = sending,
@@ -215,6 +222,8 @@ private fun InputFace(
     activeMintName: String,
     mintCount: Int,
     onPickMint: () -> Unit,
+    onUseMax: () -> Unit,
+    mintBalanceText: String?,
     amountValue: Long,
     balanceText: String,
     sending: Boolean,
@@ -231,7 +240,18 @@ private fun InputFace(
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         Spacer(Modifier.height(4.dp))
-        MintSelectorChip(name = activeMintName, mintCount = mintCount, onClick = onPickMint)
+        androidx.compose.foundation.layout.Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(8.dp),
+        ) {
+            MintSelectorChip(name = activeMintName, mintCount = mintCount, onClick = onPickMint)
+            if (mintBalanceText != null) {
+                androidx.compose.material3.AssistChip(
+                    onClick = onUseMax,
+                    label = { Text("Use max", style = MaterialTheme.typography.labelSmall) },
+                )
+            }
+        }
 
         Text(
             text = "Balance $balanceText",

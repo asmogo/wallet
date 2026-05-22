@@ -25,7 +25,7 @@ object Routes {
     const val MINT_DETAIL = "mints/{mintUrl}"
     const val MINT_DISCOVERY = "mints/discover"
     const val TRANSACTION_DETAIL = "history/transaction/{transactionId}"
-    const val CASHU_REQUEST_DETAIL = "history/request/{requestId}"
+    const val CASHU_REQUEST_DETAIL = "request/{requestId}"
     const val RECEIVE_TOKEN_DETAIL = "receive/token-detail"
 
     // Settings sub-screens
