@@ -80,6 +80,9 @@ struct MintsListView: View {
                 MintDiscoverySheet { url in addMint(url: url) }
                     .environmentObject(walletManager)
             }
+            .task {
+                await walletManager.refreshMintInfoIfNeeded()
+            }
             .confirmationDialog(
                 "Remove Mint",
                 isPresented: $showRemoveConfirmation,
@@ -242,7 +245,7 @@ struct MintsListView: View {
                     newMintNickname = ""
                 }
             } catch {
-                errorMessage = error.localizedDescription
+                errorMessage = error.userFacingWalletMessage
             }
             isAddingMint = false
         }

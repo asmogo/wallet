@@ -152,7 +152,7 @@ struct ReceiveTokenDetailView: View {
 
             Task { await calculateFee() }
         } catch {
-            errorMessage = "Invalid Token: \(error.localizedDescription)"
+            errorMessage = "Invalid token. \(error.userFacingWalletMessage)"
             isLoadingFee = false
         }
     }
@@ -197,7 +197,7 @@ struct ReceiveTokenDetailView: View {
                 }
             } catch {
                 await MainActor.run {
-                    errorMessage = error.localizedDescription
+                    errorMessage = error.userFacingWalletMessage
                     isReceiving = false
                     HapticFeedback.notification(.error)
                 }

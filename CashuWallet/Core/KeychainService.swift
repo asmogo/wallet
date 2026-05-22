@@ -11,26 +11,7 @@ class KeychainService: SecureStorageProtocol {
     
     /// Save mnemonic to Keychain
     func saveMnemonic(_ mnemonic: String) throws {
-        guard let data = mnemonic.data(using: .utf8) else {
-            throw KeychainError.encodingFailed
-        }
-        
-        // Delete existing item first
-        try? deleteMnemonic()
-        
-        let query: [String: Any] = [
-            kSecClass as String: kSecClassGenericPassword,
-            kSecAttrService as String: serviceName,
-            kSecAttrAccount as String: mnemonicKey,
-            kSecValueData as String: data,
-            kSecAttrAccessible as String: kSecAttrAccessibleWhenUnlockedThisDeviceOnly
-        ]
-        
-        let status = SecItemAdd(query as CFDictionary, nil)
-        
-        guard status == errSecSuccess else {
-            throw KeychainError.saveFailed(status)
-        }
+        try saveSecret(mnemonic, forKey: mnemonicKey)
     }
     
     /// Load mnemonic from Keychain
@@ -115,17 +96,31 @@ class KeychainService: SecureStorageProtocol {
             throw KeychainError.encodingFailed
         }
 
-        try? deleteSecret(forKey: key)
-
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: serviceName,
-            kSecAttrAccount as String: key,
+            kSecAttrAccount as String: key
+        ]
+
+        let update: [String: Any] = [
             kSecValueData as String: data,
             kSecAttrAccessible as String: kSecAttrAccessibleWhenUnlockedThisDeviceOnly
         ]
 
-        let status = SecItemAdd(query as CFDictionary, nil)
+        let updateStatus = SecItemUpdate(query as CFDictionary, update as CFDictionary)
+        if updateStatus == errSecSuccess {
+            return
+        }
+
+        guard updateStatus == errSecItemNotFound else {
+            throw KeychainError.saveFailed(updateStatus)
+        }
+
+        var addQuery = query
+        addQuery[kSecValueData as String] = data
+        addQuery[kSecAttrAccessible as String] = kSecAttrAccessibleWhenUnlockedThisDeviceOnly
+
+        let status = SecItemAdd(addQuery as CFDictionary, nil)
 
         guard status == errSecSuccess else {
             throw KeychainError.saveFailed(status)

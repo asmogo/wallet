@@ -38,6 +38,11 @@ class LightningService: ObservableObject {
         self.getActiveMint = getActiveMint
         self.getMints = getMints
     }
+
+    func clearState() {
+        isLoading = false
+        mintQuotesInFlight.removeAll()
+    }
     
     // MARK: - Minting (NUT-04) - Receive via Lightning
     
@@ -243,7 +248,10 @@ class LightningService: ObservableObject {
     /// Create a melt quote for paying a Lightning payment request
     /// - Parameter request: The BOLT11 invoice or BOLT12 offer to pay
     /// - Returns: Melt quote with fee information
-    func createMeltQuote(request: String) async throws -> MeltQuoteInfo {
+    func createMeltQuote(
+        request: String,
+        preferredMintURL: String? = nil
+    ) async throws -> MeltQuoteInfo {
         guard let repo = walletRepository() else {
             throw WalletError.notInitialized
         }
@@ -263,11 +271,12 @@ class LightningService: ObservableObject {
         let invoiceAmountSats = decodedInvoice?.amountMsat.map { ($0 + 999) / 1000 }
         let candidates = meltQuoteCandidateMints(
             paymentMethod: paymentMethod,
-            minimumAmount: invoiceAmountSats
+            minimumAmount: invoiceAmountSats,
+            preferredMintURL: preferredMintURL
         )
 
         guard !candidates.isEmpty else {
-            throw WalletError.networkError("No mint with BOLT11 sat melt support is available.")
+            throw WalletError.networkError("No mint supports \(paymentMethod.displayName) payments.")
         }
 
         var lastError: Error?
@@ -302,8 +311,11 @@ class LightningService: ObservableObject {
     }
     
     /// Backward-compatible wrapper for older bolt11-specific call sites.
-    func createMeltQuote(invoice: String) async throws -> MeltQuoteInfo {
-        try await createMeltQuote(request: invoice)
+    func createMeltQuote(
+        invoice: String,
+        preferredMintURL: String? = nil
+    ) async throws -> MeltQuoteInfo {
+        try await createMeltQuote(request: invoice, preferredMintURL: preferredMintURL)
     }
     
     /// Create a melt quote for paying a human-readable address (BIP 353 / Lightning Address)
@@ -311,52 +323,116 @@ class LightningService: ObservableObject {
     ///   - address: The user@domain address
     ///   - amount: Amount in satoshis
     /// - Returns: Melt quote with fee information
-    func createHumanReadableMeltQuote(address: String, amount: UInt64) async throws -> MeltQuoteInfo {
-        guard let repo = walletRepository(), let activeMint = getActiveMint() else {
+    func createHumanReadableMeltQuote(
+        address: String,
+        amount: UInt64,
+        preferredMintURL: String? = nil
+    ) async throws -> MeltQuoteInfo {
+        guard let repo = walletRepository() else {
             throw WalletError.notInitialized
         }
 
         isLoading = true
         defer { isLoading = false }
-
-        let mintUrl = MintUrl(url: activeMint.url)
-        let wallet = try await repo.getWallet(mintUrl: mintUrl, unit: .sat)
 
         let amountMsat = Amount(value: amount * 1000)
-        let quote = try await wallet.meltHumanReadable(
-            address: address,
-            amountMsat: amountMsat,
-            network: bitcoinNetwork(for: activeMint.url)
+        let candidates = meltQuoteCandidateMints(
+            paymentMethod: .bolt11,
+            minimumAmount: amount,
+            preferredMintURL: preferredMintURL
         )
 
-        return meltQuoteInfo(from: quote, paymentMethod: .bolt11, fallbackMintUrl: activeMint.url)
+        guard !candidates.isEmpty else {
+            throw WalletError.networkError("No mint supports Lightning payments.")
+        }
+
+        var lastError: Error?
+        for mint in candidates {
+            do {
+                let mintUrl = MintUrl(url: mint.url)
+                let wallet = try await repo.getWallet(mintUrl: mintUrl, unit: .sat)
+                let quote = try await wallet.meltHumanReadable(
+                    address: address,
+                    amountMsat: amountMsat,
+                    network: bitcoinNetwork(for: mint.url)
+                )
+
+                let totalRequired = quote.amount.value + quote.feeReserve.value
+                guard mint.balance >= totalRequired else {
+                    lastError = NFCPaymentError.insufficientBalance(required: totalRequired, available: mint.balance)
+                    continue
+                }
+
+                return meltQuoteInfo(from: quote, paymentMethod: .bolt11, fallbackMintUrl: mint.url)
+            } catch {
+                lastError = error
+                AppLogger.wallet.error("Failed to create Lightning address melt quote with mint \(mint.url): \(error)")
+            }
+        }
+
+        if let lastError {
+            throw lastError
+        }
+        throw WalletError.networkError("No mint could create a melt quote for this Lightning address.")
     }
 
-    func createOnchainMeltQuote(address: String, amount: UInt64) async throws -> MeltQuoteInfo {
-        guard let repo = walletRepository(),
-              let activeMint = getActiveMint() else {
+    func createOnchainMeltQuote(
+        address: String,
+        amount: UInt64,
+        preferredMintURL: String? = nil
+    ) async throws -> MeltQuoteInfo {
+        guard let repo = walletRepository() else {
             throw WalletError.notInitialized
         }
 
         isLoading = true
         defer { isLoading = false }
 
-        let mintUrl = MintUrl(url: activeMint.url)
-        let wallet = try await repo.getWallet(mintUrl: mintUrl, unit: .sat)
         let normalizedAddress = PaymentRequestParser.normalizeBitcoinRequest(address)
-        let quoteOptions = try await wallet.quoteOnchainMeltOptions(
-            address: normalizedAddress,
-            amount: Amount(value: amount),
-            maxFeeAmount: nil
+        let candidates = meltQuoteCandidateMints(
+            paymentMethod: .onchain,
+            minimumAmount: amount,
+            preferredMintURL: preferredMintURL
         )
 
-        guard let quoteOption = quoteOptions.first else {
-            throw WalletError.networkError("Mint returned no on-chain melt fee options.")
+        guard !candidates.isEmpty else {
+            throw WalletError.networkError("No mint supports On-chain payments.")
         }
 
-        let quote = try await wallet.selectOnchainMeltQuote(quote: quoteOption)
+        var lastError: Error?
+        for mint in candidates {
+            do {
+                let mintUrl = MintUrl(url: mint.url)
+                let wallet = try await repo.getWallet(mintUrl: mintUrl, unit: .sat)
+                let quoteOptions = try await wallet.quoteOnchainMeltOptions(
+                    address: normalizedAddress,
+                    amount: Amount(value: amount),
+                    maxFeeAmount: nil
+                )
 
-        return meltQuoteInfo(from: quote, paymentMethod: .onchain, fallbackMintUrl: activeMint.url)
+                guard let quoteOption = quoteOptions.first else {
+                    lastError = WalletError.networkError("Mint returned no on-chain melt fee options.")
+                    continue
+                }
+
+                let quote = try await wallet.selectOnchainMeltQuote(quote: quoteOption)
+                let totalRequired = quote.amount.value + quote.feeReserve.value
+                guard mint.balance >= totalRequired else {
+                    lastError = NFCPaymentError.insufficientBalance(required: totalRequired, available: mint.balance)
+                    continue
+                }
+
+                return meltQuoteInfo(from: quote, paymentMethod: .onchain, fallbackMintUrl: mint.url)
+            } catch {
+                lastError = error
+                AppLogger.wallet.error("Failed to create on-chain melt quote with mint \(mint.url): \(error)")
+            }
+        }
+
+        if let lastError {
+            throw lastError
+        }
+        throw WalletError.networkError("No mint could create a melt quote for this on-chain payment.")
     }
 
     func subscribeToMintQuote(
@@ -375,7 +451,8 @@ class LightningService: ObservableObject {
 
     private func meltQuoteCandidateMints(
         paymentMethod: PaymentMethodKind,
-        minimumAmount: UInt64?
+        minimumAmount: UInt64?,
+        preferredMintURL: String? = nil
     ) -> [MintInfo] {
         let activeMint = getActiveMint()
         let allMints = getMints()
@@ -383,13 +460,28 @@ class LightningService: ObservableObject {
             ? activeMint.map { [$0] } ?? []
             : allMints
 
+        if let preferredMintURL,
+           let preferredMint = preferredMeltMint(
+               for: preferredMintURL,
+               activeMint: activeMint,
+               mints: mints
+           ) {
+            guard preferredMint.supportedMeltMethods.contains(paymentMethod) else {
+                return []
+            }
+            return [preferredMint]
+        }
+
         let compatibleMints = mints.filter { $0.supportedMeltMethods.contains(paymentMethod) }
-        let methodCandidates = compatibleMints.isEmpty ? mints : compatibleMints
-        let affordableCandidates = methodCandidates.filter { mint in
+        guard !compatibleMints.isEmpty else {
+            return []
+        }
+
+        let affordableCandidates = compatibleMints.filter { mint in
             guard let minimumAmount else { return true }
             return mint.balance >= minimumAmount
         }
-        let candidates = affordableCandidates.isEmpty ? methodCandidates : affordableCandidates
+        let candidates = affordableCandidates.isEmpty ? compatibleMints : affordableCandidates
 
         var ordered: [MintInfo] = []
         if let activeMint,
@@ -418,12 +510,47 @@ class LightningService: ObservableObject {
 
         return ordered
     }
+
+    private func preferredMeltMint(
+        for preferredMintURL: String,
+        activeMint: MintInfo?,
+        mints: [MintInfo]
+    ) -> MintInfo? {
+        let normalizedPreferredURL = normalizedMintURL(preferredMintURL)
+        if let mint = mints.first(where: {
+            normalizedMintURL($0.url) == normalizedPreferredURL
+        }) {
+            return mint
+        }
+
+        guard let activeMint,
+              normalizedMintURL(activeMint.url) == normalizedPreferredURL else {
+            return nil
+        }
+
+        return activeMint
+    }
+
+    private func normalizedMintURL(_ urlString: String) -> String {
+        let trimmed = urlString.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let url = URL(string: trimmed),
+              let host = url.host?.lowercased() else {
+            return trimmed.lowercased().trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+        }
+
+        var normalized = host
+        if let port = url.port {
+            normalized += ":\(port)"
+        }
+        normalized += url.path.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+        return normalized
+    }
     
     /// Pay a Lightning invoice (melt tokens)
     /// - Parameter quoteId: The quote ID to melt
-    /// - Returns: Payment preimage if successful
-    func meltTokens(quoteId: String) async throws -> String? {
-        guard let repo = walletRepository(), let activeMint = getActiveMint() else {
+    /// - Returns: Melt result including payment proof and actual fee paid.
+    func meltTokens(quoteId: String, mintUrl preferredMintUrl: String? = nil) async throws -> MeltPaymentResult {
+        guard let repo = walletRepository() else {
             throw WalletError.notInitialized
         }
         
@@ -431,13 +558,20 @@ class LightningService: ObservableObject {
         defer { isLoading = false }
 
         let storedMeltQuote = try await walletDatabase()?.getMeltQuote(quoteId: quoteId)
-        let mintURLString = storedMeltQuote?.mintUrl?.url ?? activeMint.url
+        guard let mintURLString = preferredMintUrl ?? storedMeltQuote?.mintUrl?.url ?? getActiveMint()?.url else {
+            throw WalletError.notInitialized
+        }
         let mintUrl = MintUrl(url: mintURLString)
         let wallet = try await repo.getWallet(mintUrl: mintUrl, unit: .sat)
 
         let preparedMelt = try await wallet.prepareMelt(quoteId: quoteId)
         let result = try await preparedMelt.confirm()
-        return result.preimage
+        return MeltPaymentResult(
+            preimage: result.preimage,
+            amount: result.amount.value,
+            feePaid: result.feePaid.value,
+            mintUrl: mintURLString
+        )
     }
 
     private func mintQuoteInfo(
@@ -485,10 +619,10 @@ class LightningService: ObservableObject {
     ) -> MeltQuoteInfo {
         MeltQuoteInfo(
             id: quote.id,
+            mintUrl: quote.mintUrl?.url ?? fallbackMintUrl,
             amount: quote.amount.value,
             feeReserve: quote.feeReserve.value,
             paymentMethod: paymentMethod,
-            mintUrl: quote.mintUrl?.url ?? fallbackMintUrl,
             state: MeltQuoteState(quote.state),
             expiry: displayExpiry(quote.expiry)
         )

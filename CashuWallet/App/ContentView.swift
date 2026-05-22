@@ -62,23 +62,41 @@ struct MainTabView: View {
                 }
                 .tag(Tab.wallet)
             
-            HistoryView()
+            tabContent(for: .history) {
+                HistoryView()
+            }
                 .tabItem {
                     Label("History", systemImage: "clock.fill")
                 }
                 .tag(Tab.history)
             
-            MintsListView()
+            tabContent(for: .mints) {
+                MintsListView()
+            }
                 .tabItem {
                     Label("Mints", systemImage: "bitcoinsign.bank.building.fill")
                 }
                 .tag(Tab.mints)
             
-            SettingsView()
+            tabContent(for: .settings) {
+                SettingsView()
+            }
                 .tabItem {
                     Label("Settings", systemImage: "gearshape.fill")
                 }
                 .tag(Tab.settings)
+        }
+    }
+
+    @ViewBuilder
+    private func tabContent<Content: View>(
+        for tab: Tab,
+        @ViewBuilder content: () -> Content
+    ) -> some View {
+        if selectedTab == tab {
+            content()
+        } else {
+            Color.clear
         }
     }
 }

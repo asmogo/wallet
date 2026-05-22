@@ -317,6 +317,8 @@ private struct CashuPaymentRequestPayView: View {
     @State private var errorMessage: String?
     @State private var showAuthorizingOverlay = false
     @State private var authorizingState: AuthorizingOverlay.FlowState = .authorizing
+    @State private var showingMintPicker = false
+    @State private var selectedMint: MintInfo?
 
     var body: some View {
         NavigationStack {
@@ -325,6 +327,19 @@ private struct CashuPaymentRequestPayView: View {
                     VStack(spacing: 24) {
                         amountSection
                             .padding(.top, 24)
+
+                        if request.isSatUnit {
+                            if let mint = selectedPaymentMint {
+                                cashuMintSelector(mint: mint)
+                                    .padding(.horizontal)
+                            } else {
+                                Text("No matching mint for this request.")
+                                    .font(.caption)
+                                    .foregroundStyle(.orange)
+                                    .multilineTextAlignment(.center)
+                                    .padding(.horizontal)
+                            }
+                        }
 
                         detailsSection
 
@@ -390,6 +405,28 @@ private struct CashuPaymentRequestPayView: View {
                 .presentationBackgroundInteraction(.disabled)
                 .interactiveDismissDisabled()
             }
+            .sheet(isPresented: $showingMintPicker) {
+                MintSelectorSheet(
+                    selectedMint: $selectedMint,
+                    mints: candidateMints,
+                    minimumAmount: paymentAmount,
+                    onSelect: { mint in
+                        selectedMint = mint
+                        errorMessage = nil
+                    }
+                )
+                .environmentObject(walletManager)
+                .presentationDetents([.medium])
+            }
+            .onAppear {
+                syncSelectedMint()
+            }
+            .onChange(of: customAmountString) {
+                syncSelectedMint()
+            }
+            .onChange(of: walletManager.activeMint?.id) {
+                syncSelectedMint()
+            }
         }
     }
 
@@ -427,11 +464,54 @@ private struct CashuPaymentRequestPayView: View {
             Divider().padding(.leading)
             detailRow(icon: "banknote", label: "Unit", value: request.unit ?? "sat")
             Divider().padding(.leading)
-            detailRow(icon: "bitcoinsign.bank.building", label: "Mint", value: mintLabel)
+            detailRow(icon: "bitcoinsign.bank.building", label: "Mint", value: selectedMintLabel)
         }
         .padding(.vertical, 4)
         .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 14))
         .padding(.horizontal)
+    }
+
+    private func cashuMintSelector(mint: MintInfo) -> some View {
+        Button(action: {
+            HapticFeedback.selection()
+            showingMintPicker = true
+        }) {
+            HStack(spacing: 12) {
+                if let iconUrl = mint.iconUrl, let url = URL(string: iconUrl) {
+                    AsyncImage(url: url) { image in
+                        image.resizable().aspectRatio(contentMode: .fill)
+                    } placeholder: {
+                        Image(systemName: "bitcoinsign.bank.building").foregroundStyle(.secondary)
+                    }
+                    .frame(width: 40, height: 40)
+                    .clipShape(Circle())
+                } else {
+                    Image(systemName: "bitcoinsign.bank.building")
+                        .foregroundStyle(.secondary)
+                        .frame(width: 40, height: 40)
+                }
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(mint.name)
+                        .font(.subheadline.weight(.medium))
+                    Text("\(mint.balance) sat")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+
+                Spacer()
+
+                Image(systemName: "chevron.up.chevron.down")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .padding(12)
+        .liquidGlass(in: RoundedRectangle(cornerRadius: 12))
+        .accessibilityLabel("Payment mint: \(mint.name), \(mint.balance) sats")
+        .accessibilityHint("Double-tap to choose the mint to pay from")
     }
 
     private func detailRow(icon: String, label: String, value: String) -> some View {
@@ -451,7 +531,9 @@ private struct CashuPaymentRequestPayView: View {
 
     private var canPay: Bool {
         guard !isPaying, request.isSatUnit else { return false }
-        return paymentAmount.map { $0 > 0 } ?? false
+        guard let amount = paymentAmount, amount > 0 else { return false }
+        guard let mint = selectedPaymentMint else { return false }
+        return mint.balance >= amount
     }
 
     private var paymentAmount: UInt64? {
@@ -462,16 +544,85 @@ private struct CashuPaymentRequestPayView: View {
         request.description?.isEmpty == false ? request.description! : "Cashu request"
     }
 
-    private var mintLabel: String {
-        guard let firstMint = request.mints.first else { return "Any mint" }
-        if request.mints.count == 1 {
-            return URL(string: firstMint)?.host ?? firstMint
+    private var selectedMintLabel: String {
+        if let mint = selectedPaymentMint {
+            return mint.name
         }
-        return "\(request.mints.count) mints"
+
+        guard let firstMint = request.mints.first else { return "Any mint" }
+        return URL(string: firstMint)?.host ?? firstMint
+    }
+
+    private var candidateMints: [MintInfo] {
+        guard !request.mints.isEmpty else {
+            return walletManager.mints
+        }
+
+        let requestedMintURLs = Set(request.mints.map(normalizedMintURL))
+        return walletManager.mints.filter {
+            requestedMintURLs.contains(normalizedMintURL($0.url))
+        }
+    }
+
+    private var selectedPaymentMint: MintInfo? {
+        if let selectedMint,
+           let refreshedMint = candidateMints.first(where: { $0.id == selectedMint.id }) {
+            return refreshedMint
+        }
+
+        return recommendedPaymentMint()
+    }
+
+    private func syncSelectedMint() {
+        if let selectedMint,
+           candidateMints.contains(where: { $0.id == selectedMint.id }) {
+            return
+        }
+
+        selectedMint = recommendedPaymentMint()
+    }
+
+    private func recommendedPaymentMint() -> MintInfo? {
+        guard !candidateMints.isEmpty else { return nil }
+
+        let candidates: [MintInfo]
+        if let amount = paymentAmount, amount > 0 {
+            let affordable = candidateMints.filter { $0.balance >= amount }
+            candidates = affordable.isEmpty ? candidateMints : affordable
+        } else {
+            candidates = candidateMints
+        }
+
+        if let activeMint = walletManager.activeMint,
+           let activeCandidate = candidates.first(where: { $0.id == activeMint.id }) {
+            return activeCandidate
+        }
+
+        return candidates.sorted { lhs, rhs in
+            if lhs.balance == rhs.balance {
+                return lhs.name.localizedCaseInsensitiveCompare(rhs.name) == .orderedAscending
+            }
+            return lhs.balance > rhs.balance
+        }.first
+    }
+
+    private func normalizedMintURL(_ urlString: String) -> String {
+        let trimmed = urlString.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let url = URL(string: trimmed),
+              let host = url.host?.lowercased() else {
+            return trimmed.lowercased().trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+        }
+
+        var normalized = host
+        if let port = url.port {
+            normalized += ":\(port)"
+        }
+        normalized += url.path.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+        return normalized
     }
 
     private func payRequest() {
-        guard canPay else { return }
+        guard canPay, let mint = selectedPaymentMint else { return }
 
         isPaying = true
         errorMessage = nil
@@ -483,11 +634,12 @@ private struct CashuPaymentRequestPayView: View {
             do {
                 try await walletManager.payCashuPaymentRequest(
                     encoded: request.encoded,
-                    customAmountSats: request.amount == nil ? paymentAmount : nil
+                    customAmountSats: request.amount == nil ? paymentAmount : nil,
+                    preferredMintURL: mint.url
                 )
                 authorizingState = .sent
             } catch {
-                let message = error.localizedDescription
+                let message = error.userFacingWalletMessage
                 errorMessage = message
                 authorizingState = .error(message)
                 try? await Task.sleep(nanoseconds: 2_000_000_000)

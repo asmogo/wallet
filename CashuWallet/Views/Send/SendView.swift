@@ -8,10 +8,12 @@ struct SendView: View {
     @State private var amountString = ""
     @State private var memo = ""
     @State private var generatedToken: String?
+    @State private var generatedTokenMintURL: String?
     @State private var tokenFee: UInt64 = 0
     @State private var isGenerating = false
     @State private var errorMessage: String?
     @State private var showMintPicker = false
+    @State private var selectedSendMint: MintInfo?
 
     // Token claim detection
     @State private var isCheckingClaim = false
@@ -86,7 +88,11 @@ struct SendView: View {
                 }
             }
             .sheet(isPresented: $showMintPicker) {
-                MintSelectorSheet(selectedMint: $walletManager.activeMint)
+                MintSelectorSheet(
+                    selectedMint: sendMintSelection,
+                    minimumAmount: UInt64(amountString),
+                    onSelect: selectSendMint
+                )
                     .environmentObject(walletManager)
                     .presentationDetents([.medium])
             }
@@ -106,7 +112,7 @@ struct SendView: View {
     private var sendInputView: some View {
         VStack(spacing: 0) {
             // Mint selector
-            if let mint = walletManager.activeMint {
+            if let mint = displaySendMint {
                 mintSelector(mint: mint)
                     .padding(.horizontal)
                     .padding(.top, 12)
@@ -217,9 +223,70 @@ struct SendView: View {
 
     private var canSend: Bool {
         guard let amount = UInt64(amountString), amount > 0 else { return false }
-        guard let mint = walletManager.activeMint else { return false }
+        guard let mint = displaySendMint else { return false }
         if lockWithP2PK && normalizedP2PKPubkeyInput == nil { return false }
         return amount <= mint.balance
+    }
+
+    private var availableSendMints: [MintInfo] {
+        var mints = walletManager.mints
+        if let activeMint = walletManager.activeMint,
+           !mints.contains(where: { $0.id == activeMint.id }) {
+            mints.insert(activeMint, at: 0)
+        }
+        return mints
+    }
+
+    private var resolvedSelectedSendMint: MintInfo? {
+        guard let selectedSendMint else { return nil }
+        return availableSendMints.first { $0.id == selectedSendMint.id } ?? selectedSendMint
+    }
+
+    private var displaySendMint: MintInfo? {
+        resolvedSelectedSendMint ?? recommendedSendMint(minimumAmount: UInt64(amountString))
+    }
+
+    private var sendMintSelection: Binding<MintInfo?> {
+        Binding(
+            get: { displaySendMint },
+            set: { newMint in
+                if let newMint {
+                    selectSendMint(newMint)
+                } else {
+                    selectedSendMint = nil
+                }
+            }
+        )
+    }
+
+    private func recommendedSendMint(minimumAmount: UInt64?) -> MintInfo? {
+        guard !availableSendMints.isEmpty else { return nil }
+
+        let candidates: [MintInfo]
+        if let minimumAmount, minimumAmount > 0 {
+            let affordable = availableSendMints.filter { $0.balance >= minimumAmount }
+            candidates = affordable.isEmpty ? availableSendMints : affordable
+        } else {
+            candidates = availableSendMints
+        }
+
+        if let activeMint = walletManager.activeMint,
+           let activeCandidate = candidates.first(where: { $0.id == activeMint.id }) {
+            return activeCandidate
+        }
+
+        return candidates.sorted { lhs, rhs in
+            if lhs.balance == rhs.balance {
+                return lhs.name.localizedCaseInsensitiveCompare(rhs.name) == .orderedAscending
+            }
+            return lhs.balance > rhs.balance
+        }.first
+    }
+
+    private func selectSendMint(_ mint: MintInfo) {
+        selectedSendMint = mint
+        errorMessage = nil
+        HapticFeedback.selection()
     }
 
     @ViewBuilder
@@ -333,10 +400,10 @@ struct SendView: View {
                         detailRow(icon: "banknote", label: "Fiat",
                                   value: priceService.btcPriceUSD > 0
                                       ? priceService.formatSatsAsFiat(UInt64(amountString) ?? 0) : "—")
-                        if let mint = walletManager.activeMint {
+                        if let mintURL = generatedTokenMintURL {
                             canvasDivider
                             detailRow(icon: "bitcoinsign.bank.building", label: "Mint",
-                                      value: extractMintHost(mint.url))
+                                      value: extractMintHost(mintURL))
                         }
                     }
                     .padding(.top, 8)
@@ -392,6 +459,10 @@ struct SendView: View {
 
     private func generateToken() {
         guard let amount = UInt64(amountString), amount > 0 else { return }
+        guard let mint = displaySendMint else {
+            errorMessage = "No mint available."
+            return
+        }
         let selectedP2PKPubkey = lockWithP2PK ? normalizedP2PKPubkeyInput : nil
         guard !lockWithP2PK || selectedP2PKPubkey != nil else {
             errorMessage = "Please enter a valid P2PK key."
@@ -406,13 +477,15 @@ struct SendView: View {
                 let result = try await walletManager.sendTokens(
                     amount: amount,
                     memo: memo.isEmpty ? nil : memo,
-                    p2pkPubkey: selectedP2PKPubkey
+                    p2pkPubkey: selectedP2PKPubkey,
+                    mintUrl: mint.url
                 )
                 generatedToken = result.token
+                generatedTokenMintURL = mint.url
                 tokenFee = result.fee
                 HapticFeedback.notification(.success)
             } catch {
-                errorMessage = error.localizedDescription
+                errorMessage = error.userFacingWalletMessage
                 HapticFeedback.notification(.error)
             }
             isGenerating = false
@@ -573,6 +646,7 @@ struct MeltView: View {
     // Inline scan + clipboard suggestion
     @State private var showingScanner = false
     @State private var showingMintPicker = false
+    @State private var selectedMeltMint: MintInfo?
     @State private var clipboardSuggestion: PaymentRequestDecodeResult?
     @State private var clipboardSuggestionRaw: String?
     @State private var dismissedClipboardSuggestion = false
@@ -647,7 +721,7 @@ struct MeltView: View {
             }
             .sheet(isPresented: $showAuthorizingOverlay, onDismiss: handleAuthorizingDismiss) {
                 AuthorizingOverlay(
-                    amountSats: meltQuote?.totalAmount ?? 0,
+                    amountSats: meltQuote?.amount ?? 0,
                     recipient: shortRecipient,
                     recipientCaption: meltQuote.map { $0.paymentMethod.displayName },
                     state: $authorizingState,
@@ -662,12 +736,18 @@ struct MeltView: View {
                     .environmentObject(walletManager)
             }
             .sheet(isPresented: $showingMintPicker) {
-                MintSelectorSheet(selectedMint: $walletManager.activeMint)
+                MintSelectorSheet(
+                    selectedMint: meltMintSelection,
+                    paymentMethod: selectedMeltPaymentMethod,
+                    minimumAmount: knownPaymentAmount,
+                    onSelect: selectMeltMint
+                )
                     .environmentObject(walletManager)
                     .presentationDetents([.medium])
             }
             .onAppear {
-                syncMeltModeWithActiveMint()
+                syncMeltModeWithAvailableMints()
+                syncSelectedMeltMint()
                 detectClipboardSuggestion()
                 if autoQuoteOnAppear,
                    !requestInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
@@ -676,19 +756,89 @@ struct MeltView: View {
                 }
             }
             .onChange(of: walletManager.activeMint?.id) {
-                syncMeltModeWithActiveMint()
+                syncMeltModeWithAvailableMints()
+                if meltQuote == nil {
+                    syncSelectedMeltMint()
+                    errorMessage = nil
+                }
             }
             .onChange(of: meltMode) {
                 errorMessage = nil
                 if meltMode == .onchain {
                     requestInput = PaymentRequestParser.normalizeBitcoinRequest(requestInput)
                 }
+                syncSelectedMeltMint()
+            }
+            .onChange(of: requestInput) {
+                syncSelectedMeltMint()
             }
         }
     }
 
     private var supportsOnchainMelt: Bool {
-        walletManager.activeMint?.supportedMeltMethods.contains(.onchain) ?? false
+        availableMeltMints.contains { $0.supportedMeltMethods.contains(.onchain) }
+    }
+
+    private var availableMeltMints: [MintInfo] {
+        if walletManager.mints.isEmpty {
+            return walletManager.activeMint.map { [$0] } ?? []
+        }
+        return walletManager.mints
+    }
+
+    private var selectedMeltPaymentMethod: PaymentMethodKind {
+        if meltMode == .onchain {
+            return .onchain
+        }
+
+        if isHumanReadableAddress {
+            return .bolt11
+        }
+
+        return PaymentRequestParser.paymentMethod(for: requestInput) ?? .bolt11
+    }
+
+    private var knownPaymentAmount: UInt64? {
+        if let amount = UInt64(amountString), amount > 0 {
+            return amount
+        }
+
+        switch PaymentRequestDecoder.decode(requestInput) {
+        case .bolt11(let amount, _), .bolt12(let amount, _):
+            return amount
+        case .lightningAddress, .onchain, .cashuPaymentRequest, .unrecognized:
+            return nil
+        }
+    }
+
+    private var resolvedSelectedMeltMint: MintInfo? {
+        guard let selectedMeltMint else { return nil }
+        return availableMeltMints.first { $0.id == selectedMeltMint.id } ?? selectedMeltMint
+    }
+
+    private var displayMeltMint: MintInfo? {
+        if let mint = resolvedSelectedMeltMint,
+           mint.supportedMeltMethods.contains(selectedMeltPaymentMethod) {
+            return mint
+        }
+
+        return recommendedMeltMint(
+            for: selectedMeltPaymentMethod,
+            minimumAmount: knownPaymentAmount
+        )
+    }
+
+    private var meltMintSelection: Binding<MintInfo?> {
+        Binding(
+            get: { displayMeltMint },
+            set: { newMint in
+                if let newMint {
+                    selectMeltMint(newMint)
+                } else {
+                    selectedMeltMint = nil
+                }
+            }
+        )
     }
 
     private var screenTitle: String {
@@ -721,6 +871,22 @@ struct MeltView: View {
         return true
     }
 
+    private func mintInfo(for quote: MeltQuoteInfo) -> MintInfo? {
+        walletManager.mints.first { $0.url == quote.mintUrl }
+            ?? (walletManager.activeMint?.url == quote.mintUrl ? walletManager.activeMint : nil)
+    }
+
+    private func mintDisplayName(for quote: MeltQuoteInfo) -> String {
+        mintInfo(for: quote)?.name
+            ?? URL(string: quote.mintUrl)?.host
+            ?? quote.mintUrl
+    }
+
+    private func hasSufficientBalance(for quote: MeltQuoteInfo) -> Bool {
+        guard let balance = mintInfo(for: quote)?.balance else { return true }
+        return balance >= quote.totalAmount
+    }
+
     private var requestPlaceholder: String {
         switch meltMode {
         case .lightning:
@@ -732,7 +898,7 @@ struct MeltView: View {
 
     private var requestInputView: some View {
         VStack(spacing: 0) {
-            if let mint = walletManager.activeMint {
+            if let mint = displayMeltMint {
                 meltMintSelector(mint: mint)
                     .padding(.horizontal)
                     .padding(.top, 12)
@@ -740,6 +906,14 @@ struct MeltView: View {
 
             if supportsOnchainMelt {
                 meltModePicker
+                    .padding(.horizontal)
+                    .padding(.top, 12)
+            }
+
+            if displayMeltMint == nil, !availableMeltMints.isEmpty {
+                Text("No mint supports \(selectedMeltPaymentMethod.displayName) payments.")
+                    .font(.caption)
+                    .foregroundStyle(.orange)
                     .padding(.horizontal)
                     .padding(.top, 12)
             }
@@ -998,8 +1172,14 @@ struct MeltView: View {
         VStack(spacing: 0) {
             ScrollView {
                 VStack(spacing: 24) {
+                    if let mint = mintInfo(for: quote) {
+                        meltMintSelector(mint: mint)
+                            .padding(.horizontal)
+                            .padding(.top, 12)
+                    }
+
                     CurrencyAmountDisplay(
-                        sats: quote.totalAmount,
+                        sats: quote.amount,
                         primary: $settings.amountDisplayPrimary
                     )
                     .padding(.top, 24)
@@ -1016,15 +1196,25 @@ struct MeltView: View {
                         }
                         meltDetailRow(label: "Amount", value: "\(quote.amount) sat")
                         Divider().padding(.leading)
-                        meltDetailRow(label: "Fee", value: "\(quote.feeReserve) sat")
-                        if let mintUrl = quote.mintUrl ?? walletManager.activeMint?.url {
+                        meltDetailRow(label: "Max fee", value: "\(quote.feeReserve) sat")
+                        if quote.feeReserve > 0 {
                             Divider().padding(.leading)
-                            meltDetailRow(label: "Mint", value: URL(string: mintUrl)?.host ?? mintUrl)
+                            meltDetailRow(label: "Required balance", value: "\(quote.totalAmount) sat")
                         }
+                        Divider().padding(.leading)
+                        meltDetailRow(label: "Mint", value: mintDisplayName(for: quote))
                     }
                     .padding(.vertical, 4)
                     .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 14))
                     .padding(.horizontal)
+
+                    if !hasSufficientBalance(for: quote),
+                       let balance = mintInfo(for: quote)?.balance {
+                        Text("Selected mint has \(balance) sat; this quote can reserve up to \(quote.totalAmount) sat.")
+                            .font(.caption)
+                            .foregroundStyle(.orange)
+                            .padding(.horizontal)
+                    }
 
                     if let error = errorMessage {
                         Text(error)
@@ -1039,11 +1229,11 @@ struct MeltView: View {
                 if isPaying {
                     ProgressView()
                 } else {
-                    Text("Pay \(quote.totalAmount) sat")
+                    Text("Pay \(quote.amount) sat")
                 }
             }
             .glassButton()
-            .disabled(isPaying)
+            .disabled(isPaying || !hasSufficientBalance(for: quote))
             .padding(.horizontal)
             .padding(.bottom, 16)
         }
@@ -1090,11 +1280,64 @@ struct MeltView: View {
         }
     }
 
-    private func syncMeltModeWithActiveMint() {
+    private func syncMeltModeWithAvailableMints() {
         guard supportsOnchainMelt || meltMode != .onchain else {
             meltMode = .lightning
+            errorMessage = "No mint supports On-chain payments."
             return
         }
+    }
+
+    private func syncSelectedMeltMint() {
+        if let mint = resolvedSelectedMeltMint,
+           mint.supportedMeltMethods.contains(selectedMeltPaymentMethod) {
+            return
+        }
+
+        selectedMeltMint = recommendedMeltMint(
+            for: selectedMeltPaymentMethod,
+            minimumAmount: knownPaymentAmount
+        )
+    }
+
+    private func recommendedMeltMint(
+        for paymentMethod: PaymentMethodKind,
+        minimumAmount: UInt64?
+    ) -> MintInfo? {
+        let compatible = availableMeltMints.filter {
+            $0.supportedMeltMethods.contains(paymentMethod)
+        }
+
+        guard !compatible.isEmpty else {
+            return nil
+        }
+
+        let affordable = compatible.filter { mint in
+            guard let minimumAmount else { return true }
+            return mint.balance >= minimumAmount
+        }
+        let candidates = affordable.isEmpty ? compatible : affordable
+
+        if let activeMint = walletManager.activeMint,
+           candidates.contains(where: { $0.id == activeMint.id }) {
+            return activeMint
+        }
+
+        return candidates.sorted { lhs, rhs in
+            if lhs.balance == rhs.balance {
+                return lhs.name.localizedCaseInsensitiveCompare(rhs.name) == .orderedAscending
+            }
+            return lhs.balance > rhs.balance
+        }.first
+    }
+
+    private func selectMeltMint(_ mint: MintInfo) {
+        selectedMeltMint = mint
+        if meltQuote != nil {
+            meltQuote = nil
+        }
+        errorMessage = nil
+        HapticFeedback.selection()
     }
 
     private func pasteFromClipboard() {
@@ -1187,11 +1430,21 @@ struct MeltView: View {
         guard !trimmedInput.isEmpty else { return }
 
         if meltMode == .lightning,
-           PaymentRequestParser.paymentMethod(for: trimmedInput) == .onchain,
-           supportsOnchainMelt {
+           PaymentRequestParser.paymentMethod(for: trimmedInput) == .onchain {
+            guard supportsOnchainMelt else {
+                errorMessage = "No mint supports On-chain payments."
+                return
+            }
+
             meltMode = .onchain
+            syncSelectedMeltMint()
             errorMessage = "Switched to On-chain. Enter an amount to continue."
             requestInput = PaymentRequestParser.normalizeBitcoinRequest(trimmedInput)
+            return
+        }
+
+        guard let quoteMint = displayMeltMint else {
+            errorMessage = "No mint supports \(selectedMeltPaymentMethod.displayName) payments."
             return
         }
 
@@ -1206,24 +1459,39 @@ struct MeltView: View {
                 case .lightning:
                     if isHumanReadableAddress {
                         guard let amount = UInt64(amountString), amount > 0 else { return }
-                        meltQuote = try await walletManager.createHumanReadableMeltQuote(
+                        let quote = try await walletManager.createHumanReadableMeltQuote(
                             address: trimmedInput,
-                            amount: amount
+                            amount: amount,
+                            preferredMintURL: quoteMint.url
                         )
+                        setMeltQuote(quote)
                     } else {
                         let request = PaymentRequestDecoder.encodedLightningRequest(from: trimmedInput) ?? trimmedInput
-                        meltQuote = try await walletManager.createMeltQuote(request: request)
+                        let quote = try await walletManager.createMeltQuote(
+                            request: request,
+                            preferredMintURL: quoteMint.url
+                        )
+                        setMeltQuote(quote)
                     }
                 case .onchain:
                     guard let amount = UInt64(amountString), amount > 0 else { return }
-                    meltQuote = try await walletManager.createOnchainMeltQuote(
+                    let quote = try await walletManager.createOnchainMeltQuote(
                         address: trimmedInput,
-                        amount: amount
+                        amount: amount,
+                        preferredMintURL: quoteMint.url
                     )
+                    setMeltQuote(quote)
                 }
             } catch {
-                errorMessage = error.localizedDescription
+                errorMessage = error.userFacingWalletMessage
             }
+        }
+    }
+
+    private func setMeltQuote(_ quote: MeltQuoteInfo) {
+        meltQuote = quote
+        if let mint = mintInfo(for: quote) {
+            selectedMeltMint = mint
         }
     }
 
@@ -1238,7 +1506,7 @@ struct MeltView: View {
 
         Task { @MainActor in
             do {
-                let _ = try await walletManager.meltTokens(quoteId: quote.id)
+                let _ = try await walletManager.meltTokens(quoteId: quote.id, mintUrl: quote.mintUrl)
                 authorizingState = .sent
                 // Overlay calls onDismiss after 1.2s; flip isPaid then so the
                 // underlying view transitions to success while the sheet dismisses.
@@ -1246,7 +1514,7 @@ struct MeltView: View {
                 isPaid = true
                 showAuthorizingOverlay = false
             } catch {
-                let message = error.localizedDescription
+                let message = error.userFacingWalletMessage
                 authorizingState = .error(message)
                 errorMessage = message
                 // Let the user read the error in the sheet, then dismiss after 2s.
@@ -1299,12 +1567,32 @@ struct MeltViewWithAddress: View {
 struct MintSelectorSheet: View {
     @Environment(\.dismiss) private var dismiss
     @EnvironmentObject var walletManager: WalletManager
-    @Binding var selectedMint: MintInfo?
+    @Binding private var selectedMint: MintInfo?
+    private let mints: [MintInfo]?
+    private let paymentMethod: PaymentMethodKind?
+    private let minimumAmount: UInt64?
+    private let onSelect: ((MintInfo) -> Void)?
+
+    init(
+        selectedMint: Binding<MintInfo?>,
+        mints: [MintInfo]? = nil,
+        paymentMethod: PaymentMethodKind? = nil,
+        minimumAmount: UInt64? = nil,
+        onSelect: ((MintInfo) -> Void)? = nil
+    ) {
+        _selectedMint = selectedMint
+        self.mints = mints
+        self.paymentMethod = paymentMethod
+        self.minimumAmount = minimumAmount
+        self.onSelect = onSelect
+    }
 
     var body: some View {
         NavigationStack {
-            if walletManager.mints.isEmpty {
+            if sourceMints.isEmpty {
                 emptyStateView
+            } else if displayMints.isEmpty {
+                noCompatibleMintsView
             } else {
                 mintListView
             }
@@ -1340,8 +1628,61 @@ struct MintSelectorSheet: View {
         .padding()
     }
 
+    private var noCompatibleMintsView: some View {
+        VStack(spacing: 16) {
+            Image(systemName: "exclamationmark.triangle")
+                .font(.title)
+                .foregroundStyle(.orange)
+                .accessibilityHidden(true)
+
+            Text("No Compatible Mints")
+                .font(.headline)
+
+            if let paymentMethod {
+                Text("None of your mints support \(paymentMethod.displayName) payments.")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+            }
+        }
+        .padding()
+    }
+
+    private var displayMints: [MintInfo] {
+        let filteredMints: [MintInfo]
+        if let paymentMethod {
+            filteredMints = sourceMints.filter {
+                $0.supportedMeltMethods.contains(paymentMethod)
+            }
+        } else {
+            filteredMints = sourceMints
+        }
+
+        return filteredMints
+            .sorted { lhs, rhs in
+                let lhsSelected = selectedMint?.id == lhs.id
+                let rhsSelected = selectedMint?.id == rhs.id
+                if lhsSelected != rhsSelected { return lhsSelected }
+
+                if let minimumAmount {
+                    let lhsCanPay = lhs.balance >= minimumAmount
+                    let rhsCanPay = rhs.balance >= minimumAmount
+                    if lhsCanPay != rhsCanPay { return lhsCanPay }
+                }
+
+                if lhs.balance == rhs.balance {
+                    return lhs.name.localizedCaseInsensitiveCompare(rhs.name) == .orderedAscending
+                }
+                return lhs.balance > rhs.balance
+            }
+    }
+
+    private var sourceMints: [MintInfo] {
+        mints ?? walletManager.mints
+    }
+
     private var mintListView: some View {
-        List(walletManager.mints) { mint in
+        List(displayMints) { mint in
             Button(action: { selectMint(mint) }) {
                 HStack(spacing: 12) {
                     mintIcon(for: mint)
@@ -1360,7 +1701,7 @@ struct MintSelectorSheet: View {
                     VStack(alignment: .leading, spacing: 2) {
                         Text(mint.name)
                             .font(.body.weight(.medium))
-                        Text(SettingsManager.shared.formatAmountBalance(mint.balance) + " sat")
+                        Text(mintSubtitle(for: mint))
                             .font(.subheadline)
                             .foregroundStyle(.secondary)
                     }
@@ -1376,6 +1717,23 @@ struct MintSelectorSheet: View {
             .listRowSeparator(.hidden)
         }
         .listStyle(.plain)
+    }
+
+    private func mintSubtitle(for mint: MintInfo) -> String {
+        let balance = SettingsManager.shared.formatAmountBalance(mint.balance) + " sat"
+        if let minimumAmount, mint.balance < minimumAmount {
+            return "\(balance) - below amount"
+        }
+
+        guard paymentMethod != nil else {
+            return balance
+        }
+
+        let methods = mint.supportedMeltMethods
+            .sorted { $0.sortOrder < $1.sortOrder }
+            .map(\.displayName)
+            .joined(separator: ", ")
+        return "\(balance) - \(methods)"
     }
 
     @ViewBuilder
@@ -1405,6 +1763,13 @@ struct MintSelectorSheet: View {
     }
 
     private func selectMint(_ mint: MintInfo) {
+        if let onSelect {
+            selectedMint = mint
+            onSelect(mint)
+            dismiss()
+            return
+        }
+
         Task {
             do {
                 try await walletManager.setActiveMint(mint)

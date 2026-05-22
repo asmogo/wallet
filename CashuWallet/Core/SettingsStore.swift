@@ -161,6 +161,11 @@ final class SettingsStore {
         set(date, forKey: StorageKeys.cachedBTCPriceDate)
     }
 
+    func clearWalletScopedData() {
+        remove(keys: StorageKeys.walletScopedSettingsKeys + StorageKeys.walletScopedSettingsLegacyKeys)
+        remove(keys: storage.keys(withPrefix: StorageKeys.npcDataPrefix))
+    }
+
     private func bool(_ key: String, legacy: String? = nil, default defaultValue: Bool) -> Bool {
         value(key, legacyKeys: legacy.map { [$0] } ?? []) ?? defaultValue
     }
@@ -201,6 +206,16 @@ final class SettingsStore {
             }
         } catch {
             AppLogger.wallet.error("Failed to update \(key): \(error)")
+        }
+    }
+
+    private func remove(keys: [String]) {
+        for key in Set(keys) {
+            do {
+                try storage.remove(forKey: key)
+            } catch {
+                AppLogger.wallet.error("Failed to remove \(key): \(error)")
+            }
         }
     }
 }

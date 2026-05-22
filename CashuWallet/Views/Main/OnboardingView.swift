@@ -634,7 +634,7 @@ struct OnboardingView: View {
                 do {
                     try await walletManager.addMint(url: url)
                 } catch {
-                    firstMintError = "Couldn't connect to \(shortenUrl(url)). \(error.localizedDescription)"
+                    firstMintError = "Couldn't connect to \(shortenUrl(url)). \(error.userFacingWalletMessage)"
                     AppLogger.wallet.error("First-mint add error for \(url): \(error)")
                     isAddingFirstMints = false
                     currentAddingMint = nil
@@ -1008,7 +1008,7 @@ struct OnboardingView: View {
                 try await walletManager.createNewWallet()
                 advance(to: .showMnemonic)
             } catch {
-                errorMessage = "Couldn't create the wallet. \(error.localizedDescription)"
+                errorMessage = "Couldn't create the wallet. \(error.userFacingWalletMessage)"
                 AppLogger.wallet.error("Create wallet error: \(error)")
             }
             isCreating = false
@@ -1035,7 +1035,7 @@ struct OnboardingView: View {
                 try await walletManager.initializeRestoredWallet(mnemonic: cleanedMnemonic)
                 advance(to: .restoreMints)
             } catch {
-                errorMessage = "Couldn't open the wallet. \(error.localizedDescription)"
+                errorMessage = "Couldn't open the wallet. \(error.userFacingWalletMessage)"
             }
             isRestoring = false
         }
@@ -1132,7 +1132,7 @@ struct OnboardingView: View {
                     restoreResults.append(result)
                     mintsToRestore.removeAll { $0 == url }
                 } catch {
-                    restoreMintError = "Couldn't reach \(shortenUrl(url)). \(error.localizedDescription)"
+                    restoreMintError = "Couldn't reach \(shortenUrl(url)). \(error.userFacingWalletMessage)"
                     AppLogger.wallet.error("Restore error for \(url): \(error)")
                 }
             }
@@ -1149,7 +1149,7 @@ struct OnboardingView: View {
 
     private func finishOnboarding() {
         // Onboarding complete - wallet is ready
-        walletManager.needsOnboarding = false
+        walletManager.completeOnboarding()
     }
 }
 

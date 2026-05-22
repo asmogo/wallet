@@ -32,6 +32,7 @@ class SettingsManager: ObservableObject {
     @Published var showFiatBalance: Bool {
         didSet { 
             settingsStore.showFiatBalance = showFiatBalance
+            guard showFiatBalance != oldValue else { return }
             // Enable/disable price service based on this setting
             PriceService.shared.isEnabled = showFiatBalance
         }
@@ -40,6 +41,7 @@ class SettingsManager: ObservableObject {
     @Published var bitcoinPriceCurrency: String {
         didSet {
             settingsStore.bitcoinPriceCurrency = bitcoinPriceCurrency
+            guard bitcoinPriceCurrency != oldValue else { return }
             PriceService.shared.currencyCode = bitcoinPriceCurrency
         }
     }
@@ -135,16 +137,21 @@ class SettingsManager: ObservableObject {
         self.nwcConnections = Self.loadNWCConnections()
         self.showP2PKButtonInDrawer = settingsStore.showP2PKButtonInDrawer
         self.p2pkKeys = Self.loadP2PKKeys()
-        self.checkIncomingInvoices = UserDefaults.standard.object(forKey: "checkIncomingInvoices") as? Bool ?? true
-        self.periodicallyCheckIncomingInvoices = UserDefaults.standard.object(forKey: "periodicallyCheckIncomingInvoices") as? Bool ?? true
-        self.nostrRelays = UserDefaults.standard.stringArray(forKey: "nostrRelays") ?? Self.defaultNostrRelays
+        self.checkIncomingInvoices = settingsStore.checkIncomingInvoices
+        self.periodicallyCheckIncomingInvoices = settingsStore.periodicallyCheckIncomingInvoices
+        self.nostrRelays = settingsStore.nostrRelays
         self.amountDisplayPrimary = AmountDisplayPrimary(rawValue: settingsStore.amountDisplayPrimary) ?? .fiat
 
         persistNWCConnections()
         persistP2PKKeys()
         
-        PriceService.shared.currencyCode = bitcoinPriceCurrency
-        PriceService.shared.isEnabled = showFiatBalance
+        let priceService = PriceService.shared
+        if !priceService.isEnabled, priceService.currencyCode != bitcoinPriceCurrency {
+            priceService.currencyCode = bitcoinPriceCurrency
+        }
+        if !showFiatBalance, priceService.isEnabled {
+            priceService.isEnabled = false
+        }
     }
 
     func addNostrRelay(_ relay: String) -> Bool {
@@ -253,12 +260,35 @@ class SettingsManager: ObservableObject {
         try? KeychainService().deleteSecret(forKey: Self.secureP2PKPrivateKey(key.id))
         p2pkKeys.removeAll { $0.id == key.id }
     }
+
+    func resetWalletScopedData(resetRuntimeServices: Bool = true) {
+        let keychain = KeychainService()
+
+        for connection in nwcConnections {
+            try? keychain.deleteSecret(forKey: Self.secureNWCWalletPrivateKey(connection.id))
+            try? keychain.deleteSecret(forKey: Self.secureNWCConnectionSecret(connection.id))
+        }
+
+        for key in p2pkKeys {
+            try? keychain.deleteSecret(forKey: Self.secureP2PKPrivateKey(key.id))
+        }
+
+        try? keychain.deleteNostrPrivateKey()
+
+        enableNWC = false
+        nwcConnections = []
+        showP2PKButtonInDrawer = false
+        p2pkKeys = []
+
+        if resetRuntimeServices {
+            NostrService.shared.resetForWalletBoundary()
+            NPCService.shared.resetForWalletBoundary()
+        }
+        settingsStore.clearWalletScopedData()
+    }
     
     private static func loadNWCConnections() -> [NWCConnection] {
-        guard let data = UserDefaults.standard.data(forKey: "nwcConnections"),
-              let decoded = try? JSONDecoder().decode([NWCConnection].self, from: data) else {
-            return []
-        }
+        let decoded = SettingsStore.shared.nwcConnections
         let keychain = KeychainService()
         return decoded.map { connection in
             let walletPrivateKey = secureSecret(
@@ -288,15 +318,11 @@ class SettingsManager: ObservableObject {
             try? keychain.saveSecret(connection.walletPrivateKey, forKey: Self.secureNWCWalletPrivateKey(connection.id))
             try? keychain.saveSecret(connection.connectionSecret, forKey: Self.secureNWCConnectionSecret(connection.id))
         }
-        guard let data = try? JSONEncoder().encode(nwcConnections) else { return }
-        UserDefaults.standard.set(data, forKey: "nwcConnections")
+        settingsStore.nwcConnections = nwcConnections
     }
 
     private static func loadP2PKKeys() -> [P2PKKey] {
-        guard let data = UserDefaults.standard.data(forKey: "p2pkKeys"),
-              let decoded = try? JSONDecoder().decode([P2PKKey].self, from: data) else {
-            return []
-        }
+        let decoded = SettingsStore.shared.p2pkKeys
         let keychain = KeychainService()
         return decoded.map { key in
             let privateKey = secureSecret(
@@ -319,8 +345,7 @@ class SettingsManager: ObservableObject {
         for key in p2pkKeys {
             try? keychain.saveSecret(key.privateKey, forKey: Self.secureP2PKPrivateKey(key.id))
         }
-        guard let data = try? JSONEncoder().encode(p2pkKeys) else { return }
-        UserDefaults.standard.set(data, forKey: "p2pkKeys")
+        settingsStore.p2pkKeys = p2pkKeys
     }
 
     private static func secureSecret(key: String, legacyValue: String, keychain: KeychainService) -> String {

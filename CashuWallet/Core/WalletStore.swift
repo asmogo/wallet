@@ -66,6 +66,14 @@ final class WalletStore {
         set(preimages, forKey: StorageKeys.paymentPreimages)
     }
 
+    func loadMeltQuoteFees() -> [String: UInt64] {
+        value(forKey: StorageKeys.meltQuoteFees) ?? [:]
+    }
+
+    func saveMeltQuoteFees(_ fees: [String: UInt64]) {
+        set(fees, forKey: StorageKeys.meltQuoteFees)
+    }
+
     func loadMintQuoteTimestamps() -> [String: TimeInterval] {
         value(
             forKey: StorageKeys.mintQuoteTimestamps,
@@ -75,6 +83,19 @@ final class WalletStore {
 
     func saveMintQuoteTimestamps(_ timestamps: [String: TimeInterval]) {
         set(timestamps, forKey: StorageKeys.mintQuoteTimestamps)
+    }
+
+    func loadProcessedNPCQuotes() -> [String] {
+        value(forKey: StorageKeys.processedNPCQuotes) ?? []
+    }
+
+    func saveProcessedNPCQuotes(_ quoteIds: [String]) {
+        set(quoteIds, forKey: StorageKeys.processedNPCQuotes)
+    }
+
+    func removeAllWalletData() {
+        remove(keys: StorageKeys.walletDataKeys + StorageKeys.walletDataLegacyKeys)
+        remove(keys: storage.keys(withPrefix: StorageKeys.walletDataPrefix))
     }
 
     private func value<T: Codable>(forKey key: String, legacyKeys: [String] = []) -> T? {
@@ -109,6 +130,16 @@ final class WalletStore {
             }
         } catch {
             AppLogger.wallet.error("Failed to update \(key): \(error)")
+        }
+    }
+
+    private func remove(keys: [String]) {
+        for key in Set(keys) {
+            do {
+                try storage.remove(forKey: key)
+            } catch {
+                AppLogger.wallet.error("Failed to remove \(key): \(error)")
+            }
         }
     }
 }

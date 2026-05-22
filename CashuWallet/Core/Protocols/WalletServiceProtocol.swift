@@ -50,7 +50,7 @@ protocol MintServiceProtocol {
 /// Protocol for ecash token operations
 protocol TokenServiceProtocol {
     /// Send tokens of specified amount
-    func sendTokens(amount: UInt64, memo: String?) async throws -> SendTokenResult
+    func sendTokens(amount: UInt64, memo: String?, mintUrl: String?) async throws -> SendTokenResult
     
     /// Receive/redeem a token
     func receiveToken(_ tokenString: String) async throws -> UInt64
@@ -96,14 +96,14 @@ protocol QuoteServiceProtocol {
     func mintTokens(quoteId: String) async throws -> UInt64
     
     /// Create a melt quote for a payment request.
-    func createMeltQuote(request: String) async throws -> MeltQuoteInfo
+    func createMeltQuote(request: String, preferredMintURL: String?) async throws -> MeltQuoteInfo
     
     /// Backward-compatible bolt11-specific entrypoint
-    func createMeltQuote(invoice: String) async throws -> MeltQuoteInfo
+    func createMeltQuote(invoice: String, preferredMintURL: String?) async throws -> MeltQuoteInfo
 
     /// Create a melt quote for an on-chain bitcoin address.
-    func createOnchainMeltQuote(address: String, amount: UInt64) async throws -> MeltQuoteInfo
+    func createOnchainMeltQuote(address: String, amount: UInt64, preferredMintURL: String?) async throws -> MeltQuoteInfo
     
     /// Execute the melt (pay the request)
-    func meltTokens(quoteId: String) async throws -> PaymentResult
+    func meltTokens(quoteId: String, mintUrl: String?) async throws -> MeltPaymentResult
 }

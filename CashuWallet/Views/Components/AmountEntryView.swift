@@ -304,7 +304,7 @@ struct SendAmountEntryView: View {
                 let token = try await walletManager.sendTokens(amount: amount, memo: nil)
                 generatedToken = token.token
             } catch {
-                errorMessage = error.localizedDescription
+                errorMessage = error.userFacingWalletMessage
             }
             isGenerating = false
         }

@@ -412,7 +412,7 @@ struct MintDetailView: View {
         do {
             cdkInfo = try await walletManager.fetchFullMintInfo(mintUrl: mint.url)
         } catch {
-            errorMessage = error.localizedDescription
+            errorMessage = error.userFacingWalletMessage
         }
         isLoading = false
     }

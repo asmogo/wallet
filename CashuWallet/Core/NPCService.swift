@@ -2,7 +2,7 @@ import Foundation
 import SwiftUI
 import CashuDevKit
 
-/// Service for npub.cash integration using CDK NpubCashClient
+/// Service for NPubCash integration using CDK NpubCashClient
 /// Provides Lightning address functionality via Nostr identity
 @MainActor
 class NPCService: ObservableObject {
@@ -63,6 +63,7 @@ class NPCService: ObservableObject {
     private var nostrSecretKey: String?
     private var nostrPubkey: String?
     private var refreshTimer: Timer?
+    private var paymentCheckInProgress = false
     private let settingsStore = SettingsStore.shared
     private let refreshInterval: TimeInterval = 120  // Check every 2 minutes
     private var shouldCheckIncomingInvoices: Bool {
@@ -112,6 +113,12 @@ class NPCService: ObservableObject {
         guard let hexPubkey = nostrPubkey else { return nil }
         return try? hexToNpub(hexPubkey)
     }
+
+    /// The compressed public key used when minting NPubCash locked quotes.
+    var p2pkPublicKey: String? {
+        guard let nostrPubkey, nostrPubkey.count == 64 else { return nil }
+        return "02\(nostrPubkey)"
+    }
     
     /// Convert hex public key to bech32 npub format
     private func hexToNpub(_ hexPubkey: String) throws -> String {
@@ -148,8 +155,7 @@ class NPCService: ObservableObject {
         defer { isLoading = false }
         
         do {
-            // Create NpubCashClient with CDKaaaaaaaaaaaa
-            print(baseURL)
+            // Create NpubCashClient with CDK.
             let connectedClient = try NpubCashClient(baseUrl: baseURL, nostrSecretKey: secretKey)
             client = connectedClient
             
@@ -171,7 +177,7 @@ class NPCService: ObservableObject {
             startBackgroundRefresh()
             
         } catch {
-            errorMessage = error.localizedDescription
+            errorMessage = error.userFacingWalletMessage
             print("NPC connection error: \(error)")
             isConnected = false
         }
@@ -215,21 +221,28 @@ class NPCService: ObservableObject {
     
     /// Check for new payments and claim them
     func checkAndClaimPayments() async {
-        guard isEnabled, isConnected, client != nil, shouldCheckIncomingInvoices else { return }
+        guard isEnabled, shouldCheckIncomingInvoices else { return }
+        guard !paymentCheckInProgress else { return }
+
+        paymentCheckInProgress = true
+        defer { paymentCheckInProgress = false }
+
+        if !isConnected || client == nil {
+            await connect()
+        }
+
+        guard isConnected, client != nil else { return }
         
         do {
-            // Get since timestamp from last check
-            let sinceTimestamp: UInt64? = lastCheck.map { UInt64($0.timeIntervalSince1970) }
-            
-            let quotes = try await getQuotes(since: sinceTimestamp)
-            
-            // Update last check time
-            if let latestQuote = quotes.max(by: { $0.createdAt < $1.createdAt }) {
-                lastCheck = Date(timeIntervalSince1970: TimeInterval(latestQuote.createdAt))
-            }
+            let quotes = try await getQuotes(since: nil)
+            lastCheck = Date()
             
             // Process paid quotes
-            let paidQuotes = quotes.filter { $0.state == "PAID" && $0.locked != true }
+            let paidQuotes = quotes
+                .filter { $0.isPaid }
+                .sorted {
+                    ($0.paidAt ?? $0.createdAt) < ($1.paidAt ?? $1.createdAt)
+                }
             
             for quote in paidQuotes {
                 if automaticClaim {
@@ -241,6 +254,7 @@ class NPCService: ObservableObject {
             }
             
         } catch {
+            errorMessage = error.userFacingWalletMessage
             print("Failed to check NPC payments: \(error)")
         }
     }
@@ -249,14 +263,23 @@ class NPCService: ObservableObject {
     private func claimQuote(_ quote: NpubCashQuote) async {
         // Convert to MintQuote using CDK helper and notify WalletManager
         let mintQuote = npubcashQuoteToMintQuote(quote: quote)
+
+        var userInfo: [String: Any] = [
+            "mintQuote": mintQuote,
+            "npcQuote": quote
+        ]
+
+        if quote.locked == true, let p2pkPublicKey {
+            userInfo["spendingConditions"] = SpendingConditions.p2pk(
+                pubkey: p2pkPublicKey,
+                conditions: nil
+            )
+        }
         
         NotificationCenter.default.post(
             name: .npcQuoteReceived,
             object: nil,
-            userInfo: [
-                "mintQuote": mintQuote,
-                "npcQuote": quote
-            ]
+            userInfo: userInfo
         )
     }
     
@@ -305,6 +328,23 @@ class NPCService: ObservableObject {
         startBackgroundRefresh()
     }
 
+    func resetForWalletBoundary() {
+        stopBackgroundRefresh()
+        disconnect()
+        nostrSecretKey = nil
+        nostrPubkey = nil
+        client = nil
+        lightningAddress = ""
+        configuredMintUrl = ""
+        errorMessage = nil
+        isLoading = false
+        paymentCheckInProgress = false
+        selectedMintUrl = nil
+        lastCheck = nil
+        automaticClaim = true
+        isEnabled = false
+    }
+
     deinit {
         refreshTimer?.invalidate()
     }
@@ -346,4 +386,10 @@ enum NPCError: LocalizedError {
 extension Notification.Name {
     static let npcQuoteReceived = Notification.Name("npcQuoteReceived")
     static let npcPaymentPending = Notification.Name("npcPaymentPending")
+}
+
+private extension NpubCashQuote {
+    var isPaid: Bool {
+        state?.caseInsensitiveCompare("PAID") == .orderedSame
+    }
 }

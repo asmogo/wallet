@@ -14,9 +14,10 @@ class PriceService: ObservableObject {
     /// Selected fiat currency code (e.g. USD, EUR)
     @Published var currencyCode: String {
         didSet {
+            guard currencyCode != oldValue else { return }
             settingsStore.priceCurrencyCode = currencyCode
             if isEnabled {
-                Task { await fetchPrice() }
+                startAutoRefresh()
             }
         }
     }
@@ -24,6 +25,7 @@ class PriceService: ObservableObject {
     /// Whether price fetching is enabled
     @Published var isEnabled: Bool {
         didSet {
+            guard isEnabled != oldValue else { return }
             settingsStore.priceEnabled = isEnabled
             if isEnabled {
                 startAutoRefresh()
@@ -49,6 +51,7 @@ class PriceService: ObservableObject {
     }
     private let settingsStore = SettingsStore.shared
     private var refreshTimer: Timer?
+    private var initialFetchTask: Task<Void, Never>?
     private let refreshInterval: TimeInterval = 60 // Refresh every 60 seconds
     private lazy var fiatFormatter: NumberFormatter = {
         let formatter = NumberFormatter()
@@ -72,10 +75,8 @@ class PriceService: ObservableObject {
             self.lastUpdated = cachedDate
         }
         
-        // Start auto-refresh if enabled
-        if isEnabled {
-            startAutoRefresh()
-        }
+        // The first network refresh is started by SettingsManager after the
+        // initial wallet UI has had a chance to render cached values.
     }
     
     // MARK: - Public Methods
@@ -149,8 +150,11 @@ class PriceService: ObservableObject {
     func startAutoRefresh() {
         stopAutoRefresh()
         
-        // Initial fetch
-        Task { await fetchPrice() }
+        initialFetchTask = Task { [weak self] in
+            try? await Task.sleep(nanoseconds: 1_000_000_000)
+            guard !Task.isCancelled else { return }
+            await self?.fetchPrice()
+        }
         
         // Setup timer for periodic refresh
         refreshTimer = Timer.scheduledTimer(withTimeInterval: refreshInterval, repeats: true) { [weak self] _ in
@@ -162,6 +166,8 @@ class PriceService: ObservableObject {
     
     /// Stop auto-refresh timer
     func stopAutoRefresh() {
+        initialFetchTask?.cancel()
+        initialFetchTask = nil
         refreshTimer?.invalidate()
         refreshTimer = nil
     }
@@ -169,6 +175,7 @@ class PriceService: ObservableObject {
     // MARK: - Deinit
     
     deinit {
+        initialFetchTask?.cancel()
         refreshTimer?.invalidate()
     }
 }
