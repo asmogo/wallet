@@ -69,6 +69,8 @@ fun NostrScreen(
     var importError by remember { mutableStateOf<String?>(null) }
     var addRelayOpen by remember { mutableStateOf(false) }
     var addRelayError by remember { mutableStateOf<String?>(null) }
+    var showGenerateConfirm by remember { mutableStateOf(false) }
+    var showResetConfirm by remember { mutableStateOf(false) }
 
     Scaffold(
         topBar = {
@@ -170,11 +172,24 @@ fun NostrScreen(
                     )
                 }
             }
-            Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp)) {
+            Column(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                PrimaryButton(
+                    text = "Generate new key",
+                    onClick = { showGenerateConfirm = true },
+                )
                 GhostButton(
                     text = "Import nsec…",
                     onClick = { showImport = true },
                     modifier = Modifier.fillMaxWidth(),
+                )
+                GhostButton(
+                    text = "Reset to wallet seed",
+                    onClick = { showResetConfirm = true },
+                    modifier = Modifier.fillMaxWidth(),
+                    enabled = nostrState.signerType != NostrSignerType.Seed,
                 )
             }
 
@@ -270,6 +285,52 @@ fun NostrScreen(
             },
             dismissButton = {
                 TextButton(onClick = { showImport = false; importError = null }) { Text("Cancel") }
+            },
+        )
+    }
+
+    if (showGenerateConfirm) {
+        AlertDialog(
+            onDismissRequest = { showGenerateConfirm = false },
+            title = { Text("Generate new key") },
+            text = {
+                Text(
+                    "Replace your current Nostr identity with a freshly generated key? Your old public key will stop working for messages and contacts.",
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    showGenerateConfirm = false
+                    runCatching { nostrService.generateRandomKeypair() }
+                }) { Text("Generate") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showGenerateConfirm = false }) { Text("Cancel") }
+            },
+        )
+    }
+
+    if (showResetConfirm) {
+        AlertDialog(
+            onDismissRequest = { showResetConfirm = false },
+            title = { Text("Reset to wallet seed") },
+            text = {
+                Text(
+                    "Replace your Nostr identity with one derived from your wallet seed. Your current custom key will be removed.",
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    showResetConfirm = false
+                    runCatching { nostrService.resetToSeedKey() }
+                }) {
+                    Text("Reset", color = MaterialTheme.colorScheme.error)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showResetConfirm = false }) { Text("Cancel") }
             },
         )
     }

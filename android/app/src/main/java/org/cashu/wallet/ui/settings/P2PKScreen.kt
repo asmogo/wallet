@@ -13,6 +13,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.outlined.ContentCopy
 import androidx.compose.material.icons.outlined.Delete
+import androidx.compose.material.icons.outlined.VpnKey
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -44,6 +45,7 @@ import org.cashu.wallet.ui.components.CanvasDivider
 import org.cashu.wallet.ui.components.EmptyState
 import org.cashu.wallet.ui.components.PrimaryButton
 import org.cashu.wallet.ui.components.SectionHeader
+import org.cashu.wallet.ui.components.ToggleRow
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -94,6 +96,14 @@ fun P2PKScreen(
                     }
                 }
             }
+
+            SectionHeader("Send flow")
+            ToggleRow(
+                title = "Quick access to lock",
+                subtitle = "Show the P2PK lock button on the Send screen",
+                checked = settings.showP2PKButtonInDrawer,
+                onCheckedChange = settingsManager::setShowP2PKButtonInDrawer,
+            )
 
             Spacer(Modifier.height(16.dp))
             Column(
@@ -194,8 +204,14 @@ private fun P2PKRow(
     Row(
         modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
+        Icon(
+            imageVector = Icons.Outlined.VpnKey,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.size(20.dp),
+        )
         Column(modifier = Modifier.weight(1f)) {
             Text(
                 text = key.label.ifBlank { "Untitled key" },

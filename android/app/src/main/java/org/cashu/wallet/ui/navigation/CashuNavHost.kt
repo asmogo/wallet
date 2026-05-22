@@ -190,13 +190,13 @@ fun CashuNavHost(
         composable(Routes.SETTINGS_PRIVACY) {
             PrivacyScreen(
                 settingsManager = container.settingsManager,
+                priceService = container.priceService,
                 onClose = { navController.popBackStack() },
             )
         }
         composable(Routes.SETTINGS_APPEARANCE) {
             AppearanceScreen(
                 settingsManager = container.settingsManager,
-                priceService = container.priceService,
                 onClose = { navController.popBackStack() },
             )
         }

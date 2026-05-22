@@ -2,7 +2,6 @@ package org.cashu.wallet.ui.settings
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
@@ -20,9 +19,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
-import org.cashu.wallet.Core.PriceService
 import org.cashu.wallet.Core.SettingsManager
-import org.cashu.wallet.ui.components.CanvasDivider
 import org.cashu.wallet.ui.components.SectionHeader
 import org.cashu.wallet.ui.components.ToggleRow
 
@@ -30,7 +27,6 @@ import org.cashu.wallet.ui.components.ToggleRow
 @Composable
 fun AppearanceScreen(
     settingsManager: SettingsManager,
-    priceService: PriceService,
     onClose: () -> Unit,
 ) {
     val settings by settingsManager.state.collectAsState()
@@ -70,16 +66,6 @@ fun AppearanceScreen(
             }
 
             SectionHeader("Display")
-            ToggleRow(
-                title = "Show fiat balance",
-                subtitle = "Display USD/EUR equivalent next to sats",
-                checked = settings.showFiatBalance,
-                onCheckedChange = {
-                    settingsManager.setShowFiatBalance(it)
-                    priceService.syncFromSettings(refresh = it)
-                },
-            )
-            CanvasDivider(leadingInset = 16)
             ToggleRow(
                 title = "Use ₿ symbol",
                 subtitle = "Prefix balances with ₿ instead of \"sat\"",

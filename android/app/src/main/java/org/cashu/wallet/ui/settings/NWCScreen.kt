@@ -1,5 +1,6 @@
 package org.cashu.wallet.ui.settings
 
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -44,6 +45,7 @@ import org.cashu.wallet.ui.components.CanvasDivider
 import org.cashu.wallet.ui.components.EmptyState
 import org.cashu.wallet.ui.components.PrimaryButton
 import org.cashu.wallet.ui.components.SectionHeader
+import org.cashu.wallet.ui.components.ToggleRow
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -73,35 +75,46 @@ fun NWCScreen(
         },
     ) { padding ->
         Column(modifier = Modifier.fillMaxSize().padding(padding)) {
-            SectionHeader("Connections")
-            if (settings.nwcConnections.isEmpty()) {
-                EmptyState(
-                    icon = Icons.Outlined.ContentCopy,
-                    title = "No NWC connections",
-                    supporting = "Generate a connection string to authorize a remote wallet client.",
-                )
-            } else {
-                Column(modifier = Modifier.fillMaxWidth()) {
-                    settings.nwcConnections.forEachIndexed { index, conn ->
-                        ConnectionRow(
-                            connection = conn,
-                            onCopy = {
-                                val str = settingsManager.nwcConnectionString(conn)
-                                clipboard.setText(AnnotatedString(str))
-                            },
-                            onRemove = { connectionToRemove = conn },
+            ToggleRow(
+                title = "Enable NWC",
+                subtitle = "Allow remote clients to send payments through this wallet",
+                checked = settings.enableNWC,
+                onCheckedChange = settingsManager::setEnableNWC,
+            )
+
+            AnimatedVisibility(visible = settings.enableNWC) {
+                Column {
+                    SectionHeader("Connections")
+                    if (settings.nwcConnections.isEmpty()) {
+                        EmptyState(
+                            icon = Icons.Outlined.ContentCopy,
+                            title = "No NWC connections",
+                            supporting = "Generate a connection string to authorize a remote wallet client.",
                         )
-                        if (index != settings.nwcConnections.lastIndex) CanvasDivider(leadingInset = 16)
+                    } else {
+                        Column(modifier = Modifier.fillMaxWidth()) {
+                            settings.nwcConnections.forEachIndexed { index, conn ->
+                                ConnectionRow(
+                                    connection = conn,
+                                    onCopy = {
+                                        val str = settingsManager.nwcConnectionString(conn)
+                                        clipboard.setText(AnnotatedString(str))
+                                    },
+                                    onRemove = { connectionToRemove = conn },
+                                )
+                                if (index != settings.nwcConnections.lastIndex) CanvasDivider(leadingInset = 16)
+                            }
+                        }
+                    }
+
+                    Spacer(Modifier.height(16.dp))
+                    Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp)) {
+                        PrimaryButton(
+                            text = "New connection…",
+                            onClick = { showCreate = true },
+                        )
                     }
                 }
-            }
-
-            Spacer(Modifier.height(16.dp))
-            Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp)) {
-                PrimaryButton(
-                    text = "New connection…",
-                    onClick = { showCreate = true },
-                )
             }
         }
     }
