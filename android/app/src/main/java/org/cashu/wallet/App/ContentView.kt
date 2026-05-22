@@ -220,6 +220,9 @@ private fun WalletShell(container: AppContainer) {
                     priceService = container.priceService,
                     connectivityState = connectivityState,
                     onOpenMints = { selectedTab = RootTab.Mints },
+                    onOpenHistory = { selectedTab = RootTab.History },
+                    onReceive = { selectedTab = RootTab.Receive },
+                    onSend = { selectedTab = RootTab.Send },
                     onScan = { scannerTarget = ScannerTarget.Auto },
                     onContactless = { showContactless = true },
                 )

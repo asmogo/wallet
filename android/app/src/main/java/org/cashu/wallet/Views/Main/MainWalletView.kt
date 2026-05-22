@@ -2,12 +2,9 @@ package org.cashu.wallet.Views.Main
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -23,6 +20,7 @@ import org.cashu.wallet.Core.SettingsManager
 import org.cashu.wallet.Core.WalletManager
 import org.cashu.wallet.Views.Components.CurrencyAmountDisplay
 import org.cashu.wallet.Views.Components.KeyValueRow
+import org.cashu.wallet.Views.Components.PendingBalanceBadge
 import org.cashu.wallet.Views.Components.PrimaryActionButton
 import org.cashu.wallet.Views.Components.QuietCard
 import org.cashu.wallet.Views.Components.SectionHeader
@@ -35,6 +33,9 @@ fun MainWalletView(
     priceService: PriceService,
     connectivityState: ConnectivityState,
     onOpenMints: () -> Unit,
+    onOpenHistory: () -> Unit,
+    onReceive: () -> Unit,
+    onSend: () -> Unit,
     onScan: () -> Unit,
     onContactless: () -> Unit,
 ) {
@@ -42,6 +43,7 @@ fun MainWalletView(
     val settings by settingsManager.state.collectAsState()
     val priceState by priceService.state.collectAsState()
     val formatter = AmountFormatter()
+    val pendingAmount = maxOf(state.pendingBalance, state.pendingTokens.sumOf { it.amount })
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -62,11 +64,20 @@ fun MainWalletView(
             priceState = priceState,
             onPrimaryChange = { settingsManager.setAmountDisplayPrimary(it.rawValue) },
         )
-        Row(Modifier.fillMaxWidth()) {
-            PrimaryActionButton("Refresh", enabled = !state.isLoading) {
-                walletManager.launch { walletManager.refreshBalance() }
+        if (pendingAmount > 0) {
+            PendingBalanceBadge(
+                amount = pendingAmount,
+                unitSuffix = "sat",
+                onClick = onOpenHistory,
+            )
+        }
+        PrimaryActionButton("Receive", onClick = onReceive)
+        PrimaryActionButton("Send", onClick = onSend)
+        SecondaryActionButton("Refresh", enabled = !state.isLoading) {
+            walletManager.launch {
+                walletManager.refreshBalance()
+                walletManager.loadTransactions()
             }
-            Spacer(Modifier.width(12.dp))
         }
         SecondaryActionButton("Scan QR", onClick = onScan)
         SecondaryActionButton("Contactless", onClick = onContactless)
@@ -83,6 +94,7 @@ fun MainWalletView(
             state.transactions.take(5).forEach {
                 KeyValueRow(it.kind.displayName, formatter.formatWalletSats(it.amount, settings.useBitcoinSymbol))
             }
+            SecondaryActionButton("View history", onClick = onOpenHistory)
         }
         state.errorMessage?.let {
             Text(it, color = MaterialTheme.colorScheme.error)

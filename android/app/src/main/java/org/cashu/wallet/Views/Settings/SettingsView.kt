@@ -283,13 +283,6 @@ fun SettingsView(
                 onClick = onRefreshConnectivity,
             )
         }
-        SectionHeader("Payment requests")
-        QuietCard {
-            ToggleRow("Enable", settings.enablePaymentRequests) { settingsManager.setEnablePaymentRequests(it) }
-            ToggleRow("Auto-receive", settings.receivePaymentRequestsAutomatically) {
-                settingsManager.setReceivePaymentRequestsAutomatically(it)
-            }
-        }
         SectionHeader("Lightning")
         QuietCard {
             ToggleRow("Enable Lightning Address", npcState.isEnabled) {
