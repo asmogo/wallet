@@ -145,6 +145,7 @@ fun ReceiveView(
         }
     }
     val tokenForPreview = remember(tokenInput) { TokenParser.extractToken(tokenInput) }
+    val tokenValidationMessage = remember(tokenInput) { TokenParser.malformedTokenMessage(tokenInput) }
     val tokenInfo = remember(tokenInput) { TokenParser.tokenInfo(tokenInput) }
     val tokenP2PKPubkeys = remember(tokenInput) { TokenParser.p2pkPubkeys(tokenInput) }
     val activeMintSupportsBolt12 = state.activeMint?.supportedMintMethods?.contains(PaymentMethodKind.Bolt12) == true
@@ -462,15 +463,18 @@ fun ReceiveView(
         if (tokenSpent == true) {
             Text("This token appears to be spent.", color = MaterialTheme.colorScheme.error)
         }
+        if (tokenValidationMessage != null) {
+            Text(tokenValidationMessage, color = MaterialTheme.colorScheme.error)
+        }
         PrimaryActionButton(
             text = "Receive token",
-            enabled = tokenInput.isNotBlank() && !state.isLoading && tokenLockedToKnownKey && tokenSpent != true,
+            enabled = tokenForPreview != null && !state.isLoading && tokenLockedToKnownKey && tokenSpent != true,
         ) {
-            if (tokenLockedToKnownKey && tokenSpent != true) {
+            val parsedToken = tokenForPreview
+            if (parsedToken != null && tokenLockedToKnownKey && tokenSpent != true) {
                 walletManager.launch {
-                    val tokenToReceive = tokenInput
                     val fee = receiveFee?.takeIf { it > 0 }
-                    runCatching { walletManager.receiveTokens(tokenToReceive) }
+                    runCatching { walletManager.receiveTokens(parsedToken) }
                         .onSuccess { amount ->
                             haptics.perform(WalletHaptic.Success)
                             receiveSuccess = ReceiveSuccessNotification(amount = amount, fee = fee)
@@ -1071,6 +1075,11 @@ private fun cashuRequestStatus(request: CashuRequest): String {
         count == 1 -> "1 payment received"
         else -> "$count payments received"
     }
+}
+
+private fun mintDisplayValue(request: CashuRequest, mints: List<MintInfo>): String {
+    val mintUrl = request.mints.firstOrNull() ?: return "Any mint"
+    return mints.firstOrNull { it.url == mintUrl }?.name ?: shortMintUrl(mintUrl)
 }
 
 private fun formatRequestDate(epochMillis: Long): String =

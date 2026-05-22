@@ -2,22 +2,38 @@
 
 This folder is the Kotlin/Android rewrite of the Swift Cashu Wallet app.
 
-Current implementation state:
+## Implementation State
 
-- Native Android project shell with Jetpack Compose.
-- Mirrored source layout under `App`, `Core`, `Core/Protocols`, `Core/Services`, `Core/Navigation`, `Models`, `Resources`, and `Views`.
-- Android manifest permissions for internet, camera, and NFC plus `cashu:` deep links.
-- Core domain models, parser utilities, encrypted storage boundary, wallet database file helpers, and Compose feature shells.
-- CDK is isolated behind `CdkWalletGateway`; the concrete binding adapter still needs dependency-resolution verification against the exact `org.cashudevkit:cdk-kotlin:0.17.0-rc-onchain` artifact.
+The Android app is a native Jetpack Compose implementation with the same broad source sections as the Swift app:
+`App`, `Core`, `Core/Protocols`, `Core/Services`, `Core/Navigation`, `Models`, `Resources`, and `Views`.
 
-The local migration environment did not have a JDK or Gradle installed when this scaffold was created, so dependency resolution and builds are intentionally still unchecked in `../KOTLIN_MIGRATION_PLAN.md`.
+Implemented runtime coverage includes:
 
-Build once a JDK 17 and Android SDK are available:
+- CDK-backed wallet creation, restore, delete, mint management, mint quotes, melts, token send/receive, transaction loading, and payment request handling.
+- Android Keystore-backed secure storage, DataStore-backed app settings, wallet-scoped reset boundaries, and CDK database migration/recovery helpers.
+- Compose flows for onboarding, wallet home, history, mints, receive, send/pay, scanner, contactless NFC, and settings.
+- Android manifest permissions for internet, camera, NFC, vibration, optional hardware features, backup exclusions, and `cashu:` deep links.
+- Product/design parity tokens from `PRODUCT.md`, `DESIGN.md`, `DESIGN.json`, and the button prompt files through `CashuTheme`, shared action buttons, quiet cards, semantic state colors, and amount display controls.
+
+## Build
+
+Use JDK 17 and a local Android SDK:
 
 ```sh
 cd android
 export JAVA_HOME=/opt/homebrew/opt/openjdk@17
+export PATH="$JAVA_HOME/bin:$PATH"
 export ANDROID_HOME="$HOME/Library/Android/sdk"
 export ANDROID_SDK_ROOT="$ANDROID_HOME"
-./gradlew :app:assembleDebug
+./gradlew --no-daemon :app:assembleDebug
 ```
+
+Useful verification targets:
+
+```sh
+./gradlew --no-daemon :app:testDebugUnitTest
+./gradlew --no-daemon :app:lintDebug
+./gradlew --no-daemon :app:assembleRelease
+```
+
+The CDK dependency is managed by Gradle as `org.cashudevkit:cdk-kotlin` in `gradle/libs.versions.toml`.

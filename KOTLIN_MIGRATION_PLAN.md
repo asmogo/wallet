@@ -109,6 +109,7 @@ This addendum is the behavioral gap list from the current Swift working tree. Tr
 - [ ] Scanner parity includes animated UR fragment reassembly, callback-only mode for inline scanner use, default routing for ecash receive, Cashu request pay, Lightning/BOLT12/on-chain melt, human-readable Lightning address melt, mint-URL copy fallback, success/error haptics, and camera failure handling. Callback/default routing, animated UR reassembly, mint URL scan fallback, success haptics, and camera failure fallback are implemented; physical-device validation remains open.
 - [x] Send/pay mint selection must preserve active-mint preference, compatibility filtering by payment method, minimum-amount affordability sorting, selected-mint reset when incompatible, and recent-recipient derivation from the latest outgoing Lightning/on-chain transactions.
 - [x] Payment request runtime processing now follows the Swift listener shape in Kotlin: seed/custom Nostr keys, NIP-17 gift-wrap unwrap, NIP-44 v2 decryption, NUT-18 payload conversion, relay subscription, and duplicate request tracking are implemented. Settings-only toggles that are not fully wired to runtime processors in Swift must remain settings-only in Kotlin; this still includes `checkPendingOnStartup` and NWC runtime processing.
+- [x] Root/build/reference parity closed on 2026-05-22: repo-level Android ignore patterns, current Android build/run documentation, Gradle dependency replacement for SwiftPM, manifest/resource replacements for Xcode metadata, Compose design tokens, and button hierarchy guidance are represented in the Android project and this plan.
 
 ## Migration Targets
 
@@ -649,7 +650,29 @@ Implementation notes:
 - [x] Verification after Cashu request listener and standalone History detail changes: focused `NIP44AndNIP17Test`/`CashuRequestListenerTest`, `./gradlew --no-daemon :app:assembleDebug :app:testDebugUnitTest --stacktrace`, and `./gradlew --no-daemon :app:lintDebug :app:assembleRelease --stacktrace` passed on 2026-05-22. A later `connectedDebugAndroidTest` retry was blocked because `adb devices` reported no connected devices after the earlier device run.
 - [x] Added receive-side Cashu request generation: Android now builds deterministic Swift-compatible `creqA` NUT-18 requests with NIP-19 nprofile relay transport, persists generated request history/current ID in wallet storage, shows static QR/copy/share detail on Receive, supports any-mint or active-mint restriction with edit dialogs, preserves legacy received-payment IDs, provides regenerate/delete controls, fires success haptics when linked payments arrive, and attributes NIP-17 listener payments by event ID while linking them back to generated request IDs.
 - [x] Verification after receive-side Cashu request generation: `./gradlew --no-daemon :app:compileDebugKotlin :app:compileDebugAndroidTestKotlin :app:compileDebugUnitTestKotlin --stacktrace`, focused `PaymentRequestBuilderTest`/`CashuRequestListenerTest`/`PaymentRequestDecoderTest`, `./gradlew --no-daemon :app:assembleDebug :app:testDebugUnitTest --stacktrace`, `./gradlew --no-daemon :app:lintDebug :app:assembleRelease --stacktrace`, and `./gradlew --no-daemon :app:connectedDebugAndroidTest --stacktrace` on device `SM-G991B - 15` passed on 2026-05-22.
-- [ ] In progress: replace the remaining receive-side Cashu request inline/dialog controls with dedicated detail, amount picker, and mint picker sheets before closing the `CashuRequestDetailView`, `CashuRequestAmountPickerSheet`, and `CashuRequestMintPickerSheet` rows.
+- [x] Added dedicated receive-side Cashu request detail, amount picker, and mint picker sheets: Android now opens generated requests in a bottom-sheet detail view with static QR, share/copy, waiting/received status, payment-received success badge, editable amount/mint rows, fiat/sat amount display, any-amount behavior, any-mint/configured-mint choices, mint icons, selected checkmarks, regenerate, and delete actions.
+- [x] Verification after receive-side Cashu request sheet parity: `./gradlew --no-daemon :app:compileDebugKotlin :app:compileDebugUnitTestKotlin --stacktrace`, `./gradlew --no-daemon :app:assembleDebug :app:testDebugUnitTest --stacktrace`, and `./gradlew --no-daemon :app:lintDebug :app:assembleRelease --stacktrace` passed on 2026-05-22.
+- [x] Closed amount/currency formatting parity: Kotlin now has sat/fiat amount formatting, BTC-symbol display support, primary/secondary fiat-sat display helpers, currency definitions for SAT/USD/EUR, `CurrencyAmount` formatting, and mint-unit currency lookup coverage.
+- [x] Verification after amount/currency formatting parity: focused `AmountFormatterTest`/`CurrencyProtocolTest`, `./gradlew --no-daemon :app:assembleDebug :app:testDebugUnitTest --stacktrace`, and `./gradlew --no-daemon :app:lintDebug :app:assembleRelease --stacktrace` passed on 2026-05-22.
+- [x] Closed `AppLogger.swift` parity: Kotlin now has wallet/network/security/UI Logcat categories plus JVM-tested privacy-safe redaction for Nostr private keys and labeled seed/private-key/secret log messages.
+- [x] Verification after logger parity: focused `AppLoggerTest`, `./gradlew --no-daemon :app:assembleDebug :app:testDebugUnitTest --stacktrace`, and `./gradlew --no-daemon :app:lintDebug :app:assembleRelease --stacktrace` passed on 2026-05-22.
+- [x] Closed `PaymentMethodProtocol.swift` parity: Kotlin now has payment rail, request/result/status value types, expiry/status helpers, and stable BOLT11/BOLT12/on-chain icon/capability labels.
+- [x] Verification after payment method protocol parity: focused `PaymentMethodProtocolTest`, `./gradlew --no-daemon :app:assembleDebug :app:testDebugUnitTest --stacktrace`, and `./gradlew --no-daemon :app:lintDebug :app:assembleRelease --stacktrace` passed on 2026-05-22.
+- [x] Closed `TokenParser.swift` parity: Kotlin now covers Cashu token URI extraction/normalization, Swift-named normalized-token access, malformed-token messages, scanner/deep-link routing use, and Receive UI gating so malformed text is not submitted as an ecash token.
+- [x] Verification after token parser parity: focused `TokenParserTest`/`PaymentRequestDecoderTest`, `./gradlew --no-daemon :app:assembleDebug :app:testDebugUnitTest --stacktrace`, and `./gradlew --no-daemon :app:lintDebug :app:assembleRelease --stacktrace` passed on 2026-05-22.
+- [x] Closed `KeychainService.swift` parity: Kotlin secure storage now has Swift-compatible mnemonic and Nostr key save/load/delete/has convenience helpers on top of the existing AndroidKeyStore AES/GCM backend and ciphertext preferences.
+- [x] Verification after keychain/secure-storage parity: focused `SecureStorageProtocolTest`, `./gradlew --no-daemon :app:assembleDebug :app:testDebugUnitTest --stacktrace`, and `./gradlew --no-daemon :app:lintDebug :app:assembleRelease --stacktrace` passed on 2026-05-22.
+- [x] Closed `NavigationManager.swift` parity after audit: Android has a Compose route model, one-shot deep-link events, scanner/send/receive/mints routing, `cashu:` and `cashu://` token links, percent-decoded links, Cashu payment request routing, and invalid-payload rejection.
+- [x] Verification after navigation parity audit: focused `NavigationManagerTest` passed on 2026-05-22.
+- [x] Closed app-shell parity: Android now initializes dependencies through `CashuWalletApplication`/`AppContainer`, handles initial and new `cashu:` intents in `MainActivity`, switches Compose root state between loading/onboarding/authenticated shell, checks pending sent tokens on authenticated startup when settings allow, and starts/stops the Cashu request listener across authenticated state and Android foreground/background lifecycle.
+- [x] Verification after app-shell parity: `./gradlew --no-daemon :app:compileDebugKotlin :app:compileDebugUnitTestKotlin --stacktrace`, `./gradlew --no-daemon :app:assembleDebug :app:testDebugUnitTest --stacktrace`, and `./gradlew --no-daemon :app:lintDebug :app:assembleRelease --stacktrace` passed on 2026-05-22. The build reports a non-blocking deprecation warning for Compose `LocalLifecycleOwner`.
+- [x] Closed platform metadata parity after audit: AndroidManifest and resources now cover the iOS `cashu:` URL scheme, app label/application ID, camera/NFC permissions and optional hardware features, secure-storage/database backup exclusions, black/white accent resources, and adaptive launcher icons.
+- [x] Closed `WalletServiceProtocol.swift` parity: Kotlin now has the root wallet protocol plus service-level `MintServiceProtocol`, `TokenServiceProtocol`, `TransactionServiceProtocol`, and `QuoteServiceProtocol` contracts using app-domain models and no CDK binding types at the UI-facing boundary.
+- [x] Verification after wallet service protocol parity: focused `WalletServiceProtocolTest` passed on 2026-05-22.
+- [x] Closed `Models.swift` parity: Kotlin now covers payment method values/symbols, payment input parser helpers, validated Bitcoin/on-chain helpers, on-chain explorer observations, mint/quote/melt/send result models, wallet transactions including Cashu request attribution, pending/claimed/restore/token models, token parse convenience, notification-style transaction update signals, and a shared SHA-256 data helper.
+- [x] Verification after model parity: focused `ModelsParityTest` and `WalletServiceProtocolTest` passed on 2026-05-22.
+- [x] Closed shared component anchors for `AmountEntryView.swift`, `AnimatedBalanceView.swift`, and `LiquidGlassModifiers.swift`: Compose now has shared amount entry, mint picker sheet, token display card, animated balance/amount display, balance card, pending badge, transaction amount view, canvas divider, capsule surface, and liquid-glass-style surface modifiers layered on the existing action buttons and press feedback.
+- [x] Verification after shared component parity: `./gradlew --no-daemon :app:compileDebugKotlin :app:compileDebugUnitTestKotlin --stacktrace` passed on 2026-05-22.
 - [ ] Camera scanner still requires physical-device validation.
 
 ### Phase 5: Hardening and Parity Verification
@@ -681,26 +704,26 @@ Progress column:
 
 | Source file | Migration type | Progress | Kotlin target and checklist |
 | --- | --- | --- | --- |
-| `.gitignore` | Translate | [ ] | Create Android/Kotlin ignore patterns for Gradle, Android Studio, local SDK files, build outputs, keystores, and CDK/native artifacts. |
-| `README.md` | Reference | [ ] | Preserve product setup notes; later create Android README with build/run instructions and feature list. |
-| `PRODUCT.md` | Reference | [ ] | Use as product contract for wallet positioning, key user flows, and release scope. |
-| `DESIGN.md` | Reference | [ ] | Use as visual/interaction source of truth for Compose design system. |
-| `DESIGN.json` | Reference | [ ] | Translate tokens into Compose color, typography, spacing, shape, motion, and component constants. |
-| `Package.swift` | Reference | [ ] | Replace SwiftPM dependency graph with Gradle. Note cdk-swift dependency and feature expectations. |
-| `Package.resolved` | Reference | [ ] | Use to understand Swift dependency versions only; no direct Android runtime use. |
-| `button-audit-prompt.md` | Reference | [ ] | Carry button hierarchy guidance into Compose design-system acceptance criteria. |
-| `button-fixes-prompt.md` | Reference | [ ] | Ensure full-width primary actions and readable CTA states in Compose. |
+| `.gitignore` | Translate | [x] | Android/Kotlin ignore patterns are present for Gradle state, Kotlin caches, Android Studio metadata, local SDK files, build outputs, keystores, heap dumps, and CDK/native intermediates. |
+| `README.md` | Reference | [x] | Product setup context is preserved at the root, and `android/README.md` now carries Android build/run instructions, feature state, and CDK dependency notes. |
+| `PRODUCT.md` | Reference | [x] | Product positioning and key flow guidance are carried into the Android README, Compose screen copy, feature scope, and quiet wallet-first UI structure. |
+| `DESIGN.md` | Reference | [x] | Visual/interaction guidance is represented through `CashuTheme`, shared Compose components, semantic state colors, restrained surfaces, and full-width action hierarchy. |
+| `DESIGN.json` | Reference | [x] | Token intent is mapped into Compose color, typography, shape, and button/amount-display components rather than a generated runtime JSON dependency. |
+| `Package.swift` | Reference | [x] | SwiftPM dependencies are replaced by the Gradle version catalog, including the CDK Kotlin artifact and Android equivalents for Compose, CameraX, MLKit, ZXing, OkHttp, serialization, and crypto helpers. |
+| `Package.resolved` | Reference | [x] | Swift resolved dependency versions were used as source context only; Android runtime dependency versions are owned by `android/gradle/libs.versions.toml`. |
+| `button-audit-prompt.md` | Reference | [x] | Button hierarchy guidance is carried into `PrimaryActionButton`, `SecondaryActionButton`, press feedback, and feature screen CTA placement. |
+| `button-fixes-prompt.md` | Reference | [x] | Full-width primary and readable secondary CTA states are implemented through shared Compose action button components. |
 
 ### Xcode, iOS Config, and Resources
 
 | Source file | Migration type | Progress | Kotlin target and checklist |
 | --- | --- | --- | --- |
-| `CashuWallet.xcodeproj/project.pbxproj` | Reference | [ ] | Extract bundle ID, deployment target, entitlements, sources, and dependencies; replace with Gradle configuration. |
-| `CashuWallet.xcodeproj/project.xcworkspace/contents.xcworkspacedata` | Reference | [ ] | Xcode workspace metadata only. No runtime port. |
-| `CashuWallet.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved` | Reference | [ ] | Source for Swift resolved dependency versions; no Android runtime use. |
-| `CashuWallet/Info.plist` | Translate | [ ] | AndroidManifest app label, bundle/application ID, camera privacy equivalent via permission rationale, NFC usage, and `cashu:` deep-link intent filters. |
-| `CashuWallet/CashuWallet.entitlements` | Translate | [ ] | Android NFC permission/feature declarations and secure storage strategy; no entitlement file equivalent. |
-| `CashuWallet/Resources/Assets.xcassets/Contents.json` | Translate | [ ] | Android resource catalog equivalent. |
+| `CashuWallet.xcodeproj/project.pbxproj` | Reference | [x] | Bundle/app identity, source inventory, resources, entitlements, and dependencies are replaced by Android namespace/applicationId, manifest/resource declarations, mirrored Kotlin sources, and Gradle configuration. |
+| `CashuWallet.xcodeproj/project.xcworkspace/contents.xcworkspacedata` | Reference | [x] | Xcode workspace metadata has no Android runtime port; Gradle settings define the Android workspace. |
+| `CashuWallet.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved` | Reference | [x] | Swift resolved dependency versions remain reference-only; Android runtime dependencies are managed by Gradle. |
+| `CashuWallet/Info.plist` | Translate | [x] | AndroidManifest app label/application ID, camera permission, NFC permission/feature, and `cashu:` deep-link intent filter are implemented. |
+| `CashuWallet/CashuWallet.entitlements` | Translate | [x] | Android NFC permission/optional feature declarations are implemented, and secure wallet data is excluded from Android backup/device-transfer rules. |
+| `CashuWallet/Resources/Assets.xcassets/Contents.json` | Translate | [x] | Android resource catalog equivalent exists through light/dark color resources, adaptive launcher icon XML, density launcher PNGs, and Compose theme tokens. |
 | `CashuWallet/Resources/Assets.xcassets/AccentColor.colorset/Contents.json` | Translate | [x] | Compose color token and Android light/dark theme accent resources are mapped from the iOS black/white accent definitions. |
 | `CashuWallet/Resources/Assets.xcassets/AppIcon.appiconset/AppIcon.png` | Asset | [x] | Converted into Android adaptive foreground mipmaps and launcher density PNG assets. |
 | `CashuWallet/Resources/Assets.xcassets/AppIcon.appiconset/Contents.json` | Translate | [x] | Android mipmap/adaptive icon metadata equivalent is wired through `mipmap-anydpi-v26/ic_launcher*.xml`. |
@@ -716,22 +739,22 @@ Progress column:
 
 | Source file | Migration type | Progress | Kotlin target and checklist |
 | --- | --- | --- | --- |
-| `CashuWallet/App/CashuWalletApp.swift` | Port | [ ] | `CashuWalletApplication`, `MainActivity`, dependency initialization, app-level logging, service startup, scene lifecycle, background refresh hooks. |
-| `CashuWallet/App/ContentView.swift` | Port | [ ] | Compose root state switch between loading, onboarding, and authenticated wallet shell. Android now starts the Cashu payment request listener only after wallet initialization and stops it while onboarding or when the root composition is disposed. |
-| `CashuWallet/Core/Navigation/NavigationManager.swift` | Port | [ ] | Navigation Compose route model, scanner/send/receive/modal routes, deep-link routing, and one-shot navigation events. |
+| `CashuWallet/App/CashuWalletApp.swift` | Port | [x] | `CashuWalletApplication`, `MainActivity`, dependency initialization, app-level logging, Cashu request listener startup, authenticated-startup pending sent-token checks, Android lifecycle foreground/background listener handling, and `cashu:` intent routing. |
+| `CashuWallet/App/ContentView.swift` | Port | [x] | Compose root state switch between loading, onboarding, and authenticated wallet shell, plus one-shot deep-link routing into Receive/Send/Mints tabs and scanner/contactless modal routes. |
+| `CashuWallet/Core/Navigation/NavigationManager.swift` | Port | [x] | Navigation Compose route model, scanner/send/receive/mints/contactless routes, `cashu:` deep-link routing, percent-decoding, Cashu token/payment-request routing, invalid-payload rejection, and one-shot navigation events. |
 
 ### Models and Core Utilities
 
 | Source file | Migration type | Progress | Kotlin target and checklist |
 | --- | --- | --- | --- |
-| `CashuWallet/Models/Models.swift` | Port | [ ] | Kotlin data classes/enums for payment methods, parser helpers, Bitcoin address validation, on-chain observation/explorer, mint info, quote info, melt result, transactions, pending/claimed tokens, restore result, token info, and notifications/events. Broader model parity remains open. |
+| `CashuWallet/Models/Models.swift` | Port | [x] | Kotlin data classes/enums and helpers cover payment methods/symbols, parser helpers, Bitcoin address validation, on-chain observation/explorer, mint info, quote info, melt result, transactions including Cashu request attribution, pending/claimed tokens, restore result, token info/parse convenience, notifications/events, and shared SHA-256 data hashing. |
 | `CashuWallet/Models/CashuRequest.swift` | Port | [x] | Persistent generated Cashu request model with request ID, encoded `creqA`, amount/unit/mints/memo, creation date, received-payment list, total received, and legacy bare-payment-ID fallback. |
-| `CashuWallet/Core/AmountFormatter.swift` | Port | [ ] | Kotlin amount/fiat formatting, BTC symbol toggle, sat/BTC display, localized number formatting, compact UI amount strings. |
-| `CashuWallet/Core/AppLogger.swift` | Port | [ ] | Kotlin logging facade over Timber/Logcat plus privacy-safe message conventions. |
+| `CashuWallet/Core/AmountFormatter.swift` | Port | [x] | Kotlin amount/fiat formatting, BTC symbol toggle, sat/BTC display, localized number formatting, primary/secondary display helpers, and compact UI amount strings. |
+| `CashuWallet/Core/AppLogger.swift` | Port | [x] | Kotlin logging facade over Logcat with wallet, network, security, and UI categories plus privacy-safe message redaction for secret-bearing messages. |
 | `CashuWallet/Core/BIP39WordList.swift` | Port | [x] | Android delegates BIP39 word membership and checksum validation to CDK `mnemonicToEntropy`, matching Swift's final validation path; local Kotlin validation gates the current Swift-supported 12/24 word counts. |
 | `CashuWallet/Core/HapticFeedback.swift` | Port | [x] | Compose/Android haptic mapping for selection, impact, success, warning, and error states via `View.performHapticFeedback`; shared buttons and scanner success are wired. |
 | `CashuWallet/Core/LightningRequestParser.swift` | Port | [x] | Parser for BOLT11/BOLT12/Lightning address/human-readable payment inputs; strip lightning schemes and delegate invoice decode/payment type detection to CDK where possible. |
-| `CashuWallet/Core/TokenParser.swift` | Port | [ ] | Cashu token and URI extraction, normalization, malformed-token error messages, scanner/deep-link input handling. |
+| `CashuWallet/Core/TokenParser.swift` | Port | [x] | Cashu token and URI extraction, normalization, malformed-token error messages, scanner/deep-link input handling, token preview metadata, and P2PK key extraction. |
 | `CashuWallet/Core/PaymentRequestDecoder.swift` | Port | [x] | NUT-18/NUT-26 payment request decoder wrapper, summary domain model, raw/cashu/bitcoin URI support including `lightning`, `lightninginvoice`, and `creq` query extraction, amount-lock detection, type labels/icons, short representations, and Cashu-vs-Lightning precedence. |
 | `CashuWallet/Core/PaymentRequestBuilder.swift` | Port | [x] | NUT-18 `creqA` request builder for receive-side Cashu request generation, including nprofile TLV encoding, deterministic minimal CBOR payloads, base64url encoding, amount/unit/single-use/mints/description fields, and builder errors. |
 | `CashuWallet/Core/PriceService.swift` | Port | [x] | Coinbase BTC spot-price fetch, currency cache, refresh interval, enabled/currency settings, error handling. |
@@ -748,11 +771,11 @@ Progress column:
 
 | Source file | Migration type | Progress | Kotlin target and checklist |
 | --- | --- | --- | --- |
-| `CashuWallet/Core/Protocols/CurrencyProtocol.swift` | Port | [ ] | Kotlin interface/value helpers for amount display and fiat currency handling. |
-| `CashuWallet/Core/Protocols/PaymentMethodProtocol.swift` | Port | [ ] | Kotlin interface/enums for BOLT11, BOLT12, on-chain method capability and icons/labels. |
+| `CashuWallet/Core/Protocols/CurrencyProtocol.swift` | Port | [x] | Kotlin interface/value helpers for amount display and fiat currency handling, including SAT/USD/EUR currency definitions, currency amount formatting, and mint-unit lookup. |
+| `CashuWallet/Core/Protocols/PaymentMethodProtocol.swift` | Port | [x] | Kotlin payment rail interface, request/result/status value types, expiry/status helpers, and BOLT11/BOLT12/on-chain method capability/icon/label helpers. |
 | `CashuWallet/Core/Protocols/StorageProtocol.swift` | Port | [x] | Kotlin storage interfaces, DataStore adapter, secure storage interface, `StorageKeys`, legacy key migration, prefix deletion, and `wallet.processedCashuRequests` tracking are implemented with instrumentation coverage for migration/clearing/secure storage. |
-| `CashuWallet/Core/Protocols/WalletServiceProtocol.swift` | Port | [ ] | Kotlin domain interface for wallet operations consumed by ViewModels/features. |
-| `CashuWallet/Core/KeychainService.swift` | Port | [ ] | Android secure storage exists through `AndroidSecureStorage` using AndroidKeyStore AES/GCM plus ciphertext preferences, with save/load/delete instrumentation coverage; exact iOS accessibility and error-message parity remain open. |
+| `CashuWallet/Core/Protocols/WalletServiceProtocol.swift` | Port | [x] | Kotlin domain interfaces for root wallet operations, mint management, ecash token operations, transaction history, and quote/melt operations consumed by ViewModels/features, using app-domain models rather than CDK binding types. |
+| `CashuWallet/Core/KeychainService.swift` | Port | [x] | Android secure storage exists through `AndroidSecureStorage` using AndroidKeyStore AES/GCM plus ciphertext preferences, with save/load/delete instrumentation coverage and Swift-compatible mnemonic/Nostr key convenience helpers. |
 | `CashuWallet/Core/WalletStore.swift` | Port | [x] | Wallet-scoped DataStore repository for mints, pending tokens, saved tokens, preimages, fees, timestamps, processed NPC quote IDs, and processed Cashu request IDs; existing SharedPreferences data migrates through `SharedPreferencesMigration`. |
 | `CashuWallet/Core/SettingsStore.swift` | Port | [x] | DataStore-backed settings repository with defaults, price cache migration, wallet-scoped clearing, NWC/P2PK legacy-secret parsing, metadata-only persistence, and test-isolated store-name support. |
 | `CashuWallet/Core/SettingsManager.swift` | Port | [ ] | Settings ViewModel/domain manager: fiat currencies, relays, NWC connection generation, P2PK key generation/import/delete/used-count tracking, legacy secret migration into encrypted storage, metadata-only serialization, reset wallet-scoped data. Broader settings parity remains open around NPC live behavior and full runtime integration. |
@@ -776,11 +799,11 @@ Progress column:
 | Source file | Migration type | Progress | Kotlin target and checklist |
 | --- | --- | --- | --- |
 | `CashuWallet/Views/Components/ActivityOrbView.swift` | Port | [x] | Compose `ActivityOrbView`, `LoadingSpinnerView`, and `MutexLockOverlay` equivalents with accessibility descriptions. |
-| `CashuWallet/Views/Components/AmountEntryView.swift` | Port | [ ] | Shared amount entry, mint picker, send amount entry, token display components. |
-| `CashuWallet/Views/Components/AnimatedBalanceView.swift` | Port | [ ] | Animated balance, amount display, balance card, pending badge, transaction amount components. |
+| `CashuWallet/Views/Components/AmountEntryView.swift` | Port | [x] | Shared Compose amount entry, mint selector row, mint picker sheet, send/receive amount entry surface, and token display card components are implemented. |
+| `CashuWallet/Views/Components/AnimatedBalanceView.swift` | Port | [x] | Animated balance, animated amount display, balance card, pending badge, and transaction amount components are implemented in Compose. |
 | `CashuWallet/Views/Components/EcashIcon.swift` | Port | [x] | Compose Material icon components for ecash and lightning. |
 | `CashuWallet/Views/Components/ErrorBannerView.swift` | Port | [x] | Compose error/warning/info banner component with optional dismiss action. |
-| `CashuWallet/Views/Components/LiquidGlassModifiers.swift` | Port | [ ] | Compose design-system modifiers/styles: primary/secondary buttons, surfaces, dividers, cards. Preserve behavior, not iOS-only APIs. |
+| `CashuWallet/Views/Components/LiquidGlassModifiers.swift` | Port | [x] | Compose design-system modifiers/styles cover primary/secondary buttons, press feedback, liquid-glass-style surfaces, full-width capsule surface, canvas dividers, and quiet cards while preserving behavior rather than iOS-only APIs. |
 | `CashuWallet/Views/Components/NotificationBadgeView.swift` | Port | [x] | Compose notification badge component with amount/fee formatting and dismiss action. |
 | `CashuWallet/Views/Components/PressableButtonStyle.swift` | Port | [x] | Compose press interaction source and scale feedback; existing primary/secondary buttons are wired through it. |
 | `CashuWallet/Views/Components/QRCodeView.swift` | Port | [x] | Static QR rendering, animated `ur:bytes` frames, speed/size controls, static-only mode, and fallback when UR encoding is unavailable. |
@@ -805,9 +828,9 @@ Progress column:
 | `CashuWallet/Views/Receive/ReceiveView.swift` | Port | [ ] | Receive entry sheet, receive ecash flow, amount entry, method selection, scanner/paste actions. Cashu-token clipboard auto-paste/suggestion and receive-side Cashu request creation/detail card are implemented. |
 | `CashuWallet/Views/Receive/ReceiveTokenDetailView.swift` | Port | [ ] | Token preview, fee estimate, P2PK warning, receive now/later, success state. Preview, fee estimate, spendability status, P2PK unknown-key guard, receive-later persistence, pending claim, remove actions, and receive success badge/haptics are implemented; standalone receive-token sheet polish remains open. |
 | `CashuWallet/Views/Receive/ReceiveLightningView.swift` | Port | [ ] | BOLT11/BOLT12/on-chain receive, method picker, quote/address display, QR, copy/share, expiry countdown, status polling/subscription, mint success. BOLT11, BOLT12 amountless/fixed entry, on-chain quote entry, quote display/copy/share/QR, expiry countdown, manual status refresh, BOLT12/on-chain quote subscriptions, polling fallback, paid-quote mint action, and success badge/haptics after minting are implemented; broader richer mint-success parity remains open. |
-| `CashuWallet/Views/Receive/CashuRequestDetailView.swift` | Port | [ ] | Receive-side Cashu request QR/detail screen with static QR, share/copy, waiting/received status, payment-received haptics, editable mint/amount rows, regenerate-new-request action, and payment attachment display. Android now has inline Receive detail with static QR, share/copy, waiting/received status, payment attachment display, delete, edit amount/mint dialogs, regenerate controls, and payment-received haptics; standalone screen/sheet polish remains open. |
-| `CashuWallet/Views/Receive/CashuRequestAmountPickerSheet.swift` | Port | [ ] | Amount picker sheet for generated Cashu requests using the shared number pad and fiat/sat display, including nil/any-amount behavior. Android currently uses an edit dialog with the shared number pad and any-amount behavior; exact sheet/fiat-display parity remains open. |
-| `CashuWallet/Views/Receive/CashuRequestMintPickerSheet.swift` | Port | [ ] | Mint picker sheet for generated Cashu requests, including any-mint option, configured mint list, balances, icons, and selected checkmark. Android currently uses an edit dialog with any-mint/configured-mint choices and balances; exact sheet/icon/checkmark parity remains open. |
+| `CashuWallet/Views/Receive/CashuRequestDetailView.swift` | Port | [x] | Receive-side Cashu request QR/detail sheet with static QR, share/copy, waiting/received status, payment-received success badge/haptics, editable mint/amount rows, regenerate-new-request action, delete action, and payment attachment display. |
+| `CashuWallet/Views/Receive/CashuRequestAmountPickerSheet.swift` | Port | [x] | Amount picker sheet for generated Cashu requests using the shared number pad and fiat/sat display, including nil/any-amount behavior. |
+| `CashuWallet/Views/Receive/CashuRequestMintPickerSheet.swift` | Port | [x] | Mint picker sheet for generated Cashu requests, including any-mint option, configured mint list, balances, icons, and selected checkmark. |
 
 ### Send and Pay UI
 

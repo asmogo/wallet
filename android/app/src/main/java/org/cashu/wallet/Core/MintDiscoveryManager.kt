@@ -62,6 +62,11 @@ class MintDiscoveryManager(
         }
     }
 
+    fun clearDiscoveredMints() {
+        closeAllConnections()
+        mutableState.value = MintDiscoveryState()
+    }
+
     private suspend fun connectAndQuery(relay: String) {
         val request = runCatching { Request.Builder().url(relay).build() }.getOrNull() ?: return
         val closed = CompletableDeferred<Unit>()

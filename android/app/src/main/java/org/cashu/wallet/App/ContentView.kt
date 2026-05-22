@@ -25,6 +25,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalLifecycleOwner
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import org.cashu.wallet.Core.PaymentRequestDecodeResult
 import org.cashu.wallet.Core.PaymentRequestDecoder
 import org.cashu.wallet.Core.TokenParser
@@ -60,18 +63,37 @@ private enum class ScannerTarget {
 fun CashuWalletApp(container: AppContainer) {
     CashuTheme {
         val walletState by container.walletManager.state.collectAsState()
+        val lifecycleOwner = LocalLifecycleOwner.current
+        val isAuthenticated = walletState.isInitialized && !walletState.needsOnboarding
         LaunchedEffect(Unit) {
             container.walletManager.initialize()
         }
-        LaunchedEffect(walletState.isInitialized, walletState.needsOnboarding) {
-            if (walletState.isInitialized && !walletState.needsOnboarding) {
+        LaunchedEffect(isAuthenticated) {
+            if (isAuthenticated) {
                 container.cashuRequestListener.start()
+                val settings = container.settingsManager.state.value
+                if (settings.checkPendingOnStartup && settings.checkSentTokens) {
+                    container.walletManager.checkAllPendingTokens()
+                }
             } else {
                 container.cashuRequestListener.stop()
             }
         }
-        DisposableEffect(Unit) {
-            onDispose { container.cashuRequestListener.stop() }
+        DisposableEffect(lifecycleOwner, isAuthenticated) {
+            val observer = LifecycleEventObserver { _, event ->
+                if (!isAuthenticated) return@LifecycleEventObserver
+                when (event) {
+                    Lifecycle.Event.ON_START,
+                    Lifecycle.Event.ON_RESUME -> container.cashuRequestListener.start()
+                    Lifecycle.Event.ON_STOP -> container.cashuRequestListener.stop()
+                    else -> Unit
+                }
+            }
+            lifecycleOwner.lifecycle.addObserver(observer)
+            onDispose {
+                lifecycleOwner.lifecycle.removeObserver(observer)
+                container.cashuRequestListener.stop()
+            }
         }
 
         when {

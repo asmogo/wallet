@@ -14,6 +14,30 @@ interface SecureStorage {
     fun contains(key: String): Boolean
 }
 
+fun SecureStorage.saveMnemonic(mnemonic: String) {
+    saveString(StorageKeys.secureWalletMnemonic, mnemonic)
+}
+
+fun SecureStorage.loadMnemonic(): String? = loadString(StorageKeys.secureWalletMnemonic)
+
+fun SecureStorage.deleteMnemonic() {
+    delete(StorageKeys.secureWalletMnemonic)
+}
+
+fun SecureStorage.hasMnemonic(): Boolean = contains(StorageKeys.secureWalletMnemonic)
+
+fun SecureStorage.saveNostrPrivateKey(privateKeyHex: String) {
+    saveString(StorageKeys.secureNostrPrivateKey, privateKeyHex)
+}
+
+fun SecureStorage.loadNostrPrivateKey(): String? = loadString(StorageKeys.secureNostrPrivateKey)
+
+fun SecureStorage.deleteNostrPrivateKey() {
+    delete(StorageKeys.secureNostrPrivateKey)
+}
+
+fun SecureStorage.hasNostrPrivateKey(): Boolean = contains(StorageKeys.secureNostrPrivateKey)
+
 object StorageKeys {
     const val walletDataPrefix = "wallet."
     const val settingsDataPrefix = "settings."

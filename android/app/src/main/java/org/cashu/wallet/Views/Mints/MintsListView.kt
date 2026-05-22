@@ -65,11 +65,11 @@ fun MintsListView(
     val context = LocalContext.current
     val clipboardText = rememberClipboardText()
     var mintUrl by remember { mutableStateOf("") }
-    var discoveryError by remember { mutableStateOf<String?>(null) }
     var inputError by remember { mutableStateOf<String?>(null) }
     var dismissedClipboardSuggestion by remember { mutableStateOf(false) }
     var mintToRemove by remember { mutableStateOf<MintInfo?>(null) }
     var mintToInspect by remember { mutableStateOf<MintInfo?>(null) }
+    var showDiscoverySheet by remember { mutableStateOf(false) }
     val clipboardMintUrl = remember(clipboardText) {
         clipboardText?.let { mintUrlCandidates(it).firstOrNull() }
     }
@@ -109,9 +109,6 @@ fun MintsListView(
     }
     LaunchedEffect(clipboardMintUrl) {
         dismissedClipboardSuggestion = false
-    }
-    LaunchedEffect(settings.useWebsockets) {
-        if (settings.useWebsockets) discoveryError = null
     }
     mintToRemove?.let { mint ->
         AlertDialog(
@@ -153,6 +150,16 @@ fun MintsListView(
                     Text("Close")
                 }
             },
+        )
+    }
+    if (showDiscoverySheet) {
+        MintDiscoverySheet(
+            mintDiscoveryManager = mintDiscoveryManager,
+            configuredMints = state.mints,
+            useWebsockets = settings.useWebsockets,
+            isWalletLoading = state.isLoading,
+            onAddMint = { url -> addMint(rawUrl = url, clearInputOnSuccess = false) },
+            onDismiss = { showDiscoverySheet = false },
         )
     }
     LazyColumn(
@@ -206,36 +213,10 @@ fun MintsListView(
         }
         item {
             SecondaryActionButton(
-                text = if (discoveryState.isDiscovering) "Discovering..." else "Discover mints",
-                enabled = !discoveryState.isDiscovering && !state.isLoading,
+                text = "Discover mints",
+                enabled = !state.isLoading,
             ) {
-                if (!settings.useWebsockets) {
-                    discoveryError = "Enable WebSocket connections in Settings to discover mints."
-                } else {
-                    discoveryError = null
-                    scope.launch { mintDiscoveryManager.discoverMints() }
-                }
-            }
-        }
-        discoveryError?.let { error ->
-            item { Text(error, color = MaterialTheme.colorScheme.error) }
-        }
-        if (discoveryState.discoveredMints.isNotEmpty()) {
-            item { SectionHeader("Discovered") }
-            items(discoveryState.discoveredMints, key = { it.url }) { mint ->
-                val alreadyAdded = state.mints.any { it.url == mint.url }
-                QuietCard {
-                    KeyValueRow("Name", mint.name)
-                    KeyValueRow("URL", mint.url)
-                    mint.description?.let { KeyValueRow("Description", it) }
-                    CopyShareRow(label = "Mint URL", content = mint.url)
-                    SecondaryActionButton(
-                        text = if (alreadyAdded) "Added" else "Add",
-                        enabled = !alreadyAdded && !state.isLoading,
-                    ) {
-                        addMint(rawUrl = mint.url, clearInputOnSuccess = false)
-                    }
-                }
+                showDiscoverySheet = true
             }
         }
         item { SectionHeader("Configured") }

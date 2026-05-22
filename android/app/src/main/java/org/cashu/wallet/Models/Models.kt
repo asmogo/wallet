@@ -3,6 +3,7 @@ package org.cashu.wallet.Models
 import java.util.UUID
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+import org.cashu.wallet.Core.TokenParser
 
 @Serializable
 enum class PaymentMethodKind {
@@ -27,6 +28,13 @@ enum class PaymentMethodKind {
             Bolt11 -> "BOLT11"
             Bolt12 -> "BOLT12"
             Onchain -> "On-chain"
+        }
+
+    val symbol: String
+        get() = when (this) {
+            Bolt11 -> "\u26A1"
+            Bolt12 -> "\uD83D\uDD17"
+            Onchain -> "\u20BF"
         }
 
     val requestDisplayName: String
@@ -177,6 +185,7 @@ data class WalletTransaction(
     val fee: Long = 0,
     val isPendingToken: Boolean = false,
     val quoteId: String? = null,
+    val cashuRequestId: String? = null,
 ) {
     val displayStatusText: String
         get() = if (status == TransactionStatus.Pending) statusNote ?: status.displayText else status.displayText
@@ -319,7 +328,11 @@ data class TokenInfo(
     val unit: String,
     val memo: String?,
     val proofCount: Int,
-)
+) {
+    companion object {
+        fun parse(tokenString: String): TokenInfo? = TokenParser.tokenInfo(tokenString)
+    }
+}
 
 @Serializable
 data class NwcConnection(
