@@ -2,6 +2,7 @@ package org.cashu.wallet.App
 
 import android.content.Context
 import org.cashu.wallet.Core.CDK.CdkWalletGatewayImpl
+import org.cashu.wallet.Core.CashuRequestListener
 import org.cashu.wallet.Core.MintDiscoveryManager
 import org.cashu.wallet.Core.NPCService
 import org.cashu.wallet.Core.Navigation.NavigationManager
@@ -38,6 +39,12 @@ class AppContainer(context: Context) {
     )
     val priceService = PriceService(settingsStore)
     val mintDiscoveryManager = MintDiscoveryManager(settingsManager)
+    val cashuRequestListener = CashuRequestListener(
+        context = appContext,
+        nostrService = nostrService,
+        settingsManager = settingsManager,
+        walletManager = walletManager,
+    )
 
     init {
         npcService.quoteClaimHandler = walletManager

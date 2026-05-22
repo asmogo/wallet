@@ -16,6 +16,7 @@ import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -61,6 +62,16 @@ fun CashuWalletApp(container: AppContainer) {
         val walletState by container.walletManager.state.collectAsState()
         LaunchedEffect(Unit) {
             container.walletManager.initialize()
+        }
+        LaunchedEffect(walletState.isInitialized, walletState.needsOnboarding) {
+            if (walletState.isInitialized && !walletState.needsOnboarding) {
+                container.cashuRequestListener.start()
+            } else {
+                container.cashuRequestListener.stop()
+            }
+        }
+        DisposableEffect(Unit) {
+            onDispose { container.cashuRequestListener.stop() }
         }
 
         when {

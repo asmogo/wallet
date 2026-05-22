@@ -31,6 +31,7 @@ object StorageKeys {
     const val walletMeltQuoteFees = "wallet.meltQuoteFees"
     const val walletMintQuoteTimestamps = "wallet.mintQuoteTimestamps"
     const val walletProcessedNPCQuotes = "wallet.processedNPCQuotes"
+    const val walletProcessedCashuRequests = "wallet.processedCashuRequests"
 
     const val settingsUseBitcoinSymbol = "settings.useBitcoinSymbol"
     const val settingsShowFiatBalance = "settings.showFiatBalance"
@@ -79,6 +80,7 @@ object StorageKeys {
         walletMeltQuoteFees,
         walletMintQuoteTimestamps,
         walletProcessedNPCQuotes,
+        walletProcessedCashuRequests,
         settingsNwcConnections,
         settingsP2PKKeys,
         npcEnabled,

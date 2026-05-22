@@ -10,7 +10,7 @@ internal data class PreferenceSnapshot(
 internal fun SharedPreferences.snapshot(keys: Set<String>): PreferenceSnapshot {
     val currentValues = all
     val values = keys.mapNotNull { key ->
-        currentValues[key]?.let { value -> key to value.snapshotValue() }
+        currentValues[key]?.let { value -> key to value.snapshotPreferenceValue() }
     }.toMap()
     return PreferenceSnapshot(keys = keys, values = values)
 }
@@ -32,7 +32,7 @@ internal fun SharedPreferences.restore(snapshot: PreferenceSnapshot) {
     editor.apply()
 }
 
-private fun Any.snapshotValue(): Any = when (this) {
+internal fun Any.snapshotPreferenceValue(): Any = when (this) {
     is Set<*> -> filterIsInstance<String>().toSet()
     else -> this
 }

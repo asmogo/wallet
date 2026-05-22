@@ -13,13 +13,16 @@ import org.cashu.wallet.Models.PendingReceiveToken
 import org.cashu.wallet.Models.PendingToken
 import org.cashu.wallet.Models.WalletTransaction
 
-class WalletStore(context: Context) {
-    private val prefs = context.applicationContext.getSharedPreferences("wallet_store", Context.MODE_PRIVATE)
+class WalletStore(
+    context: Context,
+    storeName: String = "wallet_store",
+) {
+    private val store = DataStorePreferenceStore(context.applicationContext, storeName)
     private val json = Json { ignoreUnknownKeys = true; encodeDefaults = true }
 
     var activeMintURL: String?
-        get() = prefs.getString(StorageKeys.walletActiveMintUrl, null)
-        set(value) = prefs.edit().putString(StorageKeys.walletActiveMintUrl, value).apply()
+        get() = store.string(StorageKeys.walletActiveMintUrl)
+        set(value) = store.putString(StorageKeys.walletActiveMintUrl, value)
 
     fun loadMints(): List<MintInfo> = loadList(StorageKeys.walletMints, MintInfo.serializer())
     fun saveMints(mints: List<MintInfo>) = saveList(StorageKeys.walletMints, MintInfo.serializer(), mints)
@@ -57,42 +60,43 @@ class WalletStore(context: Context) {
     fun saveProcessedNPCQuotes(quotes: List<String>) =
         saveList(StorageKeys.walletProcessedNPCQuotes, String.serializer(), quotes)
 
+    fun loadProcessedCashuRequests(): List<String> =
+        loadList(StorageKeys.walletProcessedCashuRequests, String.serializer())
+    fun saveProcessedCashuRequests(requestIds: List<String>) =
+        saveList(StorageKeys.walletProcessedCashuRequests, String.serializer(), requestIds)
+
     internal fun snapshotWalletScopedData(): PreferenceSnapshot {
-        val prefixKeys = prefs.all.keys.filter {
+        val prefixKeys = store.keys().filter {
             it.startsWith(StorageKeys.walletDataPrefix) || it.startsWith(StorageKeys.npcDataPrefix)
         }
-        return prefs.snapshot(StorageKeys.walletBoundaryKeys + prefixKeys)
+        return store.snapshot(StorageKeys.walletBoundaryKeys + prefixKeys)
     }
 
     internal fun restoreWalletScopedData(snapshot: PreferenceSnapshot) {
-        prefs.restore(snapshot)
+        store.restore(snapshot)
     }
 
     fun removeAllWalletData() {
-        val editor = prefs.edit()
-        StorageKeys.walletBoundaryKeys.forEach(editor::remove)
-        prefs.all.keys
-            .filter { it.startsWith(StorageKeys.walletDataPrefix) || it.startsWith(StorageKeys.npcDataPrefix) }
-            .forEach(editor::remove)
-        editor.apply()
+        store.removeKeys(StorageKeys.walletBoundaryKeys)
+        store.removePrefix(listOf(StorageKeys.walletDataPrefix, StorageKeys.npcDataPrefix))
     }
 
     private fun <T> loadList(key: String, serializer: KSerializer<T>): List<T> {
-        val raw = prefs.getString(key, null) ?: return emptyList()
+        val raw = store.string(key) ?: return emptyList()
         return runCatching { json.decodeFromString(ListSerializer(serializer), raw) }.getOrDefault(emptyList())
     }
 
     private fun <T> saveList(key: String, serializer: KSerializer<T>, values: List<T>) {
-        prefs.edit().putString(key, json.encodeToString(ListSerializer(serializer), values)).apply()
+        store.putString(key, json.encodeToString(ListSerializer(serializer), values))
     }
 
     private fun <T> loadMap(key: String, serializer: KSerializer<T>): Map<String, T> {
-        val raw = prefs.getString(key, null) ?: return emptyMap()
+        val raw = store.string(key) ?: return emptyMap()
         return runCatching { json.decodeFromString(MapSerializer(String.serializer(), serializer), raw) }
             .getOrDefault(emptyMap())
     }
 
     private fun <T> saveMap(key: String, serializer: KSerializer<T>, values: Map<String, T>) {
-        prefs.edit().putString(key, json.encodeToString(MapSerializer(String.serializer(), serializer), values)).apply()
+        store.putString(key, json.encodeToString(MapSerializer(String.serializer(), serializer), values))
     }
 }

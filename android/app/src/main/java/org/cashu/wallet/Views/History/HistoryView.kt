@@ -11,12 +11,17 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
@@ -31,6 +36,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
 import org.cashu.wallet.Core.AmountFormatter
@@ -67,6 +73,7 @@ fun HistoryView(
     val state by walletManager.state.collectAsState()
     val formatter = AmountFormatter()
     var selectedTransactionId by remember { mutableStateOf<String?>(null) }
+    var detailTransaction by remember { mutableStateOf<WalletTransaction?>(null) }
     var filter by remember { mutableStateOf(HistoryFilter.All) }
     var currentPage by remember { mutableStateOf(1) }
     var refreshBanner by remember { mutableStateOf<HistoryRefreshBanner?>(null) }
@@ -207,6 +214,7 @@ fun HistoryView(
                             onToggle = {
                                 selectedTransactionId = if (selectedTransactionId == transaction.id) null else transaction.id
                             },
+                            onOpenDetail = { detailTransaction = transaction },
                         )
                     }
                 }
@@ -221,6 +229,15 @@ fun HistoryView(
                     }
                 }
             }
+        }
+        detailTransaction?.let { transaction ->
+            TransactionDetailDialog(
+                transaction = transaction,
+                amountFormatter = formatter,
+                walletManager = walletManager,
+                isLoading = state.isLoading,
+                onDismiss = { detailTransaction = null },
+            )
         }
     }
 }
@@ -300,6 +317,7 @@ private fun TransactionHistoryCard(
     walletManager: WalletManager,
     isLoading: Boolean,
     onToggle: () -> Unit,
+    onOpenDetail: () -> Unit,
 ) {
     QuietCard(modifier = Modifier.clickable(onClick = onToggle)) {
         KeyValueRow(
@@ -318,6 +336,42 @@ private fun TransactionHistoryCard(
                 walletManager = walletManager,
                 isLoading = isLoading,
             )
+            SecondaryActionButton("Open full details", onClick = onOpenDetail)
+        }
+    }
+}
+
+@Composable
+private fun TransactionDetailDialog(
+    transaction: WalletTransaction,
+    amountFormatter: AmountFormatter,
+    walletManager: WalletManager,
+    isLoading: Boolean,
+    onDismiss: () -> Unit,
+) {
+    Dialog(onDismissRequest = onDismiss) {
+        Surface(
+            shape = RoundedCornerShape(8.dp),
+            color = MaterialTheme.colorScheme.surface,
+            tonalElevation = 6.dp,
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(max = 640.dp)
+                    .verticalScroll(rememberScrollState())
+                    .padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Text(TransactionDisplay.title(transaction), style = MaterialTheme.typography.titleLarge)
+                TransactionDetailContent(
+                    transaction = transaction,
+                    amountFormatter = amountFormatter,
+                    walletManager = walletManager,
+                    isLoading = isLoading,
+                )
+                SecondaryActionButton("Close", onClick = onDismiss)
+            }
         }
     }
 }

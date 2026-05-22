@@ -16,7 +16,10 @@ import org.cashu.wallet.Core.Protocols.StorageKeys
 import org.cashu.wallet.Models.NwcConnection
 import org.cashu.wallet.Models.P2PKKeyInfo
 
-class SettingsStore(context: Context) {
+class SettingsStore(
+    context: Context,
+    storeName: String = "settings_store",
+) {
     companion object {
         val defaultNostrRelays = listOf(
             "wss://relay.damus.io",
@@ -26,68 +29,68 @@ class SettingsStore(context: Context) {
         )
     }
 
-    private val prefs = context.applicationContext.getSharedPreferences("settings_store", Context.MODE_PRIVATE)
+    private val store = DataStorePreferenceStore(context.applicationContext, storeName)
     private val json = Json { ignoreUnknownKeys = true; encodeDefaults = true }
 
     var useBitcoinSymbol: Boolean
-        get() = prefs.getBoolean(StorageKeys.settingsUseBitcoinSymbol, false)
-        set(value) = prefs.edit().putBoolean(StorageKeys.settingsUseBitcoinSymbol, value).apply()
+        get() = store.boolean(StorageKeys.settingsUseBitcoinSymbol, false)
+        set(value) = store.putBoolean(StorageKeys.settingsUseBitcoinSymbol, value)
 
     var showFiatBalance: Boolean
-        get() = prefs.getBoolean(StorageKeys.settingsShowFiatBalance, false)
-        set(value) = prefs.edit().putBoolean(StorageKeys.settingsShowFiatBalance, value).apply()
+        get() = store.boolean(StorageKeys.settingsShowFiatBalance, false)
+        set(value) = store.putBoolean(StorageKeys.settingsShowFiatBalance, value)
 
     var bitcoinPriceCurrency: String
-        get() = prefs.getString(StorageKeys.settingsBitcoinPriceCurrency, "USD") ?: "USD"
-        set(value) = prefs.edit().putString(StorageKeys.settingsBitcoinPriceCurrency, value).apply()
+        get() = store.string(StorageKeys.settingsBitcoinPriceCurrency) ?: "USD"
+        set(value) = store.putString(StorageKeys.settingsBitcoinPriceCurrency, value)
 
     var checkPendingOnStartup: Boolean
-        get() = prefs.getBoolean(StorageKeys.settingsCheckPendingOnStartup, true)
-        set(value) = prefs.edit().putBoolean(StorageKeys.settingsCheckPendingOnStartup, value).apply()
+        get() = store.boolean(StorageKeys.settingsCheckPendingOnStartup, true)
+        set(value) = store.putBoolean(StorageKeys.settingsCheckPendingOnStartup, value)
 
     var checkSentTokens: Boolean
-        get() = prefs.getBoolean(StorageKeys.settingsCheckSentTokens, true)
-        set(value) = prefs.edit().putBoolean(StorageKeys.settingsCheckSentTokens, value).apply()
+        get() = store.boolean(StorageKeys.settingsCheckSentTokens, true)
+        set(value) = store.putBoolean(StorageKeys.settingsCheckSentTokens, value)
 
     var autoPasteEcashReceive: Boolean
-        get() = prefs.getBoolean(StorageKeys.settingsAutoPasteEcashReceive, true)
-        set(value) = prefs.edit().putBoolean(StorageKeys.settingsAutoPasteEcashReceive, value).apply()
+        get() = store.boolean(StorageKeys.settingsAutoPasteEcashReceive, true)
+        set(value) = store.putBoolean(StorageKeys.settingsAutoPasteEcashReceive, value)
 
     var useWebsockets: Boolean
-        get() = prefs.getBoolean(StorageKeys.settingsUseWebsockets, true)
-        set(value) = prefs.edit().putBoolean(StorageKeys.settingsUseWebsockets, value).apply()
+        get() = store.boolean(StorageKeys.settingsUseWebsockets, true)
+        set(value) = store.putBoolean(StorageKeys.settingsUseWebsockets, value)
 
     var enablePaymentRequests: Boolean
-        get() = prefs.getBoolean(StorageKeys.settingsEnablePaymentRequests, false)
-        set(value) = prefs.edit().putBoolean(StorageKeys.settingsEnablePaymentRequests, value).apply()
+        get() = store.boolean(StorageKeys.settingsEnablePaymentRequests, false)
+        set(value) = store.putBoolean(StorageKeys.settingsEnablePaymentRequests, value)
 
     var receivePaymentRequestsAutomatically: Boolean
-        get() = prefs.getBoolean(StorageKeys.settingsReceivePaymentRequestsAutomatically, false)
-        set(value) = prefs.edit().putBoolean(StorageKeys.settingsReceivePaymentRequestsAutomatically, value).apply()
+        get() = store.boolean(StorageKeys.settingsReceivePaymentRequestsAutomatically, false)
+        set(value) = store.putBoolean(StorageKeys.settingsReceivePaymentRequestsAutomatically, value)
 
     var enableNWC: Boolean
-        get() = prefs.getBoolean(StorageKeys.settingsEnableNWC, false)
-        set(value) = prefs.edit().putBoolean(StorageKeys.settingsEnableNWC, value).apply()
+        get() = store.boolean(StorageKeys.settingsEnableNWC, false)
+        set(value) = store.putBoolean(StorageKeys.settingsEnableNWC, value)
 
     var showP2PKButtonInDrawer: Boolean
-        get() = prefs.getBoolean(StorageKeys.settingsShowP2PKButtonInDrawer, false)
-        set(value) = prefs.edit().putBoolean(StorageKeys.settingsShowP2PKButtonInDrawer, value).apply()
+        get() = store.boolean(StorageKeys.settingsShowP2PKButtonInDrawer, false)
+        set(value) = store.putBoolean(StorageKeys.settingsShowP2PKButtonInDrawer, value)
 
     var amountDisplayPrimary: String
-        get() = prefs.getString(StorageKeys.settingsAmountDisplayPrimary, "fiat") ?: "fiat"
-        set(value) = prefs.edit().putString(StorageKeys.settingsAmountDisplayPrimary, value).apply()
+        get() = store.string(StorageKeys.settingsAmountDisplayPrimary) ?: "fiat"
+        set(value) = store.putString(StorageKeys.settingsAmountDisplayPrimary, value)
 
     var checkIncomingInvoices: Boolean
-        get() = prefs.getBoolean(StorageKeys.settingsCheckIncomingInvoices, true)
-        set(value) = prefs.edit().putBoolean(StorageKeys.settingsCheckIncomingInvoices, value).apply()
+        get() = store.boolean(StorageKeys.settingsCheckIncomingInvoices, true)
+        set(value) = store.putBoolean(StorageKeys.settingsCheckIncomingInvoices, value)
 
     var periodicallyCheckIncomingInvoices: Boolean
-        get() = prefs.getBoolean(StorageKeys.settingsPeriodicallyCheckIncomingInvoices, true)
-        set(value) = prefs.edit().putBoolean(StorageKeys.settingsPeriodicallyCheckIncomingInvoices, value).apply()
+        get() = store.boolean(StorageKeys.settingsPeriodicallyCheckIncomingInvoices, true)
+        set(value) = store.putBoolean(StorageKeys.settingsPeriodicallyCheckIncomingInvoices, value)
 
     var nostrSignerType: String
-        get() = prefs.getString(StorageKeys.settingsNostrSignerType, "SEED") ?: "SEED"
-        set(value) = prefs.edit().putString(StorageKeys.settingsNostrSignerType, value).apply()
+        get() = store.string(StorageKeys.settingsNostrSignerType) ?: "SEED"
+        set(value) = store.putString(StorageKeys.settingsNostrSignerType, value)
 
     var nostrRelays: List<String>
         get() = loadList(StorageKeys.settingsNostrRelays, String.serializer()).ifEmpty { defaultNostrRelays }
@@ -102,27 +105,23 @@ class SettingsStore(context: Context) {
         set(value) = saveList(StorageKeys.settingsP2PKKeys, P2PKKeyInfo.serializer(), value)
 
     internal fun loadNwcConnectionsWithLegacySecrets(): List<LegacyNwcConnectionRecord> =
-        LegacySettingsSecretParser.nwcConnections(prefs.getString(StorageKeys.settingsNwcConnections, null))
+        LegacySettingsSecretParser.nwcConnections(store.string(StorageKeys.settingsNwcConnections))
 
     internal fun loadP2PKKeysWithLegacySecrets(): List<LegacyP2PKKeyRecord> =
-        LegacySettingsSecretParser.p2pkKeys(prefs.getString(StorageKeys.settingsP2PKKeys, null))
+        LegacySettingsSecretParser.p2pkKeys(store.string(StorageKeys.settingsP2PKKeys))
 
     internal fun snapshotWalletScopedData(): PreferenceSnapshot {
-        val prefixKeys = prefs.all.keys.filter { it.startsWith(StorageKeys.npcDataPrefix) }
-        return prefs.snapshot(walletScopedKeys + prefixKeys)
+        val prefixKeys = store.keys().filter { it.startsWith(StorageKeys.npcDataPrefix) }
+        return store.snapshot(walletScopedKeys + prefixKeys)
     }
 
     internal fun restoreWalletScopedData(snapshot: PreferenceSnapshot) {
-        prefs.restore(snapshot)
+        store.restore(snapshot)
     }
 
     fun clearWalletScopedData() {
-        val editor = prefs.edit()
-        walletScopedKeys.forEach(editor::remove)
-        prefs.all.keys
-            .filter { it.startsWith(StorageKeys.npcDataPrefix) }
-            .forEach(editor::remove)
-        editor.apply()
+        store.removeKeys(walletScopedKeys)
+        store.removePrefix(listOf(StorageKeys.npcDataPrefix))
     }
 
     fun resetNostrRelaysToDefault() {
@@ -130,50 +129,46 @@ class SettingsStore(context: Context) {
     }
 
     var priceEnabled: Boolean
-        get() = prefs.getBoolean(StorageKeys.priceEnabled, showFiatBalance)
-        set(value) = prefs.edit().putBoolean(StorageKeys.priceEnabled, value).apply()
+        get() = store.boolean(StorageKeys.priceEnabled, showFiatBalance)
+        set(value) = store.putBoolean(StorageKeys.priceEnabled, value)
 
     var priceCurrencyCode: String
-        get() = prefs.getString(StorageKeys.priceCurrencyCode, bitcoinPriceCurrency) ?: bitcoinPriceCurrency
-        set(value) = prefs.edit().putString(StorageKeys.priceCurrencyCode, value.uppercase()).apply()
+        get() = store.string(StorageKeys.priceCurrencyCode) ?: bitcoinPriceCurrency
+        set(value) = store.putString(StorageKeys.priceCurrencyCode, value.uppercase())
 
     fun cachedPrice(currency: String): Double? {
         val normalized = currency.uppercase()
-        return prefs.getString(StorageKeys.priceCachedBTC(normalized), null)?.toDoubleOrNull()
-            ?: prefs.getString(StorageKeys.priceCachedBTC, null)?.toDoubleOrNull()
+        return store.string(StorageKeys.priceCachedBTC(normalized))?.toDoubleOrNull()
+            ?: store.string(StorageKeys.priceCachedBTC)?.toDoubleOrNull()
     }
 
     fun setCachedPrice(price: Double, currency: String) {
         val normalized = currency.uppercase()
-        prefs.edit()
-            .putString(StorageKeys.priceCachedBTC(normalized), price.toString())
-            .putString(StorageKeys.priceCachedBTC, price.toString())
-            .apply()
+        store.putString(StorageKeys.priceCachedBTC(normalized), price.toString())
+        store.putString(StorageKeys.priceCachedBTC, price.toString())
     }
 
     fun cachedPriceDate(currency: String): Long? {
         val normalized = currency.uppercase()
-        val dated = prefs.getLong(StorageKeys.priceCachedBTCDate(normalized), Long.MIN_VALUE)
+        val dated = store.long(StorageKeys.priceCachedBTCDate(normalized), Long.MIN_VALUE)
         if (dated != Long.MIN_VALUE) return dated
-        val legacy = prefs.getLong(StorageKeys.priceCachedBTCDate, Long.MIN_VALUE)
+        val legacy = store.long(StorageKeys.priceCachedBTCDate, Long.MIN_VALUE)
         return legacy.takeIf { it != Long.MIN_VALUE }
     }
 
     fun setCachedPriceDate(epochMillis: Long, currency: String) {
         val normalized = currency.uppercase()
-        prefs.edit()
-            .putLong(StorageKeys.priceCachedBTCDate(normalized), epochMillis)
-            .putLong(StorageKeys.priceCachedBTCDate, epochMillis)
-            .apply()
+        store.putLong(StorageKeys.priceCachedBTCDate(normalized), epochMillis)
+        store.putLong(StorageKeys.priceCachedBTCDate, epochMillis)
     }
 
     private fun <T> loadList(key: String, serializer: KSerializer<T>): List<T> {
-        val raw = prefs.getString(key, null) ?: return emptyList()
+        val raw = store.string(key) ?: return emptyList()
         return runCatching { json.decodeFromString(ListSerializer(serializer), raw) }.getOrDefault(emptyList())
     }
 
     private fun <T> saveList(key: String, serializer: KSerializer<T>, values: List<T>) {
-        prefs.edit().putString(key, json.encodeToString(ListSerializer(serializer), values)).apply()
+        store.putString(key, json.encodeToString(ListSerializer(serializer), values))
     }
 
     private val walletScopedKeys = setOf(
