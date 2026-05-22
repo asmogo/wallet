@@ -73,8 +73,8 @@ fun HomeScreen(
     onOpenMints: () -> Unit,
     onOpenHistory: () -> Unit,
     onOpenTransaction: (WalletTransaction) -> Unit,
-    onReceive: () -> Unit,
-    onSend: () -> Unit,
+    onReceive: (ReceiveAction) -> Unit,
+    onSend: (SendAction) -> Unit,
     onScan: () -> Unit,
     onContactless: () -> Unit,
     contentPadding: PaddingValues,
@@ -214,9 +214,7 @@ fun HomeScreen(
         ReceiveChooserSheet(
             onSelect = { action ->
                 receiveChooserOpen = false
-                when (action) {
-                    ReceiveAction.Ecash, ReceiveAction.Bitcoin -> onReceive()
-                }
+                onReceive(action)
             },
             onDismiss = { receiveChooserOpen = false },
         )
@@ -227,7 +225,7 @@ fun HomeScreen(
             onSelect = { action ->
                 sendChooserOpen = false
                 when (action) {
-                    SendAction.Ecash, SendAction.Bitcoin -> onSend()
+                    SendAction.Ecash, SendAction.Bitcoin -> onSend(action)
                     SendAction.Contactless -> onContactless()
                 }
             },

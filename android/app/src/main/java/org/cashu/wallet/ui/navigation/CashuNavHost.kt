@@ -11,10 +11,14 @@ import org.cashu.wallet.App.AppContainer
 import org.cashu.wallet.Core.Platform.ConnectivityState
 import org.cashu.wallet.Views.History.HistoryView
 import org.cashu.wallet.Views.Mints.MintsListView
-import org.cashu.wallet.Views.Receive.ReceiveView
-import org.cashu.wallet.Views.Send.SendView
 import org.cashu.wallet.Views.Settings.SettingsView
 import org.cashu.wallet.ui.home.HomeScreen
+import org.cashu.wallet.ui.home.ReceiveAction
+import org.cashu.wallet.ui.home.SendAction
+import org.cashu.wallet.ui.receive.ReceiveEcashScreen
+import org.cashu.wallet.ui.receive.ReceiveLightningScreen
+import org.cashu.wallet.ui.send.SendEcashScreen
+import org.cashu.wallet.ui.send.SendLightningScreen
 
 /**
  * The NavHost. For PR #1, top-level destinations call legacy Views composables;
@@ -54,27 +58,36 @@ fun CashuNavHost(
             onPendingMintScanConsumed = onPendingMintScanConsumed,
         )
         composable(Routes.RECEIVE_ECASH) {
-            ReceiveView(
+            ReceiveEcashScreen(
                 walletManager = container.walletManager,
                 settingsManager = container.settingsManager,
-                priceService = container.priceService,
-                nostrService = container.nostrService,
-                cashuRequestStore = container.cashuRequestStore,
-                contentPadding = contentPadding,
-                scannedPayload = pendingReceiveScan,
-                onScannedPayloadConsumed = onPendingReceiveScanConsumed,
+                onClose = { navController.popBackStack() },
                 onScan = onScan,
+                prefilledPayload = pendingReceiveScan,
+                onPrefilledConsumed = onPendingReceiveScanConsumed,
+            )
+        }
+        composable(Routes.RECEIVE_LIGHTNING) {
+            ReceiveLightningScreen(
+                walletManager = container.walletManager,
+                settingsManager = container.settingsManager,
+                onClose = { navController.popBackStack() },
             )
         }
         composable(Routes.SEND_ECASH) {
-            SendView(
+            SendEcashScreen(
                 walletManager = container.walletManager,
                 settingsManager = container.settingsManager,
-                priceService = container.priceService,
-                contentPadding = contentPadding,
-                scannedPayload = pendingSendScan,
-                onScannedPayloadConsumed = onPendingSendScanConsumed,
-                onScan = onScan,
+                onClose = { navController.popBackStack() },
+            )
+        }
+        composable(Routes.SEND_LIGHTNING) {
+            SendLightningScreen(
+                walletManager = container.walletManager,
+                settingsManager = container.settingsManager,
+                onClose = { navController.popBackStack() },
+                prefilledPayload = pendingSendScan,
+                onPrefilledConsumed = onPendingSendScanConsumed,
             )
         }
     }
@@ -98,8 +111,21 @@ private fun NavGraphBuilder.tabDestinations(
             onOpenMints = { navController.navigateToTab(TopTab.Mints) },
             onOpenHistory = { navController.navigateToTab(TopTab.History) },
             onOpenTransaction = { _ -> navController.navigateToTab(TopTab.History) },
-            onReceive = { navController.navigate(Routes.RECEIVE_ECASH) },
-            onSend = { navController.navigate(Routes.SEND_ECASH) },
+            onReceive = { action ->
+                val route = when (action) {
+                    ReceiveAction.Ecash -> Routes.RECEIVE_ECASH
+                    ReceiveAction.Bitcoin -> Routes.RECEIVE_LIGHTNING
+                }
+                navController.navigate(route)
+            },
+            onSend = { action ->
+                val route = when (action) {
+                    SendAction.Ecash -> Routes.SEND_ECASH
+                    SendAction.Bitcoin -> Routes.SEND_LIGHTNING
+                    SendAction.Contactless -> Routes.SEND_ECASH
+                }
+                navController.navigate(route)
+            },
             onScan = onScan,
             onContactless = onContactless,
             contentPadding = contentPadding,
