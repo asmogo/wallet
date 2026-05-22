@@ -1,7 +1,9 @@
 package org.cashu.wallet.ui.mints
 
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -18,18 +20,27 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowRight
+import androidx.compose.material.icons.outlined.Check
+import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.QrCodeScanner
 import androidx.compose.material.icons.outlined.Search
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.LargeTopAppBar
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.MediumTopAppBar
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SwipeToDismissBox
+import androidx.compose.material3.SwipeToDismissBoxValue
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.material3.rememberSwipeToDismissBoxState
 import androidx.compose.material3.rememberTopAppBarState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -42,6 +53,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.text.input.KeyboardCapitalization
@@ -59,7 +71,6 @@ import org.cashu.wallet.ui.components.GhostButton
 import org.cashu.wallet.ui.components.MintAvatar
 import org.cashu.wallet.ui.components.MintMethodChips
 import org.cashu.wallet.ui.components.PrimaryButton
-import org.cashu.wallet.ui.components.SectionHeader
 import org.cashu.wallet.ui.theme.CashuTheme
 import org.cashu.wallet.ui.theme.withMonoDigits
 
@@ -80,7 +91,9 @@ fun MintsScreen(
     val clipboard = LocalClipboardManager.current
 
     var url by remember { mutableStateOf("") }
+    var nickname by remember { mutableStateOf("") }
     var error by remember { mutableStateOf<String?>(null) }
+    var pendingRemoval by remember { mutableStateOf<MintInfo?>(null) }
 
     LaunchedEffect(scannedMintUrl) {
         val payload = scannedMintUrl?.trim().orEmpty()
@@ -110,7 +123,10 @@ fun MintsScreen(
         error = null
         scope.launch {
             runCatching { walletManager.addMint(normalized) }
-                .onSuccess { url = "" }
+                .onSuccess {
+                    url = ""
+                    nickname = ""
+                }
                 .onFailure { error = it.message ?: "Could not add mint." }
         }
     }
@@ -123,10 +139,10 @@ fun MintsScreen(
             .padding(contentPadding)
             .nestedScroll(scrollBehavior.nestedScrollConnection),
         topBar = {
-            LargeTopAppBar(
-                title = { Text("Mints", style = MaterialTheme.typography.headlineMedium) },
+            MediumTopAppBar(
+                title = { Text("Mints") },
                 scrollBehavior = scrollBehavior,
-                colors = TopAppBarDefaults.largeTopAppBarColors(
+                colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = MaterialTheme.colorScheme.background,
                     scrolledContainerColor = MaterialTheme.colorScheme.background,
                 ),
@@ -140,20 +156,23 @@ fun MintsScreen(
             contentPadding = PaddingValues(bottom = 24.dp),
         ) {
             if (walletState.mints.isNotEmpty()) {
-                item("configured-header") {
-                    SectionHeader("Configured")
-                }
                 items(walletState.mints, key = { it.url }) { mint ->
-                    MintRow(
+                    val isActive = walletState.activeMint?.url == mint.url
+                    SwipeableMintRow(
                         mint = mint,
-                        isActive = walletState.activeMint?.url == mint.url,
-                        onClick = { onOpenMint(mint) },
+                        isActive = isActive,
+                        onOpen = { onOpenMint(mint) },
+                        onSetActive = {
+                            if (!isActive) {
+                                scope.launch { walletManager.setActiveMint(mint) }
+                            }
+                        },
+                        onRequestRemove = { pendingRemoval = mint },
                     )
                     if (mint != walletState.mints.last()) CanvasDivider(leadingInset = 64)
                 }
             }
 
-            item("discover-header") { SectionHeader("Discover") }
             item("discover-row") {
                 ListEntryRow(
                     leadingIcon = {
@@ -178,12 +197,11 @@ fun MintsScreen(
                 )
             }
 
-            item("add-header") { SectionHeader("Add by URL") }
             item("add-form") {
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 16.dp),
+                        .padding(horizontal = 16.dp, vertical = 16.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
                     OutlinedTextField(
@@ -209,6 +227,18 @@ fun MintsScreen(
                                 )
                             }
                         },
+                    )
+                    OutlinedTextField(
+                        value = nickname,
+                        onValueChange = { nickname = it },
+                        label = { Text("Nickname (optional)") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = MaterialTheme.shapes.medium,
+                        colors = TextFieldDefaults.colors(
+                            focusedContainerColor = MaterialTheme.colorScheme.surfaceContainer,
+                            unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainer,
+                        ),
                     )
                     if (error != null) {
                         Text(
@@ -249,80 +279,226 @@ fun MintsScreen(
             }
         }
     }
+
+    pendingRemoval?.let { mint ->
+        AlertDialog(
+            onDismissRequest = { pendingRemoval = null },
+            title = { Text("Remove Mint") },
+            text = {
+                Text(
+                    "Remove ${mint.name}? You will lose access to any ecash issued by this mint unless you re-add it.",
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    val target = mint
+                    pendingRemoval = null
+                    scope.launch { walletManager.removeMint(target) }
+                }) {
+                    Text("Remove", color = MaterialTheme.colorScheme.error)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { pendingRemoval = null }) { Text("Cancel") }
+            },
+        )
+    }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun SwipeableMintRow(
+    mint: MintInfo,
+    isActive: Boolean,
+    onOpen: () -> Unit,
+    onSetActive: () -> Unit,
+    onRequestRemove: () -> Unit,
+) {
+    val dismissState = rememberSwipeToDismissBoxState(
+        confirmValueChange = { value ->
+            when (value) {
+                SwipeToDismissBoxValue.StartToEnd -> {
+                    onSetActive()
+                    false
+                }
+                SwipeToDismissBoxValue.EndToStart -> {
+                    onRequestRemove()
+                    false
+                }
+                SwipeToDismissBoxValue.Settled -> false
+            }
+        },
+    )
+    SwipeToDismissBox(
+        state = dismissState,
+        enableDismissFromStartToEnd = !isActive,
+        backgroundContent = {
+            val dir = dismissState.dismissDirection
+            val bg: Color
+            val fg: Color
+            val icon: androidx.compose.ui.graphics.vector.ImageVector?
+            val label: String
+            val align: Alignment
+            when (dir) {
+                SwipeToDismissBoxValue.StartToEnd -> {
+                    bg = CashuTheme.colors.received
+                    fg = Color.White
+                    icon = Icons.Outlined.Check
+                    label = "Set Active"
+                    align = Alignment.CenterStart
+                }
+                SwipeToDismissBoxValue.EndToStart -> {
+                    bg = MaterialTheme.colorScheme.error
+                    fg = MaterialTheme.colorScheme.onError
+                    icon = Icons.Outlined.Delete
+                    label = "Remove"
+                    align = Alignment.CenterEnd
+                }
+                SwipeToDismissBoxValue.Settled -> {
+                    bg = Color.Transparent
+                    fg = Color.Transparent
+                    icon = null
+                    label = ""
+                    align = Alignment.Center
+                }
+            }
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(bg)
+                    .padding(horizontal = 20.dp),
+                contentAlignment = align,
+            ) {
+                if (icon != null) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        Icon(imageVector = icon, contentDescription = label, tint = fg)
+                        Text(text = label, color = fg, style = MaterialTheme.typography.labelLarge)
+                    }
+                }
+            }
+        },
+    ) {
+        MintRow(
+            mint = mint,
+            isActive = isActive,
+            onClick = onOpen,
+            onSetActiveLongPress = onSetActive,
+            onRemoveLongPress = onRequestRemove,
+        )
+    }
+}
+
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun MintRow(
     mint: MintInfo,
     isActive: Boolean,
     onClick: () -> Unit,
+    onSetActiveLongPress: () -> Unit = {},
+    onRemoveLongPress: () -> Unit = {},
 ) {
-    Row(
+    var menuOpen by remember { mutableStateOf(false) }
+    Box(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(onClick = onClick)
-            .padding(horizontal = 16.dp, vertical = 12.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
+            .background(MaterialTheme.colorScheme.background)
+            .combinedClickable(
+                onClick = onClick,
+                onLongClick = { menuOpen = true },
+            ),
     ) {
-        Box {
-            MintAvatar(mint = mint)
-            if (isActive) {
-                Box(
-                    modifier = Modifier
-                        .align(Alignment.BottomEnd)
-                        .size(12.dp)
-                        .clip(CircleShape)
-                        .background(MaterialTheme.colorScheme.surface),
-                    contentAlignment = Alignment.Center,
-                ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Box {
+                MintAvatar(mint = mint)
+                if (isActive) {
                     Box(
                         modifier = Modifier
-                            .size(8.dp)
+                            .align(Alignment.BottomEnd)
+                            .size(12.dp)
                             .clip(CircleShape)
-                            .background(CashuTheme.colors.received),
-                    )
+                            .background(MaterialTheme.colorScheme.surface),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(8.dp)
+                                .clip(CircleShape)
+                                .background(CashuTheme.colors.received),
+                        )
+                    }
                 }
             }
-        }
-        Column(modifier = Modifier.weight(1f)) {
-            Text(
-                text = mint.name,
-                style = MaterialTheme.typography.bodyLarge,
-                color = MaterialTheme.colorScheme.onSurface,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-            Text(
-                text = shortenMintUrl(mint.url),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = 1,
-                overflow = TextOverflow.MiddleEllipsis,
-            )
-            if (mint.supportedMintMethods.isNotEmpty() || mint.supportedMeltMethods.isNotEmpty()) {
-                Spacer(Modifier.height(4.dp))
-                MintMethodChips(mint = mint)
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = mint.name,
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                Text(
+                    text = shortenMintUrl(mint.url),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.MiddleEllipsis,
+                )
+                if (mint.supportedMintMethods.isNotEmpty() || mint.supportedMeltMethods.isNotEmpty()) {
+                    Spacer(Modifier.height(4.dp))
+                    MintMethodChips(mint = mint)
+                }
             }
-        }
-        Column(horizontalAlignment = Alignment.End) {
-            Text(
-                text = "${mint.balance}",
-                style = MaterialTheme.typography.bodyMedium.withMonoDigits(),
-                color = MaterialTheme.colorScheme.onSurface,
+            Column(horizontalAlignment = Alignment.End) {
+                Text(
+                    text = "${mint.balance}",
+                    style = MaterialTheme.typography.bodyMedium.withMonoDigits(),
+                    color = MaterialTheme.colorScheme.onSurface,
+                )
+                Text(
+                    text = "sat",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            Icon(
+                imageVector = Icons.AutoMirrored.Outlined.KeyboardArrowRight,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.size(20.dp),
             )
-            Text(
-                text = "sat",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+        }
+        DropdownMenu(
+            expanded = menuOpen,
+            onDismissRequest = { menuOpen = false },
+        ) {
+            DropdownMenuItem(
+                text = { Text("Set as Active") },
+                onClick = {
+                    menuOpen = false
+                    onSetActiveLongPress()
+                },
+                enabled = !isActive,
+            )
+            DropdownMenuItem(
+                text = {
+                    Text("Remove", color = MaterialTheme.colorScheme.error)
+                },
+                onClick = {
+                    menuOpen = false
+                    onRemoveLongPress()
+                },
             )
         }
-        Icon(
-            imageVector = Icons.AutoMirrored.Outlined.KeyboardArrowRight,
-            contentDescription = null,
-            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.size(20.dp),
-        )
     }
 }
 
