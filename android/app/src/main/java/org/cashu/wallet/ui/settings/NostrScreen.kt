@@ -22,14 +22,12 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
@@ -49,6 +47,7 @@ import org.cashu.wallet.Core.NostrService
 import org.cashu.wallet.Core.NostrSignerType
 import org.cashu.wallet.Core.SettingsManager
 import org.cashu.wallet.ui.components.CanvasDivider
+import org.cashu.wallet.ui.components.CashuTextField
 import org.cashu.wallet.ui.components.GhostButton
 import org.cashu.wallet.ui.components.InspectorRow
 import org.cashu.wallet.ui.components.PrimaryButton
@@ -265,17 +264,12 @@ fun NostrScreen(
             title = { Text("Import nsec") },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(CashuTheme.spacing.snug)) {
-                    OutlinedTextField(
+                    CashuTextField(
                         value = input,
                         onValueChange = { input = it; importError = null },
-                        label = { Text("nsec1…") },
+                        label = "nsec1…",
                         modifier = Modifier.fillMaxWidth(),
                         singleLine = true,
-                        shape = MaterialTheme.shapes.medium,
-                        colors = TextFieldDefaults.colors(
-                            focusedContainerColor = MaterialTheme.colorScheme.surfaceContainer,
-                            unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainer,
-                        ),
                     )
                     if (importError != null) {
                         Text(
@@ -352,17 +346,12 @@ fun NostrScreen(
             title = { Text("Add relay") },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(CashuTheme.spacing.snug)) {
-                    OutlinedTextField(
+                    CashuTextField(
                         value = input,
                         onValueChange = { input = it; addRelayError = null },
-                        label = { Text("wss:// URL") },
+                        label = "wss:// URL",
                         modifier = Modifier.fillMaxWidth(),
                         singleLine = true,
-                        shape = MaterialTheme.shapes.medium,
-                        colors = TextFieldDefaults.colors(
-                            focusedContainerColor = MaterialTheme.colorScheme.surfaceContainer,
-                            unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainer,
-                        ),
                     )
                     if (addRelayError != null) {
                         Text(

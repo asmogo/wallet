@@ -20,11 +20,9 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
@@ -43,6 +41,7 @@ import androidx.compose.ui.unit.dp
 import org.cashu.wallet.Core.SettingsManager
 import org.cashu.wallet.Models.NwcConnection
 import org.cashu.wallet.ui.components.CanvasDivider
+import org.cashu.wallet.ui.components.CashuTextField
 import org.cashu.wallet.ui.components.EmptyState
 import org.cashu.wallet.ui.components.PrimaryButton
 import org.cashu.wallet.ui.components.SectionHeader
@@ -130,41 +129,26 @@ fun NWCScreen(
             title = { Text("New NWC connection") },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(CashuTheme.spacing.snug)) {
-                    OutlinedTextField(
+                    CashuTextField(
                         value = name,
                         onValueChange = { name = it; createError = null },
-                        label = { Text("Nickname") },
+                        label = "Nickname",
                         modifier = Modifier.fillMaxWidth(),
                         singleLine = true,
-                        shape = MaterialTheme.shapes.medium,
-                        colors = TextFieldDefaults.colors(
-                            focusedContainerColor = MaterialTheme.colorScheme.surfaceContainer,
-                            unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainer,
-                        ),
                     )
-                    OutlinedTextField(
+                    CashuTextField(
                         value = relay,
                         onValueChange = { relay = it },
-                        label = { Text("Relay (wss://)") },
+                        label = "Relay (wss://)",
                         modifier = Modifier.fillMaxWidth(),
                         singleLine = true,
-                        shape = MaterialTheme.shapes.medium,
-                        colors = TextFieldDefaults.colors(
-                            focusedContainerColor = MaterialTheme.colorScheme.surfaceContainer,
-                            unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainer,
-                        ),
                     )
-                    OutlinedTextField(
+                    CashuTextField(
                         value = allowance,
                         onValueChange = { allowance = it.filter { ch -> ch.isDigit() } },
-                        label = { Text("Allowance (sats, optional)") },
+                        label = "Allowance (sats, optional)",
                         modifier = Modifier.fillMaxWidth(),
                         singleLine = true,
-                        shape = MaterialTheme.shapes.medium,
-                        colors = TextFieldDefaults.colors(
-                            focusedContainerColor = MaterialTheme.colorScheme.surfaceContainer,
-                            unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainer,
-                        ),
                     )
                     if (createError != null) {
                         Text(

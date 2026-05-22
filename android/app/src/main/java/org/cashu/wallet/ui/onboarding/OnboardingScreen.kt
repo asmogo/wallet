@@ -27,9 +27,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Check
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -53,6 +51,7 @@ import kotlin.random.Random
 import kotlinx.coroutines.launch
 import org.cashu.wallet.Core.WalletManager
 import org.cashu.wallet.ui.components.BoldPrimaryButton
+import org.cashu.wallet.ui.components.CashuTextField
 import org.cashu.wallet.ui.components.GhostButton
 import org.cashu.wallet.ui.components.PrimaryButton
 import org.cashu.wallet.ui.theme.CashuTheme
@@ -286,21 +285,16 @@ private fun VerifyMnemonicFace(
         )
         positions.forEach { position ->
             var value by remember { mutableStateOf("") }
-            OutlinedTextField(
+            CashuTextField(
                 value = value,
                 onValueChange = { v ->
                     value = v
                     answers[position] = v
                     attempts++ // trigger recomposition for verified check
                 },
-                label = { Text("Word ${position + 1}") },
+                label = "Word ${position + 1}",
                 modifier = Modifier.fillMaxWidth(),
                 singleLine = true,
-                shape = MaterialTheme.shapes.medium,
-                colors = TextFieldDefaults.colors(
-                    focusedContainerColor = MaterialTheme.colorScheme.surfaceContainer,
-                    unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainer,
-                ),
                 keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.None),
             )
         }
@@ -377,17 +371,12 @@ private fun FirstMintFace(
             onSelect = { useCustom = true },
         )
         if (useCustom) {
-            OutlinedTextField(
+            CashuTextField(
                 value = customUrl,
                 onValueChange = { customUrl = it },
-                label = { Text("https://…") },
+                label = "https://…",
                 modifier = Modifier.fillMaxWidth(),
                 singleLine = true,
-                shape = MaterialTheme.shapes.medium,
-                colors = TextFieldDefaults.colors(
-                    focusedContainerColor = MaterialTheme.colorScheme.surfaceContainer,
-                    unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainer,
-                ),
                 keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.None),
             )
         }
@@ -436,20 +425,15 @@ private fun RestoreInputFace(
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
-        OutlinedTextField(
+        CashuTextField(
             value = input,
             onValueChange = { input = it },
-            label = { Text("Recovery phrase") },
-            placeholder = { Text("word1 word2 word3 …") },
+            label = "Recovery phrase",
+            placeholder = "word1 word2 word3 …",
             minLines = 4,
             modifier = Modifier
                 .fillMaxWidth()
                 .height(SEED_INPUT_HEIGHT),
-            shape = MaterialTheme.shapes.medium,
-            colors = TextFieldDefaults.colors(
-                focusedContainerColor = MaterialTheme.colorScheme.surfaceContainer,
-                unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainer,
-            ),
             keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.None),
         )
         Text(

@@ -44,10 +44,8 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
@@ -72,6 +70,7 @@ import org.cashu.wallet.Core.SettingsManager
 import org.cashu.wallet.Core.WalletManager
 import org.cashu.wallet.Models.SendTokenResult
 import org.cashu.wallet.ui.components.AmountText
+import org.cashu.wallet.ui.components.CashuTextField
 import org.cashu.wallet.ui.components.MintPickerSheet
 import org.cashu.wallet.ui.components.NumberPad
 import org.cashu.wallet.ui.components.PrimaryButton
@@ -357,18 +356,12 @@ private fun InputFace(
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
 
-        OutlinedTextField(
+        CashuTextField(
             value = memo,
             onValueChange = onMemoChange,
             modifier = Modifier.fillMaxWidth(),
-            label = { Text("Memo (optional)") },
+            label = "Memo (optional)",
             singleLine = true,
-            shape = MaterialTheme.shapes.medium,
-            colors = TextFieldDefaults.colors(
-                focusedContainerColor = MaterialTheme.colorScheme.surfaceContainer,
-                unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainer,
-            ),
-            keyboardOptions = KeyboardOptions.Default,
         )
 
         AnimatedVisibility(visible = p2pkOn) {
@@ -418,19 +411,14 @@ private fun P2pkLockSection(
         modifier = Modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(CashuTheme.spacing.tight),
     ) {
-        OutlinedTextField(
+        CashuTextField(
             value = input,
             onValueChange = onInputChange,
             modifier = Modifier.fillMaxWidth(),
-            label = { Text("Recipient P2PK pubkey") },
-            placeholder = { Text("02… or 64-char hex") },
+            label = "Recipient P2PK pubkey",
+            placeholder = "02… or 64-char hex",
             singleLine = true,
-            shape = MaterialTheme.shapes.medium,
-            colors = TextFieldDefaults.colors(
-                focusedContainerColor = MaterialTheme.colorScheme.surfaceContainer,
-                unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainer,
-            ),
-            keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
+            keyboardOptions = KeyboardOptions(
                 capitalization = androidx.compose.ui.text.input.KeyboardCapitalization.None,
             ),
             textStyle = MaterialTheme.typography.bodyMedium.copy(

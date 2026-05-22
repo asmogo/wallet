@@ -19,9 +19,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -43,6 +41,7 @@ import org.cashu.wallet.Core.WalletManager
 import org.cashu.wallet.Core.shortenMintUrl
 import org.cashu.wallet.Models.MintInfo
 import org.cashu.wallet.ui.components.CanvasDivider
+import org.cashu.wallet.ui.components.CashuSearchBar
 import org.cashu.wallet.ui.components.EmptyState
 import org.cashu.wallet.ui.components.MintAvatar
 import org.cashu.wallet.ui.components.MintMethodChips
@@ -90,7 +89,7 @@ fun MintDiscoveryContent(
     }
 
     Column(modifier = Modifier.fillMaxSize()) {
-        OutlinedTextField(
+        CashuSearchBar(
             value = query,
             onValueChange = { query = it },
             modifier = Modifier
@@ -99,13 +98,7 @@ fun MintDiscoveryContent(
                     horizontal = CashuTheme.spacing.comfortable,
                     vertical = CashuTheme.spacing.snug,
                 ),
-            placeholder = { Text("Search mints") },
-            singleLine = true,
-            shape = MaterialTheme.shapes.medium,
-            colors = TextFieldDefaults.colors(
-                focusedContainerColor = MaterialTheme.colorScheme.surfaceContainer,
-                unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainer,
-            ),
+            placeholder = "Search mints",
         )
 
         if (!settings.useWebsockets) {

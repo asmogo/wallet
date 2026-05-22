@@ -19,11 +19,9 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
@@ -42,6 +40,7 @@ import androidx.compose.ui.unit.dp
 import org.cashu.wallet.Core.SettingsManager
 import org.cashu.wallet.Models.P2PKKeyInfo
 import org.cashu.wallet.ui.components.CanvasDivider
+import org.cashu.wallet.ui.components.CashuTextField
 import org.cashu.wallet.ui.components.EmptyState
 import org.cashu.wallet.ui.components.PrimaryButton
 import org.cashu.wallet.ui.components.SectionHeader
@@ -135,16 +134,11 @@ fun P2PKScreen(
             title = { Text("Import P2PK key") },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(CashuTheme.spacing.snug)) {
-                    OutlinedTextField(
+                    CashuTextField(
                         value = input,
                         onValueChange = { input = it; importError = null },
-                        label = { Text("nsec1…") },
+                        label = "nsec1…",
                         modifier = Modifier.fillMaxWidth(),
-                        shape = MaterialTheme.shapes.medium,
-                        colors = TextFieldDefaults.colors(
-                            focusedContainerColor = MaterialTheme.colorScheme.surfaceContainer,
-                            unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainer,
-                        ),
                         singleLine = true,
                     )
                     if (importError != null) {

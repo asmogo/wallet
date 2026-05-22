@@ -24,10 +24,8 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
@@ -51,6 +49,7 @@ import org.cashu.wallet.Core.WalletManager
 import org.cashu.wallet.Models.TokenInfo
 import org.cashu.wallet.ui.components.AmountText
 import org.cashu.wallet.ui.components.CanvasDivider
+import org.cashu.wallet.ui.components.CashuTextField
 import org.cashu.wallet.ui.components.GhostButton
 import org.cashu.wallet.ui.components.InspectorRow
 import org.cashu.wallet.ui.components.PrimaryButton
@@ -240,19 +239,14 @@ private fun PasteFace(
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
-        OutlinedTextField(
+        CashuTextField(
             value = input,
             onValueChange = onInputChange,
             modifier = Modifier
                 .fillMaxWidth()
                 .heightFor(180),
-            label = { Text("cashuA… / cashuB…") },
-            placeholder = { Text("Token") },
-            shape = MaterialTheme.shapes.medium,
-            colors = TextFieldDefaults.colors(
-                focusedContainerColor = MaterialTheme.colorScheme.surfaceContainer,
-                unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainer,
-            ),
+            label = "cashuA… / cashuB…",
+            placeholder = "Token",
             keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.None),
         )
         GhostButton(text = "Paste from clipboard", onClick = onPaste)

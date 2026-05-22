@@ -33,13 +33,11 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SwipeToDismissBox
 import androidx.compose.material3.SwipeToDismissBoxValue
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.material3.rememberSwipeToDismissBoxState
@@ -70,6 +68,7 @@ import org.cashu.wallet.Core.normalizeUserMintUrl
 import org.cashu.wallet.Core.shortenMintUrl
 import org.cashu.wallet.Models.MintInfo
 import org.cashu.wallet.ui.components.CanvasDivider
+import org.cashu.wallet.ui.components.CashuTextField
 import org.cashu.wallet.ui.components.GhostButton
 import org.cashu.wallet.ui.components.MintAvatar
 import org.cashu.wallet.ui.components.MintMethodChips
@@ -211,18 +210,13 @@ fun MintsScreen(
                         ),
                     verticalArrangement = Arrangement.spacedBy(CashuTheme.spacing.snug),
                 ) {
-                    OutlinedTextField(
+                    CashuTextField(
                         value = url,
                         onValueChange = { url = it; error = null },
-                        label = { Text("Mint URL") },
-                        placeholder = { Text("https://…") },
+                        label = "Mint URL",
+                        placeholder = "https://…",
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth(),
-                        shape = MaterialTheme.shapes.medium,
-                        colors = TextFieldDefaults.colors(
-                            focusedContainerColor = MaterialTheme.colorScheme.surfaceContainer,
-                            unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainer,
-                        ),
                         keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
                             capitalization = KeyboardCapitalization.None,
                         ),
@@ -235,17 +229,12 @@ fun MintsScreen(
                             }
                         },
                     )
-                    OutlinedTextField(
+                    CashuTextField(
                         value = nickname,
                         onValueChange = { nickname = it },
-                        label = { Text("Nickname (optional)") },
+                        label = "Nickname (optional)",
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth(),
-                        shape = MaterialTheme.shapes.medium,
-                        colors = TextFieldDefaults.colors(
-                            focusedContainerColor = MaterialTheme.colorScheme.surfaceContainer,
-                            unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainer,
-                        ),
                     )
                     if (error != null) {
                         Text(

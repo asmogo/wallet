@@ -31,11 +31,9 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.material3.rememberTopAppBarState
@@ -66,6 +64,7 @@ import org.cashu.wallet.Models.TransactionStatus
 import org.cashu.wallet.Models.WalletTransaction
 import org.cashu.wallet.ui.components.CanvasDivider
 import org.cashu.wallet.ui.components.CashuRequestRow
+import org.cashu.wallet.ui.components.CashuSearchBar
 import org.cashu.wallet.ui.components.EmptyState
 import org.cashu.wallet.ui.components.SectionHeader
 import org.cashu.wallet.ui.components.TransactionRow
@@ -191,7 +190,7 @@ fun HistoryScreen(
                 LazyColumn(modifier = Modifier.fillMaxSize()) {
                     if (searching) {
                         item("search") {
-                            OutlinedTextField(
+                            CashuSearchBar(
                                 value = query,
                                 onValueChange = { query = it },
                                 modifier = Modifier
@@ -200,13 +199,7 @@ fun HistoryScreen(
                                         horizontal = CashuTheme.spacing.comfortable,
                                         vertical = CashuTheme.spacing.snug,
                                     ),
-                                placeholder = { Text("Search history") },
-                                singleLine = true,
-                                shape = MaterialTheme.shapes.medium,
-                                colors = TextFieldDefaults.colors(
-                                    focusedContainerColor = MaterialTheme.colorScheme.surfaceContainer,
-                                    unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainer,
-                                ),
+                                placeholder = "Search history",
                             )
                         }
                     }
