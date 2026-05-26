@@ -256,43 +256,24 @@ struct MainWalletView: View {
 
     // MARK: - Action Buttons (Receive + Send)
 
-    /// Scan moved to the toolbar; the action row is now a two-button pair.
+    /// Scan moved to the toolbar; the action row is a two-button pair.
+    /// Interactive glass lives inside `FullWidthCapsuleButtonStyle` (driven by
+    /// `configuration.isPressed`), so a single gesture owns each button — no
+    /// press-warp vs. tap-action conflict, hence no dropped first taps.
     private var actionButtons: some View {
-        Group {
-            if #available(iOS 26, *) {
-                GlassEffectContainer(spacing: 12) {
-                    actionButtonsContent
-                }
-            } else {
-                actionButtonsContent
-            }
-        }
-    }
-
-    private var actionButtonsContent: some View {
         HStack(spacing: 12) {
             Button { activeSheet = .chooser(.receive) } label: {
                 Text("Receive")
-                    .font(.body.weight(.semibold))
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 18)
-                    .liquidGlass(in: Capsule(), interactive: true)
-                    .contentShape(Capsule())
             }
+            .glassButton()
             .accessibilityHint("Opens options to receive ecash or lightning payments")
 
             Button { activeSheet = .chooser(.send) } label: {
                 Text("Send")
-                    .font(.body.weight(.semibold))
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 18)
-                    .liquidGlass(in: Capsule(), interactive: true)
-                    .contentShape(Capsule())
             }
+            .glassButton()
             .accessibilityHint("Opens options to send ecash or pay lightning invoices")
         }
-        .buttonStyle(.plain)
-        .foregroundStyle(.primary)
     }
 
     // MARK: - Recent Activity

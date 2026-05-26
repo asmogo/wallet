@@ -28,6 +28,8 @@ class TokenService: ObservableObject {
         self.getActiveMint = getActiveMint
     }
 
+    // MARK: - State
+
     /// Reset transient state when the wallet is torn down.
     func clearState() {
         isLoading = false
@@ -57,7 +59,7 @@ class TokenService: ObservableObject {
         isLoading = true
         defer { isLoading = false }
 
-        let mintUrl = MintUrl(url: mintUrlString)
+    func sendTokens(amount: UInt64, memo: String? = nil, p2pkPubkey: String? = nil, mintUrl preferredMintURL: String? = nil) async throws -> SendTokenResult {
         let wallet = try await repo.getWallet(mintUrl: mintUrl, unit: .sat)
         
         let sendMemo = memo.map { SendMemo(memo: $0, includeMemo: true) }
