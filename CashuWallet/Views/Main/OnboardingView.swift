@@ -17,10 +17,10 @@ struct OnboardingView: View {
     @State private var currentRestoringMint: String?
     @State private var restoreMintError: String?
 
-    // Seed phrase verification state
-    @State private var verificationIndices: [Int] = []
-    @State private var verificationAnswers: [Int: String] = [:]
-    @State private var verificationError: String?
+    // Seed phrase reveal / acknowledge state
+    @State private var seedRevealed = false
+    @State private var seedAcknowledged = false
+    @State private var seedCopied = false
 
     // First-mint state (create path)
     @State private var showConceptSheet = false
@@ -40,7 +40,6 @@ struct OnboardingView: View {
     enum OnboardingStep {
         case welcome
         case showMnemonic
-        case verifyMnemonic
         case firstMint
         case restoreInput
         case restoreMints
@@ -66,9 +65,6 @@ struct OnboardingView: View {
                     .transition(stepTransition)
             case .showMnemonic:
                 showMnemonicView
-                    .transition(stepTransition)
-            case .verifyMnemonic:
-                verifyMnemonicView
                     .transition(stepTransition)
             case .firstMint:
                 firstMintView
@@ -246,118 +242,81 @@ struct OnboardingView: View {
                 .foregroundStyle(.orange)
                 .padding(.top, 4)
 
-            // Mnemonic words — plain on canvas, no per-word material
-            mnemonicWordsGrid(words: walletManager.getMnemonicWords())
-                .padding(.horizontal)
-                .padding(.top, 8)
+            // Mnemonic words — plain on canvas, blurred until revealed
+            ZStack {
+                mnemonicWordsGrid(words: walletManager.getMnemonicWords())
+                    .blur(radius: seedRevealed ? 0 : 9)
+                    .allowsHitTesting(seedRevealed)
+
+                if !seedRevealed {
+                    VStack(spacing: 6) {
+                        Image(systemName: "eye")
+                            .font(.title3)
+                        Text("Tap to reveal")
+                            .font(.subheadline)
+                    }
+                    .foregroundStyle(.secondary)
+                }
+            }
+            .contentShape(Rectangle())
+            .onTapGesture {
+                guard !seedRevealed else { return }
+                HapticFeedback.selection()
+                withAnimation(.snappy(duration: 0.25)) {
+                    seedRevealed = true
+                }
+            }
+            .padding(.horizontal)
+            .padding(.top, 8)
+
+            Button(action: copyMnemonic) {
+                Text(seedCopied ? "Copied" : "Copy")
+                    .font(.subheadline.weight(.medium))
+                    .foregroundStyle(.secondary)
+            }
+            .buttonStyle(.plain)
 
             Spacer()
 
             Button(action: {
                 HapticFeedback.selection()
-                startVerification()
+                withAnimation(.snappy) { seedAcknowledged.toggle() }
+            }) {
+                HStack(spacing: 12) {
+                    Image(systemName: seedAcknowledged ? "checkmark.circle.fill" : "circle")
+                        .font(.title3)
+                        .foregroundStyle(seedAcknowledged ? Color.primary : Color.secondary)
+                    Text("I've written down my seed phrase and stored it safely.")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.leading)
+                    Spacer(minLength: 0)
+                }
+            }
+            .buttonStyle(.plain)
+            .padding(.horizontal, 4)
+
+            Button(action: {
+                HapticFeedback.selection()
+                advance(to: .firstMint)
             }) {
                 Text("I've Saved My Seed Phrase")
             }
             .glassButton()
+            .disabled(!seedAcknowledged)
+            .animation(.easeOut(duration: 0.2), value: seedAcknowledged)
             .padding(.bottom, 40)
         }
         .padding()
     }
 
-    // MARK: - Verify Mnemonic View
-
-    private var verifyMnemonicView: some View {
-        VStack(spacing: 24) {
-            Text("Verify Seed Phrase")
-                .font(.title.weight(.semibold))
-
-            Text("Tap the right word for each position.")
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-                .multilineTextAlignment(.center)
-                .padding(.horizontal)
-
-            verificationWordsGridView(indices: verificationIndices)
-                .padding(.horizontal)
-                .padding(.top, 8)
-
-            if let error = verificationError {
-                Text(error)
-                    .font(.caption)
-                    .foregroundStyle(.red)
-                    .transition(.opacity)
-            }
-
-            Spacer()
-
-            Button(action: {
-                HapticFeedback.selection()
-                checkVerification()
-            }) {
-                Text("Confirm")
-            }
-            .glassButton()
-            .disabled(verificationAnswers.count < verificationIndices.count)
-            .animation(.easeOut(duration: 0.2), value: verificationAnswers.count)
-
-            Button(action: { retreat(to: .showMnemonic) }) {
-                Text("Go back and check")
-                    .foregroundStyle(.secondary)
-            }
-            .padding(.bottom, 40)
+    private func copyMnemonic() {
+        UIPasteboard.general.string = walletManager.getMnemonicWords().joined(separator: " ")
+        seedCopied = true
+        HapticFeedback.selection()
+        DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
+            seedCopied = false
         }
-        .padding()
-    }
-
-    private func verificationWordsGridView(indices: [Int]) -> some View {
-        let words = walletManager.getMnemonicWords()
-        return VStack(spacing: 20) {
-            ForEach(Array(indices.enumerated()), id: \.offset) { _, index in
-                VStack(alignment: .leading, spacing: 10) {
-                    Text("Word \(String(format: "#%02d", index + 1))")
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(.secondary)
-                        .textCase(.uppercase)
-                        .tracking(1.2)
-
-                    let options = generateWordOptions(correctWord: words[index])
-                    LazyVGrid(columns: [GridItem(.flexible(), spacing: 8), GridItem(.flexible(), spacing: 8), GridItem(.flexible(), spacing: 8)], spacing: 8) {
-                        ForEach(options, id: \.self) { option in
-                            verificationChip(option: option, index: index)
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    @ViewBuilder
-    private func verificationChip(option: String, index: Int) -> some View {
-        let selected = verificationAnswers[index] == option
-        Button(action: {
-            HapticFeedback.selection()
-            withAnimation(.snappy) {
-                verificationAnswers[index] = option
-                verificationError = nil
-            }
-        }) {
-            Text(option)
-                .font(.system(.subheadline, design: .monospaced).weight(.medium))
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 12)
-                .background(
-                    Capsule().fill(selected ? Color.secondary.opacity(0.18) : Color.clear)
-                )
-                .overlay(
-                    Capsule().strokeBorder(
-                        selected ? Color.primary.opacity(0.4) : Color.secondary.opacity(0.25),
-                        lineWidth: 1
-                    )
-                )
-                .foregroundStyle(selected ? .primary : .secondary)
-        }
-        .buttonStyle(.plain)
     }
 
     private func mnemonicWordsGrid(words: [String]) -> some View {
@@ -380,50 +339,6 @@ struct OnboardingView: View {
                 }
             }
         }
-    }
-
-    private func startVerification() {
-        let words = walletManager.getMnemonicWords()
-        guard words.count >= 3 else { return }
-        // Pick 3 random non-overlapping indices
-        var indices = Array(0..<words.count)
-        indices.shuffle()
-        verificationIndices = Array(indices.prefix(3)).sorted()
-        verificationAnswers = [:]
-        verificationError = nil
-        advance(to: .verifyMnemonic)
-    }
-
-    private func generateWordOptions(correctWord: String) -> [String] {
-        let words = walletManager.getMnemonicWords()
-        var options: Set<String> = [correctWord]
-        // Add random wrong words from the mnemonic (different from correct)
-        let otherWords = words.filter { $0 != correctWord }
-        for word in otherWords.shuffled() where options.count < 3 {
-            options.insert(word)
-        }
-        // If not enough from mnemonic, add from BIP39 list
-        let sampleWords = ["abandon", "ability", "about", "abstract", "access", "account",
-                           "achieve", "adapt", "affair", "agent", "alarm", "anchor"]
-        for word in sampleWords.shuffled() where options.count < 3 {
-            if !words.contains(word) {
-                options.insert(word)
-            }
-        }
-        return Array(options).shuffled()
-    }
-
-    private func checkVerification() {
-        let words = walletManager.getMnemonicWords()
-        for index in verificationIndices {
-            if verificationAnswers[index] != words[index] {
-                verificationError = "That's not right. Go back and check your seed phrase."
-                verificationAnswers = [:]
-                return
-            }
-        }
-        HapticFeedback.notification(.success)
-        advance(to: .firstMint)
     }
 
     // MARK: - First Mint View
