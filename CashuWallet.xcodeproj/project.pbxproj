@@ -40,7 +40,7 @@
 		6A8EC94C2F25A0000058C21B /* NostrService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6A8EC94D2F25A0000058C21B /* NostrService.swift */; };
 		6A8EC94E2F25A0000058C21B /* NPCService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6A8EC94F2F25A0000058C21B /* NPCService.swift */; };
 		6A8EC95B2F26983E0058C21B /* P256K in Frameworks */ = {isa = PBXBuildFile; productRef = 6A8EC95A2F26983E0058C21B /* P256K */; };
-		72DC8F232FAF4A54005E35DD /* CashuDevKit in Frameworks */ = {isa = PBXBuildFile; productRef = 72DC8F222FAF4A54005E35DD /* CashuDevKit */; };
+		724F761C2FC9D56D00EEAEAF /* CashuDevKit in Frameworks */ = {isa = PBXBuildFile; productRef = 724F761B2FC9D56D00EEAEAF /* CashuDevKit */; };
 		AA00000000000001 /* PaymentMethodProtocol.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA00000000000011 /* PaymentMethodProtocol.swift */; };
 		AA00000000000002 /* CurrencyProtocol.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA00000000000012 /* CurrencyProtocol.swift */; };
 		AA00000000000003 /* WalletServiceProtocol.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA00000000000013 /* WalletServiceProtocol.swift */; };
@@ -56,6 +56,8 @@
 		AB00000000000008 /* CashuRequestDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC00000000000008 /* CashuRequestDetailView.swift */; };
 		AB0000000000000A /* CashuRequestMintPickerSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC0000000000000A /* CashuRequestMintPickerSheet.swift */; };
 		AB0000000000000B /* CashuRequestAmountPickerSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC0000000000000B /* CashuRequestAmountPickerSheet.swift */; };
+		AB00000000000050 /* TransactionAmountColumn.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB00000000000052 /* TransactionAmountColumn.swift */; };
+		AB00000000000051 /* CashuRequestAmountColumn.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB00000000000053 /* CashuRequestAmountColumn.swift */; };
 		BB00000000000001 /* MintService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000011 /* MintService.swift */; };
 		BB00000000000002 /* TransactionService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000012 /* TransactionService.swift */; };
 		BB00000000000003 /* TokenService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000013 /* TokenService.swift */; };
@@ -88,8 +90,6 @@
 		F300000000000004 /* ClipboardPaymentChip.swift in Sources */ = {isa = PBXBuildFile; fileRef = F400000000000004 /* ClipboardPaymentChip.swift */; };
 		F300000000000005 /* RecentRecipientsList.swift in Sources */ = {isa = PBXBuildFile; fileRef = F400000000000005 /* RecentRecipientsList.swift */; };
 		F300000000000006 /* PaymentRequestDecoder.swift in Sources */ = {isa = PBXBuildFile; fileRef = F400000000000006 /* PaymentRequestDecoder.swift */; };
-		AB00000000000050 /* TransactionAmountColumn.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB00000000000052 /* TransactionAmountColumn.swift */; };
-		AB00000000000051 /* CashuRequestAmountColumn.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB00000000000053 /* CashuRequestAmountColumn.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -130,6 +130,8 @@
 		AA00000000000013 /* WalletServiceProtocol.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WalletServiceProtocol.swift; sourceTree = "<group>"; };
 		AA00000000000014 /* StorageProtocol.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StorageProtocol.swift; sourceTree = "<group>"; };
 		AA00000000000015 /* NavigationManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NavigationManager.swift; sourceTree = "<group>"; };
+		AB00000000000052 /* TransactionAmountColumn.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TransactionAmountColumn.swift; sourceTree = "<group>"; };
+		AB00000000000053 /* CashuRequestAmountColumn.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CashuRequestAmountColumn.swift; sourceTree = "<group>"; };
 		AC00000000000001 /* CashuRequest.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CashuRequest.swift; sourceTree = "<group>"; };
 		AC00000000000002 /* CashuRequestStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CashuRequestStore.swift; sourceTree = "<group>"; };
 		AC00000000000003 /* PaymentRequestBuilder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PaymentRequestBuilder.swift; sourceTree = "<group>"; };
@@ -173,8 +175,6 @@
 		F400000000000004 /* ClipboardPaymentChip.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClipboardPaymentChip.swift; sourceTree = "<group>"; };
 		F400000000000005 /* RecentRecipientsList.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecentRecipientsList.swift; sourceTree = "<group>"; };
 		F400000000000006 /* PaymentRequestDecoder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PaymentRequestDecoder.swift; sourceTree = "<group>"; };
-		AB00000000000052 /* TransactionAmountColumn.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TransactionAmountColumn.swift; sourceTree = "<group>"; };
-		AB00000000000053 /* CashuRequestAmountColumn.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CashuRequestAmountColumn.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -184,7 +184,7 @@
 			files = (
 				6A8EC93F2F256F350058C21B /* URKit in Frameworks */,
 				6A8EC95B2F26983E0058C21B /* P256K in Frameworks */,
-				72DC8F232FAF4A54005E35DD /* CashuDevKit in Frameworks */,
+				724F761C2FC9D56D00EEAEAF /* CashuDevKit in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -450,7 +450,7 @@
 			packageProductDependencies = (
 				6A8EC93E2F256F350058C21B /* URKit */,
 				6A8EC95A2F26983E0058C21B /* P256K */,
-				72DC8F222FAF4A54005E35DD /* CashuDevKit */,
+				724F761B2FC9D56D00EEAEAF /* CashuDevKit */,
 			);
 			productName = CashuWallet;
 			productReference = 0100000000000001 /* CashuWallet.app */;
@@ -488,7 +488,7 @@
 			packageReferences = (
 				6A8EC93D2F256F350058C21B /* XCRemoteSwiftPackageReference "URKit" */,
 				7200000000000002 /* XCRemoteSwiftPackageReference "swift-secp256k1" */,
-				72DC8F212FAF4A54005E35DD /* XCRemoteSwiftPackageReference "cdk-swift" */,
+				724F761A2FC9D56D00EEAEAF /* XCRemoteSwiftPackageReference "cdk-swift" */,
 			);
 			productRefGroup = 4100000000000002 /* Products */;
 			projectDirPath = "";
@@ -729,7 +729,7 @@
 				CODE_SIGN_ENTITLEMENTS = CashuWallet/CashuWallet.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = D7AHD3GLH6;
+				DEVELOPMENT_TEAM = "";
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = CashuWallet/Info.plist;
@@ -766,7 +766,7 @@
 				CODE_SIGN_ENTITLEMENTS = CashuWallet/CashuWallet.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = D7AHD3GLH6;
+				DEVELOPMENT_TEAM = "";
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = CashuWallet/Info.plist;
@@ -835,12 +835,12 @@
 				minimumVersion = 0.18.0;
 			};
 		};
-		72DC8F212FAF4A54005E35DD /* XCRemoteSwiftPackageReference "cdk-swift" */ = {
+		724F761A2FC9D56D00EEAEAF /* XCRemoteSwiftPackageReference "cdk-swift" */ = {
 			isa = XCRemoteSwiftPackageReference;
-			repositoryURL = "https://github.com/asmogo/cdk-swift";
+			repositoryURL = "https://github.com/cashubtc/cdk-swift";
 			requirement = {
-				kind = exactVersion;
-				version = 0.16.9;
+				branch = "v0.17.0-rc.0";
+				kind = branch;
 			};
 		};
 /* End XCRemoteSwiftPackageReference section */
@@ -856,9 +856,9 @@
 			package = 7200000000000002 /* XCRemoteSwiftPackageReference "swift-secp256k1" */;
 			productName = P256K;
 		};
-		72DC8F222FAF4A54005E35DD /* CashuDevKit */ = {
+		724F761B2FC9D56D00EEAEAF /* CashuDevKit */ = {
 			isa = XCSwiftPackageProductDependency;
-			package = 72DC8F212FAF4A54005E35DD /* XCRemoteSwiftPackageReference "cdk-swift" */;
+			package = 724F761A2FC9D56D00EEAEAF /* XCRemoteSwiftPackageReference "cdk-swift" */;
 			productName = CashuDevKit;
 		};
 /* End XCSwiftPackageProductDependency section */

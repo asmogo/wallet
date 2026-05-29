@@ -27,6 +27,11 @@ class TokenService: ObservableObject {
         self.walletRepository = walletRepository
         self.getActiveMint = getActiveMint
     }
+
+    /// Reset transient state when the wallet is torn down.
+    func clearState() {
+        isLoading = false
+    }
     
     // MARK: - Send Operations
     
@@ -35,15 +40,24 @@ class TokenService: ObservableObject {
     ///   - amount: Amount to send in satoshis
     ///   - memo: Optional memo to include
     /// - Returns: Result containing token string and fee paid
-    func sendTokens(amount: UInt64, memo: String? = nil, p2pkPubkey: String? = nil) async throws -> SendTokenResult {
-        guard let repo = walletRepository(), let activeMint = getActiveMint() else {
+    func sendTokens(amount: UInt64, memo: String? = nil, p2pkPubkey: String? = nil, mintUrl preferredMintURL: String? = nil) async throws -> SendTokenResult {
+        guard let repo = walletRepository() else {
             throw WalletError.notInitialized
         }
-        
+
+        let mintUrlString: String
+        if let preferredMintURL, !preferredMintURL.isEmpty {
+            mintUrlString = preferredMintURL
+        } else if let activeMint = getActiveMint() {
+            mintUrlString = activeMint.url
+        } else {
+            throw WalletError.notInitialized
+        }
+
         isLoading = true
         defer { isLoading = false }
-        
-        let mintUrl = MintUrl(url: activeMint.url)
+
+        let mintUrl = MintUrl(url: mintUrlString)
         let wallet = try await repo.getWallet(mintUrl: mintUrl, unit: .sat)
         
         let sendMemo = memo.map { SendMemo(memo: $0, includeMemo: true) }
@@ -52,6 +66,10 @@ class TokenService: ObservableObject {
             SpendingConditions.p2pk(pubkey: $0, conditions: nil)
         }
         
+        let availableP2PKKeys = SettingsManager.shared.p2pkKeys
+        let localP2PKSigningKeys = availableP2PKKeys.map { SecretKey(hex: $0.privateKey) }
+
+
         // Create SendOptions
         // Note: includeFee: false matches cashu.me default behavior
         let sendOptions = SendOptions(
@@ -62,7 +80,9 @@ class TokenService: ObservableObject {
             includeFee: false,
             useP2bk: false,
             maxProofs: nil,
-            metadata: [:]
+            metadata: [:],
+            p2pkSigningKeys: localP2PKSigningKeys,
+            p2pkLockedProofSendMode: .swap
         )
         
         let prepared = try await wallet.prepareSend(
