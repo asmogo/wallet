@@ -80,7 +80,6 @@ struct CashuRequestDetailView: View {
                     regenerate(amount: amount)
                 }
             )
-            .presentationDetents([.medium])
         }
         .onReceive(NotificationCenter.default.publisher(for: .cashuTokenReceived)) { note in
             guard let source = note.userInfo?["source"] as? String,
