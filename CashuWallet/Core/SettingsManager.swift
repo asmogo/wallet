@@ -422,11 +422,11 @@ class SettingsManager: ObservableObject {
     }
     
     func formatAmountShort(_ sats: UInt64) -> String {
-        if useBitcoinSymbol {
-            return "₿\(sats)"
-        } else {
-            return "\(sats)"
-        }
+        // Delegate to the canonical formatter so grouping ("2,500") is
+        // consistent app-wide. includeUnit:false preserves the original
+        // contract (symbol-or-nothing, never a " sat" suffix) — callers that
+        // append `unitSuffix` themselves must not get a second unit here.
+        AmountFormatter.sats(sats, useBitcoinSymbol: useBitcoinSymbol, includeUnit: false)
     }
     
     func formatAmountBalance(_ sats: UInt64) -> String {

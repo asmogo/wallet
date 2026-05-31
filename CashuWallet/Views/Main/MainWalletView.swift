@@ -12,10 +12,11 @@ struct MainWalletView: View {
     @ObservedObject var settings = SettingsManager.shared
     @ObservedObject var priceService = PriceService.shared
     @ObservedObject private var requestStore = CashuRequestStore.shared
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     @State private var activeSheet: WalletSheet?
-    @State private var notification: (message: String, amount: UInt64?, fee: UInt64?)?
-    @State private var showNotification = false
+    @State private var receivedDelta: ReceivedDelta?
+    @State private var deltaDismissTask: Task<Void, Never>?
     @State private var receiveEcashDetent: PresentationDetent = .medium
     @State private var contactlessCoordinator = ContactlessPaymentCoordinator()
     @State private var selectedTransaction: WalletTransaction?
@@ -30,21 +31,6 @@ struct MainWalletView: View {
         NavigationStack {
             ScrollView {
                 VStack(spacing: 0) {
-                    // Notification banner (in-flow at top, slides in/out)
-                    if showNotification, let notif = notification {
-                        NotificationBadgeView(
-                            message: notif.message,
-                            amount: notif.amount,
-                            fee: notif.fee,
-                            onDismiss: {
-                                withAnimation { showNotification = false }
-                            }
-                        )
-                        .padding(.horizontal, 16)
-                        .padding(.bottom, 12)
-                        .zIndex(100)
-                    }
-
                     recentSection
                         .padding(.top, 8)
                         .padding(.horizontal, 16)
@@ -93,19 +79,12 @@ struct MainWalletView: View {
             }
             .task { await walletManager.loadTransactions() }
         }
-        .onReceive(NotificationCenter.default.publisher(for: .cashuTokenReceived)) { notification in
-            if let userInfo = notification.userInfo,
-               let amount = userInfo["amount"] as? UInt64 {
-                let fee = userInfo["fee"] as? UInt64
-                withAnimation {
-                    self.notification = (message: "Received", amount: amount, fee: fee)
-                    self.showNotification = true
-                }
-                DispatchQueue.main.asyncAfter(deadline: .now() + 5) {
-                    withAnimation { self.showNotification = false }
-                }
-            }
+        .onReceive(NotificationCenter.default.publisher(for: .cashuTokenReceived)) { note in
+            guard let amount = note.userInfo?["amount"] as? UInt64 else { return }
+            let fee = note.userInfo?["fee"] as? UInt64
+            showReceivedDelta(amount: amount, fee: fee)
         }
+        .onDisappear { deltaDismissTask?.cancel() }
         .onReceive(navigationManager.$pendingMeltInvoice.compactMap { $0 }) { invoice in
             activeSheet = nil
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
@@ -175,13 +154,78 @@ struct MainWalletView: View {
                 .accessibilityLabel("Balance: \(formatBalanceWithUnit(walletManager.balance))")
                 .accessibilityHint("Tap to toggle between Bitcoin and Satoshi")
 
-                if settings.showFiatBalance && priceService.btcPriceUSD > 0 {
-                    Text(priceService.formatSatsAsFiat(walletManager.balance))
-                        .font(.body)
-                        .foregroundStyle(.secondary)
-                }
+                // Status line under the balance: a transient green received-delta
+                // beat takes over the fiat slot for 2.5s on receipt, then fiat
+                // fades back. Same slot, so the swap doesn't reflow the balance.
+                balanceStatusLine
             }
             .padding(.top, 18)
+        }
+    }
+
+    // MARK: - Received Delta Beat
+
+    /// The status line beneath the balance: the transient green received-delta
+    /// beat while a payment just landed, otherwise the fiat sub-amount.
+    @ViewBuilder
+    private var balanceStatusLine: some View {
+        if let delta = receivedDelta {
+            receivedDeltaBeat(delta)
+                .transition(reduceMotion ? .opacity : .scale.combined(with: .opacity))
+        } else if settings.showFiatBalance && priceService.btcPriceUSD > 0 {
+            Text(priceService.formatSatsAsFiat(walletManager.balance))
+                .font(.body)
+                .foregroundStyle(.secondary)
+                .transition(.opacity)
+        }
+    }
+
+    /// Green "✓ +2,500" beat. Grouped via the canonical formatter, no unit (the
+    /// balance beside it carries it), no directional arrow (the down-arrow stays
+    /// exclusive to row badges — One Green Rule). VoiceOver-hidden; the balance
+    /// announces the new total.
+    private func receivedDeltaBeat(_ delta: ReceivedDelta) -> some View {
+        Label {
+            Text("+\(settings.formatAmountShort(delta.amount))")
+                .monospacedDigit()
+        } icon: {
+            receivedDeltaCheckmark(id: delta.id)
+        }
+        .font(.body.weight(.semibold))
+        .foregroundStyle(.green)
+        .accessibilityHidden(true)
+    }
+
+    @ViewBuilder
+    private func receivedDeltaCheckmark(id: UUID) -> some View {
+        let base = Image(systemName: "checkmark.circle.fill")
+        if #available(iOS 17.0, *), !reduceMotion {
+            base.symbolEffect(.bounce, value: id)
+        } else {
+            base
+        }
+    }
+
+    /// Reuses the sanctioned payment-received celebration spring (Motion §6);
+    /// reduce-motion collapses it to a plain opacity cross-fade.
+    private var receivedDeltaAnimation: Animation {
+        reduceMotion ? .easeInOut(duration: 0.2) : .spring(response: 0.5, dampingFraction: 0.7)
+    }
+
+    /// Shows the beat and re-arms a 2.5s dismiss timer. Rapid receives coalesce
+    /// to last-write-wins: the prior timer is cancelled and the new amount
+    /// (fresh id) re-bounces the checkmark.
+    private func showReceivedDelta(amount: UInt64, fee: UInt64?) {
+        deltaDismissTask?.cancel()
+        withAnimation(receivedDeltaAnimation) {
+            receivedDelta = ReceivedDelta(amount: amount, fee: fee)
+        }
+        deltaDismissTask = Task { @MainActor in
+            try? await Task.sleep(for: .seconds(2.5))
+            guard !Task.isCancelled else { return }
+            withAnimation(receivedDeltaAnimation) {
+                receivedDelta = nil
+            }
         }
     }
 
@@ -820,6 +864,14 @@ private struct WalletActionSheetView: View {
         .foregroundStyle(.primary)
         .contentShape(Rectangle())
     }
+}
+
+/// A just-received amount, surfaced as the transient balance beat. The `id`
+/// makes rapid successive receives re-trigger the entrance + checkmark bounce.
+private struct ReceivedDelta: Identifiable, Equatable {
+    let id = UUID()
+    let amount: UInt64
+    let fee: UInt64?
 }
 
 private struct TopInsetHeightKey: PreferenceKey {
