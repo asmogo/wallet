@@ -252,6 +252,12 @@ implementation; do not re-derive the color elsewhere. The one off-row exception
 is the home-screen received-delta beat (the transient `✓ +amount` under the
 balance), which is green-on-receipt by the same logic — and it carries **no
 directional arrow**, keeping the down-arrow vocabulary exclusive to row badges.
+The **second off-row exception is the default-mint indicator dot** — a small green
+dot on a mint's icon (Mints list `MintsListView` and the mint profile
+`MintDetailView`) marking the user's currently-selected default mint. This is a
+deliberate, documented carve-out: the dot is a *selection* marker (the same axis as
+"Set as Default"), carries no amount or arrow, and never appears on a transaction
+row, so it does not dilute the receipt vocabulary (added 2026-05-31).
 
 **The Quiet Pending Rule.** Pending is `Color.orange` muted to `.opacity(0.1)`
 as a background and the clock SF Symbol as a leading badge. Never a full-saturation

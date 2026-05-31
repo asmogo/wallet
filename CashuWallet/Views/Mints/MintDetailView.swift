@@ -51,8 +51,6 @@ struct MintDetailView: View {
                     balanceRow
                     CanvasDivider()
                     connectionRow
-                    CanvasDivider()
-                    defaultRow
                 }
                 .padding(.bottom, 24)
 
@@ -109,12 +107,37 @@ struct MintDetailView: View {
     private var header: some View {
         VStack(spacing: 12) {
             mintIcon
+                .overlay(alignment: .bottomTrailing) {
+                    if isDefaultMint { defaultDot }
+                }
             Text(mint.name)
                 .font(.title3.weight(.semibold))
                 .multilineTextAlignment(.center)
             copyUrlChip
+            if isDefaultMint { defaultBadge }
         }
         .frame(maxWidth: .infinity)
+    }
+
+    // Default-mint indicator on the mint icon. Green here is a documented
+    // One Green Rule carve-out (DESIGN.md): it marks the user's selected
+    // default mint, matching the dot in MintsListView.
+    private var defaultDot: some View {
+        Circle()
+            .fill(.green)
+            .frame(width: 18, height: 18)
+            .overlay(Circle().stroke(Color(.systemBackground), lineWidth: 3))
+            .offset(x: 3, y: 3)
+    }
+
+    private var defaultBadge: some View {
+        Text("Default mint")
+            .font(.caption.weight(.medium))
+            .padding(.horizontal, 10)
+            .padding(.vertical, 4)
+            .background(Color.accentColor.opacity(0.12), in: Capsule())
+            .foregroundStyle(.primary)
+            .accessibilityLabel("This is your default mint")
     }
 
     @ViewBuilder
@@ -186,19 +209,6 @@ struct MintDetailView: View {
             case .offline:
                 Text("Offline").foregroundStyle(.red)
             }
-        }
-        .font(.body)
-        .padding(.horizontal, 4)
-        .padding(.vertical, 14)
-    }
-
-    private var defaultRow: some View {
-        HStack {
-            Label("Default mint", systemImage: "star")
-                .foregroundStyle(.secondary)
-            Spacer()
-            Text(isDefaultMint ? "Yes" : "No")
-                .foregroundStyle(isDefaultMint ? .primary : .secondary)
         }
         .font(.body)
         .padding(.horizontal, 4)
