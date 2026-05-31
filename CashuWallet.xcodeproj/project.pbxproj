@@ -34,7 +34,7 @@
 		6A8EC9452F257FFB0058C21B /* ActivityOrbView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6A8EC9422F257FFB0058C21B /* ActivityOrbView.swift */; };
 		6A8EC9462F257FFB0058C21B /* AnimatedBalanceView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6A8EC9442F257FFB0058C21B /* AnimatedBalanceView.swift */; };
 		6A8EC9472F257FFB0058C21B /* AmountEntryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6A8EC9432F257FFB0058C21B /* AmountEntryView.swift */; };
-		6A8EC9482F2580000058C21B /* EcashIcon.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6A8EC9492F2580000058C21B /* EcashIcon.swift */; };
+		6A8EC9482F2580000058C21B /* TransactionIcon.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6A8EC9492F2580000058C21B /* TransactionIcon.swift */; };
 		6A8EC94A2F2590000058C21B /* PriceService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6A8EC94B2F2590000058C21B /* PriceService.swift */; };
 		6A8EC94C2F25A0000058C21B /* NostrService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6A8EC94D2F25A0000058C21B /* NostrService.swift */; };
 		6A8EC94E2F25A0000058C21B /* NPCService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6A8EC94F2F25A0000058C21B /* NPCService.swift */; };
@@ -119,7 +119,7 @@
 		6A8EC9422F257FFB0058C21B /* ActivityOrbView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActivityOrbView.swift; sourceTree = "<group>"; };
 		6A8EC9432F257FFB0058C21B /* AmountEntryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AmountEntryView.swift; sourceTree = "<group>"; };
 		6A8EC9442F257FFB0058C21B /* AnimatedBalanceView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AnimatedBalanceView.swift; sourceTree = "<group>"; };
-		6A8EC9492F2580000058C21B /* EcashIcon.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EcashIcon.swift; sourceTree = "<group>"; };
+		6A8EC9492F2580000058C21B /* TransactionIcon.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TransactionIcon.swift; sourceTree = "<group>"; };
 		6A8EC94B2F2590000058C21B /* PriceService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PriceService.swift; sourceTree = "<group>"; };
 		6A8EC94D2F25A0000058C21B /* NostrService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NostrService.swift; sourceTree = "<group>"; };
 		6A8EC94F2F25A0000058C21B /* NPCService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NPCService.swift; sourceTree = "<group>"; };
@@ -363,7 +363,7 @@
 				6A8EC9422F257FFB0058C21B /* ActivityOrbView.swift */,
 				6A8EC9432F257FFB0058C21B /* AmountEntryView.swift */,
 				6A8EC9442F257FFB0058C21B /* AnimatedBalanceView.swift */,
-				6A8EC9492F2580000058C21B /* EcashIcon.swift */,
+				6A8EC9492F2580000058C21B /* TransactionIcon.swift */,
 				6A8EC9332F244BD80058C21B /* ScannerWrapperView.swift */,
 				2100000000000010 /* QRCodeView.swift */,
 				DD00000000000014 /* ErrorBannerView.swift */,
@@ -537,7 +537,7 @@
 				110000000000000D /* HistoryView.swift in Sources */,
 				110000000000000E /* SettingsView.swift in Sources */,
 				1100000000000010 /* QRCodeView.swift in Sources */,
-				6A8EC9482F2580000058C21B /* EcashIcon.swift in Sources */,
+				6A8EC9482F2580000058C21B /* TransactionIcon.swift in Sources */,
 				6A8EC94A2F2590000058C21B /* PriceService.swift in Sources */,
 				6A8EC94C2F25A0000058C21B /* NostrService.swift in Sources */,
 				6A8EC94E2F25A0000058C21B /* NPCService.swift in Sources */,
@@ -725,7 +725,7 @@
 				CODE_SIGN_ENTITLEMENTS = CashuWallet/CashuWallet.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = "";
+				DEVELOPMENT_TEAM = JQ4WB222T4;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = CashuWallet/Info.plist;
@@ -746,7 +746,7 @@
 					"-framework",
 					SystemConfiguration,
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = com.jcashu.wallet;
+				PRODUCT_BUNDLE_IDENTIFIER = com.cashu.wallet;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_VERSION = 5.0;
@@ -762,7 +762,7 @@
 				CODE_SIGN_ENTITLEMENTS = CashuWallet/CashuWallet.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = "";
+				DEVELOPMENT_TEAM = JQ4WB222T4;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = CashuWallet/Info.plist;
@@ -783,7 +783,7 @@
 					"-framework",
 					SystemConfiguration,
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = com.jcashu.wallet;
+				PRODUCT_BUNDLE_IDENTIFIER = com.cashu.wallet;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_VERSION = 5.0;

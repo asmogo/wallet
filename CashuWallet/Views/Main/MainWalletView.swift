@@ -463,22 +463,7 @@ struct MainWalletView: View {
 
     @ViewBuilder
     private func rowIcon(for transaction: WalletTransaction) -> some View {
-        kindIcon(transaction.kind)
-            .frame(width: 36, height: 36)
-    }
-
-    @ViewBuilder
-    private func kindIcon(_ kind: WalletTransaction.TransactionKind) -> some View {
-        switch kind {
-        case .ecash:
-            EcashIcon()
-        case .lightning:
-            LightningIcon()
-        case .onchain:
-            Image(systemName: "bitcoinsign.circle.fill")
-                .font(.title3)
-                .foregroundStyle(.orange)
-        }
+        TransactionIcon(direction: transaction.type)
     }
 
     private func rowTitle(for transaction: WalletTransaction) -> String {
@@ -506,8 +491,7 @@ struct MainWalletView: View {
             selectedRequest = request
         } label: {
             HStack(spacing: 14) {
-                EcashIcon()
-                    .frame(width: 36, height: 36)
+                TransactionIcon(direction: .incoming)
 
                 VStack(alignment: .leading, spacing: 4) {
                     Text("Cashu Request")

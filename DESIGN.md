@@ -106,27 +106,13 @@ components:
     rounded: "{rounded.capsule}"
     padding: "4px 8px"
     typography: "{typography.caption-emphasis}"
-  badge-directional-incoming:
-    backgroundColor: "{colors.surface}"
-    textColor: "{colors.state-confirmed}"
-    rounded: "{rounded.capsule}"
-    iconSymbol: "arrow.down.circle.fill"
-    iconSize: "14px"
-    note: "Bottom-trailing overlay on history-row icons. Confirmed incoming only."
-  badge-directional-outgoing:
-    backgroundColor: "{colors.surface}"
-    textColor: "{colors.primary-text}"
-    rounded: "{rounded.capsule}"
-    iconSymbol: "arrow.up.circle.fill"
-    iconSize: "14px"
-    note: "Bottom-trailing overlay on history-row icons. Confirmed outgoing only."
-  badge-directional-pending:
-    backgroundColor: "{colors.surface}"
-    textColor: "{colors.state-pending}"
-    rounded: "{rounded.capsule}"
-    iconSymbol: "clock.circle.fill"
-    iconSize: "14px"
-    note: "Replaces directional arrow while a tx is pending. Symbol-replace transition."
+  transaction-icon:
+    backgroundColor: "Color(.secondarySystemFill)"
+    textColor: "{colors.secondary-text}"
+    rounded: "circle"
+    iconSymbol: "arrow.down (incoming) / arrow.up (outgoing)"
+    iconSize: "16px"
+    note: "Leading 36x36 history-row glyph (TransactionIcon). Pure directional arrow, always muted; direction is the arrow's orientation, never colour. The amount alone carries state colour (One Green Rule). Carve-out: supersedes the prior kind-glyph + corner directional badge model."
   row-inspector-editable:
     backgroundColor: "transparent"
     textColor: "{colors.primary-text}"
@@ -418,24 +404,26 @@ right tool for the job.
   family.
 - **Press feedback — `PressableButtonStyle`**: 0.97 scale on press down
   (`.snappy(0.09)`), spring back on release (`.snappy(0.18)`). Apply only
-  where the glass style doesn't already carry feedback (the chooser cascade,
-  the EcashIcon tap target).
+  where the glass style doesn't already carry feedback (the chooser
+  cascade).
 
 ### History Rows
 
 The canonical list pattern. Defined in
 `CashuWallet/Views/History/HistoryView.swift`.
 
-- **Leading**: stacked icon — 36×36 transaction-kind glyph (`EcashIcon`,
-  `LightningIcon`, or `bitcoinsign.circle.fill`) with a directional badge
-  overlay in the bottom-trailing corner, 14pt bold, on a `Color(.systemBackground)`
-  circle so it reads cleanly against either canvas. The badge uses
-  `.contentTransition(.symbolEffect(.replace.downUp))` and a `.snappy(0.28)`
-  animation, morphing cleanly through three states:
-  - `clock.circle.fill` in `Color.orange` while pending
-  - `arrow.down.circle.fill` in `Color.green` when a completed receive lands
-  - `arrow.up.circle.fill` in `Color.primary` when a completed send clears
-  Direction is now part of the badge taxonomy, not just status.
+- **Leading**: a single directional arrow on a soft neutral circle, via
+  `TransactionIcon` — `arrow.down` for incoming, `arrow.up` for outgoing,
+  16pt `.medium`, `Color.secondary` on a 36×36 `Color(.secondarySystemFill)`
+  circle that reads cleanly against either canvas. The arrow is **always
+  muted**: direction is carried by the arrow's orientation, never by colour.
+  State colour lives only on the trailing amount (see the One Green Rule).
+  Payment method (ecash / Lightning / on-chain) is no longer drawn here — it
+  is named in the title text.
+  *Carve-out (felt-influenced):* this replaces the earlier kind-glyph +
+  corner directional badge model. Rationale: a single quiet arrow is more
+  aligned with the "System Utility" North Star and removes redundant colour
+  (the amount already signals direction and confirmation).
 - **Title**: left-aligned, `.body.weight(.medium)`, single line, derived from
   `(kind, type)` — e.g. "Lightning received", "Bitcoin sent", "Sent ecash".
 - **Timestamp**: `.caption`, `Color.secondary`, immediately under the title.
@@ -462,15 +450,10 @@ anchored to `request.createdAt`, grouped into the same TODAY / YESTERDAY /
 THIS WEEK / … buckets as transactions. They are not pinned to a separate
 section. Defined in `HistoryView.swift` → `cashuRequestRow(request:, staggerIndex:)`.
 
-- **Leading**: 36×36 stacked icon — `EcashIcon()` as the kind glyph (because
-  a Cashu Request is, structurally, an incoming-ecash event in waiting) with
-  a directional badge overlay in the bottom-trailing corner, 14pt bold, on a
-  `Color(.systemBackground)` circle. Uses the same
-  `.contentTransition(.symbolEffect(.replace.downUp))` + `.snappy(0.28)` morph
-  as transaction badges:
-  - `clock.circle.fill` in `Color.orange` while `receivedPayments.isEmpty`
-  - `arrow.down.circle.fill` in `Color.green` once any payment has landed
-  Visually parallel to a Lightning row's pending → confirmed flip.
+- **Leading**: `TransactionIcon(direction: .incoming)` — a muted `arrow.down`
+  on the same 36×36 neutral circle as transaction rows (a Cashu Request is,
+  structurally, an incoming-ecash event in waiting). Static: the row's amount
+  and title carry the waiting → received transition, not the icon.
 - **Title**: "Cashu Request", `.body.weight(.medium)`, single line. Stays
   the same across all states; the badge carries status.
 - **Subtitle**: `formatRelativeDate(request.createdAt)`, `.caption`,
