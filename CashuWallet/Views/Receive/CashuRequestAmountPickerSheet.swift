@@ -11,15 +11,6 @@ struct CashuRequestAmountPickerSheet: View {
 
     @State private var amountString: String
 
-    // The sheet sizes itself to its content rather than a fixed `.medium` detent,
-    // so the amount + keypad + Done always fit exactly — on an iPhone 12 just as on
-    // a Pro Max. `contentHeight` is the laid-out content; `bottomInset` is the home
-    // indicator, which a `.height(_:)` detent insets the content by and must be added
-    // back so Done clears the indicator. Seeded with a sane default to avoid a
-    // first-frame collapse before measurement lands.
-    @State private var contentHeight: CGFloat = 460
-    @State private var bottomInset: CGFloat = 0
-
     init(currentAmount: UInt64?, onSelect: @escaping (UInt64?) -> Void) {
         self.currentAmount = currentAmount
         self.onSelect = onSelect
@@ -27,16 +18,24 @@ struct CashuRequestAmountPickerSheet: View {
     }
 
     var body: some View {
+        // Mirrors the app's other amount-entry surfaces (ReceiveLightningView's
+        // `amountEntryView`, SendView): amount centered between two flexible
+        // spacers, full-width keypad, action button directly beneath the keypad.
         VStack(spacing: 0) {
             header
+
+            Spacer(minLength: 0)
 
             CurrencyAmountDisplay(
                 sats: UInt64(amountString) ?? 0,
                 primary: $settings.amountDisplayPrimary,
-                primarySize: 44
+                primarySize: 56
             )
             .accessibilityLabel("Request amount: \(amountString.isEmpty ? "0" : amountString) sats")
-            .padding(.vertical, 24)
+            .padding(.horizontal)
+            .frame(maxWidth: .infinity)
+
+            Spacer(minLength: 0)
 
             NumberPadAmountInput(amountString: $amountString)
                 .padding(.horizontal, 24)
@@ -49,25 +48,7 @@ struct CashuRequestAmountPickerSheet: View {
             .padding(.top, 16)
             .padding(.bottom, 16)
         }
-        .background {
-            // Measures the intrinsic content height (inside the safe area).
-            GeometryReader { proxy in
-                Color.clear
-                    .onAppear { contentHeight = proxy.size.height }
-                    .onChange(of: proxy.size.height) { _, newValue in contentHeight = newValue }
-            }
-        }
-        .background {
-            // Reads the home-indicator inset. `.ignoresSafeArea()` lets this probe
-            // span into the safe area so `safeAreaInsets.bottom` reports the real value.
-            GeometryReader { proxy in
-                Color.clear
-                    .onAppear { bottomInset = proxy.safeAreaInsets.bottom }
-                    .onChange(of: proxy.safeAreaInsets.bottom) { _, newValue in bottomInset = newValue }
-            }
-            .ignoresSafeArea()
-        }
-        .presentationDetents([.height(contentHeight + bottomInset)])
+        .presentationDetents([.large])
         .presentationDragIndicator(.visible)
     }
 
