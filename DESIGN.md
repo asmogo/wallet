@@ -138,14 +138,6 @@ components:
   divider-canvas:
     backgroundColor: "{colors.separator-hair}"
     height: "0.5px"
-  notification-toast:
-    backgroundColor: "{colors.surface}"
-    textColor: "{colors.primary-text}"
-    rounded: "{rounded.hairline}"
-    padding: "12px 16px"
-    typography: "{typography.callout}"
-    shadow: "0 2px 4px rgba(0,0,0,0.2)"
-    note: "Lone flat-by-default exception — toast literally floats over the canvas."
 ---
 
 # Design System: Cashu Wallet
@@ -270,7 +262,10 @@ payment. Outgoing completed amounts render `.primary` so the row reads as
 cleared but neutral. Pending amounts stay `.secondary` in both directions.
 Nothing else on the row, anywhere, ever, gets to be green. The shared
 `TransactionAmountColumn` (`CashuWallet/Views/Components/`) is the canonical
-implementation; do not re-derive the color elsewhere.
+implementation; do not re-derive the color elsewhere. The one off-row exception
+is the home-screen received-delta beat (the transient `✓ +amount` under the
+balance), which is green-on-receipt by the same logic — and it carries **no
+directional arrow**, keeping the down-arrow vocabulary exclusive to row badges.
 
 **The Quiet Pending Rule.** Pending is `Color.orange` muted to `.opacity(0.1)`
 as a background and the clock SF Symbol as a leading badge. Never a full-saturation
@@ -352,12 +347,12 @@ The system is **flat by default with one elevation layer**: Liquid Glass on iOS
 directly on the canvas; depth comes from material translucency and the
 `CanvasDivider` hairline, not from shadows.
 
-There is exactly one `.shadow(...)` in the production view tree — the
-`NotificationBadgeView` toast (`Color.black.opacity(0.2)`, radius 4, y-offset 2)
-— and it earns the exception because the toast literally floats above the
-underlying canvas. Everywhere else, a single subtle press scale (0.97 via
-`PressableButtonStyle`, 0.09s down / 0.18s spring back) is the only "lift" the
-system ships.
+There are **no** `.shadow(...)` modifiers in the production view tree. Depth is
+carried entirely by Liquid Glass materials and the `CanvasDivider` hairline; the
+only "lift" the system ships is a single subtle press scale (0.97 via
+`PressableButtonStyle`, 0.09s down / 0.18s spring back). (The home-screen success
+toast that once held the lone shadow was retired in favor of the balance-anchored
+received-delta beat — see Notifications.)
 
 ### Material Vocabulary
 
@@ -379,13 +374,12 @@ surface that lives *in* the canvas. No glow rings, no inner shadows, no glossy
 highlights. Depth on the canvas is conveyed by translucent materials and
 hairline `CanvasDivider`s, not by elevation geometry.
 
-**The Floating-Toast Exception.** `NotificationBadgeView` is allowed a single
-soft shadow (`Color.black.opacity(0.2)`, radius 4, y 2) because it is the one
-surface that genuinely floats *over* the app — it slides in from the top edge,
-sits above the wallet canvas without joining it, and dismisses. No other
-component may take this exception. If you find yourself reaching for a shadow,
-the layout is wrong; verify the alternative isn't a hairline divider or a
-material change before adding lift.
+**No-Shadow Absolute.** There are zero `.shadow(...)` modifiers in the app, and
+no exceptions. The Floating-Toast Exception that once permitted a single soft
+shadow on `NotificationBadgeView` is retired along with the toast itself (the
+home receive confirmation now lives on the balance — see Notifications). If you
+find yourself reaching for a shadow, the layout is wrong; the alternative is a
+hairline `CanvasDivider`, a material change, or Liquid Glass.
 
 **The Glass-As-Surface Rule.** Liquid Glass is a *surface*, not a *decoration*.
 It belongs on container shapes (`Capsule`, `RoundedRectangle(cornerRadius: 12)`)
@@ -597,10 +591,18 @@ section. The same content scales to both.
 
 ### Notifications
 
-- **`NotificationBadgeView`**: top-of-screen success toast. Checkmark icon +
-  message + amount + close button.
-  `.liquidGlassMaterial(in: RoundedRectangle(cornerRadius: 8))`. Slides in from
-  the top edge (`.move(edge: .top).combined(with: .opacity)`), self-dismisses.
+- **Received delta beat** (home screen): when `cashuTokenReceived` fires, the
+  hero balance rolls upward via `.contentTransition(.numericText())` and a
+  transient green `✓ +amount` (grouped through `AmountFormatter`, no unit, no
+  directional arrow) takes over the fiat sub-amount slot beneath the balance,
+  scaling in, holding 2.5s, then fading as the fiat line returns. Reuses the
+  payment-received celebration vocabulary (Motion §6): `checkmark.circle.fill`
+  with `.symbolEffect(.bounce)`, `.scale.combined(with: .opacity)`,
+  `.spring(response: 0.5, dampingFraction: 0.7)`; reduce-motion collapses it to
+  an opacity cross-fade. Defined in `MainWalletView` (`balanceStatusLine` /
+  `receivedDeltaBeat`). This replaced the retired floating toast — the receive
+  confirmation now lives on the balance, in the canvas, with no shadow and no
+  floating surface.
 - **`ErrorBannerView`**: inline red banner for in-context errors.
 
 ### Signature: ActivityOrb
@@ -708,10 +710,14 @@ code must be).
    Cashu Request status badge for 2.5s with `.spring(response: 0.5,
    dampingFraction: 0.7)`. The checkmark uses `.symbolEffect(.bounce, value:)`
    and the entire badge transitions in via `.scale.combined(with: .opacity)`.
-   Same pattern is mirrored in `ReceiveLightningView` for `isPaid`. The
+   Same pattern is mirrored in `ReceiveLightningView` for `isPaid`, and on the
+   home screen as the **received-delta beat** (`MainWalletView.receivedDeltaBeat`)
+   — the green `✓ +amount` that takes over the balance's fiat slot on receipt.
+   All three are instances of this one named animation, not new motions. The
    *singular* allowed celebration vocabulary — never confetti, never a haptic
    stronger than `.success`, never a sustained-color flash. Holds 2.5s,
-   then quietly steps back to the persistent N-payments-received line.
+   then quietly steps back to the persistent line (N-payments-received, or the
+   fiat sub-amount on the home balance).
 7. **Waiting-pulse** — `.symbolEffect(.pulse, options: .repeating)` on a
    single SF Symbol while a system is waiting on external state: the empty-
    state History bolt, the Cashu Request "Waiting for payment…" clock, the
@@ -778,10 +784,9 @@ No bounce, no elastic, no custom cubic-bezier, no `.interactiveSpring`.
 - **Don't** ship a loud "PENDING" pill or any full-saturation orange chip. The
   quiet-pending principle is encoded in `clock.circle.fill` over secondary
   text and `.opacity(0.1)` orange backgrounds.
-- **Don't** drop a `.shadow(...)` modifier on a card, a button, or a row.
-  **The Flat-By-Default Rule.** Depth is materials and hairlines. The only
-  permitted shadow lives on `NotificationBadgeView` because the toast
-  literally floats over the canvas — see the Floating-Toast Exception.
+- **Don't** drop a `.shadow(...)` modifier on a card, a button, or a row, ever.
+  **The Flat-By-Default Rule** is absolute — there are zero shadows in the app
+  (see the No-Shadow Absolute). Depth is materials and hairlines.
 - **Don't** ship the **hero-metric SaaS panel**: big number on tinted card,
   small label below, supporting stats around it. The balance is the only
   hero number the wallet gets, and it lives on the bare canvas. *Mint

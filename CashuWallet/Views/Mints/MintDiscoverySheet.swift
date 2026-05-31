@@ -29,11 +29,11 @@ struct MintDiscoverySheet: View {
     @ViewBuilder
     private var content: some View {
         if !settings.useWebsockets {
-            ContentUnavailableView {
-                Label("WebSockets Required", systemImage: "antenna.radiowaves.left.and.right.slash")
-            } description: {
-                Text("Enable WebSocket connections in Settings to discover mints over Nostr.")
-            }
+            NativeEmptyState(
+                title: "WebSockets Required",
+                systemImage: "antenna.radiowaves.left.and.right.slash",
+                description: "Enable WebSocket connections in Settings to discover mints over Nostr."
+            )
         } else {
             List {
                 if discoveryManager.isDiscovering {
@@ -67,13 +67,19 @@ struct MintDiscoverySheet: View {
                 } else if addedMints.isEmpty && !discoveryManager.isDiscovering {
                     Section {
                         if searchText.isEmpty {
-                            ContentUnavailableView(
-                                "No Mints Found",
+                            NativeEmptyState(
+                                title: "No Mints Found",
                                 systemImage: "magnifyingglass",
-                                description: Text("Pull down to retry.")
+                                description: "Pull down to retry.",
+                                style: .section
                             )
                         } else {
-                            ContentUnavailableView.search(text: searchText)
+                            NativeEmptyState(
+                                title: "No Results",
+                                systemImage: "magnifyingglass",
+                                description: "No mint matches \"\(searchText)\".",
+                                style: .section
+                            )
                         }
                     }
                     .listRowBackground(Color.clear)

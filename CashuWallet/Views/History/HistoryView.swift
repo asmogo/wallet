@@ -346,20 +346,23 @@ struct HistoryView: View {
     @ViewBuilder
     private var emptyStateView: some View {
         if !searchText.isEmpty {
-            ContentUnavailableView.search(text: searchText)
+            NativeEmptyState(
+                title: "No Results",
+                systemImage: "magnifyingglass",
+                description: "No activity matches \"\(searchText)\"."
+            )
         } else if filter != .all {
-            ContentUnavailableView(
-                "Nothing here",
+            NativeEmptyState(
+                title: "Nothing here",
                 systemImage: "line.3.horizontal.decrease.circle",
-                description: Text("No transactions match this filter.")
+                description: "No transactions match this filter."
             )
         } else {
-            ContentUnavailableView {
-                Label("No activity yet", systemImage: "bolt.fill")
-                    .symbolEffect(.pulse, options: .repeating)
-            } description: {
-                Text("Your first payment will show up here.")
-            }
+            NativeEmptyState(
+                title: "No activity yet",
+                systemImage: "clock.arrow.circlepath",
+                description: "Your first payment will show up here."
+            )
         }
     }
 
