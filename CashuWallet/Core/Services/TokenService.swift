@@ -214,19 +214,26 @@ class TokenService: ObservableObject {
     
     // MARK: - Token Status
     
-    /// Check if a token has been spent (claimed by recipient)
+    /// Check if a token has been spent (claimed by recipient).
+    ///
+    /// Uses `proofs(mintKeysets:)` instead of `proofsSimple()` so the decoded
+    /// `Proof` objects carry the correct (full) keyset ID.  Without this, proofs
+    /// decoded from a token created under an IDv2 keyset may carry a short/legacy
+    /// keyset ID and CDK's `checkProofsSpent` will throw:
+    ///   "Short keyset id does not match any of the provided IDv2s"
     func checkTokenSpendable(token: String, mintUrl: String) async -> Bool {
         guard let repo = walletRepository() else { return false }
-        
+
         do {
             let tokenObj = try Token.decode(encodedToken: token)
             let mintUrlObj = MintUrl(url: mintUrl)
-            
+
             let wallet = try await repo.getWallet(mintUrl: mintUrlObj, unit: .sat)
-            
-            let proofs = try tokenObj.proofsSimple()
+            let keysets = try await wallet.getMintKeysets(filter: .all)
+            let proofs = try tokenObj.proofs(mintKeysets: keysets)
+
             let spentStates = try await wallet.checkProofsSpent(proofs: proofs)
-            
+
             // If any proofs are spent, the token has been redeemed
             return spentStates.contains(true)
         } catch {

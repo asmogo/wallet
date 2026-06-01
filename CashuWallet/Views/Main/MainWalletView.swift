@@ -607,8 +607,7 @@ struct MainWalletView: View {
 
         let isSpent = await walletManager.checkTokenSpendable(token: token, mintUrl: transaction.mintUrl)
         if isSpent {
-            walletManager.removePendingToken(tokenId: transaction.id)
-            await walletManager.loadTransactions()
+            await walletManager.markTokenAsClaimed(token: token)
         }
     }
 

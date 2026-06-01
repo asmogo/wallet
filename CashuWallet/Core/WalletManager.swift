@@ -1139,7 +1139,7 @@ class WalletManager: ObservableObject {
     func checkPendingTokenStatus(pendingToken: PendingToken) async {
         let isSpent = await checkTokenSpendable(token: pendingToken.token, mintUrl: pendingToken.mintUrl)
         if isSpent {
-            transactionService.removePendingToken(tokenId: pendingToken.tokenId)
+            transactionService.markTokenAsClaimed(token: pendingToken.token)
         }
     }
     

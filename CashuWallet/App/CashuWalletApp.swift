@@ -15,11 +15,13 @@ struct CashuWalletApp: App {
                     await walletManager.initialize()
                     CashuRequestListener.shared.attach(walletManager: walletManager)
                     await CashuRequestListener.shared.start()
+                    await walletManager.checkAllPendingTokens()
                 }
                 .onChange(of: scenePhase) { _, newPhase in
                     switch newPhase {
                     case .active:
                         Task { await CashuRequestListener.shared.start() }
+                        Task { await walletManager.checkAllPendingTokens() }
                     case .background:
                         Task { await CashuRequestListener.shared.stop() }
                     default:
