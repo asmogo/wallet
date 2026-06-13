@@ -1788,6 +1788,70 @@ struct MintSelectorSheet: View {
     }
 }
 
+// MARK: - Method Picker Sheet
+
+/// Medium-detent picker for choosing a receive/send rail. Mirrors
+/// `MintSelectorSheet`: plain rows with a friendly title + descriptor and a
+/// trailing checkmark, dismiss-on-select. Detent is applied by the caller.
+struct MethodPickerSheet: View {
+    @Environment(\.dismiss) private var dismiss
+    @Binding var selectedMethod: PaymentMethodKind
+    let methods: [PaymentMethodKind]
+    var onSelect: ((PaymentMethodKind) -> Void)? = nil
+
+    var body: some View {
+        NavigationStack {
+            List(methods, id: \.self) { method in
+                Button(action: { select(method) }) {
+                    HStack(spacing: 12) {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(method.friendlyTitle)
+                                .font(.body.weight(.medium))
+                            Text(method.friendlyDescriptor)
+                                .font(.subheadline)
+                                .foregroundStyle(.secondary)
+                        }
+
+                        Spacer()
+
+                        if selectedMethod == method {
+                            Image(systemName: "checkmark")
+                                .foregroundStyle(Color.accentColor)
+                        }
+                    }
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .listRowSeparator(.hidden)
+                .accessibilityElement(children: .combine)
+                .accessibilityLabel("\(method.friendlyTitle). \(method.friendlyDescriptor)")
+                .accessibilityAddTraits(selectedMethod == method ? .isSelected : [])
+            }
+            .listStyle(.plain)
+            .navigationTitle("Receive with")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button(action: { dismiss() }) {
+                        Image(systemName: "xmark.circle.fill")
+                            .foregroundStyle(.secondary)
+                    }
+                    .accessibilityLabel("Close")
+                }
+            }
+        }
+    }
+
+    private func select(_ method: PaymentMethodKind) {
+        if method != selectedMethod {
+            HapticFeedback.selection()
+            selectedMethod = method
+        }
+        onSelect?(method)
+        dismiss()
+    }
+}
+
 // MARK: - Share Sheet
 
 struct ShareSheet: UIViewControllerRepresentable {

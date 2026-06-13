@@ -617,7 +617,6 @@ struct MainWalletView: View {
             WalletActionSheetView(
                 action: action,
                 onClose: { activeSheet = nil },
-                onScan: { activeSheet = .scanner },
                 onSelect: { flow in
                     if case .contactlessPay = flow {
                         activeSheet = nil
@@ -760,7 +759,6 @@ private enum WalletSheet: Identifiable {
 private struct WalletActionSheetView: View {
     let action: WalletActionSheet
     let onClose: () -> Void
-    let onScan: () -> Void
     let onSelect: (WalletFlow) -> Void
 
     @State private var revealed = false
@@ -814,13 +812,6 @@ private struct WalletActionSheetView: View {
                         Image(systemName: "xmark")
                     }
                     .accessibilityLabel("Close")
-                }
-
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button(action: onScan) {
-                        Image(systemName: "viewfinder")
-                    }
-                    .accessibilityLabel("Scan")
                 }
             }
         }
