@@ -1,5 +1,5 @@
 import Foundation
-import CashuDevKit
+import Cdk
 
 // MARK: - Wallet Service Protocol
 

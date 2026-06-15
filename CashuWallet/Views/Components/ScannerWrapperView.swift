@@ -1,6 +1,6 @@
 import SwiftUI
 import AVFoundation
-import CashuDevKit
+import Cdk
 #if canImport(URKit)
 import URKit
 #endif

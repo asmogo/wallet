@@ -1,7 +1,7 @@
 import Foundation
 import SwiftUI
 import Combine
-import CashuDevKit
+import Cdk
 
 // MARK: - Wallet Manager
 
@@ -157,7 +157,7 @@ class WalletManager: ObservableObject {
     
     private func loadWalletState() async {
         do {
-            CashuDevKit.initLogging(level: "info")
+            Cdk.initLogging(level: "info")
             
             if let storedMnemonic = try keychainService.loadMnemonic() {
                 mnemonic = storedMnemonic
@@ -352,7 +352,7 @@ class WalletManager: ObservableObject {
     }
 
     private func proveWalletCanInitialize(mnemonic: String) throws {
-        _ = try CashuDevKit.mnemonicToEntropy(mnemonic: mnemonic)
+        _ = try Cdk.mnemonicToEntropy(mnemonic: mnemonic)
 
         let fileManager = FileManager.default
         let temporaryDirectory = try temporaryWalletDirectoryURL()
@@ -389,7 +389,7 @@ class WalletManager: ObservableObject {
     
     private func generateMnemonic() throws -> String {
         // Use CDK's built-in BIP39 mnemonic generation
-        return try CashuDevKit.generateMnemonic()
+        return try Cdk.generateMnemonic()
     }
     
     private func walletDatabaseURL() throws -> URL {
@@ -760,7 +760,7 @@ class WalletManager: ObservableObject {
     }
 
     /// Fetch full mint info from the mint's API via CashuDevKit
-    func fetchFullMintInfo(mintUrl: String) async throws -> CashuDevKit.MintInfo? {
+    func fetchFullMintInfo(mintUrl: String) async throws -> Cdk.MintInfo? {
         guard let walletRepository = walletRepository else {
             throw WalletError.notInitialized
         }
@@ -919,7 +919,7 @@ class WalletManager: ObservableObject {
     }
 
     func payCashuPaymentRequest(
-        _ request: CashuDevKit.PaymentRequest,
+        _ request: Cdk.PaymentRequest,
         customAmountSats: UInt64? = nil,
         preferredMintURL: String? = nil
     ) async throws {
@@ -952,7 +952,7 @@ class WalletManager: ObservableObject {
     }
 
     private func selectMint(
-        forCashuPaymentRequest request: CashuDevKit.PaymentRequest,
+        forCashuPaymentRequest request: Cdk.PaymentRequest,
         amount: UInt64,
         preferredMintURL: String?
     ) throws -> MintInfo {
@@ -1337,7 +1337,7 @@ class WalletManager: ObservableObject {
         let words = normalizedPhrase.split(separator: " ").map(String.init)
         guard words.count == 12 || words.count == 24 else { return false }
         guard words.allSatisfy({ bip39WordList.contains($0) }) else { return false }
-        return (try? CashuDevKit.mnemonicToEntropy(mnemonic: normalizedPhrase)) != nil
+        return (try? Cdk.mnemonicToEntropy(mnemonic: normalizedPhrase)) != nil
     }
 
     /// Validate individual words and return which ones are invalid
@@ -1371,7 +1371,7 @@ enum WalletErrorMessage {
             return message(for: walletError)
         }
 
-        if let ffiError = error as? CashuDevKit.FfiError {
+        if let ffiError = error as? Cdk.FfiError {
             return message(for: ffiError)
         }
 
@@ -1422,7 +1422,7 @@ enum WalletErrorMessage {
         }
     }
 
-    private static func message(for ffiError: CashuDevKit.FfiError) -> String {
+    private static func message(for ffiError: Cdk.FfiError) -> String {
         switch ffiError {
         case .Cdk(let code, let errorMessage):
             return message(forCDKCode: code, rawMessage: errorMessage)
@@ -1744,7 +1744,7 @@ enum MeltQuoteState {
 }
 
 extension MintQuoteState {
-    init(_ quoteState: CashuDevKit.QuoteState) {
+    init(_ quoteState: Cdk.QuoteState) {
         switch quoteState {
         case .paid:
             self = .paid
@@ -1757,7 +1757,7 @@ extension MintQuoteState {
 }
 
 extension MeltQuoteState {
-    init(_ quoteState: CashuDevKit.QuoteState) {
+    init(_ quoteState: Cdk.QuoteState) {
         switch quoteState {
         case .unpaid:
             self = .unpaid

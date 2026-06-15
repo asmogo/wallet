@@ -1,5 +1,5 @@
 import SwiftUI
-import CashuDevKit
+import Cdk
 
 struct MintDetailView: View {
     @EnvironmentObject var walletManager: WalletManager
@@ -9,7 +9,7 @@ struct MintDetailView: View {
 
     let mint: MintInfo
 
-    @State private var cdkInfo: CashuDevKit.MintInfo?
+    @State private var cdkInfo: Cdk.MintInfo?
     @State private var isLoading = true
     @State private var errorMessage: String?
     @State private var showRemoveConfirmation = false
@@ -301,7 +301,7 @@ struct MintDetailView: View {
         }
     }
 
-    private func nutDisclosure(_ nuts: CashuDevKit.Nuts) -> some View {
+    private func nutDisclosure(_ nuts: Cdk.Nuts) -> some View {
         DisclosureGroup(isExpanded: $nutsExpanded.animation(.easeInOut(duration: 0.2))) {
             VStack(spacing: 0) {
                 nutRow("NUT-04", "Mint", true)
@@ -545,7 +545,7 @@ struct MintDetailView: View {
         var id: String { text }
     }
 
-    private func capabilityLines(_ nuts: CashuDevKit.Nuts) -> [Capability] {
+    private func capabilityLines(_ nuts: Cdk.Nuts) -> [Capability] {
         var lines: [Capability] = []
 
         let allMethods = receiveMethodSummaries.map(\.method) + sendMethodSummaries.map(\.method)

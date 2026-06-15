@@ -1,13 +1,13 @@
 import Foundation
 import CryptoKit
-import CashuDevKit
+import Cdk
 
 enum PaymentMethodKind: String, CaseIterable, Codable, Hashable {
     case bolt11
     case bolt12
     case onchain
 
-    static func from(_ cdkMethod: CashuDevKit.PaymentMethod) -> PaymentMethodKind? {
+    static func from(_ cdkMethod: Cdk.PaymentMethod) -> PaymentMethodKind? {
         switch cdkMethod {
         case .bolt11:
             return .bolt11
@@ -20,7 +20,7 @@ enum PaymentMethodKind: String, CaseIterable, Codable, Hashable {
         }
     }
 
-    var cdkMethod: CashuDevKit.PaymentMethod {
+    var cdkMethod: Cdk.PaymentMethod {
         switch self {
         case .bolt11:
             return .bolt11

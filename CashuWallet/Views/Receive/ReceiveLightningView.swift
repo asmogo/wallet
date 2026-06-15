@@ -1,5 +1,5 @@
 import SwiftUI
-import CashuDevKit
+import Cdk
 
 struct ReceiveLightningView: View {
     @Environment(\.dismiss) private var dismiss

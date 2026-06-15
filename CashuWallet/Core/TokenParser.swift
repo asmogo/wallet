@@ -1,5 +1,5 @@
 import Foundation
-import CashuDevKit
+import Cdk
 
 enum TokenParser {
     static func normalizedToken(from rawToken: String) -> String? {

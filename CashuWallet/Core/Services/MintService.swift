@@ -1,5 +1,5 @@
 import Foundation
-import CashuDevKit
+import Cdk
 
 // MARK: - Mint Service
 
@@ -312,7 +312,7 @@ class MintService: ObservableObject {
     private func makeMintInfo(
         url: String,
         existing: MintInfo?,
-        fetchedInfo: CashuDevKit.MintInfo?
+        fetchedInfo: Cdk.MintInfo?
     ) async -> MintInfo {
         var mintInfo = existing ?? MintInfo(
             url: url,
@@ -349,28 +349,28 @@ class MintService: ObservableObject {
         return mintInfo
     }
 
-    private func supportedMintPaymentMethods(from methods: [CashuDevKit.MintMethodSettings]) -> [PaymentMethodKind] {
+    private func supportedMintPaymentMethods(from methods: [Cdk.MintMethodSettings]) -> [PaymentMethodKind] {
         let mappedMethods = methods
             .filter { isSatUnit($0.unit) }
             .compactMap { PaymentMethodKind.from($0.method) }
         return PaymentMethodKind.allCases.filter { mappedMethods.contains($0) }
     }
 
-    private func supportedMeltPaymentMethods(from methods: [CashuDevKit.MeltMethodSettings]) -> [PaymentMethodKind] {
+    private func supportedMeltPaymentMethods(from methods: [Cdk.MeltMethodSettings]) -> [PaymentMethodKind] {
         let mappedMethods = methods
             .filter { isSatUnit($0.unit) }
             .compactMap { PaymentMethodKind.from($0.method) }
         return PaymentMethodKind.allCases.filter { mappedMethods.contains($0) }
     }
 
-    private func supportedUnits(from nuts: CashuDevKit.Nuts) -> [String] {
+    private func supportedUnits(from nuts: Cdk.Nuts) -> [String] {
         let units = (nuts.mintUnits + nuts.meltUnits)
             .map(PaymentRequestDecoder.unitDescription)
         let uniqueUnits = Array(Set(units)).sorted()
         return uniqueUnits.isEmpty ? ["sat"] : uniqueUnits
     }
 
-    private func isSatUnit(_ unit: CashuDevKit.CurrencyUnit) -> Bool {
+    private func isSatUnit(_ unit: Cdk.CurrencyUnit) -> Bool {
         if case .sat = unit {
             return true
         }

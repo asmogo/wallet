@@ -1,5 +1,5 @@
 import SwiftUI
-import CashuDevKit
+import Cdk
 
 struct ReceiveTokenDetailView: View {
     let tokenString: String

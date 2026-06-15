@@ -1,5 +1,5 @@
 import Foundation
-import CashuDevKit
+import Cdk
 
 enum LightningRequestParser {
     struct ParsedRequest {

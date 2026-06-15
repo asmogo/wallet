@@ -1,4 +1,4 @@
-import CashuDevKit
+import Cdk
 import Foundation
 
 enum NFCPaymentError: LocalizedError {
@@ -55,7 +55,7 @@ enum NFCPaymentError: LocalizedError {
 @MainActor
 final class NFCPaymentService {
     enum NFCInput {
-        case creq(CashuDevKit.PaymentRequest)
+        case creq(Cdk.PaymentRequest)
         case bolt11(String)
     }
 
@@ -110,7 +110,7 @@ final class NFCPaymentService {
         }
     }
 
-    func prepareToken(for request: CashuDevKit.PaymentRequest) async throws -> String {
+    func prepareToken(for request: Cdk.PaymentRequest) async throws -> String {
         guard let requestedAmount = request.amount() else {
             throw NFCPaymentError.noAmountSpecified
         }
@@ -146,7 +146,7 @@ final class NFCPaymentService {
     }
 
     private func selectMint(
-        for request: CashuDevKit.PaymentRequest,
+        for request: Cdk.PaymentRequest,
         amount: UInt64,
         preferredMintURL: String?
     ) throws -> MintInfo {
@@ -187,7 +187,7 @@ final class NFCPaymentService {
         return input
     }
 
-    private static func canPrepareInBandToken(for request: CashuDevKit.PaymentRequest) -> Bool {
+    private static func canPrepareInBandToken(for request: Cdk.PaymentRequest) -> Bool {
         guard let unit = request.unit() else { return true }
         if case .sat = unit {
             return true
@@ -210,7 +210,7 @@ final class NFCPaymentService {
         return normalized
     }
 
-    private static func description(for unit: CashuDevKit.CurrencyUnit) -> String {
+    private static func description(for unit: Cdk.CurrencyUnit) -> String {
         switch unit {
         case .sat:
             return "sat"

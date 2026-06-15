@@ -1,5 +1,5 @@
 import Foundation
-import CashuDevKit
+import Cdk
 
 /// Display-safe summary of a NUT-18/NUT-26 Cashu payment request.
 struct CashuPaymentRequestSummary: Equatable {
@@ -98,7 +98,7 @@ enum PaymentRequestDecoder {
         return withoutCashuScheme
     }
 
-    static func parseCashuPaymentRequest(_ raw: String) throws -> CashuDevKit.PaymentRequest {
+    static func parseCashuPaymentRequest(_ raw: String) throws -> Cdk.PaymentRequest {
         guard let encoded = encodedCashuPaymentRequest(from: raw) else {
             throw PaymentRequestDecodeError.noCashuPaymentRequest
         }
@@ -203,7 +203,7 @@ enum PaymentRequestDecoder {
         return "\(amount) \(summary.unit ?? "sat")"
     }
 
-    static func unitDescription(_ unit: CashuDevKit.CurrencyUnit) -> String {
+    static func unitDescription(_ unit: Cdk.CurrencyUnit) -> String {
         switch unit {
         case .sat:
             return "sat"

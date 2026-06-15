@@ -1,6 +1,6 @@
 import Foundation
 import SwiftUI
-import CashuDevKit
+import Cdk
 
 /// Service for NPubCash integration using CDK NpubCashClient
 /// Provides Lightning address functionality via Nostr identity
