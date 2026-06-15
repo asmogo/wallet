@@ -119,6 +119,7 @@ struct ReceiveEcashView: View {
     @State private var navigateToDetail = false
     @State private var validatedToken: String?
     @State private var currentRequest: CashuRequest?
+    @State private var showingScanner = false
 
     var body: some View {
         NavigationStack {
@@ -227,6 +228,21 @@ struct ReceiveEcashView: View {
                     }
                     .accessibilityLabel("Close")
                 }
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button {
+                        HapticFeedback.selection()
+                        showingScanner = true
+                    } label: {
+                        Image(systemName: "viewfinder")
+                            .font(.body.weight(.semibold))
+                    }
+                    .accessibilityLabel("Scan QR code")
+                    .accessibilityHint("Opens the camera to scan an ecash token")
+                }
+            }
+            .sheet(isPresented: $showingScanner) {
+                ScannerWrapperView(onScanned: handleScannedToken)
+                    .environmentObject(walletManager)
             }
             .navigationDestination(isPresented: $navigateToDetail) {
                 if let token = validatedToken {
@@ -289,6 +305,11 @@ struct ReceiveEcashView: View {
         } catch {
             errorMessage = "Could not build request: \(error)"
         }
+    }
+
+    private func handleScannedToken(_ scanned: String) {
+        tokenInput = scanned
+        validateAndContinue()
     }
 
     private func validateAndContinue() {
