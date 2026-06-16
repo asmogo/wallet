@@ -151,13 +151,19 @@ struct ScannerWrapperView: View {
                     }
                 }
             }
-            .navigationDestination(isPresented: $navigateToDetail) {
+            .sheet(isPresented: $navigateToDetail, onDismiss: {
+                // Sheet closed without completing the receive: re-arm the scanner
+                // so the next QR code is processed.
+                scannedToken = nil
+                scannerModel.reset()
+            }) {
                 if let token = scannedToken {
                     ReceiveTokenDetailView(tokenString: token, onComplete: {
                         // Dismiss the entire scanner sheet
                         dismiss()
                     })
                     .environmentObject(walletManager)
+                    .presentationDetents([.medium, .large])
                 }
             }
             .fullScreenCover(isPresented: $navigateToMelt) {

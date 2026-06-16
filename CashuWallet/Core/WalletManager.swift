@@ -1053,8 +1053,13 @@ class WalletManager: ObservableObject {
     }
     
     func receiveTokens(tokenString: String) async throws -> UInt64 {
-        try await ensureMintTrackedForToken(tokenString)
+        // Receive first: tokenService creates the CDK wallet and consumes the
+        // keyset counter. Enriching the mint (createWallet/fetchMintInfo) before
+        // this desyncs the counter and makes the mint reject "duplicate outputs"
+        // on the first attempt. Track/enrich the mint only after a successful
+        // receive, so an unredeemed token never adds the mint either.
         let amount = try await tokenService.receiveTokens(tokenString: tokenString)
+        try? await ensureMintTrackedForToken(tokenString)
         await refreshBalance()
         await loadTransactions()
         return amount
@@ -1113,7 +1118,10 @@ class WalletManager: ObservableObject {
     }
     
     func calculateReceiveFee(tokenString: String) async throws -> UInt64 {
-        try await ensureMintTrackedForToken(tokenString)
+        // Fee preview must not track/enrich the mint: doing so adds it to the
+        // visible mint list (hiding the "new mint" badge on a later scan) and
+        // disturbs the keyset counter before the receive. tokenService creates
+        // the throwaway CDK wallet entry it needs for the calculation itself.
         return try await tokenService.calculateReceiveFee(tokenString: tokenString)
     }
     

@@ -261,7 +261,11 @@ class MintService: ObservableObject {
 
         do {
             let mintUrlObj = MintUrl(url: normalizedUrl)
-            try await repo.createWallet(mintUrl: mintUrlObj, unit: .sat, targetProofCount: nil)
+            // Only create the CDK wallet if it isn't already present, so we never
+            // reset an existing keyset counter mid-flight.
+            if await !repo.hasMint(mintUrl: mintUrlObj) {
+                try await repo.createWallet(mintUrl: mintUrlObj, unit: .sat, targetProofCount: nil)
+            }
             let wallet = try await repo.getWallet(mintUrl: mintUrlObj, unit: .sat)
             let info = try await wallet.fetchMintInfo()
             let enriched = await makeMintInfo(

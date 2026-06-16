@@ -23,13 +23,13 @@ struct ReceiveTokenDetailView: View {
         NavigationStack {
             VStack(spacing: 0) {
                 ScrollView {
-                    VStack(spacing: 24) {
+                    VStack(spacing: 16) {
                         // Amount
                         CurrencyAmountDisplay(
                             sats: tokenAmount,
                             primary: $settings.amountDisplayPrimary
                         )
-                        .padding(.top, 24)
+                        .padding(.top, 12)
 
                         // Details
                         VStack(spacing: 0) {
@@ -70,6 +70,7 @@ struct ReceiveTokenDetailView: View {
                                 .padding(.horizontal)
                         }
                     }
+                    .padding(.bottom, 16)
                 }
 
                 // Buttons
@@ -113,21 +114,22 @@ struct ReceiveTokenDetailView: View {
     }
 
     private var newMintBadge: some View {
-        HStack(alignment: .top, spacing: 10) {
+        HStack(alignment: .top, spacing: 8) {
             Image(systemName: "exclamationmark.shield.fill")
+                .font(.caption)
                 .foregroundStyle(.orange)
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: 1) {
                 Text("New mint")
-                    .font(.subheadline.weight(.semibold))
-                Text("You haven't used \(shortMintUrl(mintUrl)) before. Receiving adds it to your wallet — only continue if you trust this mint.")
-                    .font(.caption)
+                    .font(.caption.weight(.semibold))
+                Text("You haven't used \(shortMintUrl(mintUrl)) before. Receiving adds it to your wallet — only continue if you trust it.")
+                    .font(.caption2)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
             Spacer(minLength: 0)
         }
-        .padding(14)
-        .background(.orange.opacity(0.12), in: RoundedRectangle(cornerRadius: 14))
+        .padding(10)
+        .background(.orange.opacity(0.12), in: RoundedRectangle(cornerRadius: 12))
         .padding(.horizontal)
     }
 
