@@ -205,7 +205,7 @@ class CdkWalletGatewayImpl : CdkWalletGateway {
         normalizedQuote.usedByOperation?.let { releaseMintQuoteReservation(it, quoteId) }
         val proofs = walletFor(normalizedQuote.mintUrl.url).mintUnified(
             quoteId = quoteId,
-            amountSplitTarget = normalizedQuote.mintAmountSplitTarget(method),
+            amountSplitTarget = CdkSplitTarget.None,
             spendingConditions = null,
         )
         return proofsTotalAmount(proofs).value.toLong()

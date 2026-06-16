@@ -8,7 +8,6 @@ import org.cashudevkit.MintQuote as CdkMintQuote
 import org.cashudevkit.MintUrl as CdkMintUrl
 import org.cashudevkit.PaymentMethod as CdkPaymentMethod
 import org.cashudevkit.QuoteState as CdkQuoteState
-import org.cashudevkit.SplitTarget as CdkSplitTarget
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -87,37 +86,6 @@ class MintQuoteCdkMetadataTest {
         val normalized = quote.withLocalMintQuoteMetadata(PaymentMethodKind.Onchain, fallbackAmount = 42)
 
         assertEquals(21uL, normalized.amount?.value)
-    }
-
-    @Test
-    fun onchainMintSplitTargetUsesStoredAmount() {
-        val target = quote(
-            amount = CdkAmount(64uL),
-            paymentMethod = CdkPaymentMethod.Onchain,
-            amountPaid = CdkAmount(80uL),
-        ).mintAmountSplitTarget(PaymentMethodKind.Onchain)
-
-        assertTrue(target is CdkSplitTarget.Value)
-        assertEquals(64uL, (target as CdkSplitTarget.Value).amount.value)
-    }
-
-    @Test
-    fun onchainMintSplitTargetFallsBackToCreditedAmount() {
-        val target = quote(
-            amount = null,
-            paymentMethod = CdkPaymentMethod.Onchain,
-            amountPaid = CdkAmount(80uL),
-        ).mintAmountSplitTarget(PaymentMethodKind.Onchain)
-
-        assertTrue(target is CdkSplitTarget.Value)
-        assertEquals(80uL, (target as CdkSplitTarget.Value).amount.value)
-    }
-
-    @Test
-    fun nonOnchainMintSplitTargetIsNone() {
-        val target = quote(amount = CdkAmount(64uL)).mintAmountSplitTarget(PaymentMethodKind.Bolt11)
-
-        assertTrue(target is CdkSplitTarget.None)
     }
 
     @Test

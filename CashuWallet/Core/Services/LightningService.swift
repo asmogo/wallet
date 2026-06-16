@@ -196,7 +196,7 @@ class LightningService: ObservableObject {
             }
 
             mintUrl = normalizedQuote.mintUrl
-            amountSplitTarget = mintAmountSplitTarget(for: normalizedQuote)
+            amountSplitTarget = .none
 
             if storedPaymentMethod == .onchain,
                normalizedQuote.amountPaid.value <= normalizedQuote.amountIssued.value {
@@ -735,26 +735,6 @@ class LightningService: ObservableObject {
         }
 
         return nil
-    }
-
-    private func mintAmountSplitTarget(for quote: MintQuote) -> SplitTarget {
-        guard PaymentMethodKind.from(quote.paymentMethod) == .onchain else {
-            return .none
-        }
-
-        if let amount = quote.amount?.value, amount > 0 {
-            return .value(amount: Amount(value: amount))
-        }
-
-        if quote.amountPaid.value > 0 {
-            return .value(amount: Amount(value: quote.amountPaid.value))
-        }
-
-        if quote.amountIssued.value > 0 {
-            return .value(amount: Amount(value: quote.amountIssued.value))
-        }
-
-        return .none
     }
 
     private func mintQuoteClearingOrphanedReservationIfNeeded(

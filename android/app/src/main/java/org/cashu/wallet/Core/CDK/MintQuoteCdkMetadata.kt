@@ -5,7 +5,6 @@ import org.cashu.wallet.Models.PaymentMethodKind
 import org.cashudevkit.Amount as CdkAmount
 import org.cashudevkit.MintQuote as CdkMintQuote
 import org.cashudevkit.PaymentMethod as CdkPaymentMethod
-import org.cashudevkit.SplitTarget as CdkSplitTarget
 
 internal fun CdkMintQuote.withLocalMintQuoteMetadata(
     method: PaymentMethodKind,
@@ -50,17 +49,6 @@ internal fun CdkMintQuote.clearingReservation(): CdkMintQuote =
 
 internal fun CdkMintQuote.hasUnissuedOnchainCredit(): Boolean =
     amountPaid.value > amountIssued.value
-
-internal fun CdkMintQuote.mintAmountSplitTarget(method: PaymentMethodKind): CdkSplitTarget {
-    if (method != PaymentMethodKind.Onchain) return CdkSplitTarget.None
-
-    val amount = amount?.value?.takeIf { it > 0uL }
-        ?: amountPaid.value.takeIf { it > 0uL }
-        ?: amountIssued.value.takeIf { it > 0uL }
-        ?: return CdkSplitTarget.None
-
-    return CdkSplitTarget.Value(CdkAmount(amount))
-}
 
 private fun CdkMintQuote.localMintQuoteAmount(
     method: PaymentMethodKind,
