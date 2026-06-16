@@ -231,7 +231,7 @@ class WalletManager: ObservableObject {
         let restored = try await wallet.restore()
 
         // Ensure mint is in our saved list
-        await mintService.ensureMintExists(url: normalizedUrl, name: mintName)
+        await mintService.ensureMintTracked(url: normalizedUrl, name: mintName)
 
         // Refresh balance after restore
         await refreshBalance()
@@ -633,7 +633,7 @@ class WalletManager: ObservableObject {
     private func ensureMintTrackedForToken(_ tokenString: String) async throws {
         let token = try tokenService.decodeToken(tokenString: tokenString)
         let tokenMintUrl = try token.mintUrl().url
-        await mintService.ensureMintExists(url: tokenMintUrl)
+        await mintService.ensureMintTracked(url: tokenMintUrl)
     }
     
     // MARK: - Nostr & NPC Integration
@@ -688,7 +688,7 @@ class WalletManager: ObservableObject {
             }
             
             let mintUrl = mintQuote.mintUrl
-            await mintService.ensureMintExists(url: mintUrl.url)
+            await mintService.ensureMintTracked(url: mintUrl.url)
 
             if let db {
                 try await replaceStoredNPCMintQuote(mintQuote, in: db)
@@ -753,6 +753,11 @@ class WalletManager: ObservableObject {
     func setActiveMint(_ mint: MintInfo) async throws {
         try await mintService.setActiveMint(mint)
         await refreshBalance()
+    }
+
+    /// Whether the given mint URL is already tracked by the wallet.
+    func isMintKnown(url: String) -> Bool {
+        mintService.isMintTracked(url: url)
     }
 
     func refreshMintInfoIfNeeded(maxAge: TimeInterval = 6 * 60 * 60) async {

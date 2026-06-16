@@ -17,6 +17,7 @@ struct ReceiveTokenDetailView: View {
     @State private var isLoadingFee = true
     @State private var p2pkPubkeys: [String] = []
     @State private var tokenLockedToKnownKey = true
+    @State private var mintIsKnown = true
 
     var body: some View {
         NavigationStack {
@@ -56,6 +57,10 @@ struct ReceiveTokenDetailView: View {
                         .padding(.vertical, 4)
                         .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 14))
                         .padding(.horizontal)
+
+                        if !mintIsKnown && !mintUrl.isEmpty {
+                            newMintBadge
+                        }
 
                         if let error = errorMessage {
                             Text(error)
@@ -107,6 +112,25 @@ struct ReceiveTokenDetailView: View {
         }
     }
 
+    private var newMintBadge: some View {
+        HStack(alignment: .top, spacing: 10) {
+            Image(systemName: "exclamationmark.shield.fill")
+                .foregroundStyle(.orange)
+            VStack(alignment: .leading, spacing: 2) {
+                Text("New mint")
+                    .font(.subheadline.weight(.semibold))
+                Text("You haven't used \(shortMintUrl(mintUrl)) before. Receiving adds it to your wallet — only continue if you trust this mint.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(14)
+        .background(.orange.opacity(0.12), in: RoundedRectangle(cornerRadius: 14))
+        .padding(.horizontal)
+    }
+
     // MARK: - Helpers
 
     private func detailRow(icon: String, label: String, value: String) -> some View {
@@ -140,6 +164,7 @@ struct ReceiveTokenDetailView: View {
             self.tokenAmount = try token.value().value
             let mint = try token.mintUrl()
             self.mintUrl = mint.url
+            self.mintIsKnown = walletManager.isMintKnown(url: mint.url)
 
             let tokenP2PKPubkeys = token.p2pkPubkeys()
             self.p2pkPubkeys = tokenP2PKPubkeys
