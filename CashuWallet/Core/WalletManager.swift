@@ -231,7 +231,7 @@ class WalletManager: ObservableObject {
         let restored = try await wallet.restore()
 
         // Ensure mint is in our saved list
-        await mintService.ensureMintExists(url: normalizedUrl, name: mintName)
+        await mintService.ensureMintTracked(url: normalizedUrl, name: mintName)
 
         // Refresh balance after restore
         await refreshBalance()
@@ -683,7 +683,7 @@ class WalletManager: ObservableObject {
     private func ensureMintTrackedForToken(_ tokenString: String) async throws {
         let token = try tokenService.decodeToken(tokenString: tokenString)
         let tokenMintUrl = try token.mintUrl().url
-        await mintService.ensureMintExists(url: tokenMintUrl)
+        await mintService.ensureMintTracked(url: tokenMintUrl)
     }
     
     // MARK: - Nostr & NPC Integration
@@ -738,7 +738,7 @@ class WalletManager: ObservableObject {
             }
             
             let mintUrl = mintQuote.mintUrl
-            await mintService.ensureMintExists(url: mintUrl.url)
+            await mintService.ensureMintTracked(url: mintUrl.url)
 
             if let db {
                 try await replaceStoredNPCMintQuote(mintQuote, in: db)
@@ -804,6 +804,12 @@ class WalletManager: ObservableObject {
         try await mintService.setActiveMint(mint)
         await refreshBalance()
     }
+
+    /// Whether the given mint URL is already tracked by the wallet.
+    func isMintKnown(url: String) -> Bool {
+        mintService.isMintTracked(url: url)
+    }
+
 
     func refreshMintInfo() async {
         await mintService.refreshMintInfo()
@@ -1098,8 +1104,13 @@ class WalletManager: ObservableObject {
     }
     
     func receiveTokens(tokenString: String) async throws -> UInt64 {
-        try await ensureMintTrackedForToken(tokenString)
+        // Receive first: tokenService creates the CDK wallet and consumes the
+        // keyset counter. Enriching the mint (createWallet/fetchMintInfo) before
+        // this desyncs the counter and makes the mint reject "duplicate outputs"
+        // on the first attempt. Track/enrich the mint only after a successful
+        // receive, so an unredeemed token never adds the mint either.
         let amount = try await tokenService.receiveTokens(tokenString: tokenString)
+        try? await ensureMintTrackedForToken(tokenString)
         await refreshBalance()
         await loadTransactions()
         return amount
@@ -1158,7 +1169,10 @@ class WalletManager: ObservableObject {
     }
     
     func calculateReceiveFee(tokenString: String) async throws -> UInt64 {
-        try await ensureMintTrackedForToken(tokenString)
+        // Fee preview must not track/enrich the mint: doing so adds it to the
+        // visible mint list (hiding the "new mint" badge on a later scan) and
+        // disturbs the keyset counter before the receive. tokenService creates
+        // the throwaway CDK wallet entry it needs for the calculation itself.
         return try await tokenService.calculateReceiveFee(tokenString: tokenString)
     }
     

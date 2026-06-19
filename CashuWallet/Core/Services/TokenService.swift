@@ -129,10 +129,7 @@ class TokenService: ObservableObject {
         
         // Ensure the mint is added with the correct unit
         try await repo.createWallet(mintUrl: tokenMintUrl, unit: .sat, targetProofCount: nil)
-        
-        // Get the wallet for this mint
-        let wallet = try await repo.getWallet(mintUrl: tokenMintUrl, unit: .sat)
-        
+
         let availableP2PKKeys = SettingsManager.shared.p2pkKeys
         let localP2PKSigningKeys = availableP2PKKeys.map { SecretKey(hex: $0.privateKey) }
         let tokenP2PKPubkeys = token.p2pkPubkeys()
@@ -152,17 +149,39 @@ class TokenService: ObservableObject {
             preimages: [],
             metadata: [:]
         )
-        
-        let amount = try await wallet.receive(
-            token: token,
-            options: receiveOptions
-        )
 
-        if let matchingLocalP2PKKey {
-            SettingsManager.shared.markP2PKKeyUsed(publicKey: matchingLocalP2PKKey.publicKey)
+        // The receive performs a swap whose blinded outputs are derived
+        // deterministically from the keyset counter (NUT-13). If that counter is
+        // behind what the mint has already signed (e.g. the same seed received
+        // from this mint before), the mint rejects the swap with "Duplicate
+        // outputs". A failed swap advances the persisted counter, so re-fetching
+        // a fresh wallet and retrying lands on unused outputs — the same thing a
+        // manual rescan does. Retry a few times before surfacing the error.
+        let maxAttempts = 4
+        var lastError: Error?
+        for attempt in 0..<maxAttempts {
+            let wallet = try await repo.getWallet(mintUrl: tokenMintUrl, unit: .sat)
+            do {
+                let amount = try await wallet.receive(token: token, options: receiveOptions)
+                if let matchingLocalP2PKKey {
+                    SettingsManager.shared.markP2PKKeyUsed(publicKey: matchingLocalP2PKKey.publicKey)
+                }
+                return amount.value
+            } catch {
+                lastError = error
+                guard Self.isDuplicateOutputsError(error), attempt < maxAttempts - 1 else {
+                    throw error
+                }
+                AppLogger.wallet.warning("Receive rejected with duplicate outputs; retrying with a fresh wallet (attempt \(attempt + 1)/\(maxAttempts))")
+            }
         }
-        
-        return amount.value
+        throw lastError ?? WalletError.notInitialized
+    }
+
+    /// Whether an error is the mint's NUT-03 "Duplicate outputs" rejection,
+    /// which is recoverable by retrying with an advanced keyset counter.
+    private static func isDuplicateOutputsError(_ error: Error) -> Bool {
+        String(describing: error).lowercased().contains("duplicate outputs")
     }
     
     // MARK: - Token Utilities

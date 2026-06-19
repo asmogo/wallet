@@ -203,23 +203,90 @@ class MintService: ObservableObject {
         saveMints()
     }
     
-    /// Add a mint if it doesn't exist (used for NPC and token receiving)
-    func ensureMintExists(url: String, name: String? = nil) async {
+    /// Whether a mint with the given URL is already tracked.
+    func isMintTracked(url: String) -> Bool {
+        mints.contains { $0.url == normalizeUrl(url) }
+    }
+
+    /// Ensure a mint discovered via an incoming token or NPC quote is tracked with
+    /// full metadata (NUT-04/05 payment methods, on-chain confirmations), not a bare
+    /// placeholder. Fetches mint info through the CDK wallet so the send/receive
+    /// payment-method choosers reflect the mint's real capabilities.
+    ///
+    /// - A previously saved broken placeholder (no fetched metadata) is refreshed
+    ///   in place rather than skipped.
+    /// - The mint is set as active only when no active mint exists; an existing
+    ///   user-selected active mint and the mint's balance are preserved.
+    func ensureMintTracked(url: String, name: String? = nil) async {
         let normalizedUrl = normalizeUrl(url)
-        
-        guard !mints.contains(where: { $0.url == normalizedUrl }) else {
+        let existingIndex = mints.firstIndex(where: { $0.url == normalizedUrl })
+
+        // Already tracked with real metadata — nothing to do.
+        if let existingIndex, !mintNeedsEnrichment(mints[existingIndex]) {
             return
         }
-        
-        let mintInfo = MintInfo(
-            url: normalizedUrl,
+
+        guard let repo = walletRepository() else {
+            // Repository not ready: fall back to a placeholder so the mint is at
+            // least visible; it will be enriched on a later receive/refresh.
+            if existingIndex == nil {
+                appendPlaceholderMint(url: normalizedUrl, name: name)
+            }
+            return
+        }
+
+        do {
+            let mintUrlObj = MintUrl(url: normalizedUrl)
+            // Only create the CDK wallet if it isn't already present, so we never
+            // reset an existing keyset counter mid-flight.
+            if await !repo.hasMint(mintUrl: mintUrlObj) {
+                try await repo.createWallet(mintUrl: mintUrlObj, unit: .sat, targetProofCount: nil)
+            }
+            let wallet = try await repo.getWallet(mintUrl: mintUrlObj, unit: .sat)
+            let info = try await wallet.fetchMintInfo()
+            let enriched = await makeMintInfo(
+                url: normalizedUrl,
+                existing: existingIndex.map { mints[$0] },
+                fetchedInfo: info
+            )
+
+            if let existingIndex {
+                mints[existingIndex] = enriched
+            } else {
+                mints.append(enriched)
+            }
+            saveMints()
+
+            if activeMint == nil {
+                activeMint = enriched
+            }
+        } catch {
+            AppLogger.wallet.error("Failed to enrich token-discovered mint \(normalizedUrl): \(error)")
+            if existingIndex == nil {
+                appendPlaceholderMint(url: normalizedUrl, name: name)
+            }
+        }
+    }
+
+    /// A mint still carrying the default placeholder name has never had its
+    /// metadata fetched and should be enriched.
+    private func mintNeedsEnrichment(_ mint: MintInfo) -> Bool {
+        mint.name == "Unknown Mint"
+    }
+
+    private func appendPlaceholderMint(url: String, name: String?) {
+        let placeholder = MintInfo(
+            url: url,
             name: name ?? "Unknown Mint",
             description: nil,
             isActive: true,
             balance: 0
         )
-        mints.append(mintInfo)
+        mints.append(placeholder)
         saveMints()
+        if activeMint == nil {
+            activeMint = placeholder
+        }
     }
     
     // MARK: - Private Methods
