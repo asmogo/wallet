@@ -172,30 +172,6 @@ class MintService: ObservableObject {
         }
     }
 
-    func refreshMintInfoIfNeeded(maxAge: TimeInterval) async {
-        guard let repo = walletRepository() else { return }
-        let cutoff = Date().addingTimeInterval(-maxAge)
-        var updated = false
-
-        for i in mints.indices where mints[i].lastUpdated < cutoff {
-            do {
-                if try await refreshMintInfo(at: i, using: repo) {
-                    updated = true
-                }
-            } catch {
-                AppLogger.wallet.error("Failed to refresh stale mint info for \(self.mints[i].url): \(error)")
-            }
-        }
-
-        if updated {
-            if let activeMintUrl = activeMint?.url,
-               let refreshed = mints.first(where: { $0.url == activeMintUrl }) {
-                activeMint = refreshed
-            }
-            saveMints()
-        }
-    }
-
     /// Update balance for a specific mint
     func updateMintBalance(url: String, balance: UInt64) {
         updateMintBalances([url: balance])

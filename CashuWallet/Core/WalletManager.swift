@@ -324,7 +324,8 @@ class WalletManager: ObservableObject {
         try initializeWalletRepository(mnemonic: mnemonic)
 
         mintService.loadCachedMints()
-        balance = mints.reduce(UInt64(0)) { $0 + $1.balance }
+        await performBestEffortWalletStartupMaintenance()
+        await refreshBalance()
         transactionService.loadCachedState()
 
         initializeNostrKeypairLocally(mnemonic: mnemonic)
@@ -629,6 +630,55 @@ class WalletManager: ObservableObject {
         
         return Array(Set(urls))
     }
+
+    private func performBestEffortWalletStartupMaintenance() async {
+        guard let walletRepository else { return }
+        let mintUrls = trackedMintUrlsForWalletAccess()
+        guard !mintUrls.isEmpty else { return }
+
+        for mintUrlString in mintUrls {
+            do {
+                let wallet = try await walletRepository.getWallet(
+                    mintUrl: MintUrl(url: mintUrlString),
+                    unit: .sat
+                )
+                await recoverIncompleteSagasIfNeeded(wallet: wallet, mintUrl: mintUrlString)
+                await refreshKeysetsIfNeeded(wallet: wallet, mintUrl: mintUrlString)
+            } catch {
+                AppLogger.wallet.error(
+                    "Wallet startup maintenance failed for mint \(mintUrlString, privacy: .public): \(String(describing: error), privacy: .public)"
+                )
+            }
+        }
+    }
+
+    private func recoverIncompleteSagasIfNeeded(wallet: Wallet, mintUrl: String) async {
+        do {
+            let report = try await wallet.recoverIncompleteSagas()
+            if report.recovered > 0 || report.compensated > 0 || report.skipped > 0 || report.failed > 0 {
+                AppLogger.wallet.info(
+                    "Recovered wallet sagas for mint \(mintUrl, privacy: .public): recovered=\(report.recovered, privacy: .public) compensated=\(report.compensated, privacy: .public) skipped=\(report.skipped, privacy: .public) failed=\(report.failed, privacy: .public)"
+                )
+            }
+        } catch {
+            AppLogger.wallet.error(
+                "Failed to recover wallet sagas for mint \(mintUrl, privacy: .public): \(String(describing: error), privacy: .public)"
+            )
+        }
+    }
+
+    private func refreshKeysetsIfNeeded(wallet: Wallet, mintUrl: String) async {
+        do {
+            let keysets = try await wallet.refreshKeysets()
+            AppLogger.wallet.info(
+                "Refreshed \(keysets.count, privacy: .public) keysets for mint \(mintUrl, privacy: .public)"
+            )
+        } catch {
+            AppLogger.wallet.error(
+                "Failed to refresh keysets for mint \(mintUrl, privacy: .public): \(String(describing: error), privacy: .public)"
+            )
+        }
+    }
     
     private func ensureMintTrackedForToken(_ tokenString: String) async throws {
         let token = try tokenService.decodeToken(tokenString: tokenString)
@@ -760,8 +810,9 @@ class WalletManager: ObservableObject {
         mintService.isMintTracked(url: url)
     }
 
-    func refreshMintInfoIfNeeded(maxAge: TimeInterval = 6 * 60 * 60) async {
-        await mintService.refreshMintInfoIfNeeded(maxAge: maxAge)
+
+    func refreshMintInfo() async {
+        await mintService.refreshMintInfo()
     }
 
     /// Fetch full mint info from the mint's API via CashuDevKit
