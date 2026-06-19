@@ -81,7 +81,7 @@ struct MintsListView: View {
                     .environmentObject(walletManager)
             }
             .task {
-                await walletManager.refreshMintInfoIfNeeded()
+                await walletManager.refreshMintInfo()
             }
             .alert("Remove Mint", isPresented: $showRemoveConfirmation) {
                 Button("Remove", role: .destructive) {

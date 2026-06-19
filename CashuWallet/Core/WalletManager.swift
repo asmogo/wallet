@@ -805,8 +805,8 @@ class WalletManager: ObservableObject {
         await refreshBalance()
     }
 
-    func refreshMintInfoIfNeeded(maxAge: TimeInterval = 6 * 60 * 60) async {
-        await mintService.refreshMintInfoIfNeeded(maxAge: maxAge)
+    func refreshMintInfo() async {
+        await mintService.refreshMintInfo()
     }
 
     /// Fetch full mint info from the mint's API via CashuDevKit
