@@ -18,6 +18,7 @@ struct SendView: View {
     // Token claim detection
     @State private var isCheckingClaim = false
     @State private var tokenClaimed = false
+    @State private var claimPollingExpired = false
     @State private var checkingTask: Task<Void, Never>?
 
     // Copy button feedback
@@ -389,6 +390,15 @@ struct SendView: View {
                             .font(.subheadline)
                             .foregroundStyle(.secondary)
                             .transition(.opacity)
+                        } else if claimPollingExpired {
+                            HStack(spacing: 6) {
+                                Image(systemName: "clock.badge.exclamationmark")
+                                Text("Not claimed yet — share or copy to resend")
+                            }
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                            .multilineTextAlignment(.center)
+                            .transition(.opacity)
                         } else {
                             HStack(spacing: 6) {
                                 Image(systemName: "clock")
@@ -402,6 +412,7 @@ struct SendView: View {
                     }
                     .animation(.spring(response: 0.5, dampingFraction: 0.7), value: tokenClaimed)
                     .animation(.easeInOut(duration: 0.2), value: isCheckingClaim)
+                    .animation(.easeInOut(duration: 0.2), value: claimPollingExpired)
 
                     // Detail rows on canvas with hairline dividers — same
                     // pattern as the Lightning Invoice screen.
@@ -433,6 +444,7 @@ struct SendView: View {
             .padding(.bottom, 16)
         }
         .onAppear {
+            claimPollingExpired = false
             guard settings.checkSentTokens else { return }
             startClaimPolling(token: token)
         }
@@ -589,6 +601,12 @@ struct SendView: View {
 
             await MainActor.run {
                 isCheckingClaim = false
+                // If the loop ran out of checks without the token being claimed,
+                // surface an actionable message instead of silently reverting to
+                // "Pending" — which left users with no indication that polling stopped.
+                if !tokenClaimed && !Task.isCancelled {
+                    claimPollingExpired = true
+                }
             }
         }
     }
