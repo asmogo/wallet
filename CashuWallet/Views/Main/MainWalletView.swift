@@ -323,7 +323,8 @@ struct MainWalletView: View {
 
                     actionButton(
                         "Send",
-                        hint: "Opens options to send ecash or pay lightning invoices"
+                        hint: "Opens options to send ecash or pay lightning invoices",
+                        isEnabled: walletManager.balance > 0
                     ) { activeSheet = .chooser(.send) }
                 }
             }
@@ -339,6 +340,7 @@ struct MainWalletView: View {
                     Text("Send")
                 }
                 .glassButton()
+                .disabled(walletManager.balance == 0)
                 .accessibilityHint("Opens options to send ecash or pay lightning invoices")
             }
         }
@@ -350,6 +352,7 @@ struct MainWalletView: View {
     private func actionButton(
         _ title: String,
         hint: String,
+        isEnabled: Bool = true,
         action: @escaping () -> Void
     ) -> some View {
         Button(action: action) {
@@ -361,6 +364,7 @@ struct MainWalletView: View {
         .buttonStyle(.glass)
         .controlSize(.large)
         .buttonBorderShape(.capsule)
+        .disabled(!isEnabled)
         .accessibilityHint(hint)
     }
 
