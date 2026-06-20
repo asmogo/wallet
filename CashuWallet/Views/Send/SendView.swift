@@ -650,6 +650,7 @@ struct MeltView: View {
     @State private var isGettingQuote = false
     @State private var isPaying = false
     @State private var isPaid = false
+    @State private var meltPaymentResult: MeltPaymentResult?
     @State private var errorMessage: String?
 
     // Authorizing overlay state
@@ -1270,19 +1271,54 @@ struct MeltView: View {
 
     private var paymentSuccessView: some View {
         VStack(spacing: 0) {
-            Spacer()
+            ScrollView {
+                VStack(spacing: 24) {
+                    VStack(spacing: 16) {
+                        Image(systemName: "checkmark.circle.fill")
+                            .font(.system(size: 64))
+                            .foregroundStyle(.green)
+                            .symbolEffect(.bounce, value: isPaid)
+                            .padding(.top, 32)
 
-            VStack(spacing: 16) {
-                Image(systemName: "checkmark.circle.fill")
-                    .font(.system(size: 64))
-                    .foregroundStyle(.green)
-                    .symbolEffect(.bounce, value: isPaid)
+                        Text("Payment Sent")
+                            .font(.title2.weight(.semibold))
+                    }
 
-                Text("Payment Sent!")
-                    .font(.title2.weight(.semibold))
+                    if let result = meltPaymentResult {
+                        VStack(spacing: 0) {
+                            successDetailRow(
+                                icon: meltMode == .onchain ? "bitcoinsign.circle" : "bolt",
+                                label: "Amount",
+                                value: AmountFormatter.sats(result.amount, useBitcoinSymbol: settings.useBitcoinSymbol)
+                            )
+                            Rectangle()
+                                .fill(Color(.separator))
+                                .frame(height: 0.5)
+                                .padding(.leading, 28)
+                            successDetailRow(
+                                icon: "arrow.left.arrow.right",
+                                label: "Fee paid",
+                                value: result.feePaid == 0
+                                    ? "Free"
+                                    : AmountFormatter.sats(result.feePaid, useBitcoinSymbol: settings.useBitcoinSymbol)
+                            )
+                            if let preimage = result.preimage, !preimage.isEmpty {
+                                Rectangle()
+                                    .fill(Color(.separator))
+                                    .frame(height: 0.5)
+                                    .padding(.leading, 28)
+                                successDetailRow(
+                                    icon: "key",
+                                    label: "Preimage",
+                                    value: preimage
+                                )
+                            }
+                        }
+                        .padding(.horizontal, 4)
+                    }
+                }
+                .padding(.horizontal)
             }
-
-            Spacer()
 
             Button(action: close) {
                 Text("Done")
@@ -1291,6 +1327,21 @@ struct MeltView: View {
             .padding(.horizontal)
             .padding(.bottom, 16)
         }
+    }
+
+    private func successDetailRow(icon: String, label: String, value: String) -> some View {
+        HStack {
+            Label(label, systemImage: icon)
+                .foregroundStyle(.secondary)
+            Spacer()
+            Text(value)
+                .fontWeight(.medium)
+                .lineLimit(1)
+                .truncationMode(.middle)
+        }
+        .font(.subheadline)
+        .padding(.horizontal, 4)
+        .padding(.vertical, 14)
     }
 
     private func syncMeltModeWithAvailableMints() {
@@ -1519,7 +1570,8 @@ struct MeltView: View {
 
         Task { @MainActor in
             do {
-                let _ = try await walletManager.meltTokens(quoteId: quote.id, mintUrl: quote.mintUrl)
+                let result = try await walletManager.meltTokens(quoteId: quote.id, mintUrl: quote.mintUrl)
+                meltPaymentResult = result
                 authorizingState = .sent
                 // Overlay calls onDismiss after 1.2s; flip isPaid then so the
                 // underlying view transitions to success while the sheet dismisses.
