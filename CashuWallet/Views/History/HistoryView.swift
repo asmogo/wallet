@@ -101,12 +101,14 @@ struct HistoryView: View {
             .sheet(item: $selectedTransaction) { transaction in
                 TransactionDetailView(transaction: transaction)
                     .environmentObject(walletManager)
+                    .presentationDetents([.medium, .large])
             }
             .sheet(item: $selectedRequest) { request in
                 NavigationStack {
                     CashuRequestDetailView(request: request)
                         .environmentObject(walletManager)
                 }
+                .presentationDetents([.medium, .large])
             }
             .confirmationDialog(
                 "Remove this Cashu Request from history?",

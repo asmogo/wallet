@@ -114,11 +114,11 @@ struct ReceiveTokenDetailView: View {
     }
 
     private var newMintBadge: some View {
-        HStack(alignment: .top, spacing: 8) {
+        HStack(alignment: .top, spacing: 10) {
             Image(systemName: "exclamationmark.shield.fill")
-                .font(.caption)
+                .font(.subheadline)
                 .foregroundStyle(.orange)
-            VStack(alignment: .leading, spacing: 1) {
+            VStack(alignment: .leading, spacing: 3) {
                 Text("New mint")
                     .font(.caption.weight(.semibold))
                 Text("You haven't used \(shortMintUrl(mintUrl)) before. Receiving adds it to your wallet — only continue if you trust it.")
@@ -128,8 +128,9 @@ struct ReceiveTokenDetailView: View {
             }
             Spacer(minLength: 0)
         }
-        .padding(10)
-        .background(.orange.opacity(0.12), in: RoundedRectangle(cornerRadius: 12))
+        .padding(.vertical, 12)
+        .padding(.horizontal, 14)
+        .background(.orange.opacity(0.12), in: RoundedRectangle(cornerRadius: 14))
         .padding(.horizontal)
     }
 

@@ -16,7 +16,7 @@ struct ContentView: View {
                 LoadingView()
             }
         }
-        .fullScreenCover(isPresented: $navigationManager.showReceiveTokenSheet) {
+        .sheet(isPresented: $navigationManager.showReceiveTokenSheet) {
             if let token = navigationManager.pendingDeepLinkToken {
                 ReceiveTokenDetailView(
                     tokenString: token,
@@ -26,6 +26,7 @@ struct ContentView: View {
                     }
                 )
                 .environmentObject(walletManager)
+                .presentationDetents([.medium, .large])
             }
         }
     }

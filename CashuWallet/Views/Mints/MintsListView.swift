@@ -10,6 +10,7 @@ struct MintsListView: View {
     @State private var mintToRemove: MintInfo?
     @State private var showRemoveConfirmation = false
     @State private var showDiscoverySheet = false
+    @State private var selectedMint: MintInfo?
 
     var body: some View {
         NavigationStack {
@@ -80,6 +81,13 @@ struct MintsListView: View {
                 MintDiscoverySheet { url in addMint(url: url) }
                     .environmentObject(walletManager)
             }
+            .sheet(item: $selectedMint) { mint in
+                NavigationStack {
+                    MintDetailView(mint: mint)
+                        .environmentObject(walletManager)
+                }
+                .presentationDetents([.medium, .large])
+            }
             .task {
                 await walletManager.refreshMintInfo()
             }
@@ -106,7 +114,7 @@ struct MintsListView: View {
     }
 
     private func mintRow(mint: MintInfo) -> some View {
-        NavigationLink(destination: MintDetailView(mint: mint)) {
+        Button { selectedMint = mint } label: {
             HStack(spacing: 12) {
                 mintIcon(for: mint)
                     .overlay(alignment: .bottomTrailing) {
@@ -135,6 +143,7 @@ struct MintsListView: View {
                     .foregroundStyle(.secondary)
             }
         }
+        .buttonStyle(.plain)
         .contextMenu {
             Button { setActive(mint) } label: {
                 Label("Set as Default", systemImage: "checkmark.circle")

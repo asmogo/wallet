@@ -243,13 +243,13 @@ struct ReceiveEcashView: View {
                 ScannerWrapperView(onScanned: handleScannedToken)
                     .environmentObject(walletManager)
             }
-            .navigationDestination(isPresented: $navigateToDetail) {
+            .sheet(isPresented: $navigateToDetail) {
                 if let token = validatedToken {
                     ReceiveTokenDetailView(tokenString: token, onComplete: {
                         dismiss()
                     })
                     .environmentObject(walletManager)
-                    .navigationBarBackButtonHidden(true)
+                    .presentationDetents([.medium, .large])
                 }
             }
             .onAppear {

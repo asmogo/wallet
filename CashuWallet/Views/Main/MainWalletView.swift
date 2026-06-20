@@ -75,12 +75,14 @@ struct MainWalletView: View {
             .sheet(item: $selectedTransaction) { transaction in
                 TransactionDetailView(transaction: transaction)
                     .environmentObject(walletManager)
+                    .presentationDetents([.medium, .large])
             }
             .sheet(item: $selectedRequest) { request in
                 NavigationStack {
                     CashuRequestDetailView(request: request)
                         .environmentObject(walletManager)
                 }
+                .presentationDetents([.medium, .large])
             }
             .task { await walletManager.loadTransactions() }
         }
