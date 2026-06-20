@@ -136,6 +136,19 @@ struct SendView: View {
 
             Spacer()
 
+            // Memo field
+            TextField("Add a note (optional)", text: $memo)
+                .font(.subheadline)
+                .textInputAutocapitalization(.sentences)
+                .submitLabel(.done)
+                .padding(.horizontal, 14)
+                .padding(.vertical, 10)
+                .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 10))
+                .padding(.horizontal)
+                .padding(.bottom, 8)
+                .accessibilityLabel("Memo")
+                .accessibilityHint("Optional note attached to this token")
+
             // P2PK section (only when enabled)
             if lockWithP2PK {
                 p2pkInputSection
