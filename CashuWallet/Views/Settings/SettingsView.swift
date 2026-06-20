@@ -523,14 +523,13 @@ struct RestoreWalletView: View {
             }
             .padding(.horizontal)
 
-            if isEmpty {
-                SuggestedMintsSection(
-                    existingURLs: Set(mintsToRestore).union(restoreResults.map(\.mintUrl)),
-                    onAdd: { addMintUrlToRestoreList($0, showDuplicateError: false, showValidationError: false) }
-                )
-            } else {
-                restoreMintList
-            }
+            restoreMintList
+
+            SuggestedMintsSection(
+                existingURLs: Set(mintsToRestore).union(restoreResults.map(\.mintUrl)),
+                onAdd: { addMintUrlToRestoreList($0, showDuplicateError: false, showValidationError: false) },
+                walletMints: walletManager.mints.map { RecommendedMint(name: $0.name, url: $0.url) }
+            )
 
             if let mintError {
                 Text(mintError)

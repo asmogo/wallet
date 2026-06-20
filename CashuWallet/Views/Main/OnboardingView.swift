@@ -730,12 +730,13 @@ struct OnboardingView: View {
                     .padding(.horizontal)
                 }
                 .frame(maxHeight: 280)
-            } else {
-                SuggestedMintsSection(
-                    existingURLs: Set(mintsToRestore).union(restoreResults.map(\.mintUrl)),
-                    onAdd: { addMintUrlToRestoreList($0, showDuplicateError: false, showValidationError: false) }
-                )
             }
+
+            SuggestedMintsSection(
+                existingURLs: Set(mintsToRestore).union(restoreResults.map(\.mintUrl)),
+                onAdd: { addMintUrlToRestoreList($0, showDuplicateError: false, showValidationError: false) },
+                walletMints: walletManager.mints.map { RecommendedMint(name: $0.name, url: $0.url) }
+            )
 
             // Error display
             if let error = restoreMintError {
