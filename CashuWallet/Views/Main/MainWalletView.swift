@@ -22,6 +22,7 @@ struct MainWalletView: View {
     @State private var selectedTransaction: WalletTransaction?
     @State private var selectedRequest: CashuRequest?
     @State private var topInsetHeight: CGFloat = 0
+    @State private var checkingTxId: String?
 
     private let recentRowCap = 5
     private let scrollFadeBand: CGFloat = 24
@@ -493,6 +494,26 @@ struct MainWalletView: View {
 
                 Spacer(minLength: 8)
 
+                if transaction.status == .pending {
+                    Button {
+                        refreshHomeTransaction(transaction)
+                    } label: {
+                        Group {
+                            if checkingTxId == transaction.id {
+                                ProgressView()
+                                    .scaleEffect(0.65)
+                            } else {
+                                Image(systemName: "arrow.clockwise")
+                                    .font(.caption.weight(.semibold))
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                        .frame(width: 24, height: 44)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Refresh transaction status")
+                }
+
                 TransactionAmountColumn(transaction: transaction)
             }
             .padding(.horizontal, 4)
@@ -503,6 +524,18 @@ struct MainWalletView: View {
         .accessibilityElement(children: .combine)
         .accessibilityLabel("\(rowTitle(for: transaction)), \(formatAmount(transaction)) sats, \(transaction.status == .pending ? "pending" : "completed"), \(formatRelativeDate(transaction.date))")
         .accessibilityHint("Opens transaction details")
+    }
+
+    private func refreshHomeTransaction(_ transaction: WalletTransaction) {
+        guard checkingTxId == nil else { return }
+        checkingTxId = transaction.id
+        Task { @MainActor in
+            defer { checkingTxId = nil }
+            await walletManager.loadTransactions()
+            if transaction.isPendingToken {
+                await walletManager.checkAllPendingTokens()
+            }
+        }
     }
 
     @ViewBuilder

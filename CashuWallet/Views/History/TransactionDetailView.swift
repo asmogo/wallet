@@ -95,6 +95,10 @@ struct TransactionDetailView: View {
                             }
                             detailRow(icon: "banknote", label: "Unit",
                                       value: settings.unitLabel.uppercased())
+                            if let memo = transaction.memo, !memo.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                                canvasDivider
+                                detailRow(icon: "text.bubble", label: "Memo", value: memo)
+                            }
                             if let mintUrl = transaction.mintUrl {
                                 canvasDivider
                                 detailRow(icon: "bitcoinsign.bank.building", label: "Mint",
