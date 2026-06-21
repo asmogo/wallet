@@ -682,10 +682,12 @@ struct MeltView: View {
     @State private var clipboardSuggestion: PaymentRequestDecodeResult?
     @State private var clipboardSuggestionRaw: String?
     @State private var dismissedClipboardSuggestion = false
+    @State private var pendingCashuPaymentSummary: CashuPaymentRequestSummary?
 
     private var meltViewStateKey: String {
         if isPaid { return "paid" }
         if meltQuote != nil { return "quote" }
+        if pendingCashuPaymentSummary != nil { return "cashu-confirm" }
         return "input"
     }
 
@@ -728,6 +730,12 @@ struct MeltView: View {
                             insertion: .move(edge: .trailing).combined(with: .opacity),
                             removal: .move(edge: .leading).combined(with: .opacity)
                         ))
+                } else if let summary = pendingCashuPaymentSummary {
+                    cashuPaymentConfirmView(summary: summary)
+                        .transition(.asymmetric(
+                            insertion: .move(edge: .trailing).combined(with: .opacity),
+                            removal: .move(edge: .leading).combined(with: .opacity)
+                        ))
                 } else {
                     requestInputView
                         .transition(.asymmetric(
@@ -740,10 +748,16 @@ struct MeltView: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button(action: close) {
-                        Image(systemName: "xmark")
+                    Button(action: {
+                        if pendingCashuPaymentSummary != nil {
+                            withAnimation(.snappy) { pendingCashuPaymentSummary = nil }
+                        } else {
+                            close()
+                        }
+                    }) {
+                        Image(systemName: pendingCashuPaymentSummary != nil ? "chevron.left" : "xmark")
                     }
-                    .accessibilityLabel("Close")
+                    .accessibilityLabel(pendingCashuPaymentSummary != nil ? "Back" : "Close")
                 }
 
                 ToolbarItem(placement: .principal) {
@@ -874,7 +888,17 @@ struct MeltView: View {
     }
 
     private var screenTitle: String {
-        meltMode == .onchain ? "Pay On-chain" : "Pay Lightning"
+        if pendingCashuPaymentSummary != nil { return "Confirm Payment" }
+        return meltMode == .onchain ? "Pay On-chain" : "Pay Lightning"
+    }
+
+    private var isActiveCashuPaymentRequest: Bool {
+        let trimmed = requestInput.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return false }
+        if case .cashuPaymentRequest = PaymentRequestDecoder.decode(
+            trimmed, includeCashuPaymentRequests: true, preferCashuPaymentRequests: true
+        ) { return true }
+        return false
     }
 
     private var isHumanReadableAddress: Bool {
@@ -1012,7 +1036,7 @@ struct MeltView: View {
                 if isGettingQuote {
                     ProgressView()
                 } else {
-                    Text("Get Quote")
+                    Text(isActiveCashuPaymentRequest ? "Continue" : "Get Quote")
                 }
             }
             .glassButton()
@@ -1060,7 +1084,7 @@ struct MeltView: View {
     private var liveDecodeFeedback: some View {
         let trimmed = requestInput.trimmingCharacters(in: .whitespacesAndNewlines)
         if !trimmed.isEmpty {
-            let result = PaymentRequestDecoder.decode(trimmed)
+            let result = PaymentRequestDecoder.decode(trimmed, includeCashuPaymentRequests: true, preferCashuPaymentRequests: true)
             HStack(spacing: 6) {
                 Image(systemName: result == .unrecognized ? "exclamationmark.circle" : "checkmark.circle.fill")
                     .font(.caption.weight(.semibold))
@@ -1083,7 +1107,10 @@ struct MeltView: View {
             return amount.map { "BOLT12 offer — \($0) sat" } ?? "BOLT12 offer — set amount"
         case .onchain:
             return "Bitcoin address"
-        case .cashuPaymentRequest:
+        case .cashuPaymentRequest(let summary):
+            if let amount = summary.amount, summary.isSatUnit {
+                return "Cashu payment request — \(amount) sat"
+            }
             return "Cashu payment request"
         case .unrecognized:
             return "Unrecognized — try a Lightning address, invoice, or Bitcoin address"
@@ -1427,7 +1454,7 @@ struct MeltView: View {
         let trimmed = content.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
         HapticFeedback.selection()
-        let result = PaymentRequestDecoder.decode(trimmed)
+        let result = PaymentRequestDecoder.decode(trimmed, includeCashuPaymentRequests: true, preferCashuPaymentRequests: true)
         applyDecodedSuggestion(result, raw: trimmed)
     }
 
@@ -1439,7 +1466,7 @@ struct MeltView: View {
     private func handleScannedRequest(_ scanned: String) {
         let trimmed = scanned.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
-        let result = PaymentRequestDecoder.decode(trimmed)
+        let result = PaymentRequestDecoder.decode(trimmed, includeCashuPaymentRequests: true, preferCashuPaymentRequests: true)
         applyDecodedSuggestion(result, raw: trimmed)
     }
 
@@ -1450,7 +1477,7 @@ struct MeltView: View {
               let content = UIPasteboard.general.string else { return }
         let trimmed = content.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
-        let result = PaymentRequestDecoder.decode(trimmed)
+        let result = PaymentRequestDecoder.decode(trimmed, includeCashuPaymentRequests: true, preferCashuPaymentRequests: true)
         guard result != .unrecognized else { return }
         clipboardSuggestion = result
         clipboardSuggestionRaw = trimmed
@@ -1510,6 +1537,15 @@ struct MeltView: View {
     private func getQuote() {
         let trimmedInput = requestInput.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedInput.isEmpty else { return }
+
+        let decodedForCashu = PaymentRequestDecoder.decode(
+            trimmedInput, includeCashuPaymentRequests: true, preferCashuPaymentRequests: true
+        )
+        if case .cashuPaymentRequest(let summary) = decodedForCashu {
+            withAnimation(.snappy) { pendingCashuPaymentSummary = summary }
+            errorMessage = nil
+            return
+        }
 
         if meltMode == .lightning,
            PaymentRequestParser.paymentMethod(for: trimmedInput) == .onchain {
@@ -1603,6 +1639,113 @@ struct MeltView: View {
                 // Let the user read the error in the sheet, then dismiss after 2s.
                 try? await Task.sleep(nanoseconds: 2_000_000_000)
                 showAuthorizingOverlay = false
+            }
+            isPaying = false
+        }
+    }
+
+    // MARK: - Cashu Payment Request Confirm
+
+    private func cashuPaymentConfirmView(summary: CashuPaymentRequestSummary) -> some View {
+        let fixedAmount = summary.amount.flatMap { summary.isSatUnit ? $0 : nil }
+        return VStack(spacing: 0) {
+            ScrollView {
+                VStack(spacing: 24) {
+                    if fixedAmount != nil {
+                        CurrencyAmountDisplay(
+                            sats: fixedAmount!,
+                            primary: $settings.amountDisplayPrimary
+                        )
+                        .padding(.top, 24)
+                    } else {
+                        CurrencyAmountDisplay(
+                            sats: UInt64(amountString) ?? 0,
+                            primary: $settings.amountDisplayPrimary
+                        )
+                        .padding(.top, 24)
+                    }
+
+                    VStack(spacing: 0) {
+                        meltDetailRow(label: "Type", value: "Cashu transfer")
+                        if let desc = summary.description {
+                            Divider().padding(.leading)
+                            meltDetailRow(label: "Description", value: desc)
+                        }
+                        if !summary.mints.isEmpty {
+                            Divider().padding(.leading)
+                            let mintHosts = summary.mints
+                                .compactMap { URL(string: $0)?.host }
+                                .joined(separator: ", ")
+                            meltDetailRow(label: "Accepted mints", value: mintHosts.isEmpty ? summary.mints.joined(separator: ", ") : mintHosts)
+                        }
+                        if let mint = displayMeltMint {
+                            Divider().padding(.leading)
+                            meltDetailRow(label: "Paying with", value: mint.name)
+                        }
+                    }
+                    .padding(.vertical, 4)
+                    .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 14))
+                    .padding(.horizontal)
+
+                    if fixedAmount == nil {
+                        NumberPadAmountInput(amountString: $amountString)
+                            .padding(.horizontal, 24)
+                            .padding(.top, 4)
+                    }
+
+                    if let error = errorMessage {
+                        Text(error)
+                            .font(.caption)
+                            .foregroundStyle(.red)
+                            .padding(.horizontal)
+                    }
+                }
+            }
+
+            Button(action: { payCashuRequest(summary: summary) }) {
+                if isPaying {
+                    ProgressView()
+                } else {
+                    let amount = fixedAmount ?? UInt64(amountString) ?? 0
+                    Text(amount > 0 ? "Send \(amount) sat" : "Send")
+                }
+            }
+            .glassButton()
+            .disabled(isPaying || (fixedAmount == nil && (UInt64(amountString) ?? 0) == 0))
+            .padding(.horizontal)
+            .padding(.bottom, 16)
+        }
+    }
+
+    private func payCashuRequest(summary: CashuPaymentRequestSummary) {
+        let trimmedInput = requestInput.trimmingCharacters(in: .whitespacesAndNewlines)
+        let customAmount: UInt64? = (summary.amount == nil || !summary.isSatUnit)
+            ? UInt64(amountString)
+            : nil
+
+        if summary.amount == nil {
+            guard let amount = customAmount, amount > 0 else {
+                errorMessage = "Enter an amount."
+                return
+            }
+        }
+
+        isPaying = true
+        errorMessage = nil
+        HapticFeedback.impact(.medium)
+
+        Task { @MainActor in
+            do {
+                try await walletManager.payCashuPaymentRequest(
+                    encoded: trimmedInput,
+                    customAmountSats: customAmount,
+                    preferredMintURL: displayMeltMint?.url
+                )
+                isPaid = true
+            } catch {
+                let message = error.userFacingWalletMessage
+                errorMessage = message
+                HapticFeedback.notification(.error)
             }
             isPaying = false
         }
