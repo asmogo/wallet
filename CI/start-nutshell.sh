@@ -26,14 +26,17 @@ fi
 
 echo "🚀 Starting Nutshell mint on port ${PORT}..."
 
-# Nutshell uses environment variables for configuration
-export MINT_LISTEN_PORT="$PORT"
-export MINT_HOST=0.0.0.0
-export MINT_DATABASE=memory
-export MINT_LIGHTNING_BACKEND=FakeWallet
-export FAKE_WALLET_SECRET="ToTheMoon"
+WORKDIR="${SCRIPT_DIR}/.nutshell-workdir"
+mkdir -p "$WORKDIR"
 
-nohup "$VENV_DIR/bin/nutshell" > "$LOG_FILE" 2>&1 &
+# Nutshell (cashu) reads configuration from environment variables.
+export MINT_LISTEN_HOST=0.0.0.0
+export MINT_LISTEN_PORT="$PORT"
+export MINT_DATABASE="$WORKDIR"
+export MINT_BACKEND_BOLT11_SAT=FakeWallet
+export MINT_PRIVATE_KEY="TEST_PRIVATE_KEY_DO_NOT_USE_IN_PRODUCTION"
+
+nohup "$VENV_DIR/bin/mint" > "$LOG_FILE" 2>&1 &
 MINT_PID=$!
 echo "$MINT_PID" > "$PID_FILE"
 
