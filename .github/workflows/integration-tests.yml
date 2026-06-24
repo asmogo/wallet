@@ -1,0 +1,199 @@
+name: Integration Tests
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+  workflow_dispatch:
+
+concurrency:
+  group: integration-tests-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  integration-tests:
+    name: Integration Tests with Live Mints
+    runs-on: macos-14
+    timeout-minutes: 45
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Select Xcode version
+      uses: maxim-lobanov/setup-xcode@v1
+      with:
+        xcode-version: '16.0'
+        
+    - name: Install Python for Nutshell
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+        
+    - name: Install Rust for CDK
+      uses: dtolnay/rust-toolchain@stable
+      with:
+        toolchain: stable
+        
+    - name: Cache Rust dependencies
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/.cargo/bin/
+          ~/.cargo/registry/index/
+          ~/.cargo/registry/cache/
+          ~/.cargo/git/db/
+          CI/.cdk/target/
+        key: ${{ runner.os }}-cargo-${{ hashFiles('CI/.cdk/**/Cargo.lock') }}
+        
+    - name: Cache Python dependencies
+      uses: actions/cache@v4
+      with:
+        path: |
+          CI/.nutshell/.venv
+        key: ${{ runner.os }}-python-${{ hashFiles('CI/.nutshell/requirements.txt') }}
+        
+    - name: Setup Nutshell mint
+      run: |
+        cd CI
+        chmod +x setup-nutshell.sh
+        ./setup-nutshell.sh
+        
+    - name: Setup CDK mint
+      run: |
+        cd CI
+        chmod +x setup-cdk.sh
+        ./setup-cdk.sh
+        
+    - name: Start mints
+      run: |
+        cd CI
+        chmod +x start-nutshell.sh start-cdk.sh
+        ./start-nutshell.sh
+        ./start-cdk.sh
+        
+    - name: Wait for mints to be ready
+      run: |
+        echo "Waiting for mints to initialize..."
+        sleep 10
+        
+        # Check Nutshell
+        for i in {1..30}; do
+          if curl -f http://localhost:3338/v1/info > /dev/null 2>&1; then
+            echo "✓ Nutshell mint is ready"
+            break
+          fi
+          if [ $i -eq 30 ]; then
+            echo "✗ Nutshell mint failed to start"
+            cat CI/.nutshell/nutshell.log 2>/dev/null || true
+            exit 1
+          fi
+          echo "Waiting for Nutshell... ($i/30)"
+          sleep 1
+        done
+        
+        # Check CDK
+        for i in {1..30}; do
+          if curl -f http://localhost:3339/v1/info > /dev/null 2>&1; then
+            echo "✓ CDK mint is ready"
+            break
+          fi
+          if [ $i -eq 30 ]; then
+            echo "✗ CDK mint failed to start"
+            cat CI/.cdk/mint.log 2>/dev/null || true
+            exit 1
+          fi
+          echo "Waiting for CDK... ($i/30)"
+          sleep 1
+        done
+        
+    - name: Build iOS app
+      run: |
+        xcodebuild clean build \
+          -project CashuWallet.xcodeproj \
+          -scheme CashuWallet \
+          -destination 'platform=iOS Simulator,name=iPhone 15,OS=17.0' \
+          CODE_SIGNING_ALLOWED=NO
+        
+    - name: Run Unit Tests
+      run: |
+        xcodebuild test \
+          -project CashuWallet.xcodeproj \
+          -scheme CashuWallet \
+          -destination 'platform=iOS Simulator,name=iPhone 15,OS=17.0' \
+          -only-testing:CashuWalletTests \
+          CODE_SIGNING_ALLOWED=NO | tee unit-test-output.log | xcpretty || true
+        
+    - name: Run Integration Tests
+      env:
+        NUTSHELL_MINT_URL: http://localhost:3338
+        CDK_MINT_URL: http://localhost:3339
+      run: |
+        xcodebuild test \
+          -project CashuWallet.xcodeproj \
+          -scheme CashuWalletIntegration \
+          -destination 'platform=iOS Simulator,name=iPhone 15,OS=17.0' \
+          CODE_SIGNING_ALLOWED=NO | tee integration-test-output.log | xcpretty || true
+        
+    - name: Run UI Integration Tests
+      env:
+        NUTSHELL_MINT_URL: http://localhost:3338
+        CDK_MINT_URL: http://localhost:3339
+      run: |
+        xcodebuild test \
+          -project CashuWallet.xcodeproj \
+          -scheme CashuWalletIntegration \
+          -destination 'platform=iOS Simulator,name=iPhone 15,OS=17.0' \
+          -only-testing:CashuWalletUITests/WalletIntegrationTests \
+          CODE_SIGNING_ALLOWED=NO | tee ui-test-output.log | xcpretty || true
+        
+    - name: Stop mints
+      if: always()
+      run: |
+        cd CI
+        chmod +x stop-nutshell.sh stop-cdk.sh
+        ./stop-nutshell.sh
+        ./stop-cdk.sh
+        ./cleanup.sh
+        
+    - name: Upload test results
+      if: failure()
+      uses: actions/upload-artifact@v4
+      with:
+        name: test-results-${{ github.sha }}
+        path: |
+          *-test-output.log
+          /tmp/test_logs/
+          
+    - name: Upload mint logs
+      if: failure()
+      uses: actions/upload-artifact@v4
+      with:
+        name: mint-logs-${{ github.sha }}
+        path: |
+          CI/.nutshell/nutshell.log
+          CI/mint.log
+          CI/.cdk/target/release/build/*/output
+
+  build-only:
+    name: Build Only (no tests)
+    runs-on: macos-14
+    if: github.event_name == 'pull_request'
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Select Xcode version
+      uses: maxim-lobanov/setup-xcode@v1
+      with:
+        xcode-version: '16.0'
+        
+    - name: Build app
+      run: |
+        xcodebuild clean build \
+          -project CashuWallet.xcodeproj \
+          -scheme CashuWallet \
+          -destination 'platform=iOS Simulator,name=iPhone 15,OS=17.0' \
+          CODE_SIGNING_ALLOWED=NO
