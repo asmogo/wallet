@@ -950,4 +950,10 @@ extension Data {
         let hash = SHA256.hash(data: self)
         return Data(hash)
     }
+
+    /// SHA512 hash of the data
+    func sha512() -> Data {
+        let hash = SHA512.hash(data: self)
+        return Data(hash)
+    }
 }

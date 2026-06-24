@@ -121,6 +121,28 @@ final class SettingsStore {
         set { setOptional(newValue, forKey: StorageKeys.npcLastCheck) }
     }
 
+    // MARK: - NWC (Nostr Wallet Connect)
+
+    var nwcEnabled: Bool {
+        get { bool(StorageKeys.nwcEnabled, default: false) }
+        set { set(newValue, forKey: StorageKeys.nwcEnabled) }
+    }
+
+    var nwcConnectionUri: String? {
+        get { value(StorageKeys.nwcConnectionUri) }
+        set { setOptional(newValue, forKey: StorageKeys.nwcConnectionUri) }
+    }
+
+    var nwcSelectedMint: String? {
+        get { value(StorageKeys.nwcSelectedMint) }
+        set { setOptional(newValue, forKey: StorageKeys.nwcSelectedMint) }
+    }
+
+    var nwcBudgetSats: UInt64? {
+        get { value(StorageKeys.nwcBudgetSats) }
+        set { setOptional(newValue, forKey: StorageKeys.nwcBudgetSats) }
+    }
+
     func cachedPrice(currency: String) -> Double? {
         value(
             StorageKeys.cachedBTCPrice(currency: currency),
@@ -154,6 +176,7 @@ final class SettingsStore {
     func clearWalletScopedData() {
         remove(keys: StorageKeys.walletScopedSettingsKeys + StorageKeys.walletScopedSettingsLegacyKeys)
         remove(keys: storage.keys(withPrefix: StorageKeys.npcDataPrefix))
+        remove(keys: storage.keys(withPrefix: StorageKeys.nwcDataPrefix))
     }
 
     private func bool(_ key: String, legacy: String? = nil, default defaultValue: Bool) -> Bool {

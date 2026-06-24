@@ -127,6 +127,28 @@ class WalletManager: ObservableObject {
     init() {
         processedQuotes = Set(walletStore.loadProcessedNPCQuotes())
         bindServiceChanges()
+        configureNWCManager()
+    }
+
+    /// Wire the NWC manager to this wallet. Providers capture `self` weakly and
+    /// read the live wallet/seed at call time, so configuring once at init is safe.
+    private func configureNWCManager() {
+        NWCManager.shared.configure(
+            walletProvider: { [weak self] mintUrl in
+                guard let self, let walletRepository = self.walletRepository else {
+                    throw WalletError.notInitialized
+                }
+                let url = MintUrl(url: mintUrl)
+                // Idempotent: ensures a CDK wallet exists for this mint before use.
+                try? await walletRepository.createWallet(mintUrl: url, unit: .sat, targetProofCount: nil)
+                return try await walletRepository.getWallet(mintUrl: url, unit: .sat)
+            },
+            seedProvider: { [weak self] in
+                guard let mnemonic = self?.mnemonic else { return nil }
+                // 64-byte deterministic seed material for NIP-06 service-key derivation.
+                return Data(mnemonic.utf8).sha512()
+            }
+        )
     }
 
     private func bindServiceChanges() {
@@ -298,6 +320,7 @@ class WalletManager: ObservableObject {
             SettingsStore.shared.clearWalletScopedData()
             NostrService.shared.resetForWalletBoundary(deleteStoredKey: false)
             NPCService.shared.resetForWalletBoundary()
+            NWCManager.shared.resetForWalletBoundary()
             SettingsStore.shared.clearWalletScopedData()
 
             try initializeWalletForCreation(mnemonic: newMnemonic)
@@ -330,6 +353,7 @@ class WalletManager: ObservableObject {
 
         initializeNostrKeypairLocally(mnemonic: mnemonic)
         setupNPCQuoteListener()
+        await NWCManager.shared.startIfEnabled()
     }
 
     private func initializeWalletForCreation(mnemonic: String) throws {
@@ -461,7 +485,9 @@ class WalletManager: ObservableObject {
     private func walletBoundaryDefaultsSnapshot() -> UserDefaultsSnapshot {
         let defaults = UserDefaults.standard
         let prefixKeys = defaults.dictionaryRepresentation().keys.filter {
-            $0.hasPrefix(StorageKeys.walletDataPrefix) || $0.hasPrefix(StorageKeys.npcDataPrefix)
+            $0.hasPrefix(StorageKeys.walletDataPrefix)
+                || $0.hasPrefix(StorageKeys.npcDataPrefix)
+                || $0.hasPrefix(StorageKeys.nwcDataPrefix)
         }
         let keys = Set(StorageKeys.walletBoundaryKeys + prefixKeys)
         var values: [String: Any] = [:]
