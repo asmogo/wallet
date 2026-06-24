@@ -61,71 +61,28 @@ enum WalletErrorMessage {
     }
 
     private static func message(for ffiError: Cdk.FfiError) -> String {
+        // CDK's FfiError already carries a spec-accurate `error_message` for both
+        // `.Cdk` (Cashu protocol) and `.Internal` errors. We deliberately do NOT
+        // maintain our own numeric code -> message table: it drifts from the CDK /
+        // Cashu spec and produced wrong copy (see issue #40). Surface CDK's own
+        // message, lightly normalised for friendlier phrasing where we recognise it.
         switch ffiError {
-        case .Cdk(let code, let errorMessage):
-            return message(forCDKCode: code, rawMessage: errorMessage)
+        case .Cdk(_, let errorMessage):
+            return message(forRawMessage: errorMessage)
+                ?? cleanedCDKMessage(errorMessage)
         case .Internal(let errorMessage):
             return message(forRawMessage: errorMessage)
-                ?? "The wallet could not complete that request. Try again in a moment."
+                ?? cleanedCDKMessage(errorMessage)
         }
     }
 
-    private static func message(forCDKCode code: UInt32, rawMessage: String) -> String {
-        switch code {
-        case 10002:
-            return "This token has already been processed by the mint."
-        case 10003:
-            return "This token could not be verified. Ask the sender for a new token."
-        case 11001:
-            return "This token was already redeemed."
-        case 11002:
-            return "The mint rejected this transaction because the amounts did not balance. Try again."
-        case 11005:
-            return "This mint does not support that unit."
-        case 11006:
-            return "This amount is outside the mint's allowed limits."
-        case 11007:
-            return "This token contains duplicate proofs and cannot be redeemed."
-        case 11008:
-            return "The mint rejected duplicate outputs. Try again."
-        case 11009:
-            return "This token mixes multiple units and cannot be redeemed here."
-        case 11010:
-            return "The token unit does not match this wallet action."
-        case 11012:
-            return "This token is still pending. Try again shortly."
-        case 12001:
-            return "This token uses an unknown keyset for this mint."
-        case 12002:
-            return "This mint no longer accepts this token's keyset."
-        case 20000:
-            return "The mint could not complete the Lightning payment. Try again or use another mint."
-        case 20001:
-            return "The invoice has not been paid yet."
-        case 20002:
-            return "Ecash has already been issued for this quote."
-        case 20003:
-            return "This mint has disabled receiving new ecash."
-        case 20005:
-            return "The payment is still pending. Try again shortly."
-        case 20006:
-            return "This invoice has already been paid."
-        case 20007:
-            return "This quote has expired. Create a new request."
-        case 20008:
-            return "The token lock signature is missing or invalid."
-        case 30001:
-            return "This mint requires authentication before this action."
-        case 30002:
-            return "Mint authentication failed. Check your mint credentials."
-        case 31001:
-            return "This mint requires blind authentication before this action."
-        case 31002:
-            return "Blind authentication failed. Check the mint and try again."
-        default:
-            return message(forRawMessage: rawMessage)
-                ?? "The mint rejected the request. Try again or choose another mint."
+    private static func cleanedCDKMessage(_ rawMessage: String) -> String {
+        let message = extractedCDKMessage(from: rawMessage)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        if !message.isEmpty, !looksLikeRawCDKError(message) {
+            return message
         }
+        return "The mint rejected the request. Try again or choose another mint."
     }
 
     private static func message(forRawMessage rawMessage: String) -> String? {
