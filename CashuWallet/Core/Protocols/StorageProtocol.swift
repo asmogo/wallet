@@ -83,6 +83,7 @@ final class UserDefaultsStorage: StorageProtocol {
 enum StorageKeys {
     static let walletDataPrefix = "wallet."
     static let npcDataPrefix = "npc."
+    static let nwcDataPrefix = "nwc."
 
     // Wallet
     static let mints = "wallet.mints"
@@ -157,6 +158,12 @@ enum StorageKeys {
     static let npcAutomaticClaim = "npc.automaticClaim"
     static let npcSelectedMint = "npc.selectedMint"
     static let npcLastCheck = "npc.lastCheck"
+
+    // NWC (Nostr Wallet Connect)
+    static let nwcEnabled = "nwc.enabled"
+    static let nwcConnectionUri = "nwc.connectionUri"
+    static let nwcSelectedMint = "nwc.selectedMint"
+    static let nwcBudgetSats = "nwc.budgetSats"
     
     // Price
     static let priceEnabled = "price.enabled"
@@ -205,7 +212,11 @@ enum StorageKeys {
         npcEnabled,
         npcAutomaticClaim,
         npcSelectedMint,
-        npcLastCheck
+        npcLastCheck,
+        nwcEnabled,
+        nwcConnectionUri,
+        nwcSelectedMint,
+        nwcBudgetSats
     ]
 
     static let walletScopedSettingsLegacyKeys = [

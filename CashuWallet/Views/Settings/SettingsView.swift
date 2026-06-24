@@ -54,6 +54,10 @@ struct SettingsView: View {
                         navRow("Nostr", icon: "person.circle") {
                             nostrDetailView
                         }
+                        CanvasDivider()
+                        navRow("Nostr Wallet Connect", icon: "bolt.horizontal.circle") {
+                            nwcDetailView
+                        }
                     }
 
                     sectionGroup(title: "Privacy & Display") {
@@ -266,6 +270,19 @@ struct SettingsView: View {
         }
         .listStyle(.plain)
         .navigationTitle("Nostr")
+        .toolbarBackground(.hidden, for: .navigationBar)
+    }
+
+    private var nwcDetailView: some View {
+        List {
+            Section {
+                NWCSettingsSection()
+                    .environmentObject(walletManager)
+            }
+            .listRowSeparator(.hidden)
+        }
+        .listStyle(.plain)
+        .navigationTitle("Nostr Wallet Connect")
         .toolbarBackground(.hidden, for: .navigationBar)
     }
 
