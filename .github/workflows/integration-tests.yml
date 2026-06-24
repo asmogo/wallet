@@ -26,35 +26,15 @@ jobs:
       with:
         xcode-version: '16.2'
         
-    - name: Install Python for Nutshell
+    - name: Setup Python
       uses: actions/setup-python@v5
       with:
         python-version: '3.11'
         
-    - name: Install Rust for CDK
+    - name: Setup Rust
       uses: dtolnay/rust-toolchain@stable
-      with:
-        toolchain: stable
-        
-    - name: Cache Rust dependencies
-      uses: actions/cache@v4
-      with:
-        path: |
-          ~/.cargo/bin/
-          ~/.cargo/registry/index/
-          ~/.cargo/registry/cache/
-          ~/.cargo/git/db/
-          CI/.cdk/target/
-        key: ${{ runner.os }}-cargo-${{ hashFiles('CI/.cdk/**/Cargo.lock') }}
-        
-    - name: Cache Python dependencies
-      uses: actions/cache@v4
-      with:
-        path: |
-          CI/.nutshell/.venv
-        key: ${{ runner.os }}-python-${{ hashFiles('CI/.nutshell/requirements.txt') }}
-        
-    - name: Setup Nutshell mint
+      
+    - name: Setup Nutshell mint (pip install)
       run: |
         cd CI
         chmod +x setup-nutshell.sh
@@ -76,17 +56,16 @@ jobs:
     - name: Wait for mints to be ready
       run: |
         echo "Waiting for mints to initialize..."
-        sleep 10
         
         # Check Nutshell
         for i in {1..30}; do
-          if curl -f http://localhost:3338/v1/info > /dev/null 2>&1; then
+          if curl -sf http://localhost:3338/v1/info > /dev/null 2>&1; then
             echo "✓ Nutshell mint is ready"
             break
           fi
           if [ $i -eq 30 ]; then
             echo "✗ Nutshell mint failed to start"
-            cat CI/.nutshell/nutshell.log 2>/dev/null || true
+            cat CI/.nutshell.log 2>/dev/null || true
             exit 1
           fi
           echo "Waiting for Nutshell... ($i/30)"
@@ -95,13 +74,13 @@ jobs:
         
         # Check CDK
         for i in {1..30}; do
-          if curl -f http://localhost:3339/v1/info > /dev/null 2>&1; then
+          if curl -sf http://localhost:3339/v1/info > /dev/null 2>&1; then
             echo "✓ CDK mint is ready"
             break
           fi
           if [ $i -eq 30 ]; then
             echo "✗ CDK mint failed to start"
-            cat CI/.cdk/mint.log 2>/dev/null || true
+            cat CI/.cdk.log 2>/dev/null || true
             exit 1
           fi
           echo "Waiting for CDK... ($i/30)"
@@ -155,7 +134,6 @@ jobs:
         chmod +x stop-nutshell.sh stop-cdk.sh
         ./stop-nutshell.sh
         ./stop-cdk.sh
-        ./cleanup.sh
         
     - name: Upload test results
       if: failure()
@@ -164,7 +142,6 @@ jobs:
         name: test-results-${{ github.sha }}
         path: |
           *-test-output.log
-          /tmp/test_logs/
           
     - name: Upload mint logs
       if: failure()
@@ -172,28 +149,5 @@ jobs:
       with:
         name: mint-logs-${{ github.sha }}
         path: |
-          CI/.nutshell/nutshell.log
-          CI/mint.log
-          CI/.cdk/target/release/build/*/output
-
-  build-only:
-    name: Build Only (no tests)
-    runs-on: macos-14
-    if: github.event_name == 'pull_request'
-    
-    steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-      
-    - name: Select Xcode version
-      uses: maxim-lobanov/setup-xcode@v1
-      with:
-        xcode-version: '16.2'
-        
-    - name: Build app
-      run: |
-        xcodebuild clean build \
-          -project CashuWallet.xcodeproj \
-          -scheme CashuWallet \
-          -destination 'platform=iOS Simulator,name=iPhone 15,OS=17.0' \
-          CODE_SIGNING_ALLOWED=NO
+          CI/.nutshell.log
+          CI/.cdk.log

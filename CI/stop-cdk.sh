@@ -1,6 +1,7 @@
 #!/bin/bash
+set -euo pipefail
 
-# Stop CDK mint
+# stop-cdk.sh — Stop CDK mint daemon
 # Usage: ./CI/stop-cdk.sh
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -12,17 +13,16 @@ if [ -f "$PID_FILE" ]; then
     if kill -0 "$PID" 2>/dev/null; then
         echo "🛑 Stopping CDK mint (PID: $PID)..."
         kill "$PID" 2>/dev/null || true
-        sleep 2
+        sleep 1
     fi
     rm -f "$PID_FILE"
-    echo "✅ Mint stopped"
+    echo "✅ CDK stopped"
 else
-    echo "⚠️  No mint running"
+    echo "⚠️  No CDK mint running"
 fi
 
-# Show last 20 lines of log
 if [ -f "$LOG_FILE" ]; then
     echo ""
-    echo "📝 Last 20 lines:"
+    echo "📝 Last 20 lines of CDK log:"
     tail -20 "$LOG_FILE"
 fi

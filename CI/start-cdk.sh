@@ -1,51 +1,54 @@
 #!/bin/bash
+set -euo pipefail
 
-# Start CDK mint with FakeWallet backend
-# Usage: ./CI/start-cdk.sh [port]
+# start-cdk.sh — Launch CDK mint daemon
+# Usage: ./CI/start-cdk.sh
 
-set -e
-
-PORT=${1:-3339}
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-CDK_DIR="${SCRIPT_DIR}/.cdk"
+BIN_DIR="${SCRIPT_DIR}/.cdk-bin"
+WORK_DIR="${SCRIPT_DIR}/.cdk-workdir"
 LOG_FILE="${SCRIPT_DIR}/.cdk.log"
 PID_FILE="${SCRIPT_DIR}/.cdk.pid"
 
-echo "🚀 Starting CDK mint on port ${PORT}..."
+MINTD_BIN="${BIN_DIR}/cdk-mintd"
 
-cd "$CDK_DIR"
+if [ ! -x "$MINTD_BIN" ]; then
+    echo "❌ cdk-mintd not found. Run ./CI/setup-cdk.sh first"
+    exit 1
+fi
 
-# Kill any existing mint on this port
+# Kill any existing mint
 if [ -f "$PID_FILE" ]; then
-    OLD_PID=$(cat "$PID_FILE")
-    if kill -0 "$OLD_PID" 2>/dev/null; then
-        echo "⚠️  Stopping existing mint (PID: $OLD_PID)..."
-        kill "$OLD_PID" 2>/dev/null || true
-        sleep 2
+    if pid=$(cat "$PID_FILE") && kill -0 "$pid" 2>/dev/null; then
+        kill "$pid" 2>/dev/null || true
+        sleep 1
     fi
     rm -f "$PID_FILE"
 fi
 
-# Start mint in background with config
-nohup cargo run --bin cdk-mintd --release -- --config "${SCRIPT_DIR}/.cdk-config/cdk-mintd.toml" > "$LOG_FILE" 2>&1 &
-MINT_PID=$!
+echo "🚀 Starting CDK mint..."
 
+cd "$WORK_DIR"
+nohup "$MINTD_BIN" --work-dir "$WORK_DIR" > "$LOG_FILE" 2>&1 &
+MINT_PID=$!
 echo "$MINT_PID" > "$PID_FILE"
-echo "✅ Mint started (PID: $MINT_PID)"
+
+echo "✅ CDK started (PID: $MINT_PID)"
 echo "📝 Log: $LOG_FILE"
 
 # Wait for mint to be ready
-echo "⏳ Waiting for mint to be ready..."
+PORT=$(grep '^port' "${WORK_DIR}/config.toml" 2>/dev/null | head -1 | sed 's/.*= *//')
+PORT=${PORT:-3339}
+
+echo "⏳ Waiting for mint to be ready on port ${PORT}..."
 for i in {1..30}; do
     if curl -sf "http://localhost:${PORT}/v1/info" > /dev/null 2>&1; then
-        echo "✅ Mint is ready!"
-        curl -s "http://localhost:${PORT}/v1/info" | head -c 200
-        echo ""
+        echo "✅ CDK mint is ready!"
         exit 0
     fi
     sleep 1
 done
 
-echo "❌ Mint failed to start within 30 seconds"
+echo "❌ CDK mint failed to start within 30 seconds"
 cat "$LOG_FILE"
 exit 1
