@@ -739,6 +739,12 @@ struct OnboardingView: View {
                 walletMints: previousWalletMintSuggestions
             )
 
+            NostrMintBackupSection(
+                existingURLs: Set(mintsToRestore).union(restoreResults.map(\.mintUrl)),
+                onSearch: searchNostrMintBackups,
+                onAddSelected: addNostrMintBackupURLs
+            )
+
             // Error display
             if let error = restoreMintError {
                 Text(error)
@@ -823,6 +829,7 @@ struct OnboardingView: View {
                 mintsToRestore.removeAll()
                 restoreResults.removeAll()
                 restoreMintError = nil
+                NostrMintBackupService.shared.clearDiscovered()
                 retreat(to: .restoreInput)
             }) {
                 Text("Back")
@@ -957,12 +964,13 @@ struct OnboardingView: View {
         isRestoring = true
         errorMessage = nil
 
-        Task {
+        Task { @MainActor in
             do {
                 try await walletManager.initializeRestoredWallet(mnemonic: cleanedMnemonic)
                 if !currentMintSuggestions.isEmpty {
                     previousWalletMintSuggestions = currentMintSuggestions
                 }
+                NostrMintBackupService.shared.clearDiscovered()
                 advance(to: .restoreMints)
             } catch {
                 errorMessage = "Couldn't open the wallet. \(error.userFacingWalletMessage)"
@@ -1032,6 +1040,42 @@ struct OnboardingView: View {
         return true
     }
 
+    private func searchNostrMintBackups() {
+        let cleanedMnemonic = restoreMnemonic
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
+            .split(whereSeparator: { $0.isWhitespace })
+            .joined(separator: " ")
+        restoreMintError = nil
+
+        Task { @MainActor in
+            do {
+                let found = try await NostrMintBackupService.shared.searchBackups(using: cleanedMnemonic)
+                if found.isEmpty {
+                    restoreMintError = "No Nostr mint backups found."
+                }
+            } catch {
+                restoreMintError = error.localizedDescription
+            }
+        }
+    }
+
+    private func addNostrMintBackupURLs(_ urls: [String]) {
+        guard !urls.isEmpty else {
+            restoreMintError = "Select at least one mint backup."
+            return
+        }
+
+        var addedCount = 0
+        for url in urls {
+            if addMintUrlToRestoreList(url, showDuplicateError: false, showValidationError: false) {
+                addedCount += 1
+            }
+        }
+
+        restoreMintError = addedCount > 0 ? nil : "No new mint URLs to add."
+    }
+
     private func normalizedMintURL(from rawUrl: String) -> String? {
         var url = rawUrl.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !url.isEmpty else { return nil }
@@ -1073,8 +1117,9 @@ struct OnboardingView: View {
     }
 
     private func finishRestore() {
-        Task {
+        Task { @MainActor in
             await walletManager.completeRestore()
+            NostrMintBackupService.shared.clearDiscovered()
         }
     }
 

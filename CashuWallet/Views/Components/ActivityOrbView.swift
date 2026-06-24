@@ -339,6 +339,154 @@ struct SuggestedMintsSection: View {
     }
 }
 
+// MARK: - Nostr Mint Backups
+
+struct NostrMintBackupSection: View {
+    @ObservedObject private var mintBackupService = NostrMintBackupService.shared
+
+    let existingURLs: Set<String>
+    let onSearch: () -> Void
+    let onAddSelected: ([String]) -> Void
+
+    private var availableBackups: [DiscoveredNostrMintBackup] {
+        mintBackupService.discoveredMints.filter { !existingURLs.contains($0.url) }
+    }
+
+    private var selectedURLs: [String] {
+        availableBackups.filter(\.selected).map(\.url)
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            sectionHeader("Nostr backups")
+
+            Button(action: onSearch) {
+                HStack(spacing: 12) {
+                    Image(systemName: "tray.and.arrow.down")
+                        .foregroundStyle(.secondary)
+                        .frame(width: 24, height: 24)
+
+                    Text(mintBackupService.isSearching ? "Searching Nostr..." : "Search Nostr backups")
+                        .font(.subheadline.weight(.medium))
+                        .foregroundStyle(.primary)
+
+                    Spacer()
+
+                    if mintBackupService.isSearching {
+                        ProgressView()
+                            .controlSize(.small)
+                    } else {
+                        Image(systemName: "chevron.right")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(.tertiary)
+                    }
+                }
+                .padding(.horizontal, 4)
+                .padding(.vertical, 12)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .disabled(mintBackupService.isSearching)
+            .accessibilityLabel("Search Nostr backups")
+
+            if !availableBackups.isEmpty {
+                CanvasDivider()
+
+                HStack(spacing: 12) {
+                    Text("\(availableBackups.count) found")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.secondary)
+
+                    Spacer()
+
+                    Button {
+                        onAddSelected(selectedURLs)
+                        HapticFeedback.selection()
+                    } label: {
+                        Label("Add selected", systemImage: "plus.circle.fill")
+                            .font(.caption.weight(.semibold))
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(selectedURLs.isEmpty)
+                    .opacity(selectedURLs.isEmpty ? 0.45 : 1)
+                }
+                .padding(.horizontal, 4)
+                .padding(.vertical, 10)
+
+                CanvasDivider()
+
+                ForEach(Array(availableBackups.enumerated()), id: \.element.id) { index, mint in
+                    Toggle(isOn: selectionBinding(for: mint.url)) {
+                        mintBackupRow(mint)
+                    }
+                    .toggleStyle(.switch)
+                    .padding(.horizontal, 4)
+                    .padding(.vertical, 12)
+
+                    if index < availableBackups.count - 1 {
+                        CanvasDivider()
+                    }
+                }
+            }
+        }
+        .padding(.horizontal)
+    }
+
+    @ViewBuilder
+    private func sectionHeader(_ title: String) -> some View {
+        Text(title)
+            .font(.caption.weight(.semibold))
+            .foregroundStyle(.secondary)
+            .textCase(.uppercase)
+            .tracking(1.2)
+            .padding(.horizontal, 4)
+            .padding(.bottom, 8)
+    }
+
+    private func mintBackupRow(_ mint: DiscoveredNostrMintBackup) -> some View {
+        HStack(spacing: 12) {
+            Image(systemName: "bitcoinsign.bank.building")
+                .foregroundStyle(.secondary)
+                .frame(width: 24, height: 24)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(displayHost(mint.url))
+                    .font(.subheadline.weight(.medium))
+                    .lineLimit(1)
+
+                Text(timestampDescription(mint.timestamp))
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+        }
+    }
+
+    private func selectionBinding(for url: String) -> Binding<Bool> {
+        Binding(
+            get: {
+                mintBackupService.discoveredMints.first(where: { $0.url == url })?.selected ?? false
+            },
+            set: { isSelected in
+                mintBackupService.setSelected(isSelected, for: url)
+            }
+        )
+    }
+
+    private func timestampDescription(_ date: Date) -> String {
+        let formatter = RelativeDateTimeFormatter()
+        formatter.unitsStyle = .short
+        return formatter.localizedString(for: date, relativeTo: Date())
+    }
+
+    private func displayHost(_ url: String) -> String {
+        var host = url
+            .replacingOccurrences(of: "https://", with: "")
+            .replacingOccurrences(of: "http://", with: "")
+        if host.hasSuffix("/") { host = String(host.dropLast()) }
+        return host
+    }
+}
+
 // MARK: - Preview
 
 #Preview("Activity Orb") {

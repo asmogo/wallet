@@ -55,6 +55,7 @@
 		AB00000000000008 /* CashuRequestDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC00000000000008 /* CashuRequestDetailView.swift */; };
 		AB0000000000000A /* CashuRequestMintPickerSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC0000000000000A /* CashuRequestMintPickerSheet.swift */; };
 		AB0000000000000B /* CashuRequestAmountPickerSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC0000000000000B /* CashuRequestAmountPickerSheet.swift */; };
+		AB0000000000000C /* NostrMintBackupService.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC0000000000000C /* NostrMintBackupService.swift */; };
 		AB00000000000050 /* TransactionAmountColumn.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB00000000000052 /* TransactionAmountColumn.swift */; };
 		AB00000000000051 /* CashuRequestAmountColumn.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB00000000000053 /* CashuRequestAmountColumn.swift */; };
 		BB00000000000001 /* MintService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000011 /* MintService.swift */; };
@@ -139,6 +140,7 @@
 		AC00000000000008 /* CashuRequestDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CashuRequestDetailView.swift; sourceTree = "<group>"; };
 		AC0000000000000A /* CashuRequestMintPickerSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CashuRequestMintPickerSheet.swift; sourceTree = "<group>"; };
 		AC0000000000000B /* CashuRequestAmountPickerSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CashuRequestAmountPickerSheet.swift; sourceTree = "<group>"; };
+		AC0000000000000C /* NostrMintBackupService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NostrMintBackupService.swift; sourceTree = "<group>"; };
 		BB00000000000011 /* MintService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MintService.swift; sourceTree = "<group>"; };
 		BB00000000000012 /* TransactionService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TransactionService.swift; sourceTree = "<group>"; };
 		BB00000000000013 /* TokenService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TokenService.swift; sourceTree = "<group>"; };
@@ -253,6 +255,7 @@
 				AC00000000000004 /* NIP44.swift */,
 				AC00000000000005 /* NIP17.swift */,
 				AC00000000000006 /* NostrInboxClient.swift */,
+				AC0000000000000C /* NostrMintBackupService.swift */,
 				AC00000000000007 /* CashuRequestListener.swift */,
 			);
 			path = Core;
@@ -582,6 +585,7 @@
 				AB00000000000004 /* NIP44.swift in Sources */,
 				AB00000000000005 /* NIP17.swift in Sources */,
 				AB00000000000006 /* NostrInboxClient.swift in Sources */,
+				AB0000000000000C /* NostrMintBackupService.swift in Sources */,
 				AB00000000000007 /* CashuRequestListener.swift in Sources */,
 				AB00000000000008 /* CashuRequestDetailView.swift in Sources */,
 				AB0000000000000A /* CashuRequestMintPickerSheet.swift in Sources */,

@@ -100,6 +100,12 @@ class SettingsManager: ObservableObject {
         }
     }
 
+    @Published var nostrMintBackupEnabled: Bool {
+        didSet {
+            settingsStore.nostrMintBackupEnabled = nostrMintBackupEnabled
+        }
+    }
+
     @Published var amountDisplayPrimary: AmountDisplayPrimary {
         didSet {
             settingsStore.amountDisplayPrimary = amountDisplayPrimary.rawValue
@@ -121,6 +127,7 @@ class SettingsManager: ObservableObject {
         self.checkIncomingInvoices = settingsStore.checkIncomingInvoices
         self.periodicallyCheckIncomingInvoices = settingsStore.periodicallyCheckIncomingInvoices
         self.nostrRelays = settingsStore.nostrRelays
+        self.nostrMintBackupEnabled = settingsStore.nostrMintBackupEnabled
         self.amountDisplayPrimary = AmountDisplayPrimary(rawValue: settingsStore.amountDisplayPrimary) ?? .fiat
 
         persistP2PKKeys()
@@ -202,12 +209,14 @@ class SettingsManager: ObservableObject {
         try? keychain.deleteNostrPrivateKey()
 
         showP2PKButtonInDrawer = false
+        nostrMintBackupEnabled = true
         p2pkKeys = []
 
         if resetRuntimeServices {
             NostrService.shared.resetForWalletBoundary()
             NPCService.shared.resetForWalletBoundary()
         }
+        NostrMintBackupService.shared.resetForWalletBoundary()
         settingsStore.clearWalletScopedData()
     }
     
