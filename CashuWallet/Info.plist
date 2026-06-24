@@ -17,5 +17,7 @@
 	<array>
 		<string>cashu</string>
 	</array>
+	<key>NSFaceIDUsageDescription</key>
+	<string>Cashu Wallet uses Face ID to unlock the app and protect your funds.</string>
 </dict>
 </plist>

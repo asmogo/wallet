@@ -1,4 +1,5 @@
 import SwiftUI
+import LocalAuthentication
 
 struct SettingsView: View {
     @EnvironmentObject var walletManager: WalletManager
@@ -37,6 +38,12 @@ struct SettingsView: View {
                     sectionGroup(title: "Backup") {
                         navRow("Backup & Restore", icon: "key.fill") {
                             backupDetailView
+                        }
+                    }
+
+                    sectionGroup(title: "Security") {
+                        navRow("App Lock", icon: "lock.shield") {
+                            securityDetailView
                         }
                     }
 
@@ -300,6 +307,18 @@ struct SettingsView: View {
         .toolbarBackground(.hidden, for: .navigationBar)
     }
 
+    private var securityDetailView: some View {
+        List {
+            Section {
+                SecuritySettingsSection()
+            }
+            .listRowSeparator(.hidden)
+        }
+        .listStyle(.plain)
+        .navigationTitle("App Lock")
+        .toolbarBackground(.hidden, for: .navigationBar)
+    }
+
     private var appearanceDetailView: some View {
         List {
             Section {
@@ -330,6 +349,80 @@ struct SettingsView: View {
             showImportP2PK = false
         } catch {
             p2pkError = error.localizedDescription
+        }
+    }
+}
+
+// MARK: - Security Settings Section
+
+struct SecuritySettingsSection: View {
+    @ObservedObject var settings = SettingsManager.shared
+
+    @State private var biometryNoun = "Face ID"
+    @State private var biometryAvailable = true
+    @State private var authError: String?
+
+    var body: some View {
+        Group {
+            Toggle(isOn: appLockBinding) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Require \(biometryNoun)")
+                    Text("Ask for \(biometryNoun) when opening the wallet.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+
+            if !biometryAvailable {
+                Text("Set a device passcode in iOS Settings to use App Lock.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            Text("Your seed phrase always requires authentication to reveal, even when App Lock is off.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+        .task { refreshBiometry() }
+        .alert("Couldn't Enable App Lock", isPresented: Binding(
+            get: { authError != nil },
+            set: { if !$0 { authError = nil } }
+        )) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(authError ?? "")
+        }
+    }
+
+    /// Enabling first confirms with a live auth and reverts to off on failure —
+    /// you can't switch on a lock you can't satisfy.
+    private var appLockBinding: Binding<Bool> {
+        Binding(
+            get: { settings.appLockEnabled },
+            set: { newValue in
+                guard newValue else {
+                    settings.appLockEnabled = false
+                    return
+                }
+                Task {
+                    let ok = await AppLockManager.shared.authenticate(reason: "Confirm to enable App Lock")
+                    settings.appLockEnabled = ok
+                    if !ok {
+                        authError = "Authentication failed. App Lock was not enabled."
+                    }
+                }
+            }
+        )
+    }
+
+    private func refreshBiometry() {
+        let context = LAContext()
+        let available = context.canEvaluatePolicy(.deviceOwnerAuthentication, error: nil)
+        biometryAvailable = available
+        switch context.biometryType {
+        case .faceID: biometryNoun = "Face ID"
+        case .touchID: biometryNoun = "Touch ID"
+        default: biometryNoun = available ? "your passcode" : "Face ID"
         }
     }
 }
@@ -1068,7 +1161,7 @@ struct BackupView: View {
                             Spacer(minLength: 0)
 
                             VStack(spacing: 8) {
-                                Button(action: { showWords.toggle() }) {
+                                Button(action: toggleReveal) {
                                     Image(systemName: showWords ? "eye.slash" : "eye")
                                 }
 
@@ -1104,12 +1197,29 @@ struct BackupView: View {
         }
     }
 
+    /// Hiding is free; revealing always requires authentication, regardless of
+    /// the App Lock setting.
+    private func toggleReveal() {
+        if showWords {
+            showWords = false
+            return
+        }
+        Task {
+            if await AppLockManager.shared.authenticate(reason: "Reveal your seed phrase") {
+                showWords = true
+            }
+        }
+    }
+
     private func copyToClipboard() {
-        let words = walletManager.getMnemonicWords().joined(separator: " ")
-        UIPasteboard.general.string = words
-        copiedToClipboard = true
-        DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
-            copiedToClipboard = false
+        Task {
+            guard await AppLockManager.shared.authenticate(reason: "Copy your seed phrase") else { return }
+            let words = walletManager.getMnemonicWords().joined(separator: " ")
+            UIPasteboard.general.string = words
+            copiedToClipboard = true
+            DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
+                copiedToClipboard = false
+            }
         }
     }
 }

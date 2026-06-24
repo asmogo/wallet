@@ -106,6 +106,14 @@ class SettingsManager: ObservableObject {
         }
     }
 
+    @Published var appLockEnabled: Bool {
+        didSet {
+            settingsStore.appLockEnabled = appLockEnabled
+            guard appLockEnabled != oldValue else { return }
+            AppLockManager.shared.setEnabled(appLockEnabled)
+        }
+    }
+
     // MARK: - Initialization
     
     init() {
@@ -122,6 +130,7 @@ class SettingsManager: ObservableObject {
         self.periodicallyCheckIncomingInvoices = settingsStore.periodicallyCheckIncomingInvoices
         self.nostrRelays = settingsStore.nostrRelays
         self.amountDisplayPrimary = AmountDisplayPrimary(rawValue: settingsStore.amountDisplayPrimary) ?? .fiat
+        self.appLockEnabled = settingsStore.appLockEnabled
 
         persistP2PKKeys()
         

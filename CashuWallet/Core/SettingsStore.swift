@@ -91,6 +91,11 @@ final class SettingsStore {
         set { set(newValue, forKey: StorageKeys.amountDisplayPrimary) }
     }
 
+    var appLockEnabled: Bool {
+        get { bool(StorageKeys.appLockEnabled, default: false) }
+        set { set(newValue, forKey: StorageKeys.appLockEnabled) }
+    }
+
     var priceEnabled: Bool {
         get { bool(StorageKeys.priceEnabled, legacy: StorageKeys.Legacy.priceEnabled, default: false) }
         set { set(newValue, forKey: StorageKeys.priceEnabled) }
