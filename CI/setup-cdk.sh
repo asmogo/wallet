@@ -1,7 +1,7 @@
 #!/bin/bash
 set -euo pipefail
 
-# setup-cdk.sh — Download prebuilt cdk-mintd binary
+# setup-cdk.sh — Download prebuilt cdk-mintd binary (Linux) or build from source (macOS)
 # Usage: ./CI/setup-cdk.sh [port]
 
 PORT=${1:-3339}
@@ -10,7 +10,7 @@ CDK_VERSION="0.17.1"
 BIN_DIR="${SCRIPT_DIR}/.cdk-bin"
 WORK_DIR="${SCRIPT_DIR}/.cdk-workdir"
 
-echo "🔧 Setting up CDK mint (prebuilt v${CDK_VERSION}) on port ${PORT}..."
+echo "🔧 Setting up CDK mint (v${CDK_VERSION}) on port ${PORT}..."
 
 mkdir -p "$BIN_DIR"
 
@@ -26,14 +26,17 @@ esac
 
 if [ "$OS" = "darwin" ]; then
     echo "⚠️  CDK prebuilt binary v${CDK_VERSION} is Linux-only (x86_64/aarch64)."
-    echo "   macOS runner detected (${ARCH}). Using Linux prebuilt directly..."
-
-    ASSET_NAME="cdk-mintd-${CDK_VERSION}-${ASSET_ARCH}"
-    DOWNLOAD_URL="https://github.com/cashubtc/cdk/releases/download/v${CDK_VERSION}/${ASSET_NAME}"
-
-    echo "📥 Downloading ${ASSET_NAME}..."
-    curl -fsSL -o "${BIN_DIR}/cdk-mintd" "$DOWNLOAD_URL"
+    echo "   macOS runner detected (${ARCH}). Building from source with cargo..."
+    
+    # Since the CI has Rust installed (dtolnay/rust-toolchain), build from source
+    # Install cdk-mintd from the git repo at the matching tag
+    cargo install --git https://github.com/cashubtc/cdk --tag "v${CDK_VERSION}" --root "${BIN_DIR}/.cargo" cdk-mintd 2>&1
+    
+    # Move binary to expected location
+    mv "${BIN_DIR}/.cargo/bin/cdk-mintd" "${BIN_DIR}/cdk-mintd"
+    rm -rf "${BIN_DIR}/.cargo"
     chmod +x "${BIN_DIR}/cdk-mintd"
+    echo "✅ Built cdk-mintd v${CDK_VERSION} from source"
 else
     # Linux: download prebuilt
     ASSET_NAME="cdk-mintd-${CDK_VERSION}-${ASSET_ARCH}"
