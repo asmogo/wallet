@@ -26,28 +26,14 @@ esac
 
 if [ "$OS" = "darwin" ]; then
     echo "⚠️  CDK prebuilt binary v${CDK_VERSION} is Linux-only (x86_64/aarch64)."
-    echo "   macOS runner detected (${ARCH}). Falling back to building from source..."
-    
-    # Install Rust if needed
-    if ! command -v cargo &> /dev/null; then
-        echo "📦 Installing Rust..."
-        curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
-        source "$HOME/.cargo/env"
-    fi
-    
-    CDK_SRC="${SCRIPT_DIR}/.cdk-src"
-    if [ ! -d "$CDK_SRC" ]; then
-        echo "📥 Cloning CDK source..."
-        git clone --depth 1 --branch "v${CDK_VERSION}" https://github.com/cashubtc/cdk.git "$CDK_SRC"
-    fi
-    
-    cd "$CDK_SRC"
-    echo "📦 Building cdk-mintd..."
-    cargo build --bin cdk-mintd --release
-    
-    mkdir -p "$BIN_DIR"
-    cp target/release/cdk-mintd "${BIN_DIR}/cdk-mintd"
-    cd "$SCRIPT_DIR"
+    echo "   macOS runner detected (${ARCH}). Using Linux prebuilt directly..."
+
+    ASSET_NAME="cdk-mintd-${CDK_VERSION}-${ASSET_ARCH}"
+    DOWNLOAD_URL="https://github.com/cashubtc/cdk/releases/download/v${CDK_VERSION}/${ASSET_NAME}"
+
+    echo "📥 Downloading ${ASSET_NAME}..."
+    curl -fsSL -o "${BIN_DIR}/cdk-mintd" "$DOWNLOAD_URL"
+    chmod +x "${BIN_DIR}/cdk-mintd"
 else
     # Linux: download prebuilt
     ASSET_NAME="cdk-mintd-${CDK_VERSION}-${ASSET_ARCH}"
