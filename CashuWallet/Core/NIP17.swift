@@ -1,6 +1,6 @@
 import Foundation
 
-struct NostrIncomingEvent: Codable, Hashable {
+struct NostrIncomingEvent: Codable, Hashable, Sendable {
     let id: String
     let pubkey: String
     let createdAt: Int64

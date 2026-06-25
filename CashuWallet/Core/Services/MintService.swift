@@ -336,9 +336,8 @@ class MintService: ObservableObject {
     /// Save mints to persistent storage
     func saveMints() {
         walletStore.saveMints(mints)
-        let mintURLs = mints.map(\.url)
         Task { @MainActor in
-            await NostrMintBackupService.shared.backupCurrentMintsIfEnabled(mintURLs: mintURLs)
+            await NostrMintBackupService.shared.backupCurrentMintsIfEnabled()
         }
     }
 

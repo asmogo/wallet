@@ -83,11 +83,10 @@ struct BackupSettingsSection: View {
 
     private func backupMintsNow() {
         mintBackupError = nil
-        let mintURLs = walletManager.mints.map(\.url)
 
         Task { @MainActor in
             do {
-                try await mintBackupService.backupMintURLs(mintURLs)
+                try await mintBackupService.backupMints()
                 HapticFeedback.notification(.success)
             } catch {
                 mintBackupError = error.localizedDescription

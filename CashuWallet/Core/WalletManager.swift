@@ -349,6 +349,7 @@ class WalletManager: ObservableObject {
         
         db = repository.db
         walletRepository = repository.repository
+        NostrMintBackupService.shared.walletRepository = repository.repository
         processedQuotes = Set(walletStore.loadProcessedNPCQuotes())
     }
 
@@ -373,6 +374,7 @@ class WalletManager: ObservableObject {
         }
 
         walletRepository = nil
+        NostrMintBackupService.shared.walletRepository = nil
         db = nil
         mnemonic = nil
         balance = 0
