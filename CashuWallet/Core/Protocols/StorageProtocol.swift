@@ -96,6 +96,7 @@ enum StorageKeys {
     static let meltQuoteFees = "wallet.meltQuoteFees"
     static let mintQuoteTimestamps = "wallet.mintQuoteTimestamps"
     static let processedNPCQuotes = "wallet.processedNPCQuotes"
+    static let nostrMintBackupLastBackupDate = "wallet.nostrMintBackup.lastBackupDate"
     
     // Settings
     static let useBitcoinSymbol = "settings.useBitcoinSymbol"
@@ -113,6 +114,7 @@ enum StorageKeys {
     static let periodicallyCheckIncomingInvoices = "settings.periodicallyCheckIncomingInvoices"
     static let nostrRelays = "settings.nostrRelays"
     static let nostrSignerType = "settings.nostrSignerType"
+    static let nostrMintBackupEnabled = "settings.nostrMintBackupEnabled"
     static let amountDisplayPrimary = "settings.amountDisplayPrimary"
 
     enum Legacy {
@@ -138,6 +140,7 @@ enum StorageKeys {
         static let periodicallyCheckIncomingInvoices = "periodicallyCheckIncomingInvoices"
         static let nostrRelays = "nostrRelays"
         static let nostrSignerType = "nostr_signer_type"
+        static let nostrMintBackupEnabled = "nostrMintBackupEnabled"
         static let priceEnabled = "priceServiceEnabled"
         static let priceCurrencyCode = "priceServiceCurrencyCode"
         static let cachedBTCPrice = "cachedBTCPrice"
@@ -183,7 +186,8 @@ enum StorageKeys {
         paymentPreimages,
         meltQuoteFees,
         mintQuoteTimestamps,
-        processedNPCQuotes
+        processedNPCQuotes,
+        nostrMintBackupLastBackupDate
     ]
 
     static let walletDataLegacyKeys = [
@@ -201,6 +205,7 @@ enum StorageKeys {
         receivePaymentRequestsAutomatically,
         showP2PKButtonInDrawer,
         p2pkKeys,
+        nostrMintBackupEnabled,
         nostrSignerType,
         npcEnabled,
         npcAutomaticClaim,
@@ -213,6 +218,7 @@ enum StorageKeys {
         Legacy.receivePaymentRequestsAutomatically,
         Legacy.showP2PKButtonInDrawer,
         Legacy.p2pkKeys,
+        Legacy.nostrMintBackupEnabled,
         Legacy.nostrSignerType
     ]
 
