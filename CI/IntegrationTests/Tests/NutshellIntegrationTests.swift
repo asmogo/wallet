@@ -1,217 +1,185 @@
+// NutshellIntegrationTests.swift
+//
+// Integration tests against a live Nutshell mint running the FakeWallet
+// backend (auto-pays bolt11 quotes). Exercises the cdk-swift wallet API
+// end-to-end: discovery, minting, send/receive, and quote state.
+//
+// Requires a running mint via `CI/setup-nutshell.sh` + `CI/start-nutshell.sh`.
+
 import XCTest
-@testable import CashuWallet
 import Cdk
 
-final class NutshellIntegrationTests: XCTestCase {
-    
-    // MARK: - Properties
-    
-    private let mintUrl = ProcessInfo.processInfo.environment["NUTSHELL_MINT_URL"] ?? "http://localhost:3338"
-    private var walletRepository: WalletRepository!
-    private var wallet: Wallet!
-    private let mnemonic = "test test test test test test test test test test test junk"
-    
-    // MARK: - Setup & Teardown
-    
-    override func setUp() async throws {
-        // Initialize CDK logging
-        CdkFfi.initLogging("debug")
-        
-        // Create temporary directory for SQLite database
-        let tempDir = FileManager.default.temporaryDirectory
-            .appendingPathComponent(UUID().uuidString)
-        try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
-        
-        let dbPath = tempDir.appendingPathComponent("nutshell_test.db").path
-        
-        // Create wallet repository with SQLite storage
-        walletRepository = try WalletRepository(
-            mnemonic: mnemonic,
-            store: .sqlite(path: dbPath)
-        )
-        
-        // Create or get wallet for the mint
-        let mintUrlStruct = MintUrl(url: mintUrl)
-        try await walletRepository.createWallet(
-            mintUrl: mintUrlStruct,
-            unit: .sat,
-            targetProofCount: 32
-        )
-        
-        wallet = try await walletRepository.getWallet(
-            mintUrl: mintUrlStruct,
-            unit: .sat
-        )
+final class NutshellIntegrationTests: IntegrationTestBase {
+    override var mintUrlStr: String {
+        ProcessInfo.processInfo.environment["NUTSHELL_MINT_URL"] ?? "http://localhost:3338"
     }
-    
-    override func tearDown() async throws {
-        wallet = nil
-        walletRepository = nil
-    }
-    
-    // MARK: - Test: Fetch Mint Info
-    
+
+    override var dbNamePrefix: String { "nutshell_test" }
+
+    // MARK: - Discovery
+
     func testFetchMintInfo() async throws {
-        let mintInfo = try await wallet.fetchMintInfo()
-        
-        XCTAssertNotNil(mintInfo, "Mint info should not be nil")
-        print("✓ Mint info fetched successfully")
-        print("  Mint name: \(mintInfo?.name ?? "N/A")")
-        print("  Mint version: \(mintInfo?.version ?? "N/A")")
+        let info = try await wallet.fetchMintInfo()
+        XCTAssertNotNil(info, "Nutshell mint should return mint info")
+        XCTAssertFalse(info?.name?.isEmpty ?? true, "Mint name should not be empty")
     }
-    
-    // MARK: - Test: Fetch Active Keyset
-    
-    func testFetchActiveKeyset() async throws {
-        let keysetInfo = try await wallet.fetchActiveKeyset()
-        
-        XCTAssertFalse(keysetInfo.id.isEmpty, "Keyset ID should not be empty")
-        XCTAssertEqual(keysetInfo.unit, .sat, "Keyset unit should be sat")
-        print("✓ Active keyset fetched successfully")
-        print("  Keyset ID: \(keysetInfo.id)")
-        print("  Unit: \(keysetInfo.unit)")
-    }
-    
-    // MARK: - Test: Mint Quote
-    
-    func testMintQuote() async throws {
-        let amount = Amount(value: 21)
-        
-        let quote = try await wallet.mintQuote(
-            paymentMethod: .bolt11,
-            amount: amount,
-            description: "Integration test quote",
-            extra: nil
-        )
-        
-        XCTAssertFalse(quote.id.isEmpty, "Quote ID should not be empty")
-        XCTAssertEqual(quote.state, .unpaid, "Quote should be unpaid initially")
-        XCTAssertFalse(quote.request.isEmpty, "Quote request should not be empty")
-        print("✓ Mint quote created successfully")
-        print("  Quote ID: \(quote.id)")
-        print("  Amount: \(quote.amount?.value ?? 0) sats")
-        print("  State: \(quote.state)")
-        print("  Invoice: \(quote.request.prefix(50))...")
-    }
-    
-    // MARK: - Test: Mint Tokens (Quote + Mint)
-    
-    func testMintTokens() async throws {
-        let amount = Amount(value: 42)
-        
-        // Create mint quote
-        let quote = try await wallet.mintQuote(
-            paymentMethod: .bolt11,
-            amount: amount,
-            description: "Integration test mint",
-            extra: nil
-        )
-        
-        print("✓ Mint quote created")
-        print("  Quote ID: \(quote.id)")
-        print("  Request: \(quote.request)")
-        
-        // In a real test, you would pay the invoice here
-        // For now, we'll just verify the quote was created
-        XCTAssertFalse(quote.id.isEmpty, "Quote ID should not be empty")
-        XCTAssertEqual(quote.state, .unpaid, "Quote should be unpaid")
-        
-        // Note: To actually mint, you need to pay the invoice and wait for payment
-        // Then call: let proofs = try await wallet.mint(quoteId: quote.id, amountSplitTarget: .none, spendingConditions: nil)
-        print("⚠️  Skipping actual minting (requires payment)")
-    }
-    
-    // MARK: - Test: Total Balance
-    
-    func testTotalBalance() async throws {
-        let balance = try await wallet.totalBalance()
-        
-        XCTAssertNotNil(balance, "Balance should not be nil")
-        print("✓ Total balance fetched successfully")
-        print("  Balance: \(balance.value) sats")
-    }
-    
-    // MARK: - Test: Repository Balances
-    
-    func testRepositoryBalances() async throws {
-        let balances = try await walletRepository.getBalances()
-        
-        XCTAssertNotNil(balances, "Balances should not be nil")
-        print("✓ Repository balances fetched successfully")
-        print("  Number of mints: \(balances.count)")
-        
-        for (walletKey, amount) in balances {
-            print("  Mint: \(walletKey.mintUrl.url) - \(amount.value) sats")
+
+    func testGetMintKeysets() async throws {
+        let keysets = try await wallet.getMintKeysets(filter: .active)
+        XCTAssertFalse(keysets.isEmpty, "Nutshell mint should have at least one active keyset")
+        for keyset in keysets {
+            XCTAssertEqual(keyset.unit, .sat, "Keyset unit should be sat")
         }
     }
-    
-    // MARK: - Test: Send/Receive Flow
-    
-    func testSendReceiveFlow() async throws {
-        // This test requires existing balance, so we'll just verify the API works
-        
-        // First check balance
+
+    // MARK: - Minting
+
+    func testBalanceAfterMinting() async throws {
+        let initialBalance = try await wallet.totalBalance()
+        XCTAssertEqual(initialBalance.value, 0, "Initial balance should be 0")
+        _ = try await mintSats(100)
+        let finalBalance = try await wallet.totalBalance()
+        XCTAssertEqual(finalBalance.value, 100, "Balance should be 100 after minting")
+    }
+
+    func testMultipleTokensMinting() async throws {
+        let batch1 = try await mintSats(21)
+        let batch2 = try await mintSats(42)
+
+        let total1 = batch1.reduce(UInt64(0)) { $0 + $1.amount.value }
+        let total2 = batch2.reduce(UInt64(0)) { $0 + $1.amount.value }
+
+        XCTAssertEqual(total1, 21, "First batch should equal 21 sats")
+        XCTAssertEqual(total2, 42, "Second batch should equal 42 sats")
+
         let balance = try await wallet.totalBalance()
-        print("Current balance: \(balance.value) sats")
-        
-        guard balance.value > 0 else {
-            print("⚠️  Skipping send/receive test - no balance")
-            return
-        }
-        
-        let sendAmount = Amount(value: 1)
-        
-        // Prepare send
-        let sendOptions = SendOptions(
-            memo: SendMemo(text: "Test token", sender: nil),
-            conditions: nil,
-            amountSplitTarget: .none,
-            sendKind: .onlineExact,
-            includeFee: false,
-            useP2bk: false,
-            maxProofs: nil,
-            metadata: [:],
-            p2pkSigningKeys: [],
-            p2pkLockedProofSendMode: .normal
-        )
-        
-        do {
-            let preparedSend = try await wallet.prepareSend(
-                amount: sendAmount,
-                options: sendOptions
+        XCTAssertEqual(balance.value, 63, "Balance should be 63 after minting 21 + 42")
+    }
+
+    // MARK: - Send
+
+    func testPrepareAndConfirmSend() async throws {
+        _ = try await mintSats(50)
+
+        let prepared = try await wallet.prepareSend(
+            amount: Amount(value: 21),
+            options: SendOptions(
+                memo: SendMemo(memo: "Nutshell test send", includeMemo: true),
+                conditions: nil,
+                amountSplitTarget: .none,
+                sendKind: .onlineExact,
+                includeFee: false,
+                useP2bk: false,
+                maxProofs: nil,
+                metadata: [:],
+                p2pkSigningKeys: [],
+                p2pkLockedProofSendMode: .swap
             )
-            
-            print("✓ Send prepared successfully")
-            print("  Amount: \(prepareSend.amount.value) sats")
-            
-            // In a real scenario, you would:
-            // 1. Get the token from preparedSend
-            // 2. Receive it with: let receivedAmount = try await wallet.receive(token: token, options: receiveOptions)
-            
-        } catch {
-            print("⚠️  Send preparation failed (expected if insufficient balance): \(error)")
-        }
+        )
+
+        XCTAssertEqual(prepared.amount().value, 21, "Prepared amount should match requested")
+        XCTAssertTrue(prepared.proofs().count > 0, "Should have proofs")
+
+        let token = try await prepared.confirm(memo: "Test receive")
+        let tokenString = token.encode()
+        XCTAssertTrue(tokenString.hasPrefix("cashu"), "Token should start with cashu prefix")
+
+        let balance = try await wallet.totalBalance()
+        XCTAssertEqual(balance.value, 29, "Balance should be 29 after sending 21")
     }
-    
-    // MARK: - Test: Check Mint Quote Status
-    
-    func testCheckMintQuoteStatus() async throws {
-        // First create a quote
-        let amount = Amount(value: 10)
+
+    func testCancelSendKeepsBalance() async throws {
+        _ = try await mintSats(50)
+
+        let prepared = try await wallet.prepareSend(
+            amount: Amount(value: 20),
+            options: SendOptions(
+                memo: nil,
+                conditions: nil,
+                amountSplitTarget: .none,
+                sendKind: .onlineExact,
+                includeFee: false,
+                useP2bk: false,
+                maxProofs: nil,
+                metadata: [:],
+                p2pkSigningKeys: [],
+                p2pkLockedProofSendMode: .swap
+            )
+        )
+
+        try await prepared.cancel()
+
+        let balance = try await wallet.totalBalance()
+        XCTAssertEqual(balance.value, 50, "Balance should remain 50 after cancel")
+    }
+
+    // MARK: - Receive
+
+    func testReceiveTokenFromAnotherWallet() async throws {
+        let senderDbPath = NSTemporaryDirectory().appending("nutshell_sender_\(UUID().uuidString).sqlite")
+        let senderRepo = try WalletRepository(
+            mnemonic: try generateMnemonic(),
+            store: .sqlite(path: senderDbPath)
+        )
+
+        let senderMintUrl = MintUrl(url: mintUrlStr)
+        try await senderRepo.createWallet(mintUrl: senderMintUrl, unit: .sat, targetProofCount: nil)
+        let senderWallet = try await senderRepo.getWallet(mintUrl: senderMintUrl, unit: .sat)
+
+        let senderProofs = try await mintSats(80, wallet: senderWallet)
+        XCTAssertFalse(senderProofs.isEmpty, "Sender should have minted proofs")
+
+        let prepared = try await senderWallet.prepareSend(
+            amount: Amount(value: 30),
+            options: SendOptions(
+                memo: SendMemo(memo: "Test cross-wallet receive", includeMemo: true),
+                conditions: nil,
+                amountSplitTarget: .none,
+                sendKind: .onlineExact,
+                includeFee: false,
+                useP2bk: false,
+                maxProofs: nil,
+                metadata: [:],
+                p2pkSigningKeys: [],
+                p2pkLockedProofSendMode: .swap
+            )
+        )
+
+        let token = try await prepared.confirm(memo: nil)
+        let tokenString = token.encode()
+
+        let decodedToken = try Token.decode(encodedToken: tokenString)
+        let receivedAmount = try await wallet.receive(
+            token: decodedToken,
+            options: ReceiveOptions(
+                amountSplitTarget: .none,
+                p2pkSigningKeys: [],
+                preimages: [],
+                metadata: [:]
+            )
+        )
+
+        XCTAssertEqual(receivedAmount.value, 30, "Should receive 30 sats")
+
+        try? FileManager.default.removeItem(atPath: senderDbPath)
+    }
+
+    // MARK: - Quote State
+
+    func testMintQuoteStateTransitions() async throws {
         let quote = try await wallet.mintQuote(
             paymentMethod: .bolt11,
-            amount: amount,
-            description: "Status check test",
+            amount: Amount(value: 42),
+            description: "State transition test",
             extra: nil
         )
-        
-        // Check the quote status
-        let updatedQuote = try await wallet.checkMintQuote(quoteId: quote.id)
-        
-        XCTAssertEqual(updatedQuote.id, quote.id, "Quote IDs should match")
-        XCTAssertEqual(updatedQuote.state, .unpaid, "Quote should still be unpaid")
-        print("✓ Mint quote status checked successfully")
-        print("  Quote ID: \(updatedQuote.id)")
-        print("  State: \(updatedQuote.state)")
+
+        XCTAssertEqual(quote.state, .unpaid, "Initial state should be unpaid")
+
+        let proofs = try await mintSats(42)
+        XCTAssertFalse(proofs.isEmpty, "Should have minted proofs")
+
+        let paidQuote = try await wallet.checkMintQuote(quoteId: quote.id)
+        XCTAssertEqual(paidQuote.state, .paid, "Quote should be paid after minting")
     }
 }

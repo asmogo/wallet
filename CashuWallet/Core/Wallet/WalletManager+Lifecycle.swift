@@ -8,6 +8,14 @@ extension WalletManager {
     func initialize() async {
         guard !hasInitialized else { return }
         hasInitialized = true
+        // UI-test support: wipe any persisted wallet so onboarding always shows
+        // from a known-empty state. Driven by RESET_WALLET=1 in the test launch
+        // environment; no effect in normal runs.
+        if IntegrationTestConfig.shouldResetWallet {
+            try? keychainService.deleteMnemonic()
+            try? keychainService.deleteNostrPrivateKey()
+            SettingsManager.shared.resetWalletScopedData()
+        }
         await loadWalletState()
     }
 

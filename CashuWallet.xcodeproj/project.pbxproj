@@ -23,7 +23,10 @@
 		1100000000000012 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 2100000000000012 /* Assets.xcassets */; };
 		11000000000000CC /* MintDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 21000000000000CC /* MintDetailView.swift */; };
 		11000000000000CD /* MintDiscoverySheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 21000000000000CD /* MintDiscoverySheet.swift */; };
+		13919761D160B56C1BD7FDB4 /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 460F5508C2B82DAECD0FEDDB /* Foundation.framework */; };
 		264054F18D12335595328FBC /* LiquidGlassModifiers.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3DC08FE85DFC643906176894 /* LiquidGlassModifiers.swift */; };
+		349E3802577110813AC1A9E3 /* NutshellIntegrationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 72DD529F60A8D9D1A81E3FBB /* NutshellIntegrationTests.swift */; };
+		67BDAA1154A191D7ACD57E34 /* WalletIntegrationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 99846FC03810AE4BE904466F /* WalletIntegrationTests.swift */; };
 		6A8EC9302F2442F00058C21B /* SettingsManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6A8EC92F2F2442EF0058C21B /* SettingsManager.swift */; };
 		6A8EC9322F2448B60058C21B /* MintDiscoveryManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6A8EC9312F2448B60058C21B /* MintDiscoveryManager.swift */; };
 		6A8EC9342F244BD80058C21B /* ScannerWrapperView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6A8EC9332F244BD80058C21B /* ScannerWrapperView.swift */; };
@@ -39,6 +42,7 @@
 		6A8EC94E2F25A0000058C21B /* NPCService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6A8EC94F2F25A0000058C21B /* NPCService.swift */; };
 		6A8EC95B2F26983E0058C21B /* P256K in Frameworks */ = {isa = PBXBuildFile; productRef = 6A8EC95A2F26983E0058C21B /* P256K */; };
 		720E47A62FEC721E00E02CD0 /* Cdk in Frameworks */ = {isa = PBXBuildFile; productRef = 720E47A52FEC721E00E02CD0 /* Cdk */; };
+		927178DF5291C6C3273CCA86 /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 460F5508C2B82DAECD0FEDDB /* Foundation.framework */; };
 		AA00000000000001 /* PaymentMethodProtocol.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA00000000000011 /* PaymentMethodProtocol.swift */; };
 		AA00000000000002 /* CurrencyProtocol.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA00000000000012 /* CurrencyProtocol.swift */; };
 		AA00000000000003 /* WalletServiceProtocol.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA00000000000013 /* WalletServiceProtocol.swift */; };
@@ -60,6 +64,8 @@
 		BB00000000000002 /* TransactionService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000012 /* TransactionService.swift */; };
 		BB00000000000003 /* TokenService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000013 /* TokenService.swift */; };
 		BB00000000000004 /* LightningService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000014 /* LightningService.swift */; };
+		BE86C0C8B9BAF95539080EF9 /* Cdk in Frameworks */ = {isa = PBXBuildFile; productRef = E118F77A2062DDD58C0A6DA3 /* Cdk */; };
+		BF36C01CE0AB810E1B462448 /* IntegrationTestBase.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1CF8C0C2E1379BCD23CF8C6 /* IntegrationTestBase.swift */; };
 		CC00000000000001 /* ThemeSettingsSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC00000000000011 /* ThemeSettingsSection.swift */; };
 		CC00000000000002 /* BackupSettingsSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC00000000000012 /* BackupSettingsSection.swift */; };
 		CC00000000000004 /* P2PKSettingsSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC00000000000014 /* P2PKSettingsSection.swift */; };
@@ -108,7 +114,25 @@
 		F300000000000004 /* ClipboardPaymentChip.swift in Sources */ = {isa = PBXBuildFile; fileRef = F400000000000004 /* ClipboardPaymentChip.swift */; };
 		F300000000000005 /* RecentRecipientsList.swift in Sources */ = {isa = PBXBuildFile; fileRef = F400000000000005 /* RecentRecipientsList.swift */; };
 		F300000000000006 /* PaymentRequestDecoder.swift in Sources */ = {isa = PBXBuildFile; fileRef = F400000000000006 /* PaymentRequestDecoder.swift */; };
+		FC31D408CB5FAB113E9A5327 /* IntegrationTestConfig.swift in Sources */ = {isa = PBXBuildFile; fileRef = FB989C698CCB0CCD5FA8788D /* IntegrationTestConfig.swift */; };
 /* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		0BB23F69253386F9E93BCF64 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 5000000000000001 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 5100000000000001;
+			remoteInfo = CashuWallet;
+		};
+		A6EA6C0F4E10B077B2F25229 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 5000000000000001 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 5100000000000001;
+			remoteInfo = CashuWallet;
+		};
+/* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
 		0100000000000001 /* CashuWallet.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = CashuWallet.app; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -128,7 +152,10 @@
 		2100000000000012 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		21000000000000CC /* MintDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MintDetailView.swift; sourceTree = "<group>"; };
 		21000000000000CD /* MintDiscoverySheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MintDiscoverySheet.swift; sourceTree = "<group>"; };
+		24A09ED243324E11C828B365 /* CashuWalletTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = CashuWalletTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		3DC08FE85DFC643906176894 /* LiquidGlassModifiers.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = LiquidGlassModifiers.swift; sourceTree = "<group>"; };
+		460F5508C2B82DAECD0FEDDB /* Foundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Foundation.framework; path = Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS18.0.sdk/System/Library/Frameworks/Foundation.framework; sourceTree = DEVELOPER_DIR; };
+		661C4ED74C24D2347947422A /* CashuWalletUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = CashuWalletUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		6A8EC92F2F2442EF0058C21B /* SettingsManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsManager.swift; sourceTree = "<group>"; };
 		6A8EC9312F2448B60058C21B /* MintDiscoveryManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MintDiscoveryManager.swift; sourceTree = "<group>"; };
 		6A8EC9332F244BD80058C21B /* ScannerWrapperView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScannerWrapperView.swift; sourceTree = "<group>"; };
@@ -141,6 +168,8 @@
 		6A8EC94B2F2590000058C21B /* PriceService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PriceService.swift; sourceTree = "<group>"; };
 		6A8EC94D2F25A0000058C21B /* NostrService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NostrService.swift; sourceTree = "<group>"; };
 		6A8EC94F2F25A0000058C21B /* NPCService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NPCService.swift; sourceTree = "<group>"; };
+		72DD529F60A8D9D1A81E3FBB /* NutshellIntegrationTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = NutshellIntegrationTests.swift; path = CI/IntegrationTests/Tests/NutshellIntegrationTests.swift; sourceTree = "<group>"; };
+		99846FC03810AE4BE904466F /* WalletIntegrationTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = WalletIntegrationTests.swift; path = CashuWalletUITests/WalletIntegrationTests.swift; sourceTree = "<group>"; };
 		AA00000000000011 /* PaymentMethodProtocol.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PaymentMethodProtocol.swift; sourceTree = "<group>"; };
 		AA00000000000012 /* CurrencyProtocol.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CurrencyProtocol.swift; sourceTree = "<group>"; };
 		AA00000000000013 /* WalletServiceProtocol.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WalletServiceProtocol.swift; sourceTree = "<group>"; };
@@ -200,6 +229,7 @@
 		EE00000000000014 /* TokenParser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TokenParser.swift; sourceTree = "<group>"; };
 		EE00000000000015 /* AmountFormatter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AmountFormatter.swift; sourceTree = "<group>"; };
 		EE00000000000016 /* LightningRequestParser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LightningRequestParser.swift; sourceTree = "<group>"; };
+		F1CF8C0C2E1379BCD23CF8C6 /* IntegrationTestBase.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = IntegrationTestBase.swift; path = CI/IntegrationTests/Tests/IntegrationTestBase.swift; sourceTree = "<group>"; };
 		F200000000000001 /* NDEFTextRecordCoder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NDEFTextRecordCoder.swift; sourceTree = "<group>"; };
 		F200000000000002 /* NFCReaderDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NFCReaderDelegate.swift; sourceTree = "<group>"; };
 		F200000000000003 /* NFCPaymentService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NFCPaymentService.swift; sourceTree = "<group>"; };
@@ -211,6 +241,7 @@
 		F400000000000004 /* ClipboardPaymentChip.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClipboardPaymentChip.swift; sourceTree = "<group>"; };
 		F400000000000005 /* RecentRecipientsList.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecentRecipientsList.swift; sourceTree = "<group>"; };
 		F400000000000006 /* PaymentRequestDecoder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PaymentRequestDecoder.swift; sourceTree = "<group>"; };
+		FB989C698CCB0CCD5FA8788D /* IntegrationTestConfig.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = IntegrationTestConfig.swift; path = CashuWallet/Core/IntegrationTestConfig.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -224,15 +255,44 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		D7063CEB27C3A787F34A0AEF /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				13919761D160B56C1BD7FDB4 /* Foundation.framework in Frameworks */,
+				BE86C0C8B9BAF95539080EF9 /* Cdk in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		DBD39D736FB1781D022E612F /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				927178DF5291C6C3273CCA86 /* Foundation.framework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
+		172BA94269E4241413C46309 /* CashuWalletTests */ = {
+			isa = PBXGroup;
+			children = (
+				F1CF8C0C2E1379BCD23CF8C6 /* IntegrationTestBase.swift */,
+				72DD529F60A8D9D1A81E3FBB /* NutshellIntegrationTests.swift */,
+			);
+			name = CashuWalletTests;
+			sourceTree = "<group>";
+		};
 		4000000000000000 = {
 			isa = PBXGroup;
 			children = (
 				4100000000000001 /* CashuWallet */,
 				6A8EC9592F26983E0058C21B /* Frameworks */,
 				4100000000000002 /* Products */,
+				172BA94269E4241413C46309 /* CashuWalletTests */,
+				46FCF584756C5A2EEED0B106 /* CashuWalletUITests */,
+				FB989C698CCB0CCD5FA8788D /* IntegrationTestConfig.swift */,
 			);
 			sourceTree = "<group>";
 		};
@@ -253,6 +313,8 @@
 			isa = PBXGroup;
 			children = (
 				0100000000000001 /* CashuWallet.app */,
+				24A09ED243324E11C828B365 /* CashuWalletTests.xctest */,
+				661C4ED74C24D2347947422A /* CashuWalletUITests.xctest */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -418,11 +480,28 @@
 			path = Components;
 			sourceTree = "<group>";
 		};
+		46FCF584756C5A2EEED0B106 /* CashuWalletUITests */ = {
+			isa = PBXGroup;
+			children = (
+				99846FC03810AE4BE904466F /* WalletIntegrationTests.swift */,
+			);
+			name = CashuWalletUITests;
+			sourceTree = "<group>";
+		};
 		6A8EC9592F26983E0058C21B /* Frameworks */ = {
 			isa = PBXGroup;
 			children = (
+				A663D259873B0B08B980CE94 /* iOS */,
 			);
 			name = Frameworks;
+			sourceTree = "<group>";
+		};
+		A663D259873B0B08B980CE94 /* iOS */ = {
+			isa = PBXGroup;
+			children = (
+				460F5508C2B82DAECD0FEDDB /* Foundation.framework */,
+			);
+			name = iOS;
 			sourceTree = "<group>";
 		};
 		AA00000000000020 /* Protocols */ = {
@@ -582,6 +661,45 @@
 			productReference = 0100000000000001 /* CashuWallet.app */;
 			productType = "com.apple.product-type.application";
 		};
+		AFC8B1DEC85E45AF663C36B4 /* CashuWalletTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 7D8B921369B95115EFA884BE /* Build configuration list for PBXNativeTarget "CashuWalletTests" */;
+			buildPhases = (
+				50FE5B3FF5CE09CCCE522FF2 /* Sources */,
+				D7063CEB27C3A787F34A0AEF /* Frameworks */,
+				8FA94E341B228F5316441F9A /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				0567D6BBCBFC27AA85E60773 /* PBXTargetDependency */,
+			);
+			name = CashuWalletTests;
+			packageProductDependencies = (
+				E118F77A2062DDD58C0A6DA3 /* Cdk */,
+			);
+			productName = CashuWalletTests;
+			productReference = 24A09ED243324E11C828B365 /* CashuWalletTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
+		B1B0E17344AC15825896A0EC /* CashuWalletUITests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 39B99ECA72BC3A01061D4BE5 /* Build configuration list for PBXNativeTarget "CashuWalletUITests" */;
+			buildPhases = (
+				61F56F654B87355191E13597 /* Sources */,
+				DBD39D736FB1781D022E612F /* Frameworks */,
+				B6CEC43B081D9F65FDAB60CA /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				48CA8B91A181F2031B2AEE91 /* PBXTargetDependency */,
+			);
+			name = CashuWalletUITests;
+			productName = CashuWalletUITests;
+			productReference = 661C4ED74C24D2347947422A /* CashuWalletUITests.xctest */;
+			productType = "com.apple.product-type.bundle.ui-testing";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -621,6 +739,8 @@
 			projectRoot = "";
 			targets = (
 				5100000000000001 /* CashuWallet */,
+				AFC8B1DEC85E45AF663C36B4 /* CashuWalletTests */,
+				B1B0E17344AC15825896A0EC /* CashuWalletUITests */,
 			);
 		};
 /* End PBXProject section */
@@ -634,9 +754,32 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		8FA94E341B228F5316441F9A /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		B6CEC43B081D9F65FDAB60CA /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
+		50FE5B3FF5CE09CCCE522FF2 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				BF36C01CE0AB810E1B462448 /* IntegrationTestBase.swift in Sources */,
+				349E3802577110813AC1A9E3 /* NutshellIntegrationTests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		5200000000000001 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -738,12 +881,52 @@
 				AB00000000000008 /* CashuRequestDetailView.swift in Sources */,
 				AB0000000000000A /* CashuRequestMintPickerSheet.swift in Sources */,
 				AB0000000000000B /* CashuRequestAmountPickerSheet.swift in Sources */,
+				FC31D408CB5FAB113E9A5327 /* IntegrationTestConfig.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		61F56F654B87355191E13597 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				67BDAA1154A191D7ACD57E34 /* WalletIntegrationTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXSourcesBuildPhase section */
 
+/* Begin PBXTargetDependency section */
+		0567D6BBCBFC27AA85E60773 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			name = CashuWallet;
+			target = 5100000000000001 /* CashuWallet */;
+			targetProxy = 0BB23F69253386F9E93BCF64 /* PBXContainerItemProxy */;
+		};
+		48CA8B91A181F2031B2AEE91 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			name = CashuWallet;
+			target = 5100000000000001 /* CashuWallet */;
+			targetProxy = A6EA6C0F4E10B077B2F25229 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
 /* Begin XCBuildConfiguration section */
+		37938FBD56075C5CF490EA40 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CLANG_ENABLE_OBJC_WEAK = NO;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.gcashu.wallet.tests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_VERSION = 5.0;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/CashuWallet.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/CashuWallet";
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
 		6200000000000001 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -941,9 +1124,62 @@
 			};
 			name = Release;
 		};
+		8CB0EFD900130D45E5FBD3FB /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CLANG_ENABLE_OBJC_WEAK = NO;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.gcashu.wallet.uitests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_VERSION = 5.0;
+				TEST_TARGET_NAME = CashuWallet;
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
+		917E65B1C6FCEC91C2646D0E /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CLANG_ENABLE_OBJC_WEAK = NO;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.gcashu.wallet.uitests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_VERSION = 5.0;
+				TEST_TARGET_NAME = CashuWallet;
+			};
+			name = Debug;
+		};
+		A9A5C3B193FDDAC1B8AED0F1 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CLANG_ENABLE_OBJC_WEAK = NO;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.gcashu.wallet.tests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_VERSION = 5.0;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/CashuWallet.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/CashuWallet";
+			};
+			name = Debug;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
+		39B99ECA72BC3A01061D4BE5 /* Build configuration list for PBXNativeTarget "CashuWalletUITests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				8CB0EFD900130D45E5FBD3FB /* Release */,
+				917E65B1C6FCEC91C2646D0E /* Debug */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
 		6000000000000001 /* Build configuration list for PBXProject "CashuWallet" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
@@ -958,6 +1194,15 @@
 			buildConfigurations = (
 				6300000000000001 /* Debug */,
 				6300000000000002 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		7D8B921369B95115EFA884BE /* Build configuration list for PBXNativeTarget "CashuWalletTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				37938FBD56075C5CF490EA40 /* Release */,
+				A9A5C3B193FDDAC1B8AED0F1 /* Debug */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
@@ -1003,6 +1248,11 @@
 			productName = P256K;
 		};
 		720E47A52FEC721E00E02CD0 /* Cdk */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 720E47A42FEC721E00E02CD0 /* XCRemoteSwiftPackageReference "cdk-swift" */;
+			productName = Cdk;
+		};
+		E118F77A2062DDD58C0A6DA3 /* Cdk */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = 720E47A42FEC721E00E02CD0 /* XCRemoteSwiftPackageReference "cdk-swift" */;
 			productName = Cdk;

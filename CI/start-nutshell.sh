@@ -35,6 +35,8 @@ export MINT_LISTEN_PORT="$PORT"
 export MINT_DATABASE="$WORKDIR"
 export MINT_BACKEND_BOLT11_SAT=FakeWallet
 export MINT_PRIVATE_KEY="TEST_PRIVATE_KEY_DO_NOT_USE_IN_PRODUCTION"
+# Zero input fee so integration tests can assert exact amounts.
+export MINT_INPUT_FEE_PPK=0
 
 nohup "$VENV_DIR/bin/mint" > "$LOG_FILE" 2>&1 &
 MINT_PID=$!

@@ -66,44 +66,45 @@ jobs:
           sleep 1
         done
 
+    # Ad-hoc signing ("-") on the simulator applies the app entitlements
+    # (keychain-access-groups) without a team/profile — required so the wallet
+    # can write its mnemonic to the Keychain during UI tests.
     - name: Build iOS app
       run: |
-        xcodebuild clean build \
+        set -o pipefail
+        xcodebuild clean build-for-testing \
           -project CashuWallet.xcodeproj \
           -scheme CashuWallet \
           -destination 'platform=iOS Simulator,name=iPhone 17' \
-          CODE_SIGNING_ALLOWED=NO
-        
-    - name: Run Unit Tests
+          CODE_SIGNING_ALLOWED=YES CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="-" \
+          | tee build-output.log | xcbeautify
+
+    - name: Run Integration Tests (Nutshell mint)
+      env:
+        NUTSHELL_MINT_URL: http://localhost:3338
       run: |
-        xcodebuild test \
+        set -o pipefail
+        xcodebuild test-without-building \
           -project CashuWallet.xcodeproj \
           -scheme CashuWallet \
           -destination 'platform=iOS Simulator,name=iPhone 17' \
           -only-testing:CashuWalletTests \
-          CODE_SIGNING_ALLOWED=NO | tee unit-test-output.log | xcpretty || true
-        
-    - name: Run Integration Tests
-      env:
-        NUTSHELL_MINT_URL: http://localhost:3338
-      run: |
-        xcodebuild test \
-          -project CashuWallet.xcodeproj \
-          -scheme CashuWalletIntegration \
-          -destination 'platform=iOS Simulator,name=iPhone 17' \
-          CODE_SIGNING_ALLOWED=NO | tee integration-test-output.log | xcpretty || true
-        
+          CODE_SIGNING_ALLOWED=YES CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="-" \
+          | tee integration-test-output.log | xcbeautify
+
     - name: Run UI Integration Tests
       env:
         NUTSHELL_MINT_URL: http://localhost:3338
       run: |
-        xcodebuild test \
+        set -o pipefail
+        xcodebuild test-without-building \
           -project CashuWallet.xcodeproj \
-          -scheme CashuWalletIntegration \
+          -scheme CashuWallet \
           -destination 'platform=iOS Simulator,name=iPhone 17' \
-          -only-testing:CashuWalletUITests/WalletIntegrationTests \
-          CODE_SIGNING_ALLOWED=NO | tee ui-test-output.log | xcpretty || true
-        
+          -only-testing:CashuWalletUITests \
+          CODE_SIGNING_ALLOWED=YES CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="-" \
+          | tee ui-test-output.log | xcbeautify
+
     - name: Stop mints
       if: always()
       run: |

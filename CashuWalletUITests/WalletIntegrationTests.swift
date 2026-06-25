@@ -1,153 +1,96 @@
 import XCTest
 
-/// Integration tests for wallet operations against real Cashu mints
-/// These tests require live mints running (see CI/setup-mints.sh)
-class WalletIntegrationTests: XCTestCase {
-    
-    var app: XCUIApplication!
-    
+/// UI integration tests driving the real onboarding flow end-to-end.
+///
+/// Each test launches the app with `RESET_WALLET=1`, which makes `WalletManager`
+/// wipe any persisted wallet on startup so onboarding always begins from a
+/// known-empty state (see `IntegrationTestConfig` / `WalletManager.initialize`).
+///
+/// The mint-add test connects to the live Nutshell mint, so a mint must be
+/// running on `http://localhost:3338` (see `CI/start-nutshell.sh`).
+final class WalletIntegrationTests: XCTestCase {
+
+    private var app: XCUIApplication!
+    private let mintURL = ProcessInfo.processInfo.environment["NUTSHELL_MINT_URL"] ?? "http://localhost:3338"
+
     override func setUpWithError() throws {
+        continueAfterFailure = false
         app = XCUIApplication()
-        
-        // Setup launch environment
         app.launchEnvironment = [
             "CI_INTEGRATION_TEST": "1",
-            "RESET_WALLET": "1",
-            "NUTSHELL_MINT_URL": "http://localhost:3338",
-            "CDK_MINT_URL": "http://localhost:3339"
+            "RESET_WALLET": "1"
         ]
-        
         app.launch()
     }
-    
+
     override func tearDownWithError() throws {
         app = nil
     }
-    
-    // MARK: - Onboarding Tests
-    
-    func testOnboardingCreatesWalletWithMints() throws {
-        // Complete onboarding
-        let createButton = app.buttons["Create New Wallet"]
-        XCTAssertTrue(createButton.waitForExistence(timeout: 5))
-        createButton.tap()
-        
-        // Wait for onboarding to complete
-        let walletView = app.navigationBars["Wallet"]
-        XCTAssertTrue(walletView.waitForExistence(timeout: 10))
-        
-        // Navigate to Mints tab
-        let mintsTab = app.tabBars.buttons["Mints"]
-        XCTAssertTrue(mintsTab.waitForExistence(timeout: 5))
-        mintsTab.tap()
-        
-        // Add Nutshell mint
-        let addMintButton = app.buttons["Add Mint"]
-        addMintButton.tap()
-        
-        let mintUrlField = app.textFields["Mint URL"]
-        mintUrlField.tap()
-        mintUrlField.typeText("http://localhost:3338")
-        
-        app.buttons["Add"].tap()
-        
-        // Wait for mint to be added
-        let nutshellMintCell = app.staticTexts["Nutshell Mint"]
-        XCTAssertTrue(nutshellMintCell.waitForExistence(timeout: 10))
-        
-        // Add CDK mint
-        addMintButton.tap()
-        mintUrlField.tap()
-        mintUrlField.typeText("http://localhost:3339")
-        app.buttons["Add"].tap()
-        
-        // Wait for second mint
-        let cdkMintCell = app.staticTexts["CDK Mint"]
-        XCTAssertTrue(cdkMintCell.waitForExistence(timeout: 10))
+
+    // MARK: - Helpers
+
+    /// Advances welcome → create wallet → acknowledge seed → first-mint step.
+    /// Leaves the app on the "Pick your first mint" screen.
+    private func createWalletThroughSeed() {
+        let create = app.buttons["onboarding-create-wallet"]
+        XCTAssertTrue(create.waitForExistence(timeout: 30), "Onboarding welcome should appear")
+        create.tap()
+
+        let ack = app.buttons["onboarding-ack-seed"]
+        XCTAssertTrue(ack.waitForExistence(timeout: 15), "Seed phrase step should appear")
+        ack.tap()
+
+        let saved = app.buttons["onboarding-saved-seed"]
+        XCTAssertTrue(saved.waitForExistence(timeout: 5))
+        XCTAssertTrue(saved.isEnabled, "Saved-seed button should enable after acknowledging")
+        saved.tap()
     }
-    
-    // MARK: - Mint Operations Tests
-    
-    func testMintAndReceiveLightning() throws {
-        // Setup: Complete onboarding and add mints (reuse from above)
-        try testOnboardingCreatesWalletWithMints()
-        
-        // Go to Receive tab
-        let receiveTab = app.tabBars.buttons["Receive"]
-        receiveTab.tap()
-        
-        // Request Lightning payment
-        let lightningButton = app.buttons["Lightning"]
-        lightningButton.tap()
-        
-        let amountField = app.textFields["Amount"]
-        amountField.tap()
-        amountField.typeText("21")
-        
-        let requestButton = app.buttons["Request Payment"]
-        requestButton.tap()
-        
-        // Wait for QR code
-        let qrCode = app.images["QR Code"]
-        XCTAssertTrue(qrCode.waitForExistence(timeout: 5))
-        
-        // The invoice should be paid by the fake mint
-        // Wait for success
-        let successMessage = app.staticTexts["Payment Received"]
-        XCTAssertTrue(successMessage.waitForExistence(timeout: 15))
-        
-        // Check balance updated
-        let balanceText = app.staticTexts["21 sats"]
-        XCTAssertTrue(balanceText.exists)
+
+    private func assertReachedWallet(timeout: TimeInterval = 20) {
+        let walletTab = app.tabBars.buttons["Wallet"]
+        XCTAssertTrue(walletTab.waitForExistence(timeout: timeout), "Main wallet tab bar should appear")
     }
-    
-    // MARK: - Token Operations Tests
-    
-    func testCreateAndRedeemToken() throws {
-        // Setup: Complete onboarding and add mint
-        try testMintAndReceiveLightning()
-        
-        // Go to Send tab
-        let sendTab = app.tabBars.buttons["Send"]
-        sendTab.tap()
-        
-        // Create token
-        let tokenButton = app.buttons["Create Token"]
-        tokenButton.tap()
-        
-        let amountField = app.textFields["Amount"]
-        amountField.tap()
-        amountField.typeText("10")
-        
-        let createButton = app.buttons["Create"]
-        createButton.tap()
-        
-        // Wait for token to be displayed
-        let tokenField = app.textFields["Token"]
-        XCTAssertTrue(tokenField.waitForExistence(timeout: 5))
-        
-        // Copy token
-        let copyButton = app.buttons["Copy"]
-        copyButton.tap()
-        
-        // Go to Receive tab and redeem token
-        let receiveTab = app.tabBars.buttons["Receive"]
-        receiveTab.tap()
-        
-        let tokenReceiveButton = app.buttons["Cashu Token"]
-        tokenReceiveButton.tap()
-        
-        let tokenInputField = app.textFields["Paste Token"]
-        tokenInputField.tap()
-        
-        // Paste from clipboard
-        app.typeText(tokenField.value as? String ?? "")
-        
-        let redeemButton = app.buttons["Redeem"]
-        redeemButton.tap()
-        
-        // Wait for success
-        let successMessage = app.staticTexts["Token Redeemed"]
-        XCTAssertTrue(successMessage.waitForExistence(timeout: 10))
+
+    // MARK: - Tests
+
+    /// Create a wallet and skip mint setup — should land on the main tab bar.
+    func testOnboardingCreateWalletAndSkipMint() throws {
+        createWalletThroughSeed()
+
+        let skip = app.buttons["onboarding-skip-mint"]
+        XCTAssertTrue(skip.waitForExistence(timeout: 10), "First-mint step should appear")
+        skip.tap()
+
+        assertReachedWallet()
+    }
+
+    /// Create a wallet and connect the live Nutshell mint via a custom URL.
+    /// Reaching the wallet tab means `addMint` succeeded against the mint.
+    func testOnboardingAddLocalMint() throws {
+        createWalletThroughSeed()
+
+        let addCustom = app.buttons["onboarding-add-custom-mint"]
+        XCTAssertTrue(addCustom.waitForExistence(timeout: 10), "First-mint step should appear")
+        addCustom.tap()
+
+        let field = app.textFields["onboarding-custom-mint-field"]
+        XCTAssertTrue(field.waitForExistence(timeout: 5))
+        field.tap()
+        field.typeText(mintURL)
+
+        app.buttons["onboarding-commit-custom-mint"].tap()
+
+        let cont = app.buttons["onboarding-continue"]
+        XCTAssertTrue(cont.waitForExistence(timeout: 5))
+        XCTAssertTrue(cont.isEnabled, "Continue should enable once a mint is selected")
+        cont.tap()
+
+        // Reaching the wallet tab confirms the mint connected successfully.
+        assertReachedWallet(timeout: 30)
+
+        // The added mint should be listed on the Mints tab.
+        app.tabBars.buttons["Mints"].tap()
+        let mintRow = app.staticTexts[mintURL]
+        XCTAssertTrue(mintRow.waitForExistence(timeout: 10), "Added mint should appear in the Mints list")
     }
 }

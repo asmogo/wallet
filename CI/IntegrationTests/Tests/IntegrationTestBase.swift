@@ -10,7 +10,7 @@ import Cdk
 //
 // "abandon x N + about" is the standard BIP39 test vector.
 // This is the same mnemonic used across all test suites for deterministic key derivation.
-let testMnemonic = "all all all all all all all all all all all junk"
+let testMnemonic = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about"
 
 /// Base class for CDK-Swift integration tests against live Cashu mints.
 ///
@@ -33,9 +33,12 @@ class IntegrationTestBase: XCTestCase {
         // One-time CDK logging initialisation (safe to call multiple times)
         initLogging(level: "debug")
 
+        // A fresh random mnemonic per test keeps blinded-message secrets unique
+        // across tests; the mint persists signed messages for its lifetime, so a
+        // shared seed would collide ("Blinded Message is already signed").
         let tmpPath = NSTemporaryDirectory().appending("\(dbNamePrefix)_\(UUID().uuidString).sqlite")
         repository = try WalletRepository(
-            mnemonic: testMnemonic,
+            mnemonic: try generateMnemonic(),
             store: .sqlite(path: tmpPath)
         )
 
@@ -59,8 +62,9 @@ class IntegrationTestBase: XCTestCase {
     /// Creates a mint quote and waits until it has `paid` state, then mints proofs.
     /// Uses the BOLT11 payment method (fake wallets auto-pay immediately).
     /// Returns the minted proofs.
-    func mintSats(_ amount: UInt64, timeout: TimeInterval = 15.0) async throws -> [Proof] {
-        let quote = try await wallet.mintQuote(
+    func mintSats(_ amount: UInt64, timeout: TimeInterval = 15.0, wallet targetWallet: Wallet? = nil) async throws -> [Proof] {
+        let target = targetWallet ?? wallet!
+        let quote = try await target.mintQuote(
             paymentMethod: .bolt11,
             amount: Amount(value: amount),
             description: "E2E integration test",
@@ -72,7 +76,7 @@ class IntegrationTestBase: XCTestCase {
         var currentState = quote.state
         while currentState != .paid, Date().timeIntervalSince(start) < timeout {
             try await Task.sleep(nanoseconds: 200_000_000)  // 200 ms
-            let updated = try await wallet.checkMintQuote(quoteId: quote.id)
+            let updated = try await target.checkMintQuote(quoteId: quote.id)
             currentState = updated.state
         }
         XCTAssertEqual(currentState, .paid, "Mint quote did not become paid within timeout")
@@ -84,7 +88,7 @@ class IntegrationTestBase: XCTestCase {
         }
 
         // Mint the proofs
-        let proofs = try await wallet.mint(
+        let proofs = try await target.mint(
             quoteId: quote.id,
             amountSplitTarget: .none,
             spendingConditions: nil

@@ -155,6 +155,7 @@ struct OnboardingView: View {
                 }
                 .glassButton()
                 .disabled(isCreating)
+                .accessibilityIdentifier("onboarding-create-wallet")
 
                 Button(action: {
                     HapticFeedback.selection()
@@ -282,6 +283,7 @@ struct OnboardingView: View {
             }
             .buttonStyle(.plain)
             .padding(.horizontal, 4)
+            .accessibilityIdentifier("onboarding-ack-seed")
 
             Button(action: {
                 HapticFeedback.selection()
@@ -291,6 +293,7 @@ struct OnboardingView: View {
             }
             .glassButton()
             .disabled(!seedAcknowledged)
+            .accessibilityIdentifier("onboarding-saved-seed")
             .animation(.easeOut(duration: 0.2), value: seedAcknowledged)
             .padding(.bottom, 40)
         }
@@ -377,6 +380,7 @@ struct OnboardingView: View {
                     }
                     .textLinkButton()
                     .padding(.top, 4)
+                    .accessibilityIdentifier("onboarding-add-custom-mint")
                 }
 
                 if let error = firstMintError {
@@ -414,6 +418,7 @@ struct OnboardingView: View {
                 .glassButton()
                 .disabled(selectedMintUrls.isEmpty || isAddingFirstMints)
                 .animation(.easeOut(duration: 0.2), value: selectedMintUrls.isEmpty)
+                .accessibilityIdentifier("onboarding-continue")
 
                 Button(action: skipFirstMint) {
                     Text("Skip for now")
@@ -421,6 +426,7 @@ struct OnboardingView: View {
                 }
                 .textLinkButton()
                 .disabled(isAddingFirstMints)
+                .accessibilityIdentifier("onboarding-skip-mint")
             }
             .padding(.horizontal, 24)
             .padding(.bottom, 32)
@@ -488,6 +494,7 @@ struct OnboardingView: View {
                             .allowsHitTesting(false)
                     }
                 }
+                .accessibilityIdentifier("onboarding-custom-mint-field")
 
             Button(action: commitCustomMintInput) {
                 Image(systemName: customMintInput.isEmpty ? "doc.on.clipboard" : "arrow.right.circle.fill")
@@ -498,6 +505,7 @@ struct OnboardingView: View {
             .buttonStyle(.plain)
             .accessibilityLabel(customMintInput.isEmpty ? "Paste from clipboard" : "Add mint")
             .accessibilityHint(customMintInput.isEmpty ? "Pastes mint URL from clipboard" : "Adds mint to restore list")
+            .accessibilityIdentifier("onboarding-commit-custom-mint")
         }
         .padding(.vertical, 12)
         .padding(.horizontal, 14)
