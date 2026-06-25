@@ -226,48 +226,82 @@ struct RecommendedMint: Identifiable {
     ]
 }
 
-/// Quick-add suggestion rows shown in the restore-mints empty state. Converts
-/// the "type a mint URL from memory" recall task into recognition: tap a known
-/// mint to stage it for restore. Rows sit on the bare canvas with hairline
-/// dividers — the same shape as the staged-mint list, no card.
+/// Quick-add suggestion rows shown in the restore-mints flow. Converts the
+/// "type a mint URL from memory" recall task into recognition. Shows the
+/// wallet's own mints first ("Your mints"), then falls back to curated
+/// suggestions for users who have none configured yet. Rows sit on the bare
+/// canvas with hairline dividers — the same shape as the staged-mint list.
 struct SuggestedMintsSection: View {
     /// URLs already staged or restored — filtered out of the suggestions.
     let existingURLs: Set<String>
     let onAdd: (String) -> Void
+    /// Mints already configured in the wallet — surfaced first so users
+    /// recognise them without having to remember URLs.
+    var walletMints: [RecommendedMint] = []
 
-    private var available: [RecommendedMint] {
-        RecommendedMint.suggested.filter { !existingURLs.contains($0.url) }
+    private var availableWalletMints: [RecommendedMint] {
+        walletMints.filter { !existingURLs.contains($0.url) }
+    }
+
+    private var availableCurated: [RecommendedMint] {
+        let walletUrls = Set(walletMints.map(\.url))
+        return RecommendedMint.suggested.filter {
+            !existingURLs.contains($0.url) && !walletUrls.contains($0.url)
+        }
     }
 
     var body: some View {
-        if !available.isEmpty {
+        let hasWallet = !availableWalletMints.isEmpty
+        let hasCurated = !availableCurated.isEmpty
+
+        if hasWallet || hasCurated {
             VStack(alignment: .leading, spacing: 0) {
-                Text("Suggested mints")
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(.secondary)
-                    .textCase(.uppercase)
-                    .tracking(1.2)
-                    .padding(.horizontal, 4)
-                    .padding(.bottom, 8)
-
-                ForEach(Array(available.enumerated()), id: \.element.id) { index, mint in
-                    Button {
-                        onAdd(mint.url)
-                        HapticFeedback.selection()
-                    } label: {
-                        row(for: mint)
+                if hasWallet {
+                    sectionHeader("Your mints")
+                    ForEach(Array(availableWalletMints.enumerated()), id: \.element.id) { index, mint in
+                        mintButton(mint)
+                        if index < availableWalletMints.count - 1 || hasCurated {
+                            CanvasDivider()
+                        }
                     }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel("Add \(mint.name)")
-                    .accessibilityHint("Stages \(displayHost(mint.url)) for recovery")
-
-                    if index < available.count - 1 {
-                        CanvasDivider()
+                }
+                if hasCurated {
+                    sectionHeader("Suggested mints")
+                        .padding(.top, hasWallet ? 16 : 0)
+                    ForEach(Array(availableCurated.enumerated()), id: \.element.id) { index, mint in
+                        mintButton(mint)
+                        if index < availableCurated.count - 1 {
+                            CanvasDivider()
+                        }
                     }
                 }
             }
             .padding(.horizontal)
         }
+    }
+
+    @ViewBuilder
+    private func sectionHeader(_ title: String) -> some View {
+        Text(title)
+            .font(.caption.weight(.semibold))
+            .foregroundStyle(.secondary)
+            .textCase(.uppercase)
+            .tracking(1.2)
+            .padding(.horizontal, 4)
+            .padding(.bottom, 8)
+    }
+
+    @ViewBuilder
+    private func mintButton(_ mint: RecommendedMint) -> some View {
+        Button {
+            onAdd(mint.url)
+            HapticFeedback.selection()
+        } label: {
+            row(for: mint)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Add \(mint.name)")
+        .accessibilityHint("Stages \(displayHost(mint.url)) for recovery")
     }
 
     private func row(for mint: RecommendedMint) -> some View {

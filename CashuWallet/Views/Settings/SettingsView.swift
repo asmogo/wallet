@@ -359,6 +359,7 @@ struct RestoreWalletView: View {
     @State private var isRestoringMints = false
     @State private var currentRestoringMint: String?
     @State private var mintError: String?
+    @State private var previousWalletMintSuggestions: [RecommendedMint] = []
 
     private enum RestoreStep {
         case seed
@@ -523,14 +524,13 @@ struct RestoreWalletView: View {
             }
             .padding(.horizontal)
 
-            if isEmpty {
-                SuggestedMintsSection(
-                    existingURLs: Set(mintsToRestore).union(restoreResults.map(\.mintUrl)),
-                    onAdd: { addMintUrlToRestoreList($0, showDuplicateError: false, showValidationError: false) }
-                )
-            } else {
-                restoreMintList
-            }
+            restoreMintList
+
+            SuggestedMintsSection(
+                existingURLs: Set(mintsToRestore).union(restoreResults.map(\.mintUrl)),
+                onAdd: { addMintUrlToRestoreList($0, showDuplicateError: false, showValidationError: false) },
+                walletMints: previousWalletMintSuggestions
+            )
 
             if let mintError {
                 Text(mintError)
@@ -726,6 +726,9 @@ struct RestoreWalletView: View {
 
     private func initializeAndProceed() {
         let cleanedMnemonic = normalizedWords(from: restoreMnemonic).joined(separator: " ")
+        let currentMintSuggestions = walletManager.mints.map {
+            RecommendedMint(name: $0.name, url: $0.url)
+        }
 
         guard walletManager.validateMnemonic(cleanedMnemonic) else {
             seedError = "That seed phrase doesn't look right. Check the spelling and try again."
@@ -740,6 +743,9 @@ struct RestoreWalletView: View {
 
             do {
                 try await walletManager.initializeRestoredWallet(mnemonic: cleanedMnemonic)
+                if !currentMintSuggestions.isEmpty {
+                    previousWalletMintSuggestions = currentMintSuggestions
+                }
                 step = .mints
             } catch {
                 seedError = "Couldn't open the wallet. \(error.userFacingWalletMessage)"
