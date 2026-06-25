@@ -1,8 +1,9 @@
 #!/bin/bash
 set -euo pipefail
 
-# setup-cdk.sh — Download prebuilt cdk-mintd binary
-#                On macOS the binary is run via Docker (start-cdk.sh handles that).
+# setup-cdk.sh — Get cdk-mintd binary ready
+#   Linux:  download prebuilt binary + checksum verify
+#   macOS:  build from source with cargo (Rust must be installed)
 # Usage: ./CI/setup-cdk.sh [port]
 
 PORT=${1:-3339}
@@ -11,7 +12,7 @@ CDK_VERSION="0.17.1"
 BIN_DIR="${SCRIPT_DIR}/.cdk-bin"
 WORK_DIR="${SCRIPT_DIR}/.cdk-workdir"
 
-echo "🔧 Setting up CDK mint (prebuilt v${CDK_VERSION}) on port ${PORT}..."
+echo "🔧 Setting up CDK mint (v${CDK_VERSION}) on port ${PORT}..."
 
 mkdir -p "$BIN_DIR"
 
@@ -25,24 +26,33 @@ case "${ARCH}" in
     *)       echo "❌ Unsupported arch: ${ARCH}"; exit 1 ;;
 esac
 
-ASSET_NAME="cdk-mintd-${CDK_VERSION}-${ASSET_ARCH}"
-DOWNLOAD_URL="https://github.com/cashubtc/cdk/releases/download/v${CDK_VERSION}/${ASSET_NAME}"
+if [ "$OS" = "darwin" ]; then
+    echo "⚠️  Prebuilt binary v${CDK_VERSION} is Linux-only."
+    echo "   macOS detected (${ARCH}). Building from source with cargo..."
 
-echo "📥 Downloading ${ASSET_NAME}..."
-curl -fsSL -o "${BIN_DIR}/cdk-mintd" "$DOWNLOAD_URL"
-chmod +x "${BIN_DIR}/cdk-mintd"
+    cargo install --git https://github.com/cashubtc/cdk --tag "v${CDK_VERSION}" --root "${BIN_DIR}/.cargo" cdk-mintd 2>&1
 
-if [ "$OS" = "linux" ]; then
-    # Linux: verify checksum
+    # Move binary to expected location and clean up
+    mv "${BIN_DIR}/.cargo/bin/cdk-mintd" "${BIN_DIR}/cdk-mintd"
+    rm -rf "${BIN_DIR}/.cargo"
+
+    echo "✅ Built cdk-mintd v${CDK_VERSION} from source"
+else
+    # Linux: download prebuilt + checksum verify
+    ASSET_NAME="cdk-mintd-${CDK_VERSION}-${ASSET_ARCH}"
+    DOWNLOAD_URL="https://github.com/cashubtc/cdk/releases/download/v${CDK_VERSION}/${ASSET_NAME}"
     CHECKSUM_URL="https://github.com/cashubtc/cdk/releases/download/v${CDK_VERSION}/SHA256SUMS"
+
+    echo "📥 Downloading ${ASSET_NAME}..."
+    curl -fsSL -o "${BIN_DIR}/cdk-mintd" "$DOWNLOAD_URL"
     curl -fsSL -o "${BIN_DIR}/SHA256SUMS" "$CHECKSUM_URL"
+
     (cd "$BIN_DIR" && sha256sum -c SHA256SUMS --ignore-missing)
     rm -f "${BIN_DIR}/SHA256SUMS"
-else
-    echo "⚠️  Downloaded prebuilt is a Linux binary — will run via Docker (on macOS)"
-fi
+    chmod +x "${BIN_DIR}/cdk-mintd"
 
-echo "✅ cdk-mintd binary ready at ${BIN_DIR}/cdk-mintd"
+    echo "✅ cdk-mintd binary ready at ${BIN_DIR}/cdk-mintd"
+fi
 
 # Create work directory with config
 mkdir -p "$WORK_DIR"
@@ -62,7 +72,6 @@ port = ${PORT}
 
 [database]
 engine = "sqlite"
-# Path is resolved relative to work_dir
 directory = ".cdk-workdir"
 
 [ln]
