@@ -27,8 +27,40 @@
       buildConfiguration = "Debug"
       selectedDebuggerIdentifier = "Xcode.DebuggerFoundation.Debugger.LLDB"
       selectedLauncherIdentifier = "Xcode.DebuggerFoundation.Launcher.LLDB"
-      shouldUseLaunchSchemeArgsEnv = "YES"
-      shouldAutocreateTestPlan = "YES">
+      shouldUseLaunchSchemeArgsEnv = "YES">
+      <Testables>
+         <TestableReference
+            skipped = "NO"
+            parallelizable = "YES">
+            <BuildableReference
+               BuildableIdentifier = "primary"
+               BlueprintIdentifier = "AFC8B1DEC85E45AF663C36B4"
+               BuildableName = "CashuWalletTests.xctest"
+               BlueprintName = "CashuWalletTests"
+               ReferencedContainer = "container:CashuWallet.xcodeproj">
+            </BuildableReference>
+         </TestableReference>
+         <TestableReference
+            skipped = "NO"
+            parallelizable = "YES">
+            <BuildableReference
+               BuildableIdentifier = "primary"
+               BlueprintIdentifier = "B1B0E17344AC15825896A0EC"
+               BuildableName = "CashuWalletUITests.xctest"
+               BlueprintName = "CashuWalletUITests"
+               ReferencedContainer = "container:CashuWallet.xcodeproj">
+            </BuildableReference>
+         </TestableReference>
+      </Testables>
+      <MacroExpansion>
+         <BuildableReference
+            BuildableIdentifier = "primary"
+            BlueprintIdentifier = "5100000000000001"
+            BuildableName = "CashuWallet.app"
+            BlueprintName = "CashuWallet"
+            ReferencedContainer = "container:CashuWallet.xcodeproj">
+         </BuildableReference>
+      </MacroExpansion>
    </TestAction>
    <LaunchAction
       buildConfiguration = "Debug"

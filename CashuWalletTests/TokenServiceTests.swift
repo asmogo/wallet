@@ -91,8 +91,8 @@ final class TokenServiceTests: XCTestCase {
     // MARK: - P2PK pubkey validation (exercised via sendTokens error path)
     //
     // The private `normalizedP2PKPubkey` throws `TokenServiceError.invalidP2PKPubkey`
-    // for malformed keys. We reach it through sendTokens which calls it before
-    // touching the wallet.
+    // for malformed keys. With no repository available, sendTokens may also fail
+    // earlier with `WalletError.notInitialized`.
 
     func testSendWithInvalidP2PKPubkeyThrows() async {
         do {
@@ -102,6 +102,8 @@ final class TokenServiceTests: XCTestCase {
             XCTAssertEqual(err, .invalidP2PKPubkey)
         } catch is WalletError {
             // wallet guard fires first when there is no repository; that's fine
+        } catch {
+            XCTFail("Unexpected error: \(error)")
         }
     }
 
@@ -113,6 +115,8 @@ final class TokenServiceTests: XCTestCase {
             XCTAssertEqual(err, .invalidP2PKPubkey)
         } catch is WalletError {
             // wallet guard fires first; acceptable
+        } catch {
+            XCTFail("Unexpected error: \(error)")
         }
     }
 
