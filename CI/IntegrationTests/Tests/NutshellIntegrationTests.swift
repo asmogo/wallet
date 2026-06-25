@@ -1,6 +1,6 @@
 import XCTest
 @testable import CashuWallet
-import CashuDevKit
+import Cdk
 
 final class NutshellIntegrationTests: XCTestCase {
     

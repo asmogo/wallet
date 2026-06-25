@@ -614,7 +614,7 @@
 			packageReferences = (
 				6A8EC93D2F256F350058C21B /* XCRemoteSwiftPackageReference "URKit" */,
 				7200000000000002 /* XCRemoteSwiftPackageReference "swift-secp256k1" */,
-				720E47A42FEC721E00E02CD0 /* XCLocalSwiftPackageReference "../../cdk/target/cdk-swift-local" */,
+				720E47A42FEC721E00E02CD0 /* XCRemoteSwiftPackageReference "cdk-swift" */,
 			);
 			productRefGroup = 4100000000000002 /* Products */;
 			projectDirPath = "";
@@ -964,13 +964,6 @@
 		};
 /* End XCConfigurationList section */
 
-/* Begin XCLocalSwiftPackageReference section */
-		720E47A42FEC721E00E02CD0 /* XCLocalSwiftPackageReference "../../cdk/target/cdk-swift-local" */ = {
-			isa = XCLocalSwiftPackageReference;
-			relativePath = "../../cdk/target/cdk-swift-local";
-		};
-/* End XCLocalSwiftPackageReference section */
-
 /* Begin XCRemoteSwiftPackageReference section */
 		6A8EC93D2F256F350058C21B /* XCRemoteSwiftPackageReference "URKit" */ = {
 			isa = XCRemoteSwiftPackageReference;
@@ -988,6 +981,14 @@
 				minimumVersion = 0.18.0;
 			};
 		};
+		720E47A42FEC721E00E02CD0 /* XCRemoteSwiftPackageReference "cdk-swift" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/cashubtc/cdk-swift";
+			requirement = {
+				kind = exactVersion;
+				version = 0.17.1;
+			};
+		};
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
@@ -1003,6 +1004,7 @@
 		};
 		720E47A52FEC721E00E02CD0 /* Cdk */ = {
 			isa = XCSwiftPackageProductDependency;
+			package = 720E47A42FEC721E00E02CD0 /* XCRemoteSwiftPackageReference "cdk-swift" */;
 			productName = Cdk;
 		};
 /* End XCSwiftPackageProductDependency section */
