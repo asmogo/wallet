@@ -58,7 +58,7 @@ enum PaymentMethodKind: String, CaseIterable, Codable, Hashable {
         case .bolt11:
             return "Invoice"
         case .bolt12:
-            return "Offer"
+            return "Invoice"
         case .onchain:
             return "Address"
         }
@@ -71,7 +71,7 @@ enum PaymentMethodKind: String, CaseIterable, Codable, Hashable {
         case .bolt11:
             return "Lightning invoice"
         case .bolt12:
-            return "Reusable offer"
+            return "Reusable invoice"
         case .onchain:
             return "On-chain address"
         }
@@ -95,7 +95,7 @@ enum PaymentMethodKind: String, CaseIterable, Codable, Hashable {
         case .bolt11:
             return "Create invoice"
         case .bolt12:
-            return "Create offer"
+            return "Create invoice"
         case .onchain:
             return "Create address"
         }

@@ -99,9 +99,8 @@ struct ReceiveLightningView: View {
                 MethodPickerSheet(
                     selectedMethod: $selectedMethod,
                     methods: availableMintMethods,
-                    onSelect: { method in
-                        // Amountless only applies to BOLT12 — never let it leak.
-                        if method != .bolt12 { isAmountless = false }
+                    onSelect: { _ in
+                        // `onChange(of: selectedMethod)` owns the amountless rule.
                     }
                 )
                 .presentationDetents([.medium])
@@ -115,7 +114,10 @@ struct ReceiveLightningView: View {
             .onChange(of: selectedMethod) {
                 errorMessage = nil
                 onchainObservation = nil
-                if selectedMethod != .bolt12 { isAmountless = false }
+                // Reusable invoices open amountless (sender chooses) when no
+                // amount is typed; any carried-over amount keeps it off, and
+                // every non-BOLT12 method is always amount-bearing.
+                isAmountless = (selectedMethod == .bolt12) && amountString.isEmpty
             }
             .onChange(of: entryUnit) { oldUnit, newUnit in
                 // Flip (or a price load that changes the effective unit): carry
@@ -151,7 +153,7 @@ struct ReceiveLightningView: View {
         case .bolt11:
             return "Lightning Invoice"
         case .bolt12:
-            return "BOLT12 Offer"
+            return "Reusable Invoice"
         case .onchain:
             return "Bitcoin Address"
         }
@@ -227,7 +229,7 @@ struct ReceiveLightningView: View {
 
     private var amountHero: some View {
         VStack(spacing: 12) {
-            if shouldShowMethodPicker {
+            if selectedMethod == .onchain {
                 methodBadge
                     .transition(.opacity)
             }
@@ -250,11 +252,11 @@ struct ReceiveLightningView: View {
         .animation(.snappy, value: selectedMethod)
     }
 
-    /// Quiet label naming the selected receive method, sitting above the amount.
-    /// The nav-bar glyph is the control; this is a passive indicator, only shown
-    /// when the mint actually offers more than one method.
+    /// All-caps "ON-CHAIN" label sitting above the amount. On-chain receive is
+    /// unusual enough to warrant the callout; Lightning and reusable invoices
+    /// rely on the nav-bar glyph alone, so this only renders for on-chain.
     private var methodBadge: some View {
-        Text(selectedMethod.displayName)
+        Text(selectedMethod.displayName.uppercased())
             .font(.caption.weight(.medium))
             .foregroundStyle(.secondary)
             .padding(.horizontal, 10)
@@ -263,8 +265,9 @@ struct ReceiveLightningView: View {
             .accessibilityLabel("Method: \(selectedMethod.friendlyTitle)")
     }
 
-    /// BOLT12-only toggle. Lit = the offer carries no amount (sender chooses).
-    /// Typing any digit clears it (handled in `amountInputView`).
+    /// BOLT12-only toggle. Lit = the invoice carries no amount (sender chooses).
+    /// Only available while the field is empty: typing a digit clears it (handled
+    /// in `amountInputView`) and greys it out until the amount is cleared again.
     private var anyAmountChip: some View {
         Button(action: {
             HapticFeedback.selection()
@@ -286,6 +289,8 @@ struct ReceiveLightningView: View {
                 .contentShape(Capsule())
         }
         .buttonStyle(.plain)
+        .disabled(!amountString.isEmpty)
+        .opacity(amountString.isEmpty ? 1 : 0.35)
         .accessibilityLabel("Any amount")
         .accessibilityHint("The sender chooses the amount")
         .accessibilityAddTraits(isAmountless ? .isSelected : [])
@@ -622,7 +627,7 @@ struct ReceiveLightningView: View {
     private func syncSelectedMethodWithActiveMint() {
         guard availableMintMethods.contains(selectedMethod) else {
             selectedMethod = availableMintMethods.first ?? .bolt11
-            isAmountless = false
+            isAmountless = (selectedMethod == .bolt12) && amountString.isEmpty
             return
         }
     }
