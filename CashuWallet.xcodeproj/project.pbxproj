@@ -115,6 +115,20 @@
 		F300000000000005 /* RecentRecipientsList.swift in Sources */ = {isa = PBXBuildFile; fileRef = F400000000000005 /* RecentRecipientsList.swift */; };
 		F300000000000006 /* PaymentRequestDecoder.swift in Sources */ = {isa = PBXBuildFile; fileRef = F400000000000006 /* PaymentRequestDecoder.swift */; };
 		FC31D408CB5FAB113E9A5327 /* IntegrationTestConfig.swift in Sources */ = {isa = PBXBuildFile; fileRef = FB989C698CCB0CCD5FA8788D /* IntegrationTestConfig.swift */; };
+		T2A0000000000001 /* MainTabUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = T1A0000000000001 /* MainTabUITests.swift */; };
+		T2A0000000000002 /* ReceiveUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = T1A0000000000002 /* ReceiveUITests.swift */; };
+		T2A0000000000003 /* SettingsUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = T1A0000000000003 /* SettingsUITests.swift */; };
+		T2A0000000000004 /* UITestBase.swift in Sources */ = {isa = PBXBuildFile; fileRef = T1A0000000000004 /* UITestBase.swift */; };
+		T2B0000000000001 /* InMemoryStorage.swift in Sources */ = {isa = PBXBuildFile; fileRef = T1B0000000000001 /* InMemoryStorage.swift */; };
+		T2B0000000000002 /* WalletStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = T1B0000000000002 /* WalletStoreTests.swift */; };
+		T2B0000000000003 /* MintServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = T1B0000000000003 /* MintServiceTests.swift */; };
+		T2B0000000000004 /* TransactionServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = T1B0000000000004 /* TransactionServiceTests.swift */; };
+		T2B0000000000005 /* NIP44Tests.swift in Sources */ = {isa = PBXBuildFile; fileRef = T1B0000000000005 /* NIP44Tests.swift */; };
+		T2B0000000000006 /* TokenServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = T1B0000000000006 /* TokenServiceTests.swift */; };
+		T2B0000000000007 /* AmountFormatterTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = T1B0000000000007 /* AmountFormatterTests.swift */; };
+		T2B0000000000008 /* TokenParserTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = T1B0000000000008 /* TokenParserTests.swift */; };
+		T2B0000000000009 /* PaymentRequestDecoderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = T1B0000000000009 /* PaymentRequestDecoderTests.swift */; };
+		T2B000000000000A /* CurrencyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = T1B000000000000A /* CurrencyTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -242,6 +256,20 @@
 		F400000000000005 /* RecentRecipientsList.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecentRecipientsList.swift; sourceTree = "<group>"; };
 		F400000000000006 /* PaymentRequestDecoder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PaymentRequestDecoder.swift; sourceTree = "<group>"; };
 		FB989C698CCB0CCD5FA8788D /* IntegrationTestConfig.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = IntegrationTestConfig.swift; path = CashuWallet/Core/IntegrationTestConfig.swift; sourceTree = "<group>"; };
+		T1A0000000000001 /* MainTabUITests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = MainTabUITests.swift; path = CashuWalletUITests/MainTabUITests.swift; sourceTree = "<group>"; };
+		T1A0000000000002 /* ReceiveUITests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = ReceiveUITests.swift; path = CashuWalletUITests/ReceiveUITests.swift; sourceTree = "<group>"; };
+		T1A0000000000003 /* SettingsUITests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = SettingsUITests.swift; path = CashuWalletUITests/SettingsUITests.swift; sourceTree = "<group>"; };
+		T1A0000000000004 /* UITestBase.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = UITestBase.swift; path = CashuWalletUITests/UITestBase.swift; sourceTree = "<group>"; };
+		T1B0000000000001 /* InMemoryStorage.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = InMemoryStorage.swift; path = CashuWalletTests/InMemoryStorage.swift; sourceTree = "<group>"; };
+		T1B0000000000002 /* WalletStoreTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = WalletStoreTests.swift; path = CashuWalletTests/WalletStoreTests.swift; sourceTree = "<group>"; };
+		T1B0000000000003 /* MintServiceTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = MintServiceTests.swift; path = CashuWalletTests/MintServiceTests.swift; sourceTree = "<group>"; };
+		T1B0000000000004 /* TransactionServiceTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = TransactionServiceTests.swift; path = CashuWalletTests/TransactionServiceTests.swift; sourceTree = "<group>"; };
+		T1B0000000000005 /* NIP44Tests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = NIP44Tests.swift; path = CashuWalletTests/NIP44Tests.swift; sourceTree = "<group>"; };
+		T1B0000000000006 /* TokenServiceTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = TokenServiceTests.swift; path = CashuWalletTests/TokenServiceTests.swift; sourceTree = "<group>"; };
+		T1B0000000000007 /* AmountFormatterTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = AmountFormatterTests.swift; path = CI/IntegrationTests/Tests/AmountFormatterTests.swift; sourceTree = "<group>"; };
+		T1B0000000000008 /* TokenParserTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = TokenParserTests.swift; path = CI/IntegrationTests/Tests/TokenParserTests.swift; sourceTree = "<group>"; };
+		T1B0000000000009 /* PaymentRequestDecoderTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = PaymentRequestDecoderTests.swift; path = CI/IntegrationTests/Tests/PaymentRequestDecoderTests.swift; sourceTree = "<group>"; };
+		T1B000000000000A /* CurrencyTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = CurrencyTests.swift; path = CI/IntegrationTests/Tests/CurrencyTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -280,6 +308,16 @@
 			children = (
 				F1CF8C0C2E1379BCD23CF8C6 /* IntegrationTestBase.swift */,
 				72DD529F60A8D9D1A81E3FBB /* NutshellIntegrationTests.swift */,
+				T1B0000000000001 /* InMemoryStorage.swift */,
+				T1B0000000000002 /* WalletStoreTests.swift */,
+				T1B0000000000003 /* MintServiceTests.swift */,
+				T1B0000000000004 /* TransactionServiceTests.swift */,
+				T1B0000000000005 /* NIP44Tests.swift */,
+				T1B0000000000006 /* TokenServiceTests.swift */,
+				T1B0000000000007 /* AmountFormatterTests.swift */,
+				T1B0000000000008 /* TokenParserTests.swift */,
+				T1B0000000000009 /* PaymentRequestDecoderTests.swift */,
+				T1B000000000000A /* CurrencyTests.swift */,
 			);
 			name = CashuWalletTests;
 			sourceTree = "<group>";
@@ -484,6 +522,10 @@
 			isa = PBXGroup;
 			children = (
 				99846FC03810AE4BE904466F /* WalletIntegrationTests.swift */,
+				T1A0000000000001 /* MainTabUITests.swift */,
+				T1A0000000000002 /* ReceiveUITests.swift */,
+				T1A0000000000003 /* SettingsUITests.swift */,
+				T1A0000000000004 /* UITestBase.swift */,
 			);
 			name = CashuWalletUITests;
 			sourceTree = "<group>";
@@ -777,6 +819,16 @@
 			files = (
 				BF36C01CE0AB810E1B462448 /* IntegrationTestBase.swift in Sources */,
 				349E3802577110813AC1A9E3 /* NutshellIntegrationTests.swift in Sources */,
+				T2B0000000000001 /* InMemoryStorage.swift in Sources */,
+				T2B0000000000002 /* WalletStoreTests.swift in Sources */,
+				T2B0000000000003 /* MintServiceTests.swift in Sources */,
+				T2B0000000000004 /* TransactionServiceTests.swift in Sources */,
+				T2B0000000000005 /* NIP44Tests.swift in Sources */,
+				T2B0000000000006 /* TokenServiceTests.swift in Sources */,
+				T2B0000000000007 /* AmountFormatterTests.swift in Sources */,
+				T2B0000000000008 /* TokenParserTests.swift in Sources */,
+				T2B0000000000009 /* PaymentRequestDecoderTests.swift in Sources */,
+				T2B000000000000A /* CurrencyTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -890,6 +942,10 @@
 			buildActionMask = 2147483647;
 			files = (
 				67BDAA1154A191D7ACD57E34 /* WalletIntegrationTests.swift in Sources */,
+				T2A0000000000001 /* MainTabUITests.swift in Sources */,
+				T2A0000000000002 /* ReceiveUITests.swift in Sources */,
+				T2A0000000000003 /* SettingsUITests.swift in Sources */,
+				T2A0000000000004 /* UITestBase.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

@@ -164,6 +164,100 @@ final class NutshellIntegrationTests: IntegrationTestBase {
         try? FileManager.default.removeItem(atPath: senderDbPath)
     }
 
+    // MARK: - Negative paths
+
+    func testSendMoreThanBalanceThrows() async throws {
+        _ = try await mintSats(10)
+
+        do {
+            _ = try await wallet.prepareSend(
+                amount: Amount(value: 999),
+                options: SendOptions(
+                    memo: nil,
+                    conditions: nil,
+                    amountSplitTarget: .none,
+                    sendKind: .onlineExact,
+                    includeFee: false,
+                    useP2bk: false,
+                    maxProofs: nil,
+                    metadata: [:],
+                    p2pkSigningKeys: [],
+                    p2pkLockedProofSendMode: .swap
+                )
+            )
+            XCTFail("Expected an error when sending more than balance")
+        } catch {
+            // Any error is correct — the mint / CDK should reject insufficient funds.
+            let balance = try await wallet.totalBalance()
+            XCTAssertEqual(balance.value, 10, "Balance must not change after a failed send")
+        }
+    }
+
+    func testReceiveSameTokenTwiceFailsSecondTime() async throws {
+        // Mint proofs, build a token, receive it once, then attempt a second receive.
+        _ = try await mintSats(30)
+
+        let prepared = try await wallet.prepareSend(
+            amount: Amount(value: 10),
+            options: SendOptions(
+                memo: nil,
+                conditions: nil,
+                amountSplitTarget: .none,
+                sendKind: .onlineExact,
+                includeFee: false,
+                useP2bk: false,
+                maxProofs: nil,
+                metadata: [:],
+                p2pkSigningKeys: [],
+                p2pkLockedProofSendMode: .swap
+            )
+        )
+        let token = try await prepared.confirm(memo: nil)
+        let tokenString = token.encode()
+
+        // First receive — should succeed.
+        let receiverDbPath = NSTemporaryDirectory()
+            .appending("receiver_\(UUID().uuidString).sqlite")
+        let receiverRepo = try WalletRepository(
+            mnemonic: try generateMnemonic(),
+            store: .sqlite(path: receiverDbPath)
+        )
+        let mintUrl = MintUrl(url: mintUrlStr)
+        try await receiverRepo.createWallet(mintUrl: mintUrl, unit: .sat, targetProofCount: nil)
+        let receiverWallet = try await receiverRepo.getWallet(mintUrl: mintUrl, unit: .sat)
+        let decoded = try Token.decode(encodedToken: tokenString)
+        let opts = ReceiveOptions(
+            amountSplitTarget: .none, p2pkSigningKeys: [],
+            preimages: [], metadata: [:]
+        )
+        let received = try await receiverWallet.receive(token: decoded, options: opts)
+        XCTAssertEqual(received.value, 10, "First receive should succeed")
+
+        // Second receive of the same token — mint must reject it.
+        do {
+            let decoded2 = try Token.decode(encodedToken: tokenString)
+            _ = try await receiverWallet.receive(token: decoded2, options: opts)
+            XCTFail("Double-spend should have been rejected by the mint")
+        } catch {
+            // Expected: "Token is already spent" or equivalent CDK error.
+        }
+
+        try? FileManager.default.removeItem(atPath: receiverDbPath)
+    }
+
+    func testMintQuoteBalanceZeroWithoutPayment() async throws {
+        let quote = try await wallet.mintQuote(
+            paymentMethod: .bolt11,
+            amount: Amount(value: 50),
+            description: "Unpaid quote test",
+            extra: nil
+        )
+        XCTAssertEqual(quote.state, .unpaid, "Fresh quote must be unpaid")
+
+        let balance = try await wallet.totalBalance()
+        XCTAssertEqual(balance.value, 0, "Balance must remain 0 before payment")
+    }
+
     // MARK: - Quote State
 
     func testMintQuoteStateTransitions() async throws {

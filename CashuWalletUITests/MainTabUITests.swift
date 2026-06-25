@@ -1,48 +1,7 @@
 import XCTest
 
 /// UI tests verifying tab-bar navigation after wallet creation.
-final class MainTabUITests: XCTestCase {
-
-    private var app: XCUIApplication!
-
-    override func setUpWithError() throws {
-        continueAfterFailure = false
-        app = XCUIApplication()
-        app.launchEnvironment = [
-            "CI_INTEGRATION_TEST": "1",
-            "RESET_WALLET": "1"
-        ]
-        app.launch()
-    }
-
-    override func tearDownWithError() throws {
-        app = nil
-    }
-
-    // MARK: - Helpers
-
-    private func createWalletAndSkipMint() {
-        let create = app.buttons["onboarding-create-wallet"]
-        XCTAssertTrue(create.waitForExistence(timeout: 30))
-        create.tap()
-
-        let ack = app.buttons["onboarding-ack-seed"]
-        XCTAssertTrue(ack.waitForExistence(timeout: 15))
-        ack.tap()
-
-        let saved = app.buttons["onboarding-saved-seed"]
-        XCTAssertTrue(saved.waitForExistence(timeout: 5))
-        saved.tap()
-
-        let skip = app.buttons["onboarding-skip-mint"]
-        XCTAssertTrue(skip.waitForExistence(timeout: 10))
-        skip.tap()
-    }
-
-    private func waitForMainTab(timeout: TimeInterval = 20) {
-        let walletTab = app.tabBars.buttons["Wallet"]
-        XCTAssertTrue(walletTab.waitForExistence(timeout: timeout))
-    }
+final class MainTabUITests: UITestBase {
 
     // MARK: - Tests
 
