@@ -190,14 +190,14 @@
 		F400000000000004 /* ClipboardPaymentChip.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClipboardPaymentChip.swift; sourceTree = "<group>"; };
 		F400000000000005 /* RecentRecipientsList.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecentRecipientsList.swift; sourceTree = "<group>"; };
 		F400000000000006 /* PaymentRequestDecoder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PaymentRequestDecoder.swift; sourceTree = "<group>"; };
-		D100000000000101 /* WalletManager+Lifecycle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WalletManager+Lifecycle.swift; sourceTree = "<group>"; };
-		D100000000000102 /* WalletManager+NPC.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WalletManager+NPC.swift; sourceTree = "<group>"; };
-		D100000000000103 /* WalletManager+Mints.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WalletManager+Mints.swift; sourceTree = "<group>"; };
-		D100000000000104 /* WalletManager+Lightning.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WalletManager+Lightning.swift; sourceTree = "<group>"; };
-		D100000000000105 /* WalletManager+CashuPaymentRequests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WalletManager+CashuPaymentRequests.swift; sourceTree = "<group>"; };
-		D100000000000106 /* WalletManager+Tokens.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WalletManager+Tokens.swift; sourceTree = "<group>"; };
-		D100000000000107 /* WalletManager+MintQuoteSync.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WalletManager+MintQuoteSync.swift; sourceTree = "<group>"; };
-		D100000000000108 /* WalletManager+Backup.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WalletManager+Backup.swift; sourceTree = "<group>"; };
+		D100000000000101 /* WalletManager+Lifecycle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "WalletManager+Lifecycle.swift"; sourceTree = "<group>"; };
+		D100000000000102 /* WalletManager+NPC.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "WalletManager+NPC.swift"; sourceTree = "<group>"; };
+		D100000000000103 /* WalletManager+Mints.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "WalletManager+Mints.swift"; sourceTree = "<group>"; };
+		D100000000000104 /* WalletManager+Lightning.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "WalletManager+Lightning.swift"; sourceTree = "<group>"; };
+		D100000000000105 /* WalletManager+CashuPaymentRequests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "WalletManager+CashuPaymentRequests.swift"; sourceTree = "<group>"; };
+		D100000000000106 /* WalletManager+Tokens.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "WalletManager+Tokens.swift"; sourceTree = "<group>"; };
+		D100000000000107 /* WalletManager+MintQuoteSync.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "WalletManager+MintQuoteSync.swift"; sourceTree = "<group>"; };
+		D100000000000108 /* WalletManager+Backup.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "WalletManager+Backup.swift"; sourceTree = "<group>"; };
 		D100000000000109 /* WalletErrors.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WalletErrors.swift; sourceTree = "<group>"; };
 		D100000000000201 /* PaymentMethodKind.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PaymentMethodKind.swift; sourceTree = "<group>"; };
 		D100000000000202 /* PaymentRequestParser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PaymentRequestParser.swift; sourceTree = "<group>"; };
@@ -210,7 +210,7 @@
 		D100000000000209 /* TokenTransferModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TokenTransferModels.swift; sourceTree = "<group>"; };
 		D100000000000210 /* RestoreMintResult.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RestoreMintResult.swift; sourceTree = "<group>"; };
 		D100000000000211 /* TokenInfo.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TokenInfo.swift; sourceTree = "<group>"; };
-		D100000000000212 /* Data+Hashing.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Data+Hashing.swift; sourceTree = "<group>"; };
+		D100000000000212 /* Data+Hashing.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Data+Hashing.swift"; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
