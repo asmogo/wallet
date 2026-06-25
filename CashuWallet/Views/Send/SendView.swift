@@ -90,7 +90,7 @@ struct SendView: View {
             .sheet(isPresented: $showMintPicker) {
                 MintSelectorSheet(
                     selectedMint: sendMintSelection,
-                    minimumAmount: UInt64(amountString),
+                    minimumAmount: amountSats > 0 ? amountSats : nil,
                     onSelect: selectSendMint
                 )
                     .environmentObject(walletManager)
@@ -103,6 +103,9 @@ struct SendView: View {
             }
             .onDisappear {
                 checkingTask?.cancel()
+            }
+            .onChange(of: entryUnit) { oldUnit, newUnit in
+                amountString = AmountFormatter.entryConverted(raw: amountString, from: oldUnit, to: newUnit)
             }
         }
     }
@@ -122,8 +125,9 @@ struct SendView: View {
 
             // Amount display — fiat-primary with tap-to-flip ↕ pill
             CurrencyAmountDisplay(
-                sats: UInt64(amountString) ?? 0,
-                primary: $settings.amountDisplayPrimary
+                sats: amountSats,
+                primary: $settings.amountDisplayPrimary,
+                entryRaw: amountString
             )
 
             if let error = errorMessage {
@@ -144,7 +148,7 @@ struct SendView: View {
             }
 
             // Number pad
-            NumberPadAmountInput(amountString: $amountString)
+            NumberPadAmountInput(amountString: $amountString, unit: entryUnit)
                 .padding(.horizontal, 24)
 
             Button(action: {
@@ -216,13 +220,25 @@ struct SendView: View {
         .liquidGlass(in: RoundedRectangle(cornerRadius: 12), interactive: true)
     }
 
+    /// The unit the keypad is entering in: fiat only when fiat is primary AND a
+    /// price is loaded, else sats (mirrors `CurrencyAmountDisplay.effectivePrimary`).
+    private var entryUnit: AmountDisplayPrimary {
+        (settings.amountDisplayPrimary == .fiat && priceService.btcPriceUSD > 0) ? .fiat : .sats
+    }
+
+    /// Satoshis represented by the typed amount, interpreted per `entryUnit`.
+    private var amountSats: UInt64 { AmountFormatter.entrySats(raw: amountString, unit: entryUnit) }
+
     private func useMax(mint: MintInfo) {
         HapticFeedback.impact(.light)
-        amountString = String(mint.balance)
+        // Balance is sats; express it in the current entry unit so the keypad
+        // string keeps its meaning.
+        amountString = AmountFormatter.entryConverted(raw: String(mint.balance), from: .sats, to: entryUnit)
     }
 
     private var canSend: Bool {
-        guard let amount = UInt64(amountString), amount > 0 else { return false }
+        let amount = amountSats
+        guard amount > 0 else { return false }
         guard let mint = displaySendMint else { return false }
         if lockWithP2PK && normalizedP2PKPubkeyInput == nil { return false }
         return amount <= mint.balance
@@ -243,7 +259,7 @@ struct SendView: View {
     }
 
     private var displaySendMint: MintInfo? {
-        resolvedSelectedSendMint ?? recommendedSendMint(minimumAmount: UInt64(amountString))
+        resolvedSelectedSendMint ?? recommendedSendMint(minimumAmount: amountSats > 0 ? amountSats : nil)
     }
 
     private var sendMintSelection: Binding<MintInfo?> {
@@ -352,7 +368,7 @@ struct SendView: View {
 
                     // Amount
                     CurrencyAmountDisplay(
-                        sats: UInt64(amountString) ?? 0,
+                        sats: amountSats,
                         primary: $settings.amountDisplayPrimary,
                         primarySize: 32
                     )
@@ -399,7 +415,7 @@ struct SendView: View {
                         canvasDivider
                         detailRow(icon: "banknote", label: "Fiat",
                                   value: priceService.btcPriceUSD > 0
-                                      ? priceService.formatSatsAsFiat(UInt64(amountString) ?? 0) : "—")
+                                      ? priceService.formatSatsAsFiat(amountSats) : "—")
                         if let mintURL = generatedTokenMintURL {
                             canvasDivider
                             detailRow(icon: "bitcoinsign.bank.building", label: "Mint",
@@ -458,7 +474,8 @@ struct SendView: View {
     // MARK: - Actions
 
     private func generateToken() {
-        guard let amount = UInt64(amountString), amount > 0 else { return }
+        let amount = amountSats
+        guard amount > 0 else { return }
         guard let mint = displaySendMint else {
             errorMessage = "No mint available."
             return
@@ -626,6 +643,7 @@ struct MeltView: View {
     @Environment(\.dismiss) private var dismiss
     @EnvironmentObject var walletManager: WalletManager
     @ObservedObject private var settings = SettingsManager.shared
+    @ObservedObject private var priceService = PriceService.shared
 
     private let autoQuoteOnAppear: Bool
     private let onComplete: (() -> Void)?
@@ -772,6 +790,9 @@ struct MeltView: View {
             .onChange(of: requestInput) {
                 syncSelectedMeltMint()
             }
+            .onChange(of: entryUnit) { oldUnit, newUnit in
+                amountString = AmountFormatter.entryConverted(raw: amountString, from: oldUnit, to: newUnit)
+            }
         }
     }
 
@@ -798,9 +819,19 @@ struct MeltView: View {
         return PaymentRequestParser.paymentMethod(for: requestInput) ?? .bolt11
     }
 
+    /// The unit the keypad is entering in: fiat only when fiat is primary AND a
+    /// price is loaded, else sats (mirrors `CurrencyAmountDisplay.effectivePrimary`).
+    private var entryUnit: AmountDisplayPrimary {
+        (settings.amountDisplayPrimary == .fiat && priceService.btcPriceUSD > 0) ? .fiat : .sats
+    }
+
+    /// Satoshis represented by the typed amount, interpreted per `entryUnit`.
+    private var amountSats: UInt64 { AmountFormatter.entrySats(raw: amountString, unit: entryUnit) }
+
     private var knownPaymentAmount: UInt64? {
-        if let amount = UInt64(amountString), amount > 0 {
-            return amount
+        let entered = amountSats
+        if entered > 0 {
+            return entered
         }
 
         switch PaymentRequestDecoder.decode(requestInput) {
@@ -861,7 +892,7 @@ struct MeltView: View {
         guard !requestInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return false }
 
         if amountRequired {
-            guard let amount = UInt64(amountString), amount > 0 else { return false }
+            guard amountSats > 0 else { return false }
         }
 
         if meltMode == .onchain {
@@ -966,7 +997,7 @@ struct MeltView: View {
             }
 
             if amountRequired {
-                NumberPadAmountInput(amountString: $amountString)
+                NumberPadAmountInput(amountString: $amountString, unit: entryUnit)
                     .padding(.horizontal, 24)
                     .padding(.top, 12)
             } else {
@@ -1116,9 +1147,10 @@ struct MeltView: View {
 
     private var amountEntrySection: some View {
         CurrencyAmountDisplay(
-            sats: UInt64(amountString) ?? 0,
+            sats: amountSats,
             primary: $settings.amountDisplayPrimary,
-            primarySize: 48
+            primarySize: 48,
+            entryRaw: amountString
         )
         .accessibilityElement(children: .combine)
         .accessibilityLabel("Payment amount")
@@ -1458,7 +1490,8 @@ struct MeltView: View {
                 switch meltMode {
                 case .lightning:
                     if isHumanReadableAddress {
-                        guard let amount = UInt64(amountString), amount > 0 else { return }
+                        let amount = amountSats
+                        guard amount > 0 else { return }
                         let quote = try await walletManager.createHumanReadableMeltQuote(
                             address: trimmedInput,
                             amount: amount,
@@ -1474,7 +1507,8 @@ struct MeltView: View {
                         setMeltQuote(quote)
                     }
                 case .onchain:
-                    guard let amount = UInt64(amountString), amount > 0 else { return }
+                    let amount = amountSats
+                    guard amount > 0 else { return }
                     let quote = try await walletManager.createOnchainMeltQuote(
                         address: trimmedInput,
                         amount: amount,

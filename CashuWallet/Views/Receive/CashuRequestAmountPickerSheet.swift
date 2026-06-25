@@ -3,6 +3,7 @@ import SwiftUI
 struct CashuRequestAmountPickerSheet: View {
     @Environment(\.dismiss) private var dismiss
     @ObservedObject private var settings = SettingsManager.shared
+    @ObservedObject private var priceService = PriceService.shared
 
     /// Current value for the request: `nil` = Any amount, value = fixed amount in sats.
     let currentAmount: UInt64?
@@ -14,8 +15,25 @@ struct CashuRequestAmountPickerSheet: View {
     init(currentAmount: UInt64?, onSelect: @escaping (UInt64?) -> Void) {
         self.currentAmount = currentAmount
         self.onSelect = onSelect
-        self._amountString = State(initialValue: currentAmount.map { String($0) } ?? "")
+        // Seed the keypad string in whatever unit entry is currently in, so a
+        // sats `currentAmount` isn't misread as fiat.
+        let unit: AmountDisplayPrimary =
+            (SettingsManager.shared.amountDisplayPrimary == .fiat && PriceService.shared.btcPriceUSD > 0)
+                ? .fiat : .sats
+        let seed = currentAmount.map {
+            AmountFormatter.entryConverted(raw: String($0), from: .sats, to: unit)
+        } ?? ""
+        self._amountString = State(initialValue: seed)
     }
+
+    /// The unit the keypad is entering in: fiat only when fiat is primary AND a
+    /// price is loaded, else sats (mirrors `CurrencyAmountDisplay.effectivePrimary`).
+    private var entryUnit: AmountDisplayPrimary {
+        (settings.amountDisplayPrimary == .fiat && priceService.btcPriceUSD > 0) ? .fiat : .sats
+    }
+
+    /// Satoshis represented by the typed amount, interpreted per `entryUnit`.
+    private var amountSats: UInt64 { AmountFormatter.entrySats(raw: amountString, unit: entryUnit) }
 
     var body: some View {
         // Mirrors the app's other amount-entry surfaces (ReceiveLightningView's
@@ -27,9 +45,10 @@ struct CashuRequestAmountPickerSheet: View {
             Spacer(minLength: 0)
 
             CurrencyAmountDisplay(
-                sats: UInt64(amountString) ?? 0,
+                sats: amountSats,
                 primary: $settings.amountDisplayPrimary,
-                primarySize: 56
+                primarySize: 56,
+                entryRaw: amountString
             )
             .accessibilityLabel("Request amount: \(amountString.isEmpty ? "0" : amountString) sats")
             .padding(.horizontal)
@@ -37,7 +56,7 @@ struct CashuRequestAmountPickerSheet: View {
 
             Spacer(minLength: 0)
 
-            NumberPadAmountInput(amountString: $amountString)
+            NumberPadAmountInput(amountString: $amountString, unit: entryUnit)
                 .padding(.horizontal, 24)
 
             Button(action: confirm) {
@@ -50,6 +69,9 @@ struct CashuRequestAmountPickerSheet: View {
         }
         .presentationDetents([.large])
         .presentationDragIndicator(.visible)
+        .onChange(of: entryUnit) { oldUnit, newUnit in
+            amountString = AmountFormatter.entryConverted(raw: amountString, from: oldUnit, to: newUnit)
+        }
     }
 
     private var header: some View {
@@ -75,7 +97,7 @@ struct CashuRequestAmountPickerSheet: View {
 
     private func confirm() {
         HapticFeedback.selection()
-        let value = UInt64(amountString) ?? 0
+        let value = amountSats
         onSelect(value > 0 ? value : nil)
         dismiss()
     }

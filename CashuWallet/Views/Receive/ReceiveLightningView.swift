@@ -117,6 +117,11 @@ struct ReceiveLightningView: View {
                 onchainObservation = nil
                 if selectedMethod != .bolt12 { isAmountless = false }
             }
+            .onChange(of: entryUnit) { oldUnit, newUnit in
+                // Flip (or a price load that changes the effective unit): carry
+                // the typed amount across, converted, so it stays equivalent.
+                amountString = AmountFormatter.entryConverted(raw: amountString, from: oldUnit, to: newUnit)
+            }
             .onDisappear {
                 quoteStatusTask?.cancel()
                 expiryTimer?.invalidate()
@@ -152,7 +157,14 @@ struct ReceiveLightningView: View {
         }
     }
 
-    private var amountValue: UInt64? { UInt64(amountString) }
+    /// The unit the keypad is entering in: fiat only when fiat is primary AND a
+    /// price is loaded, else sats (mirrors `CurrencyAmountDisplay.effectivePrimary`).
+    private var entryUnit: AmountDisplayPrimary {
+        (settings.amountDisplayPrimary == .fiat && priceService.btcPriceUSD > 0) ? .fiat : .sats
+    }
+
+    /// Satoshis represented by the typed amount, interpreted per `entryUnit`.
+    private var amountSats: UInt64 { AmountFormatter.entrySats(raw: amountString, unit: entryUnit) }
 
     /// The one path that submits no amount: a BOLT12 offer with "Any amount" lit.
     /// Everything else (BOLT11, on-chain, a BOLT12 offer with a typed amount)
@@ -164,7 +176,7 @@ struct ReceiveLightningView: View {
     private var canCreateRequest: Bool {
         guard !isCreatingRequest else { return false }
         if isAmountlessOffer { return true }
-        return (amountValue ?? 0) > 0
+        return amountSats > 0
     }
 
     // MARK: - Amount Input View
@@ -191,7 +203,7 @@ struct ReceiveLightningView: View {
 
             Spacer()
 
-            NumberPadAmountInput(amountString: $amountString)
+            NumberPadAmountInput(amountString: $amountString, unit: entryUnit)
                 .padding(.horizontal, 24)
                 .onChange(of: amountString) { _, newValue in
                     // Typing a digit takes over from the amountless offer.
@@ -221,8 +233,9 @@ struct ReceiveLightningView: View {
             }
 
             CurrencyAmountDisplay(
-                sats: amountValue ?? 0,
-                primary: $settings.amountDisplayPrimary
+                sats: amountSats,
+                primary: $settings.amountDisplayPrimary,
+                entryRaw: amountString
             )
             .opacity(isAmountlessOffer ? 0.35 : 1)
             .accessibilityElement(children: .combine)
@@ -620,7 +633,7 @@ struct ReceiveLightningView: View {
         let requestMethod = selectedMethod
         // Only a BOLT12 amountless offer submits no amount; BOLT11, on-chain,
         // and a BOLT12 offer with a typed amount all require a positive value.
-        let requestAmount: UInt64? = isAmountlessOffer ? nil : amountValue
+        let requestAmount: UInt64? = isAmountlessOffer ? nil : (amountSats > 0 ? amountSats : nil)
 
         if !isAmountlessOffer, (requestAmount ?? 0) == 0 {
             return

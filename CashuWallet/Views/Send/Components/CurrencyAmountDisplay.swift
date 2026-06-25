@@ -9,6 +9,11 @@ struct CurrencyAmountDisplay: View {
     let sats: UInt64
     @Binding var primary: AmountDisplayPrimary
     var primarySize: CGFloat = 64
+    /// Live-entry mode: the raw typed string. When set, the primary line renders
+    /// the typed value verbatim (partial decimals included) instead of deriving
+    /// from `sats`; the secondary line still shows `sats` converted. Display-only
+    /// call sites omit this and are unchanged.
+    var entryRaw: String? = nil
 
     @ObservedObject private var priceService = PriceService.shared
     @ObservedObject private var settings = SettingsManager.shared
@@ -25,6 +30,13 @@ struct CurrencyAmountDisplay: View {
     }
 
     private var primaryText: String {
+        if let entryRaw {
+            return AmountFormatter.entryPrimary(
+                raw: entryRaw,
+                unit: effectivePrimary,
+                useBitcoinSymbol: settings.useBitcoinSymbol
+            )
+        }
         switch effectivePrimary {
         case .fiat: return priceService.formatSatsAsFiat(sats)
         case .sats: return AmountFormatter.sats(sats, useBitcoinSymbol: settings.useBitcoinSymbol)

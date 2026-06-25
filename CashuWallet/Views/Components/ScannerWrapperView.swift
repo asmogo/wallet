@@ -317,6 +317,7 @@ private struct CashuPaymentRequestPayView: View {
     @Environment(\.dismiss) private var dismiss
     @EnvironmentObject private var walletManager: WalletManager
     @ObservedObject private var settings = SettingsManager.shared
+    @ObservedObject private var priceService = PriceService.shared
 
     @State private var customAmountString = ""
     @State private var isPaying = false
@@ -368,7 +369,7 @@ private struct CashuPaymentRequestPayView: View {
                 }
 
                 if request.amount == nil {
-                    NumberPadAmountInput(amountString: $customAmountString)
+                    NumberPadAmountInput(amountString: $customAmountString, unit: entryUnit)
                         .padding(.horizontal, 24)
                 }
 
@@ -433,6 +434,9 @@ private struct CashuPaymentRequestPayView: View {
             .onChange(of: walletManager.activeMint?.id) {
                 syncSelectedMint()
             }
+            .onChange(of: entryUnit) { oldUnit, newUnit in
+                customAmountString = AmountFormatter.entryConverted(raw: customAmountString, from: oldUnit, to: newUnit)
+            }
         }
     }
 
@@ -454,8 +458,9 @@ private struct CashuPaymentRequestPayView: View {
             }
         } else {
             CurrencyAmountDisplay(
-                sats: UInt64(customAmountString) ?? 0,
-                primary: $settings.amountDisplayPrimary
+                sats: customAmountSats,
+                primary: $settings.amountDisplayPrimary,
+                entryRaw: customAmountString
             )
         }
     }
@@ -542,8 +547,19 @@ private struct CashuPaymentRequestPayView: View {
         return mint.balance >= amount
     }
 
+    /// The unit the keypad is entering in: fiat only when fiat is primary AND a
+    /// price is loaded, else sats (mirrors `CurrencyAmountDisplay.effectivePrimary`).
+    private var entryUnit: AmountDisplayPrimary {
+        (settings.amountDisplayPrimary == .fiat && priceService.btcPriceUSD > 0) ? .fiat : .sats
+    }
+
+    /// Satoshis represented by the typed custom amount, interpreted per `entryUnit`.
+    private var customAmountSats: UInt64 {
+        AmountFormatter.entrySats(raw: customAmountString, unit: entryUnit)
+    }
+
     private var paymentAmount: UInt64? {
-        request.amount ?? UInt64(customAmountString)
+        request.amount ?? (customAmountSats > 0 ? customAmountSats : nil)
     }
 
     private var recipientLabel: String {

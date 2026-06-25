@@ -121,6 +121,16 @@ class PriceService: ObservableObject {
         let btc = Double(sats) / 100_000_000.0
         return btc * btcPriceUSD
     }
+
+    /// Convert a fiat amount (major units, e.g. dollars) to satoshis at the
+    /// current price, rounded to the nearest sat. Returns 0 when no price is
+    /// loaded, so fiat entry never fabricates an amount.
+    func fiatToSats(_ fiat: Double) -> UInt64 {
+        guard btcPriceUSD > 0, fiat > 0 else { return 0 }
+        let sats = (fiat / btcPriceUSD * 100_000_000.0).rounded()
+        guard sats.isFinite, sats >= 0, sats < Double(UInt64.max) else { return 0 }
+        return UInt64(sats)
+    }
     
     /// Format satoshis as selected fiat currency string.
     /// `.presentation(.narrow)` forces the bare symbol ("$", not "US$") for every
