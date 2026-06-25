@@ -101,6 +101,19 @@ enum PaymentMethodKind: String, CaseIterable, Codable, Hashable {
         }
     }
 
+    /// Monochrome SF Symbol for the nav-bar method switcher. Distinct from
+    /// `symbol` (emoji), which the design system forbids in chrome.
+    var navSymbol: String {
+        switch self {
+        case .bolt11:
+            return "bolt.fill"
+        case .bolt12:
+            return "arrow.2.squarepath"
+        case .onchain:
+            return "bitcoinsign"
+        }
+    }
+
     var sortOrder: Int {
         switch self {
         case .bolt11:

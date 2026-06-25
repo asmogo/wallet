@@ -72,6 +72,22 @@ struct ReceiveLightningView: View {
                         }
                         .accessibilityLabel("Share request")
                     }
+                } else if shouldShowMethodPicker {
+                    // Liquid Glass method switcher. On iOS 26 the toolbar renders
+                    // bar buttons as glass, so this reads as a sibling of the
+                    // close button by construction. Replaces the old inline
+                    // `methodChip` text affordance.
+                    ToolbarItem(placement: .topBarTrailing) {
+                        Button {
+                            HapticFeedback.selection()
+                            showMethodPicker = true
+                        } label: {
+                            Image(systemName: selectedMethod.navSymbol)
+                                .contentTransition(.symbolEffect(.replace))
+                        }
+                        .accessibilityLabel("Receive method: \(selectedMethod.friendlyTitle)")
+                        .accessibilityHint("Opens the receive method picker")
+                    }
                 }
             }
             .sheet(isPresented: $showMintPicker) {
@@ -161,12 +177,6 @@ struct ReceiveLightningView: View {
                     .padding(.top, 12)
             }
 
-            if shouldShowMethodPicker {
-                methodChip
-                    .padding(.horizontal)
-                    .padding(.top, 12)
-            }
-
             Spacer()
 
             amountHero
@@ -203,31 +213,13 @@ struct ReceiveLightningView: View {
         }
     }
 
-    /// Quiet, left-aligned menu trigger that opens the method picker sheet.
-    /// Replaces the old segmented pill bar — a Plain-Button affordance, not a
-    /// capsule, so it never reads as a tab.
-    private var methodChip: some View {
-        Button(action: {
-            HapticFeedback.selection()
-            showMethodPicker = true
-        }) {
-            HStack(spacing: 4) {
-                Text(selectedMethod.friendlyTitle)
-                    .font(.subheadline.weight(.medium))
-                Image(systemName: "chevron.down")
-                    .font(.caption2.weight(.semibold))
-            }
-            .foregroundStyle(.secondary)
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .accessibilityLabel("Receive method: \(selectedMethod.friendlyTitle)")
-        .accessibilityHint("Opens the receive method picker")
-    }
-
     private var amountHero: some View {
         VStack(spacing: 12) {
+            if shouldShowMethodPicker {
+                methodBadge
+                    .transition(.opacity)
+            }
+
             CurrencyAmountDisplay(
                 sats: amountValue ?? 0,
                 primary: $settings.amountDisplayPrimary
@@ -243,6 +235,19 @@ struct ReceiveLightningView: View {
         }
         .animation(.snappy, value: isAmountless)
         .animation(.snappy, value: selectedMethod)
+    }
+
+    /// Quiet label naming the selected receive method, sitting above the amount.
+    /// The nav-bar glyph is the control; this is a passive indicator, only shown
+    /// when the mint actually offers more than one method.
+    private var methodBadge: some View {
+        Text(selectedMethod.displayName)
+            .font(.caption.weight(.medium))
+            .foregroundStyle(.secondary)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 4)
+            .background(.quaternary, in: Capsule())
+            .accessibilityLabel("Method: \(selectedMethod.friendlyTitle)")
     }
 
     /// BOLT12-only toggle. Lit = the offer carries no amount (sender chooses).

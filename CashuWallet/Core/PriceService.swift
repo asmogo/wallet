@@ -53,14 +53,7 @@ class PriceService: ObservableObject {
     private var refreshTimer: Timer?
     private var initialFetchTask: Task<Void, Never>?
     private let refreshInterval: TimeInterval = 60 // Refresh every 60 seconds
-    private lazy var fiatFormatter: NumberFormatter = {
-        let formatter = NumberFormatter()
-        formatter.numberStyle = .currency
-        formatter.maximumFractionDigits = 2
-        formatter.minimumFractionDigits = 2
-        return formatter
-    }()
-    
+
     // MARK: - Initialization
     
     init() {
@@ -129,11 +122,13 @@ class PriceService: ObservableObject {
         return btc * btcPriceUSD
     }
     
-    /// Format satoshis as selected fiat currency string
+    /// Format satoshis as selected fiat currency string.
+    /// `.presentation(.narrow)` forces the bare symbol ("$", not "US$") for every
+    /// supported currency, regardless of the device locale.
     func formatSatsAsFiat(_ sats: UInt64) -> String {
-        let fiat = satsToFiat(sats)
-        fiatFormatter.currencyCode = currencyCode
-        return fiatFormatter.string(from: NSNumber(value: fiat)) ?? "\(currencyCode) 0.00"
+        satsToFiat(sats).formatted(
+            .currency(code: currencyCode).presentation(.narrow).precision(.fractionLength(2))
+        )
     }
 
     /// Backward-compatible wrapper used by existing views

@@ -1814,10 +1814,12 @@ struct MethodPickerSheet: View {
 
                         Spacer()
 
-                        if selectedMethod == method {
-                            Image(systemName: "checkmark")
-                                .foregroundStyle(Color.accentColor)
-                        }
+                        // Glyph teaches the nav-bar mapping and carries selection:
+                        // accent when chosen, muted otherwise. The row's
+                        // `.isSelected` trait conveys state to VoiceOver.
+                        Image(systemName: method.navSymbol)
+                            .foregroundStyle(selectedMethod == method ? Color.accentColor : .secondary)
+                            .accessibilityHidden(true)
                     }
                     .contentShape(Rectangle())
                 }

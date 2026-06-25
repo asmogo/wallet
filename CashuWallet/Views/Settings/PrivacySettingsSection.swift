@@ -101,11 +101,10 @@ struct PrivacySettingsSection: View {
     // MARK: - Helpers
 
     private func formatBTCPrice(_ price: Double) -> String {
-        let formatter = NumberFormatter()
-        formatter.numberStyle = .currency
-        formatter.currencyCode = settings.bitcoinPriceCurrency
-        formatter.maximumFractionDigits = 0
-        return formatter.string(from: NSNumber(value: price)) ?? "\(settings.bitcoinPriceCurrency) 0"
+        // `.presentation(.narrow)` yields the bare symbol ("$", not "US$").
+        price.formatted(
+            .currency(code: settings.bitcoinPriceCurrency).presentation(.narrow).precision(.fractionLength(0))
+        )
     }
 
     private func formatRelativeTime(_ date: Date) -> String {
