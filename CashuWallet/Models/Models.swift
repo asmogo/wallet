@@ -135,6 +135,89 @@ enum PaymentMethodKind: String, CaseIterable, Codable, Hashable {
 
 }
 
+/// Presentation-layer expansion of `PaymentMethodKind` for the *receive* method
+/// picker. BOLT12 fans out into two rows — a fixed-amount offer and an
+/// amountless offer (sender decides) — so the fixed/any choice is made up-front
+/// in the picker instead of via a toggle on the amount screen. Every other rail
+/// maps to a single row. UI-only: the service layer still sees a
+/// `PaymentMethodKind` plus a nil/non-nil amount.
+enum ReceiveMethodOption: Hashable, Identifiable, CaseIterable {
+    case lightning        // bolt11
+    case reusableFixed    // bolt12, amount entered on the amount screen
+    case reusableAny      // bolt12, amountless (sender decides)
+    case onchain          // onchain
+
+    var id: Self { self }
+
+    /// Underlying service rail + whether the offer carries no amount.
+    var resolved: (method: PaymentMethodKind, isAmountless: Bool) {
+        switch self {
+        case .lightning:     return (.bolt11, false)
+        case .reusableFixed: return (.bolt12, false)
+        case .reusableAny:   return (.bolt12, true)
+        case .onchain:       return (.onchain, false)
+        }
+    }
+
+    var method: PaymentMethodKind { resolved.method }
+    var isAmountless: Bool { resolved.isAmountless }
+
+    /// True when picking this row should skip the amount screen and create the
+    /// request immediately. Only the amountless reusable offer needs no input.
+    var autoCreates: Bool { isAmountless }
+
+    /// Plain-language title, mirroring `PaymentMethodKind.friendlyTitle`. Both
+    /// reusable rows share the same title; `friendlyDescriptor` distinguishes.
+    var friendlyTitle: String {
+        switch self {
+        case .lightning:                   return "Lightning invoice"
+        case .reusableFixed, .reusableAny: return "Reusable invoice"
+        case .onchain:                     return "On-chain address"
+        }
+    }
+
+    /// One-line descriptor beneath the title in the picker.
+    var friendlyDescriptor: String {
+        switch self {
+        case .lightning:     return "One-time, instant"
+        case .reusableFixed: return "Fixed amount, paid many times"
+        case .reusableAny:   return "Any amount, paid many times"
+        case .onchain:       return "Slower, for larger amounts"
+        }
+    }
+
+    /// Monochrome SF Symbol for the trailing glyph / nav-bar switcher. Both
+    /// reusable rows share BOLT12's `arrow.2.squarepath`.
+    var navSymbol: String { method.navSymbol }
+
+    /// Verb-phrase CTA, reused on the amount screen for the fixed path.
+    var createActionTitle: String { method.createActionTitle }
+
+    /// Ordered picker rows for a set of supported rails. BOLT12 expands into the
+    /// fixed + any-amount pair (in that order); every other rail contributes one
+    /// row. Input order is preserved so it tracks `availableMintMethods`.
+    static func options(for methods: [PaymentMethodKind]) -> [ReceiveMethodOption] {
+        methods.flatMap { method -> [ReceiveMethodOption] in
+            switch method {
+            case .bolt11:  return [.lightning]
+            case .bolt12:  return [.reusableFixed, .reusableAny]
+            case .onchain: return [.onchain]
+            }
+        }
+    }
+
+    /// The row representing a live (method, isAmountless) pair — used to reflect
+    /// the parent's state back into the picker's highlight and to label the
+    /// nav-bar switcher.
+    static func current(method: PaymentMethodKind, isAmountless: Bool) -> ReceiveMethodOption {
+        switch method {
+        case .bolt11:  return .lightning
+        case .bolt12:  return isAmountless ? .reusableAny : .reusableFixed
+        case .onchain: return .onchain
+        }
+    }
+}
+
 enum PaymentRequestParser {
     static func normalizeLightningRequest(_ request: String) -> String {
         let trimmedRequest = request.trimmingCharacters(in: .whitespacesAndNewlines)
