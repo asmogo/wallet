@@ -1342,6 +1342,7 @@ struct ICloudBackupSettingsView: View {
     @State private var showEnableConfirm = false
     @State private var showDisableConfirm = false
     @State private var didBackUp = false
+    @State private var backupError: String?
 
     var body: some View {
         List {
@@ -1395,7 +1396,12 @@ struct ICloudBackupSettingsView: View {
         .navigationBarTitleDisplayMode(.inline)
         .toolbarBackground(.hidden, for: .navigationBar)
         .alert("Enable iCloud Backup?", isPresented: $showEnableConfirm) {
-            Button("Enable") { walletManager.iCloudBackupEnabled = true }
+            Button("Enable") {
+                walletManager.iCloudBackupEnabled = true
+                if let outcome = walletManager.lastICloudBackupOutcome {
+                    backupError = backupErrorMessage(for: outcome)
+                }
+            }
             Button("Cancel", role: .cancel) {}
         } message: {
             Text("Your seed phrase will be stored in iCloud Keychain, which is end-to-end encrypted and inaccessible to Apple. Mint URLs will be stored in iCloud encrypted by Apple.")
@@ -1405,6 +1411,11 @@ struct ICloudBackupSettingsView: View {
             Button("Cancel", role: .cancel) {}
         } message: {
             Text("Your backup will be removed from iCloud Keychain and iCloud. Your local wallet is not affected.")
+        }
+        .alert("Backup Failed", isPresented: Binding(get: { backupError != nil }, set: { if !$0 { backupError = nil } })) {
+            Button("OK", role: .cancel) { backupError = nil }
+        } message: {
+            Text(backupError ?? "")
         }
     }
 
@@ -1419,10 +1430,24 @@ struct ICloudBackupSettingsView: View {
     }
 
     private func backUpNow() {
-        walletManager.performICloudBackup()
+        let outcome = walletManager.performICloudBackup()
+        if let message = backupErrorMessage(for: outcome) {
+            backupError = message
+            return
+        }
         didBackUp = true
         DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
             didBackUp = false
+        }
+    }
+
+    /// User-facing message for a non-success backup outcome, or nil on success.
+    private func backupErrorMessage(for outcome: ICloudBackupOutcome) -> String? {
+        switch outcome {
+        case .success: return nil
+        case .unavailable: return "iCloud is unavailable. Sign in to iCloud in Settings and try again."
+        case .noSeed: return "There's no wallet seed to back up."
+        case .failed(let message): return message
         }
     }
 

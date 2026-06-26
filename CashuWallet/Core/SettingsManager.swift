@@ -316,7 +316,15 @@ class SettingsManager: ObservableObject {
     func formatAmountBalance(_ sats: UInt64) -> String {
         AmountFormatter.sats(sats, useBitcoinSymbol: false, includeUnit: false)
     }
-    
+
+    /// Grouped balance plus the active unit (₿ prefix or " sat" suffix). The
+    /// canonical hero-balance string, shared by the wallet hero and the restore
+    /// success screen so both render identically including the unit toggle.
+    func formatBalanceWithUnit(_ sats: UInt64) -> String {
+        let formatted = formatAmountBalance(sats)
+        return useBitcoinSymbol ? "₿\(formatted)" : "\(formatted) sat"
+    }
+
     var unitSuffix: String {
         useBitcoinSymbol ? "" : " sat"
     }

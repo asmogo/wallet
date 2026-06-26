@@ -2,8 +2,19 @@ import Foundation
 import Cdk
 
 struct ICloudBackupInfo: Sendable {
+    /// May be empty: a seed in iCloud Keychain is a valid backup on its own. The
+    /// mint list is convenience (which mints to auto re-add), not a requirement.
     let mintURLs: [String]
     let timestamp: Date
+}
+
+/// Result of a `performICloudBackup()` attempt, so the UI can report the truth
+/// instead of an unconditional "Backed up ✓".
+enum ICloudBackupOutcome: Equatable {
+    case success(mintCount: Int)
+    case unavailable
+    case noSeed
+    case failed(String)
 }
 
 extension WalletManager {
@@ -68,12 +79,15 @@ extension WalletManager {
     }
 
     func detectICloudBackup() -> ICloudBackupInfo? {
-        guard keychainService.hasSynchronizableMnemonic() else { return nil }
+        guard keychainService.hasSynchronizableMnemonic() else {
+            AppLogger.wallet.info("iCloud detect: no synchronizable seed → no backup")
+            return nil
+        }
         let store = NSUbiquitousKeyValueStore.default
-        guard let urls = store.array(forKey: ICloudKVKey.mintURLs) as? [String],
-              !urls.isEmpty else { return nil }
+        let urls = (store.array(forKey: ICloudKVKey.mintURLs) as? [String]) ?? []
         let ts = store.double(forKey: ICloudKVKey.timestamp)
         let timestamp = ts > 0 ? Date(timeIntervalSince1970: ts) : Date()
+        AppLogger.wallet.info("iCloud detect: seed present, \(urls.count) mint(s)")
         return ICloudBackupInfo(mintURLs: urls, timestamp: timestamp)
     }
 
@@ -86,20 +100,32 @@ extension WalletManager {
     /// with no shared-state hazard. `ICloudBackupInfo` is `Sendable`.
     nonisolated static func detectICloudBackupOffMain() async -> ICloudBackupInfo? {
         await Task.detached(priority: .userInitiated) {
-            guard KeychainService().hasSynchronizableMnemonic() else { return nil }
+            guard KeychainService().hasSynchronizableMnemonic() else {
+                AppLogger.wallet.info("iCloud detect (off-main): no synchronizable seed → no backup")
+                return nil
+            }
             let store = NSUbiquitousKeyValueStore.default
             store.synchronize()
-            guard let urls = store.array(forKey: ICloudKVKey.mintURLs) as? [String],
-                  !urls.isEmpty else { return nil }
+            let urls = (store.array(forKey: ICloudKVKey.mintURLs) as? [String]) ?? []
             let ts = store.double(forKey: ICloudKVKey.timestamp)
             let timestamp = ts > 0 ? Date(timeIntervalSince1970: ts) : Date()
+            AppLogger.wallet.info("iCloud detect (off-main): seed present, \(urls.count) mint(s)")
             return ICloudBackupInfo(mintURLs: urls, timestamp: timestamp)
         }.value
     }
 
-    func performICloudBackup() {
-        guard iCloudBackupEnabled, iCloudAvailable() else { return }
-        guard let currentMnemonic = mnemonic else { return }
+    @discardableResult
+    func performICloudBackup() -> ICloudBackupOutcome {
+        guard iCloudBackupEnabled, iCloudAvailable() else {
+            AppLogger.wallet.error("iCloud backup skipped: iCloud unavailable")
+            lastICloudBackupOutcome = .unavailable
+            return .unavailable
+        }
+        guard let currentMnemonic = mnemonic else {
+            AppLogger.wallet.error("iCloud backup skipped: no seed in memory")
+            lastICloudBackupOutcome = .noSeed
+            return .noSeed
+        }
         do {
             try keychainService.saveSynchronizableMnemonic(currentMnemonic)
             let store = NSUbiquitousKeyValueStore.default
@@ -107,8 +133,14 @@ extension WalletManager {
             store.set(Date().timeIntervalSince1970, forKey: ICloudKVKey.timestamp)
             store.synchronize()
             objectWillChange.send()
+            AppLogger.wallet.info("iCloud backup ok: \(self.mints.count) mint(s)")
+            lastICloudBackupOutcome = .success(mintCount: mints.count)
+            return .success(mintCount: mints.count)
         } catch {
             AppLogger.wallet.error("iCloud backup failed: \(error)")
+            let message = error.userFacingWalletMessage
+            lastICloudBackupOutcome = .failed(message)
+            return .failed(message)
         }
     }
 
@@ -129,11 +161,12 @@ extension WalletManager {
         guard let recoveredMnemonic = try keychainService.loadSynchronizableMnemonic() else {
             throw WalletError.networkError("iCloud Keychain item is missing.")
         }
+        AppLogger.wallet.info("iCloud restore: starting, \(backup.mintURLs.count) mint(s) to restore")
         try await initializeRestoredWallet(mnemonic: recoveredMnemonic)
         for url in backup.mintURLs {
             _ = try? await restoreFromMint(url: url)
         }
-        pendingICloudBackup = nil
+        AppLogger.wallet.info("iCloud restore: complete, balance \(self.balance)")
         iCloudBackupEnabled = true
     }
 }

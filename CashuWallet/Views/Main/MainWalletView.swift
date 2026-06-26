@@ -609,8 +609,7 @@ struct MainWalletView: View {
     // MARK: - Helpers
 
     private func formatBalanceWithUnit(_ sats: UInt64) -> String {
-        let formatted = settings.formatAmountBalance(sats)
-        return settings.useBitcoinSymbol ? "₿\(formatted)" : "\(formatted) sat"
+        settings.formatBalanceWithUnit(sats)
     }
 
     /// Detent for the action chooser. The Send chooser grows into a taller

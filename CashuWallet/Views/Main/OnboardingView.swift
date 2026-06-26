@@ -45,6 +45,9 @@ struct OnboardingView: View {
     @State private var detectedICloudBackup: ICloudBackupInfo? = nil
     @State private var isDetectingICloudBackup = true
     @State private var iCloudRestorePhase = ICloudRestorePhase.preview
+    // Staged exit on the success screen: chrome recedes while the balance hero
+    // holds, then `completeRestore()` hands off to the ContentView crossfade.
+    @State private var isCompleting = false
 
     // Per-step entrance animation triggers
     @State private var welcomeAppeared = false
@@ -353,8 +356,38 @@ struct OnboardingView: View {
             // Detection blocks on a keychain query + KV-store flush. Run it off
             // the main actor so it can't hitch the crossfade into this screen.
             let info = await WalletManager.detectICloudBackupOffMain()
-            detectedICloudBackup = info
-            isDetectingICloudBackup = false
+            withAnimation(reduceMotion ? nil : .snappy) {
+                detectedICloudBackup = info
+                isDetectingICloudBackup = false
+            }
+        }
+    }
+
+    private enum ICloudPreviewState {
+        case detecting
+        case found(ICloudBackupInfo)
+        case notFound
+    }
+
+    private var iCloudPreviewState: ICloudPreviewState {
+        if isDetectingICloudBackup { return .detecting }
+        if let backup = detectedICloudBackup { return .found(backup) }
+        return .notFound
+    }
+
+    private var iCloudPreviewIcon: String {
+        switch iCloudPreviewState {
+        case .detecting: return "icloud"
+        case .found: return "icloud.and.arrow.down"
+        case .notFound: return "exclamationmark.icloud"
+        }
+    }
+
+    private var iCloudPreviewTitle: String {
+        switch iCloudPreviewState {
+        case .detecting: return "Checking\niCloud…"
+        case .found: return "Wallet found\nin iCloud."
+        case .notFound: return "No backup\nin iCloud."
         }
     }
 
@@ -364,29 +397,35 @@ struct OnboardingView: View {
 
             stagger(appeared: iCloudPreviewAppeared, index: 0) {
                 VStack(alignment: .leading, spacing: 14) {
-                    Image(systemName: "icloud.and.arrow.down")
+                    Image(systemName: iCloudPreviewIcon)
                         .font(.largeTitle)
                         .foregroundStyle(.secondary)
                         .padding(.bottom, 4)
+                        .contentTransition(.symbolEffect(.replace))
 
-                    Text("Wallet found\nin iCloud.")
+                    // Header reflects detection state — no longer a hardcoded
+                    // "Wallet found" that contradicts a "no backup" body.
+                    Text(iCloudPreviewTitle)
                         .font(.largeTitle.weight(.heavy))
                         .tracking(-0.5)
                         .foregroundStyle(.primary)
                         .fixedSize(horizontal: false, vertical: true)
 
                     Group {
-                        if isDetectingICloudBackup {
+                        switch iCloudPreviewState {
+                        case .detecting:
                             HStack(spacing: 8) {
                                 ProgressView().scaleEffect(0.75)
                                 Text("Checking iCloud…")
                             }
-                        } else if let backup = detectedICloudBackup {
+                        case .found(let backup):
                             VStack(alignment: .leading, spacing: 4) {
                                 Text(backup.timestamp.formatted(date: .abbreviated, time: .shortened))
-                                Text("\(backup.mintURLs.count) mint\(backup.mintURLs.count == 1 ? "" : "s")")
+                                Text(backup.mintURLs.isEmpty
+                                     ? "Seed backup — add mints after"
+                                     : "\(backup.mintURLs.count) mint\(backup.mintURLs.count == 1 ? "" : "s")")
                             }
-                        } else {
+                        case .notFound:
                             Text("No backup found. Make sure you're signed in to the same Apple ID with iCloud Keychain enabled.")
                                 .fixedSize(horizontal: false, vertical: true)
                         }
@@ -455,32 +494,52 @@ struct OnboardingView: View {
     }
 
     private var iCloudRestoreSuccessView: some View {
-        VStack(spacing: 0) {
+        // A centered terminal "done" moment: the recovered balance is the hero,
+        // rendered identically to the wallet's balance so it appears to stay put
+        // through the crossfade into the wallet. Everything else recedes on exit.
+        let count = detectedICloudBackup?.mintURLs.count ?? 0
+        return VStack(spacing: 0) {
             Spacer()
 
-            VStack(alignment: .leading, spacing: 14) {
+            VStack(spacing: 16) {
                 Image(systemName: "checkmark.circle.fill")
-                    .font(.system(size: 72))
+                    .font(.system(size: 56))
                     .foregroundStyle(.green)
-                    .padding(.bottom, 4)
                     // One hero gesture: the symbol bounce. Scale floor raised to
                     // 0.85 (Emil's "never below 0.9-ish") so it settles rather
                     // than pops. Reduce Motion gets a plain fade, no bounce.
                     .symbolEffect(.bounce, value: reduceMotion ? false : iCloudRestorePhase == .success)
                     .transition(reduceMotion ? .opacity : .scale(scale: 0.85).combined(with: .opacity))
+                    .opacity(isCompleting ? 0 : 1)
 
-                Text("Wallet\nRestored.")
-                    .font(.largeTitle.weight(.heavy))
-                    .tracking(-0.5)
+                Text("Wallet Restored")
+                    .font(.title.weight(.heavy))
+                    .tracking(-0.4)
                     .foregroundStyle(.primary)
-                    .fixedSize(horizontal: false, vertical: true)
+                    .opacity(isCompleting ? 0 : 1)
 
-                Text("Your ecash is ready.")
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
-                    .padding(.top, 4)
+                // Hero — echoes MainWalletView's balance treatment exactly; the
+                // one element held at full opacity so it carries the handoff.
+                Text(SettingsManager.shared.formatBalanceWithUnit(walletManager.balance))
+                    .font(.system(size: 44, weight: .bold))
+                    .monospacedDigit()
+                    .minimumScaleFactor(0.5)
+                    .lineLimit(1)
+                    .contentTransition(.numericText(value: Double(walletManager.balance)))
+                    .foregroundStyle(.primary)
+
+                Group {
+                    if walletManager.balance > 0 && count > 0 {
+                        Text("across \(count) mint\(count == 1 ? "" : "s")")
+                    } else {
+                        Text("Your ecash is ready.")
+                    }
+                }
+                .font(.callout)
+                .foregroundStyle(.secondary)
+                .opacity(isCompleting ? 0 : 1)
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
+            .frame(maxWidth: .infinity)
             .padding(.horizontal, 28)
 
             Spacer()
@@ -491,6 +550,7 @@ struct OnboardingView: View {
             .glassButton()
             .padding(.horizontal, 24)
             .padding(.bottom, 40)
+            .opacity(isCompleting ? 0 : 1)
         }
     }
 
@@ -513,7 +573,21 @@ struct OnboardingView: View {
     }
 
     private func openRestoredWallet() {
+        guard !isCompleting else { return }
+        HapticFeedback.selection()
+
+        // Reduce Motion: skip the staged exit entirely; ContentView still
+        // crossfades (opacity is vestibular-safe).
+        if reduceMotion {
+            Task { @MainActor in await walletManager.completeRestore() }
+            return
+        }
+
+        // Chrome recedes while the balance hero holds, a brief settle, then the
+        // handoff flips `needsOnboarding` and ContentView dissolves to the wallet.
+        withAnimation(.easeOut(duration: 0.22)) { isCompleting = true }
         Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(240))
             await walletManager.completeRestore()
         }
     }
