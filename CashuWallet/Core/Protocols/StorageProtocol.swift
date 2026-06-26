@@ -114,6 +114,7 @@ enum StorageKeys {
     static let nostrSignerType = "settings.nostrSignerType"
     static let amountDisplayPrimary = "settings.amountDisplayPrimary"
     static let appLockEnabled = "settings.appLockEnabled"
+    static let sentryEnabled = "settings.sentryEnabled"
 
     enum Legacy {
         static let mints = "savedMints"

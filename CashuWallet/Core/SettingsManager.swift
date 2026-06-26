@@ -108,6 +108,18 @@ class SettingsManager: ObservableObject {
         }
     }
 
+    @Published var sentryEnabled: Bool {
+        didSet {
+            settingsStore.sentryEnabled = sentryEnabled
+            guard sentryEnabled != oldValue else { return }
+            if sentryEnabled {
+                SentryService.initialize()
+            } else {
+                SentryService.shutdown()
+            }
+        }
+    }
+
     // MARK: - Initialization
     
     init() {
@@ -124,6 +136,7 @@ class SettingsManager: ObservableObject {
         self.nostrRelays = settingsStore.nostrRelays
         self.amountDisplayPrimary = AmountDisplayPrimary(rawValue: settingsStore.amountDisplayPrimary) ?? .fiat
         self.appLockEnabled = settingsStore.appLockEnabled
+        self.sentryEnabled = settingsStore.sentryEnabled
 
         persistP2PKKeys()
         

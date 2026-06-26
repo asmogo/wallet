@@ -42,6 +42,7 @@ struct CashuWalletApp: App {
                     .environmentObject(navigationManager)
                     .environmentObject(appLockManager)
                     .task {
+                        SentryService.initialize()
                         await walletManager.initialize()
                         CashuRequestListener.shared.attach(walletManager: walletManager)
                         await CashuRequestListener.shared.start()

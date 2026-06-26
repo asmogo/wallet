@@ -29,6 +29,17 @@ struct PrivacySettingsSection: View {
                 Toggle("Paste ecash automatically", isOn: $settings.autoPasteEcashReceive)
                     .padding(.horizontal, 4)
                     .padding(.vertical, 14)
+
+                Toggle(isOn: $settings.sentryEnabled) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Send anonymous crash reports")
+                        Text("Helps improve the app. No personal data, wallet addresses, or amounts are ever sent.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                .padding(.horizontal, 4)
+                .padding(.vertical, 14)
             }
 
             SettingsSectionFooter {

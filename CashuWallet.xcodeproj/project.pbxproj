@@ -3,7 +3,7 @@
 	archiveVersion = 1;
 	classes = {
 	};
-	objectVersion = 60;
+	objectVersion = 56;
 	objects = {
 
 /* Begin PBXBuildFile section */
@@ -42,6 +42,8 @@
 		6A8EC94E2F25A0000058C21B /* NPCService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6A8EC94F2F25A0000058C21B /* NPCService.swift */; };
 		6A8EC95B2F26983E0058C21B /* P256K in Frameworks */ = {isa = PBXBuildFile; productRef = 6A8EC95A2F26983E0058C21B /* P256K */; };
 		720E47A62FEC721E00E02CD0 /* Cdk in Frameworks */ = {isa = PBXBuildFile; productRef = 720E47A52FEC721E00E02CD0 /* Cdk */; };
+		72AF0EF32FEF2165001AD6AC /* Sentry in Frameworks */ = {isa = PBXBuildFile; productRef = AACC000000000002 /* Sentry */; };
+		72AF0EF52FEF2300001AD6AC /* SentryService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 72AF0EF42FEF2300001AD6AC /* SentryService.swift */; };
 		927178DF5291C6C3273CCA86 /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 460F5508C2B82DAECD0FEDDB /* Foundation.framework */; };
 		AA00000000000001 /* PaymentMethodProtocol.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA00000000000011 /* PaymentMethodProtocol.swift */; };
 		AA00000000000002 /* CurrencyProtocol.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA00000000000012 /* CurrencyProtocol.swift */; };
@@ -182,6 +184,7 @@
 		6A8EC94B2F2590000058C21B /* PriceService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PriceService.swift; sourceTree = "<group>"; };
 		6A8EC94D2F25A0000058C21B /* NostrService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NostrService.swift; sourceTree = "<group>"; };
 		6A8EC94F2F25A0000058C21B /* NPCService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NPCService.swift; sourceTree = "<group>"; };
+		72AF0EF42FEF2300001AD6AC /* SentryService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SentryService.swift; sourceTree = "<group>"; };
 		72DD529F60A8D9D1A81E3FBB /* NutshellIntegrationTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = NutshellIntegrationTests.swift; path = CI/IntegrationTests/Tests/NutshellIntegrationTests.swift; sourceTree = "<group>"; };
 		99846FC03810AE4BE904466F /* WalletIntegrationTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = WalletIntegrationTests.swift; path = CashuWalletUITests/WalletIntegrationTests.swift; sourceTree = "<group>"; };
 		AA00000000000011 /* PaymentMethodProtocol.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PaymentMethodProtocol.swift; sourceTree = "<group>"; };
@@ -277,6 +280,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				72AF0EF32FEF2165001AD6AC /* Sentry in Frameworks */,
 				720E47A62FEC721E00E02CD0 /* Cdk in Frameworks */,
 				6A8EC93F2F256F350058C21B /* URKit in Frameworks */,
 				6A8EC95B2F26983E0058C21B /* P256K in Frameworks */,
@@ -369,6 +373,7 @@
 		4200000000000002 /* Core */ = {
 			isa = PBXGroup;
 			children = (
+				72AF0EF42FEF2300001AD6AC /* SentryService.swift */,
 				AA00000000000020 /* Protocols */,
 				AA00000000000021 /* Navigation */,
 				BB00000000000020 /* Services */,
@@ -699,6 +704,7 @@
 				6A8EC93E2F256F350058C21B /* URKit */,
 				6A8EC95A2F26983E0058C21B /* P256K */,
 				720E47A52FEC721E00E02CD0 /* Cdk */,
+				AACC000000000002 /* Sentry */,
 			);
 			productName = CashuWallet;
 			productReference = 0100000000000001 /* CashuWallet.app */;
@@ -776,6 +782,7 @@
 				6A8EC93D2F256F350058C21B /* XCRemoteSwiftPackageReference "URKit" */,
 				7200000000000002 /* XCRemoteSwiftPackageReference "swift-secp256k1" */,
 				720E47A42FEC721E00E02CD0 /* XCRemoteSwiftPackageReference "cdk-swift" */,
+				AACC000000000001 /* XCRemoteSwiftPackageReference "sentry-cocoa" */,
 			);
 			productRefGroup = 4100000000000002 /* Products */;
 			projectDirPath = "";
@@ -906,6 +913,7 @@
 				6A8EC94E2F25A0000058C21B /* NPCService.swift in Sources */,
 				AB00000000000002 /* CashuRequestStore.swift in Sources */,
 				AA00000000000001 /* PaymentMethodProtocol.swift in Sources */,
+				72AF0EF52FEF2300001AD6AC /* SentryService.swift in Sources */,
 				AA00000000000002 /* CurrencyProtocol.swift in Sources */,
 				AA00000000000003 /* WalletServiceProtocol.swift in Sources */,
 				AA00000000000004 /* StorageProtocol.swift in Sources */,
@@ -1309,6 +1317,14 @@
 				version = 0.17.1;
 			};
 		};
+		AACC000000000001 /* XCRemoteSwiftPackageReference "sentry-cocoa" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/getsentry/sentry-cocoa";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 8.0.0;
+			};
+		};
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
@@ -1326,6 +1342,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = 720E47A42FEC721E00E02CD0 /* XCRemoteSwiftPackageReference "cdk-swift" */;
 			productName = Cdk;
+		};
+		AACC000000000002 /* Sentry */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = AACC000000000001 /* XCRemoteSwiftPackageReference "sentry-cocoa" */;
+			productName = Sentry;
 		};
 		E118F77A2062DDD58C0A6DA3 /* Cdk */ = {
 			isa = XCSwiftPackageProductDependency;
