@@ -97,6 +97,17 @@ class LightningService: ObservableObject {
         return mintQuoteInfo(from: quote, fallbackAmount: amount, paymentMethod: method)
     }
 
+    /// Returns the first pending amountless BOLT12 offer stored in the DB, or nil if none exists.
+    /// Used to avoid creating a new offer on every visit to the Reusable Invoice screen.
+    func existingAmountlessOffer() async throws -> MintQuoteInfo? {
+        guard let db = walletDatabase() else { return nil }
+        let pendingQuotes = try await db.getUnissuedMintQuotes()
+        guard let match = pendingQuotes.first(where: {
+            PaymentMethodKind.from($0.paymentMethod) == .bolt12 && $0.amount == nil
+        }) else { return nil }
+        return mintQuoteInfo(from: match, fallbackAmount: nil, paymentMethod: .bolt12)
+    }
+
     func checkMintQuote(quoteId: String) async throws -> MintQuoteInfo {
         guard let repo = walletRepository() else {
             throw WalletError.notInitialized

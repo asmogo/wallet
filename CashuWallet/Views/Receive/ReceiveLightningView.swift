@@ -414,6 +414,12 @@ struct ReceiveLightningView: View {
             startQuoteMonitoring(for: quote)
             startExpiryCountdown(quote: quote)
         }
+        .onChange(of: mintQuote?.id) { _, _ in
+            if let quote = mintQuote {
+                startQuoteMonitoring(for: quote)
+                startExpiryCountdown(quote: quote)
+            }
+        }
     }
 
     private func amountSummary(for quote: MintQuoteInfo) -> some View {
@@ -428,9 +434,18 @@ struct ReceiveLightningView: View {
                 )
                 .accessibilityLabel("Request amount: \(amount) sats")
             } else {
-                Text("Amount set by sender")
-                    .font(.headline)
-                    .multilineTextAlignment(.center)
+                if isCreatingRequest {
+                    ProgressView()
+                        .tint(.secondary)
+                } else {
+                    Button { createRequest(method: .bolt12, amountless: true) } label: {
+                        Label("Generate new invoice", systemImage: "arrow.clockwise")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                    }
+                    .accessibilityLabel("Generate new invoice")
+                    .accessibilityHint("Creates a new reusable invoice and replaces the current QR code")
+                }
             }
         }
     }
@@ -646,7 +661,7 @@ struct ReceiveLightningView: View {
             selectedMethod = option.method   // .bolt12
             isAmountless = true
             amountString = ""
-            createRequest(method: option.method, amountless: true)
+            loadOrCreateAmountlessOffer()
         } else {
             // Lightning / on-chain / fixed reusable: land on the amount screen,
             // carrying any typed amount across (existing behavior).
@@ -657,6 +672,36 @@ struct ReceiveLightningView: View {
 
     private func createRequest() {
         createRequest(method: selectedMethod, amountless: isAmountlessOffer)
+    }
+
+    private func loadOrCreateAmountlessOffer() {
+        isCreatingRequest = true
+        errorMessage = nil
+        isPaid = false
+        isExpired = false
+        copiedRequest = false
+        onchainObservation = nil
+        quoteCreatedAt = nil
+        monitoredQuoteId = nil
+        expiryTimeRemaining = 0
+        quoteStatusTask?.cancel()
+        expiryTimer?.invalidate()
+
+        Task { @MainActor in
+            do {
+                let quote: MintQuoteInfo
+                if let existing = try await walletManager.existingAmountlessOffer() {
+                    quote = existing
+                } else {
+                    quote = try await walletManager.createMintQuote(amount: nil, method: .bolt12)
+                }
+                quoteCreatedAt = Date()
+                mintQuote = quote
+            } catch {
+                errorMessage = "Failed. \(error.userFacingWalletMessage)"
+            }
+            isCreatingRequest = false
+        }
     }
 
     private func createRequest(method requestMethod: PaymentMethodKind, amountless: Bool) {
