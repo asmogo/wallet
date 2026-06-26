@@ -29,6 +29,7 @@ extension WalletManager {
         let amount = try await lightningService.mintTokens(quoteId: quoteId)
         await refreshBalance()
         await loadTransactions()
+        SentryService.breadcrumb("Lightning invoice minted", category: "wallet.lightning")
         return amount
     }
 
@@ -47,6 +48,7 @@ extension WalletManager {
             }
         }
         AppLogger.wallet.error("claimPaidMintQuote: gave up minting \(quoteId, privacy: .public)")
+        SentryService.breadcrumb("Lightning mint claim gave up after retries", category: "wallet.lightning")
     }
 
     func createMeltQuote(
@@ -109,6 +111,7 @@ extension WalletManager {
         transactionService.saveMeltFeePaid(quoteId: quoteId, feePaid: result.feePaid)
         await refreshBalance()
         await loadTransactions()
+        SentryService.breadcrumb("Lightning payment sent", category: "wallet.lightning")
         return result
     }
 }

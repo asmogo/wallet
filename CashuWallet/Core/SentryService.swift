@@ -17,7 +17,6 @@ enum SentryService {
             options.tracesSampleRate = 0.1
             options.profilesSampleRate = 0.0
         }
-        SentrySDK.capture(message: "Sentry initialized — test event") // TODO: remove after confirming
     }
 
     static func shutdown() {

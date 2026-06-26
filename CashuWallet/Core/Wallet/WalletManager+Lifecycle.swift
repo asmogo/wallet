@@ -39,12 +39,14 @@ extension WalletManager {
                 try await initializeWalletForLaunch(mnemonic: storedMnemonic)
                 needsOnboarding = false
                 isInitialized = true
+                SentryService.breadcrumb("Wallet loaded", category: "wallet.lifecycle")
             } else {
                 needsOnboarding = true
                 isInitialized = true
             }
         } catch {
             AppLogger.wallet.error("Wallet initialization error: \(error)")
+            SentryService.capture(error)
             isInitialized = true
             needsOnboarding = true
         }
@@ -56,9 +58,10 @@ extension WalletManager {
     func createNewWallet() async throws {
         isLoading = true
         defer { isLoading = false }
-        
+
         let newMnemonic = try generateMnemonic()
         try await installCleanWallet(mnemonic: newMnemonic)
+        SentryService.breadcrumb("Wallet created", category: "wallet.lifecycle")
     }
 
     /// Restore wallet from mnemonic - Phase 1: Initialize wallet state
@@ -75,6 +78,7 @@ extension WalletManager {
 
         try proveWalletCanInitialize(mnemonic: normalizedMnemonic)
         try await installCleanWallet(mnemonic: normalizedMnemonic)
+        SentryService.breadcrumb("Wallet restored from seed", category: "wallet.lifecycle")
     }
 
     /// Restore wallet from mnemonic - Phase 2: Recover proofs from a mint via NUT-09
@@ -108,6 +112,7 @@ extension WalletManager {
         // Refresh balance after restore
         await refreshBalance()
 
+        SentryService.breadcrumb("Wallet restore from mint completed", category: "wallet.lifecycle")
         return RestoreMintResult(
             mintUrl: normalizedUrl,
             mintName: mintName,
@@ -150,6 +155,7 @@ extension WalletManager {
         // Restore Wallet → Restore from iCloud.
         needsOnboarding = true
         isInitialized = true
+        SentryService.breadcrumb("Wallet deleted", category: "wallet.lifecycle")
     }
 
     private struct UserDefaultsSnapshot {
@@ -183,6 +189,7 @@ extension WalletManager {
             try removeWalletFileBackups(fileBackups)
             performICloudBackup()
         } catch {
+            SentryService.capture(error)
             resetRuntimeState()
             restoreWalletBoundaryDefaults(defaultsSnapshot)
             try? removeWalletDatabaseFiles()

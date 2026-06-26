@@ -8,12 +8,14 @@ extension WalletManager {
         try await mintService.addMint(url: url)
         await refreshBalance()
         performICloudBackup()
+        SentryService.breadcrumb("Mint added", category: "wallet.mint")
     }
 
     func removeMint(at offsets: IndexSet) async {
         await mintService.removeMint(at: offsets)
         await refreshBalance()
         performICloudBackup()
+        SentryService.breadcrumb("Mint removed", category: "wallet.mint")
     }
 
     func setActiveMint(_ mint: MintInfo) async throws {

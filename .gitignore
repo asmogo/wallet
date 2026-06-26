@@ -75,3 +75,4 @@ iOSInjectionProject/
 
 # Impeccable (design critique tool output / hook cache)
 .impeccable/
+.sentryclirc

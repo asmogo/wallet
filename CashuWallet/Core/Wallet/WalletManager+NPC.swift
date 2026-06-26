@@ -76,6 +76,7 @@ extension WalletManager {
 
                 await refreshBalance()
                 await loadTransactions()
+                SentryService.breadcrumb("NPC quote minted", category: "wallet.npc")
 
                 NotificationCenter.default.post(
                     name: .cashuTokenReceived,
@@ -86,6 +87,8 @@ extension WalletManager {
         } catch {
             if isAlreadyIssuedMintError(error) {
                 markNPCQuoteProcessed(mintQuote.id)
+            } else {
+                SentryService.capture(error)
             }
             AppLogger.wallet.error("Failed to mint NPC quote: \(error)")
         }
