@@ -261,7 +261,16 @@ class TokenService: ObservableObject {
         }
     }
 
-    private func normalizedP2PKPubkey(_ pubkey: String?) throws -> String? {
+    /// Normalize and validate a P2PK pubkey.
+    ///
+    /// `nil`/empty/whitespace → `nil` (no P2PK lock). A bare 64-char hex key is
+    /// prefixed with `02`. Anything that isn't a 66-char `02`/`03` hex key throws
+    /// `TokenServiceError.invalidP2PKPubkey`.
+    ///
+    /// Internal (not private) so it can be unit-tested directly without standing
+    /// up a wallet repository — `sendTokens` reaches it only after the repository
+    /// guard and `getWallet`, which need a live mint.
+    func normalizedP2PKPubkey(_ pubkey: String?) throws -> String? {
         guard let pubkey else { return nil }
         let trimmed = pubkey.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         guard !trimmed.isEmpty else { return nil }

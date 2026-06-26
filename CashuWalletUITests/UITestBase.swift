@@ -6,23 +6,48 @@ import XCTest
 /// helpers so individual test files don't duplicate setUp/tearDown or
 /// the multi-step onboarding walk-through.
 class UITestBase: XCTestCase {
+    enum LaunchMode {
+        case emptyWallet
+        case seededWallet
+        case seededWalletWithMint
+    }
+
     var app: XCUIApplication!
     var mintURL: String {
         ProcessInfo.processInfo.environment["NUTSHELL_MINT_URL"] ?? "http://localhost:3338"
     }
+    var launchMode: LaunchMode { .emptyWallet }
 
     override func setUpWithError() throws {
         continueAfterFailure = false
         app = XCUIApplication()
-        app.launchEnvironment = [
-            "CI_INTEGRATION_TEST": "1",
-            "RESET_WALLET": "1",
-        ]
+        app.launchEnvironment = launchEnvironment(for: launchMode)
         app.launch()
     }
 
     override func tearDownWithError() throws {
         app = nil
+    }
+
+    private func launchEnvironment(for mode: LaunchMode) -> [String: String] {
+        var environment = [
+            "CI_INTEGRATION_TEST": "1",
+            "RESET_WALLET": "1",
+            "NUTSHELL_MINT_URL": mintURL,
+        ]
+
+        switch mode {
+        case .emptyWallet:
+            break
+        case .seededWallet:
+            environment["UITEST_SEED_WALLET"] = "1"
+        case .seededWalletWithMint:
+            environment["UITEST_SEED_WALLET"] = "1"
+            environment["UITEST_SEED_MINT"] = "1"
+            environment["UITEST_SEED_MINT_URL"] = mintURL
+        }
+
+        return environment
     }
 
     // MARK: - Onboarding helpers

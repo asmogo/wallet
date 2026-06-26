@@ -16,6 +16,16 @@ extension WalletManager {
             try? keychainService.deleteNostrPrivateKey()
             SettingsManager.shared.resetWalletScopedData()
         }
+
+        if IntegrationTestConfig.shouldSeedWallet {
+            do {
+                try await installSeededUITestWallet()
+                return
+            } catch {
+                AppLogger.wallet.error("Seeded UI-test wallet initialization error: \(error)")
+            }
+        }
+
         await loadWalletState()
     }
 
@@ -202,6 +212,43 @@ extension WalletManager {
 
         initializeNostrKeypairLocally(mnemonic: mnemonic)
         setupNPCQuoteListener()
+    }
+
+    private func installSeededUITestWallet() async throws {
+        try await installCleanWallet(mnemonic: IntegrationTestConfig.seedMnemonic)
+        installSeededUITestMintIfNeeded()
+        completeOnboarding()
+        isInitialized = true
+    }
+
+    private func installSeededUITestMintIfNeeded() {
+        guard IntegrationTestConfig.shouldSeedMint,
+              let rawURL = IntegrationTestConfig.seedMintURL,
+              !rawURL.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            return
+        }
+
+        let normalizedURL = rawURL
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+
+        let mint = MintInfo(
+            url: normalizedURL,
+            name: "Cashu mint",
+            description: "Seeded for UI tests",
+            isActive: true,
+            balance: 0,
+            iconUrl: nil,
+            units: ["sat"],
+            supportedMintMethods: [.bolt11],
+            supportedMeltMethods: [.bolt11],
+            onchainMintConfirmations: nil,
+            lastUpdated: Date()
+        )
+
+        mints = [mint]
+        activeMint = mint
+        mintService.saveMints()
     }
 
     private func initializeWalletRepository(mnemonic: String) throws {

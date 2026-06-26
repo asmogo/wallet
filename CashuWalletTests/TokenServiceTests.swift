@@ -41,29 +41,33 @@ final class TokenServiceTests: XCTestCase {
         }
     }
 
-    func testReceiveTokensThrowsWhenNoRepository() async {
+    func testReceiveTokensThrowsNotInitializedWhenNoRepository() async {
+        // The repository guard runs before Token.decode, so the error must be
+        // WalletError.notInitialized — not a CDK decode error.
         do {
             _ = try await service.receiveTokens(tokenString: "cashuAtest")
             XCTFail("Expected WalletError.notInitialized")
-        } catch is WalletError {
-            // Correct — wallet guard fired before touching CDK.
+        } catch let err as WalletError {
+            guard case .notInitialized = err else {
+                XCTFail("Expected .notInitialized, got \(err)"); return
+            }
         } catch {
-            // CDK token decode error is also acceptable here — it means
-            // the wallet guard did not trigger, which would be a separate bug.
-            // Accept any error for robustness.
+            XCTFail("Expected WalletError.notInitialized, got \(error)")
         }
     }
 
     // MARK: - calculateReceiveFee — wallet not initialised
 
-    func testCalculateReceiveFeeThrowsWhenNoRepository() async {
+    func testCalculateReceiveFeeThrowsNotInitializedWhenNoRepository() async {
         do {
             _ = try await service.calculateReceiveFee(tokenString: "cashuAtest")
             XCTFail("Expected WalletError.notInitialized")
-        } catch is WalletError {
-            // Correct.
+        } catch let err as WalletError {
+            guard case .notInitialized = err else {
+                XCTFail("Expected .notInitialized, got \(err)"); return
+            }
         } catch {
-            // CDK decode error acceptable for the same reason above.
+            XCTFail("Expected WalletError.notInitialized, got \(error)")
         }
     }
 
@@ -84,52 +88,75 @@ final class TokenServiceTests: XCTestCase {
     }
 
     func testClearStateResetsLoading() {
+        service.isLoading = true
         service.clearState()
-        XCTAssertFalse(service.isLoading)
+        XCTAssertFalse(service.isLoading, "clearState must reset isLoading to false")
     }
 
-    // MARK: - P2PK pubkey validation (exercised via sendTokens error path)
+    // MARK: - P2PK pubkey validation (normalizedP2PKPubkey)
     //
-    // The private `normalizedP2PKPubkey` throws `TokenServiceError.invalidP2PKPubkey`
-    // for malformed keys. With no repository available, sendTokens may also fail
-    // earlier with `WalletError.notInitialized`.
+    // Tested directly: `sendTokens` only reaches this validator after the
+    // repository guard and `getWallet`, both of which need a live mint, so
+    // driving it through `sendTokens` with a nil repository never exercises
+    // these branches — it always short-circuits with WalletError.notInitialized.
 
-    func testSendWithInvalidP2PKPubkeyThrows() async {
-        do {
-            _ = try await service.sendTokens(amount: 10, p2pkPubkey: "not-a-pubkey")
-            XCTFail("Expected error")
-        } catch let err as TokenServiceError {
-            XCTAssertEqual(err, .invalidP2PKPubkey)
-        } catch is WalletError {
-            // wallet guard fires first when there is no repository; that's fine
-        } catch {
-            XCTFail("Unexpected error: \(error)")
+    func testNormalizedP2PKReturnsNilForNil() throws {
+        XCTAssertNil(try service.normalizedP2PKPubkey(nil))
+    }
+
+    func testNormalizedP2PKReturnsNilForEmpty() throws {
+        XCTAssertNil(try service.normalizedP2PKPubkey(""))
+    }
+
+    func testNormalizedP2PKReturnsNilForWhitespace() throws {
+        XCTAssertNil(try service.normalizedP2PKPubkey("   "))
+    }
+
+    func testNormalizedP2PKPrefixesBare64HexKey() throws {
+        let bare = String(repeating: "a", count: 64)
+        XCTAssertEqual(try service.normalizedP2PKPubkey(bare), "02" + bare)
+    }
+
+    func testNormalizedP2PKAcceptsCompressed02Key() throws {
+        let key = "02" + String(repeating: "b", count: 64)
+        XCTAssertEqual(try service.normalizedP2PKPubkey(key), key)
+    }
+
+    func testNormalizedP2PKAcceptsCompressed03Key() throws {
+        let key = "03" + String(repeating: "c", count: 64)
+        XCTAssertEqual(try service.normalizedP2PKPubkey(key), key)
+    }
+
+    func testNormalizedP2PKLowercasesInput() throws {
+        let key = "02" + String(repeating: "AB", count: 32)
+        XCTAssertEqual(try service.normalizedP2PKPubkey(key), key.lowercased())
+    }
+
+    func testNormalizedP2PKThrowsOnNonHex() {
+        XCTAssertThrowsError(try service.normalizedP2PKPubkey("not-a-pubkey")) { error in
+            XCTAssertEqual(error as? TokenServiceError, .invalidP2PKPubkey)
         }
     }
 
-    func testSendWithTooShortHexP2PKPubkeyThrows() async {
-        do {
-            _ = try await service.sendTokens(amount: 10, p2pkPubkey: "02aabb")
-            XCTFail("Expected error")
-        } catch let err as TokenServiceError {
-            XCTAssertEqual(err, .invalidP2PKPubkey)
-        } catch is WalletError {
-            // wallet guard fires first; acceptable
-        } catch {
-            XCTFail("Unexpected error: \(error)")
+    func testNormalizedP2PKThrowsOnTooShortHex() {
+        XCTAssertThrowsError(try service.normalizedP2PKPubkey("02aabb")) { error in
+            XCTAssertEqual(error as? TokenServiceError, .invalidP2PKPubkey)
         }
     }
 
-    func testSendWithEmptyP2PKPubkeyPassesThrough() async {
-        // Empty string is treated as no pubkey — validation is skipped, so the
-        // only error should be notInitialized (no wallet), not invalidP2PKPubkey.
-        do {
-            _ = try await service.sendTokens(amount: 10, p2pkPubkey: "")
-            XCTFail("Expected WalletError.notInitialized")
-        } catch is WalletError {
-            // Correct.
-        } catch {
-            XCTFail("Unexpected error: \(error)")
+    func testNormalizedP2PKThrowsOnWrongPrefix() {
+        // 66 hex chars but an invalid SEC1 prefix (04 = uncompressed, not allowed).
+        let key = "04" + String(repeating: "a", count: 64)
+        XCTAssertThrowsError(try service.normalizedP2PKPubkey(key)) { error in
+            XCTAssertEqual(error as? TokenServiceError, .invalidP2PKPubkey)
+        }
+    }
+
+    func testNormalizedP2PKThrowsOnBare64NonHex() {
+        // 64 chars but contains non-hex 'g' — must not be auto-prefixed.
+        let key = String(repeating: "g", count: 64)
+        XCTAssertThrowsError(try service.normalizedP2PKPubkey(key)) { error in
+            XCTAssertEqual(error as? TokenServiceError, .invalidP2PKPubkey)
         }
     }
 

@@ -35,6 +35,34 @@ final class MintServiceTests: XCTestCase {
         XCTAssertNotNil(service.validateMintUrl("ftp://mint.example.com"))
     }
 
+    func testCustomSchemeReturnsError() {
+        // A syntactically valid but non-http(s) scheme must be rejected.
+        XCTAssertNotNil(service.validateMintUrl("cashu://mint.example.com"))
+    }
+
+    // MARK: - validateMintUrl — host validation (isValidMintHost)
+
+    func testSingleLabelHostRejected() {
+        // No dot, not localhost, not an IP — not a usable mint host.
+        XCTAssertNotNil(service.validateMintUrl("https://localmint"))
+    }
+
+    func testLocalhostWithoutPortAccepted() {
+        XCTAssertNil(service.validateMintUrl("http://localhost"))
+    }
+
+    func testIPv4HostAccepted() {
+        XCTAssertNil(service.validateMintUrl("http://192.168.1.50"))
+    }
+
+    func testIPv4HostWithPortAccepted() {
+        XCTAssertNil(service.validateMintUrl("http://127.0.0.1:3338"))
+    }
+
+    func testDottedHostWithPortAccepted() {
+        XCTAssertNil(service.validateMintUrl("https://mint.example.com:443"))
+    }
+
     // MARK: - isMintTracked
 
     func testIsMintTrackedFalseWhenEmpty() {

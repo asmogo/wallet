@@ -37,6 +37,24 @@ final class MainTabUITests: UITestBase {
         XCTAssertTrue(mintsTab.isSelected)
     }
 
+    /// With no mint configured, the Mints tab shows its add-mint form.
+    func testMintsTabShowsAddMintWithoutMint() throws {
+        createWalletAndSkipMint()
+        waitForMainTab()
+
+        app.tabBars.buttons["Mints"].tap()
+        XCTAssertTrue(app.tabBars.buttons["Mints"].isSelected)
+
+        XCTAssertTrue(
+            app.navigationBars["Mints"].waitForExistence(timeout: 10),
+            "Mints navigation bar should appear"
+        )
+        XCTAssertTrue(
+            app.buttons["mints-add-button"].waitForExistence(timeout: 5),
+            "Mints tab should show the Add Mint button when no mint is configured"
+        )
+    }
+
     func testNavigateToSettingsTab() throws {
         createWalletAndSkipMint()
         waitForMainTab()

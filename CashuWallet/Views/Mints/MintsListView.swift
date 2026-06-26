@@ -71,6 +71,7 @@ struct MintsListView: View {
                         }
                     }
                     .disabled(newMintUrl.isEmpty || isAddingMint)
+                    .accessibilityIdentifier("mints-add-button")
 
                     Button("Paste URL from Clipboard", action: pasteMintUrlFromClipboard)
                 }
