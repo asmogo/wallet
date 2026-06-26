@@ -12,6 +12,7 @@ struct ActivityOrbView: View {
 
     @State private var isVisible: Bool = false
     @State private var rotation: Double = 0
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         Group {
@@ -38,6 +39,9 @@ struct ActivityOrbView: View {
         withAnimation(.easeIn(duration: 0.3)) {
             isVisible = true
         }
+        // A perpetual spin is a vestibular trigger — hold the orb steady when
+        // the user has asked for reduced motion.
+        guard !reduceMotion else { return }
         withAnimation(.linear(duration: 2).repeatForever(autoreverses: false)) {
             rotation = 360
         }

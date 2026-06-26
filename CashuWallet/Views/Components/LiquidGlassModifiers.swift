@@ -138,7 +138,11 @@ struct FullWidthCapsuleButtonStyle: ButtonStyle {
                     in: Capsule()
                 )
             } else {
+                // iOS 26's `.interactive()` glass supplies its own press squish;
+                // the fallback surface gets a scale-on-press so the tactile
+                // feedback is at parity below iOS 26.
                 label.background(.quaternary, in: Capsule())
+                    .scaleEffect(isEnabled && configuration.isPressed ? 0.97 : 1)
             }
         }
         .opacity(isEnabled ? (configuration.isPressed ? 0.85 : 1) : 0.4)
