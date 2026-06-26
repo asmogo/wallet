@@ -143,7 +143,7 @@ struct MintDetailView: View {
     @ViewBuilder
     private var mintIcon: some View {
         if let iconUrl = cdkInfo?.iconUrl, let url = URL(string: iconUrl) {
-            AsyncImage(url: url) { image in
+            CachedAsyncImage(url: url) { image in
                 image
                     .resizable()
                     .aspectRatio(contentMode: .fill)

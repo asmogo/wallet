@@ -37,6 +37,12 @@ struct ReceiveLightningView: View {
                             insertion: .move(edge: .trailing).combined(with: .opacity),
                             removal: .opacity
                         ))
+                } else if isCreatingRequest && isAmountlessOffer {
+                    // Any-amount reusable offer auto-creates with no keypad step,
+                    // so there's no inline button spinner to host the wait — show
+                    // a dedicated overlay between picker-dismiss and the QR.
+                    creatingOverlay
+                        .transition(.opacity)
                 } else {
                     amountInputView
                         .transition(.asymmetric(
@@ -72,7 +78,7 @@ struct ReceiveLightningView: View {
                         }
                         .accessibilityLabel("Share request")
                     }
-                } else if shouldShowMethodPicker {
+                } else if shouldShowMethodPicker && !isCreatingRequest {
                     // Liquid Glass method switcher. On iOS 26 the toolbar renders
                     // bar buttons as glass, so this reads as a sibling of the
                     // close button by construction. Replaces the old inline
@@ -82,10 +88,12 @@ struct ReceiveLightningView: View {
                             HapticFeedback.selection()
                             showMethodPicker = true
                         } label: {
-                            Image(systemName: selectedMethod.navSymbol)
+                            Image(systemName: selectedOption.navSymbol)
                                 .contentTransition(.symbolEffect(.replace))
                         }
-                        .accessibilityLabel("Receive method: \(selectedMethod.friendlyTitle)")
+                        // Both reusable options share title + glyph, so the
+                        // descriptor is what tells "fixed" from "any amount".
+                        .accessibilityLabel("Receive method: \(selectedOption.friendlyTitle), \(selectedOption.friendlyDescriptor)")
                         .accessibilityHint("Opens the receive method picker")
                     }
                 }
@@ -97,11 +105,9 @@ struct ReceiveLightningView: View {
             }
             .sheet(isPresented: $showMethodPicker) {
                 MethodPickerSheet(
-                    selectedMethod: $selectedMethod,
-                    methods: availableMintMethods,
-                    onSelect: { _ in
-                        // `onChange(of: selectedMethod)` owns the amountless rule.
-                    }
+                    selectedOption: selectedOption,
+                    options: availableMethodOptions,
+                    onSelect: { applyMethodOption($0) }
                 )
                 .presentationDetents([.medium])
             }
@@ -114,10 +120,9 @@ struct ReceiveLightningView: View {
             .onChange(of: selectedMethod) {
                 errorMessage = nil
                 onchainObservation = nil
-                // Reusable invoices open amountless (sender chooses) when no
-                // amount is typed; any carried-over amount keeps it off, and
-                // every non-BOLT12 method is always amount-bearing.
-                isAmountless = (selectedMethod == .bolt12) && amountString.isEmpty
+                // `isAmountless` is owned by the picked `ReceiveMethodOption` now
+                // (set in `applyMethodOption`); don't recompute it from the empty
+                // field here — that would fight the user's explicit picker choice.
             }
             .onChange(of: entryUnit) { oldUnit, newUnit in
                 // Flip (or a price load that changes the effective unit): carry
@@ -142,8 +147,22 @@ struct ReceiveLightningView: View {
         return orderedMethods.isEmpty ? [.bolt11] : orderedMethods
     }
 
+    /// Picker rows: BOLT12 fans out into fixed + any-amount, so a BOLT12-only
+    /// mint still yields two options (and therefore a visible picker).
+    private var availableMethodOptions: [ReceiveMethodOption] {
+        ReceiveMethodOption.options(for: availableMintMethods)
+    }
+
+    /// The option mirroring the current (selectedMethod, isAmountless) state —
+    /// drives the picker highlight and the nav-bar switcher.
+    private var selectedOption: ReceiveMethodOption {
+        ReceiveMethodOption.current(method: selectedMethod, isAmountless: isAmountless)
+    }
+
     private var shouldShowMethodPicker: Bool {
-        availableMintMethods.count > 1
+        // Count options, not methods: a BOLT12-only mint is one method but two
+        // options, and the in-screen toggle that used to disambiguate is gone.
+        availableMethodOptions.count > 1
     }
 
     private var screenTitle: String {
@@ -240,16 +259,9 @@ struct ReceiveLightningView: View {
                 primary: $settings.amountDisplayPrimary,
                 entryRaw: amountString
             )
-            .opacity(isAmountlessOffer ? 0.35 : 1)
             .accessibilityElement(children: .combine)
             .accessibilityLabel("Request amount: \(amountString.isEmpty ? "0" : amountString) sats")
-
-            if selectedMethod == .bolt12 {
-                anyAmountChip
-                    .transition(.opacity)
-            }
         }
-        .animation(.snappy, value: isAmountless)
         .animation(.snappy, value: selectedMethod)
     }
 
@@ -266,35 +278,20 @@ struct ReceiveLightningView: View {
             .accessibilityLabel("Method: \(selectedMethod.friendlyTitle)")
     }
 
-    /// BOLT12-only toggle. Lit = the invoice carries no amount (sender chooses).
-    /// Only available while the field is empty: typing a digit clears it (handled
-    /// in `amountInputView`) and greys it out until the amount is cleared again.
-    private var anyAmountChip: some View {
-        Button(action: {
-            HapticFeedback.selection()
-            withAnimation(.snappy) {
-                isAmountless.toggle()
-                if isAmountless { amountString = "" }
-            }
-        }) {
-            Text("Any amount")
-                .font(.subheadline.weight(.medium))
-                .foregroundStyle(isAmountless ? .primary : .secondary)
-                .padding(.horizontal, 14)
-                .padding(.vertical, 7)
-                .background {
-                    Capsule()
-                        .fill(.quaternary)
-                        .overlay(Capsule().fill(Color.primary.opacity(isAmountless ? 0.12 : 0)))
-                }
-                .contentShape(Capsule())
+    /// Shown only during the any-amount auto-create, between the picker
+    /// dismissing and the offer QR sliding in. The amount-bearing paths keep
+    /// their inline button spinner, so this never renders for them.
+    private var creatingOverlay: some View {
+        VStack(spacing: 16) {
+            ProgressView()
+                .controlSize(.large)
+            Text("Creating reusable invoice")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
         }
-        .buttonStyle(.plain)
-        .disabled(!amountString.isEmpty)
-        .opacity(amountString.isEmpty ? 1 : 0.35)
-        .accessibilityLabel("Any amount")
-        .accessibilityHint("The sender chooses the amount")
-        .accessibilityAddTraits(isAmountless ? .isSelected : [])
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("Creating reusable invoice")
     }
 
     // MARK: - Mint Selector
@@ -303,7 +300,7 @@ struct ReceiveLightningView: View {
         Button(action: { showMintPicker = true }) {
             HStack(spacing: 12) {
                 if let iconUrl = mint.iconUrl, let url = URL(string: iconUrl) {
-                    AsyncImage(url: url) { image in
+                    CachedAsyncImage(url: url) { image in
                         image.resizable().aspectRatio(contentMode: .fill)
                     } placeholder: {
                         Image(systemName: "bitcoinsign.bank.building")
@@ -628,20 +625,46 @@ struct ReceiveLightningView: View {
     private func syncSelectedMethodWithActiveMint() {
         guard availableMintMethods.contains(selectedMethod) else {
             selectedMethod = availableMintMethods.first ?? .bolt11
-            isAmountless = (selectedMethod == .bolt12) && amountString.isEmpty
+            // The picker (not this reset) is where the user opts into "any
+            // amount", so a fallback always lands on an amount-bearing method.
+            isAmountless = false
             return
         }
     }
 
     // MARK: - Actions
 
-    private func createRequest() {
-        let requestMethod = selectedMethod
-        // Only a BOLT12 amountless offer submits no amount; BOLT11, on-chain,
-        // and a BOLT12 offer with a typed amount all require a positive value.
-        let requestAmount: UInt64? = isAmountlessOffer ? nil : (amountSats > 0 ? amountSats : nil)
+    /// Translate a picked `ReceiveMethodOption` into state + side effects. The
+    /// single place that owns the (method, isAmountless) transition, so there's
+    /// no split between a sheet binding-write and an `onChange` reaction.
+    private func applyMethodOption(_ option: ReceiveMethodOption) {
+        if option.autoCreates {
+            // Any-amount reusable offer: skip the keypad and create now. Set
+            // state so the overlay/title/switcher reflect the reusable method,
+            // then create with EXPLICIT params (don't rely on the @State writes
+            // above having propagated by the time `createRequest` reads them).
+            selectedMethod = option.method   // .bolt12
+            isAmountless = true
+            amountString = ""
+            createRequest(method: option.method, amountless: true)
+        } else {
+            // Lightning / on-chain / fixed reusable: land on the amount screen,
+            // carrying any typed amount across (existing behavior).
+            selectedMethod = option.method
+            isAmountless = false
+        }
+    }
 
-        if !isAmountlessOffer, (requestAmount ?? 0) == 0 {
+    private func createRequest() {
+        createRequest(method: selectedMethod, amountless: isAmountlessOffer)
+    }
+
+    private func createRequest(method requestMethod: PaymentMethodKind, amountless: Bool) {
+        // Only an amountless offer submits no amount; BOLT11, on-chain, and a
+        // BOLT12 offer with a typed amount all require a positive value.
+        let requestAmount: UInt64? = amountless ? nil : (amountSats > 0 ? amountSats : nil)
+
+        if !amountless, (requestAmount ?? 0) == 0 {
             return
         }
 

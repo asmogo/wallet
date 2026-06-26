@@ -142,6 +142,7 @@ extension WalletManager {
         try removeWalletDatabaseFiles()
         walletStore.removeAllWalletData()
         SettingsManager.shared.resetWalletScopedData()
+        MintLogoCache.shared.clear()
         processedQuotes.removeAll()
         needsOnboarding = true
         isInitialized = true

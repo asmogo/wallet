@@ -176,7 +176,7 @@ struct SendView: View {
             Button(action: { showMintPicker = true }) {
                 HStack(spacing: 12) {
                     if let iconUrl = mint.iconUrl, let url = URL(string: iconUrl) {
-                        AsyncImage(url: url) { image in
+                        CachedAsyncImage(url: url) { image in
                             image.resizable().aspectRatio(contentMode: .fill)
                         } placeholder: {
                             Image(systemName: "bitcoinsign.bank.building").foregroundStyle(.secondary)
@@ -1164,7 +1164,7 @@ struct MeltView: View {
         }) {
             HStack(spacing: 12) {
                 if let iconUrl = mint.iconUrl, let url = URL(string: iconUrl) {
-                    AsyncImage(url: url) { image in
+                    CachedAsyncImage(url: url) { image in
                         image.resizable().aspectRatio(contentMode: .fill)
                     } placeholder: {
                         Image(systemName: "bitcoinsign.bank.building").foregroundStyle(.secondary)
@@ -1773,7 +1773,7 @@ struct MintSelectorSheet: View {
     @ViewBuilder
     private func mintIcon(for mint: MintInfo) -> some View {
         if let iconUrl = mint.iconUrl, let url = URL(string: iconUrl) {
-            AsyncImage(url: url) { image in
+            CachedAsyncImage(url: url) { image in
                 image.resizable().aspectRatio(contentMode: .fill)
             } placeholder: {
                 mintIconPlaceholder
@@ -1829,19 +1829,22 @@ struct MintSelectorSheet: View {
 /// trailing checkmark, dismiss-on-select. Detent is applied by the caller.
 struct MethodPickerSheet: View {
     @Environment(\.dismiss) private var dismiss
-    @Binding var selectedMethod: PaymentMethodKind
-    let methods: [PaymentMethodKind]
-    var onSelect: ((PaymentMethodKind) -> Void)? = nil
+    /// The live option, for the accent glyph + VoiceOver `.isSelected`. Read-only:
+    /// the parent owns the (method, isAmountless) state this maps to, so the
+    /// parent can react to a pick with side effects (e.g. auto-create) race-free.
+    let selectedOption: ReceiveMethodOption
+    let options: [ReceiveMethodOption]
+    var onSelect: (ReceiveMethodOption) -> Void
 
     var body: some View {
         NavigationStack {
-            List(methods, id: \.self) { method in
-                Button(action: { select(method) }) {
+            List(options) { option in
+                Button(action: { select(option) }) {
                     HStack(spacing: 12) {
                         VStack(alignment: .leading, spacing: 2) {
-                            Text(method.friendlyTitle)
+                            Text(option.friendlyTitle)
                                 .font(.body.weight(.medium))
-                            Text(method.friendlyDescriptor)
+                            Text(option.friendlyDescriptor)
                                 .font(.subheadline)
                                 .foregroundStyle(.secondary)
                         }
@@ -1851,8 +1854,8 @@ struct MethodPickerSheet: View {
                         // Glyph teaches the nav-bar mapping and carries selection:
                         // accent when chosen, muted otherwise. The row's
                         // `.isSelected` trait conveys state to VoiceOver.
-                        Image(systemName: method.navSymbol)
-                            .foregroundStyle(selectedMethod == method ? Color.accentColor : .secondary)
+                        Image(systemName: option.navSymbol)
+                            .foregroundStyle(selectedOption == option ? Color.accentColor : .secondary)
                             .accessibilityHidden(true)
                     }
                     .contentShape(Rectangle())
@@ -1860,8 +1863,8 @@ struct MethodPickerSheet: View {
                 .buttonStyle(.plain)
                 .listRowSeparator(.hidden)
                 .accessibilityElement(children: .combine)
-                .accessibilityLabel("\(method.friendlyTitle). \(method.friendlyDescriptor)")
-                .accessibilityAddTraits(selectedMethod == method ? .isSelected : [])
+                .accessibilityLabel("\(option.friendlyTitle). \(option.friendlyDescriptor)")
+                .accessibilityAddTraits(selectedOption == option ? .isSelected : [])
             }
             .listStyle(.plain)
             .navigationTitle("Receive with")
@@ -1878,12 +1881,11 @@ struct MethodPickerSheet: View {
         }
     }
 
-    private func select(_ method: PaymentMethodKind) {
-        if method != selectedMethod {
+    private func select(_ option: ReceiveMethodOption) {
+        if option != selectedOption {
             HapticFeedback.selection()
-            selectedMethod = method
         }
-        onSelect?(method)
+        onSelect(option)   // parent mutates state + may auto-create
         dismiss()
     }
 }

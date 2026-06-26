@@ -281,13 +281,10 @@ struct MainWalletView: View {
     @ViewBuilder
     private func mintChipIcon(url: String?) -> some View {
         if let urlString = url, let imageURL = URL(string: urlString) {
-            AsyncImage(url: imageURL) { phase in
-                switch phase {
-                case .success(let image):
-                    image.resizable().scaledToFill()
-                default:
-                    mintChipIconPlaceholder
-                }
+            CachedAsyncImage(url: imageURL) { image in
+                image.resizable().scaledToFill()
+            } placeholder: {
+                mintChipIconPlaceholder
             }
             .frame(width: 20, height: 20)
             .clipShape(Circle())

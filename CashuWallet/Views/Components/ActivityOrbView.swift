@@ -1,4 +1,7 @@
 import SwiftUI
+import UIKit
+import ImageIO
+import CryptoKit
 
 // MARK: - Activity Orb View
 /// Loading indicator showing a subtle pulsing indicator when operations are in progress
@@ -253,13 +256,10 @@ struct MintAvatarView: View {
     var body: some View {
         Group {
             if let iconUrl, let url = URL(string: iconUrl) {
-                AsyncImage(url: url) { phase in
-                    switch phase {
-                    case .success(let image):
-                        image.resizable().aspectRatio(contentMode: .fill)
-                    default:
-                        placeholder
-                    }
+                CachedAsyncImage(url: url) { image in
+                    image.resizable().aspectRatio(contentMode: .fill)
+                } placeholder: {
+                    placeholder
                 }
             } else {
                 placeholder
@@ -409,5 +409,182 @@ struct SuggestedMintsSection: View {
         Text("Main Content")
 
         MutexLockOverlay(isLocked: .constant(true), message: "Sending tokens...")
+    }
+}
+
+// MARK: - Mint Logo Cache
+
+/// Process-wide cache for remote mint logos. `AsyncImage` re-issues the network
+/// request on every appearance (scrolling a list, opening a sheet, switching
+/// tabs) and persists nothing on disk, so logos flicker in and re-download
+/// constantly. This keeps decoded images in a bounded in-memory `NSCache` and
+/// the raw bytes on disk in the caches directory (keyed by a hash of the URL),
+/// so a mint logo downloads once and renders instantly thereafter. Decode and
+/// downsampling happen off the main thread. Used via `CachedAsyncImage`.
+final class MintLogoCache: @unchecked Sendable {
+    static let shared = MintLogoCache()
+
+    /// Upper bound on the decoded thumbnail's longest edge, in pixels. Mint
+    /// logos render at most at 72pt (≈216px @3x); 256 keeps them crisp while
+    /// capping memory if a mint serves an oversized image.
+    private static let maxPixelSize: CGFloat = 256
+
+    /// How long a logo on disk is served before we re-fetch it, so a mint that
+    /// swaps its logo is eventually picked up. If the refetch fails (offline),
+    /// the stale copy is still used rather than showing nothing.
+    private static let ttl: TimeInterval = 7 * 24 * 60 * 60
+
+    private let memory = NSCache<NSString, UIImage>()
+    private let directory: URL
+    private let lock = NSLock()
+    private var inFlight: [String: Task<UIImage?, Never>] = [:]
+
+    private init() {
+        memory.countLimit = 64
+        let caches = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
+        directory = caches.appendingPathComponent("MintLogos", isDirectory: true)
+        try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    }
+
+    /// Synchronous memory-only lookup, so an already-cached logo renders on the
+    /// first frame without a placeholder flash. Nil means "ask `image(for:)`".
+    func cachedImage(for url: URL) -> UIImage? {
+        memory.object(forKey: url.absoluteString as NSString)
+    }
+
+    /// Returns the logo, loading memory → disk → network as needed. Concurrent
+    /// requests for the same URL coalesce onto a single load.
+    func image(for url: URL) async -> UIImage? {
+        let key = url.absoluteString
+        if let cached = memory.object(forKey: key as NSString) { return cached }
+
+        let task: Task<UIImage?, Never> = {
+            lock.lock(); defer { lock.unlock() }
+            if let existing = inFlight[key] { return existing }
+            let created = Task { await self.load(url: url, key: key) }
+            inFlight[key] = created
+            return created
+        }()
+
+        let image = await task.value
+        lock.lock(); inFlight[key] = nil; lock.unlock()
+        return image
+    }
+
+    private func load(url: URL, key: String) async -> UIImage? {
+        let file = directory.appendingPathComponent(Self.filename(for: key))
+        let diskData = try? Data(contentsOf: file)
+
+        // Serve an unexpired disk copy without touching the network.
+        if let diskData, Self.isFresh(file), let image = await Self.decode(diskData) {
+            memory.setObject(image, forKey: key as NSString)
+            return image
+        }
+
+        // Stale or missing: refetch, but fall back to whatever's on disk — a
+        // stale logo beats a blank one when the network is unavailable.
+        if let (data, response) = try? await URLSession.shared.data(from: url),
+           (response as? HTTPURLResponse).map({ (200..<300).contains($0.statusCode) }) ?? true,
+           let image = await Self.decode(data) {
+            try? data.write(to: file, options: .atomic)
+            memory.setObject(image, forKey: key as NSString)
+            return image
+        }
+
+        if let diskData, let image = await Self.decode(diskData) {
+            memory.setObject(image, forKey: key as NSString)
+            return image
+        }
+        return nil
+    }
+
+    /// Wipes every cached logo (memory + disk) and cancels in-flight loads.
+    /// Called when the wallet is erased so no per-wallet state lingers.
+    func clear() {
+        memory.removeAllObjects()
+        lock.lock()
+        inFlight.values.forEach { $0.cancel() }
+        inFlight.removeAll()
+        lock.unlock()
+        try? FileManager.default.removeItem(at: directory)
+        try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    }
+
+    private static func isFresh(_ file: URL) -> Bool {
+        guard let modified = try? FileManager.default
+            .attributesOfItem(atPath: file.path)[.modificationDate] as? Date else { return false }
+        return Date().timeIntervalSince(modified) < ttl
+    }
+
+    private static func filename(for key: String) -> String {
+        let digest = SHA256.hash(data: Data(key.utf8))
+        return digest.map { String(format: "%02x", $0) }.joined()
+    }
+
+    /// Decode + downsample off the main thread via ImageIO, so large source
+    /// images never get fully decoded into memory.
+    private static func decode(_ data: Data) async -> UIImage? {
+        await Task.detached(priority: .utility) {
+            let sourceOptions = [kCGImageSourceShouldCache: false] as CFDictionary
+            guard let source = CGImageSourceCreateWithData(data as CFData, sourceOptions) else { return nil }
+            let thumbnailOptions = [
+                kCGImageSourceCreateThumbnailFromImageAlways: true,
+                kCGImageSourceCreateThumbnailWithTransform: true,
+                kCGImageSourceShouldCacheImmediately: true,
+                kCGImageSourceThumbnailMaxPixelSize: maxPixelSize
+            ] as CFDictionary
+            guard let cgImage = CGImageSourceCreateThumbnailAtIndex(source, 0, thumbnailOptions) else { return nil }
+            return UIImage(cgImage: cgImage)
+        }.value
+    }
+}
+
+// MARK: - Cached Async Image
+
+/// Drop-in replacement for `AsyncImage(url:content:placeholder:)` that loads
+/// through `MintLogoCache` instead of refetching on every appearance. The API
+/// mirrors `AsyncImage`'s two-closure form: `content` receives the loaded image
+/// (success), `placeholder` covers loading and failure. Call sites keep their
+/// own `.frame`, `.clipShape`, and fallback styling unchanged.
+struct CachedAsyncImage<Content: View, Placeholder: View>: View {
+    private let url: URL?
+    private let content: (Image) -> Content
+    private let placeholder: () -> Placeholder
+
+    @State private var image: UIImage?
+
+    init(
+        url: URL?,
+        @ViewBuilder content: @escaping (Image) -> Content,
+        @ViewBuilder placeholder: @escaping () -> Placeholder
+    ) {
+        self.url = url
+        self.content = content
+        self.placeholder = placeholder
+        // Seed from the memory cache so a previously-loaded logo shows on the
+        // first frame, with no placeholder flash.
+        _image = State(initialValue: url.flatMap { MintLogoCache.shared.cachedImage(for: $0) })
+    }
+
+    var body: some View {
+        Group {
+            if let image {
+                content(Image(uiImage: image))
+            } else {
+                placeholder()
+            }
+        }
+        .task(id: url) {
+            guard let url else {
+                image = nil
+                return
+            }
+            if let cached = MintLogoCache.shared.cachedImage(for: url) {
+                image = cached
+                return
+            }
+            image = nil
+            image = await MintLogoCache.shared.image(for: url)
+        }
     }
 }
