@@ -40,8 +40,16 @@ struct TransactionAmountColumn: View {
         transaction.status == .pending ? .secondary : .primary
     }
 
+    // The +/− sign is a *settled-ledger* signal: a pending receive hasn't
+    // credited the balance and a pending send hasn't debited it, so neither
+    // wears a sign until it settles — matching the waiting Cashu Request /
+    // Reusable Invoice, which shows a bare amount until paid. The sign and the
+    // `.primary` colour arrive together on settlement. See DESIGN.md — The
+    // Quiet Pending Rule.
     private var formattedAmount: String {
+        let value = settings.formatAmountShort(transaction.amount)
+        guard transaction.status != .pending else { return value }
         let prefix = transaction.type == .incoming ? "+" : "−"
-        return "\(prefix)\(settings.formatAmountShort(transaction.amount))"
+        return "\(prefix)\(value)"
     }
 }

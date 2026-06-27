@@ -289,6 +289,15 @@ status badge (`TransactionDetailView`) and the "Waiting for payment…" status
 clock inside `CashuRequestDetailView`. Never a full-saturation pill, never a
 loud "PENDING" wordmark.
 
+*Amended 2026-06-27: the leading `+`/`−` sign is itself a settled-ledger
+signal. A pending row — either direction — renders a **bare, unsigned** amount;
+the sign appears only on settlement, together with the `.primary` colour. This
+unifies the transaction column (`TransactionAmountColumn`, used by BOLT11 /
+Lightning / ecash) with the waiting Cashu Request / Reusable Invoice
+(`CashuRequestAmountColumn`), which already showed a bare amount until paid — so
+a pending incoming BOLT11 invoice no longer shows `+21` while a waiting BOLT12
+offer shows `21`.*
+
 **The Fiat Sub-Amount Rule.** When
 `settings.showFiatBalance && priceService.btcPriceUSD > 0`, any row that
 renders a sats amount also renders the fiat equivalent directly below it in

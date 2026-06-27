@@ -490,9 +490,14 @@ struct HistoryView: View {
 
     // MARK: - Formatting
 
+    // Mirrors TransactionAmountColumn: the sign is a settled-ledger signal, so a
+    // pending row reads as a bare amount in VoiceOver too (status is announced
+    // separately).
     private func formatAmount(_ transaction: WalletTransaction) -> String {
+        let value = settings.formatAmountShort(transaction.amount)
+        guard transaction.status != .pending else { return value }
         let prefix = transaction.type == .incoming ? "+" : "−"
-        return "\(prefix)\(settings.formatAmountShort(transaction.amount))"
+        return "\(prefix)\(value)"
     }
 
     private static let shortTimeFormatter: DateFormatter = {
