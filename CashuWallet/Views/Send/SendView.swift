@@ -26,6 +26,12 @@ struct SendView: View {
     @State private var lockWithP2PK = false
     @State private var p2pkPubkeyInput = ""
 
+    // More-options flows (Pay Cashu Request / Lock Ecash)
+    @State private var showPayRequestScanner = false
+    @State private var showLockScanner = false
+    @State private var pendingCashuRequest: CashuPaymentRequestSummary?
+    @State private var showCashuRequestPay = false
+
     @ObservedObject private var priceService = PriceService.shared
 
     var body: some View {
@@ -65,16 +71,28 @@ struct SendView: View {
 
                 if generatedToken == nil {
                     ToolbarItem(placement: .topBarTrailing) {
-                        Button(action: {
-                            HapticFeedback.selection()
-                            lockWithP2PK.toggle()
-                        }) {
-                            Image(systemName: lockWithP2PK ? "lock.fill" : "lock.open")
-                                .font(.caption)
-                                .foregroundStyle(lockWithP2PK ? Color.accentColor : .secondary)
+                        Menu {
+                            Button {
+                                HapticFeedback.selection()
+                                pendingCashuRequest = nil
+                                showPayRequestScanner = true
+                            } label: {
+                                Label("Pay Cashu Request", systemImage: "qrcode.viewfinder")
+                            }
+
+                            Button {
+                                HapticFeedback.selection()
+                                showLockScanner = true
+                            } label: {
+                                Label("Lock Ecash", systemImage: "lock")
+                            }
+                        } label: {
+                            Image(systemName: "ellipsis")
+                                .font(.body.weight(.semibold))
+                                .foregroundStyle(.secondary)
                         }
-                        .accessibilityLabel(lockWithP2PK ? "P2PK lock on" : "P2PK lock off")
-                        .accessibilityHint("Locks this token to a recipient public key")
+                        .accessibilityLabel("More options")
+                        .accessibilityHint("Pay a Cashu request or lock ecash to a public key")
                     }
                 }
 
@@ -101,6 +119,32 @@ struct SendView: View {
                     CashuTokenShareSheet(token: token)
                 }
             }
+            .sheet(isPresented: $showPayRequestScanner, onDismiss: presentPendingCashuRequestIfNeeded) {
+                ScannerWrapperView(
+                    onScanned: handleScannedRequest,
+                    promptText: "Scan a Cashu request",
+                    quickFills: payRequestQuickFills
+                )
+                .environmentObject(walletManager)
+            }
+            .sheet(isPresented: $showLockScanner) {
+                ScannerWrapperView(
+                    onScanned: handleScannedPubkey,
+                    promptText: "Scan a public key to lock to",
+                    quickFills: lockQuickFills
+                )
+                .environmentObject(walletManager)
+            }
+            .fullScreenCover(isPresented: $showCashuRequestPay, onDismiss: { pendingCashuRequest = nil }) {
+                if let request = pendingCashuRequest {
+                    CashuPaymentRequestPayView(request: request, onComplete: {
+                        // Pay Cashu Request "takes over": once it completes,
+                        // leave the Send flow entirely and return to the wallet.
+                        dismiss()
+                    })
+                    .environmentObject(walletManager)
+                }
+            }
             .onDisappear {
                 checkingTask?.cancel()
             }
@@ -119,6 +163,13 @@ struct SendView: View {
                 mintSelector(mint: mint)
                     .padding(.horizontal)
                     .padding(.top, 12)
+            }
+
+            // Locked-to-key indicator (when the token will be P2PK-locked)
+            if lockWithP2PK, let locked = normalizedP2PKPubkeyInput {
+                lockedKeyChip(key: locked)
+                    .padding(.horizontal)
+                    .padding(.top, 10)
             }
 
             Spacer()
@@ -140,13 +191,6 @@ struct SendView: View {
 
             Spacer()
 
-            // P2PK section (only when enabled)
-            if lockWithP2PK {
-                p2pkInputSection
-                    .padding(.horizontal)
-                    .padding(.bottom, 8)
-            }
-
             // Number pad
             NumberPadAmountInput(amountString: $amountString, unit: entryUnit)
                 .padding(.horizontal, 24)
@@ -167,6 +211,7 @@ struct SendView: View {
             .padding(.top, 16)
             .padding(.bottom, 16)
         }
+        .animation(.snappy(duration: 0.3), value: lockWithP2PK)
     }
 
     // MARK: - Mint Selector
@@ -305,33 +350,65 @@ struct SendView: View {
         HapticFeedback.selection()
     }
 
-    @ViewBuilder
-    private var p2pkInputSection: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            TextField("02... public key", text: $p2pkPubkeyInput)
-                .font(.system(.caption, design: .monospaced))
-                .textInputAutocapitalization(.never)
-                .autocorrectionDisabled()
-                .padding(10)
-                .background(
-                    RoundedRectangle(cornerRadius: 8)
-                        .fill(.quaternary)
-                )
+    /// Compact, removable indicator that the token will be P2PK-locked. Tapping
+    /// the body reopens the scanner to change the key; the × clears the lock.
+    /// Mirrors `ClipboardPaymentChip`'s visual language.
+    private func lockedKeyChip(key: String) -> some View {
+        HStack(spacing: 12) {
+            Button(action: {
+                HapticFeedback.selection()
+                showLockScanner = true
+            }) {
+                HStack(spacing: 10) {
+                    Image(systemName: "lock.fill")
+                        .font(.callout.weight(.semibold))
+                        .foregroundStyle(.primary)
+                        .frame(width: 30, height: 30)
+                        .background(.thinMaterial, in: Circle())
 
-            if let ownKey = settings.p2pkKeys.last {
-                Button(action: { p2pkPubkeyInput = ownKey.publicKey }) {
-                    Text("Use my latest key")
-                        .font(.caption)
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text("Locked to")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(.secondary)
+                            .textCase(.uppercase)
+                            .tracking(0.5)
+                        Text(shortKey(key))
+                            .font(.subheadline.weight(.medium))
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+                    }
+
+                    Spacer(minLength: 0)
                 }
+                .contentShape(Rectangle())
             }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Locked to public key")
+            .accessibilityHint("Double-tap to change the key")
 
-            if !p2pkPubkeyInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
-               normalizedP2PKPubkeyInput == nil {
-                Text("Invalid P2PK key format")
-                    .font(.caption2)
-                    .foregroundStyle(.red)
+            Button(action: {
+                HapticFeedback.selection()
+                lockWithP2PK = false
+                p2pkPubkeyInput = ""
+            }) {
+                Image(systemName: "xmark")
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(.secondary)
+                    .frame(width: 28, height: 28)
+                    .contentShape(Circle())
             }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Remove lock")
         }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
+        .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 14))
+        .transition(.opacity.combined(with: .move(edge: .top)))
+    }
+
+    private func shortKey(_ key: String) -> String {
+        guard key.count > 16 else { return key }
+        return "\(key.prefix(10))…\(key.suffix(6))"
     }
 
     // MARK: - Token Display View
@@ -510,7 +587,14 @@ struct SendView: View {
     }
 
     private var normalizedP2PKPubkeyInput: String? {
-        let trimmed = p2pkPubkeyInput.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        Self.normalizeP2PKPubkey(p2pkPubkeyInput)
+    }
+
+    /// Normalizes a P2PK public key string: accepts a 66-char `02`/`03`-prefixed
+    /// hex key, or bare 64-char hex (auto-prefixed `02`). Returns nil for anything
+    /// else — including Nostr `npub`s, which this scheme can't lock to.
+    static func normalizeP2PKPubkey(_ raw: String) -> String? {
+        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         guard !trimmed.isEmpty else { return nil }
 
         let hexChars = CharacterSet(charactersIn: "0123456789abcdef")
@@ -527,6 +611,74 @@ struct SendView: View {
         }
 
         return trimmed
+    }
+
+    // MARK: - More Options (Pay Cashu Request / Lock Ecash)
+
+    /// Pay-flow intake: a scanned/pasted `creqA` routes to the Cashu request
+    /// pay screen; anything else is rejected so the labeled action stays honest.
+    private func handleScannedRequest(_ scanned: String) {
+        let trimmed = scanned.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+
+        if case .cashuPaymentRequest(let summary) = PaymentRequestDecoder.decode(
+            trimmed,
+            includeCashuPaymentRequests: true,
+            preferCashuPaymentRequests: true
+        ) {
+            // Stash the request; the scanner sheet's onDismiss presents the pay
+            // screen *after* the sheet finishes dismissing. Presenting a cover
+            // mid-dismiss yields a black screen.
+            pendingCashuRequest = summary
+        } else {
+            errorMessage = "That's not a Cashu request."
+            HapticFeedback.notification(.error)
+        }
+    }
+
+    /// Called from the Pay scanner sheet's `onDismiss`. By now the scanner is
+    /// fully gone, so it's safe to present the Cashu request pay cover.
+    private func presentPendingCashuRequestIfNeeded() {
+        guard pendingCashuRequest != nil else { return }
+        showCashuRequestPay = true
+    }
+
+    /// Lock-flow intake: a scanned/pasted public key arms P2PK locking for the
+    /// next send; invalid input (junk, or an `npub`) is rejected.
+    private func handleScannedPubkey(_ scanned: String) {
+        guard let normalized = Self.normalizeP2PKPubkey(scanned) else {
+            errorMessage = "That's not a valid public key."
+            HapticFeedback.notification(.error)
+            return
+        }
+        p2pkPubkeyInput = normalized
+        lockWithP2PK = true
+        errorMessage = nil
+        HapticFeedback.notification(.success)
+    }
+
+    private func payRequestQuickFills() -> [ScannerWrapperView.ScannerQuickFill] {
+        guard let clip = UIPasteboard.general.string?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !clip.isEmpty,
+              case .cashuPaymentRequest = PaymentRequestDecoder.decode(
+                clip,
+                includeCashuPaymentRequests: true,
+                preferCashuPaymentRequests: true
+              )
+        else { return [] }
+        return [.init(title: "Paste request", systemImage: "doc.on.clipboard", value: clip)]
+    }
+
+    private func lockQuickFills() -> [ScannerWrapperView.ScannerQuickFill] {
+        var fills: [ScannerWrapperView.ScannerQuickFill] = []
+        if let clip = UIPasteboard.general.string?.trimmingCharacters(in: .whitespacesAndNewlines),
+           Self.normalizeP2PKPubkey(clip) != nil {
+            fills.append(.init(title: "Paste key", systemImage: "doc.on.clipboard", value: clip))
+        }
+        if let ownKey = settings.p2pkKeys.last {
+            fills.append(.init(title: "Use my latest key", systemImage: "key", value: ownKey.publicKey))
+        }
+        return fills
     }
 
     private func copyToken(_ token: String) {

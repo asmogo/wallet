@@ -73,7 +73,24 @@ struct ScannerWrapperView: View {
     /// scanned string so the caller can decide what to do.
     var onScanned: ((String) -> Void)? = nil
 
+    /// Optional override for the instruction shown under the viewfinder.
+    var promptText: String? = nil
+
+    /// Optional quick-fill chips rendered over the camera (e.g. "Paste",
+    /// "Use my latest key"). Tapping one routes its `value` through the same
+    /// pipeline as a scanned code. Evaluated once on appear so the caller can
+    /// read the clipboard lazily — only when the scanner is actually shown.
+    var quickFills: (() -> [ScannerQuickFill])? = nil
+
+    struct ScannerQuickFill: Identifiable {
+        let id = UUID()
+        let title: String
+        let systemImage: String
+        let value: String
+    }
+
     @StateObject private var scannerModel = ScannerViewModel()
+    @State private var resolvedQuickFills: [ScannerQuickFill] = []
     @State private var scannedToken: String?
     @State private var scannedMeltRequest: String?
     @State private var scannedCashuPaymentRequest: CashuPaymentRequestSummary?
@@ -119,13 +136,35 @@ struct ScannerWrapperView: View {
                         .padding(.bottom, 50)
                         .padding(.horizontal, 40)
                     } else {
-                        Text("Scan Cashu Token, Payment Request, or Bitcoin Address")
-                            .foregroundStyle(.primary)
-                            .font(.caption)
-                            .padding()
-                            .background(Color.black.opacity(0.6))
-                            .clipShape(.rect(cornerRadius: 20))
-                            .padding(.bottom, 50)
+                        VStack(spacing: 12) {
+                            ForEach(resolvedQuickFills) { fill in
+                                Button {
+                                    HapticFeedback.selection()
+                                    processCompleteContent(fill.value)
+                                } label: {
+                                    HStack(spacing: 8) {
+                                        Image(systemName: fill.systemImage)
+                                        Text(fill.title)
+                                    }
+                                    .font(.subheadline.weight(.semibold))
+                                    .foregroundStyle(.primary)
+                                    .padding(.horizontal, 18)
+                                    .padding(.vertical, 11)
+                                    .background(.ultraThinMaterial, in: Capsule())
+                                }
+                                .buttonStyle(.plain)
+                                .accessibilityHint("Use this instead of scanning")
+                            }
+
+                            Text(promptText ?? "Scan Cashu Token, Payment Request, or Bitcoin Address")
+                                .foregroundStyle(.primary)
+                                .font(.caption)
+                                .padding()
+                                .background(Color.black.opacity(0.6))
+                                .clipShape(.rect(cornerRadius: 20))
+                        }
+                        .padding(.horizontal, 24)
+                        .padding(.bottom, 50)
                     }
                 }
                 
@@ -150,6 +189,9 @@ struct ScannerWrapperView: View {
                             .foregroundStyle(.primary)
                     }
                 }
+            }
+            .onAppear {
+                resolvedQuickFills = quickFills?() ?? []
             }
             .sheet(isPresented: $navigateToDetail, onDismiss: {
                 // Sheet closed without completing the receive: re-arm the scanner
@@ -310,7 +352,7 @@ struct ScannerWrapperView: View {
     }
 }
 
-private struct CashuPaymentRequestPayView: View {
+struct CashuPaymentRequestPayView: View {
     let request: CashuPaymentRequestSummary
     var onComplete: (() -> Void)?
 

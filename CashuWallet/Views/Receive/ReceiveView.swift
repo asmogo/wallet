@@ -3,11 +3,12 @@ import SwiftUI
 struct ReceiveView: View {
     @Environment(\.dismiss) private var dismiss
     @EnvironmentObject var walletManager: WalletManager
+    @ObservedObject private var settings = SettingsManager.shared
 
     @State private var selectedOption: ReceiveOption?
 
     enum ReceiveOption: String, Identifiable {
-        case paste, scan, lightning
+        case paste, scan, lightning, lockedKey
         var id: String { rawValue }
     }
 
@@ -65,6 +66,23 @@ struct ReceiveView: View {
                     .accessibilityLabel("Payment Request")
                     .accessibilityHint("Creates a lightning invoice, BOLT12 offer, or bitcoin address to receive sats")
                     .accessibilityAddTraits(.isButton)
+
+                    Button(action: { presentReceiveLockedKey() }) {
+                        Label {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("Receive Locked Ecash")
+                                Text("Have someone scan your key")
+                                    .font(.subheadline)
+                                    .foregroundStyle(.secondary)
+                            }
+                        } icon: {
+                            Image(systemName: "lock")
+                                .foregroundStyle(Color.accentColor)
+                        }
+                    }
+                    .accessibilityLabel("Receive Locked Ecash")
+                    .accessibilityHint("Shows your public key so someone can lock ecash to you")
+                    .accessibilityAddTraits(.isButton)
                 }
             }
             .listStyle(.plain)
@@ -88,6 +106,15 @@ struct ReceiveView: View {
                 case .lightning:
                     ReceiveLightningView()
                         .environmentObject(walletManager)
+                case .lockedKey:
+                    Group {
+                        if let key = settings.p2pkKeys.last {
+                            QRCodeDetailSheet(title: "Receive Locked Ecash", content: key.publicKey)
+                        } else {
+                            lockedKeyUnavailable
+                        }
+                    }
+                    .presentationDetents([.medium, .large])
                 }
             }
         }
@@ -104,6 +131,31 @@ struct ReceiveView: View {
                 }
             }
         }
+    }
+
+    /// Shows the user's P2PK public key QR so a counterparty can lock ecash to
+    /// it. Generates a key on first use if the wallet has none yet.
+    private func presentReceiveLockedKey() {
+        HapticFeedback.selection()
+        if settings.p2pkKeys.isEmpty {
+            _ = settings.generateP2PKKey()
+        }
+        selectedOption = .lockedKey
+    }
+
+    private var lockedKeyUnavailable: some View {
+        VStack(spacing: 12) {
+            Image(systemName: "key.slash")
+                .font(.largeTitle)
+                .foregroundStyle(.secondary)
+            Text("Couldn't create a key")
+                .font(.headline)
+            Text("Try again from Settings → P2PK.")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+        }
+        .padding()
     }
 }
 
