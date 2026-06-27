@@ -371,44 +371,44 @@ struct CashuPaymentRequestPayView: View {
 
     var body: some View {
         NavigationStack {
+            // Canonical amount-entry layout, shared with ReceiveLightningView:
+            // mint selector on top → centered amount hero → keypad → action.
             VStack(spacing: 0) {
-                ScrollView {
-                    VStack(spacing: 24) {
-                        amountSection
-                            .padding(.top, 24)
-
-                        if request.isSatUnit {
-                            if let mint = selectedPaymentMint {
-                                cashuMintSelector(mint: mint)
-                                    .padding(.horizontal)
-                            } else {
-                                Text("No matching mint for this request.")
-                                    .font(.caption)
-                                    .foregroundStyle(.orange)
-                                    .multilineTextAlignment(.center)
-                                    .padding(.horizontal)
-                            }
-                        }
-
-                        detailsSection
-
-                        if !request.isSatUnit {
-                            Text("This wallet can only pay sat-denominated Cashu requests.")
-                                .font(.caption)
-                                .foregroundStyle(.red)
-                                .multilineTextAlignment(.center)
-                                .padding(.horizontal)
-                        }
-
-                        if let errorMessage {
-                            Text(errorMessage)
-                                .font(.caption)
-                                .foregroundStyle(.red)
-                                .multilineTextAlignment(.center)
-                                .padding(.horizontal)
-                        }
-                    }
+                // Top mint card only when the user genuinely chooses the source
+                // (flexible request + at least one held mint). A request that
+                // pins one mint, or one we can't pay, is shown read-only in the
+                // request-details section under the amount instead.
+                if request.isSatUnit, case .picker(_, let mint) = mintPresentation {
+                    cashuMintSelector(mint: mint)
+                        .padding(.horizontal)
+                        .padding(.top, 12)
                 }
+
+                Spacer()
+
+                amountSection
+
+                requestDetailsSection
+
+                if !request.isSatUnit {
+                    Text("This wallet can only pay sat-denominated Cashu requests.")
+                        .font(.caption)
+                        .foregroundStyle(.red)
+                        .multilineTextAlignment(.center)
+                        .padding(.top, 12)
+                        .padding(.horizontal)
+                }
+
+                if let errorMessage {
+                    Text(errorMessage)
+                        .font(.caption)
+                        .foregroundStyle(.red)
+                        .multilineTextAlignment(.center)
+                        .padding(.top, 12)
+                        .padding(.horizontal)
+                }
+
+                Spacer()
 
                 if request.amount == nil {
                     NumberPadAmountInput(amountString: $customAmountString, unit: entryUnit)
@@ -419,7 +419,7 @@ struct CashuPaymentRequestPayView: View {
                     if isPaying {
                         ProgressView()
                     } else {
-                        Label("Pay", systemImage: "checkmark.circle.fill")
+                        Text("Pay")
                     }
                 }
                 .glassButton()
@@ -507,21 +507,145 @@ struct CashuPaymentRequestPayView: View {
         }
     }
 
-    private var detailsSection: some View {
-        VStack(spacing: 0) {
-            detailRow(
-                icon: "text.quote",
-                label: "Description",
-                value: request.description?.isEmpty == false ? request.description! : "Cashu payment"
-            )
-            Divider().padding(.leading)
-            detailRow(icon: "banknote", label: "Unit", value: request.unit ?? "sat")
-            Divider().padding(.leading)
-            detailRow(icon: "bitcoinsign.bank.building", label: "Mint", value: selectedMintLabel)
+    /// A requester-supplied memo, shown as a read-only "Memo" row in the
+    /// request-details section under the amount. Nil when the request has no
+    /// real description — the old screen rendered a hardcoded "Cashu payment"
+    /// placeholder, which said nothing.
+    private var requestMemo: String? {
+        guard let description = request.description?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !description.isEmpty else { return nil }
+        return description
+    }
+
+    /// How the request's mint is offered, derived from `request.mints`
+    /// (empty = any, 1 = required, ≥2 = alternatives) and what the user holds.
+    private enum MintPresentation {
+        /// Flexible request with ≥1 qualifying held mint — the top picker card.
+        case picker(mints: [MintInfo], selected: MintInfo)
+        /// Exactly one required mint that the user holds — read-only detail row.
+        case fixed(MintInfo)
+        /// No usable held mint — read-only warning row, Pay disabled.
+        /// `requiredHosts` is the requested mint host(s); empty means an
+        /// any-mint request and the user holds no mints at all.
+        case unavailable(requiredHosts: [String])
+    }
+
+    private var mintPresentation: MintPresentation {
+        // `selectedPaymentMint` is nil exactly when `candidateMints` is empty,
+        // i.e. no held mint satisfies the request — covers both a required mint
+        // we don't hold and a flexible request we can't service.
+        guard let selected = selectedPaymentMint else {
+            return .unavailable(requiredHosts: request.mints.map(extractMintHost))
         }
-        .padding(.vertical, 4)
-        .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 14))
-        .padding(.horizontal)
+        // The count check sits after the nil-guard, so a single required mint we
+        // *don't* hold falls through to `.unavailable`, not `.fixed`.
+        if request.mints.count == 1 {
+            return .fixed(selected)
+        }
+        return .picker(mints: candidateMints, selected: selected)
+    }
+
+    /// Content for the read-only Mint row. Nil when the mint is the top picker
+    /// card, or for non-sat requests (which surface their own warning).
+    private var mintRowConfig: (value: String, caption: String?, isWarning: Bool)? {
+        guard request.isSatUnit else { return nil }
+        switch mintPresentation {
+        case .picker:
+            return nil
+        case .fixed(let mint):
+            return (mint.name, nil, false)
+        case .unavailable(let hosts):
+            if hosts.isEmpty {
+                return ("Any mint", "Add a mint to pay", true)
+            } else if hosts.count == 1 {
+                return (hosts[0], "Not in your wallet", true)
+            } else {
+                return (hosts.joined(separator: ", "), "You hold none of these", true)
+            }
+        }
+    }
+
+    /// Read-only facts about the request that the user can't change here: the
+    /// Mint (only when it's a constraint, never duplicating the picker card) and
+    /// the Memo. Renders nothing when both are absent.
+    @ViewBuilder
+    private var requestDetailsSection: some View {
+        let mintConfig = mintRowConfig
+        let memo = requestMemo
+
+        if mintConfig != nil || memo != nil {
+            VStack(spacing: 0) {
+                if let mintConfig {
+                    mintRow(value: mintConfig.value, caption: mintConfig.caption, isWarning: mintConfig.isWarning)
+                    if memo != nil { canvasDivider }
+                }
+                if let memo {
+                    detailRow(icon: "quote.bubble", label: "Memo", value: memo)
+                }
+            }
+            .padding(.top, 16)
+            .padding(.horizontal)
+        }
+    }
+
+    /// Read-only Mint row. `.fixed` passes no caption; `.unavailable` passes a
+    /// caption and the warning tint.
+    private func mintRow(value: String, caption: String?, isWarning: Bool) -> some View {
+        HStack(alignment: caption == nil ? .firstTextBaseline : .top) {
+            Label("Mint", systemImage: "bitcoinsign.bank.building")
+                .foregroundStyle(.secondary)
+            Spacer()
+            VStack(alignment: .trailing, spacing: 2) {
+                Text(value)
+                    .fontWeight(.medium)
+                    .foregroundStyle(isWarning ? Color.orange : Color.primary)
+                    .multilineTextAlignment(.trailing)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                if let caption {
+                    Text(caption)
+                        .font(.caption)
+                        .foregroundStyle(isWarning ? Color.orange : Color.secondary)
+                }
+            }
+        }
+        .font(.subheadline)
+        .padding(.horizontal, 4)
+        .padding(.vertical, 14)
+        .accessibilityElement(children: .combine)
+    }
+
+    /// Read-only detail row matching the app's `detailRow` vocabulary
+    /// (TransactionDetailView, CashuRequestDetailView). Memo text is prose, so it
+    /// wraps once and tail-truncates rather than middle-truncating like an ID.
+    private func detailRow(icon: String, label: String, value: String) -> some View {
+        HStack {
+            Label(label, systemImage: icon)
+                .foregroundStyle(.secondary)
+            Spacer()
+            Text(value)
+                .fontWeight(.medium)
+                .multilineTextAlignment(.trailing)
+                .lineLimit(2)
+                .truncationMode(.tail)
+        }
+        .font(.subheadline)
+        .padding(.horizontal, 4)
+        .padding(.vertical, 14)
+        .accessibilityElement(children: .combine)
+    }
+
+    private var canvasDivider: some View {
+        Rectangle()
+            .fill(Color(.separator))
+            .frame(height: 0.5)
+            .padding(.horizontal, 4)
+    }
+
+    /// Host of a mint URL for display when we hold no `MintInfo` for it
+    /// (matches ReceiveLightningView / SendView).
+    private func extractMintHost(_ url: String) -> String {
+        URL(string: url)?.host ?? url
     }
 
     private func cashuMintSelector(mint: MintInfo) -> some View {
@@ -554,32 +678,17 @@ struct CashuPaymentRequestPayView: View {
 
                 Spacer()
 
-                Image(systemName: "chevron.up.chevron.down")
-                    .font(.caption.weight(.semibold))
+                Image(systemName: "chevron.down")
+                    .font(.caption)
                     .foregroundStyle(.secondary)
             }
             .contentShape(Rectangle())
+            .padding(12)
+            .liquidGlass(in: RoundedRectangle(cornerRadius: 12), interactive: true)
         }
         .buttonStyle(.plain)
-        .padding(12)
-        .liquidGlass(in: RoundedRectangle(cornerRadius: 12))
         .accessibilityLabel("Payment mint: \(mint.name), \(mint.balance) sats")
         .accessibilityHint("Double-tap to choose the mint to pay from")
-    }
-
-    private func detailRow(icon: String, label: String, value: String) -> some View {
-        HStack(spacing: 12) {
-            Label(label, systemImage: icon)
-                .foregroundStyle(.secondary)
-            Spacer()
-            Text(value)
-                .fontWeight(.medium)
-                .lineLimit(1)
-                .truncationMode(.middle)
-        }
-        .font(.subheadline)
-        .padding(.horizontal, 14)
-        .padding(.vertical, 12)
     }
 
     private var canPay: Bool {
@@ -606,15 +715,6 @@ struct CashuPaymentRequestPayView: View {
 
     private var recipientLabel: String {
         request.description?.isEmpty == false ? request.description! : "Cashu request"
-    }
-
-    private var selectedMintLabel: String {
-        if let mint = selectedPaymentMint {
-            return mint.name
-        }
-
-        guard let firstMint = request.mints.first else { return "Any mint" }
-        return URL(string: firstMint)?.host ?? firstMint
     }
 
     private var candidateMints: [MintInfo] {
