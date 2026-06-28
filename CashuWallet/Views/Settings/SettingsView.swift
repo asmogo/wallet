@@ -11,6 +11,7 @@ struct SettingsView: View {
     @State private var copiedLightningAddress = false
     @State private var isCheckingPayments = false
     @State private var showMintPicker = false
+    @State private var showCurrencySheet = false
 
     // Nostr Key Management
     @State private var showNsec = false
@@ -35,13 +36,20 @@ struct SettingsView: View {
         NavigationStack {
             ScrollView {
                 LazyVStack(spacing: 0) {
-                    sectionGroup(title: "Backup") {
+                    sectionGroup(title: "Display") {
+                        currencyRow
+                        toggleRow(
+                            "Use ₿ symbol",
+                            subtitle: "Use ₿ symbol instead of sats.",
+                            icon: "bitcoinsign",
+                            isOn: $settings.useBitcoinSymbol
+                        )
+                    }
+
+                    sectionGroup(title: "Backup & Security") {
                         navRow("Backup & Restore", icon: "key.fill") {
                             backupDetailView
                         }
-                    }
-
-                    sectionGroup(title: "Security") {
                         navRow("App Lock", icon: "lock.shield") {
                             securityDetailView
                         }
@@ -51,7 +59,6 @@ struct SettingsView: View {
                         navRow("Lightning", icon: "bolt.fill") {
                             lightningDetailView
                         }
-                        CanvasDivider()
                         navRow("P2PK", icon: "lock.fill") {
                             p2pkDetailView
                         }
@@ -63,13 +70,9 @@ struct SettingsView: View {
                         }
                     }
 
-                    sectionGroup(title: "Privacy & Display") {
+                    sectionGroup(title: "Privacy") {
                         navRow("Privacy", icon: "eye.slash") {
                             privacyDetailView
-                        }
-                        CanvasDivider()
-                        navRow("Appearance", icon: "paintbrush") {
-                            appearanceDetailView
                         }
                     }
 
@@ -77,7 +80,6 @@ struct SettingsView: View {
                         externalLinkRow("Learn about Cashu",
                                         icon: "globe",
                                         url: URL(string: "https://cashu.space")!)
-                        CanvasDivider()
                         externalLinkRow("Protocol Specs (NUTs)",
                                         icon: "doc.text",
                                         url: URL(string: "https://github.com/cashubtc/nuts")!)
@@ -120,6 +122,11 @@ struct SettingsView: View {
             .sheet(item: $activeQRPayload) { payload in
                 QRCodeDetailSheet(title: payload.title, content: payload.content)
                     .presentationDetents([.medium, .large])
+            }
+            .sheet(isPresented: $showCurrencySheet) {
+                CurrencyPickerSheet()
+                    .presentationDetents([.medium, .large])
+                    .presentationDragIndicator(.visible)
             }
             .alert("Delete Wallet", isPresented: $showDeleteConfirm) {
                 Button("Cancel", role: .cancel) {}
@@ -193,10 +200,7 @@ struct SettingsView: View {
         isDestructive: Bool = false
     ) -> some View {
         HStack(spacing: 14) {
-            Image(systemName: icon)
-                .font(.body.weight(.semibold))
-                .foregroundStyle(isDestructive ? .red : .secondary)
-                .frame(width: 28)
+            SettingsRowIcon(systemName: icon, tint: isDestructive ? .red : .secondary)
 
             Text(title)
                 .font(.body)
@@ -215,18 +219,84 @@ struct SettingsView: View {
         .contentShape(Rectangle())
     }
 
+    /// Currency row in the Display group — shows the active fiat code (or "Off"
+    /// when fiat display is disabled) and opens the bottom-sheet selector.
+    private var currencyRow: some View {
+        Button {
+            HapticFeedback.selection()
+            showCurrencySheet = true
+        } label: {
+            valueRow(
+                "Currency",
+                icon: "coloncurrencysign",
+                value: settings.showFiatBalance ? settings.bitcoinPriceCurrency : "Off"
+            )
+        }
+        .buttonStyle(.plain)
+    }
+
+    /// A row with a trailing value + chevron (a tap target that opens a sheet).
+    private func valueRow(_ title: String, icon: String, value: String) -> some View {
+        HStack(spacing: 14) {
+            SettingsRowIcon(systemName: icon)
+
+            Text(title)
+                .font(.body)
+                .foregroundStyle(.primary)
+
+            Spacer(minLength: 8)
+
+            Text(value)
+                .font(.body)
+                .foregroundStyle(.secondary)
+
+            Image(systemName: "chevron.right")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.tertiary)
+        }
+        .padding(.horizontal, 4)
+        .padding(.vertical, 14)
+        .contentShape(Rectangle())
+    }
+
+    /// A row carrying a trailing toggle, matching the tile + 14pt rhythm.
+    private func toggleRow(
+        _ title: String,
+        subtitle: String? = nil,
+        icon: String,
+        isOn: Binding<Bool>
+    ) -> some View {
+        HStack(spacing: 14) {
+            SettingsRowIcon(systemName: icon)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                    .font(.body)
+                    .foregroundStyle(.primary)
+                if let subtitle {
+                    Text(subtitle)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+
+            Spacer(minLength: 8)
+
+            Toggle("", isOn: isOn)
+                .labelsHidden()
+        }
+        .padding(.horizontal, 4)
+        .padding(.vertical, 14)
+    }
+
     // MARK: - Detail Views
 
     private var backupDetailView: some View {
-        List {
-            Section {
-                BackupSettingsSection(
-                    showBackup: $showBackup
-                )
-            }
-            .listRowSeparator(.hidden)
+        ScrollView {
+            BackupSettingsSection(showBackup: $showBackup)
+                .padding(.horizontal)
+                .padding(.bottom, 32)
         }
-        .listStyle(.plain)
         .navigationTitle("Backup & Restore")
         .toolbarBackground(.hidden, for: .navigationBar)
     }
@@ -249,85 +319,68 @@ struct SettingsView: View {
     }
 
     private var nostrDetailView: some View {
-        List {
-            Section("Keys") {
-                NostrKeysSettingsSection(
-                    showNsec: $showNsec,
-                    copiedNsec: $copiedNsec,
-                    showImportNsec: $showImportNsec,
-                    importNsecText: $importNsecText,
-                    showGenerateKeyConfirm: $showGenerateKeyConfirm,
-                    showResetKeyConfirm: $showResetKeyConfirm,
-                    nostrKeyError: $nostrKeyError
-                )
+        ScrollView {
+            LazyVStack(spacing: 0) {
+                SettingsSectionGroup("Keys") {
+                    NostrKeysSettingsSection(
+                        showNsec: $showNsec,
+                        copiedNsec: $copiedNsec,
+                        showImportNsec: $showImportNsec,
+                        importNsecText: $importNsecText,
+                        showGenerateKeyConfirm: $showGenerateKeyConfirm,
+                        showResetKeyConfirm: $showResetKeyConfirm,
+                        nostrKeyError: $nostrKeyError
+                    )
+                }
+                SettingsSectionGroup("Relays") {
+                    NostrRelaysSettingsSection(
+                        relayInput: $relayInput,
+                        relayError: $relayError,
+                        copiedRelay: $copiedRelay
+                    )
+                }
             }
-            .listRowSeparator(.hidden)
-            Section("Relays") {
-                NostrRelaysSettingsSection(
-                    relayInput: $relayInput,
-                    relayError: $relayError,
-                    copiedRelay: $copiedRelay
-                )
-            }
-            .listRowSeparator(.hidden)
+            .padding(.horizontal)
+            .padding(.bottom, 32)
         }
-        .listStyle(.plain)
         .navigationTitle("Nostr")
         .toolbarBackground(.hidden, for: .navigationBar)
     }
 
     private var p2pkDetailView: some View {
-        List {
-            Section {
-                P2PKSettingsSection(
-                    expandedP2PKKeys: $expandedP2PKKeys,
-                    activeQRPayload: $activeQRPayload,
-                    copiedP2PKPublicKey: $copiedP2PKPublicKey,
-                    p2pkImportText: $p2pkImportText,
-                    showImportP2PK: $showImportP2PK,
-                    p2pkError: $p2pkError
-                )
-            }
-            .listRowSeparator(.hidden)
+        ScrollView {
+            P2PKSettingsSection(
+                expandedP2PKKeys: $expandedP2PKKeys,
+                activeQRPayload: $activeQRPayload,
+                copiedP2PKPublicKey: $copiedP2PKPublicKey,
+                p2pkImportText: $p2pkImportText,
+                showImportP2PK: $showImportP2PK,
+                p2pkError: $p2pkError
+            )
+            .padding(.horizontal)
+            .padding(.bottom, 32)
         }
-        .listStyle(.plain)
         .navigationTitle("P2PK")
         .toolbarBackground(.hidden, for: .navigationBar)
     }
 
     private var privacyDetailView: some View {
-        List {
-            Section {
-                PrivacySettingsSection()
-            }
-            .listRowSeparator(.hidden)
+        ScrollView {
+            PrivacySettingsSection()
+                .padding(.horizontal)
+                .padding(.bottom, 32)
         }
-        .listStyle(.plain)
         .navigationTitle("Privacy")
         .toolbarBackground(.hidden, for: .navigationBar)
     }
 
     private var securityDetailView: some View {
-        List {
-            Section {
-                SecuritySettingsSection()
-            }
-            .listRowSeparator(.hidden)
+        ScrollView {
+            SecuritySettingsSection()
+                .padding(.horizontal)
+                .padding(.bottom, 32)
         }
-        .listStyle(.plain)
         .navigationTitle("App Lock")
-        .toolbarBackground(.hidden, for: .navigationBar)
-    }
-
-    private var appearanceDetailView: some View {
-        List {
-            Section {
-                ThemeSettingsSection()
-            }
-            .listRowSeparator(.hidden)
-        }
-        .listStyle(.plain)
-        .navigationTitle("Appearance")
         .toolbarBackground(.hidden, for: .navigationBar)
     }
 
@@ -363,25 +416,28 @@ struct SecuritySettingsSection: View {
     @State private var authError: String?
 
     var body: some View {
-        Group {
-            Toggle(isOn: appLockBinding) {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Require \(biometryNoun)")
-                    Text("Ask for \(biometryNoun) when opening the wallet.")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+        LazyVStack(spacing: 0) {
+            SettingsSectionGroup(nil) {
+                Toggle(isOn: appLockBinding) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Require \(biometryNoun)")
+                        Text("Ask for \(biometryNoun) when opening the wallet.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                .padding(.horizontal, 4)
+                .padding(.vertical, 14)
+            }
+
+            SettingsSectionFooter {
+                VStack(alignment: .leading, spacing: 8) {
+                    if !biometryAvailable {
+                        Text("Set a device passcode in iOS Settings to use App Lock.")
+                    }
+                    Text("Your seed phrase always requires authentication to reveal, even when App Lock is off.")
                 }
             }
-
-            if !biometryAvailable {
-                Text("Set a device passcode in iOS Settings to use App Lock.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-
-            Text("Your seed phrase always requires authentication to reveal, even when App Lock is off.")
-                .font(.caption)
-                .foregroundStyle(.secondary)
         }
         .task { refreshBiometry() }
         .alert("Couldn't Enable App Lock", isPresented: Binding(

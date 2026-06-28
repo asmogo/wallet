@@ -11,83 +11,90 @@ struct P2PKSettingsSection: View {
     @Binding var p2pkError: String?
 
     var body: some View {
-        Group {
-            Text("Generate a key pair to receive P2PK-locked ecash. Use only small amounts while this remains experimental.")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-
-            Button(action: generateP2PKKey) {
-                HStack(spacing: 6) {
-                    Image(systemName: "plus.circle")
-                    Text("Generate key")
+        LazyVStack(spacing: 0) {
+            SettingsSectionGroup(nil) {
+                Button(action: generateP2PKKey) {
+                    Label("Generate key", systemImage: "plus.circle")
                 }
-            }
+                .padding(.horizontal, 4)
+                .padding(.vertical, 14)
 
-            Button(action: {
-                p2pkError = nil
-                showImportP2PK = true
-            }) {
-                HStack(spacing: 6) {
-                    Image(systemName: "square.and.arrow.down")
-                    Text("Import nsec")
+                Button(action: {
+                    p2pkError = nil
+                    showImportP2PK = true
+                }) {
+                    Label("Import nsec", systemImage: "square.and.arrow.down")
                 }
-            }
+                .padding(.horizontal, 4)
+                .padding(.vertical, 14)
 
-            Toggle(isOn: $settings.showP2PKButtonInDrawer.animation(.easeInOut(duration: 0.2))) {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Quick access to lock")
-                    Text("Show your P2PK locking key in the Receive ecash menu.")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-            }
-
-            if !settings.p2pkKeys.isEmpty {
-                DisclosureGroup(
-                    isExpanded: $expandedP2PKKeys.animation(.easeInOut(duration: 0.2)),
-                    content: {
-                        ForEach(settings.p2pkKeys) { key in
-                            HStack(spacing: 10) {
-                                Button(action: { copyP2PKPublicKey(key.publicKey) }) {
-                                    Image(systemName: copiedP2PKPublicKey == key.publicKey ? "checkmark" : "doc.on.doc")
-                                        .foregroundStyle(copiedP2PKPublicKey == key.publicKey ? .green : Color.accentColor)
-                                }
-
-                                Text(key.publicKey)
-                                    .font(.system(.caption2, design: .monospaced))
-                                    .lineLimit(1)
-                                    .truncationMode(.middle)
-
-                                if key.used {
-                                    Text("used")
-                                        .font(.caption2)
-                                        .foregroundStyle(.secondary)
-                                        .padding(.horizontal, 6)
-                                        .padding(.vertical, 2)
-                                        .background(.secondary.opacity(0.15), in: Capsule())
-                                }
-
-                                Spacer()
-
-                                Button(action: { showQRCode(title: "P2PK Public Key", content: key.publicKey) }) {
-                                    Image(systemName: "qrcode")
-                                        .foregroundStyle(Color.accentColor)
-                                }
-                            }
-                        }
-                    },
-                    label: {
-                        Text("Browse \(settings.p2pkKeys.count) keys")
+                Toggle(isOn: $settings.showP2PKButtonInDrawer.animation(.easeInOut(duration: 0.2))) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Quick access to lock")
+                        Text("Show your P2PK locking key in the Receive ecash menu.")
                             .font(.caption)
-                            .foregroundStyle(Color.accentColor)
+                            .foregroundStyle(.secondary)
                     }
-                )
+                }
+                .padding(.horizontal, 4)
+                .padding(.vertical, 14)
+
+                if !settings.p2pkKeys.isEmpty {
+                    DisclosureGroup(
+                        isExpanded: $expandedP2PKKeys.animation(.easeInOut(duration: 0.2)),
+                        content: {
+                            ForEach(settings.p2pkKeys) { key in
+                                HStack(spacing: 10) {
+                                    Button(action: { copyP2PKPublicKey(key.publicKey) }) {
+                                        Image(systemName: copiedP2PKPublicKey == key.publicKey ? "checkmark" : "doc.on.doc")
+                                            .foregroundStyle(copiedP2PKPublicKey == key.publicKey ? .green : Color.accentColor)
+                                    }
+
+                                    Text(key.publicKey)
+                                        .font(.system(.caption2, design: .monospaced))
+                                        .lineLimit(1)
+                                        .truncationMode(.middle)
+
+                                    if key.used {
+                                        Text("used")
+                                            .font(.caption2)
+                                            .foregroundStyle(.secondary)
+                                            .padding(.horizontal, 6)
+                                            .padding(.vertical, 2)
+                                            .background(.secondary.opacity(0.15), in: Capsule())
+                                    }
+
+                                    Spacer()
+
+                                    Button(action: { showQRCode(title: "P2PK Public Key", content: key.publicKey) }) {
+                                        Image(systemName: "qrcode")
+                                            .foregroundStyle(Color.accentColor)
+                                    }
+                                }
+                                .padding(.vertical, 6)
+                            }
+                        },
+                        label: {
+                            Text("Browse \(settings.p2pkKeys.count) keys")
+                                .font(.caption)
+                                .foregroundStyle(Color.accentColor)
+                        }
+                    )
+                    .padding(.horizontal, 4)
+                    .padding(.vertical, 8)
+                }
+
+                if let p2pkError {
+                    Text(p2pkError)
+                        .font(.caption2)
+                        .foregroundStyle(.red)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.horizontal, 4)
+                }
             }
 
-            if let p2pkError {
-                Text(p2pkError)
-                    .font(.caption2)
-                    .foregroundStyle(.red)
+            SettingsSectionFooter {
+                Text("Generate a key pair to receive P2PK-locked ecash. Use only small amounts while this remains experimental.")
             }
         }
     }

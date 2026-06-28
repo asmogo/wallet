@@ -18,7 +18,6 @@ struct LightningAddressSettingsSection: View {
                     .padding(.vertical, 14)
 
                 if npcService.isEnabled && npcService.isInitialized {
-                    CanvasDivider()
                     addressRow
                 }
             }
@@ -32,7 +31,6 @@ struct LightningAddressSettingsSection: View {
                         .padding(.vertical, 14)
 
                     if !walletManager.mints.isEmpty {
-                        CanvasDivider()
                         receivingMintRow
                     }
                 }

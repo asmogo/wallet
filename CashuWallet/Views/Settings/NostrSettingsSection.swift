@@ -12,7 +12,7 @@ struct NostrKeysSettingsSection: View {
     @Binding var nostrKeyError: String?
 
     var body: some View {
-        Group {
+        VStack(alignment: .leading, spacing: 16) {
             Text("Your Lightning address is derived from your Nostr public key. Choose which key to use.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
@@ -213,7 +213,7 @@ struct NostrRelaysSettingsSection: View {
     @Binding var copiedRelay: String?
 
     var body: some View {
-        Group {
+        VStack(alignment: .leading, spacing: 16) {
             Text("Manage your Nostr relay list for compatible features like npub.cash and backups.")
                 .font(.caption)
                 .foregroundStyle(.secondary)

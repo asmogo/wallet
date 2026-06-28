@@ -666,10 +666,24 @@ moment — and it is still a system glyph at a system color.
 
 ### Named Rules
 
-**The CanvasDivider Rule.** Single-canvas screens (History, Settings,
-Lightning Invoice detail) use `CanvasDivider` between rows. Raw `Divider()` is
-legacy. There are no card stacks; rows sit directly on the canvas, separated
-only by the hairline.
+**The CanvasDivider Rule.** Single-canvas screens (History, Lightning Invoice
+detail) use `CanvasDivider` between rows. Raw `Divider()` is legacy. There are
+no card stacks; rows sit directly on the canvas, separated only by the hairline.
+
+*Carve-out (Settings, 2026-06-28):* the Settings screen and its detail
+subscreens drop hairlines entirely — rows flow on the bare canvas, separated by
+section-group spacing alone, each with a plain leading SF Symbol
+(`SettingsRowIcon`). A "Family wallet" treatment requested by the user. Settings
+is no longer governed by this rule; History and the Lightning Invoice detail
+still are. Icons stay plain and monochrome — no tile, no box, no color (the
+Semantic-Only Rule holds).
+
+**The Monochrome-Glyph Rule.** Iconography is monochrome SF Symbols at system
+colors — never emoji, never `PaymentMethodKind.symbol` glyphs. *Carve-out
+(currency picker, 2026-06-28):* a flag **emoji** is permitted as the leading
+avatar in `CurrencyPickerSheet`, and only there — clipped inside the circular
+`CurrencyAvatar` so it reads as a contained flag chip (the Family idiom), not
+loose inline emoji. Everywhere else the no-emoji rule stands.
 
 **The Plain-Button Rule.** Utility actions (close `xmark`, copy, refresh,
 chevron disclosure) use `.buttonStyle(.plain)` with an SF Symbol. They do not

@@ -56,6 +56,24 @@ struct CanvasDivider: View {
     }
 }
 
+// MARK: - Settings Row Icon
+
+/// Leading glyph for settings rows: a plain monochrome SF Symbol (no tile or
+/// box), fixed-width so row titles align down a common column. Monochrome
+/// (`.secondary` by default, `.red` for the lone destructive row).
+struct SettingsRowIcon: View {
+    let systemName: String
+    var tint: Color = .secondary
+
+    var body: some View {
+        Image(systemName: systemName)
+            .font(.body.weight(.semibold))
+            .foregroundStyle(tint)
+            .frame(width: 28)
+            .accessibilityHidden(true)
+    }
+}
+
 // MARK: - Settings Canvas Components
 
 /// Section grouping on a single-canvas Settings screen. Renders an
