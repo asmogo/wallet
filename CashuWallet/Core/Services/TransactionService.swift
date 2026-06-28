@@ -129,42 +129,12 @@ class TransactionService: ObservableObject {
                 AppLogger.wallet.error("Failed to load stored payment quotes: \(error)")
             }
         }
-        
-        // Add pending tokens as pending transactions
-        for pendingToken in pendingTokens {
-            var pendingTx = WalletTransaction(
-                id: pendingToken.tokenId,
-                amount: pendingToken.amount,
-                type: .outgoing,
-                kind: .ecash,
-                date: pendingToken.date,
-                memo: pendingToken.memo,
-                status: .pending,
-                mintUrl: pendingToken.mintUrl,
-                token: pendingToken.token,
-                isPendingToken: true
-            )
-            pendingTx.fee = pendingToken.fee
-            allTransactions.append(pendingTx)
-        }
-        
-        // Add claimed tokens as completed transactions
-        for claimedToken in claimedTokens {
-            var claimedTx = WalletTransaction(
-                id: claimedToken.tokenId,
-                amount: claimedToken.amount,
-                type: .outgoing,
-                kind: .ecash,
-                date: claimedToken.date,
-                memo: claimedToken.memo,
-                status: .completed,
-                mintUrl: claimedToken.mintUrl,
-                token: claimedToken.token
-            )
-            claimedTx.fee = claimedToken.fee
-            allTransactions.append(claimedTx)
-        }
-        
+
+        // Merge locally-tracked sent tokens (pending + claimed) into the
+        // matching CDK outgoing-ecash rows instead of emitting separate rows,
+        // which previously produced a duplicate "Ecash sent" entry per send.
+        mergeSentTokens(into: &allTransactions)
+
         persistMintQuoteTimestamps(for: allTransactions, using: mintQuoteTimestamps)
 
         // Sort by date descending (newest first)
@@ -172,6 +142,96 @@ class TransactionService: ObservableObject {
         
         // Post notification that transactions were updated
         NotificationCenter.default.post(name: .cashuTransactionsUpdated, object: nil)
+    }
+
+    /// Fold locally-tracked sent ecash tokens into the CDK transaction rows.
+    ///
+    /// CDK already records every send as its own outgoing-ecash transaction.
+    /// The local `PendingToken`/`ClaimedToken` store exists only to carry the
+    /// token string (for re-display/reclaim) and the unclaimed/claimed state,
+    /// so emitting it as a separate row duplicated each "Ecash sent" entry.
+    ///
+    /// Each token is matched to a CDK row one-to-one by (mint, amount),
+    /// choosing the closest timestamp so repeated identical sends still line
+    /// up. A pending match flips its row to `.pending` and attaches the token
+    /// string; a claimed match just attaches the token. Any token with no CDK
+    /// counterpart (older data, or a send CDK didn't record) is appended as
+    /// its own row so nothing is lost.
+    private func mergeSentTokens(into transactions: inout [WalletTransaction]) {
+        func normalizedMint(_ url: String?) -> String {
+            var s = (url ?? "").trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+            while s.hasSuffix("/") { s.removeLast() }
+            return s
+        }
+
+        // Indices of CDK outgoing-ecash rows still available to match.
+        var available: Set<Int> = Set(transactions.indices.filter {
+            transactions[$0].kind == .ecash && transactions[$0].type == .outgoing
+        })
+
+        func claimMatch(mintUrl: String, amount: UInt64, date: Date) -> Int? {
+            let target = normalizedMint(mintUrl)
+            let best = available
+                .filter {
+                    transactions[$0].amount == amount &&
+                    normalizedMint(transactions[$0].mintUrl) == target
+                }
+                .min {
+                    abs(transactions[$0].date.timeIntervalSince(date)) <
+                    abs(transactions[$1].date.timeIntervalSince(date))
+                }
+            if let best { available.remove(best) }
+            return best
+        }
+
+        var leftovers: [WalletTransaction] = []
+
+        for pendingToken in pendingTokens {
+            if let idx = claimMatch(mintUrl: pendingToken.mintUrl, amount: pendingToken.amount, date: pendingToken.date) {
+                transactions[idx].status = .pending
+                transactions[idx].isPendingToken = true
+                if transactions[idx].token == nil { transactions[idx].token = pendingToken.token }
+                if transactions[idx].fee == 0 { transactions[idx].fee = pendingToken.fee }
+            } else {
+                var pendingTx = WalletTransaction(
+                    id: pendingToken.tokenId,
+                    amount: pendingToken.amount,
+                    type: .outgoing,
+                    kind: .ecash,
+                    date: pendingToken.date,
+                    memo: pendingToken.memo,
+                    status: .pending,
+                    mintUrl: pendingToken.mintUrl,
+                    token: pendingToken.token,
+                    isPendingToken: true
+                )
+                pendingTx.fee = pendingToken.fee
+                leftovers.append(pendingTx)
+            }
+        }
+
+        for claimedToken in claimedTokens {
+            if let idx = claimMatch(mintUrl: claimedToken.mintUrl, amount: claimedToken.amount, date: claimedToken.date) {
+                if transactions[idx].token == nil { transactions[idx].token = claimedToken.token }
+                if transactions[idx].fee == 0 { transactions[idx].fee = claimedToken.fee }
+            } else {
+                var claimedTx = WalletTransaction(
+                    id: claimedToken.tokenId,
+                    amount: claimedToken.amount,
+                    type: .outgoing,
+                    kind: .ecash,
+                    date: claimedToken.date,
+                    memo: claimedToken.memo,
+                    status: .completed,
+                    mintUrl: claimedToken.mintUrl,
+                    token: claimedToken.token
+                )
+                claimedTx.fee = claimedToken.fee
+                leftovers.append(claimedTx)
+            }
+        }
+
+        transactions.append(contentsOf: leftovers)
     }
 
     func loadCachedState() {
