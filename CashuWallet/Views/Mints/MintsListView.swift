@@ -80,6 +80,7 @@ struct MintsListView: View {
             .sheet(isPresented: $showDiscoverySheet) {
                 MintDiscoverySheet { url in addMint(url: url) }
                     .environmentObject(walletManager)
+                    .canvasSheetBackground()
             }
             .task {
                 await walletManager.refreshMintInfo()

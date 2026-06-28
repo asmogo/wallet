@@ -66,6 +66,7 @@ struct LightningAddressSettingsSection: View {
                     }
                 }
             )
+            .canvasSheetBackground()
         }
         .sheet(isPresented: $showAddressQR) {
             QRCodeDetailSheet(
@@ -73,6 +74,7 @@ struct LightningAddressSettingsSection: View {
                 content: npcService.lightningAddress
             )
             .presentationDetents([.medium, .large])
+            .canvasSheetBackground()
         }
     }
 

@@ -105,6 +105,7 @@ struct OnboardingView: View {
         }
         .sheet(isPresented: $showConceptSheet) {
             conceptSheet
+                .canvasSheetBackground()
         }
     }
 

@@ -96,26 +96,29 @@ struct ReceiveView: View {
                 }
             }
             .sheet(item: $selectedOption) { option in
-                switch option {
-                case .paste:
-                    ReceiveEcashView()
-                        .environmentObject(walletManager)
-                case .scan:
-                    ScannerWrapperView()
-                        .environmentObject(walletManager)
-                case .lightning:
-                    ReceiveLightningView()
-                        .environmentObject(walletManager)
-                case .lockedKey:
-                    Group {
-                        if let key = settings.p2pkKeys.last {
-                            QRCodeDetailSheet(title: "Receive Locked Ecash", content: key.publicKey)
-                        } else {
-                            lockedKeyUnavailable
+                Group {
+                    switch option {
+                    case .paste:
+                        ReceiveEcashView()
+                            .environmentObject(walletManager)
+                    case .scan:
+                        ScannerWrapperView()
+                            .environmentObject(walletManager)
+                    case .lightning:
+                        ReceiveLightningView()
+                            .environmentObject(walletManager)
+                    case .lockedKey:
+                        Group {
+                            if let key = settings.p2pkKeys.last {
+                                QRCodeDetailSheet(title: "Receive Locked Ecash", content: key.publicKey)
+                            } else {
+                                lockedKeyUnavailable
+                            }
                         }
+                        .presentationDetents([.medium, .large])
                     }
-                    .presentationDetents([.medium, .large])
                 }
+                .canvasSheetBackground()
             }
         }
     }
@@ -294,6 +297,7 @@ struct ReceiveEcashView: View {
             .sheet(isPresented: $showingScanner) {
                 ScannerWrapperView(onScanned: handleScannedToken)
                     .environmentObject(walletManager)
+                    .canvasSheetBackground()
             }
             .navigationDestination(isPresented: $navigateToDetail) {
                 if let token = validatedToken {

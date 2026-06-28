@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 // MARK: - Liquid Glass Adaptive Modifiers
 // iOS 26+ Liquid Glass with graceful fallbacks for earlier versions.
@@ -38,6 +39,35 @@ extension View {
         self.buttonStyle(TextLinkButtonStyle())
     }
 
+    /// Make a presented sheet/cover read as the same flat canvas as the home
+    /// screen — base `systemBackground` (pure black in dark, white in light) —
+    /// instead of iOS's default elevated-gray modal background. Apply to the
+    /// content of every `.sheet`/`.fullScreenCover` (frosted HUDs excluded).
+    func canvasSheetBackground() -> some View {
+        modifier(CanvasSheetBackground())
+    }
+
+}
+
+// MARK: - Canvas Sheet Background
+
+/// Pins a modal's presentation background to the *base*-elevation `systemBackground`.
+/// Inside a sheet the plain semantic resolves to the elevated gray, so we resolve it
+/// at base level (for the current color scheme) to match the home canvas exactly.
+private struct CanvasSheetBackground: ViewModifier {
+    @Environment(\.colorScheme) private var colorScheme
+
+    func body(content: Content) -> some View {
+        content.presentationBackground {
+            Color(uiColor: UIColor.systemBackground.resolvedColor(
+                with: UITraitCollection(traitsFrom: [
+                    UITraitCollection(userInterfaceStyle: colorScheme == .dark ? .dark : .light),
+                    UITraitCollection(userInterfaceLevel: .base),
+                ])
+            ))
+            .ignoresSafeArea()
+        }
+    }
 }
 
 // MARK: - Canvas Divider

@@ -141,6 +141,7 @@ struct NostrKeysSettingsSection: View {
                 nsecText: $importNsecText,
                 onImport: importNsec
             )
+            .canvasSheetBackground()
         }
     }
 

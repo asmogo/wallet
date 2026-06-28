@@ -111,6 +111,7 @@ struct SettingsView: View {
                 BackupView()
                     .environmentObject(walletManager)
                     .presentationDetents([.medium, .large])
+                    .canvasSheetBackground()
             }
             .sheet(isPresented: $showImportP2PK) {
                 ImportP2PKSheet(
@@ -118,15 +119,18 @@ struct SettingsView: View {
                     onImport: importP2PKNsec
                 )
                 .presentationDetents([.medium])
+                .canvasSheetBackground()
             }
             .sheet(item: $activeQRPayload) { payload in
                 QRCodeDetailSheet(title: payload.title, content: payload.content)
                     .presentationDetents([.medium, .large])
+                    .canvasSheetBackground()
             }
             .sheet(isPresented: $showCurrencySheet) {
                 CurrencyPickerSheet()
                     .presentationDetents([.medium, .large])
                     .presentationDragIndicator(.visible)
+                    .canvasSheetBackground()
             }
             .alert("Delete Wallet", isPresented: $showDeleteConfirm) {
                 Button("Cancel", role: .cancel) {}

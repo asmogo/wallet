@@ -111,6 +111,7 @@ struct SendView: View {
                 )
                     .environmentObject(walletManager)
                     .presentationDetents([.medium])
+                    .canvasSheetBackground()
             }
             .sheet(isPresented: $showShareSheet) {
                 if let token = generatedToken {
@@ -130,6 +131,7 @@ struct SendView: View {
                     quickFills: payRequestQuickFills
                 )
                 .environmentObject(walletManager)
+                .canvasSheetBackground()
             }
             .sheet(isPresented: $showLockScanner) {
                 ScannerWrapperView(
@@ -138,6 +140,7 @@ struct SendView: View {
                     quickFills: lockQuickFills
                 )
                 .environmentObject(walletManager)
+                .canvasSheetBackground()
             }
             .onDisappear {
                 checkingTask?.cancel()
@@ -878,9 +881,10 @@ struct UnifiedSendView: View {
             .sheet(isPresented: $showingScanner) {
                 ScannerWrapperView(onScanned: handleScannedDestination)
                     .environmentObject(walletManager)
+                    .canvasSheetBackground()
             }
-            .sheet(isPresented: $showingMintPicker) { mintPickerSheet }
-            .fullScreenCover(item: $route, content: routeView)
+            .sheet(isPresented: $showingMintPicker) { mintPickerSheet.canvasSheetBackground() }
+            .fullScreenCover(item: $route) { routeView($0).canvasSheetBackground() }
             .onChange(of: destination) { handleDestinationChange() }
             .onChange(of: entryUnit) { oldUnit, newUnit in
                 amountString = AmountFormatter.entryConverted(raw: amountString, from: oldUnit, to: newUnit)
@@ -959,7 +963,7 @@ struct UnifiedSendView: View {
                     }
                 }
                 .padding(.horizontal)
-                .padding(.top, 24)
+                .padding(.top, 40)
 
                 if destination.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
                    !recentRecipients.isEmpty {
@@ -2162,6 +2166,7 @@ struct MeltView: View {
             .sheet(isPresented: $showingScanner) {
                 ScannerWrapperView(onScanned: handleScannedRequest)
                     .environmentObject(walletManager)
+                    .canvasSheetBackground()
             }
             .sheet(isPresented: $showingMintPicker) {
                 MintSelectorSheet(
@@ -2172,6 +2177,7 @@ struct MeltView: View {
                 )
                     .environmentObject(walletManager)
                     .presentationDetents([.medium])
+                    .canvasSheetBackground()
             }
             .onAppear {
                 syncMeltModeWithAvailableMints()

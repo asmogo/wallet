@@ -218,6 +218,7 @@ struct ScannerWrapperView: View {
                     })
                     .environmentObject(walletManager)
                     .presentationDetents([.medium, .large])
+                    .canvasSheetBackground()
                 }
             }
             .fullScreenCover(isPresented: $navigateToMelt) {
@@ -231,6 +232,7 @@ struct ScannerWrapperView: View {
                         }
                     )
                     .environmentObject(walletManager)
+                    .canvasSheetBackground()
                 }
             }
             .fullScreenCover(isPresented: $navigateToCashuPaymentRequest) {
@@ -247,6 +249,7 @@ struct ScannerWrapperView: View {
                         }
                     })
                     .environmentObject(walletManager)
+                    .canvasSheetBackground()
                 }
             }
         }
@@ -522,6 +525,7 @@ struct CashuPaymentRequestPayView: View {
                 )
                 .environmentObject(walletManager)
                 .presentationDetents([.medium])
+                .canvasSheetBackground()
             }
             .onAppear {
                 syncSelectedMint()
