@@ -9,6 +9,7 @@ struct MainWalletView: View {
 
     @EnvironmentObject var walletManager: WalletManager
     @EnvironmentObject var navigationManager: NavigationManager
+    @EnvironmentObject var siriIntentHandoffStore: SiriIntentHandoffStore
     @ObservedObject var settings = SettingsManager.shared
     @ObservedObject var priceService = PriceService.shared
     @ObservedObject private var requestStore = CashuRequestStore.shared
@@ -96,6 +97,12 @@ struct MainWalletView: View {
                 activeSheet = .flow(.sendLightningWithInvoice(invoice))
                 navigationManager.pendingMeltInvoice = nil
             }
+        }
+        .onReceive(siriIntentHandoffStore.$pendingWalletActionRequest.compactMap { $0 }) { request in
+            handleSiriWalletAction(request)
+        }
+        .task {
+            handlePendingSiriWalletAction()
         }
     }
 
@@ -611,6 +618,45 @@ struct MainWalletView: View {
     private func formatBalanceWithUnit(_ sats: UInt64) -> String {
         let formatted = settings.formatAmountBalance(sats)
         return settings.useBitcoinSymbol ? "₿\(formatted)" : "\(formatted) sat"
+    }
+
+    private func handlePendingSiriWalletAction() {
+        guard let request = siriIntentHandoffStore.pendingWalletActionRequest else { return }
+        handleSiriWalletAction(request)
+    }
+
+    private func handleSiriWalletAction(_ request: SiriWalletActionRequest) {
+        switch request.action {
+        case .receiveEcash:
+            activeSheet = .flow(.receiveEcash)
+            siriIntentHandoffStore.clearWalletActionRequest(request)
+        case .receiveLightning:
+            activeSheet = .flow(.receiveLightning)
+            siriIntentHandoffStore.clearWalletActionRequest(request)
+        case .sendEcash:
+            activeSheet = .flow(.sendEcash)
+            siriIntentHandoffStore.clearWalletActionRequest(request)
+        case .payLightning:
+            activeSheet = .flow(.sendLightning)
+            siriIntentHandoffStore.clearWalletActionRequest(request)
+        case .scanQRCode:
+            activeSheet = .scanner
+            siriIntentHandoffStore.clearWalletActionRequest(request)
+        case .contactlessPayment:
+            activeSheet = nil
+            siriIntentHandoffStore.clearWalletActionRequest(request)
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                contactlessCoordinator.start(
+                    walletManager: walletManager,
+                    navigationManager: navigationManager
+                )
+            }
+        case .wallet,
+             .showHistory,
+             .showMints,
+             .showSettings:
+            break
+        }
     }
 
     /// Detent for the action chooser. The Send chooser grows into a taller

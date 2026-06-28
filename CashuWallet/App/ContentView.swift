@@ -4,6 +4,7 @@ import LocalAuthentication
 struct ContentView: View {
     @EnvironmentObject var walletManager: WalletManager
     @EnvironmentObject var navigationManager: NavigationManager
+    @EnvironmentObject var siriIntentHandoffStore: SiriIntentHandoffStore
     
     var body: some View {
         Group {
@@ -29,6 +30,15 @@ struct ContentView: View {
                 .environmentObject(walletManager)
             }
         }
+        .fullScreenCover(item: $siriIntentHandoffStore.pendingCreateTokenRequest) { request in
+            SiriCreateEcashTokenView(
+                request: request,
+                onComplete: {
+                    siriIntentHandoffStore.clearCreateTokenRequest()
+                }
+            )
+            .environmentObject(walletManager)
+        }
     }
 }
 
@@ -46,6 +56,7 @@ struct LoadingView: View {
 
 struct MainTabView: View {
     @EnvironmentObject var walletManager: WalletManager
+    @EnvironmentObject var siriIntentHandoffStore: SiriIntentHandoffStore
     @State private var selectedTab: Tab = .wallet
     
     enum Tab {
@@ -87,6 +98,9 @@ struct MainTabView: View {
                 }
                 .tag(Tab.settings)
         }
+        .onReceive(siriIntentHandoffStore.$pendingWalletActionRequest.compactMap { $0 }) { request in
+            routeSiriWalletAction(request)
+        }
     }
 
     @ViewBuilder
@@ -98,6 +112,30 @@ struct MainTabView: View {
             content()
         } else {
             Color.clear
+        }
+    }
+
+    private func routeSiriWalletAction(_ request: SiriWalletActionRequest) {
+        switch request.action {
+        case .wallet:
+            selectedTab = .wallet
+            siriIntentHandoffStore.clearWalletActionRequest(request)
+        case .showHistory:
+            selectedTab = .history
+            siriIntentHandoffStore.clearWalletActionRequest(request)
+        case .showMints:
+            selectedTab = .mints
+            siriIntentHandoffStore.clearWalletActionRequest(request)
+        case .showSettings:
+            selectedTab = .settings
+            siriIntentHandoffStore.clearWalletActionRequest(request)
+        case .receiveEcash,
+             .receiveLightning,
+             .sendEcash,
+             .payLightning,
+             .scanQRCode,
+             .contactlessPayment:
+            selectedTab = .wallet
         }
     }
 }

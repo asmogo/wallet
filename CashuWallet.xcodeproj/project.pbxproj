@@ -115,6 +115,9 @@
 		F300000000000005 /* RecentRecipientsList.swift in Sources */ = {isa = PBXBuildFile; fileRef = F400000000000005 /* RecentRecipientsList.swift */; };
 		F300000000000006 /* PaymentRequestDecoder.swift in Sources */ = {isa = PBXBuildFile; fileRef = F400000000000006 /* PaymentRequestDecoder.swift */; };
 		FC31D408CB5FAB113E9A5327 /* IntegrationTestConfig.swift in Sources */ = {isa = PBXBuildFile; fileRef = FB989C698CCB0CCD5FA8788D /* IntegrationTestConfig.swift */; };
+		SI00000000000001 /* CreateEcashTokenIntent.swift in Sources */ = {isa = PBXBuildFile; fileRef = SI10000000000001 /* CreateEcashTokenIntent.swift */; };
+		SI00000000000002 /* SiriIntentHandoffStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = SI10000000000002 /* SiriIntentHandoffStore.swift */; };
+		SI00000000000003 /* SiriCreateEcashTokenView.swift in Sources */ = {isa = PBXBuildFile; fileRef = SI10000000000003 /* SiriCreateEcashTokenView.swift */; };
 		T2A0000000000001 /* MainTabUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = T1A0000000000001 /* MainTabUITests.swift */; };
 		T2A0000000000002 /* ReceiveUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = T1A0000000000002 /* ReceiveUITests.swift */; };
 		T2A0000000000003 /* SettingsUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = T1A0000000000003 /* SettingsUITests.swift */; };
@@ -256,6 +259,9 @@
 		F400000000000005 /* RecentRecipientsList.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecentRecipientsList.swift; sourceTree = "<group>"; };
 		F400000000000006 /* PaymentRequestDecoder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PaymentRequestDecoder.swift; sourceTree = "<group>"; };
 		FB989C698CCB0CCD5FA8788D /* IntegrationTestConfig.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = IntegrationTestConfig.swift; path = CashuWallet/Core/IntegrationTestConfig.swift; sourceTree = "<group>"; };
+		SI10000000000001 /* CreateEcashTokenIntent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CreateEcashTokenIntent.swift; sourceTree = "<group>"; };
+		SI10000000000002 /* SiriIntentHandoffStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SiriIntentHandoffStore.swift; sourceTree = "<group>"; };
+		SI10000000000003 /* SiriCreateEcashTokenView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SiriCreateEcashTokenView.swift; sourceTree = "<group>"; };
 		T1A0000000000001 /* MainTabUITests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = MainTabUITests.swift; path = CashuWalletUITests/MainTabUITests.swift; sourceTree = "<group>"; };
 		T1A0000000000002 /* ReceiveUITests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = ReceiveUITests.swift; path = CashuWalletUITests/ReceiveUITests.swift; sourceTree = "<group>"; };
 		T1A0000000000003 /* SettingsUITests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = SettingsUITests.swift; path = CashuWalletUITests/SettingsUITests.swift; sourceTree = "<group>"; };
@@ -362,6 +368,8 @@
 			children = (
 				2100000000000001 /* CashuWalletApp.swift */,
 				2100000000000002 /* ContentView.swift */,
+				SI10000000000001 /* CreateEcashTokenIntent.swift */,
+				SI10000000000002 /* SiriIntentHandoffStore.swift */,
 			);
 			path = App;
 			sourceTree = "<group>";
@@ -462,6 +470,7 @@
 			children = (
 				F500000000000001 /* Components */,
 				210000000000000B /* SendView.swift */,
+				SI10000000000003 /* SiriCreateEcashTokenView.swift */,
 			);
 			path = Send;
 			sourceTree = "<group>";
@@ -953,6 +962,9 @@
 				AB0000000000000A /* CashuRequestMintPickerSheet.swift in Sources */,
 				AB0000000000000B /* CashuRequestAmountPickerSheet.swift in Sources */,
 				FC31D408CB5FAB113E9A5327 /* IntegrationTestConfig.swift in Sources */,
+				SI00000000000001 /* CreateEcashTokenIntent.swift in Sources */,
+				SI00000000000002 /* SiriIntentHandoffStore.swift in Sources */,
+				SI00000000000003 /* SiriCreateEcashTokenView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -1131,7 +1143,7 @@
 				CODE_SIGN_ENTITLEMENTS = CashuWallet/CashuWallet.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = JQ4WB222T4;
+				DEVELOPMENT_TEAM = D7AHD3GLH6;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = CashuWallet/Info.plist;
@@ -1153,7 +1165,7 @@
 					"-framework",
 					SystemConfiguration,
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = com.cashu.wallet;
+				PRODUCT_BUNDLE_IDENTIFIER = com.gcashu.wallet;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_VERSION = 5.0;
@@ -1169,7 +1181,7 @@
 				CODE_SIGN_ENTITLEMENTS = CashuWallet/CashuWallet.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = JQ4WB222T4;
+				DEVELOPMENT_TEAM = D7AHD3GLH6;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = CashuWallet/Info.plist;
@@ -1191,7 +1203,7 @@
 					"-framework",
 					SystemConfiguration,
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = com.cashu.wallet;
+				PRODUCT_BUNDLE_IDENTIFIER = com.gcashu.wallet;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_VERSION = 5.0;
@@ -1298,7 +1310,7 @@
 			repositoryURL = "https://github.com/21-DOT-DEV/swift-secp256k1.git";
 			requirement = {
 				kind = upToNextMajorVersion;
-				minimumVersion = 0.18.0;
+				minimumVersion = 0.23.2;
 			};
 		};
 		720E47A42FEC721E00E02CD0 /* XCRemoteSwiftPackageReference "cdk-swift" */ = {
