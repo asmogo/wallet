@@ -2,7 +2,7 @@ import Foundation
 import Cdk
 
 /// Display-safe summary of a NUT-18/NUT-26 Cashu payment request.
-struct CashuPaymentRequestSummary: Equatable {
+struct CashuPaymentRequestSummary: Equatable, Sendable {
     let encoded: String
     let amount: UInt64?
     let unit: String?
@@ -15,8 +15,82 @@ struct CashuPaymentRequestSummary: Equatable {
     }
 }
 
+struct LightningRequestMetadata: Equatable, Sendable {
+    let normalizedRequest: String
+    let paymentMethod: PaymentMethodKind
+    let amountSats: UInt64?
+}
+
+struct TokenPreview: Equatable, Sendable {
+    let amount: UInt64
+    let mintUrl: String
+    let p2pkPubkeys: [String]
+}
+
+/// Non-main CDK boundary for synchronous FFI helpers.
+///
+/// CDK's wallet operations are mostly exposed as real async UniFFI futures, but
+/// parsing helpers like `decodeInvoice`, `decodePaymentRequest`, and
+/// `Token.decode` are synchronous. Keeping those behind this actor prevents
+/// SwiftUI body recomputation and input handling from doing FFI work on the main
+/// actor while still returning plain app values to views.
+actor CdkRuntime {
+    static let shared = CdkRuntime()
+
+    private init() {}
+
+    func decodePaymentRequest(
+        _ raw: String,
+        includeCashuPaymentRequests: Bool = false,
+        preferCashuPaymentRequests: Bool = false
+    ) -> PaymentRequestDecodeResult {
+        PaymentRequestDecoder.decode(
+            raw,
+            includeCashuPaymentRequests: includeCashuPaymentRequests,
+            preferCashuPaymentRequests: preferCashuPaymentRequests
+        )
+    }
+
+    func normalizedLightningRequest(from raw: String) -> String? {
+        PaymentRequestDecoder.encodedLightningRequest(from: raw)
+    }
+
+    func lightningMetadata(from raw: String) -> LightningRequestMetadata? {
+        let normalized = PaymentRequestDecoder.encodedLightningRequest(from: raw)
+            ?? PaymentRequestParser.normalizeLightningRequest(raw)
+
+        guard !normalized.isEmpty,
+              let decoded = try? decodeInvoice(invoiceStr: normalized) else {
+            return nil
+        }
+
+        let paymentMethod: PaymentMethodKind
+        switch decoded.paymentType {
+        case .bolt11:
+            paymentMethod = .bolt11
+        case .bolt12:
+            paymentMethod = .bolt12
+        }
+
+        return LightningRequestMetadata(
+            normalizedRequest: normalized,
+            paymentMethod: paymentMethod,
+            amountSats: decoded.amountMsat.map(PaymentRequestDecoder.satsCeiling(from:))
+        )
+    }
+
+    func tokenPreview(from tokenString: String) throws -> TokenPreview {
+        let token = try Token.decode(encodedToken: tokenString)
+        return TokenPreview(
+            amount: try token.value().value,
+            mintUrl: try token.mintUrl().url,
+            p2pkPubkeys: token.p2pkPubkeys()
+        )
+    }
+}
+
 /// Typed result of decoding a raw payment request string.
-enum PaymentRequestDecodeResult: Equatable {
+enum PaymentRequestDecodeResult: Equatable, Sendable {
     case lightningAddress(String)
     case bolt11(amountSats: UInt64?, description: String?)
     case bolt12(amountSats: UInt64?, description: String?)
@@ -127,13 +201,17 @@ enum PaymentRequestDecoder {
             return nil
         }
 
-        let amountSats: UInt64? = decoded.amountMsat.map { $0 / 1000 }
+        let amountSats: UInt64? = decoded.amountMsat.map(satsCeiling(from:))
         switch decoded.paymentType {
         case .bolt11:
             return .bolt11(amountSats: amountSats, description: decoded.description)
         case .bolt12:
             return .bolt12(amountSats: amountSats, description: decoded.description)
         }
+    }
+
+    fileprivate static func satsCeiling(from amountMsat: UInt64) -> UInt64 {
+        amountMsat / 1000 + (amountMsat % 1000 == 0 ? 0 : 1)
     }
 
     /// True if the request carries an enforceable amount the user can't change
@@ -144,19 +222,6 @@ enum PaymentRequestDecoder {
             return amount != nil
         case .lightningAddress, .onchain, .cashuPaymentRequest, .unrecognized:
             return false
-        }
-    }
-
-    /// Which `MeltView.MeltMode` this result wants. Nil means caller's current
-    /// mode is fine.
-    static func suggestedMode(_ result: PaymentRequestDecodeResult) -> MeltView.MeltMode? {
-        switch result {
-        case .onchain:
-            return .onchain
-        case .bolt11, .bolt12, .lightningAddress:
-            return .lightning
-        case .cashuPaymentRequest, .unrecognized:
-            return nil
         }
     }
 

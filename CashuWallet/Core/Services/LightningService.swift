@@ -259,16 +259,21 @@ class LightningService: ObservableObject {
         isLoading = true
         defer { isLoading = false }
 
-        let normalizedRequest = PaymentRequestDecoder.encodedLightningRequest(from: request) ?? request
+        guard let metadata = await CdkRuntime.shared.lightningMetadata(from: request) else {
+            if PaymentRequestParser.isBitcoinAddress(request) {
+                throw WalletError.networkError("On-chain payments require an amount before requesting a quote.")
+            }
+            throw WalletError.networkError("Invalid Lightning payment request.")
+        }
+
+        let normalizedRequest = metadata.normalizedRequest
+        let paymentMethod = metadata.paymentMethod
+        let invoiceAmountSats = metadata.amountSats
 
         if PaymentRequestParser.isBitcoinAddress(normalizedRequest) {
             throw WalletError.networkError("On-chain payments require an amount before requesting a quote.")
         }
 
-        let parsedRequest = try LightningRequestParser.parse(normalizedRequest)
-        let paymentMethod = PaymentMethodKind.from(parsedRequest.method) ?? .bolt11
-        let decodedInvoice = try? decodeInvoice(invoiceStr: parsedRequest.request)
-        let invoiceAmountSats = decodedInvoice?.amountMsat.map { ($0 + 999) / 1000 }
         let candidates = meltQuoteCandidateMints(
             paymentMethod: paymentMethod,
             minimumAmount: invoiceAmountSats,
@@ -285,8 +290,8 @@ class LightningService: ObservableObject {
                 let mintUrl = MintUrl(url: mint.url)
                 let wallet = try await repo.getWallet(mintUrl: mintUrl, unit: .sat)
                 let quote = try await wallet.meltQuote(
-                    method: parsedRequest.method,
-                    request: parsedRequest.request,
+                    method: paymentMethod.cdkMethod,
+                    request: normalizedRequest,
                     options: nil,
                     extra: nil
                 )

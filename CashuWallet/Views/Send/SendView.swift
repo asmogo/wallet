@@ -646,9 +646,14 @@ struct MeltView: View {
     @ObservedObject private var priceService = PriceService.shared
 
     private let autoQuoteOnAppear: Bool
+    private let initialAutoQuoteRequest: String
     private let onComplete: (() -> Void)?
 
     @State private var requestInput: String
+    @State private var decodedRequestSource = ""
+    @State private var decodedRequestResult: PaymentRequestDecodeResult = .unrecognized
+    @State private var isDecodingRequest = false
+    @State private var didPerformInitialAutoQuote = false
     @State private var amountString: String
     @State private var meltMode: MeltMode
     @State private var meltQuote: MeltQuoteInfo?
@@ -668,6 +673,8 @@ struct MeltView: View {
     @State private var clipboardSuggestion: PaymentRequestDecodeResult?
     @State private var clipboardSuggestionRaw: String?
     @State private var dismissedClipboardSuggestion = false
+    @State private var suggestionTask: Task<Void, Never>?
+    @State private var quoteTask: Task<Void, Never>?
 
     private var meltViewStateKey: String {
         if isPaid { return "paid" }
@@ -696,6 +703,7 @@ struct MeltView: View {
         onComplete: (() -> Void)? = nil
     ) {
         self.autoQuoteOnAppear = autoQuoteOnAppear
+        self.initialAutoQuoteRequest = initialRequest.trimmingCharacters(in: .whitespacesAndNewlines)
         self.onComplete = onComplete
         _requestInput = State(initialValue: initialRequest)
         _amountString = State(initialValue: initialAmount)
@@ -767,12 +775,8 @@ struct MeltView: View {
                 syncMeltModeWithAvailableMints()
                 syncSelectedMeltMint()
                 detectClipboardSuggestion()
-                if autoQuoteOnAppear,
-                   !requestInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
-                   !amountRequired {
-                    getQuote()
-                }
             }
+            .onDisappear(perform: cancelTransientTasks)
             .onChange(of: walletManager.activeMint?.id) {
                 syncMeltModeWithAvailableMints()
                 if meltQuote == nil {
@@ -789,6 +793,9 @@ struct MeltView: View {
             }
             .onChange(of: requestInput) {
                 syncSelectedMeltMint()
+            }
+            .task(id: trimmedRequestInput) { [input = trimmedRequestInput] in
+                await updateRequestDecode(for: input)
             }
             .onChange(of: entryUnit) { oldUnit, newUnit in
                 amountString = AmountFormatter.entryConverted(raw: amountString, from: oldUnit, to: newUnit)
@@ -807,6 +814,18 @@ struct MeltView: View {
         return walletManager.mints
     }
 
+    private var trimmedRequestInput: String {
+        requestInput.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private var requestDecodeResult: PaymentRequestDecodeResult {
+        let trimmed = trimmedRequestInput
+        guard !trimmed.isEmpty, decodedRequestSource == trimmed else {
+            return .unrecognized
+        }
+        return decodedRequestResult
+    }
+
     private var selectedMeltPaymentMethod: PaymentMethodKind {
         if meltMode == .onchain {
             return .onchain
@@ -816,7 +835,16 @@ struct MeltView: View {
             return .bolt11
         }
 
-        return PaymentRequestParser.paymentMethod(for: requestInput) ?? .bolt11
+        switch requestDecodeResult {
+        case .bolt11:
+            return .bolt11
+        case .bolt12:
+            return .bolt12
+        case .onchain:
+            return .onchain
+        case .lightningAddress, .cashuPaymentRequest, .unrecognized:
+            return .bolt11
+        }
     }
 
     /// The unit the keypad is entering in: fiat only when fiat is primary AND a
@@ -834,7 +862,7 @@ struct MeltView: View {
             return entered
         }
 
-        switch PaymentRequestDecoder.decode(requestInput) {
+        switch requestDecodeResult {
         case .bolt11(let amount, _), .bolt12(let amount, _):
             return amount
         case .lightningAddress, .onchain, .cashuPaymentRequest, .unrecognized:
@@ -877,11 +905,11 @@ struct MeltView: View {
     }
 
     private var isHumanReadableAddress: Bool {
-        meltMode == .lightning && PaymentRequestParser.isHumanReadableLightningAddress(requestInput)
+        meltMode == .lightning && PaymentRequestParser.isHumanReadableLightningAddress(trimmedRequestInput)
     }
 
     private var isBitcoinAddress: Bool {
-        PaymentRequestParser.isBitcoinAddress(requestInput)
+        PaymentRequestParser.isBitcoinAddress(trimmedRequestInput)
     }
 
     private var amountRequired: Bool {
@@ -889,7 +917,7 @@ struct MeltView: View {
     }
 
     private var canGetQuote: Bool {
-        guard !requestInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return false }
+        guard !trimmedRequestInput.isEmpty else { return false }
 
         if amountRequired {
             guard amountSats > 0 else { return false }
@@ -900,6 +928,82 @@ struct MeltView: View {
         }
 
         return true
+    }
+
+    @MainActor
+    private func updateRequestDecode(for input: String) async {
+        let trimmed = input.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else {
+            applyRequestDecode(source: "", result: .unrecognized, isDecoding: false)
+            syncSelectedMeltMint()
+            return
+        }
+
+        applyRequestDecode(source: decodedRequestSource, result: decodedRequestResult, isDecoding: true)
+
+        do {
+            try await Task.sleep(nanoseconds: 120_000_000)
+        } catch {
+            return
+        }
+
+        let result = await CdkRuntime.shared.decodePaymentRequest(trimmed)
+        guard !Task.isCancelled, trimmedRequestInput == trimmed else { return }
+
+        applyRequestDecode(source: trimmed, result: result, isDecoding: false)
+        syncSelectedMeltMint()
+        performInitialAutoQuoteIfNeeded(for: result)
+    }
+
+    @MainActor
+    private func applyRequestDecode(
+        source: String,
+        result: PaymentRequestDecodeResult,
+        isDecoding: Bool
+    ) {
+        if decodedRequestSource != source {
+            decodedRequestSource = source
+        }
+        if decodedRequestResult != result {
+            decodedRequestResult = result
+        }
+        if isDecodingRequest != isDecoding {
+            isDecodingRequest = isDecoding
+        }
+    }
+
+    @MainActor
+    private func performInitialAutoQuoteIfNeeded(for result: PaymentRequestDecodeResult) {
+        guard autoQuoteOnAppear,
+              !didPerformInitialAutoQuote,
+              !initialAutoQuoteRequest.isEmpty,
+              trimmedRequestInput == initialAutoQuoteRequest else { return }
+
+        switch result {
+        case .bolt11, .bolt12:
+            didPerformInitialAutoQuote = true
+            getQuote()
+        case .lightningAddress, .onchain, .cashuPaymentRequest, .unrecognized:
+            break
+        }
+    }
+
+    private static func suggestedMode(for result: PaymentRequestDecodeResult) -> MeltMode? {
+        switch result {
+        case .onchain:
+            return .onchain
+        case .bolt11, .bolt12, .lightningAddress:
+            return .lightning
+        case .cashuPaymentRequest, .unrecognized:
+            return nil
+        }
+    }
+
+    private func cancelTransientTasks() {
+        suggestionTask?.cancel()
+        quoteTask?.cancel()
+        suggestionTask = nil
+        quoteTask = nil
     }
 
     private func mintInfo(for quote: MeltQuoteInfo) -> MintInfo? {
@@ -1034,7 +1138,12 @@ struct MeltView: View {
                 ClipboardPaymentChip(
                     raw: raw,
                     result: suggestion,
-                    onTap: { applyDecodedSuggestion(suggestion, raw: raw) },
+                    onTap: {
+                        suggestionTask?.cancel()
+                        suggestionTask = Task { @MainActor in
+                            await applyDecodedSuggestion(suggestion, raw: raw)
+                        }
+                    },
                     onDismiss: {
                         withAnimation(.easeOut(duration: 0.2)) {
                             dismissedClipboardSuggestion = true
@@ -1057,18 +1166,29 @@ struct MeltView: View {
 
     @ViewBuilder
     private var liveDecodeFeedback: some View {
-        let trimmed = requestInput.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !trimmed.isEmpty {
-            let result = PaymentRequestDecoder.decode(trimmed)
-            HStack(spacing: 6) {
-                Image(systemName: result == .unrecognized ? "exclamationmark.circle" : "checkmark.circle.fill")
-                    .font(.caption.weight(.semibold))
-                Text(liveDecodeText(for: result))
-                    .font(.caption)
+        if !trimmedRequestInput.isEmpty {
+            if isDecodingRequest {
+                HStack(spacing: 6) {
+                    ProgressView()
+                        .scaleEffect(0.65)
+                    Text("Checking...")
+                        .font(.caption)
+                }
+                .foregroundStyle(Color.secondary)
+                .transition(.opacity)
+                .accessibilityLabel("Checking payment request")
+            } else {
+                let result = requestDecodeResult
+                HStack(spacing: 6) {
+                    Image(systemName: result == .unrecognized ? "exclamationmark.circle" : "checkmark.circle.fill")
+                        .font(.caption.weight(.semibold))
+                    Text(liveDecodeText(for: result))
+                        .font(.caption)
+                }
+                .foregroundStyle(result == .unrecognized ? Color.red : Color.secondary)
+                .transition(.opacity)
+                .accessibilityLabel(liveDecodeText(for: result))
             }
-            .foregroundStyle(result == .unrecognized ? Color.red : Color.secondary)
-            .transition(.opacity)
-            .accessibilityLabel(liveDecodeText(for: result))
         }
     }
 
@@ -1377,8 +1497,10 @@ struct MeltView: View {
         let trimmed = content.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
         HapticFeedback.selection()
-        let result = PaymentRequestDecoder.decode(trimmed)
-        applyDecodedSuggestion(result, raw: trimmed)
+        suggestionTask?.cancel()
+        suggestionTask = Task { @MainActor in
+            await decodeAndApplySuggestion(raw: trimmed)
+        }
     }
 
     private func openScanner() {
@@ -1389,8 +1511,10 @@ struct MeltView: View {
     private func handleScannedRequest(_ scanned: String) {
         let trimmed = scanned.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
-        let result = PaymentRequestDecoder.decode(trimmed)
-        applyDecodedSuggestion(result, raw: trimmed)
+        suggestionTask?.cancel()
+        suggestionTask = Task { @MainActor in
+            await decodeAndApplySuggestion(raw: trimmed)
+        }
     }
 
     private func detectClipboardSuggestion() {
@@ -1400,15 +1524,32 @@ struct MeltView: View {
               let content = UIPasteboard.general.string else { return }
         let trimmed = content.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
-        let result = PaymentRequestDecoder.decode(trimmed)
-        guard result != .unrecognized else { return }
-        clipboardSuggestion = result
-        clipboardSuggestionRaw = trimmed
+        suggestionTask?.cancel()
+        suggestionTask = Task { @MainActor in
+            let result = await CdkRuntime.shared.decodePaymentRequest(trimmed)
+            guard !Task.isCancelled,
+                  result != .unrecognized,
+                  requestInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+            clipboardSuggestion = result
+            clipboardSuggestionRaw = trimmed
+        }
     }
 
-    private func applyDecodedSuggestion(_ result: PaymentRequestDecodeResult, raw: String) {
+    @MainActor
+    private func decodeAndApplySuggestion(raw: String) async {
+        let result = await CdkRuntime.shared.decodePaymentRequest(raw)
+        guard !Task.isCancelled else { return }
+        await applyDecodedSuggestion(result, raw: raw)
+    }
+
+    @MainActor
+    private func applyDecodedSuggestion(
+        _ result: PaymentRequestDecodeResult,
+        raw: String,
+        autoQuoteAmountLocked: Bool = true
+    ) async {
         // Choose mode based on suggestion (if we can switch).
-        if let suggested = PaymentRequestDecoder.suggestedMode(result),
+        if let suggested = Self.suggestedMode(for: result),
            suggested != meltMode,
            suggested != .onchain || supportsOnchainMelt {
             withAnimation(.snappy) { meltMode = suggested }
@@ -1419,50 +1560,47 @@ struct MeltView: View {
         case .onchain:
             requestInput = PaymentRequestParser.normalizeBitcoinRequest(raw)
         case .bolt11, .bolt12:
-            requestInput = PaymentRequestDecoder.encodedLightningRequest(from: raw)
+            requestInput = await CdkRuntime.shared.normalizedLightningRequest(from: raw)
                 ?? PaymentRequestParser.normalizeLightningRequest(raw)
         case .lightningAddress, .cashuPaymentRequest, .unrecognized:
             requestInput = raw
         }
+
+        let decodedSource = requestInput.trimmingCharacters(in: .whitespacesAndNewlines)
+        applyRequestDecode(source: decodedSource, result: result, isDecoding: false)
+        syncSelectedMeltMint()
 
         // Hide the chip after a tap.
         dismissedClipboardSuggestion = true
         errorMessage = nil
 
         // Auto-quote when amount is locked.
-        if PaymentRequestDecoder.amountLocked(result) {
+        if autoQuoteAmountLocked, PaymentRequestDecoder.amountLocked(result) {
             getQuote()
         }
     }
 
     private func applyRecentRecipient(_ recipient: RecentRecipientsList.Recipient) {
         HapticFeedback.selection()
-        let result = PaymentRequestDecoder.decode(recipient.invoice)
-        // Reuse the same routing as suggestion tap, but never auto-quote: the
-        // user is reusing a destination at a (likely) new amount.
-        if let suggested = PaymentRequestDecoder.suggestedMode(result),
-           suggested != meltMode,
-           suggested != .onchain || supportsOnchainMelt {
-            withAnimation(.snappy) { meltMode = suggested }
+        suggestionTask?.cancel()
+        suggestionTask = Task { @MainActor in
+            let result = await CdkRuntime.shared.decodePaymentRequest(recipient.invoice)
+            guard !Task.isCancelled else { return }
+            // Reuse the same routing as suggestion tap, but never auto-quote:
+            // the user is reusing a destination at a (likely) new amount.
+            await applyDecodedSuggestion(
+                result,
+                raw: recipient.invoice,
+                autoQuoteAmountLocked: false
+            )
         }
-        switch result {
-        case .onchain:
-            requestInput = PaymentRequestParser.normalizeBitcoinRequest(recipient.invoice)
-        case .bolt11, .bolt12:
-            requestInput = PaymentRequestDecoder.encodedLightningRequest(from: recipient.invoice)
-                ?? PaymentRequestParser.normalizeLightningRequest(recipient.invoice)
-        case .lightningAddress, .cashuPaymentRequest, .unrecognized:
-            requestInput = recipient.invoice
-        }
-        errorMessage = nil
     }
 
     private func getQuote() {
         let trimmedInput = requestInput.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedInput.isEmpty else { return }
 
-        if meltMode == .lightning,
-           PaymentRequestParser.paymentMethod(for: trimmedInput) == .onchain {
+        if meltMode == .lightning, isBitcoinAddress {
             guard supportsOnchainMelt else {
                 errorMessage = "No mint supports On-chain payments."
                 return
@@ -1480,40 +1618,54 @@ struct MeltView: View {
             return
         }
 
+        let quoteMode = meltMode
+        let quoteSource = trimmedInput
+        let quoteAmount = amountSats
+        let quoteMintURL = quoteMint.url
+        let quoteIsHumanReadableAddress = isHumanReadableAddress
+
+        quoteTask?.cancel()
         isGettingQuote = true
         errorMessage = nil
 
-        Task { @MainActor in
+        quoteTask = Task { @MainActor in
             defer { isGettingQuote = false }
 
             do {
-                switch meltMode {
+                switch quoteMode {
                 case .lightning:
-                    if isHumanReadableAddress {
-                        let amount = amountSats
-                        guard amount > 0 else { return }
+                    if quoteIsHumanReadableAddress {
+                        guard quoteAmount > 0 else { return }
                         let quote = try await walletManager.createHumanReadableMeltQuote(
-                            address: trimmedInput,
-                            amount: amount,
-                            preferredMintURL: quoteMint.url
+                            address: quoteSource,
+                            amount: quoteAmount,
+                            preferredMintURL: quoteMintURL
                         )
+                        guard !Task.isCancelled,
+                              trimmedRequestInput == quoteSource,
+                              amountSats == quoteAmount else { return }
                         setMeltQuote(quote)
                     } else {
-                        let request = PaymentRequestDecoder.encodedLightningRequest(from: trimmedInput) ?? trimmedInput
+                        let request = await CdkRuntime.shared.normalizedLightningRequest(from: quoteSource)
+                            ?? quoteSource
                         let quote = try await walletManager.createMeltQuote(
                             request: request,
-                            preferredMintURL: quoteMint.url
+                            preferredMintURL: quoteMintURL
                         )
+                        guard !Task.isCancelled,
+                              trimmedRequestInput == quoteSource else { return }
                         setMeltQuote(quote)
                     }
                 case .onchain:
-                    let amount = amountSats
-                    guard amount > 0 else { return }
+                    guard quoteAmount > 0 else { return }
                     let quote = try await walletManager.createOnchainMeltQuote(
-                        address: trimmedInput,
-                        amount: amount,
-                        preferredMintURL: quoteMint.url
+                        address: quoteSource,
+                        amount: quoteAmount,
+                        preferredMintURL: quoteMintURL
                     )
+                    guard !Task.isCancelled,
+                          trimmedRequestInput == quoteSource,
+                          amountSats == quoteAmount else { return }
                     setMeltQuote(quote)
                 }
             } catch {

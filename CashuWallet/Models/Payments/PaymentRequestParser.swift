@@ -1,5 +1,4 @@
 import Foundation
-import Cdk
 import CryptoKit
 
 enum PaymentRequestParser {
@@ -41,30 +40,6 @@ enum PaymentRequestParser {
         let user = trimmedRequest[trimmedRequest.startIndex..<atIndex]
         let domain = trimmedRequest[trimmedRequest.index(after: atIndex)...]
         return !user.isEmpty && domain.contains(".") && !domain.hasPrefix(".") && !domain.hasSuffix(".")
-    }
-
-    static func paymentMethod(for request: String) -> PaymentMethodKind? {
-        if isHumanReadableLightningAddress(request) {
-            return nil
-        }
-
-        let normalizedRequest = PaymentRequestDecoder.encodedLightningRequest(from: request)
-            ?? normalizeLightningRequest(request)
-        if !normalizedRequest.isEmpty,
-           let decodedRequest = try? decodeInvoice(invoiceStr: normalizedRequest) {
-            switch decodedRequest.paymentType {
-            case .bolt11:
-                return .bolt11
-            case .bolt12:
-                return .bolt12
-            }
-        }
-
-        if isBitcoinAddress(request) {
-            return .onchain
-        }
-
-        return nil
     }
 }
 

@@ -1,6 +1,6 @@
 import Cdk
 
-enum PaymentMethodKind: String, CaseIterable, Codable, Hashable {
+enum PaymentMethodKind: String, CaseIterable, Codable, Hashable, Sendable {
     case bolt11
     case bolt12
     case onchain

@@ -1,6 +1,5 @@
 import SwiftUI
 import AVFoundation
-import Cdk
 #if canImport(URKit)
 import URKit
 #endif
@@ -71,7 +70,7 @@ struct ScannerWrapperView: View {
     /// Optional callback. When provided, the scanner short-circuits its default
     /// routing (Receive detail / fresh MeltView) and just returns the raw
     /// scanned string so the caller can decide what to do.
-    var onScanned: ((String) -> Void)? = nil
+    let onScanned: ((String) -> Void)?
 
     @StateObject private var scannerModel = ScannerViewModel()
     @State private var scannedToken: String?
@@ -82,6 +81,11 @@ struct ScannerWrapperView: View {
     @State private var navigateToDetail = false
     @State private var navigateToMelt = false
     @State private var navigateToCashuPaymentRequest = false
+    @State private var routingTask: Task<Void, Never>?
+
+    init(onScanned: ((String) -> Void)? = nil) {
+        self.onScanned = onScanned
+    }
     
     var body: some View {
         NavigationStack {
@@ -187,19 +191,11 @@ struct ScannerWrapperView: View {
                     .environmentObject(walletManager)
                 }
             }
+            .onDisappear {
+                routingTask?.cancel()
+                routingTask = nil
+            }
         }
-    }
-
-    private static func isHumanReadableAddress(_ content: String) -> Bool {
-        let trimmed = content.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard let atIndex = trimmed.firstIndex(of: "@") else { return false }
-        let user = trimmed[trimmed.startIndex..<atIndex]
-        let domain = trimmed[trimmed.index(after: atIndex)...]
-        return !user.isEmpty && domain.contains(".") && !domain.hasPrefix(".") && !domain.hasSuffix(".")
-    }
-
-    private static func parseLightningPaymentRequest(_ content: String) -> String? {
-        try? LightningRequestParser.parse(content).request
     }
 
     private func handleScan(code: String) {
@@ -244,49 +240,68 @@ struct ScannerWrapperView: View {
             scannedToken = token
             navigateToDetail = true
 
-        } else if case .cashuPaymentRequest(let request) = PaymentRequestDecoder.decode(
+        } else {
+            routingTask?.cancel()
+            routingTask = Task { @MainActor in
+                await routeScannedPaymentContent(content)
+            }
+        }
+    }
+
+    @MainActor
+    private func routeScannedPaymentContent(_ content: String) async {
+        let cashuResult = await CdkRuntime.shared.decodePaymentRequest(
             content,
             includeCashuPaymentRequests: true,
             preferCashuPaymentRequests: true
-        ), request.isSatUnit || PaymentRequestDecoder.encodedLightningRequest(from: content) == nil {
-            let generator = UINotificationFeedbackGenerator()
-            generator.notificationOccurred(.success)
+        )
+        guard !Task.isCancelled else { return }
 
+        let lightningFallback = await CdkRuntime.shared.normalizedLightningRequest(from: content)
+        guard !Task.isCancelled else { return }
+
+        if case .cashuPaymentRequest(let request) = cashuResult,
+           request.isSatUnit || lightningFallback == nil {
             scannedCashuPaymentRequest = request
             navigateToCashuPaymentRequest = true
-            
-        } else {
-            let decodedPaymentRequest = PaymentRequestDecoder.decode(content)
-            switch decodedPaymentRequest {
-            case .bolt11, .bolt12, .onchain:
-                let generator = UINotificationFeedbackGenerator()
-                generator.notificationOccurred(.success)
-
-                if case .onchain = decodedPaymentRequest {
-                    scannedMeltRequest = PaymentRequestParser.normalizeBitcoinRequest(content)
-                    scannedMeltMode = .onchain
-                    scannedMeltAutoQuote = false
-                } else {
-                    scannedMeltRequest = PaymentRequestDecoder.encodedLightningRequest(from: content)
-                        ?? PaymentRequestParser.normalizeLightningRequest(content)
-                    scannedMeltMode = .lightning
-                    scannedMeltAutoQuote = true
-                }
-                navigateToMelt = true
-
-            case .lightningAddress:
-                let generator = UINotificationFeedbackGenerator()
-                generator.notificationOccurred(.success)
-
-                scannedMeltRequest = content
-                scannedMeltMode = .lightning
-                scannedMeltAutoQuote = false
-                navigateToMelt = true
-
-            case .cashuPaymentRequest, .unrecognized:
-                processUnsupportedContent(content)
-            }
+            notifySuccessfulScan()
+            return
         }
+
+        let decodedPaymentRequest = await CdkRuntime.shared.decodePaymentRequest(content)
+        guard !Task.isCancelled else { return }
+
+        switch decodedPaymentRequest {
+        case .bolt11, .bolt12:
+            scannedMeltRequest = lightningFallback
+                ?? PaymentRequestParser.normalizeLightningRequest(content)
+            scannedMeltMode = .lightning
+            scannedMeltAutoQuote = true
+            navigateToMelt = true
+            notifySuccessfulScan()
+
+        case .onchain:
+            scannedMeltRequest = PaymentRequestParser.normalizeBitcoinRequest(content)
+            scannedMeltMode = .onchain
+            scannedMeltAutoQuote = false
+            navigateToMelt = true
+            notifySuccessfulScan()
+
+        case .lightningAddress:
+            scannedMeltRequest = content
+            scannedMeltMode = .lightning
+            scannedMeltAutoQuote = false
+            navigateToMelt = true
+            notifySuccessfulScan()
+
+        case .cashuPaymentRequest, .unrecognized:
+            processUnsupportedContent(content)
+        }
+    }
+
+    private func notifySuccessfulScan() {
+        let generator = UINotificationFeedbackGenerator()
+        generator.notificationOccurred(.success)
     }
 
     private func processUnsupportedContent(_ content: String) {
@@ -784,9 +799,14 @@ class QRScannerViewController: UIViewController, AVCaptureMetadataOutputObjectsD
             previewLayer.frame = view.layer.bounds
         }
         
-        // Ensure connection orientation matches
-        if let connection = previewLayer?.connection, connection.isVideoOrientationSupported {
-            connection.videoOrientation = .portrait 
+        // Ensure connection orientation matches portrait scanner chrome.
+        if let connection = previewLayer?.connection {
+            if #available(iOS 17.0, *) {
+                let portraitRotationAngle: CGFloat = 90
+                if connection.isVideoRotationAngleSupported(portraitRotationAngle) {
+                    connection.videoRotationAngle = portraitRotationAngle
+                }
+            }
         }
     }
     
