@@ -72,13 +72,20 @@ struct TransactionDetailView: View {
                                 .accessibilityHidden(true)
                         }
 
-                        // Amount — same scale as Lightning Invoice / Pending Ecash.
-                        CurrencyAmountDisplay(
-                            sats: transaction.amount,
-                            primary: $settings.amountDisplayPrimary,
-                            primarySize: 32
-                        )
-                        .accessibilityLabel("Amount: \(transaction.amount) sats")
+                        // Amount — onchain is always sats; others get the fiat toggle.
+                        if transaction.kind == .onchain {
+                            Text(AmountFormatter.sats(transaction.amount, useBitcoinSymbol: settings.useBitcoinSymbol))
+                                .font(.system(size: 32, weight: .semibold, design: .rounded))
+                                .monospacedDigit()
+                                .accessibilityLabel("Amount: \(transaction.amount) sats")
+                        } else {
+                            CurrencyAmountDisplay(
+                                sats: transaction.amount,
+                                primary: $settings.amountDisplayPrimary,
+                                primarySize: 32
+                            )
+                            .accessibilityLabel("Amount: \(transaction.amount) sats")
+                        }
 
                         // Animated status.
                         statusBadge
@@ -93,40 +100,47 @@ struct TransactionDetailView: View {
                                           value: "\(transaction.fee) sat")
                                 canvasDivider
                             }
-                            detailRow(icon: "banknote", label: "Unit",
-                                      value: settings.unitLabel.uppercased())
-                            if let mintUrl = transaction.mintUrl {
-                                canvasDivider
-                                detailRow(icon: "bitcoinsign.bank.building", label: "Mint",
-                                          value: extractMintHost(mintUrl))
-                            }
-                            if let request = transaction.invoice {
-                                canvasDivider
-                                detailRow(
-                                    icon: transaction.kind == .onchain ? "qrcode" : "doc.text",
-                                    label: transaction.kind == .onchain ? "Address" : "Request",
-                                    value: request
-                                )
-                            }
-                            if let preimage = transaction.preimage {
-                                canvasDivider
-                                detailRow(
-                                    icon: transaction.kind == .onchain ? "checkmark.seal" : "key",
-                                    label: transaction.kind == .onchain ? "Transaction ID" : "Payment Proof",
-                                    value: preimage
-                                )
+                            if transaction.kind == .onchain {
+                                if let mintUrl = transaction.mintUrl {
+                                    detailRow(icon: "bitcoinsign.bank.building", label: "Mint",
+                                              value: extractMintHost(mintUrl))
+                                }
+                                if let request = transaction.invoice {
+                                    if transaction.mintUrl != nil { canvasDivider }
+                                    detailRow(icon: "qrcode", label: "Address", value: request)
+                                }
+                                if let preimage = transaction.preimage {
+                                    canvasDivider
+                                    detailRow(icon: "checkmark.seal", label: "Transaction ID", value: preimage)
+                                }
+                            } else {
+                                detailRow(icon: "banknote", label: "Unit",
+                                          value: settings.unitLabel.uppercased())
+                                if let mintUrl = transaction.mintUrl {
+                                    canvasDivider
+                                    detailRow(icon: "bitcoinsign.bank.building", label: "Mint",
+                                              value: extractMintHost(mintUrl))
+                                }
+                                if let request = transaction.invoice {
+                                    canvasDivider
+                                    detailRow(icon: "doc.text", label: "Request", value: request)
+                                }
+                                if let preimage = transaction.preimage {
+                                    canvasDivider
+                                    detailRow(icon: "key", label: "Payment Proof", value: preimage)
+                                }
                             }
                         }
                         .padding(.top, 8)
                         .padding(.horizontal, 4)
-
-                        if let explorerURL = onchainExplorerURL {
-                            Link("View in block explorer", destination: explorerURL)
-                                .font(.subheadline.weight(.medium))
-                                .padding(.top, 4)
-                        }
                     }
                     .padding(.horizontal)
+                }
+
+                if let explorerURL = onchainExplorerURL {
+                    Link("View in block explorer", destination: explorerURL)
+                        .textLinkButton()
+                        .padding(.vertical, 12)
                 }
 
                 // Single primary action — Copy. Share lives at top-right in

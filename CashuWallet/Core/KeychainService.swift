@@ -176,6 +176,93 @@ class KeychainService: SecureStorageProtocol {
             return false
         }
     }
+
+    // MARK: - iCloud Keychain (Synchronizable)
+
+    private let iCloudMnemonicKey = "wallet_mnemonic_icloud"
+
+    func saveSynchronizableMnemonic(_ mnemonic: String) throws {
+        guard let data = mnemonic.data(using: .utf8) else {
+            throw KeychainError.encodingFailed
+        }
+
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: serviceName,
+            kSecAttrAccount as String: iCloudMnemonicKey,
+            kSecAttrSynchronizable as String: kCFBooleanTrue!
+        ]
+
+        let update: [String: Any] = [
+            kSecValueData as String: data,
+            kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlock
+        ]
+
+        let updateStatus = SecItemUpdate(query as CFDictionary, update as CFDictionary)
+        if updateStatus == errSecSuccess { return }
+
+        guard updateStatus == errSecItemNotFound else {
+            throw KeychainError.saveFailed(updateStatus)
+        }
+
+        var addQuery = query
+        addQuery[kSecValueData as String] = data
+        addQuery[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlock
+
+        let status = SecItemAdd(addQuery as CFDictionary, nil)
+        guard status == errSecSuccess else {
+            throw KeychainError.saveFailed(status)
+        }
+    }
+
+    func loadSynchronizableMnemonic() throws -> String? {
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: serviceName,
+            kSecAttrAccount as String: iCloudMnemonicKey,
+            kSecAttrSynchronizable as String: kCFBooleanTrue!,
+            kSecReturnData as String: true,
+            kSecMatchLimit as String: kSecMatchLimitOne
+        ]
+
+        var result: AnyObject?
+        let status = SecItemCopyMatching(query as CFDictionary, &result)
+
+        if status == errSecItemNotFound { return nil }
+
+        guard status == errSecSuccess else {
+            throw KeychainError.loadFailed(status)
+        }
+
+        guard let data = result as? Data,
+              let mnemonic = String(data: data, encoding: .utf8) else {
+            throw KeychainError.decodingFailed
+        }
+
+        return mnemonic
+    }
+
+    func deleteSynchronizableMnemonic() throws {
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: serviceName,
+            kSecAttrAccount as String: iCloudMnemonicKey,
+            kSecAttrSynchronizable as String: kCFBooleanTrue!
+        ]
+
+        let status = SecItemDelete(query as CFDictionary)
+        guard status == errSecSuccess || status == errSecItemNotFound else {
+            throw KeychainError.deleteFailed(status)
+        }
+    }
+
+    func hasSynchronizableMnemonic() -> Bool {
+        do {
+            return try loadSynchronizableMnemonic() != nil
+        } catch {
+            return false
+        }
+    }
 }
 
 // MARK: - Errors

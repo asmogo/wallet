@@ -1,66 +1,86 @@
 import Foundation
 import Cdk
 
+// MARK: - User-facing message + severity
+
+/// A resolved, user-facing wallet message paired with the severity tier the UI
+/// should render it at. The text follows the contract **{what broke}. {what to
+/// try next}** in the app's quiet, native voice.
+struct WalletMessage {
+    let text: String
+    let severity: ErrorSeverity
+
+    static func error(_ text: String) -> WalletMessage { .init(text: text, severity: .error) }
+    static func caution(_ text: String) -> WalletMessage { .init(text: text, severity: .caution) }
+    static func info(_ text: String) -> WalletMessage { .init(text: text, severity: .info) }
+}
+
 // MARK: - Error Types
 
 enum WalletErrorMessage {
-    static func message(for error: Error) -> String {
+    /// Resolve an error to its user-facing message **and** severity.
+    static func classified(for error: Error) -> WalletMessage {
         if let walletError = error as? WalletError {
-            return message(for: walletError)
+            return classified(for: walletError)
         }
 
         if let ffiError = error as? Cdk.FfiError {
-            return message(for: ffiError)
+            return classified(for: ffiError)
         }
 
-        if let mappedMessage = message(forRawMessage: String(describing: error)) {
-            return mappedMessage
+        if let mapped = classified(forRawMessage: String(describing: error)) {
+            return mapped
         }
 
         if let localizedError = error as? LocalizedError,
            let description = localizedError.errorDescription,
            !description.isEmpty,
            !looksLikeRawCDKError(description) {
-            return description
+            return .error(description)
         }
 
         let localizedDescription = error.localizedDescription
         if !localizedDescription.isEmpty,
            !looksLikeRawCDKError(localizedDescription),
            !localizedDescription.contains("Swift.Error error 1") {
-            return localizedDescription
+            return .error(localizedDescription)
         }
 
-        return "Something went wrong. Try again in a moment."
+        return .error("The wallet couldn't finish that action. Try again in a moment.")
     }
 
-    private static func message(for error: WalletError) -> String {
+    /// Text-only convenience that preserves the original string API.
+    static func message(for error: Error) -> String {
+        classified(for: error).text
+    }
+
+    private static func classified(for error: WalletError) -> WalletMessage {
         switch error {
         case .notInitialized:
-            return "The wallet is still starting up. Try again in a moment."
+            return .error("The wallet is still starting up. Try again in a moment.")
         case .mintAlreadyExists:
-            return "This mint is already in your wallet."
+            return .error("This mint is already in your wallet.")
         case .invalidMnemonic:
-            return "That seed phrase doesn't look right. Check the spelling and try again."
+            return .error("That seed phrase doesn't look right. Check the spelling and try again.")
         case .insufficientBalance:
-            return "Not enough spendable ecash for this payment."
+            return .error("Not enough balance.")
         case .networkError(let message):
-            if let mappedMessage = self.message(forRawMessage: message) {
-                return mappedMessage
+            if let mapped = classified(forRawMessage: message) {
+                return mapped
             }
 
             let trimmedMessage = message.trimmingCharacters(in: .whitespacesAndNewlines)
             if !trimmedMessage.isEmpty,
                !looksLikeRawCDKError(trimmedMessage),
                !trimmedMessage.contains("Swift.Error error 1") {
-                return trimmedMessage
+                return .error(trimmedMessage)
             }
 
-            return "The wallet could not complete that request. Try again in a moment."
+            return .error("The wallet could not complete that request. Try again in a moment.")
         }
     }
 
-    private static func message(for ffiError: Cdk.FfiError) -> String {
+    private static func classified(for ffiError: Cdk.FfiError) -> WalletMessage {
         // CDK's FfiError already carries a spec-accurate `error_message` for both
         // `.Cdk` (Cashu protocol) and `.Internal` errors. We deliberately do NOT
         // maintain our own numeric code -> message table: it drifts from the CDK /
@@ -68,24 +88,24 @@ enum WalletErrorMessage {
         // message, lightly normalised for friendlier phrasing where we recognise it.
         switch ffiError {
         case .Cdk(_, let errorMessage):
-            return message(forRawMessage: errorMessage)
+            return classified(forRawMessage: errorMessage)
                 ?? cleanedCDKMessage(errorMessage)
         case .Internal(let errorMessage):
-            return message(forRawMessage: errorMessage)
+            return classified(forRawMessage: errorMessage)
                 ?? cleanedCDKMessage(errorMessage)
         }
     }
 
-    private static func cleanedCDKMessage(_ rawMessage: String) -> String {
+    private static func cleanedCDKMessage(_ rawMessage: String) -> WalletMessage {
         let message = extractedCDKMessage(from: rawMessage)
             .trimmingCharacters(in: .whitespacesAndNewlines)
         if !message.isEmpty, !looksLikeRawCDKError(message) {
-            return message
+            return .error(message)
         }
-        return "The mint rejected the request. Try again or choose another mint."
+        return .error("The mint rejected the request. Try again or choose another mint.")
     }
 
-    private static func message(forRawMessage rawMessage: String) -> String? {
+    private static func classified(forRawMessage rawMessage: String) -> WalletMessage? {
         let message = extractedCDKMessage(from: rawMessage)
         let normalized = message.lowercased()
 
@@ -94,53 +114,53 @@ enum WalletErrorMessage {
         }
 
         if normalized.contains("already being minted") {
-            return "This payment is already being claimed. Give it a moment and refresh."
+            return .error("This payment is already being claimed. Give it a moment and refresh.")
         }
 
         if normalized.contains("already issued")
             || normalized.contains("already minted")
             || normalized.contains("quote is issued")
             || normalized.contains("tokens already issued") {
-            return "Ecash has already been issued for this quote."
+            return .error("Ecash has already been issued for this quote.")
         }
 
         if normalized.contains("already paid")
             || normalized.contains("request already paid")
             || normalized.contains("invoice already paid") {
-            return "This invoice has already been paid."
+            return .error("This invoice has already been paid.")
         }
 
         if normalized.contains("not paid")
             || normalized.contains("unpaid quote")
             || normalized.contains("quote is not paid") {
-            return "The invoice has not been paid yet."
+            return .error("The invoice has not been paid yet.")
         }
 
         if normalized.contains("not credited this on-chain quote yet")
             || (normalized.contains("not credited") && normalized.contains("on-chain")) {
-            return "The mint has not credited this on-chain payment yet. Try again shortly."
+            return .error("The mint has not credited this on-chain payment yet. Try again shortly.")
         }
 
         if normalized.contains("pending quote")
             || normalized.contains("payment pending")
             || normalized.contains("quote pending") {
-            return "The payment is still pending. Try again shortly."
+            return .error("The payment is still pending. Try again shortly.")
         }
 
         if normalized.contains("expired quote")
             || normalized.contains("quote expired")
             || normalized.contains("invoice expired") {
-            return "This quote has expired. Create a new request."
+            return .error("This quote has expired. Create a new request.")
         }
 
         if normalized.contains("payment failed") {
-            return "The payment failed. Try again or use another mint."
+            return .error("The payment failed. Try again or use another mint.")
         }
 
         if normalized.contains("max fee exceeded")
             || normalized.contains("fee exceeded")
             || normalized.contains("fee is higher") {
-            return "The fee is higher than the wallet limit for this payment."
+            return .caution("The fee is higher than this wallet allows. Lower the amount or try another mint.")
         }
 
         if normalized.contains("insufficient")
@@ -148,101 +168,101 @@ enum WalletErrorMessage {
             || normalized.contains("no spendable")
             || normalized.contains("no available proofs")
             || normalized.contains("balance too low") {
-            return "Not enough spendable ecash for this payment."
+            return .error("Not enough balance.")
         }
 
         if normalized.contains("token already spent")
             || normalized.contains("proof already used")
             || normalized.contains("already redeemed")
             || normalized.contains("proofs are spent") {
-            return "This token was already redeemed."
+            return .error("This token was already redeemed.")
         }
 
         if normalized.contains("token not verified")
             || normalized.contains("invalid proof")
             || normalized.contains("could not verify")
             || normalized.contains("dleq") {
-            return "This token could not be verified. Ask the sender for a new token."
+            return .error("This token could not be verified. Ask the sender for a new token.")
         }
 
         if normalized.contains("keyset not found")
             || normalized.contains("unknown keyset")
             || normalized.contains("keyset id not known") {
-            return "This token uses an unknown keyset for this mint."
+            return .error("This token uses a keyset this mint doesn't recognize. Add the matching mint and try again.")
         }
 
         if normalized.contains("keyset inactive")
             || normalized.contains("inactive keyset") {
-            return "This mint no longer accepts this token's keyset."
+            return .error("This mint no longer accepts this token's keyset.")
         }
 
         if normalized.contains("unsupported unit")
             || normalized.contains("unit unsupported") {
-            return "This mint does not support that unit."
+            return .caution("This mint doesn't support that unit. Choose another mint.")
         }
 
         if normalized.contains("unsupported payment method")
             || normalized.contains("invalid payment method")
             || normalized.contains("payment method not supported") {
-            return "This mint does not support that payment method."
+            return .caution("This mint doesn't support that payment method. Choose another mint.")
         }
 
         if normalized.contains("no key for amount")
             || normalized.contains("amount key")
             || normalized.contains("no active keyset") {
-            return "This mint cannot issue ecash for that amount right now."
+            return .error("This mint can't issue ecash for that amount right now. Try another mint.")
         }
 
         if normalized.contains("amountless invoice")
             || normalized.contains("invoice amount undefined")
             || normalized.contains("amount is required") {
-            return "This payment request does not include an amount."
+            return .caution("This request doesn't include an amount. Enter one to continue.")
         }
 
         if normalized.contains("amount out")
             || normalized.contains("outside of allowed")
             || normalized.contains("amount is outside") {
-            return "This amount is outside the mint's allowed limits."
+            return .caution("This amount is outside the mint's limits. Try a different amount.")
         }
 
         if normalized.contains("minting disabled") {
-            return "This mint has disabled receiving new ecash."
+            return .caution("This mint has paused deposits. Choose another mint.")
         }
 
         if normalized.contains("melting disabled") {
-            return "This mint has disabled payments."
+            return .caution("This mint has paused payments. Choose another mint.")
         }
 
         if normalized.contains("clear auth required") {
-            return "This mint requires authentication before this action."
+            return .error("This mint requires authentication before this action.")
         }
 
         if normalized.contains("clear auth failed") {
-            return "Mint authentication failed. Check your mint credentials."
+            return .error("Mint authentication failed. Check your mint credentials.")
         }
 
         if normalized.contains("blind auth required") {
-            return "This mint requires blind authentication before this action."
+            return .error("This mint requires blind authentication before this action.")
         }
 
         if normalized.contains("blind auth failed") {
-            return "Blind authentication failed. Check the mint and try again."
+            return .error("Blind authentication failed. Check the mint and try again.")
         }
 
         if normalized.contains("no on-chain melt fee options") {
-            return "This mint cannot quote an on-chain payment right now. Try another mint."
+            return .caution("This mint can't quote an on-chain payment right now. Try another mint.")
         }
 
         if normalized.contains("invalid payment request")
             || normalized.contains("invalid invoice")
             || (normalized.contains("bolt11") && normalized.contains("parse"))
             || (normalized.contains("bolt12") && normalized.contains("parse")) {
-            return "This payment request does not look valid."
+            return .error("That payment request isn't valid. Check it and try again.")
         }
 
         if normalized.contains("timeout")
             || normalized.contains("timed out") {
-            return "The mint took too long to respond. Check your connection and try again."
+            return .error("The mint took too long to respond. Check your connection and try again.")
         }
 
         if normalized.contains("network")
@@ -257,18 +277,18 @@ enum WalletErrorMessage {
             || normalized.contains("certificate")
             || normalized.contains("couldn't reach")
             || normalized.contains("could not reach") {
-            return "Couldn't reach the mint. Check your connection and try again."
+            return .error("Couldn't reach the mint. Check your connection and try again.")
         }
 
         if normalized.contains("not found") {
-            return "The mint could not find that quote. Create a new request and try again."
+            return .error("The mint could not find that quote. Create a new request and try again.")
         }
 
         if normalized.contains("sqlite")
             || normalized.contains("database")
             || normalized.contains("corrupt")
             || normalized.contains("malformed") {
-            return "The wallet database could not be opened. Restart the app and try again."
+            return .error("The wallet database could not be opened. Restart the app and try again.")
         }
 
         return nil
@@ -296,8 +316,23 @@ enum WalletErrorMessage {
 }
 
 extension Error {
+    /// Text-only user-facing message (defaults the UI to the `.error` tier).
     var userFacingWalletMessage: String {
         WalletErrorMessage.message(for: self)
+    }
+
+    /// User-facing message paired with the severity tier the UI should render.
+    var walletMessage: WalletMessage {
+        WalletErrorMessage.classified(for: self)
+    }
+
+    /// True when the error is an out-of-balance condition — lets a call site
+    /// render the richer "you have X here · choose another mint" notice.
+    var isInsufficientBalanceError: Bool {
+        if let walletError = self as? WalletError, case .insufficientBalance = walletError {
+            return true
+        }
+        return WalletErrorMessage.classified(for: self).text == "Not enough balance."
     }
 }
 
@@ -307,7 +342,7 @@ enum WalletError: LocalizedError {
     case invalidMnemonic
     case insufficientBalance
     case networkError(String)
-    
+
     var errorDescription: String? {
         switch self {
         case .notInitialized:
@@ -317,7 +352,7 @@ enum WalletError: LocalizedError {
         case .invalidMnemonic:
             return "That seed phrase doesn't look right. Check the spelling and try again."
         case .insufficientBalance:
-            return "Not enough spendable ecash for this payment."
+            return "Not enough balance."
         case .networkError:
             return WalletErrorMessage.message(for: self)
         }

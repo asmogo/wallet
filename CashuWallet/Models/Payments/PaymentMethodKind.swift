@@ -124,7 +124,7 @@ enum PaymentMethodKind: String, CaseIterable, Codable, Hashable {
     }
 
     var requiresMintAmount: Bool {
-        self != .bolt12
+        self != .bolt12 && self != .onchain
     }
 
     var supportsOptionalMintAmount: Bool {
@@ -134,11 +134,11 @@ enum PaymentMethodKind: String, CaseIterable, Codable, Hashable {
 }
 
 /// Presentation-layer expansion of `PaymentMethodKind` for the *receive* method
-/// picker. BOLT12 fans out into two rows — a fixed-amount offer and an
-/// amountless offer (sender decides) — so the fixed/any choice is made up-front
-/// in the picker instead of via a toggle on the amount screen. Every other rail
-/// maps to a single row. UI-only: the service layer still sees a
-/// `PaymentMethodKind` plus a nil/non-nil amount.
+/// picker. BOLT12 surfaces a single amountless "Reusable invoice" row — picking
+/// it skips the keypad and creates the offer immediately. The `reusableFixed`
+/// case is retained (dormant) for the resolved/current mappings but is no longer
+/// offered in the picker. Every other rail maps to a single row. UI-only: the
+/// service layer still sees a `PaymentMethodKind` plus a nil/non-nil amount.
 enum ReceiveMethodOption: Hashable, Identifiable, CaseIterable {
     case lightning        // bolt11
     case reusableFixed    // bolt12, amount entered on the amount screen
@@ -165,11 +165,12 @@ enum ReceiveMethodOption: Hashable, Identifiable, CaseIterable {
     var autoCreates: Bool { isAmountless }
 
     /// Plain-language title, mirroring `PaymentMethodKind.friendlyTitle`. Both
-    /// reusable rows share the same title; `friendlyDescriptor` distinguishes.
+    /// reusable rows use distinct titles; `friendlyDescriptor` adds detail.
     var friendlyTitle: String {
         switch self {
         case .lightning:                   return "Lightning invoice"
-        case .reusableFixed, .reusableAny: return "Reusable invoice"
+        case .reusableFixed: return "Reusable invoice"
+        case .reusableAny:   return "Reusable invoice"
         case .onchain:                     return "On-chain address"
         }
     }
@@ -191,14 +192,15 @@ enum ReceiveMethodOption: Hashable, Identifiable, CaseIterable {
     /// Verb-phrase CTA, reused on the amount screen for the fixed path.
     var createActionTitle: String { method.createActionTitle }
 
-    /// Ordered picker rows for a set of supported rails. BOLT12 expands into the
-    /// fixed + any-amount pair (in that order); every other rail contributes one
-    /// row. Input order is preserved so it tracks `availableMintMethods`.
+    /// Ordered picker rows for a set of supported rails. BOLT12 surfaces a single
+    /// amountless "Reusable invoice" row (the fixed-amount row was retired); every
+    /// other rail contributes one row. Input order is preserved so it tracks
+    /// `availableMintMethods`.
     static func options(for methods: [PaymentMethodKind]) -> [ReceiveMethodOption] {
         methods.flatMap { method -> [ReceiveMethodOption] in
             switch method {
             case .bolt11:  return [.lightning]
-            case .bolt12:  return [.reusableFixed, .reusableAny]
+            case .bolt12:  return [.reusableAny]
             case .onchain: return [.onchain]
             }
         }

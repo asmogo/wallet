@@ -18,7 +18,6 @@ struct LightningAddressSettingsSection: View {
                     .padding(.vertical, 14)
 
                 if npcService.isEnabled && npcService.isInitialized {
-                    CanvasDivider()
                     addressRow
                 }
             }
@@ -32,7 +31,6 @@ struct LightningAddressSettingsSection: View {
                         .padding(.vertical, 14)
 
                     if !walletManager.mints.isEmpty {
-                        CanvasDivider()
                         receivingMintRow
                     }
                 }
@@ -88,8 +86,7 @@ struct LightningAddressSettingsSection: View {
             }
         } else if let error = npcService.errorMessage {
             SettingsSectionFooter {
-                Text(error)
-                    .foregroundStyle(.red)
+                InlineNotice(message: error, severity: .error, showsIcon: false)
             }
         } else if !npcService.isInitialized {
             SettingsSectionFooter {

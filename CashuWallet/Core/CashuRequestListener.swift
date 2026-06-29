@@ -128,10 +128,14 @@ final class CashuRequestListener: ObservableObject {
             return .transientFailure
         }
         do {
-            let amount = try await walletManager.receiveCashuRequestPayment(
-                tokenString: tokenString,
-                requestId: requestId
-            )
+            // A gift wrap can arrive exactly as the app backgrounds; hold a background-task
+            // assertion so this SQLite-writing redeem finishes before suspension.
+            let amount = try await withBackgroundWriteAssertion("cashu-request-claim") {
+                try await walletManager.receiveCashuRequestPayment(
+                    tokenString: tokenString,
+                    requestId: requestId
+                )
+            }
             AppLogger.wallet.notice("CashuRequestListener: claimed \(amount) sat for request \(requestId ?? "—", privacy: .public)")
             return .claimed
         } catch {

@@ -52,9 +52,7 @@ struct MintsListView: View {
 
                 if let error = errorMessage {
                     Section {
-                        Label(error, systemImage: "exclamationmark.triangle")
-                            .foregroundStyle(.red)
-                            .font(.subheadline)
+                        InlineNotice(message: error, severity: .error)
                     }
                 }
 
@@ -80,6 +78,7 @@ struct MintsListView: View {
             .sheet(isPresented: $showDiscoverySheet) {
                 MintDiscoverySheet { url in addMint(url: url) }
                     .environmentObject(walletManager)
+                    .canvasSheetBackground()
             }
             .task {
                 await walletManager.refreshMintInfo()

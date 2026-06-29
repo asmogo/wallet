@@ -6,17 +6,25 @@ struct ContentView: View {
     @EnvironmentObject var navigationManager: NavigationManager
     
     var body: some View {
-        Group {
+        // ZStack (not Group) so the outgoing and incoming roots overlap and truly
+        // cross-dissolve. The animation is value-scoped to `needsOnboarding` only,
+        // so finishing onboarding/restore fades into the wallet, while the
+        // cold-launch LoadingView → root swap stays instant for returning users.
+        ZStack {
             if walletManager.isInitialized {
                 if walletManager.needsOnboarding {
                     OnboardingView()
+                        .transition(.opacity)
                 } else {
                     MainTabView()
+                        .transition(.opacity)
                 }
             } else {
                 LoadingView()
+                    .transition(.opacity)
             }
         }
+        .animation(.easeInOut(duration: 0.35), value: walletManager.needsOnboarding)
         .fullScreenCover(isPresented: $navigationManager.showReceiveTokenSheet) {
             if let token = navigationManager.pendingDeepLinkToken {
                 ReceiveTokenDetailView(

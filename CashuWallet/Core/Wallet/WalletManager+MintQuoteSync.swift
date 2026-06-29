@@ -62,7 +62,26 @@ extension WalletManager {
 
     func loadTransactions(includeRemoteObservations: Bool = true) async {
         await transactionService.loadTransactions(includeRemoteObservations: includeRemoteObservations)
+        reconcileQuoteIntents()
         objectWillChange.send()
+    }
+
+    /// Attach freshly-loaded incoming Lightning / on-chain transactions to the
+    /// receive-intent backing their mint quote, so a reusable BOLT12 offer (or a
+    /// BOLT11 invoice / on-chain address) aggregates its payments into one row
+    /// and the duplicate per-payment row is suppressed via the intent's
+    /// `receivedPayments` (the same mechanic Cashu Requests already use).
+    /// Idempotent: `attachPayment(quoteId:)` skips ids already recorded, so a
+    /// steady-state reload does nothing and never re-persists.
+    private func reconcileQuoteIntents() {
+        let store = CashuRequestStore.shared
+        let ownedQuoteIds = Set(store.requests.compactMap(\.quoteId))
+        guard !ownedQuoteIds.isEmpty else { return }
+
+        for tx in transactionService.transactions where tx.type == .incoming {
+            guard let quoteId = tx.quoteId, ownedQuoteIds.contains(quoteId) else { continue }
+            store.attachPayment(quoteId: quoteId, transactionId: tx.id, amount: tx.amount)
+        }
     }
 
     @discardableResult

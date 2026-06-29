@@ -227,7 +227,8 @@ class SettingsManager: ObservableObject {
                 publicKey: key.publicKey,
                 privateKey: privateKey,
                 used: key.used,
-                usedCount: key.usedCount
+                usedCount: key.usedCount,
+                nickname: key.nickname
             )
         }
     }
@@ -316,7 +317,15 @@ class SettingsManager: ObservableObject {
     func formatAmountBalance(_ sats: UInt64) -> String {
         AmountFormatter.sats(sats, useBitcoinSymbol: false, includeUnit: false)
     }
-    
+
+    /// Grouped balance plus the active unit (₿ prefix or " sat" suffix). The
+    /// canonical hero-balance string, shared by the wallet hero and the restore
+    /// success screen so both render identically including the unit toggle.
+    func formatBalanceWithUnit(_ sats: UInt64) -> String {
+        let formatted = formatAmountBalance(sats)
+        return useBitcoinSymbol ? "₿\(formatted)" : "\(formatted) sat"
+    }
+
     var unitSuffix: String {
         useBitcoinSymbol ? "" : " sat"
     }
@@ -332,19 +341,23 @@ struct P2PKKey: Identifiable, Codable, Hashable {
     let privateKey: String
     var used: Bool
     var usedCount: Int
+    /// Optional human label the user gives a key so it's recognizable in the list.
+    var nickname: String?
 
     init(
         id: UUID = UUID(),
         publicKey: String,
         privateKey: String,
         used: Bool,
-        usedCount: Int
+        usedCount: Int,
+        nickname: String? = nil
     ) {
         self.id = id
         self.publicKey = publicKey
         self.privateKey = privateKey
         self.used = used
         self.usedCount = usedCount
+        self.nickname = nickname
     }
 
     private enum CodingKeys: String, CodingKey {
@@ -353,6 +366,7 @@ struct P2PKKey: Identifiable, Codable, Hashable {
         case privateKey
         case used
         case usedCount
+        case nickname
     }
 
     init(from decoder: Decoder) throws {
@@ -362,6 +376,7 @@ struct P2PKKey: Identifiable, Codable, Hashable {
         self.privateKey = try container.decodeIfPresent(String.self, forKey: .privateKey) ?? ""
         self.used = try container.decode(Bool.self, forKey: .used)
         self.usedCount = try container.decode(Int.self, forKey: .usedCount)
+        self.nickname = try container.decodeIfPresent(String.self, forKey: .nickname)
     }
 
     func encode(to encoder: Encoder) throws {
@@ -370,6 +385,68 @@ struct P2PKKey: Identifiable, Codable, Hashable {
         try container.encode(publicKey, forKey: .publicKey)
         try container.encode(used, forKey: .used)
         try container.encode(usedCount, forKey: .usedCount)
+        try container.encodeIfPresent(nickname, forKey: .nickname)
+    }
+}
+
+// MARK: - Primary (seed-derived) P2PK key & signing helpers
+
+extension SettingsManager {
+    /// The wallet's primary P2PK key — the seed-derived Nostr identity. Unlike the
+    /// random/imported keys in `p2pkKeys` (which live only in the Keychain), this
+    /// key is recoverable from the seed phrase, so ecash locked to it survives a
+    /// lost device. Returned as a 33-byte compressed pubkey ("02" + x-only hex),
+    /// the same form NPubCash locked receives already use.
+    var primaryP2PKPublicKey: String? {
+        let nostr = NostrService.shared
+        guard nostr.isInitialized, nostr.publicKeyHex.count == 64 else { return nil }
+        return "02\(nostr.publicKeyHex)"
+    }
+
+    /// Private-key hex for the primary key, used to sign when spending or receiving
+    /// ecash locked to it. Nil until the Nostr identity is initialized.
+    var primaryP2PKPrivateKeyHex: String? {
+        let nostr = NostrService.shared
+        guard nostr.isInitialized else { return nil }
+        return nostr.getPrivateKeyHex()
+    }
+
+    /// Whether the primary key is derived from — and therefore restorable with —
+    /// the seed phrase. False when a custom Nostr key has been imported.
+    var primaryP2PKIsSeedBacked: Bool {
+        NostrService.shared.signerType == .seed
+    }
+
+    /// Every private-key hex available for P2PK signing: the seed-derived primary
+    /// key (when available) followed by each stored device/imported key, de-duped.
+    /// This is the single source of truth for the wallet's signing set, so tokens
+    /// locked to *any* of the user's keys — including the recoverable primary —
+    /// are always spendable and receivable.
+    func allP2PKSigningKeyHexes() -> [String] {
+        var seen = Set<String>()
+        var result: [String] = []
+        for hex in [primaryP2PKPrivateKeyHex].compactMap({ $0 }) + p2pkKeys.map({ $0.privateKey }) {
+            guard !hex.isEmpty, seen.insert(hex.lowercased()).inserted else { continue }
+            result.append(hex)
+        }
+        return result
+    }
+
+    /// True when `pubkey` matches the primary key or any stored key (prefix-agnostic).
+    func isKnownP2PKPublicKey(_ pubkey: String) -> Bool {
+        let target = normalizeP2PKPublicKeyForComparison(pubkey)
+        if let primary = primaryP2PKPublicKey,
+           normalizeP2PKPublicKeyForComparison(primary) == target {
+            return true
+        }
+        return p2pkKeys.contains { normalizeP2PKPublicKeyForComparison($0.publicKey) == target }
+    }
+
+    /// Assign or clear a human label for a stored key.
+    func setP2PKKeyNickname(_ nickname: String?, for id: UUID) {
+        guard let index = p2pkKeys.firstIndex(where: { $0.id == id }) else { return }
+        let trimmed = nickname?.trimmingCharacters(in: .whitespacesAndNewlines)
+        p2pkKeys[index].nickname = (trimmed?.isEmpty == false) ? trimmed : nil
     }
 }
 

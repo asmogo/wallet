@@ -69,13 +69,7 @@ class LightningService: ObservableObject {
         }
 
         if method == .onchain {
-            guard let amount else {
-                throw WalletError.notInitialized
-            }
-            return try await createOnchainMintQuote(
-                amount: amount,
-                activeMint: activeMint
-            )
+            return try await createOnchainMintQuote(activeMint: activeMint)
         }
 
         guard let repo = walletRepository() else {
@@ -95,6 +89,32 @@ class LightningService: ObservableObject {
         await persistMintQuote(quote, paymentMethod: method)
 
         return mintQuoteInfo(from: quote, fallbackAmount: amount, paymentMethod: method)
+    }
+
+    /// Returns the first pending amountless BOLT12 offer stored in the DB, or nil if none exists.
+    /// Used to avoid creating a new offer on every visit to the Reusable Invoice screen.
+    func existingAmountlessOffer() async throws -> MintQuoteInfo? {
+        guard let db = walletDatabase() else { return nil }
+        let pendingQuotes = try await db.getUnissuedMintQuotes()
+        guard let match = pendingQuotes.first(where: {
+            PaymentMethodKind.from($0.paymentMethod) == .bolt12 && $0.amount == nil
+        }) else { return nil }
+        return mintQuoteInfo(from: match, fallbackAmount: nil, paymentMethod: .bolt12)
+    }
+
+    /// Returns an existing unpaid onchain quote at the active mint, or nil if none exists.
+    /// Used to avoid generating a fresh deposit address on every visit to the onchain receive screen.
+    func existingOnchainMintQuote() async throws -> MintQuoteInfo? {
+        guard let db = walletDatabase(),
+              let activeMint = getActiveMint() else { return nil }
+        let pendingQuotes = try await db.getUnissuedMintQuotes()
+        guard let match = pendingQuotes.first(where: {
+            PaymentMethodKind.from($0.paymentMethod) == .onchain
+            && $0.mintUrl.url == activeMint.url
+            && $0.amountPaid.value == 0
+        }) else { return nil }
+        let info = mintQuoteInfo(from: match, fallbackAmount: nil, paymentMethod: .onchain)
+        return info.isExpired ? nil : info
     }
 
     func checkMintQuote(quoteId: String) async throws -> MintQuoteInfo {
@@ -583,13 +603,23 @@ class LightningService: ObservableObject {
             ?? (quote.amountPaid.value > 0 ? quote.amountPaid.value : nil)
             ?? fallbackAmount
 
+        // Reusable BOLT12 offers (amountless or fixed) have no CDK creation field;
+        // the amountless one is also reused across opens. Stamp the first time we
+        // materialize each offer, then read it back so the "Created" row stays put.
+        // Keyed by quote id, so a fixed offer minted from the Amount pencil gets
+        // its own stable date.
+        let createdAt: Date? = paymentMethod == .bolt12
+            ? MintQuoteCreatedAtStore.recordIfAbsent(quoteId: quote.id, date: Date())
+            : nil
+
         return MintQuoteInfo(
             id: quote.id,
             request: quote.request,
             amount: resolvedAmount,
             paymentMethod: paymentMethod,
             state: mintQuoteState(from: quote, paymentMethod: paymentMethod),
-            expiry: displayExpiry(quote.expiry)
+            expiry: displayExpiry(quote.expiry),
+            createdAt: createdAt
         )
     }
 
@@ -849,10 +879,7 @@ class LightningService: ObservableObject {
         return quoteToPersist
     }
 
-    private func createOnchainMintQuote(
-        amount: UInt64,
-        activeMint: MintInfo
-    ) async throws -> MintQuoteInfo {
+    private func createOnchainMintQuote(activeMint: MintInfo) async throws -> MintQuoteInfo {
         guard let repo = walletRepository() else {
             throw WalletError.notInitialized
         }
@@ -862,14 +889,14 @@ class LightningService: ObservableObject {
 
         let quote = try await wallet.mintQuote(
             paymentMethod: PaymentMethodKind.onchain.cdkMethod,
-            amount: Amount(value: amount),
+            amount: nil,
             description: nil,
             extra: "{}"
         )
 
-        await persistMintQuote(quote, paymentMethod: .onchain, fallbackAmount: amount)
+        await persistMintQuote(quote, paymentMethod: .onchain)
 
-        return mintQuoteInfo(from: quote, fallbackAmount: amount, paymentMethod: .onchain)
+        return mintQuoteInfo(from: quote, fallbackAmount: nil, paymentMethod: .onchain)
     }
 
     private func bitcoinNetwork(for mintURLString: String) -> BitcoinNetwork {

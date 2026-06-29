@@ -44,7 +44,7 @@ struct CashuRequestDetailView: View {
         .toolbarBackground(.hidden, for: .navigationBar)
         .toolbar {
             ToolbarItem(placement: .principal) {
-                Text("Cashu Request")
+                Text(request?.displayTitle ?? "Cashu Request")
                     .font(.headline)
             }
             ToolbarItem(placement: .cancellationAction) {
@@ -159,19 +159,37 @@ struct CashuRequestDetailView: View {
                     statusBadge
 
                     VStack(spacing: 0) {
-                        editableRow(
-                            icon: "bitcoinsign.bank.building",
-                            label: "Mint",
-                            value: mintDisplayValue(for: request),
-                            action: { showMintPicker = true }
-                        )
-                        canvasDivider
-                        editableRow(
-                            icon: "bitcoinsign",
-                            label: "Amount",
-                            value: amountDisplayValue(for: request),
-                            action: { showAmountPicker = true }
-                        )
+                        // Only the ecash NUT-18 request can re-mint its Mint /
+                        // Amount in place (that's what `regenerate` rebuilds).
+                        // Quote-backed rails (BOLT12 offer, etc.) are read-only
+                        // here until the unified editable detail lands.
+                        if request.rail == .ecash {
+                            editableRow(
+                                icon: "bitcoinsign.bank.building",
+                                label: "Mint",
+                                value: mintDisplayValue(for: request),
+                                action: { showMintPicker = true }
+                            )
+                            canvasDivider
+                            editableRow(
+                                icon: "bitcoinsign",
+                                label: "Amount",
+                                value: amountDisplayValue(for: request),
+                                action: { showAmountPicker = true }
+                            )
+                        } else {
+                            detailRow(
+                                icon: "bitcoinsign.bank.building",
+                                label: "Mint",
+                                value: mintDisplayValue(for: request)
+                            )
+                            canvasDivider
+                            detailRow(
+                                icon: "bitcoinsign",
+                                label: "Amount",
+                                value: amountDisplayValue(for: request)
+                            )
+                        }
                         canvasDivider
                         detailRow(icon: "creditcard", label: "Unit", value: request.unit.uppercased())
                         canvasDivider
@@ -193,11 +211,15 @@ struct CashuRequestDetailView: View {
                 }
                 .glassButton()
 
-                Button(action: { regenerate() }) {
-                    Text("New Request")
+                // "New Request" rotates a fresh NUT-18 request; it's meaningless
+                // for a quote-backed reusable offer (the offer is the artifact).
+                if request.rail == .ecash {
+                    Button(action: { regenerate() }) {
+                        Text("New Request")
+                    }
+                    .glassButton()
+                    .accessibilityHint("Generates a fresh Cashu Request and rotates the QR")
                 }
-                .glassButton()
-                .accessibilityHint("Generates a fresh Cashu Request and rotates the QR")
             }
             .padding(.horizontal)
             .padding(.bottom, 16)

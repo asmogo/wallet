@@ -289,6 +289,15 @@ status badge (`TransactionDetailView`) and the "Waiting for payment…" status
 clock inside `CashuRequestDetailView`. Never a full-saturation pill, never a
 loud "PENDING" wordmark.
 
+*Amended 2026-06-27: the leading `+`/`−` sign is itself a settled-ledger
+signal. A pending row — either direction — renders a **bare, unsigned** amount;
+the sign appears only on settlement, together with the `.primary` colour. This
+unifies the transaction column (`TransactionAmountColumn`, used by BOLT11 /
+Lightning / ecash) with the waiting Cashu Request / Reusable Invoice
+(`CashuRequestAmountColumn`), which already showed a bare amount until paid — so
+a pending incoming BOLT11 invoice no longer shows `+21` while a waiting BOLT12
+offer shows `21`.*
+
 **The Fiat Sub-Amount Rule.** When
 `settings.showFiatBalance && priceService.btcPriceUSD > 0`, any row that
 renders a sats amount also renders the fiat equivalent directly below it in
@@ -576,6 +585,12 @@ camera scanner only.
   attribute is small, the edit is one tap, the surrounding context never leaves.
 - **Confirmation dialogs**: `.confirmationDialog(...)` for destructive
   actions (remove mint, sign out). Never a custom alert sheet.
+- **Sheet background (carve-out, 2026-06-29)**: full-screen `.large` flows and
+  `.fullScreenCover`s pin to the flat canvas via `canvasSheetBackground()` so they
+  read seamless with home. Bottom-sheet pickers, choosers, and inspectors
+  (`.medium` / `.height(...)` detents) instead keep SwiftUI's **default**
+  translucent sheet background — they should read as floating layers, not as the
+  home canvas.
 
 ### Cashu Request Inspector
 
@@ -657,10 +672,24 @@ moment — and it is still a system glyph at a system color.
 
 ### Named Rules
 
-**The CanvasDivider Rule.** Single-canvas screens (History, Settings,
-Lightning Invoice detail) use `CanvasDivider` between rows. Raw `Divider()` is
-legacy. There are no card stacks; rows sit directly on the canvas, separated
-only by the hairline.
+**The CanvasDivider Rule.** Single-canvas screens (History, Lightning Invoice
+detail) use `CanvasDivider` between rows. Raw `Divider()` is legacy. There are
+no card stacks; rows sit directly on the canvas, separated only by the hairline.
+
+*Carve-out (Settings, 2026-06-28):* the Settings screen and its detail
+subscreens drop hairlines entirely — rows flow on the bare canvas, separated by
+section-group spacing alone, each with a plain leading SF Symbol
+(`SettingsRowIcon`). A "Family wallet" treatment requested by the user. Settings
+is no longer governed by this rule; History and the Lightning Invoice detail
+still are. Icons stay plain and monochrome — no tile, no box, no color (the
+Semantic-Only Rule holds).
+
+**The Monochrome-Glyph Rule.** Iconography is monochrome SF Symbols at system
+colors — never emoji, never `PaymentMethodKind.symbol` glyphs. *Carve-out
+(currency picker, 2026-06-28):* a flag **emoji** is permitted as the leading
+avatar in `CurrencyPickerSheet`, and only there — clipped inside the circular
+`CurrencyAvatar` so it reads as a contained flag chip (the Family idiom), not
+loose inline emoji. Everywhere else the no-emoji rule stands.
 
 **The Plain-Button Rule.** Utility actions (close `xmark`, copy, refresh,
 chevron disclosure) use `.buttonStyle(.plain)` with an SF Symbol. They do not

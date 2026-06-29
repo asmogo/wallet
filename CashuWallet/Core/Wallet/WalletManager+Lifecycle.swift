@@ -31,8 +31,9 @@ extension WalletManager {
 
     private func loadWalletState() async {
         do {
+            NSUbiquitousKeyValueStore.default.synchronize()
             Cdk.initLogging(level: "info")
-            
+
             if let storedMnemonic = try keychainService.loadMnemonic() {
                 mnemonic = storedMnemonic
                 try await initializeWalletForLaunch(mnemonic: storedMnemonic)
@@ -110,6 +111,7 @@ extension WalletManager {
         return RestoreMintResult(
             mintUrl: normalizedUrl,
             mintName: mintName,
+            iconUrl: info?.iconUrl,
             spent: restored.spent.value,
             unspent: restored.unspent.value,
             pending: restored.pending.value
@@ -144,6 +146,8 @@ extension WalletManager {
         SettingsManager.shared.resetWalletScopedData()
         MintLogoCache.shared.clear()
         processedQuotes.removeAll()
+        // iCloud backup survives a local deletion — the user can restore it from
+        // Restore Wallet → Restore from iCloud.
         needsOnboarding = true
         isInitialized = true
     }
@@ -177,6 +181,7 @@ extension WalletManager {
             mnemonic = newMnemonic
             SettingsManager.shared.resetWalletScopedData(resetRuntimeServices: false)
             try removeWalletFileBackups(fileBackups)
+            performICloudBackup()
         } catch {
             resetRuntimeState()
             restoreWalletBoundaryDefaults(defaultsSnapshot)

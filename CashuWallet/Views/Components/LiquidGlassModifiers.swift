@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 // MARK: - Liquid Glass Adaptive Modifiers
 // iOS 26+ Liquid Glass with graceful fallbacks for earlier versions.
@@ -38,6 +39,35 @@ extension View {
         self.buttonStyle(TextLinkButtonStyle())
     }
 
+    /// Make a presented sheet/cover read as the same flat canvas as the home
+    /// screen — base `systemBackground` (pure black in dark, white in light) —
+    /// instead of iOS's default elevated-gray modal background. Apply to the
+    /// content of every `.sheet`/`.fullScreenCover` (frosted HUDs excluded).
+    func canvasSheetBackground() -> some View {
+        modifier(CanvasSheetBackground())
+    }
+
+}
+
+// MARK: - Canvas Sheet Background
+
+/// Pins a modal's presentation background to the *base*-elevation `systemBackground`.
+/// Inside a sheet the plain semantic resolves to the elevated gray, so we resolve it
+/// at base level (for the current color scheme) to match the home canvas exactly.
+private struct CanvasSheetBackground: ViewModifier {
+    @Environment(\.colorScheme) private var colorScheme
+
+    func body(content: Content) -> some View {
+        content.presentationBackground {
+            Color(uiColor: UIColor.systemBackground.resolvedColor(
+                with: UITraitCollection(traitsFrom: [
+                    UITraitCollection(userInterfaceStyle: colorScheme == .dark ? .dark : .light),
+                    UITraitCollection(userInterfaceLevel: .base),
+                ])
+            ))
+            .ignoresSafeArea()
+        }
+    }
 }
 
 // MARK: - Canvas Divider
@@ -53,6 +83,24 @@ struct CanvasDivider: View {
             .fill(Color(.separator))
             .frame(height: 0.5)
             .padding(.leading, inset)
+    }
+}
+
+// MARK: - Settings Row Icon
+
+/// Leading glyph for settings rows: a plain monochrome SF Symbol (no tile or
+/// box), fixed-width so row titles align down a common column. Monochrome
+/// (`.secondary` by default, `.red` for the lone destructive row).
+struct SettingsRowIcon: View {
+    let systemName: String
+    var tint: Color = .secondary
+
+    var body: some View {
+        Image(systemName: systemName)
+            .font(.body.weight(.semibold))
+            .foregroundStyle(tint)
+            .frame(width: 28)
+            .accessibilityHidden(true)
     }
 }
 
@@ -138,7 +186,11 @@ struct FullWidthCapsuleButtonStyle: ButtonStyle {
                     in: Capsule()
                 )
             } else {
+                // iOS 26's `.interactive()` glass supplies its own press squish;
+                // the fallback surface gets a scale-on-press so the tactile
+                // feedback is at parity below iOS 26.
                 label.background(.quaternary, in: Capsule())
+                    .scaleEffect(isEnabled && configuration.isPressed ? 0.97 : 1)
             }
         }
         .opacity(isEnabled ? (configuration.isPressed ? 0.85 : 1) : 0.4)

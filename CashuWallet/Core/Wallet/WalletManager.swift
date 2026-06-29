@@ -34,6 +34,11 @@ class WalletManager: ObservableObject {
     /// Active unit (sat, usd, etc.)
     @Published var activeUnit: String = "sat"
 
+    /// Outcome of the most recent `performICloudBackup()`. Lets the enable path
+    /// (which runs the backup via the `iCloudBackupEnabled` setter) read the real
+    /// result without triggering a second write.
+    var lastICloudBackupOutcome: ICloudBackupOutcome? = nil
+
     var mintQuoteSyncsInFlight: Set<String> = []
 
     /// Throttle state for passive mint-quote syncs (opening History, app

@@ -33,6 +33,11 @@ struct WalletTransaction: Identifiable {
     /// row in favor of the request row.
     var cashuRequestId: String? = nil
 
+    /// Mint-quote id for Lightning / on-chain mints and melts. The join key
+    /// used to attach this transaction to the receive-intent backing its quote
+    /// (a reusable BOLT12 offer, a BOLT11 invoice, an on-chain address).
+    var quoteId: String? = nil
+
     var displayStatusText: String {
         if status == .pending {
             return statusNote ?? status.displayText

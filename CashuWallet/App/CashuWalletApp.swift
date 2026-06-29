@@ -1,4 +1,31 @@
 import SwiftUI
+import UIKit
+
+/// Holds a UIKit background-task assertion across an async wallet-DB write so iOS grants a
+/// short grace window to finish instead of suspending the app mid-write. A SQLite lock held
+/// across suspension is the classic trigger for a `0xdead10cc` termination (which testers
+/// experience as a crash). The assertion is always ended via `defer`, including on throw.
+@MainActor
+func withBackgroundWriteAssertion<T>(
+    _ name: String,
+    _ work: () async throws -> T
+) async rethrows -> T {
+    let app = UIApplication.shared
+    var taskId: UIBackgroundTaskIdentifier = .invalid
+    taskId = app.beginBackgroundTask(withName: name) {
+        if taskId != .invalid {
+            app.endBackgroundTask(taskId)
+            taskId = .invalid
+        }
+    }
+    defer {
+        if taskId != .invalid {
+            app.endBackgroundTask(taskId)
+            taskId = .invalid
+        }
+    }
+    return try await work()
+}
 
 @main
 struct CashuWalletApp: App {
@@ -45,12 +72,22 @@ struct CashuWalletApp: App {
                     Task { await CashuRequestListener.shared.start() }
                     Task { await walletManager.checkAllPendingTokens() }
                     Task { await walletManager.syncPendingMintQuotesIfStale() }
+                    // Re-arm the pollers stopped on `.background` (both are idempotent
+                    // and self-gate on their enabled/connected state).
+                    NPCService.shared.applyPollingPreferences()
+                    if PriceService.shared.isEnabled {
+                        PriceService.shared.startAutoRefresh()
+                    }
                 case .inactive:
                     // The app-switcher snapshot is taken here, before `.background`.
                     appLockManager.appResignedActive()
                 case .background:
                     appLockManager.appResignedActive()
                     Task { await CashuRequestListener.shared.stop() }
+                    // Quiesce the timers so no fresh mint network + wallet-DB write kicks
+                    // off during the brief background-transition window before suspension.
+                    NPCService.shared.stopBackgroundRefresh()
+                    PriceService.shared.stopAutoRefresh()
                 @unknown default:
                     break
                 }

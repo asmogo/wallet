@@ -75,12 +75,14 @@ struct MainWalletView: View {
             .sheet(item: $selectedTransaction) { transaction in
                 TransactionDetailView(transaction: transaction)
                     .environmentObject(walletManager)
+                    .canvasSheetBackground()
             }
             .sheet(item: $selectedRequest) { request in
                 NavigationStack {
                     CashuRequestDetailView(request: request)
                         .environmentObject(walletManager)
                 }
+                .canvasSheetBackground()
             }
             .task { await walletManager.loadTransactions() }
         }
@@ -323,7 +325,7 @@ struct MainWalletView: View {
                         "Send",
                         identifier: "wallet-action-send",
                         hint: "Opens options to send ecash or pay lightning invoices"
-                    ) { activeSheet = .chooser(.send) }
+                    ) { activeSheet = .send }
                 }
             }
         } else {
@@ -335,7 +337,7 @@ struct MainWalletView: View {
                 .accessibilityIdentifier("wallet-action-receive")
                 .accessibilityHint("Opens options to receive ecash or lightning payments")
 
-                Button { activeSheet = .chooser(.send) } label: {
+                Button { activeSheet = .send } label: {
                     Text("Send")
                 }
                 .glassButton()
@@ -530,7 +532,7 @@ struct MainWalletView: View {
                 TransactionIcon(direction: .incoming)
 
                 VStack(alignment: .leading, spacing: 4) {
-                    Text("Cashu Request")
+                    Text(request.displayTitle)
                         .font(.body.weight(.medium))
                         .lineLimit(1)
 
@@ -553,7 +555,7 @@ struct MainWalletView: View {
         }
         .buttonStyle(.plain)
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("Cashu Request, \(isReceived ? "received" : "waiting for payment"), \(formatRelativeDate(request.createdAt))")
+        .accessibilityLabel("\(request.displayTitle), \(isReceived ? "received" : "waiting for payment"), \(formatRelativeDate(request.createdAt))")
         .accessibilityHint("Opens request details")
     }
 
@@ -609,8 +611,7 @@ struct MainWalletView: View {
     // MARK: - Helpers
 
     private func formatBalanceWithUnit(_ sats: UInt64) -> String {
-        let formatted = settings.formatAmountBalance(sats)
-        return settings.useBitcoinSymbol ? "₿\(formatted)" : "\(formatted) sat"
+        settings.formatBalanceWithUnit(sats)
     }
 
     /// Detent for the action chooser. The Send chooser grows into a taller
@@ -648,10 +649,27 @@ struct MainWalletView: View {
             .environmentObject(walletManager)
             .presentationDragIndicator(.visible)
             .modifier(ChooserSheetPresentation(height: chooserHeight(for: action)))
+        case .send:
+            UnifiedSendView(
+                onClose: { activeSheet = nil },
+                onReceive: { activeSheet = .chooser(.receive) },
+                onAddCustomMint: { activeSheet = .discoverMints },
+                onContactless: {
+                    activeSheet = nil
+                    contactlessCoordinator.start(
+                        walletManager: walletManager,
+                        navigationManager: navigationManager
+                    )
+                }
+            )
+            .environmentObject(walletManager)
+            .presentationDetents([.large])
+            .canvasSheetBackground()
         case .scanner:
             ScannerWrapperView()
                 .environmentObject(walletManager)
                 .presentationDetents([.large])
+                .canvasSheetBackground()
         case .flow(let flow):
             flowView(for: flow)
         case .discoverMints:
@@ -659,6 +677,7 @@ struct MainWalletView: View {
                 Task { try? await walletManager.addMint(url: url) }
             }
             .environmentObject(walletManager)
+            .canvasSheetBackground()
         }
     }
 
@@ -674,18 +693,22 @@ struct MainWalletView: View {
             ReceiveLightningView()
                 .environmentObject(walletManager)
                 .presentationDetents([.large])
+                .canvasSheetBackground()
         case .sendEcash:
             SendView()
                 .environmentObject(walletManager)
                 .presentationDetents([.large])
+                .canvasSheetBackground()
         case .sendLightning:
             MeltView()
                 .environmentObject(walletManager)
                 .presentationDetents([.large])
+                .canvasSheetBackground()
         case .sendLightningWithInvoice(let invoice):
             MeltViewWithInvoice(invoice: invoice)
                 .environmentObject(walletManager)
                 .presentationDetents([.large])
+                .canvasSheetBackground()
         case .contactlessPay:
             EmptyView()
         }
@@ -755,6 +778,7 @@ private enum WalletFlow: Identifiable {
 
 private enum WalletSheet: Identifiable {
     case chooser(WalletActionSheet)
+    case send
     case scanner
     case flow(WalletFlow)
     case discoverMints
@@ -763,6 +787,8 @@ private enum WalletSheet: Identifiable {
         switch self {
         case .chooser(let action):
             return "chooser-\(action.id)"
+        case .send:
+            return "send"
         case .scanner:
             return "scanner"
         case .flow(let flow):
@@ -915,9 +941,7 @@ private struct WalletActionSheetView: View {
                 )
 
                 if let addMintError {
-                    Text(addMintError)
-                        .font(.caption)
-                        .foregroundStyle(.red)
+                    InlineNotice(message: addMintError, severity: .error)
                         .padding(.horizontal, 20)
                         .padding(.top, 8)
                 }

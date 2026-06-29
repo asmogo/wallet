@@ -3,11 +3,13 @@ import SwiftUI
 struct ReceiveView: View {
     @Environment(\.dismiss) private var dismiss
     @EnvironmentObject var walletManager: WalletManager
+    @ObservedObject private var settings = SettingsManager.shared
 
     @State private var selectedOption: ReceiveOption?
+    @State private var lockedReceiveEncoded: String?
 
     enum ReceiveOption: String, Identifiable {
-        case paste, scan, lightning
+        case paste, scan, lightning, lockedKey
         var id: String { rawValue }
     }
 
@@ -65,6 +67,23 @@ struct ReceiveView: View {
                     .accessibilityLabel("Payment Request")
                     .accessibilityHint("Creates a lightning invoice, BOLT12 offer, or bitcoin address to receive sats")
                     .accessibilityAddTraits(.isButton)
+
+                    Button(action: { presentReceiveLockedKey() }) {
+                        Label {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("Receive Locked Ecash")
+                                Text("Receive ecash only you can claim")
+                                    .font(.subheadline)
+                                    .foregroundStyle(.secondary)
+                            }
+                        } icon: {
+                            Image(systemName: "lock")
+                                .foregroundStyle(Color.accentColor)
+                        }
+                    }
+                    .accessibilityLabel("Receive Locked Ecash")
+                    .accessibilityHint("Shows a request so someone can send ecash only you can claim")
+                    .accessibilityAddTraits(.isButton)
                 }
             }
             .listStyle(.plain)
@@ -78,17 +97,29 @@ struct ReceiveView: View {
                 }
             }
             .sheet(item: $selectedOption) { option in
-                switch option {
-                case .paste:
-                    ReceiveEcashView()
-                        .environmentObject(walletManager)
-                case .scan:
-                    ScannerWrapperView()
-                        .environmentObject(walletManager)
-                case .lightning:
-                    ReceiveLightningView()
-                        .environmentObject(walletManager)
+                Group {
+                    switch option {
+                    case .paste:
+                        ReceiveEcashView()
+                            .environmentObject(walletManager)
+                    case .scan:
+                        ScannerWrapperView()
+                            .environmentObject(walletManager)
+                    case .lightning:
+                        ReceiveLightningView()
+                            .environmentObject(walletManager)
+                    case .lockedKey:
+                        Group {
+                            if let encoded = lockedReceiveEncoded {
+                                QRCodeDetailSheet(title: "Receive Locked Ecash", content: encoded)
+                            } else {
+                                lockedKeyUnavailable
+                            }
+                        }
+                        .presentationDetents([.medium, .large])
+                    }
                 }
+                .canvasSheetBackground()
             }
         }
     }
@@ -105,6 +136,30 @@ struct ReceiveView: View {
             }
         }
     }
+
+    /// Builds a NUT-18 Cashu payment request locked to the wallet's primary
+    /// (seed-derived) key, so anyone who pays it sends ecash only this wallet can
+    /// claim. Routes the proofs back over Nostr.
+    private func presentReceiveLockedKey() {
+        HapticFeedback.selection()
+        lockedReceiveEncoded = LockedReceiveRequest.build()
+        selectedOption = .lockedKey
+    }
+
+    private var lockedKeyUnavailable: some View {
+        VStack(spacing: 12) {
+            Image(systemName: "key.slash")
+                .font(.largeTitle)
+                .foregroundStyle(.secondary)
+            Text("Couldn't create a request")
+                .font(.headline)
+            Text("This needs your wallet set up with a Nostr relay. Check Settings → Nostr, then try again.")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+        }
+        .padding()
+    }
 }
 
 struct ReceiveEcashView: View {
@@ -117,6 +172,7 @@ struct ReceiveEcashView: View {
     @State private var tokenInput = ""
     @State private var errorMessage: String?
     @State private var navigateToDetail = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var validatedToken: String?
     @State private var currentRequest: CashuRequest?
     @State private var showingScanner = false
@@ -192,12 +248,9 @@ struct ReceiveEcashView: View {
                 .padding(.top, 12)
 
                 if let error = errorMessage {
-                    Text(error)
-                        .foregroundStyle(.red)
-                        .font(.caption)
-                        .multilineTextAlignment(.center)
+                    InlineNotice(message: error, severity: .error)
                         .padding(.horizontal)
-                        .transition(.opacity.combined(with: .scale))
+                        .transition(reduceMotion ? .opacity : .opacity.combined(with: .scale))
                 }
 
                 VStack(spacing: 10) {
@@ -242,6 +295,7 @@ struct ReceiveEcashView: View {
             .sheet(isPresented: $showingScanner) {
                 ScannerWrapperView(onScanned: handleScannedToken)
                     .environmentObject(walletManager)
+                    .canvasSheetBackground()
             }
             .navigationDestination(isPresented: $navigateToDetail) {
                 if let token = validatedToken {

@@ -50,8 +50,7 @@ struct ReceiveTokenDetailView: View {
                             detailRow(icon: "bitcoinsign.bank.building", label: "Mint", value: shortMintUrl(mintUrl))
                             if !p2pkPubkeys.isEmpty {
                                 Divider().padding(.leading)
-                                detailRow(icon: "lock.fill", label: "P2PK",
-                                          value: tokenLockedToKnownKey ? "Your key" : "Unknown key")
+                                lockedToRow
                             }
                         }
                         .padding(.vertical, 4)
@@ -63,10 +62,7 @@ struct ReceiveTokenDetailView: View {
                         }
 
                         if let error = errorMessage {
-                            Text(error)
-                                .foregroundStyle(.red)
-                                .font(.caption)
-                                .multilineTextAlignment(.center)
+                            InlineNotice(message: error, severity: .error)
                                 .padding(.horizontal)
                         }
                     }
@@ -135,6 +131,34 @@ struct ReceiveTokenDetailView: View {
 
     // MARK: - Helpers
 
+    /// The "locked to" row: shows "Your key" when the wallet holds the matching
+    /// key, otherwise the npub the ecash is locked to plus a caution glyph.
+    private var lockedToRow: some View {
+        HStack {
+            Label("Locked to", systemImage: "lock.fill")
+                .foregroundStyle(.secondary)
+            Spacer()
+            HStack(spacing: 6) {
+                Text(lockedKeyLabel)
+                    .fontWeight(.medium)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                Image(systemName: tokenLockedToKnownKey ? "checkmark.seal.fill" : "exclamationmark.triangle.fill")
+                    .font(.caption)
+                    .foregroundStyle(tokenLockedToKnownKey ? Color.secondary : Color.orange)
+            }
+        }
+        .font(.subheadline)
+        .padding(.horizontal, 14)
+        .padding(.vertical, 12)
+    }
+
+    private var lockedKeyLabel: String {
+        if tokenLockedToKnownKey { return "Your key" }
+        if let first = p2pkPubkeys.first { return P2PKKeyDisplay.shortLabel(forPubkey: first) }
+        return "Unknown key"
+    }
+
     private func detailRow(icon: String, label: String, value: String) -> some View {
         HStack {
             Label(label, systemImage: icon)
@@ -170,11 +194,10 @@ struct ReceiveTokenDetailView: View {
 
             let tokenP2PKPubkeys = token.p2pkPubkeys()
             self.p2pkPubkeys = tokenP2PKPubkeys
-            let knownKeys = Set(settings.p2pkKeys.map { normalizeP2PKForComparison($0.publicKey) })
-            let hasMatch = tokenP2PKPubkeys.contains { knownKeys.contains(normalizeP2PKForComparison($0)) }
+            let hasMatch = tokenP2PKPubkeys.contains { settings.isKnownP2PKPublicKey($0) }
             self.tokenLockedToKnownKey = tokenP2PKPubkeys.isEmpty || hasMatch
             if !self.tokenLockedToKnownKey {
-                errorMessage = "This token is P2PK locked and requires a matching key from Settings > P2PK."
+                errorMessage = "This ecash is locked to a key you don't hold. Ask the sender to lock it to your key instead."
             }
 
             Task { await calculateFee() }
@@ -246,13 +269,5 @@ struct ReceiveTokenDetailView: View {
         } else {
             dismiss()
         }
-    }
-
-    private func normalizeP2PKForComparison(_ pubkey: String) -> String {
-        let normalized = pubkey.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        if normalized.count == 66, normalized.hasPrefix("02") || normalized.hasPrefix("03") {
-            return String(normalized.dropFirst(2))
-        }
-        return normalized
     }
 }

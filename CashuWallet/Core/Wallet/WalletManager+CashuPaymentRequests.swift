@@ -50,6 +50,53 @@ extension WalletManager {
         await loadTransactions()
     }
 
+    // MARK: - Fee estimation (for the pay-request screen)
+
+    /// The active keyset's input fee (parts per thousand proofs) for `mintURL`,
+    /// or nil if it can't be read. A value of 0 means the mint charges no swap
+    /// fee, so paying a request from it is always free regardless of amount —
+    /// the common case, which the UI can resolve without a `prepareSend`.
+    func mintInputFeePpk(mintURL: String) async -> UInt64? {
+        guard let walletRepository else { return nil }
+        do {
+            let wallet = try await walletRepository.getWallet(mintUrl: MintUrl(url: mintURL), unit: .sat)
+            let keysets = try await wallet.refreshKeysets()
+            let active = keysets.first(where: { $0.active }) ?? keysets.first
+            return active?.inputFeePpk
+        } catch {
+            return nil
+        }
+    }
+
+    /// Exact swap fee (sats) to pay `amountSats` from `mintURL`, or nil if it
+    /// can't be determined. Used only for the rare fee-charging mint, where the
+    /// fee depends on coin selection: we `prepareSend` to read the real fee and
+    /// immediately `cancel()` so no proofs stay reserved.
+    func estimateCashuPaymentFee(amountSats: UInt64, mintURL: String) async -> UInt64? {
+        guard let walletRepository, amountSats > 0 else { return nil }
+        do {
+            let wallet = try await walletRepository.getWallet(mintUrl: MintUrl(url: mintURL), unit: .sat)
+            let options = SendOptions(
+                memo: nil,
+                conditions: nil,
+                amountSplitTarget: SplitTarget.none,
+                sendKind: SendKind.onlineExact,
+                includeFee: false,
+                useP2bk: false,
+                maxProofs: nil,
+                metadata: [:],
+                p2pkSigningKeys: [],
+                p2pkLockedProofSendMode: .swap
+            )
+            let prepared = try await wallet.prepareSend(amount: Amount(value: amountSats), options: options)
+            let fee = prepared.fee().value
+            try? await prepared.cancel()
+            return fee
+        } catch {
+            return nil
+        }
+    }
+
     private func selectMint(
         forCashuPaymentRequest request: Cdk.PaymentRequest,
         amount: UInt64,

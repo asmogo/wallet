@@ -42,7 +42,7 @@ struct MintDetailView: View {
                     .padding(.bottom, 24)
 
                 if let errorMessage {
-                    ErrorBannerView(message: errorMessage, type: .error)
+                    ErrorBannerView(message: errorMessage, severity: .error)
                         .padding(.bottom, 12)
                 }
 

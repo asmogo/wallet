@@ -7,11 +7,13 @@ extension WalletManager {
     func addMint(url: String) async throws {
         try await mintService.addMint(url: url)
         await refreshBalance()
+        performICloudBackup()
     }
 
     func removeMint(at offsets: IndexSet) async {
         await mintService.removeMint(at: offsets)
         await refreshBalance()
+        performICloudBackup()
     }
 
     func setActiveMint(_ mint: MintInfo) async throws {
@@ -37,6 +39,28 @@ extension WalletManager {
         let mintUrlObj = MintUrl(url: mintUrl)
         let wallet = try await walletRepository.getWallet(mintUrl: mintUrlObj, unit: .sat)
         return try await wallet.fetchMintInfo()
+    }
+
+    /// Best-effort, side-effect-free preview of a mint's identity (name + icon),
+    /// fetched straight from its `/v1/info` endpoint. Unlike `fetchFullMintInfo`
+    /// this creates no CDK wallet and tracks nothing — it's safe to call the
+    /// moment a user stages a mint URL, before they commit to restoring. Returns
+    /// `nil` (and the caller falls back to a monogram) on any failure.
+    nonisolated func fetchMintPreviewInfo(url: String) async -> (name: String?, iconUrl: String?)? {
+        let trimmed = url.trimmingCharacters(in: .whitespacesAndNewlines)
+            .trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+        guard let infoURL = URL(string: "\(trimmed)/v1/info") else { return nil }
+
+        var request = URLRequest(url: infoURL)
+        request.timeoutInterval = 8
+
+        guard let (data, response) = try? await URLSession.shared.data(for: request),
+              let http = response as? HTTPURLResponse,
+              (200..<300).contains(http.statusCode),
+              let info = try? JSONDecoder().decode(MintPreviewInfo.self, from: data) else {
+            return nil
+        }
+        return (name: info.name, iconUrl: info.iconUrl)
     }
 
     // MARK: - Balance Operations
@@ -69,5 +93,17 @@ extension WalletManager {
         
         mintService.updateMintBalances(balancesByMintURL)
         balance = total
+    }
+}
+
+/// Minimal decode of a mint's `/v1/info` (NUT-06) — just the display identity
+/// used to preview a staged mint before it's restored.
+private struct MintPreviewInfo: Decodable {
+    let name: String?
+    let iconUrl: String?
+
+    enum CodingKeys: String, CodingKey {
+        case name
+        case iconUrl = "icon_url"
     }
 }

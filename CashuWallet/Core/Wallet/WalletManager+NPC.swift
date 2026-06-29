@@ -49,36 +49,40 @@ extension WalletManager {
         }
         
         do {
-            guard let walletRepository = walletRepository else {
-                throw WalletError.notInitialized
-            }
-            
-            let mintUrl = mintQuote.mintUrl
-            await mintService.ensureMintTracked(url: mintUrl.url)
+            // The NPC poller can fire as the app backgrounds; hold a background-task
+            // assertion so this SQLite-writing mint finishes before suspension.
+            try await withBackgroundWriteAssertion("npc-mint-claim") {
+                guard let walletRepository = walletRepository else {
+                    throw WalletError.notInitialized
+                }
 
-            if let db {
-                try await replaceStoredNPCMintQuote(mintQuote, in: db)
+                let mintUrl = mintQuote.mintUrl
+                await mintService.ensureMintTracked(url: mintUrl.url)
+
+                if let db {
+                    try await replaceStoredNPCMintQuote(mintQuote, in: db)
+                }
+
+                let wallet = try await walletRepository.getWallet(mintUrl: mintUrl, unit: .sat)
+
+                let proofs = try await wallet.mintUnified(
+                    quoteId: mintQuote.id,
+                    amountSplitTarget: SplitTarget.none,
+                    spendingConditions: spendingConditions
+                )
+                let totalAmount = proofs.reduce(UInt64(0)) { $0 + $1.amount.value }
+
+                markNPCQuoteProcessed(mintQuote.id)
+
+                await refreshBalance()
+                await loadTransactions()
+
+                NotificationCenter.default.post(
+                    name: .cashuTokenReceived,
+                    object: nil,
+                    userInfo: ["amount": totalAmount, "source": "npub.cash"]
+                )
             }
-            
-            let wallet = try await walletRepository.getWallet(mintUrl: mintUrl, unit: .sat)
-            
-            let proofs = try await wallet.mintUnified(
-                quoteId: mintQuote.id,
-                amountSplitTarget: SplitTarget.none,
-                spendingConditions: spendingConditions
-            )
-            let totalAmount = proofs.reduce(UInt64(0)) { $0 + $1.amount.value }
-            
-            markNPCQuoteProcessed(mintQuote.id)
-            
-            await refreshBalance()
-            await loadTransactions()
-            
-            NotificationCenter.default.post(
-                name: .cashuTokenReceived,
-                object: nil,
-                userInfo: ["amount": totalAmount, "source": "npub.cash"]
-            )
         } catch {
             if isAlreadyIssuedMintError(error) {
                 markNPCQuoteProcessed(mintQuote.id)

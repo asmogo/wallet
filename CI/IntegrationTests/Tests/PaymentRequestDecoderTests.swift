@@ -238,4 +238,43 @@ final class PaymentRequestDecoderTests: XCTestCase {
     func testSuggestedModeUnrecognizedNil() {
         XCTAssertNil(PaymentRequestDecoder.suggestedMode(.unrecognized))
     }
+
+    // MARK: - Locked receive request (NUT-10 P2PK lock in a NUT-18 request)
+
+    private func bytesContain(_ data: Data, _ needle: String) -> Bool {
+        let hay = Array(data)
+        let pin = Array(needle.utf8)
+        guard !pin.isEmpty, hay.count >= pin.count else { return false }
+        for start in 0...(hay.count - pin.count) where Array(hay[start..<start + pin.count]) == pin {
+            return true
+        }
+        return false
+    }
+
+    func testLockedReceiveRequestEncodesNut10AndParses() throws {
+        let pubkey = "02" + String(repeating: "a", count: 64)   // 66-char compressed P2PK key
+        let encoded = try PaymentRequestBuilder.build(
+            id: "testid01",
+            amount: 21,
+            unit: "sat",
+            mints: [],
+            description: nil,
+            nostrPubkeyHex: String(repeating: "b", count: 64),
+            relays: ["wss://relay.example.com"],
+            p2pkPubkeyHex: pubkey
+        )
+        XCTAssertTrue(encoded.hasPrefix("creqA"))
+
+        // 1) Our own CBOR carries the lock.
+        let myBytes = try XCTUnwrap(Base64URL.decode(String(encoded.dropFirst("creqA".count))))
+        XCTAssertTrue(bytesContain(myBytes, "nut10"), "request CBOR should carry a nut10 field")
+        XCTAssertTrue(bytesContain(myBytes, "P2PK"), "request CBOR should name the P2PK kind")
+        XCTAssertTrue(bytesContain(myBytes, pubkey), "request CBOR should carry the locking pubkey")
+
+        // 2) Adding the lock must not break the Nostr transport: CDK still parses
+        // the request and the core fields round-trip.
+        let parsed = try PaymentRequestDecoder.parseCashuPaymentRequest(encoded)
+        XCTAssertEqual(parsed.amount()?.value, 21)
+        XCTAssertFalse(parsed.transports().isEmpty)
+    }
 }

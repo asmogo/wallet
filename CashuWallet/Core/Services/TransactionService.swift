@@ -97,6 +97,7 @@ class TransactionService: ObservableObject {
                     )
 
                     walletTransaction.fee = tx.fee.value
+                    walletTransaction.quoteId = tx.quoteId
                     return walletTransaction
                 }
                 allTransactions.append(contentsOf: walletTxs)
@@ -422,7 +423,8 @@ class TransactionService: ObservableObject {
                 mintUrl: quote.mintUrl.url,
                 preimage: storedPaymentProof,
                 token: nil,
-                invoice: quote.request
+                invoice: quote.request,
+                quoteId: quote.id
             ))
         }
 
@@ -472,6 +474,7 @@ class TransactionService: ObservableObject {
                 invoice: quote.request
             )
             transaction.fee = getMeltFeePaid(quoteId: quote.id) ?? quote.feeReserve.value
+            transaction.quoteId = quote.id
             transactions.append(transaction)
         }
 

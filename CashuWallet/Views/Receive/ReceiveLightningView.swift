@@ -19,6 +19,8 @@ struct ReceiveLightningView: View {
     @State private var isPaid = false
     @State private var errorMessage: String?
     @State private var showMintPicker = false
+    /// Reusable BOLT12 offer: drives the Amount-row pencil → amount picker sheet.
+    @State private var showReusableAmountPicker = false
     @State private var copiedRequest = false
     @State private var quoteStatusTask: Task<Void, Never>?
     @State private var expiryTimeRemaining: TimeInterval = 0
@@ -37,10 +39,9 @@ struct ReceiveLightningView: View {
                             insertion: .move(edge: .trailing).combined(with: .opacity),
                             removal: .opacity
                         ))
-                } else if isCreatingRequest && isAmountlessOffer {
-                    // Any-amount reusable offer auto-creates with no keypad step,
-                    // so there's no inline button spinner to host the wait — show
-                    // a dedicated overlay between picker-dismiss and the QR.
+                } else if isCreatingRequest && (isAmountlessOffer || selectedMethod == .onchain) {
+                    // Auto-creating requests (amountless BOLT12 or onchain) have no
+                    // keypad to host the spinner — show a dedicated overlay.
                     creatingOverlay
                         .transition(.opacity)
                 } else {
@@ -215,9 +216,7 @@ struct ReceiveLightningView: View {
             amountHero
 
             if let error = errorMessage {
-                Text(error)
-                    .font(.caption)
-                    .foregroundStyle(.red)
+                InlineNotice(message: error, severity: .error)
                     .padding(.top, 12)
                     .padding(.horizontal)
             }
@@ -278,20 +277,20 @@ struct ReceiveLightningView: View {
             .accessibilityLabel("Method: \(selectedMethod.friendlyTitle)")
     }
 
-    /// Shown only during the any-amount auto-create, between the picker
-    /// dismissing and the offer QR sliding in. The amount-bearing paths keep
-    /// their inline button spinner, so this never renders for them.
+    /// Shown while auto-creating a request (amountless BOLT12 or onchain address),
+    /// between the picker dismissing and the QR sliding in.
     private var creatingOverlay: some View {
-        VStack(spacing: 16) {
+        let label = selectedMethod == .onchain ? "Generating address" : "Creating reusable invoice"
+        return VStack(spacing: 16) {
             ProgressView()
                 .controlSize(.large)
-            Text("Creating reusable invoice")
+            Text(label)
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("Creating reusable invoice")
+        .accessibilityLabel(label)
     }
 
     // MARK: - Mint Selector
@@ -339,7 +338,115 @@ struct ReceiveLightningView: View {
 
     // MARK: - Request Display View
 
+    /// Routes the result screen by rail. Every reusable BOLT12 offer (amountless
+    /// or fixed) gets the calm, Cashu-Request-style metadata layout; BOLT11 and
+    /// on-chain keep the amount-hero + expiry-countdown layout in
+    /// `standardRequestDisplayView`.
+    @ViewBuilder
     private func requestDisplayView(quote: MintQuoteInfo) -> some View {
+        if quote.paymentMethod == .bolt12 {
+            reusableOfferDisplayView(quote: quote)
+                .onAppear {
+                    persistReceiveIntent(for: quote)
+                    startQuoteMonitoring(for: quote)
+                }
+                .onChange(of: mintQuote?.id) { _, _ in
+                    if let quote = mintQuote {
+                        persistReceiveIntent(for: quote)
+                        startQuoteMonitoring(for: quote)
+                    }
+                }
+        } else {
+            standardRequestDisplayView(quote: quote)
+        }
+    }
+
+    /// Cashu-Request-style screen for a reusable BOLT12 offer: QR → (amount hero,
+    /// if fixed) → status → read-only Mint / editable Amount / Created rows → Copy.
+    /// Editing the Amount row mints a fresh fixed-amount offer (or reverts to the
+    /// amountless one) — that's how a fixed-amount reusable invoice is made.
+    /// No expiry countdown, no rotate affordance.
+    private func reusableOfferDisplayView(quote: MintQuoteInfo) -> some View {
+        VStack(spacing: 0) {
+            ScrollView {
+                VStack(spacing: 24) {
+                    QRCodeView(content: quote.request, showControls: false, staticOnly: true)
+                        .frame(width: 280, height: 280)
+                        .padding(16)
+                        .background(Color.white, in: RoundedRectangle(cornerRadius: 20))
+                        .padding(.top, 8)
+                        .contextMenu {
+                            Button(action: { copyRequest(quote.request) }) {
+                                Label("Copy", systemImage: "doc.on.doc")
+                            }
+                            ShareLink(item: quote.request) {
+                                Label("Share", systemImage: "square.and.arrow.up")
+                            }
+                        }
+
+                    if let amount = quote.amount, amount > 0 {
+                        CurrencyAmountDisplay(
+                            sats: amount,
+                            primary: $settings.amountDisplayPrimary,
+                            primarySize: 32
+                        )
+                        .accessibilityLabel("Offer amount: \(amount) sats")
+                    }
+
+                    statusBadge
+
+                    VStack(spacing: 0) {
+                        detailRow(
+                            icon: "bitcoinsign.bank.building",
+                            label: "Mint",
+                            value: reusableMintDisplayValue
+                        )
+                        canvasDivider
+                        editableRow(
+                            icon: "bitcoinsign",
+                            label: "Amount",
+                            value: quote.amount.flatMap { $0 > 0 ? formatBalance($0) : nil } ?? "Any",
+                            action: { showReusableAmountPicker = true }
+                        )
+                        if let created = quote.createdAt {
+                            canvasDivider
+                            detailRow(
+                                icon: "calendar",
+                                label: "Created",
+                                value: created.formatted(date: .abbreviated, time: .shortened)
+                            )
+                        }
+                    }
+                    .padding(.top, 8)
+                    .padding(.horizontal, 4)
+                }
+                .padding(.horizontal)
+            }
+
+            Button(action: { copyRequest(quote.request) }) {
+                Text(copyButtonTitle(for: quote))
+            }
+            .glassButton()
+            .padding(.horizontal)
+            .padding(.bottom, 16)
+        }
+        .sheet(isPresented: $showReusableAmountPicker) {
+            CashuRequestAmountPickerSheet(
+                currentAmount: quote.amount,
+                onSelect: { setReusableOfferAmount($0) }
+            )
+        }
+    }
+
+    /// Friendly name of the offer's issuing mint for the read-only Mint row. A
+    /// BOLT12 offer is bound to one mint, so this never shows "Any mint" in
+    /// practice — the fallback only guards a missing active mint.
+    private var reusableMintDisplayValue: String {
+        guard let mint = walletManager.activeMint else { return "Any mint" }
+        return mint.name.isEmpty ? extractMintHost(mint.url) : mint.name
+    }
+
+    private func standardRequestDisplayView(quote: MintQuoteInfo) -> some View {
         VStack(spacing: 0) {
             ScrollView {
                 VStack(spacing: 24) {
@@ -372,35 +479,23 @@ struct ReceiveLightningView: View {
                         .foregroundStyle(expiryTimeRemaining < 60 ? Color.red : Color.primary.opacity(0.5))
                     }
 
-                    if let explorerURL = blockExplorerURL(for: quote) {
-                        Link(blockExplorerLabel(for: quote), destination: explorerURL)
-                            .font(.subheadline.weight(.medium))
-                    }
-
-                    // Detail rows live directly on the canvas — no gray card.
-                    // Hairline dividers separate them; eye flows down the
-                    // page without competing surfaces.
-                    VStack(spacing: 0) {
+                    if let mint = walletManager.activeMint {
                         detailRow(
-                            icon: "number",
-                            label: "Amount",
-                            value: quote.amount.map { formattedAmount(sats: $0) } ?? "Set by sender"
+                            icon: "bitcoinsign.bank.building",
+                            label: "Mint",
+                            value: extractMintHost(mint.url)
                         )
-                        canvasDivider
-                        detailRow(icon: "info.circle", label: "State", value: quoteStateText(for: quote))
-                        if let mint = walletManager.activeMint {
-                            canvasDivider
-                            detailRow(
-                                icon: "bitcoinsign.bank.building",
-                                label: "Mint",
-                                value: extractMintHost(mint.url)
-                            )
-                        }
+                        .padding(.top, 8)
+                        .padding(.horizontal, 4)
                     }
-                    .padding(.top, 8)
-                    .padding(.horizontal, 4)
                 }
                 .padding(.horizontal)
+            }
+
+            if let explorerURL = blockExplorerURL(for: quote) {
+                Link(blockExplorerLabel(for: quote), destination: explorerURL)
+                    .font(.subheadline.weight(.medium))
+                    .padding(.vertical, 12)
             }
 
             Button(action: { copyRequest(quote.request) }) {
@@ -414,23 +509,47 @@ struct ReceiveLightningView: View {
             startQuoteMonitoring(for: quote)
             startExpiryCountdown(quote: quote)
         }
+        .onChange(of: mintQuote?.id) { _, _ in
+            if let quote = mintQuote {
+                startQuoteMonitoring(for: quote)
+                startExpiryCountdown(quote: quote)
+            }
+        }
     }
 
     private func amountSummary(for quote: MintQuoteInfo) -> some View {
         VStack(spacing: 6) {
             if let amount = quote.amount {
-                // Smaller than the QR — the QR is the focal element on this
-                // screen; the amount confirms it.
-                CurrencyAmountDisplay(
-                    sats: amount,
-                    primary: $settings.amountDisplayPrimary,
-                    primarySize: 32
-                )
-                .accessibilityLabel("Request amount: \(amount) sats")
+                if quote.paymentMethod == .onchain {
+                    // Onchain: amount surfaces once the sender has paid (amountPaid).
+                    // Always shown in sats — no fiat toggle.
+                    Text(AmountFormatter.sats(amount, useBitcoinSymbol: settings.useBitcoinSymbol))
+                        .font(.system(size: 32, weight: .semibold, design: .rounded))
+                        .monospacedDigit()
+                        .accessibilityLabel("Amount received: \(amount) sats")
+                } else {
+                    // Smaller than the QR — the QR is the focal element on this
+                    // screen; the amount confirms it.
+                    CurrencyAmountDisplay(
+                        sats: amount,
+                        primary: $settings.amountDisplayPrimary,
+                        primarySize: 32
+                    )
+                    .accessibilityLabel("Request amount: \(amount) sats")
+                }
             } else {
-                Text("Amount set by sender")
-                    .font(.headline)
-                    .multilineTextAlignment(.center)
+                if isCreatingRequest {
+                    ProgressView()
+                        .tint(.secondary)
+                } else if quote.paymentMethod == .onchain {
+                    Button { createRequest(method: .onchain, amountless: false, forceNew: true) } label: {
+                        Label("Use new address", systemImage: "arrow.clockwise")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                    }
+                    .accessibilityLabel("Use new address")
+                    .accessibilityHint("Generates a fresh deposit address and replaces the current QR code")
+                }
             }
         }
     }
@@ -451,6 +570,33 @@ struct ReceiveLightningView: View {
         .font(.subheadline)
         .padding(.horizontal, 4)
         .padding(.vertical, 14)
+    }
+
+    /// Same as `detailRow` but tappable, with a trailing pencil — used for the
+    /// Amount row on the reusable offer screen (mirrors the Cashu Request screen).
+    private func editableRow(icon: String, label: String, value: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            HStack {
+                Label(label, systemImage: icon)
+                    .foregroundStyle(.secondary)
+                Spacer()
+                Text(value)
+                    .fontWeight(.medium)
+                    .multilineTextAlignment(.trailing)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                Image(systemName: "pencil")
+                    .font(.footnote)
+                    .foregroundStyle(.tertiary)
+                    .padding(.leading, 4)
+            }
+            .font(.subheadline)
+            .padding(.horizontal, 4)
+            .padding(.vertical, 14)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityHint("Edits the \(label.lowercased())")
     }
 
     private var canvasDivider: some View {
@@ -624,10 +770,13 @@ struct ReceiveLightningView: View {
 
     private func syncSelectedMethodWithActiveMint() {
         guard availableMintMethods.contains(selectedMethod) else {
-            selectedMethod = availableMintMethods.first ?? .bolt11
-            // The picker (not this reset) is where the user opts into "any
-            // amount", so a fallback always lands on an amount-bearing method.
-            isAmountless = false
+            let fallback = availableMintMethods.first ?? .bolt11
+            selectedMethod = fallback
+            // BOLT12 is now exclusively amountless (the fixed-amount row was
+            // retired), so a fallback onto bolt12 — e.g. a mint that supports
+            // only bolt12 — must land on the amountless path, not a keypad.
+            // Every other rail enters its amount on the keypad.
+            isAmountless = (fallback == .bolt12)
             return
         }
     }
@@ -638,7 +787,13 @@ struct ReceiveLightningView: View {
     /// single place that owns the (method, isAmountless) transition, so there's
     /// no split between a sheet binding-write and an `onChange` reaction.
     private func applyMethodOption(_ option: ReceiveMethodOption) {
-        if option.autoCreates {
+        if option.method == .onchain {
+            // Onchain: no amount needed — generate an address immediately.
+            selectedMethod = .onchain
+            isAmountless = false
+            amountString = ""
+            createRequest(method: .onchain, amountless: false)
+        } else if option.autoCreates {
             // Any-amount reusable offer: skip the keypad and create now. Set
             // state so the overlay/title/switcher reflect the reusable method,
             // then create with EXPLICIT params (don't rely on the @State writes
@@ -646,10 +801,9 @@ struct ReceiveLightningView: View {
             selectedMethod = option.method   // .bolt12
             isAmountless = true
             amountString = ""
-            createRequest(method: option.method, amountless: true)
+            loadOrCreateAmountlessOffer()
         } else {
-            // Lightning / on-chain / fixed reusable: land on the amount screen,
-            // carrying any typed amount across (existing behavior).
+            // Lightning / fixed reusable: land on the amount screen.
             selectedMethod = option.method
             isAmountless = false
         }
@@ -659,12 +813,102 @@ struct ReceiveLightningView: View {
         createRequest(method: selectedMethod, amountless: isAmountlessOffer)
     }
 
-    private func createRequest(method requestMethod: PaymentMethodKind, amountless: Bool) {
-        // Only an amountless offer submits no amount; BOLT11, on-chain, and a
-        // BOLT12 offer with a typed amount all require a positive value.
-        let requestAmount: UInt64? = amountless ? nil : (amountSats > 0 ? amountSats : nil)
+    /// Persist a receive-intent for the quote so it appears in History as a
+    /// first-class, re-openable row — exactly like a Cashu Request. Reusable
+    /// BOLT12 offers aggregate their payments and keep collecting; the one-shot
+    /// BOLT11 / on-chain rails are wired in a later step. Deduped by `quoteId`,
+    /// so re-opening the single reusable offer never spawns a second row.
+    private func persistReceiveIntent(for quote: MintQuoteInfo) {
+        let rail: CashuRequest.Rail
+        let reusable: Bool
+        switch quote.paymentMethod {
+        case .bolt12:
+            rail = .bolt12
+            reusable = true
+        case .bolt11, .onchain:
+            return
+        }
 
-        if !amountless, (requestAmount ?? 0) == 0 {
+        let expiry = quote.expiry.flatMap { $0 > 0 ? Date(timeIntervalSince1970: Double($0)) : nil }
+        CashuRequestStore.shared.upsertQuoteIntent(
+            rail: rail,
+            quoteId: quote.id,
+            encoded: quote.request,
+            amount: quote.amount,
+            mints: walletManager.activeMint.map { [$0.url] } ?? [],
+            reusable: reusable,
+            expiry: expiry
+        )
+    }
+
+    /// Re-mints the reusable BOLT12 offer at a new amount, driven by the Amount-row
+    /// pencil. nil / 0 → amountless (reuses the existing offer); a positive value →
+    /// a fresh fixed-amount offer. Setting an amount is how the user turns an "Any"
+    /// reusable invoice into a fixed-amount one. The old QR stays on screen until
+    /// the new offer is ready, so the keypad never flashes back in.
+    private func setReusableOfferAmount(_ amount: UInt64?) {
+        let target: UInt64? = (amount ?? 0) > 0 ? amount : nil
+        isAmountless = (target == nil)
+
+        guard let target else {
+            loadOrCreateAmountlessOffer()
+            return
+        }
+
+        isCreatingRequest = true
+        errorMessage = nil
+        isPaid = false
+        isExpired = false
+        copiedRequest = false
+        onchainObservation = nil
+        monitoredQuoteId = nil
+        quoteStatusTask?.cancel()
+
+        Task { @MainActor in
+            do {
+                mintQuote = try await walletManager.createMintQuote(amount: target, method: .bolt12)
+            } catch {
+                errorMessage = "Failed. \(error.userFacingWalletMessage)"
+            }
+            isCreatingRequest = false
+        }
+    }
+
+    private func loadOrCreateAmountlessOffer() {
+        isCreatingRequest = true
+        errorMessage = nil
+        isPaid = false
+        isExpired = false
+        copiedRequest = false
+        onchainObservation = nil
+        quoteCreatedAt = nil
+        monitoredQuoteId = nil
+        expiryTimeRemaining = 0
+        quoteStatusTask?.cancel()
+        expiryTimer?.invalidate()
+
+        Task { @MainActor in
+            do {
+                let quote: MintQuoteInfo
+                if let existing = try await walletManager.existingAmountlessOffer() {
+                    quote = existing
+                } else {
+                    quote = try await walletManager.createMintQuote(amount: nil, method: .bolt12)
+                }
+                quoteCreatedAt = Date()
+                mintQuote = quote
+            } catch {
+                errorMessage = "Failed. \(error.userFacingWalletMessage)"
+            }
+            isCreatingRequest = false
+        }
+    }
+
+    private func createRequest(method requestMethod: PaymentMethodKind, amountless: Bool, forceNew: Bool = false) {
+        // Onchain is always amountless (sender decides). Lightning/BOLT12 require a value.
+        let requestAmount: UInt64? = (amountless || requestMethod == .onchain) ? nil : (amountSats > 0 ? amountSats : nil)
+
+        if !amountless, requestMethod != .onchain, (requestAmount ?? 0) == 0 {
             return
         }
 
@@ -682,10 +926,17 @@ struct ReceiveLightningView: View {
 
         Task { @MainActor in
             do {
-                let quote = try await walletManager.createMintQuote(
-                    amount: requestAmount,
-                    method: requestMethod
-                )
+                let quote: MintQuoteInfo
+                if !forceNew,
+                   requestMethod == .onchain,
+                   let existing = try await walletManager.existingOnchainMintQuote() {
+                    quote = existing
+                } else {
+                    quote = try await walletManager.createMintQuote(
+                        amount: requestAmount,
+                        method: requestMethod
+                    )
+                }
                 quoteCreatedAt = Date()
                 mintQuote = quote
             } catch {

@@ -101,12 +101,14 @@ struct HistoryView: View {
             .sheet(item: $selectedTransaction) { transaction in
                 TransactionDetailView(transaction: transaction)
                     .environmentObject(walletManager)
+                    .canvasSheetBackground()
             }
             .sheet(item: $selectedRequest) { request in
                 NavigationStack {
                     CashuRequestDetailView(request: request)
                         .environmentObject(walletManager)
                 }
+                .canvasSheetBackground()
             }
             .confirmationDialog(
                 "Remove this Cashu Request from history?",
@@ -349,7 +351,7 @@ struct HistoryView: View {
             if "\(tx.amount)".contains(query) { return true }
             return false
         case .request(let req):
-            if "cashu request".contains(query) { return true }
+            if req.displayTitle.lowercased().contains(query) { return true }
             if let amount = req.amount, "\(amount)".contains(query) { return true }
             let received = totalReceived(for: req)
             if received > 0, "\(received)".contains(query) { return true }
@@ -400,7 +402,7 @@ struct HistoryView: View {
                 TransactionIcon(direction: .incoming)
 
                 VStack(alignment: .leading, spacing: 4) {
-                    Text("Cashu Request")
+                    Text(request.displayTitle)
                         .font(.body.weight(.medium))
                         .lineLimit(1)
 
@@ -426,7 +428,7 @@ struct HistoryView: View {
         .offset(y: hasAppearedOnce ? 0 : 6)
         .animation(.smooth(duration: 0.32).delay(delay), value: hasAppearedOnce)
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("Cashu Request, \(isReceived ? "received" : "waiting for payment"), \(formatRelativeDate(request.createdAt))")
+        .accessibilityLabel("\(request.displayTitle), \(isReceived ? "received" : "waiting for payment"), \(formatRelativeDate(request.createdAt))")
         .accessibilityHint("Opens request details")
         .swipeActions(edge: .trailing, allowsFullSwipe: true) {
             Button(role: .destructive) {
@@ -490,9 +492,14 @@ struct HistoryView: View {
 
     // MARK: - Formatting
 
+    // Mirrors TransactionAmountColumn: the sign is a settled-ledger signal, so a
+    // pending row reads as a bare amount in VoiceOver too (status is announced
+    // separately).
     private func formatAmount(_ transaction: WalletTransaction) -> String {
+        let value = settings.formatAmountShort(transaction.amount)
+        guard transaction.status != .pending else { return value }
         let prefix = transaction.type == .incoming ? "+" : "−"
-        return "\(prefix)\(settings.formatAmountShort(transaction.amount))"
+        return "\(prefix)\(value)"
     }
 
     private static let shortTimeFormatter: DateFormatter = {

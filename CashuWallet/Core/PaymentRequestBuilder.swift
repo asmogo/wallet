@@ -17,7 +17,8 @@ enum PaymentRequestBuilder {
         description: String?,
         nostrPubkeyHex: String,
         relays: [String],
-        nip: String = "17"
+        nip: String = "17",
+        p2pkPubkeyHex: String? = nil
     ) throws -> String {
         let nprofile = try makeNprofile(pubkeyHex: nostrPubkeyHex, relays: relays)
 
@@ -44,6 +45,16 @@ enum PaymentRequestBuilder {
         }
         if let description, !description.isEmpty {
             request.append((.text("d"), .text(description)))
+        }
+        // Optional NUT-10 lock (NUT-18). A payer's wallet reads this and locks the
+        // proofs it creates to the given P2PK pubkey, so only its holder can
+        // redeem them. Encoded as cashu-ts does: `"nut10": {"k": kind, "d": data}`.
+        if let p2pkPubkeyHex, !p2pkPubkeyHex.isEmpty {
+            let nut10: [(Nut18Key, Nut18Value)] = [
+                (.text("k"), .text("P2PK")),
+                (.text("d"), .text(p2pkPubkeyHex)),
+            ]
+            request.append((.text("nut10"), .map(nut10)))
         }
         request.append((.text("t"), .array([.map(transport)])))
 
@@ -74,6 +85,34 @@ enum PaymentRequestBuilder {
         } catch {
             throw BuildError.nprofileEncodeFailed
         }
+    }
+}
+
+// MARK: - Locked Receive Request
+
+/// Builds the "receive locked ecash" artifact: a NUT-18 Cashu payment request that
+/// locks any payment to the wallet's primary (seed-derived) P2PK key and routes the
+/// proofs back over Nostr. Anyone who pays it sends ecash that only this wallet can
+/// redeem. Shared by the Receive menu and the Locked Ecash settings hub.
+enum LockedReceiveRequest {
+    @MainActor
+    static func build(amount: UInt64? = nil) -> String? {
+        let nostr = NostrService.shared
+        guard nostr.isInitialized,
+              !nostr.publicKeyHex.isEmpty,
+              let pubkey = SettingsManager.shared.primaryP2PKPublicKey else { return nil }
+        let relays = SettingsManager.shared.nostrRelays
+        guard !relays.isEmpty else { return nil }
+        return try? PaymentRequestBuilder.build(
+            id: CashuRequest.newId(),
+            amount: amount,
+            unit: "sat",
+            mints: [],
+            description: nil,
+            nostrPubkeyHex: nostr.publicKeyHex,
+            relays: relays,
+            p2pkPubkeyHex: pubkey
+        )
     }
 }
 

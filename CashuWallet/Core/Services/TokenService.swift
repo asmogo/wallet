@@ -67,9 +67,9 @@ class TokenService: ObservableObject {
             SpendingConditions.p2pk(pubkey: $0, conditions: nil)
         }
         
-        let availableP2PKKeys = SettingsManager.shared.p2pkKeys
-        let localP2PKSigningKeys = availableP2PKKeys.map { SecretKey(hex: $0.privateKey) }
-
+        // Sign with the full set: the seed-derived primary key plus any stored
+        // device/imported keys. Lets a locked send be re-claimed by the sender.
+        let localP2PKSigningKeys = SettingsManager.shared.allP2PKSigningKeyHexes().map { SecretKey(hex: $0) }
 
         // Create SendOptions
         // Note: includeFee: false matches cashu.me default behavior
@@ -130,16 +130,21 @@ class TokenService: ObservableObject {
         // Ensure the mint is added with the correct unit
         try await repo.createWallet(mintUrl: tokenMintUrl, unit: .sat, targetProofCount: nil)
 
-        let availableP2PKKeys = SettingsManager.shared.p2pkKeys
-        let localP2PKSigningKeys = availableP2PKKeys.map { SecretKey(hex: $0.privateKey) }
+        // Offer the full signing set (primary seed-derived key + stored keys) so a
+        // token locked to the user's own identity is redeemable.
+        let localP2PKSigningKeys = SettingsManager.shared.allP2PKSigningKeyHexes().map { SecretKey(hex: $0) }
         let tokenP2PKPubkeys = token.p2pkPubkeys()
-        let matchingLocalP2PKKey = availableP2PKKeys.first {
-            let localKey = normalizedP2PKForComparison($0.publicKey)
-            return tokenP2PKPubkeys.contains { normalizedP2PKForComparison($0) == localKey }
+
+        if !tokenP2PKPubkeys.isEmpty,
+           !tokenP2PKPubkeys.contains(where: { SettingsManager.shared.isKnownP2PKPublicKey($0) }) {
+            throw TokenServiceError.missingP2PKSigningKey
         }
 
-        if !tokenP2PKPubkeys.isEmpty && matchingLocalP2PKKey == nil {
-            throw TokenServiceError.missingP2PKSigningKey
+        // A stored-key match is only needed to bump that key's "used" counter;
+        // the primary key has no counter to advance.
+        let matchingLocalP2PKKey = SettingsManager.shared.p2pkKeys.first {
+            let localKey = normalizedP2PKForComparison($0.publicKey)
+            return tokenP2PKPubkeys.contains { normalizedP2PKForComparison($0) == localKey }
         }
 
         // Create ReceiveOptions
@@ -308,9 +313,9 @@ enum TokenServiceError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .invalidP2PKPubkey:
-            return "Invalid P2PK pubkey. Use a 66-character hex key (02/03 prefix)."
+            return "That key isn't valid. Use a 66-character hex key (02/03 prefix)."
         case .missingP2PKSigningKey:
-            return "Token is P2PK locked and no matching key is available in Settings > P2PK Features."
+            return "This ecash is locked to a key you don't hold. Add the matching key in Settings → Locked Ecash to receive it."
         }
     }
 }
