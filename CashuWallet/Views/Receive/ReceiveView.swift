@@ -347,6 +347,7 @@ struct ReceiveEcashView: View {
                 relays: SettingsManager.shared.nostrRelays
             )
             let request = CashuRequestStore.shared.createNew(
+                id: id,
                 amount: nil,
                 unit: "sat",
                 mints: [],

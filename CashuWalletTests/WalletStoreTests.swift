@@ -239,3 +239,47 @@ final class WalletStoreTests: XCTestCase {
         )
     }
 }
+
+@MainActor
+final class CashuRequestStoreTests: XCTestCase {
+    private var suiteName: String!
+    private var defaults: UserDefaults!
+
+    override func setUp() {
+        super.setUp()
+        suiteName = "CashuRequestStoreTests.\(UUID().uuidString)"
+        defaults = UserDefaults(suiteName: suiteName)
+        defaults.removePersistentDomain(forName: suiteName)
+    }
+
+    override func tearDown() {
+        defaults.removePersistentDomain(forName: suiteName)
+        defaults = nil
+        suiteName = nil
+        super.tearDown()
+    }
+
+    func testCreateNewPreservesEmbeddedPaymentRequestId() {
+        let store = CashuRequestStore(userDefaults: defaults)
+
+        let request = store.createNew(
+            id: "request-id",
+            amount: 42,
+            unit: "sat",
+            mints: ["https://mint.example.com"],
+            memo: "coffee",
+            encoded: "creqAtest"
+        )
+
+        XCTAssertEqual(request.id, "request-id")
+        XCTAssertEqual(store.currentRequestId, "request-id")
+        XCTAssertEqual(store.request(withId: "request-id")?.encoded, "creqAtest")
+
+        store.attachPayment(requestId: "request-id", transactionId: "tx-1", amount: 42)
+        XCTAssertEqual(store.request(withId: "request-id")?.receivedPayments.first?.transactionId, "tx-1")
+
+        let reloaded = CashuRequestStore(userDefaults: defaults)
+        XCTAssertEqual(reloaded.currentRequestId, "request-id")
+        XCTAssertEqual(reloaded.request(withId: "request-id")?.receivedPayments.first?.amount, 42)
+    }
+}

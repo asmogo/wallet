@@ -358,6 +358,7 @@ struct CashuRequestDetailView: View {
                 relays: SettingsManager.shared.nostrRelays
             )
             let newRequest = store.createNew(
+                id: id,
                 amount: nextAmount,
                 unit: existing.unit,
                 mints: nextMints,
