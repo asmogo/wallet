@@ -119,14 +119,7 @@ struct SettingsView: View {
             } message: {
                 Text("Are you sure you want to delete your wallet? This action cannot be undone. Make sure you have backed up your seed phrase!")
             }
-            .alert("Wallet Action Failed", isPresented: Binding(
-                get: { walletActionError != nil },
-                set: { if !$0 { walletActionError = nil } }
-            )) {
-                Button("OK", role: .cancel) {}
-            } message: {
-                Text(walletActionError ?? "Something went wrong. Try again.")
-            }
+            .errorBanner($walletActionError)
         }
     }
 
@@ -471,6 +464,14 @@ struct RestoreWalletView: View {
     @State private var mintUrlInput = ""
     @State private var mintsToRestore: [String] = []
     @State private var mintError: String?
+    @State private var mintNoticeSeverity: ErrorSeverity = .info
+
+    /// The restore mint-list channel carries successes ("Added 3 mint URLs…") and
+    /// gentle advisories as well as real errors, so it sets a severity, not just text.
+    private func setMintNotice(_ message: String?, severity: ErrorSeverity = .info) {
+        mintError = message
+        mintNoticeSeverity = severity
+    }
     @FocusState private var mintFieldFocused: Bool
 
     // Dedicated restore/results screen (forward-only): a snapshot of the staged
@@ -584,12 +585,12 @@ struct RestoreWalletView: View {
                 if wordCount > 0 && !invalidIndices.isEmpty {
                     Text("- \(invalidIndices.count) invalid")
                         .font(.caption)
-                        .foregroundStyle(.red)
+                        .foregroundStyle(.secondary)
                 }
             }
 
             if let seedError {
-                ErrorBannerView(message: seedError, type: .error)
+                ErrorBannerView(message: seedError, severity: .error)
                     .padding(.horizontal)
             }
 
@@ -661,10 +662,7 @@ struct RestoreWalletView: View {
                     restoreMintList
 
                     if let mintError {
-                        Text(mintError)
-                            .font(.caption)
-                            .foregroundStyle(.red)
-                            .multilineTextAlignment(.center)
+                        InlineNotice(message: mintError, severity: mintNoticeSeverity)
                             .padding(.horizontal)
                     }
                 }
@@ -877,10 +875,7 @@ struct RestoreWalletView: View {
                     .lineLimit(1)
 
                 if case .failed(let message) = phase {
-                    Text(message)
-                        .font(.caption2)
-                        .foregroundStyle(.red)
-                        .lineLimit(2)
+                    InlineNotice(message: message, severity: .error)
                 } else {
                     Text(url)
                         .font(.caption2)
@@ -961,7 +956,7 @@ struct RestoreWalletView: View {
 
     private func pasteMintUrlsFromClipboard() {
         guard let clipboardContent = UIPasteboard.general.string else {
-            mintError = "Clipboard is empty."
+            setMintNotice("Clipboard is empty.")
             return
         }
 
@@ -985,9 +980,9 @@ struct RestoreWalletView: View {
         }
 
         if addedCount == 0 {
-            mintError = invalidCount > 0 ? "Nothing in the clipboard looked like a mint URL." : "No new mint URLs to add."
+            setMintNotice(invalidCount > 0 ? "Nothing in the clipboard looked like a mint URL." : "No new mint URLs to add.")
         } else if invalidCount > 0 {
-            mintError = "Added \(addedCount) mint URL\(addedCount == 1 ? "" : "s"). Skipped \(invalidCount) invalid."
+            setMintNotice("Added \(addedCount) mint URL\(addedCount == 1 ? "" : "s"). Skipped \(invalidCount) invalid.")
         } else {
             mintError = nil
         }
@@ -997,14 +992,14 @@ struct RestoreWalletView: View {
     private func addMintUrlToRestoreList(_ rawUrl: String, showDuplicateError: Bool, showValidationError: Bool) -> Bool {
         guard let url = normalizedMintURL(from: rawUrl) else {
             if showValidationError {
-                mintError = "That doesn't look like a mint URL."
+                setMintNotice("That doesn't look like a mint URL.", severity: .caution)
             }
             return false
         }
 
         guard !mintsToRestore.contains(url) else {
             if showDuplicateError {
-                mintError = "This mint is already in the list."
+                setMintNotice("This mint is already in the list.", severity: .caution)
             }
             return false
         }
@@ -1233,10 +1228,7 @@ struct ImportP2PKSheet: View {
                 .liquidGlass(in: RoundedRectangle(cornerRadius: 12))
 
                 if let validationError {
-                    Text(validationError)
-                        .font(.caption)
-                        .foregroundStyle(.red)
-                        .frame(maxWidth: .infinity, alignment: .leading)
+                    InlineNotice(message: validationError, severity: .error)
                         .padding(.horizontal, 4)
                         .transition(.opacity)
                 }
@@ -1473,11 +1465,7 @@ struct ICloudBackupSettingsView: View {
         } message: {
             Text("Your backup will be removed from iCloud Keychain and iCloud. Your local wallet is not affected.")
         }
-        .alert("Backup Failed", isPresented: Binding(get: { backupError != nil }, set: { if !$0 { backupError = nil } })) {
-            Button("OK", role: .cancel) { backupError = nil }
-        } message: {
-            Text(backupError ?? "")
-        }
+        .errorBanner($backupError, retry: { backUpNow() })
     }
 
     private var enabledBinding: Binding<Bool> {
@@ -1605,7 +1593,7 @@ struct ImportNsecSheet: View {
 
                 if let error = errorMessage {
                     Section {
-                        Text(error).foregroundStyle(.red)
+                        InlineNotice(message: error, severity: .error)
                     }
                 }
 

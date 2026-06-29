@@ -13,8 +13,11 @@ struct SendView: View {
     @State private var tokenFee: UInt64 = 0
     @State private var isGenerating = false
     @State private var errorMessage: String?
+    @State private var errorSeverity: ErrorSeverity = .error
+    @State private var errorShowsMintAction = false
     @State private var showMintPicker = false
     @State private var selectedSendMint: MintInfo?
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     // Token claim detection
     @State private var isCheckingClaim = false
@@ -149,11 +152,14 @@ struct SendView: View {
             )
 
             if let error = errorMessage {
-                Text(error)
-                    .font(.caption)
-                    .foregroundStyle(.red)
-                    .padding(.top, 8)
-                    .transition(.opacity.combined(with: .scale))
+                InlineNotice(
+                    message: error,
+                    severity: errorSeverity,
+                    detail: errorShowsMintAction ? insufficientBalanceDetail : nil
+                )
+                .padding(.horizontal)
+                .padding(.top, 8)
+                .transition(reduceMotion ? .opacity : .opacity.combined(with: .scale))
             }
 
             Spacer()
@@ -482,6 +488,18 @@ struct SendView: View {
         AmountFormatter.sats(sats, useBitcoinSymbol: settings.useBitcoinSymbol)
     }
 
+    /// Secondary line under an insufficient-balance notice: what's actually here.
+    private var insufficientBalanceDetail: String? {
+        guard let mint = displaySendMint else { return nil }
+        return "You have \(formatBalance(mint.balance)) in \(mint.name)."
+    }
+
+    private func presentError(_ message: String, severity: ErrorSeverity = .error, showsMintAction: Bool = false) {
+        errorMessage = message
+        errorSeverity = severity
+        errorShowsMintAction = showsMintAction
+    }
+
     private func extractMintHost(_ url: String) -> String {
         URL(string: url)?.host ?? url
     }
@@ -492,12 +510,12 @@ struct SendView: View {
         let amount = amountSats
         guard amount > 0 else { return }
         guard let mint = displaySendMint else {
-            errorMessage = "No mint available."
+            presentError("No mint available.")
             return
         }
         let selectedP2PKPubkey = lockWithP2PK ? normalizedP2PKPubkeyInput : nil
         guard !lockWithP2PK || selectedP2PKPubkey != nil else {
-            errorMessage = "Choose a valid key to lock to."
+            presentError("Choose a valid key to lock to.")
             return
         }
 
@@ -517,7 +535,12 @@ struct SendView: View {
                 tokenFee = result.fee
                 HapticFeedback.notification(.success)
             } catch {
-                errorMessage = error.userFacingWalletMessage
+                let walletMessage = error.walletMessage
+                presentError(
+                    walletMessage.text,
+                    severity: walletMessage.severity,
+                    showsMintAction: error.isInsufficientBalanceError
+                )
                 HapticFeedback.notification(.error)
             }
             isGenerating = false
@@ -557,7 +580,7 @@ struct SendView: View {
     /// next send; invalid input (junk, or an `npub`) is rejected.
     private func handleScannedPubkey(_ scanned: String) {
         guard let normalized = Self.normalizeP2PKPubkey(scanned) else {
-            errorMessage = "That's not a valid public key."
+            presentError("That's not a valid public key.")
             HapticFeedback.notification(.error)
             return
         }
@@ -776,12 +799,50 @@ struct UnifiedSendView: View {
     // Flow control
     @State private var isWorking = false
     @State private var errorMessage: String?
+    @State private var errorSeverity: ErrorSeverity = .error
+    @State private var errorShowsMintAction = false
     @State private var inputHint: String?
     @State private var autoAdvanceTask: Task<Void, Never>?
     /// Set when the user taps the pill to edit: auto-advance stays suppressed while
     /// the field text equals this value, so a still-valid recipient doesn't bounce
     /// straight back forward. Cleared the instant the text differs.
     @State private var suppressedValue: String?
+
+    private func presentError(_ message: String, severity: ErrorSeverity = .error) {
+        errorMessage = message
+        errorSeverity = severity
+        errorShowsMintAction = false
+    }
+
+    private func presentError(from error: Error) {
+        let walletMessage = error.walletMessage
+        errorMessage = walletMessage.text
+        errorSeverity = walletMessage.severity
+        errorShowsMintAction = error.isInsufficientBalanceError
+    }
+
+    /// Secondary line under an insufficient-balance notice: what's actually here.
+    private var meltInsufficientDetail: String? {
+        guard let mint = activeMeltMint else { return nil }
+        return "You have \(AmountFormatter.sats(mint.balance, useBitcoinSymbol: settings.useBitcoinSymbol)) in \(mint.name)."
+    }
+
+    /// The unified error surface for this flow. Insufficient-balance errors carry the
+    /// live mint balance as a second line; the recovery action lives in the bottom
+    /// CTA (see `meltConfirmBody`), never inside the notice.
+    @ViewBuilder
+    private func errorNotice(_ message: String) -> some View {
+        InlineNotice(
+            message: message,
+            severity: errorSeverity,
+            detail: errorShowsMintAction ? meltInsufficientDetail : nil
+        )
+    }
+
+    /// Another compatible mint exists to fall back to when this one is short.
+    private var canSwitchMintForBalance: Bool {
+        errorShowsMintAction && meltCompatibleMints.count > 1
+    }
 
     // Routes that genuinely leave this flow + scanner / mint picker / empty state
     @State private var route: SendRoute?
@@ -887,17 +948,9 @@ struct UnifiedSendView: View {
                     .padding(.top, 12)
 
                 if let inputHint {
-                    HStack(spacing: 6) {
-                        Image(systemName: "exclamationmark.circle")
-                            .font(.caption.weight(.semibold))
-                        Text(inputHint)
-                            .font(.caption)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
-                    .foregroundStyle(.red)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.horizontal, 20)
-                    .padding(.top, 10)
+                    InlineNotice(message: inputHint, severity: .caution)
+                        .padding(.horizontal, 20)
+                        .padding(.top, 10)
                 }
 
                 // Two (or three) plain action rows, generously spaced — no header,
@@ -1144,9 +1197,7 @@ struct UnifiedSendView: View {
                     }
 
                     if let errorMessage {
-                        Text(errorMessage)
-                            .font(.caption)
-                            .foregroundStyle(.red)
+                        errorNotice(errorMessage)
                             .padding(.horizontal)
                     }
                 }
@@ -1227,12 +1278,12 @@ struct UnifiedSendView: View {
 
                         if !hasSufficientBalance(for: quote),
                            let balance = mintInfo(for: quote)?.balance {
-                            Text("Selected mint has \(balance) sat; this quote can reserve up to \(quote.totalAmount) sat.")
-                                .font(.caption)
-                                .foregroundStyle(.orange)
-                                .multilineTextAlignment(.center)
-                                .padding(.top, 12)
-                                .padding(.horizontal)
+                            InlineNotice(
+                                message: "This mint holds \(AmountFormatter.sats(balance, useBitcoinSymbol: settings.useBitcoinSymbol)); the payment reserves up to \(AmountFormatter.sats(quote.totalAmount, useBitcoinSymbol: settings.useBitcoinSymbol)).",
+                                severity: .caution
+                            )
+                            .padding(.top, 12)
+                            .padding(.horizontal)
                         }
                     } else if isWorking {
                         ProgressView()
@@ -1240,11 +1291,8 @@ struct UnifiedSendView: View {
                     }
 
                     if let errorMessage {
-                        Text(errorMessage)
-                            .font(.caption)
-                            .foregroundStyle(.red)
-                            .multilineTextAlignment(.center)
-                            .padding(.top, 12)
+                        errorNotice(errorMessage)
+                            .padding(.top, meltQuote == nil ? 48 : 12)
                             .padding(.horizontal)
                     }
                 }
@@ -1257,6 +1305,16 @@ struct UnifiedSendView: View {
                 }
                 .glassButton()
                 .disabled(isWorking || !hasSufficientBalance(for: quote))
+                .padding(.horizontal)
+                .padding(.bottom, 16)
+            } else if canSwitchMintForBalance {
+                Button {
+                    HapticFeedback.selection()
+                    showingMintPicker = true
+                } label: {
+                    Text("Choose another mint")
+                }
+                .glassButton()
                 .padding(.horizontal)
                 .padding(.bottom, 16)
             }
@@ -1371,7 +1429,7 @@ struct UnifiedSendView: View {
     private func fetchMeltQuote() {
         guard case let .melt(request, mode, decoded) = locked else { return }
         guard let mint = activeMeltMint else {
-            errorMessage = "No mint supports \(meltPaymentMethod.displayName) payments."
+            presentError("No mint supports \(meltPaymentMethod.displayName) payments.")
             return
         }
         isWorking = true
@@ -1404,7 +1462,7 @@ struct UnifiedSendView: View {
                 meltQuote = quote
                 if let resolved = mintInfo(for: quote) { selectedMint = resolved }
             } catch {
-                errorMessage = error.userFacingWalletMessage
+                presentError(from: error)
             }
         }
     }
@@ -1423,7 +1481,7 @@ struct UnifiedSendView: View {
                 onClose()
             } catch {
                 HapticFeedback.notification(.error)
-                errorMessage = error.userFacingWalletMessage
+                presentError(from: error)
                 withAnimation { step = .confirm }
             }
         }
@@ -1558,19 +1616,16 @@ struct UnifiedSendView: View {
                     creqRequestDetails(creq)
 
                     if !creq.isSatUnit {
-                        Text("This wallet can only pay sat-denominated Cashu requests.")
-                            .font(.caption)
-                            .foregroundStyle(.red)
-                            .multilineTextAlignment(.center)
-                            .padding(.top, 12)
-                            .padding(.horizontal)
+                        InlineNotice(
+                            message: "This wallet can only pay sat-denominated Cashu requests.",
+                            severity: .caution
+                        )
+                        .padding(.top, 12)
+                        .padding(.horizontal)
                     }
 
                     if let errorMessage {
-                        Text(errorMessage)
-                            .font(.caption)
-                            .foregroundStyle(.red)
-                            .multilineTextAlignment(.center)
+                        errorNotice(errorMessage)
                             .padding(.top, 12)
                             .padding(.horizontal)
                     }
@@ -1606,7 +1661,7 @@ struct UnifiedSendView: View {
                 onClose()
             } catch {
                 HapticFeedback.notification(.error)
-                errorMessage = error.userFacingWalletMessage
+                presentError(from: error)
                 withAnimation { step = .confirm }
             }
         }
@@ -1959,9 +2014,7 @@ struct UnifiedSendView: View {
                 )
 
                 if let addMintError {
-                    Text(addMintError)
-                        .font(.caption)
-                        .foregroundStyle(.red)
+                    InlineNotice(message: addMintError, severity: .error)
                         .padding(.horizontal, 20)
                         .padding(.top, 8)
                 }
@@ -2049,10 +2102,39 @@ struct MeltView: View {
     @State private var isPaying = false
     @State private var isPaid = false
     @State private var errorMessage: String?
+    @State private var errorSeverity: ErrorSeverity = .error
+    @State private var errorShowsMintAction = false
 
     // Authorizing overlay state
     @State private var showAuthorizingOverlay = false
     @State private var authorizingState: AuthorizingOverlay.FlowState = .authorizing
+
+    private func presentError(_ message: String, severity: ErrorSeverity = .error) {
+        errorMessage = message
+        errorSeverity = severity
+        errorShowsMintAction = false
+    }
+
+    private func presentError(from error: Error) {
+        let walletMessage = error.walletMessage
+        errorMessage = walletMessage.text
+        errorSeverity = walletMessage.severity
+        errorShowsMintAction = error.isInsufficientBalanceError
+    }
+
+    private var meltInsufficientDetail: String? {
+        guard let mint = displayMeltMint else { return nil }
+        return "You have \(AmountFormatter.sats(mint.balance, useBitcoinSymbol: settings.useBitcoinSymbol)) in \(mint.name)."
+    }
+
+    @ViewBuilder
+    private func errorNotice(_ message: String) -> some View {
+        InlineNotice(
+            message: message,
+            severity: errorSeverity,
+            detail: errorShowsMintAction ? meltInsufficientDetail : nil
+        )
+    }
 
     // Inline scan + clipboard suggestion
     @State private var showingScanner = false
@@ -2330,11 +2412,12 @@ struct MeltView: View {
             }
 
             if displayMeltMint == nil, !availableMeltMints.isEmpty {
-                Text("No mint supports \(selectedMeltPaymentMethod.displayName) payments.")
-                    .font(.caption)
-                    .foregroundStyle(.orange)
-                    .padding(.horizontal)
-                    .padding(.top, 12)
+                InlineNotice(
+                    message: "No mint supports \(selectedMeltPaymentMethod.displayName) payments.",
+                    severity: .caution
+                )
+                .padding(.horizontal)
+                .padding(.top, 12)
             }
 
             HStack(alignment: .top, spacing: 12) {
@@ -2377,9 +2460,7 @@ struct MeltView: View {
             }
 
             if let error = errorMessage {
-                Text(error)
-                    .font(.caption)
-                    .foregroundStyle(.red)
+                errorNotice(error)
                     .padding(.top, 12)
                     .padding(.horizontal)
             }
@@ -2596,16 +2677,16 @@ struct MeltView: View {
 
                     if !hasSufficientBalance(for: quote),
                        let balance = mintInfo(for: quote)?.balance {
-                        Text("Selected mint has \(balance) sat; this quote can reserve up to \(quote.totalAmount) sat.")
-                            .font(.caption)
-                            .foregroundStyle(.orange)
-                            .padding(.horizontal)
+                        InlineNotice(
+                            message: "Selected mint has \(balance) sat; this quote can reserve up to \(quote.totalAmount) sat.",
+                            severity: .caution
+                        )
+                        .padding(.horizontal)
                     }
 
                     if let error = errorMessage {
-                        Text(error)
-                            .font(.caption)
-                            .foregroundStyle(.red)
+                        errorNotice(error)
+                            .padding(.top, meltQuote == nil ? 48 : 12)
                             .padding(.horizontal)
                     }
                 }
@@ -2669,7 +2750,7 @@ struct MeltView: View {
     private func syncMeltModeWithAvailableMints() {
         guard supportsOnchainMelt || meltMode != .onchain else {
             meltMode = .lightning
-            errorMessage = "No mint supports On-chain payments."
+            presentError("No mint supports On-chain payments.")
             return
         }
     }
@@ -2818,19 +2899,19 @@ struct MeltView: View {
         if meltMode == .lightning,
            PaymentRequestParser.paymentMethod(for: trimmedInput) == .onchain {
             guard supportsOnchainMelt else {
-                errorMessage = "No mint supports On-chain payments."
+                presentError("No mint supports On-chain payments.")
                 return
             }
 
             meltMode = .onchain
             syncSelectedMeltMint()
-            errorMessage = "Switched to On-chain. Enter an amount to continue."
+            presentError("Switched to On-chain. Enter an amount to continue.", severity: .info)
             requestInput = PaymentRequestParser.normalizeBitcoinRequest(trimmedInput)
             return
         }
 
         guard let quoteMint = displayMeltMint else {
-            errorMessage = "No mint supports \(selectedMeltPaymentMethod.displayName) payments."
+            presentError("No mint supports \(selectedMeltPaymentMethod.displayName) payments.")
             return
         }
 
@@ -2871,7 +2952,7 @@ struct MeltView: View {
                     setMeltQuote(quote)
                 }
             } catch {
-                errorMessage = error.userFacingWalletMessage
+                presentError(from: error)
             }
         }
     }
@@ -2902,9 +2983,9 @@ struct MeltView: View {
                 isPaid = true
                 showAuthorizingOverlay = false
             } catch {
-                let message = error.userFacingWalletMessage
-                authorizingState = .error(message)
-                errorMessage = message
+                let walletMessage = error.walletMessage
+                authorizingState = .error(walletMessage.text)
+                presentError(walletMessage.text, severity: walletMessage.severity)
                 // Let the user read the error in the sheet, then dismiss after 2s.
                 try? await Task.sleep(nanoseconds: 2_000_000_000)
                 showAuthorizingOverlay = false

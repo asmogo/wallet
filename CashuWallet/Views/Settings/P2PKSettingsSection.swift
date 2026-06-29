@@ -345,10 +345,7 @@ private struct AdvancedKeysView: View {
                 }
 
                 if let actionError {
-                    Text(actionError)
-                        .font(.caption)
-                        .foregroundStyle(.red)
-                        .frame(maxWidth: .infinity, alignment: .leading)
+                    InlineNotice(message: actionError, severity: .error)
                         .padding(.horizontal, 6)
                         .padding(.top, 4)
                         .transition(.opacity)

@@ -86,8 +86,7 @@ struct LightningAddressSettingsSection: View {
             }
         } else if let error = npcService.errorMessage {
             SettingsSectionFooter {
-                Text(error)
-                    .foregroundStyle(.red)
+                InlineNotice(message: error, severity: .error, showsIcon: false)
             }
         } else if !npcService.isInitialized {
             SettingsSectionFooter {

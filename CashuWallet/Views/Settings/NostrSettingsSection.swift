@@ -115,9 +115,7 @@ struct NostrKeysSettingsSection: View {
             }
 
             if let error = nostrKeyError {
-                Text(error)
-                    .font(.caption)
-                    .foregroundStyle(.red)
+                InlineNotice(message: error, severity: .error)
             }
         }
         .alert("Generate New Key", isPresented: $showGenerateKeyConfirm) {
@@ -258,9 +256,7 @@ struct NostrRelaysSettingsSection: View {
             }
 
             if let relayError {
-                Text(relayError)
-                    .font(.caption2)
-                    .foregroundStyle(.red)
+                InlineNotice(message: relayError, severity: .error)
             }
 
             Button(action: {

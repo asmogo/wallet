@@ -52,9 +52,7 @@ struct MintsListView: View {
 
                 if let error = errorMessage {
                     Section {
-                        Label(error, systemImage: "exclamationmark.triangle")
-                            .foregroundStyle(.red)
-                            .font(.subheadline)
+                        InlineNotice(message: error, severity: .error)
                     }
                 }
 

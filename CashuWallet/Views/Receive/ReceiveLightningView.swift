@@ -216,9 +216,7 @@ struct ReceiveLightningView: View {
             amountHero
 
             if let error = errorMessage {
-                Text(error)
-                    .font(.caption)
-                    .foregroundStyle(.red)
+                InlineNotice(message: error, severity: .error)
                     .padding(.top, 12)
                     .padding(.horizontal)
             }

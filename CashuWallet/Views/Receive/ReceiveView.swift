@@ -172,6 +172,7 @@ struct ReceiveEcashView: View {
     @State private var tokenInput = ""
     @State private var errorMessage: String?
     @State private var navigateToDetail = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var validatedToken: String?
     @State private var currentRequest: CashuRequest?
     @State private var showingScanner = false
@@ -247,12 +248,9 @@ struct ReceiveEcashView: View {
                 .padding(.top, 12)
 
                 if let error = errorMessage {
-                    Text(error)
-                        .foregroundStyle(.red)
-                        .font(.caption)
-                        .multilineTextAlignment(.center)
+                    InlineNotice(message: error, severity: .error)
                         .padding(.horizontal)
-                        .transition(.opacity.combined(with: .scale))
+                        .transition(reduceMotion ? .opacity : .opacity.combined(with: .scale))
                 }
 
                 VStack(spacing: 10) {

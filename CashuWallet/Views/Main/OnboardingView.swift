@@ -40,6 +40,20 @@ struct OnboardingView: View {
     @State private var isAddingFirstMints = false
     @State private var currentAddingMint: String?
     @State private var firstMintError: String?
+    @State private var firstMintSeverity: ErrorSeverity = .error
+    @State private var restoreMintSeverity: ErrorSeverity = .info
+
+    /// Add-first-mint field carries both validation advisories and connect failures.
+    private func setFirstMintNotice(_ message: String?, severity: ErrorSeverity = .error) {
+        firstMintError = message
+        firstMintSeverity = severity
+    }
+
+    /// Paste-mint-list channel carries successes and advisories as well as errors.
+    private func setRestoreMintNotice(_ message: String?, severity: ErrorSeverity = .info) {
+        restoreMintError = message
+        restoreMintSeverity = severity
+    }
 
     // iCloud restore state
     @State private var detectedICloudBackup: ICloudBackupInfo? = nil
@@ -185,20 +199,17 @@ struct OnboardingView: View {
             Spacer()
 
             if let error = walletManager.errorMessage {
-                ErrorBannerView(message: "Couldn't start the wallet. \(error)", type: .error)
+                ErrorBannerView(message: "Couldn't start the wallet. \(error)", severity: .error)
                     .padding(.horizontal)
                     .padding(.bottom, 8)
                     .transition(.opacity.combined(with: .move(edge: .top)))
             }
 
             if let error = errorMessage {
-                Text(error)
-                    .font(.caption)
-                    .foregroundStyle(.red)
-                    .multilineTextAlignment(.center)
+                InlineNotice(message: error, severity: .error)
                     .padding(.horizontal)
                     .padding(.bottom, 8)
-                    .transition(.opacity.combined(with: .move(edge: .top)))
+                    .transition(reduceMotion ? .opacity : .opacity.combined(with: .move(edge: .top)))
             }
 
             stagger(appeared: welcomeAppeared, index: 1) {
@@ -443,7 +454,7 @@ struct OnboardingView: View {
             stagger(appeared: iCloudPreviewAppeared, index: 1) {
                 VStack(spacing: 12) {
                     if let error = errorMessage {
-                        ErrorBannerView(message: error, type: .error)
+                        ErrorBannerView(message: error, severity: .error)
                             .padding(.horizontal)
                             .transition(.opacity.combined(with: .move(edge: .top)))
                     }
@@ -799,13 +810,10 @@ struct OnboardingView: View {
                 }
 
                 if let error = firstMintError {
-                    Text(error)
-                        .font(.caption)
-                        .foregroundStyle(.red)
-                        .multilineTextAlignment(.center)
+                    InlineNotice(message: error, severity: firstMintSeverity)
                         .padding(.horizontal, 28)
                         .padding(.top, 8)
-                        .transition(.opacity.combined(with: .move(edge: .top)))
+                        .transition(reduceMotion ? .opacity : .opacity.combined(with: .move(edge: .top)))
                 }
 
                 if let current = currentAddingMint, isAddingFirstMints {
@@ -944,11 +952,11 @@ struct OnboardingView: View {
             return
         }
         guard let normalized = normalizedMintURL(from: customMintInput) else {
-            firstMintError = "That doesn't look like a mint URL."
+            setFirstMintNotice("That doesn't look like a mint URL.", severity: .caution)
             return
         }
         if recommendedMints.contains(where: { $0.url == normalized }) || customMintUrls.contains(normalized) {
-            firstMintError = "That mint is already in the list."
+            setFirstMintNotice("That mint is already in the list.", severity: .caution)
             return
         }
         HapticFeedback.selection()
@@ -976,7 +984,7 @@ struct OnboardingView: View {
                 do {
                     try await walletManager.addMint(url: url)
                 } catch {
-                    firstMintError = "Couldn't connect to \(shortenUrl(url)). \(error.userFacingWalletMessage)"
+                    setFirstMintNotice("Couldn't connect to \(shortenUrl(url)). \(error.userFacingWalletMessage)")
                     AppLogger.wallet.error("First-mint add error for \(url): \(error)")
                     isAddingFirstMints = false
                     currentAddingMint = nil
@@ -1064,12 +1072,12 @@ struct OnboardingView: View {
                 if wordCount > 0 && !invalidIndices.isEmpty {
                     Text("· \(invalidIndices.count) invalid")
                         .font(.caption)
-                        .foregroundStyle(.red)
+                        .foregroundStyle(.secondary)
                 }
             }
 
             if let error = errorMessage {
-                ErrorBannerView(message: error, type: .error)
+                ErrorBannerView(message: error, severity: .error)
                     .padding(.horizontal)
                     .transition(.opacity.combined(with: .move(edge: .top)))
             }
@@ -1183,14 +1191,11 @@ struct OnboardingView: View {
                         .padding(.horizontal)
                     }
 
-                    // Error display
+                    // Mint-list notice (success / advisory / error)
                     if let error = restoreMintError {
-                        Text(error)
-                            .font(.caption)
-                            .foregroundStyle(.red)
-                            .multilineTextAlignment(.center)
+                        InlineNotice(message: error, severity: restoreMintSeverity)
                             .padding(.horizontal)
-                            .transition(.opacity.combined(with: .move(edge: .top)))
+                            .transition(reduceMotion ? .opacity : .opacity.combined(with: .move(edge: .top)))
                     }
                 }
                 .padding(.bottom, 8)
@@ -1407,10 +1412,7 @@ struct OnboardingView: View {
                     .lineLimit(1)
 
                 if case .failed(let message) = phase {
-                    Text(message)
-                        .font(.caption2)
-                        .foregroundStyle(.red)
-                        .lineLimit(2)
+                    InlineNotice(message: message, severity: .error)
                 } else {
                     Text(url)
                         .font(.caption2)
@@ -1510,7 +1512,7 @@ struct OnboardingView: View {
 
     private func pasteMintUrlsFromClipboard() {
         guard let clipboardContent = UIPasteboard.general.string else {
-            restoreMintError = "Clipboard is empty."
+            setRestoreMintNotice("Clipboard is empty.")
             return
         }
 
@@ -1532,9 +1534,9 @@ struct OnboardingView: View {
         }
 
         if addedCount == 0 {
-            restoreMintError = invalidCount > 0 ? "Nothing in the clipboard looked like a mint URL." : "No new mint URLs to add."
+            setRestoreMintNotice(invalidCount > 0 ? "Nothing in the clipboard looked like a mint URL." : "No new mint URLs to add.")
         } else if invalidCount > 0 {
-            restoreMintError = "Added \(addedCount) mint URL\(addedCount == 1 ? "" : "s"). Skipped \(invalidCount) that didn't look like a mint URL."
+            setRestoreMintNotice("Added \(addedCount) mint URL\(addedCount == 1 ? "" : "s"). Skipped \(invalidCount) that didn't look like a mint URL.")
         } else {
             restoreMintError = nil
         }
@@ -1544,14 +1546,14 @@ struct OnboardingView: View {
     private func addMintUrlToRestoreList(_ rawUrl: String, showDuplicateError: Bool, showValidationError: Bool) -> Bool {
         guard let url = normalizedMintURL(from: rawUrl) else {
             if showValidationError {
-                restoreMintError = "That doesn't look like a mint URL."
+                setRestoreMintNotice("That doesn't look like a mint URL.", severity: .caution)
             }
             return false
         }
 
         guard !mintsToRestore.contains(url) else {
             if showDuplicateError {
-                restoreMintError = "This mint is already in the list."
+                setRestoreMintNotice("This mint is already in the list.", severity: .caution)
             }
             return false
         }

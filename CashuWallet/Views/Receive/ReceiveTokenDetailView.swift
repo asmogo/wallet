@@ -62,10 +62,7 @@ struct ReceiveTokenDetailView: View {
                         }
 
                         if let error = errorMessage {
-                            Text(error)
-                                .foregroundStyle(.red)
-                                .font(.caption)
-                                .multilineTextAlignment(.center)
+                            InlineNotice(message: error, severity: .error)
                                 .padding(.horizontal)
                         }
                     }

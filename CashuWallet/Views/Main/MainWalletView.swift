@@ -941,9 +941,7 @@ private struct WalletActionSheetView: View {
                 )
 
                 if let addMintError {
-                    Text(addMintError)
-                        .font(.caption)
-                        .foregroundStyle(.red)
+                    InlineNotice(message: addMintError, severity: .error)
                         .padding(.horizontal, 20)
                         .padding(.top, 8)
                 }

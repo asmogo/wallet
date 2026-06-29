@@ -410,6 +410,7 @@ struct CashuPaymentRequestPayView: View {
     @State private var customAmountString = ""
     @State private var isPaying = false
     @State private var errorMessage: String?
+    @State private var errorSeverity: ErrorSeverity = .error
     @State private var showAuthorizingOverlay = false
     @State private var authorizingState: AuthorizingOverlay.FlowState = .authorizing
     @State private var showingMintPicker = false
@@ -450,19 +451,16 @@ struct CashuPaymentRequestPayView: View {
                 requestDetailsSection
 
                 if !request.isSatUnit {
-                    Text("This wallet can only pay sat-denominated Cashu requests.")
-                        .font(.caption)
-                        .foregroundStyle(.red)
-                        .multilineTextAlignment(.center)
-                        .padding(.top, 12)
-                        .padding(.horizontal)
+                    InlineNotice(
+                        message: "This wallet can only pay sat-denominated Cashu requests.",
+                        severity: .caution
+                    )
+                    .padding(.top, 12)
+                    .padding(.horizontal)
                 }
 
                 if let errorMessage {
-                    Text(errorMessage)
-                        .font(.caption)
-                        .foregroundStyle(.red)
-                        .multilineTextAlignment(.center)
+                    InlineNotice(message: errorMessage, severity: errorSeverity)
                         .padding(.top, 12)
                         .padding(.horizontal)
                 }
@@ -986,9 +984,10 @@ struct CashuPaymentRequestPayView: View {
                 )
                 authorizingState = .sent
             } catch {
-                let message = error.userFacingWalletMessage
-                errorMessage = message
-                authorizingState = .error(message)
+                let walletMessage = error.walletMessage
+                errorMessage = walletMessage.text
+                errorSeverity = walletMessage.severity
+                authorizingState = .error(walletMessage.text)
                 try? await Task.sleep(nanoseconds: 2_000_000_000)
                 showAuthorizingOverlay = false
             }
