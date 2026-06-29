@@ -112,8 +112,18 @@ struct ScannerWrapperView: View {
     @State private var navigateToCashuPaymentRequest = false
     @State private var routingTask: Task<Void, Never>?
 
-    init(onScanned: ((String) -> Void)? = nil) {
+    init(
+        onScanned: ((String) -> Void)? = nil,
+        promptText: String? = nil,
+        cashuRequestOnly: Bool = false,
+        onComplete: (() -> Void)? = nil,
+        quickFills: (() -> [ScannerQuickFill])? = nil
+    ) {
         self.onScanned = onScanned
+        self.promptText = promptText
+        self.cashuRequestOnly = cashuRequestOnly
+        self.onComplete = onComplete
+        self.quickFills = quickFills
     }
     
     var body: some View {
