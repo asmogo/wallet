@@ -1,5 +1,6 @@
 package com.cashu.me.Core.CDK
 
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
@@ -796,12 +797,14 @@ class CdkWalletGatewayImpl : CdkWalletGateway, NwcServiceGateway {
 
     private suspend fun replaceStoredMintQuote(quote: CdkMintQuote) {
         val db = database ?: return
-        runCatching { db.addMintQuote(quote) }
-            .onFailure {
-                db.removeMintQuote(quote.id)
-                db.addMintQuote(quote)
-            }
-            .getOrThrow()
+        try {
+            db.addMintQuote(quote)
+        } catch (cancellation: CancellationException) {
+            throw cancellation
+        } catch (_: Throwable) {
+            db.removeMintQuote(quote.id)
+            db.addMintQuote(quote)
+        }
     }
 
     private suspend fun persistMintQuoteLocalMetadataIfNeeded(
