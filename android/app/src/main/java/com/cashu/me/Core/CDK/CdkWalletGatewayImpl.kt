@@ -72,6 +72,7 @@ class CdkWalletGatewayImpl : CdkWalletGateway, NwcServiceGateway {
     private var database: CdkWalletSqliteDatabase? = null
     private var repository: CdkWalletRepository? = null
     private val operationMutex = Mutex()
+    private val lightningAddressResolver = LightningAddressResolver()
 
     override suspend fun initializeLogging(level: String) = cdkCall {
         initLogging(level)
@@ -328,12 +329,38 @@ class CdkWalletGatewayImpl : CdkWalletGateway, NwcServiceGateway {
         when (val decoded = PaymentRequestDecoder.decode(request)) {
             is PaymentRequestDecodeResult.LightningAddress -> {
                 val amount = requirePositiveAmount(amountSats, "Lightning address payments require an amount.")
-                val quote = wallet.meltHumanReadable(
-                    address = decoded.address,
-                    amountMsat = (amount * 1_000).toCdkAmount(),
-                    network = bitcoinNetworkFor(wallet.mintUrl().url),
-                )
-                return@cdkCall quote.toDomain(fallbackMethod = PaymentMethodKind.Bolt11)
+                val amountMsat = try {
+                    Math.multiplyExact(amount, 1_000L)
+                } catch (_: ArithmeticException) {
+                    throw CdkGatewayUnavailable("Lightning address payment amount is too large.")
+                }
+                try {
+                    /*
+                     * CDK <= 0.17.3 rejects otherwise valid LNURL-pay invoices whose
+                     * description hash does not commit to the advertised metadata
+                     * (cashubtc/cdk#2235). Resolve and amount-check LNURL here, as iOS
+                     * does, then give CDK the BOLT11 invoice directly. Remove this
+                     * workaround once the Android binding includes upstream 7be1e2e7b8.
+                     */
+                    val invoice = lightningAddressResolver.resolveBolt11Invoice(
+                        address = decoded.address,
+                        amountMsat = amountMsat,
+                    )
+                    val quote = wallet.meltQuote(
+                        method = CdkPaymentMethod.Bolt11,
+                        request = invoice,
+                        options = null,
+                        extra = null,
+                    )
+                    return@cdkCall quote.toDomain(fallbackMethod = PaymentMethodKind.Bolt11)
+                } catch (_: LightningAddressResolutionException.Unavailable) {
+                    val quote = wallet.meltBip353Quote(
+                        bip353Address = decoded.address,
+                        amountMsat = amountMsat.toCdkAmount(),
+                        network = bitcoinNetworkFor(wallet.mintUrl().url),
+                    )
+                    return@cdkCall quote.toDomain(fallbackMethod = quote.paymentMethod.toDomain())
+                }
             }
             is PaymentRequestDecodeResult.Onchain -> {
                 val amount = requirePositiveAmount(amountSats, "On-chain payments require an amount.")
