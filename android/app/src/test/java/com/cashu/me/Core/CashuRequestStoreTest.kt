@@ -199,9 +199,11 @@ class CashuRequestStoreTest {
         assertNull(store.state.value.currentRequestId)
         assertNull(persistence.currentCashuRequestId)
 
-        store.reset()
+        store.resetForWalletBoundary()
         assertTrue(persistence.requests.isEmpty())
         assertNull(persistence.currentCashuRequestId)
+        assertTrue(store.state.value.requests.isEmpty())
+        assertNull(store.state.value.currentRequestId)
     }
 
     @Test

@@ -249,6 +249,7 @@ class WalletManager(
             secureStorage.delete(StorageKeys.secureWalletMnemonic)
             secureStorage.delete(StorageKeys.secureNostrPrivateKey)
             databasePathManager.removeWalletDatabaseFiles()
+            cashuRequestStore.resetForWalletBoundary()
             walletStore.removeAllWalletData()
             settingsManager.resetWalletScopedData()
             npcService.resetForWalletBoundary()
@@ -1073,6 +1074,7 @@ class WalletManager(
             // the repository/database it is backed by is closed.
             nwcManager.resetForWalletBoundary()
             gateway.closeWalletRepository()
+            cashuRequestStore.resetForWalletBoundary()
             walletStore.removeAllWalletData()
             settingsManager.prepareForWalletReplacement()
             nostrService.resetForWalletBoundary(deleteStoredKey = false)
@@ -1087,6 +1089,7 @@ class WalletManager(
         }.onFailure { error ->
             gateway.closeWalletRepository()
             walletStore.restoreWalletScopedData(walletSnapshot)
+            cashuRequestStore.reload()
             settingsManager.restoreWalletScopedData(settingsSnapshot)
             nwcManager.restoreWalletScopedData(nwcSnapshot)
             nostrMintBackupService.reloadStoredState()

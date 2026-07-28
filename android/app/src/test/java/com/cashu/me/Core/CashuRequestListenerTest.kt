@@ -7,6 +7,7 @@ import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import com.cashu.me.Core.Protocols.StorageKeys
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -49,5 +50,53 @@ class CashuRequestListenerTest {
     @Test
     fun processedGiftWrapsAreClearedAtWalletBoundary() {
         assertTrue(StorageKeys.walletProcessedNip17GiftWraps in StorageKeys.walletBoundaryKeys)
+    }
+
+    @Test
+    fun transientGiftWrapCanRetryButTerminalGiftWrapIsPersistentlyDeduplicated() {
+        var stored = emptyList<String>()
+        val tracker = ProcessedNip17EventTracker(
+            load = { stored },
+            save = { stored = it },
+        )
+        tracker.reload()
+
+        assertTrue(tracker.begin("retryable"))
+        tracker.finish("retryable", terminalOutcome = false)
+        assertTrue(tracker.begin("retryable"))
+
+        tracker.finish("retryable", terminalOutcome = true)
+        assertEquals(listOf("retryable"), stored)
+        assertFalse(tracker.begin("retryable"))
+
+        val reloaded = ProcessedNip17EventTracker(
+            load = { stored },
+            save = { stored = it },
+        )
+        reloaded.reload()
+        assertFalse(reloaded.begin("retryable"))
+    }
+
+    @Test
+    fun concurrentRelayDuplicateIsSuppressedAndProcessedHistoryIsBounded() {
+        var stored = emptyList<String>()
+        val tracker = ProcessedNip17EventTracker(
+            load = { stored },
+            save = { stored = it },
+            maxProcessedIds = 2,
+        )
+        tracker.reload()
+
+        assertTrue(tracker.begin("event-1"))
+        assertFalse(tracker.begin("event-1"))
+        tracker.finish("event-1", terminalOutcome = true)
+        assertTrue(tracker.begin("event-2"))
+        tracker.finish("event-2", terminalOutcome = true)
+        assertTrue(tracker.begin("event-3"))
+        tracker.finish("event-3", terminalOutcome = true)
+
+        assertEquals(listOf("event-2", "event-3"), stored)
+        assertTrue(tracker.begin("event-1"))
+        assertFalse(tracker.begin("event-2"))
     }
 }

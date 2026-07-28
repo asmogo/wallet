@@ -32,10 +32,10 @@ class CashuRequestListener(
     private val walletStore: WalletStore,
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
-    private val processedLock = Any()
-    private val processedIds = mutableSetOf<String>()
-    private val processedOrder = mutableListOf<String>()
-    private val inFlightIds = mutableSetOf<String>()
+    private val processedEvents = ProcessedNip17EventTracker(
+        load = walletStore::loadProcessedNip17GiftWraps,
+        save = walletStore::saveProcessedNip17GiftWraps,
+    )
     private var client: NostrInboxClient? = null
     private val mutableState = MutableStateFlow(CashuRequestListenerState())
     val state: StateFlow<CashuRequestListenerState> = mutableState.asStateFlow()
@@ -78,17 +78,13 @@ class CashuRequestListener(
 
     fun resetForWalletBoundary(restart: Boolean) {
         stop()
-        synchronized(processedLock) {
-            processedIds.clear()
-            processedOrder.clear()
-            inFlightIds.clear()
-        }
+        processedEvents.clear()
         if (restart) start()
     }
 
     private suspend fun handle(event: NostrIncomingEvent, recipientPrivateKey: ByteArray) {
         if (event.kind != 1059) return
-        if (!beginProcessing(event.id)) return
+        if (!processedEvents.begin(event.id)) return
 
         var terminalOutcome = false
         try {
@@ -101,7 +97,7 @@ class CashuRequestListener(
             }
             terminalOutcome = tryClaim(rumor.content, event.id) != ClaimOutcome.TransientFailure
         } finally {
-            finishProcessing(event.id, terminalOutcome)
+            processedEvents.finish(event.id, terminalOutcome)
         }
     }
 
@@ -135,38 +131,7 @@ class CashuRequestListener(
     }
 
     private fun reloadProcessedIds() {
-        val stored = walletStore.loadProcessedNip17GiftWraps()
-            .distinct()
-            .takeLast(MaxProcessedIds)
-        synchronized(processedLock) {
-            processedOrder.clear()
-            processedOrder.addAll(stored)
-            processedIds.clear()
-            processedIds.addAll(stored)
-            inFlightIds.clear()
-        }
-    }
-
-    private fun beginProcessing(eventId: String): Boolean = synchronized(processedLock) {
-        if (eventId in processedIds || eventId in inFlightIds) {
-            false
-        } else {
-            inFlightIds += eventId
-            true
-        }
-    }
-
-    private fun finishProcessing(eventId: String, terminalOutcome: Boolean) {
-        synchronized(processedLock) {
-            inFlightIds -= eventId
-            if (!terminalOutcome || !processedIds.add(eventId)) return
-            processedOrder += eventId
-            if (processedOrder.size > MaxProcessedIds) {
-                val removed = processedOrder.removeAt(0)
-                processedIds -= removed
-            }
-            walletStore.saveProcessedNip17GiftWraps(processedOrder)
-        }
+        processedEvents.reload()
     }
 
     private enum class ClaimOutcome { Claimed, Unclaimable, TransientFailure }
@@ -178,7 +143,6 @@ class CashuRequestListener(
 
     companion object {
         internal const val LookbackSeconds = 7L * 24 * 60 * 60
-        private const val MaxProcessedIds = 1_000
         private val payloadJson = Json { ignoreUnknownKeys = true; encodeDefaults = true }
 
         internal fun subscriptionSince(nowEpochSeconds: Long): Long =
@@ -218,6 +182,62 @@ class CashuRequestListener(
                 token = "cashuA$encoded",
                 requestId = fields["id"]?.jsonPrimitive?.contentOrNull,
             )
+        }
+    }
+}
+
+internal class ProcessedNip17EventTracker(
+    private val load: () -> List<String>,
+    private val save: (List<String>) -> Unit,
+    private val maxProcessedIds: Int = 1_000,
+) {
+    private val lock = Any()
+    private val processedIds = mutableSetOf<String>()
+    private val processedOrder = mutableListOf<String>()
+    private val inFlightIds = mutableSetOf<String>()
+
+    init {
+        require(maxProcessedIds > 0) { "maxProcessedIds must be positive." }
+    }
+
+    fun reload() {
+        val stored = load().distinct().takeLast(maxProcessedIds)
+        synchronized(lock) {
+            processedOrder.clear()
+            processedOrder.addAll(stored)
+            processedIds.clear()
+            processedIds.addAll(stored)
+            inFlightIds.clear()
+        }
+    }
+
+    fun clear() {
+        synchronized(lock) {
+            processedIds.clear()
+            processedOrder.clear()
+            inFlightIds.clear()
+        }
+    }
+
+    fun begin(eventId: String): Boolean = synchronized(lock) {
+        if (eventId in processedIds || eventId in inFlightIds) {
+            false
+        } else {
+            inFlightIds += eventId
+            true
+        }
+    }
+
+    fun finish(eventId: String, terminalOutcome: Boolean) {
+        synchronized(lock) {
+            inFlightIds -= eventId
+            if (!terminalOutcome || !processedIds.add(eventId)) return
+            processedOrder += eventId
+            if (processedOrder.size > maxProcessedIds) {
+                val removed = processedOrder.removeAt(0)
+                processedIds -= removed
+            }
+            save(processedOrder.toList())
         }
     }
 }

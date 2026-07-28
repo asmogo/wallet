@@ -192,6 +192,11 @@ class CashuRequestStore(
         mutableState.value = loadState()
     }
 
+    /** Clear both observable and persisted request state before changing wallets. */
+    fun resetForWalletBoundary() {
+        reset()
+    }
+
     fun reset() {
         persist(emptyList(), null)
     }
