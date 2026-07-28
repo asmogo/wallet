@@ -218,10 +218,32 @@ struct UnifiedReceiveView: View {
                 }
                 .fullScreenCover(item: $route) { routeView($0).canvasSheetBackground() }
                 .onChange(of: tokenInput) { handleInputChange() }
+                .onAppear {
+                    guard let token = Self.automaticReceiveClipboardToken(
+                        enabled: settings.autoPasteEcashReceive,
+                        currentInput: tokenInput,
+                        clipboardText: { UIPasteboard.general.string }
+                    ) else { return }
+                    tokenInput = token
+                }
                 .onDisappear { autoRouteTask?.cancel() }
         }
         .presentationDetents([.height(compactDetentHeight)])
         .presentationDragIndicator(.visible)
+    }
+
+    /// The clipboard token to auto-paste when the receive input appears, if
+    /// any. Honors the privacy setting and never replaces explicit input —
+    /// mirrors Android `ReceiveEcashScreen.automaticReceiveClipboardToken`.
+    static func automaticReceiveClipboardToken(
+        enabled: Bool,
+        currentInput: String,
+        clipboardText: () -> String?
+    ) -> String? {
+        guard enabled,
+              currentInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+              let clipboardText = clipboardText() else { return nil }
+        return TokenParser.normalizedToken(from: clipboardText)
     }
 
     // MARK: Input step

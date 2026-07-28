@@ -25,11 +25,14 @@ enum WalletStartupPolicy {
         return now - lastRefresh >= keysetRefreshInterval
     }
 
-    /// A CDK/database failure must not hide a wallet whose complete cached home
-    /// model was already published. Without a cache, onboarding is the only
-    /// recoverable presentation.
-    static func needsOnboardingAfterRuntimeFailure(cachedWalletPublished: Bool) -> Bool {
-        !cachedWalletPublished
+    /// A CDK/database failure must not hide a complete wallet whose cached home
+    /// model was already published. An interrupted iCloud restore is never
+    /// complete, so it must return to recovery even when partial cache exists.
+    static func needsOnboardingAfterRuntimeFailure(
+        cachedWalletPublished: Bool,
+        iCloudRestoreIncomplete: Bool = false
+    ) -> Bool {
+        iCloudRestoreIncomplete || !cachedWalletPublished
     }
 }
 
@@ -46,6 +49,7 @@ extension WalletManager {
         if IntegrationTestConfig.shouldResetWallet {
             try? keychainService.deleteMnemonic()
             try? keychainService.deleteNostrPrivateKey()
+            setICloudRestoreIncomplete(false)
             SettingsManager.shared.resetWalletScopedData()
         }
 
@@ -85,7 +89,10 @@ extension WalletManager {
             if let storedMnemonic {
                 mnemonic = storedMnemonic
                 loadCachedWalletState()
-                needsOnboarding = false
+                needsOnboarding = ICloudRestorePolicy.needsOnboarding(
+                    hasStoredMnemonic: true,
+                    restoreIncomplete: hasIncompleteICloudRestore
+                )
                 isInitialized = true
                 publishedCachedWallet = true
                 WalletStartupInstrumentation.signposter.emitEvent(
@@ -112,7 +119,10 @@ extension WalletManager {
                 startDeferredStartupMaintenance()
                 SentryService.breadcrumb("Wallet loaded", category: "wallet.lifecycle")
             } else {
-                needsOnboarding = true
+                needsOnboarding = ICloudRestorePolicy.needsOnboarding(
+                    hasStoredMnemonic: false,
+                    restoreIncomplete: hasIncompleteICloudRestore
+                )
                 isRuntimeReady = true
                 isInitialized = true
                 // Neither cloud synchronization nor logging setup is required
@@ -131,7 +141,8 @@ extension WalletManager {
             // A runtime-open failure must not hide already-published balances
             // and history or incorrectly send an existing wallet to onboarding.
             needsOnboarding = WalletStartupPolicy.needsOnboardingAfterRuntimeFailure(
-                cachedWalletPublished: publishedCachedWallet
+                cachedWalletPublished: publishedCachedWallet,
+                iCloudRestoreIncomplete: hasIncompleteICloudRestore
             )
         }
     }
@@ -238,6 +249,15 @@ extension WalletManager {
 
     func completeOnboarding() {
         transactionService.loadCachedState()
+        if hasIncompleteICloudRestore {
+            // Choosing a different onboarding path after an interrupted iCloud
+            // restore is also a valid completion. Release the write barrier only
+            // once that replacement wallet and its mint list are final.
+            setICloudRestoreIncomplete(false)
+            if iCloudBackupEnabled {
+                performICloudBackup()
+            }
+        }
         needsOnboarding = false
         guard !IntegrationTestConfig.shouldUseDeterministicUIRuntime else { return }
         CashuRequestListener.shared.attach(walletManager: self)

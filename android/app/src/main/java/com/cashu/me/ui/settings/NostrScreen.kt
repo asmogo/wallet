@@ -49,6 +49,7 @@ import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.cashu.me.Core.AppLockManager
 import com.cashu.me.Core.NostrService
 import com.cashu.me.Core.NostrSignerType
 import com.cashu.me.Core.NwcManager
@@ -63,6 +64,7 @@ import com.cashu.me.ui.components.NavRow
 import com.cashu.me.ui.components.PrimaryButton
 import com.cashu.me.ui.components.SectionHeader
 import com.cashu.me.ui.components.ToolbarIcon
+import com.cashu.me.ui.security.rememberWalletAuthenticationLauncher
 import com.cashu.me.ui.theme.CashuTheme
 import kotlinx.coroutines.delay
 
@@ -74,6 +76,7 @@ fun NostrScreen(
     nostrService: NostrService,
     settingsManager: SettingsManager,
     nwcManager: NwcManager,
+    appLockManager: AppLockManager,
     onOpenWalletConnect: () -> Unit,
     onClose: () -> Unit,
 ) {
@@ -81,7 +84,10 @@ fun NostrScreen(
     val settings by settingsManager.state.collectAsState()
     val nwcState by nwcManager.state.collectAsState()
     val clipboard = LocalClipboardManager.current
-    var nsecRevealed by remember { mutableStateOf(false) }
+    val authenticate = rememberWalletAuthenticationLauncher(appLockManager)
+    // Keep the authenticated value tied to this key. Replacing/importing/resetting
+    // the Nostr key creates fresh hidden state, even if the previous key was visible.
+    var revealedNsec by remember(nostrState.nsec) { mutableStateOf<String?>(null) }
     var nsecCopied by remember { mutableStateOf(false) }
     LaunchedEffect(nsecCopied) {
         if (nsecCopied) {
@@ -174,25 +180,36 @@ fun NostrScreen(
                 horizontalArrangement = Arrangement.spacedBy(CashuTheme.spacing.snug),
             ) {
                 Text(
-                    text = if (nsecRevealed) nostrState.nsec.ifBlank { "—" }
-                    else "•".repeat(12),
+                    text = revealedNsec?.ifBlank { "—" } ?: "•".repeat(12),
                     style = MaterialTheme.typography.bodyMedium.copy(fontFamily = FontFamily.Monospace),
                     color = MaterialTheme.colorScheme.onSurface,
                     modifier = Modifier.weight(1f),
                     maxLines = 1,
                     overflow = TextOverflow.MiddleEllipsis,
                 )
-                IconButton(onClick = { nsecRevealed = !nsecRevealed }) {
+                IconButton(
+                    onClick = {
+                        if (revealedNsec != null) {
+                            revealedNsec = null
+                        } else {
+                            authenticate("Reveal your Nostr private key") {
+                                revealedNsec = nostrState.nsec
+                            }
+                        }
+                    },
+                ) {
                     Icon(
-                        imageVector = if (nsecRevealed) Icons.Outlined.VisibilityOff
+                        imageVector = if (revealedNsec != null) Icons.Outlined.VisibilityOff
                         else Icons.Outlined.Visibility,
-                        contentDescription = if (nsecRevealed) "Hide" else "Reveal",
+                        contentDescription = if (revealedNsec != null) "Hide" else "Reveal",
                     )
                 }
                 IconButton(
                     onClick = {
-                        clipboard.setText(AnnotatedString(nostrState.nsec))
-                        nsecCopied = true
+                        authenticate("Copy your Nostr private key") {
+                            clipboard.setText(AnnotatedString(nostrState.nsec))
+                            nsecCopied = true
+                        }
                     },
                     enabled = nostrState.nsec.isNotBlank(),
                 ) {

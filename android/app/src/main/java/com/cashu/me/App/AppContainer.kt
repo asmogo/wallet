@@ -85,6 +85,8 @@ class AppContainer(context: Context) {
         walletManager.cashuRequestListener = cashuRequestListener
         npcService.quoteClaimHandler = walletManager
         settingsManager.sentryService = sentryService
+        settingsManager.claimEligibleHeldPayments =
+            cashuRequestListener::claimEligibleHeldPaymentsAsync
         // Seed-derived primary P2PK key (iOS primaryP2PKPublicKey/PrivateKeyHex):
         // included in the signing set so ecash locked to the wallet's own key
         // (e.g. NPC locked quotes, locked receive requests) is redeemable.

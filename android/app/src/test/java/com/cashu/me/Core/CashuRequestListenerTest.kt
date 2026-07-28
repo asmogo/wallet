@@ -38,12 +38,76 @@ class CashuRequestListenerTest {
     }
 
     @Test
-    fun subscriptionAlwaysUsesFixedSevenDayLookback() {
-        val now = 2_000_000_000L
+    fun automaticClaimRequiresOptInAndPreviouslyTrustedMint() {
+        assertFalse(CashuRequestListener.shouldAutoClaim(autoClaimEnabled = false, mintKnown = false))
+        assertFalse(CashuRequestListener.shouldAutoClaim(autoClaimEnabled = false, mintKnown = true))
+        assertFalse(CashuRequestListener.shouldAutoClaim(autoClaimEnabled = true, mintKnown = false))
+        assertTrue(CashuRequestListener.shouldAutoClaim(autoClaimEnabled = true, mintKnown = true))
+    }
+
+    @Test
+    fun heldAutomaticClaimRequiresListenerOwnershipAndKnownMint() {
+        assertFalse(
+            CashuRequestListener.shouldClaimHeldPayment(
+                autoClaimEnabled = false,
+                listenerHeld = true,
+                mintKnown = true,
+            ),
+        )
+        assertFalse(
+            CashuRequestListener.shouldClaimHeldPayment(
+                autoClaimEnabled = true,
+                listenerHeld = false,
+                mintKnown = true,
+            ),
+        )
+        assertFalse(
+            CashuRequestListener.shouldClaimHeldPayment(
+                autoClaimEnabled = true,
+                listenerHeld = true,
+                mintKnown = false,
+            ),
+        )
+        assertTrue(
+            CashuRequestListener.shouldClaimHeldPayment(
+                autoClaimEnabled = true,
+                listenerHeld = true,
+                mintKnown = true,
+            ),
+        )
+    }
+
+    @Test
+    fun transientFailuresRemainRetryable() {
+        assertFalse(
+            CashuRequestListener.shouldMarkProcessed(
+                CashuRequestListener.ClaimOutcome.TransientFailure,
+            ),
+        )
+        assertTrue(
+            CashuRequestListener.shouldMarkProcessed(
+                CashuRequestListener.ClaimOutcome.Held,
+            ),
+        )
+        assertTrue(
+            CashuRequestListener.shouldMarkProcessed(
+                CashuRequestListener.ClaimOutcome.Claimed,
+            ),
+        )
+        assertTrue(
+            CashuRequestListener.shouldMarkProcessed(
+                CashuRequestListener.ClaimOutcome.Unclaimable,
+            ),
+        )
+    }
+
+    @Test
+    fun listenerUsesFixedSevenDayLookback() {
+        val now = 2_000_000L
 
         assertEquals(
-            now - CashuRequestListener.LookbackSeconds,
-            CashuRequestListener.subscriptionSince(now),
+            now - CashuRequestListener.LookbackWindowSeconds,
+            CashuRequestListener.lookbackSince(now),
         )
     }
 

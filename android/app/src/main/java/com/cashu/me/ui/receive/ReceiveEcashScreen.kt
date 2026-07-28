@@ -40,6 +40,7 @@ import com.cashu.me.Core.CashuRequestStore
 import com.cashu.me.Core.NostrService
 import com.cashu.me.Core.PaymentRequestBuilder
 import com.cashu.me.Core.SettingsManager
+import com.cashu.me.Core.TokenParser
 import com.cashu.me.Core.WalletManager
 import com.cashu.me.ui.components.CashuTextField
 import com.cashu.me.ui.components.CircularMethodButton
@@ -53,6 +54,16 @@ import com.cashu.me.ui.send.resolveSendDestination
 import com.cashu.me.ui.theme.CashuTheme
 
 private const val TYPE_DEBOUNCE_MS = 400L
+
+internal fun automaticReceiveClipboardToken(
+    enabled: Boolean,
+    currentInput: String,
+    prefilledPayload: String?,
+    clipboardText: () -> String?,
+): String? {
+    if (!enabled || currentInput.isNotBlank() || !prefilledPayload.isNullOrBlank()) return null
+    return clipboardText()?.let(TokenParser::extractToken)
+}
 
 /**
  * The Receive surface — the mirror of [com.cashu.me.ui.send.UnifiedSendScreen]'s
@@ -142,6 +153,15 @@ fun ReceiveEcashScreen(
             SendDestinationResolution.Unrecognized ->
                 inputHint = "That doesn't look like a Cashu token. Paste an ecash token to receive."
         }
+    }
+
+    LaunchedEffect(Unit) {
+        automaticReceiveClipboardToken(
+            enabled = settings.autoPasteEcashReceive,
+            currentInput = input,
+            prefilledPayload = prefilledPayload,
+            clipboardText = { clipboard.getText()?.text },
+        )?.let { input = it }
     }
 
     // Typing settles for a beat before routing; paste/scan advance immediately.

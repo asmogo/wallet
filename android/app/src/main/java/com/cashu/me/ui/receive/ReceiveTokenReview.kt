@@ -101,10 +101,20 @@ internal const val MinClaimingBeatMillis = 500L
 internal suspend fun claimToken(
     review: TokenReview,
     walletManager: WalletManager,
+    claimPendingReceiveToken: suspend (PendingReceiveToken) -> Long =
+        walletManager::claimPendingReceiveToken,
 ): TokenClaimStatus {
     val startedAt = System.currentTimeMillis()
     val result = try {
-        Result.success(walletManager.receiveTokens(review.token))
+        val pending = walletManager.state.value.pendingReceiveTokens
+            .firstOrNull { it.token == review.token }
+        Result.success(
+            if (pending != null) {
+                claimPendingReceiveToken(pending)
+            } else {
+                walletManager.receiveTokens(review.token)
+            },
+        )
     } catch (c: CancellationException) {
         throw c
     } catch (t: Throwable) {
@@ -115,9 +125,6 @@ internal suspend fun claimToken(
     if (elapsed < MinClaimingBeatMillis) delay(MinClaimingBeatMillis - elapsed)
     return result.fold(
         onSuccess = { credited ->
-            // If this token was previously saved via "Receive later", clear the
-            // stored pending record — it's redeemed now.
-            walletManager.removePendingReceiveToken(review.token.take(64))
             TokenClaimStatus.Claimed(
                 // The gateway reports what was actually credited (net of the
                 // receive-swap fee); fall back to the reviewed net amount.

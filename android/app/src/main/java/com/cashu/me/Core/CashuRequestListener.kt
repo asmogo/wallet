@@ -9,6 +9,8 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
@@ -19,10 +21,13 @@ import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import com.cashu.me.Core.Wallet.userFacingWalletMessage
+import com.cashu.me.Models.PendingReceiveToken
+import com.cashu.me.Models.TokenInfo
 
 data class CashuRequestListenerState(
     val isRunning: Boolean = false,
     val lastError: String? = null,
+    val heldForApproval: PendingReceiveToken? = null,
 )
 
 class CashuRequestListener(
@@ -42,11 +47,17 @@ class CashuRequestListener(
     private val listenerGeneration = AtomicLong()
     private var pausedForWalletBoundary = false
     private var startAfterRetirement = false
+    private val eventMutex = Mutex()
+    private val heldClaimMutex = Mutex()
     private val mutableState = MutableStateFlow(CashuRequestListenerState())
     val state: StateFlow<CashuRequestListenerState> = mutableState.asStateFlow()
 
     @Synchronized
     fun start() {
+        if (!settingsManager.state.value.enablePaymentRequests) {
+            stop()
+            return
+        }
         if (client != null || pausedForWalletBoundary) return
         if (retiringClients.isNotEmpty()) {
             startAfterRetirement = true
@@ -55,7 +66,10 @@ class CashuRequestListener(
         val nostr = nostrService.state.value
         val privateKeyHex = nostrService.currentPrivateKey()
         if (!nostr.isInitialized || nostr.publicKeyHex.isBlank() || privateKeyHex.isNullOrBlank()) {
-            mutableState.value = CashuRequestListenerState(lastError = "Nostr key is not initialized.")
+            mutableState.value = mutableState.value.copy(
+                isRunning = false,
+                lastError = "Nostr key is not initialized.",
+            )
             return
         }
         val relays = settingsManager.state.value.nostrRelays
@@ -63,11 +77,14 @@ class CashuRequestListener(
             .filter { it.startsWith("ws://") || it.startsWith("wss://") }
             .distinct()
         if (relays.isEmpty()) {
-            mutableState.value = CashuRequestListenerState(lastError = "No Nostr relays configured.")
+            mutableState.value = mutableState.value.copy(
+                isRunning = false,
+                lastError = "No Nostr relays configured.",
+            )
             return
         }
-        reloadProcessedIds()
-        val since = subscriptionSince(System.currentTimeMillis() / 1000)
+        processedEvents.reload()
+        val since = lookbackSince(System.currentTimeMillis() / 1000)
         val recipientPrivateKey = NIP44.hexToBytes(privateKeyHex)
         val generation = listenerGeneration.incrementAndGet()
         val newClient = NostrInboxClient(
@@ -79,7 +96,7 @@ class CashuRequestListener(
         }
         client = newClient
         newClient.start()
-        mutableState.value = CashuRequestListenerState(isRunning = true)
+        mutableState.value = mutableState.value.copy(isRunning = true, lastError = null)
         AppLogger.wallet.info("CashuRequestListener: started on ${relays.size} relays since=$since")
     }
 
@@ -110,6 +127,7 @@ class CashuRequestListener(
     suspend fun resetForWalletBoundary(restart: Boolean) {
         quiesceForWalletBoundary()
         processedEvents.clear()
+        mutableState.value = CashuRequestListenerState()
         synchronized(this) {
             pausedForWalletBoundary = false
         }
@@ -135,12 +153,16 @@ class CashuRequestListener(
         listenerGeneration.incrementAndGet()
         val detached = client
         client = null
-        mutableState.value = CashuRequestListenerState(isRunning = false)
+        mutableState.value = mutableState.value.copy(isRunning = false)
         return detached
     }
 
     private fun isCurrentGeneration(generation: Long): Boolean =
         listenerGeneration.get() == generation
+
+    fun dismissHeldPayment() {
+        mutableState.value = mutableState.value.copy(heldForApproval = null)
+    }
 
     private suspend fun handle(
         event: NostrIncomingEvent,
@@ -148,26 +170,35 @@ class CashuRequestListener(
         generation: Long,
     ) {
         if (!isCurrentGeneration(generation)) return
-        if (event.kind != 1059) return
-        if (!processedEvents.begin(event.id)) return
+        eventMutex.withLock {
+            if (!isCurrentGeneration(generation)) return@withLock
+            if (event.kind != 1059) return@withLock
+            if (!processedEvents.begin(event.id)) return@withLock
 
-        var terminalOutcome = false
-        try {
-            if (!isCurrentGeneration(generation)) return
-            val rumor = runCatching { NIP17.unwrap(event, recipientPrivateKey) }
-                .onFailure { AppLogger.wallet.debug("CashuRequestListener: NIP-17 unwrap failed: ${it.message}") }
-                .getOrNull()
-            if (rumor == null || rumor.kind != 14) {
-                terminalOutcome = true
-                return
+            var terminalOutcome = false
+            try {
+                if (!isCurrentGeneration(generation)) return@withLock
+                val rumor = runCatching { NIP17.unwrap(event, recipientPrivateKey) }
+                    .onFailure {
+                        AppLogger.wallet.debug(
+                            "CashuRequestListener: NIP-17 unwrap failed: ${it.message}",
+                        )
+                    }
+                    .getOrNull()
+                if (rumor == null || rumor.kind != 14) {
+                    terminalOutcome = true
+                    return@withLock
+                }
+                if (!isCurrentGeneration(generation)) return@withLock
+                terminalOutcome = shouldMarkProcessed(
+                    tryClaim(rumor.content, event.id, generation),
+                )
+            } finally {
+                processedEvents.finish(
+                    eventId = event.id,
+                    terminalOutcome = terminalOutcome && isCurrentGeneration(generation),
+                )
             }
-            if (!isCurrentGeneration(generation)) return
-            terminalOutcome = tryClaim(rumor.content, event.id, generation) != ClaimOutcome.TransientFailure
-        } finally {
-            processedEvents.finish(
-                eventId = event.id,
-                terminalOutcome = terminalOutcome && isCurrentGeneration(generation),
-            )
         }
     }
 
@@ -179,6 +210,14 @@ class CashuRequestListener(
         val payload = runCatching { paymentPayloadToToken(rumorContent) }
             .onFailure { AppLogger.wallet.debug("CashuRequestListener: malformed PaymentRequestPayload") }
             .getOrNull() ?: return ClaimOutcome.Unclaimable
+        val info = TokenInfo.parse(payload.token) ?: return ClaimOutcome.Unclaimable
+        val shouldAutoClaim = shouldAutoClaim(
+            autoClaimEnabled = settingsManager.state.value.receivePaymentRequestsAutomatically,
+            mintKnown = walletManager.isMintKnown(info.mint),
+        )
+        if (!shouldAutoClaim) {
+            return holdForApproval(payload, info, eventId, generation)
+        }
         return runCatching {
             val amount = walletManager.receiveCashuRequestPayment(
                 tokenString = payload.token,
@@ -193,38 +232,155 @@ class CashuRequestListener(
                 )
             }
             ClaimOutcome.Claimed
-        }.onFailure { error ->
-            AppLogger.wallet.error("CashuRequestListener: redeem failed", error)
+        }.getOrElse { error ->
+            AppLogger.wallet.error(
+                "CashuRequestListener: redeem failed; payment remains retryable",
+                error,
+            )
             if (isCurrentGeneration(generation)) {
-                scope.launch {
+                scope.launch(Dispatchers.Main.immediate) {
                     if (isCurrentGeneration(generation)) {
-                        mutableState.value = CashuRequestListenerState(
-                            isRunning = mutableState.value.isRunning,
+                        mutableState.value = mutableState.value.copy(
                             lastError = error.userFacingWalletMessage,
                         )
                     }
                 }
             }
-        }.getOrElse { ClaimOutcome.TransientFailure }
+            ClaimOutcome.TransientFailure
+        }
     }
 
-    private fun reloadProcessedIds() {
-        processedEvents.reload()
+    private suspend fun holdForApproval(
+        payload: PaymentPayloadToken,
+        info: TokenInfo,
+        eventId: String,
+        generation: Long,
+    ): ClaimOutcome {
+        val existing = walletManager.state.value.pendingReceiveTokens
+            .firstOrNull { it.token == payload.token }
+        if (existing != null) {
+            if (isCurrentGeneration(generation)) {
+                mutableState.value = mutableState.value.copy(heldForApproval = existing)
+            }
+            return ClaimOutcome.Held
+        }
+
+        val listenerHeldCount = walletManager.state.value.pendingReceiveTokens.count {
+            it.isCashuRequestPayment
+        }
+        if (listenerHeldCount >= MaxHeldPayments) {
+            AppLogger.wallet.info("CashuRequestListener: approval backlog full; deferring payment")
+            return ClaimOutcome.TransientFailure
+        }
+
+        val pending = PendingReceiveToken(
+            tokenId = payload.token.take(64),
+            token = payload.token,
+            amount = info.amount,
+            dateEpochMillis = System.currentTimeMillis(),
+            mintUrl = info.mint,
+            unit = info.unit,
+            cashuRequestId = payload.requestId,
+            processedId = eventId,
+        )
+        return runCatching {
+            walletManager.savePendingReceiveToken(pending)
+            walletManager.loadTransactions()
+            if (isCurrentGeneration(generation)) {
+                mutableState.value = mutableState.value.copy(
+                    lastError = null,
+                    heldForApproval = pending,
+                )
+            }
+            AppLogger.wallet.info("CashuRequestListener: payment held for explicit approval")
+            ClaimOutcome.Held
+        }.getOrElse { error ->
+            AppLogger.wallet.error("CashuRequestListener: failed to persist held payment", error)
+            ClaimOutcome.TransientFailure
+        }
     }
 
-    private enum class ClaimOutcome { Claimed, Unclaimable, TransientFailure }
+    suspend fun claimHeldPayment(pending: PendingReceiveToken): Long {
+        val amount = heldClaimMutex.withLock {
+            walletManager.claimPendingReceiveToken(pending)
+        }
+        if (mutableState.value.heldForApproval?.tokenId == pending.tokenId) {
+            mutableState.value = mutableState.value.copy(heldForApproval = null)
+        }
+        claimEligibleHeldPayments()
+        return amount
+    }
+
+    fun declineHeldPayment(pending: PendingReceiveToken) {
+        walletManager.removePendingReceiveToken(pending.tokenId)
+        if (mutableState.value.heldForApproval?.tokenId == pending.tokenId) {
+            mutableState.value = mutableState.value.copy(heldForApproval = null)
+        }
+        scope.launch { walletManager.loadTransactions() }
+    }
+
+    suspend fun claimEligibleHeldPayments() {
+        if (!settingsManager.state.value.receivePaymentRequestsAutomatically) return
+        heldClaimMutex.withLock {
+            val eligible = walletManager.state.value.pendingReceiveTokens.filter { pending ->
+                shouldClaimHeldPayment(
+                    autoClaimEnabled = settingsManager.state.value.receivePaymentRequestsAutomatically,
+                    listenerHeld = pending.isCashuRequestPayment,
+                    mintKnown = walletManager.isMintKnown(pending.mintUrl),
+                )
+            }
+            for (pending in eligible) {
+                runCatching { walletManager.claimPendingReceiveToken(pending) }
+                    .onSuccess {
+                        if (mutableState.value.heldForApproval?.tokenId == pending.tokenId) {
+                            mutableState.value = mutableState.value.copy(heldForApproval = null)
+                        }
+                    }
+                    .onFailure {
+                        AppLogger.wallet.error(
+                            "CashuRequestListener: held-payment claim failed; leaving it in History",
+                            it,
+                        )
+                    }
+            }
+        }
+    }
+
+    fun claimEligibleHeldPaymentsAsync() {
+        scope.launch { claimEligibleHeldPayments() }
+    }
 
     data class PaymentPayloadToken(
         val token: String,
         val requestId: String?,
     )
 
+    internal enum class ClaimOutcome {
+        Claimed,
+        Unclaimable,
+        TransientFailure,
+        Held,
+    }
+
     companion object {
-        internal const val LookbackSeconds = 7L * 24 * 60 * 60
+        internal const val MaxHeldPayments = 50
+        internal const val LookbackWindowSeconds = 7 * 24 * 60 * 60L
         private val payloadJson = Json { ignoreUnknownKeys = true; encodeDefaults = true }
 
-        internal fun subscriptionSince(nowEpochSeconds: Long): Long =
-            nowEpochSeconds - LookbackSeconds
+        internal fun shouldAutoClaim(autoClaimEnabled: Boolean, mintKnown: Boolean): Boolean =
+            autoClaimEnabled && mintKnown
+
+        internal fun shouldClaimHeldPayment(
+            autoClaimEnabled: Boolean,
+            listenerHeld: Boolean,
+            mintKnown: Boolean,
+        ): Boolean = autoClaimEnabled && listenerHeld && mintKnown
+
+        internal fun shouldMarkProcessed(outcome: ClaimOutcome): Boolean =
+            outcome != ClaimOutcome.TransientFailure
+
+        internal fun lookbackSince(nowEpochSeconds: Long): Long =
+            nowEpochSeconds - LookbackWindowSeconds
 
         fun paymentPayloadToToken(content: String): PaymentPayloadToken {
             val fields = payloadJson.parseToJsonElement(content).jsonObject

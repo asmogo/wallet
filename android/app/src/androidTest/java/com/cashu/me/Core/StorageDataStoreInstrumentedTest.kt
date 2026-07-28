@@ -15,6 +15,7 @@ import com.cashu.me.Models.MintInfo
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 
@@ -65,8 +66,14 @@ class StorageDataStoreInstrumentedTest {
         val storeName = uniqueStoreName("settings_store")
         context.seedSharedPreferences(storeName) {
             putBoolean(StorageKeys.settingsUseBitcoinSymbol, true)
+            putBoolean(StorageKeys.settingsEnablePaymentRequests, false)
+            putBoolean(StorageKeys.settingsReceivePaymentRequestsAutomatically, false)
             putString(StorageKeys.settingsBitcoinPriceCurrency, "EUR")
             putString(StorageKeys.settingsNostrRelays, json.encodeToString(ListSerializer(String.serializer()), listOf("wss://relay.example")))
+            putString(
+                StorageKeys.cashuRequestsProcessedNip17Ids,
+                json.encodeToString(ListSerializer(String.serializer()), listOf("event-1")),
+            )
             putString(
                 StorageKeys.settingsP2PKKeys,
                 """[{"id":"p2pk-1","publicKey":"02${"a".repeat(64)}","label":"P2PK key","createdAtEpochMillis":1,"used":false,"usedCount":0}]""",
@@ -76,15 +83,50 @@ class StorageDataStoreInstrumentedTest {
         val store = SettingsStore(context, storeName)
 
         assertEquals(true, store.useBitcoinSymbol)
+        assertFalse(store.enablePaymentRequests)
+        assertFalse(store.receivePaymentRequestsAutomatically)
         assertEquals("EUR", store.bitcoinPriceCurrency)
         assertEquals(listOf("wss://relay.example"), store.nostrRelays)
         assertEquals(1, store.p2pkKeys.size)
+        assertEquals(
+            """["event-1"]""",
+            DataStorePreferenceStore(context, storeName)
+                .string(StorageKeys.cashuRequestsProcessedNip17Ids),
+        )
 
         store.clearWalletScopedData()
 
         assertEquals(true, store.useBitcoinSymbol)
+        assertTrue(store.enablePaymentRequests)
+        assertTrue(store.receivePaymentRequestsAutomatically)
         assertEquals("EUR", store.bitcoinPriceCurrency)
         assertEquals(emptyList<Any>(), store.p2pkKeys)
+        assertNull(
+            DataStorePreferenceStore(context, storeName)
+                .string(StorageKeys.cashuRequestsProcessedNip17Ids),
+        )
+    }
+
+    @Test
+    fun cashuRequestPrivacyDefaultsMatchIos() {
+        val store = SettingsStore(context, uniqueStoreName("settings_store"))
+
+        assertTrue(store.enablePaymentRequests)
+        assertTrue(store.receivePaymentRequestsAutomatically)
+    }
+
+    @Test
+    fun enablingAutomaticCashuRequestClaimsDrainsEligibleHeldPaymentsOnce() {
+        val store = SettingsStore(context, uniqueStoreName("settings_store"))
+        store.receivePaymentRequestsAutomatically = false
+        val manager = SettingsManager(store, AndroidSecureStorage(context))
+        var drainCount = 0
+        manager.claimEligibleHeldPayments = { drainCount += 1 }
+
+        manager.setReceivePaymentRequestsAutomatically(true)
+        manager.setReceivePaymentRequestsAutomatically(true)
+
+        assertEquals(1, drainCount)
     }
 
     @Test

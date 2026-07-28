@@ -109,12 +109,13 @@ private fun CashuAppContent(container: AppContainer) {
     }
 
     val isRuntimeReadyRef by rememberUpdatedState(isRuntimeReady)
+    val shouldListenForRequests = isRuntimeReady && settings.enablePaymentRequests
+    val shouldListenForRequestsRef by rememberUpdatedState(shouldListenForRequests)
 
     LaunchedEffect(isRuntimeReady) {
         if (isRuntimeReady) {
-            container.cashuRequestListener.start()
-            val settings = container.settingsManager.state.value
-            if (settings.checkPendingOnStartup && settings.checkSentTokens) {
+            val currentSettings = container.settingsManager.state.value
+            if (currentSettings.checkPendingOnStartup && currentSettings.checkSentTokens) {
                 container.walletManager.checkAllPendingTokens()
             }
             // Runtime became ready while the process is already foregrounded —
@@ -128,7 +129,13 @@ private fun CashuAppContent(container: AppContainer) {
             container.walletManager.stopPendingQuoteForegroundPolling()
         }
     }
-
+    LaunchedEffect(shouldListenForRequests) {
+        if (shouldListenForRequests) {
+            container.cashuRequestListener.start()
+        } else {
+            container.cashuRequestListener.stop()
+        }
+    }
     // App-process foreground (not Activity): M3 ModalBottomSheet runs in its own
     // Dialog window and can ON_STOP the Activity while the user is still in the
     // app. Quote detection must keep running — iOS scenePhase parity.
@@ -163,7 +170,7 @@ private fun CashuAppContent(container: AppContainer) {
                 Lifecycle.Event.ON_START,
                 Lifecycle.Event.ON_RESUME -> {
                     container.appLockManager.appBecameActive()
-                    if (isRuntimeReadyRef) {
+                    if (shouldListenForRequestsRef) {
                         container.cashuRequestListener.start()
                     }
                 }
@@ -248,6 +255,30 @@ private fun AuthenticatedShell(container: AppContainer) {
     val pendingDeepLink by container.navigationManager.pendingDeepLink.collectAsState()
     val connectivityState by container.connectivityObserver.state.collectAsState()
     val appLockState by container.appLockManager.state.collectAsState()
+    val cashuRequestListenerState by container.cashuRequestListener.state.collectAsState()
+
+    // Incoming payments that are not eligible for silent receipt are already
+    // persisted before being surfaced. Present the normal Receive review when
+    // the shell is idle; closing it leaves the payment claimable from History.
+    LaunchedEffect(
+        cashuRequestListenerState.heldForApproval?.tokenId,
+        receiveTokenDetail,
+        activeFlow,
+        scannerTarget,
+        showContactless,
+        appLockState.isLocked,
+    ) {
+        val held = cashuRequestListenerState.heldForApproval ?: return@LaunchedEffect
+        val canPresent = receiveTokenDetail == null &&
+            activeFlow == null &&
+            scannerTarget == null &&
+            !showContactless &&
+            !appLockState.isLocked
+        if (canPresent) {
+            receiveTokenDetail = held.token
+            container.cashuRequestListener.dismissHeldPayment()
+        }
+    }
 
     LaunchedEffect(pendingDeepLink) {
         val deepLink = pendingDeepLink ?: return@LaunchedEffect
@@ -351,6 +382,14 @@ private fun AuthenticatedShell(container: AppContainer) {
                 payload = lastReceiveTokenDetail,
                 onDone = { receiveTokenDetail = null },
                 onDismissLockChanged = { receiveDetailDismissLocked = it },
+                claimPendingReceiveToken = { pending ->
+                    if (pending.isCashuRequestPayment) {
+                        container.cashuRequestListener.claimHeldPayment(pending)
+                    } else {
+                        container.walletManager.claimPendingReceiveToken(pending)
+                    }
+                },
+                onDeclinePendingReceiveToken = container.cashuRequestListener::declineHeldPayment,
             )
         }
         // System back (including predictive back) must dismiss the topmost overlay

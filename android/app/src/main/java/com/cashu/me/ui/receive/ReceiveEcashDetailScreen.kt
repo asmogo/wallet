@@ -38,6 +38,7 @@ import com.cashu.me.Core.Protocols.CurrencyAmount
 import com.cashu.me.Core.Protocols.CurrencyRegistry
 import com.cashu.me.Core.SettingsManager
 import com.cashu.me.Core.WalletManager
+import com.cashu.me.Models.PendingReceiveToken
 import com.cashu.me.ui.components.AmountFlipDisplay
 import com.cashu.me.ui.components.AmountText
 import com.cashu.me.ui.components.GhostButton
@@ -69,8 +70,13 @@ fun ReceiveEcashDetailScreen(
     payload: String,
     onDone: () -> Unit,
     onDismissLockChanged: (Boolean) -> Unit = {},
+    claimPendingReceiveToken: suspend (PendingReceiveToken) -> Long =
+        walletManager::claimPendingReceiveToken,
+    onDeclinePendingReceiveToken: (PendingReceiveToken) -> Unit =
+        { walletManager.removePendingReceiveToken(it.tokenId) },
 ) {
     val settings by settingsManager.state.collectAsState()
+    val walletState by walletManager.state.collectAsState()
     val priceState by priceService.state.collectAsState()
     val formatter = remember { AmountFormatter() }
     val scope = rememberCoroutineScope()
@@ -104,8 +110,12 @@ fun ReceiveEcashDetailScreen(
         if (status != null) return
         status = TokenClaimStatus.Claiming
         scope.launch {
-            status = claimToken(target, walletManager)
+            status = claimToken(target, walletManager, claimPendingReceiveToken)
         }
+    }
+
+    val heldPayment = walletState.pendingReceiveTokens.firstOrNull {
+        it.token == (parsed as? TokenParseOutcome.Ok)?.token && it.isCashuRequestPayment
     }
 
     // Surface (not a bare Box): the overlay renders outside any Material
@@ -145,10 +155,20 @@ fun ReceiveEcashDetailScreen(
                     onFlipPrimary = { settingsManager.setAmountDisplayPrimary(it.rawValue) },
                     onClose = onDone,
                     onReceive = { review?.let(::claim) },
-                    onReceiveLater = {
-                        review?.let {
-                            walletManager.savePendingReceiveToken(pendingReceiveTokenFrom(it))
+                    secondaryActionText = if (heldPayment != null) "Decline" else "Receive later",
+                    onSecondaryAction = {
+                        if (heldPayment != null) {
+                            onDeclinePendingReceiveToken(heldPayment)
                             onDone()
+                        } else {
+                            review?.let {
+                                val alreadyPending = walletManager.state.value.pendingReceiveTokens
+                                    .any { pending -> pending.token == it.token }
+                                if (!alreadyPending) {
+                                    walletManager.savePendingReceiveToken(pendingReceiveTokenFrom(it))
+                                }
+                                onDone()
+                            }
                         }
                     },
                 )
@@ -170,7 +190,8 @@ private fun ConfirmContent(
     onFlipPrimary: (AmountDisplayPrimary) -> Unit,
     onClose: () -> Unit,
     onReceive: () -> Unit,
-    onReceiveLater: () -> Unit,
+    secondaryActionText: String,
+    onSecondaryAction: () -> Unit,
 ) {
     val info = parsed.info
     val isSatToken = info.unit.equals("sat", ignoreCase = true)
@@ -244,8 +265,8 @@ private fun ConfirmContent(
             )
             Spacer(Modifier.height(CashuTheme.spacing.snug))
             GhostButton(
-                text = "Receive later",
-                onClick = onReceiveLater,
+                text = secondaryActionText,
+                onClick = onSecondaryAction,
             )
             Spacer(Modifier.navigationBarsPadding())
         }

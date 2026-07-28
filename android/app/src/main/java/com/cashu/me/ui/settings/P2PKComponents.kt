@@ -56,12 +56,14 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import com.cashu.me.Core.AppLockManager
 import com.cashu.me.Core.Bech32
 import com.cashu.me.ui.components.CanvasDivider
 import com.cashu.me.ui.components.IconSwap
 import com.cashu.me.ui.components.PrimaryButton
 import com.cashu.me.ui.components.QrCard
 import com.cashu.me.ui.components.shareText
+import com.cashu.me.ui.security.rememberWalletAuthenticationLauncher
 import com.cashu.me.ui.theme.CashuTheme
 import com.cashu.me.ui.theme.asOverline
 
@@ -340,20 +342,21 @@ fun QrDetailSheet(
 }
 
 /**
- * Reveals a key's nsec, mirroring the iOS seed-phrase backup pattern: hidden by
- * default behind an explicit reveal. (iOS additionally gates reveal/copy behind
- * App Lock authentication — Android follows once App Lock lands, see backlog.)
+ * Reveals a key's nsec, mirroring the seed-phrase backup pattern: the key is
+ * loaded only after device authentication, independently for reveal and copy.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun PrivateKeyRevealSheet(
     title: String,
-    nsec: String,
+    loadNsec: () -> String?,
+    appLockManager: AppLockManager,
     onDismiss: () -> Unit,
     warning: String = "Anyone with this key can claim ecash locked to it. Never share it.",
 ) {
     val clipboard = LocalClipboardManager.current
-    var revealed by remember { mutableStateOf(false) }
+    val authenticate = rememberWalletAuthenticationLauncher(appLockManager)
+    var revealedNsec by remember { mutableStateOf<String?>(null) }
     var copied by remember { mutableStateOf(false) }
     LaunchedEffect(copied) {
         if (copied) {
@@ -406,24 +409,36 @@ fun PrivateKeyRevealSheet(
                     horizontalArrangement = Arrangement.spacedBy(CashuTheme.spacing.snug),
                 ) {
                     Text(
-                        text = if (revealed) nsec else "•".repeat(HiddenKeyDots),
+                        text = revealedNsec ?: "•".repeat(HiddenKeyDots),
                         style = MaterialTheme.typography.bodyMedium.copy(fontFamily = FontFamily.Monospace),
-                        color = if (revealed) MaterialTheme.colorScheme.onSurface
+                        color = if (revealedNsec != null) MaterialTheme.colorScheme.onSurface
                         else MaterialTheme.colorScheme.onSurfaceVariant,
                         maxLines = 3,
                         modifier = Modifier.weight(1f),
                     )
                     Column(verticalArrangement = Arrangement.spacedBy(CashuTheme.spacing.micro)) {
-                        IconButton(onClick = { revealed = !revealed }) {
+                        IconButton(onClick = {
+                            if (revealedNsec != null) {
+                                revealedNsec = null
+                            } else {
+                                authenticate("Reveal this private key") {
+                                    revealedNsec = loadNsec()
+                                }
+                            }
+                        }) {
                             IconSwap(
-                                icon = if (revealed) Icons.Outlined.VisibilityOff
+                                icon = if (revealedNsec != null) Icons.Outlined.VisibilityOff
                                 else Icons.Outlined.Visibility,
-                                contentDescription = if (revealed) "Hide key" else "Reveal key",
+                                contentDescription = if (revealedNsec != null) "Hide key" else "Reveal key",
                             )
                         }
                         IconButton(onClick = {
-                            clipboard.setText(AnnotatedString(nsec))
-                            copied = true
+                            authenticate("Copy this private key") {
+                                loadNsec()?.let { nsec ->
+                                    clipboard.setText(AnnotatedString(nsec))
+                                    copied = true
+                                }
+                            }
                         }) {
                             IconSwap(
                                 icon = if (copied) Icons.Outlined.Check
