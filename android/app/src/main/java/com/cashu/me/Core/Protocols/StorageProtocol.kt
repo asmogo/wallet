@@ -61,6 +61,7 @@ object StorageKeys {
     const val walletProcessedCashuRequests = "wallet.processedCashuRequests"
     const val cashuRequests = "cashuRequests.v1"
     const val cashuRequestsCurrentId = "cashuRequests.currentId.v1"
+    const val cashuRequestsProcessedNip17Ids = "cashuRequests.processedNIP17Ids.v1"
 
     const val settingsUseBitcoinSymbol = "settings.useBitcoinSymbol"
     const val settingsShowFiatBalance = "settings.showFiatBalance"

@@ -136,7 +136,6 @@ private fun CashuAppContent(container: AppContainer) {
             container.cashuRequestListener.stop()
         }
     }
-
     // App-process foreground (not Activity): M3 ModalBottomSheet runs in its own
     // Dialog window and can ON_STOP the Activity while the user is still in the
     // app. Quote detection must keep running — iOS scenePhase parity.
@@ -383,6 +382,14 @@ private fun AuthenticatedShell(container: AppContainer) {
                 payload = lastReceiveTokenDetail,
                 onDone = { receiveTokenDetail = null },
                 onDismissLockChanged = { receiveDetailDismissLocked = it },
+                claimPendingReceiveToken = { pending ->
+                    if (pending.isCashuRequestPayment) {
+                        container.cashuRequestListener.claimHeldPayment(pending)
+                    } else {
+                        container.walletManager.claimPendingReceiveToken(pending)
+                    }
+                },
+                onDeclinePendingReceiveToken = container.cashuRequestListener::declineHeldPayment,
             )
         }
         // System back (including predictive back) must dismiss the topmost overlay

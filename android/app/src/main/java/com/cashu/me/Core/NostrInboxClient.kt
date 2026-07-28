@@ -37,8 +37,7 @@ class NostrInboxClient(
     private val sockets = mutableSetOf<WebSocket>()
     @Volatile
     private var running = false
-    @Volatile
-    private var sinceTimestamp = since
+    private val sinceTimestamp = since
 
     fun start() {
         if (running) return
@@ -55,10 +54,6 @@ class NostrInboxClient(
             sockets.forEach { it.close(1000, "closed") }
             sockets.clear()
         }
-    }
-
-    fun updateSince(timestamp: Long) {
-        if (timestamp > sinceTimestamp) sinceTimestamp = timestamp
     }
 
     private suspend fun connectLoop(relay: String) {
@@ -92,7 +87,6 @@ class NostrInboxClient(
         val event = runCatching {
             json.decodeFromJsonElement<NostrIncomingEvent>(array[2].jsonObject)
         }.getOrNull() ?: return
-        updateSince(event.createdAt)
         onEvent(event)
     }
 

@@ -101,6 +101,8 @@ internal const val MinClaimingBeatMillis = 500L
 internal suspend fun claimToken(
     review: TokenReview,
     walletManager: WalletManager,
+    claimPendingReceiveToken: suspend (PendingReceiveToken) -> Long =
+        walletManager::claimPendingReceiveToken,
 ): TokenClaimStatus {
     val startedAt = System.currentTimeMillis()
     val result = try {
@@ -108,7 +110,7 @@ internal suspend fun claimToken(
             .firstOrNull { it.token == review.token }
         Result.success(
             if (pending != null) {
-                walletManager.claimPendingReceiveToken(pending)
+                claimPendingReceiveToken(pending)
             } else {
                 walletManager.receiveTokens(review.token)
             },

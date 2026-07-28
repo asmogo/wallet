@@ -7,6 +7,14 @@ import org.junit.Test
 
 class SettingsManagerTest {
     @Test
+    fun cashuRequestPrivacyDefaultsMatchIos() {
+        val defaults = SettingsState()
+
+        assertEquals(true, defaults.enablePaymentRequests)
+        assertEquals(true, defaults.receivePaymentRequestsAutomatically)
+    }
+
+    @Test
     fun p2pkSendNormalizationAcceptsXOnlyHex() {
         val xOnly = "a".repeat(64)
 

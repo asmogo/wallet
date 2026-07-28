@@ -35,6 +35,7 @@ data class PendingReceiveToken(
     val processedId: String? = null,
 ) {
     val id: String get() = tokenId
+    val isCashuRequestPayment: Boolean get() = cashuRequestId != null || processedId != null
 }
 
 @Serializable
