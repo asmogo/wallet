@@ -12,9 +12,42 @@ struct ICloudBackupInfo: Sendable {
 /// instead of an unconditional "Backed up ✓".
 enum ICloudBackupOutcome: Equatable {
     case success(mintCount: Int)
+    case deferred
     case unavailable
     case noSeed
     case failed(String)
+}
+
+enum ICloudRestoreState {
+    private static let incompleteKey = "cashu.local.icloudRestoreIncomplete"
+
+    static func isIncomplete(defaults: UserDefaults = .standard) -> Bool {
+        defaults.bool(forKey: incompleteKey)
+    }
+
+    static func setIncomplete(
+        _ incomplete: Bool,
+        defaults: UserDefaults = .standard
+    ) {
+        if incomplete {
+            defaults.set(true, forKey: incompleteKey)
+        } else {
+            defaults.removeObject(forKey: incompleteKey)
+        }
+    }
+}
+
+enum ICloudRestorePolicy {
+    static func shouldPerformBackup(restoreIncomplete: Bool) -> Bool {
+        !restoreIncomplete
+    }
+
+    static func needsOnboarding(
+        hasStoredMnemonic: Bool,
+        restoreIncomplete: Bool
+    ) -> Bool {
+        !hasStoredMnemonic || restoreIncomplete
+    }
 }
 
 extension WalletManager {
@@ -69,6 +102,15 @@ extension WalletManager {
         }
     }
 
+    var hasIncompleteICloudRestore: Bool {
+        ICloudRestoreState.isIncomplete()
+    }
+
+    func setICloudRestoreIncomplete(_ incomplete: Bool) {
+        ICloudRestoreState.setIncomplete(incomplete)
+        objectWillChange.send()
+    }
+
     var lastICloudBackupDate: Date? {
         let ts = NSUbiquitousKeyValueStore.default.double(forKey: ICloudKVKey.timestamp)
         return ts > 0 ? Date(timeIntervalSince1970: ts) : nil
@@ -116,6 +158,13 @@ extension WalletManager {
 
     @discardableResult
     func performICloudBackup() -> ICloudBackupOutcome {
+        guard ICloudRestorePolicy.shouldPerformBackup(
+            restoreIncomplete: hasIncompleteICloudRestore
+        ) else {
+            AppLogger.wallet.info("iCloud backup deferred: wallet restore is incomplete")
+            lastICloudBackupOutcome = .deferred
+            return .deferred
+        }
         guard iCloudBackupEnabled, iCloudAvailable() else {
             AppLogger.wallet.error("iCloud backup skipped: iCloud unavailable")
             lastICloudBackupOutcome = .unavailable
@@ -162,11 +211,37 @@ extension WalletManager {
             throw WalletError.networkError("iCloud Keychain item is missing.")
         }
         AppLogger.wallet.info("iCloud restore: starting, \(backup.mintURLs.count) mint(s) to restore")
+
+        // Keep the user's backup preference intact while independently
+        // suppressing writes. Persist the marker so an interruption cannot make
+        // a partial wallet look complete on the next launch.
+        setICloudRestoreIncomplete(true)
         try await initializeRestoredWallet(mnemonic: recoveredMnemonic)
+
+        var failedMintCount = 0
         for url in backup.mintURLs {
-            _ = try? await restoreFromMint(url: url)
+            do {
+                _ = try await restoreFromMint(url: url)
+            } catch {
+                if error is CancellationError {
+                    throw error
+                }
+                failedMintCount += 1
+                AppLogger.wallet.error("iCloud restore: mint recovery failed for \(url): \(error)")
+            }
         }
-        AppLogger.wallet.info("iCloud restore: complete, balance \(self.balance)")
+
+        guard failedMintCount == 0 else {
+            AppLogger.wallet.error("iCloud restore: \(failedMintCount) mint(s) failed; preserving existing backup")
+            throw WalletError.networkError(
+                "Could not restore \(failedMintCount) of \(backup.mintURLs.count) mints. "
+                    + "Your iCloud backup was preserved. Try again when all mints are reachable."
+            )
+        }
+
+        // Only a complete restore may replace the backed-up mint list.
+        setICloudRestoreIncomplete(false)
         iCloudBackupEnabled = true
+        AppLogger.wallet.info("iCloud restore: complete, balance \(self.balance)")
     }
 }

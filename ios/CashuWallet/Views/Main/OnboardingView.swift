@@ -121,6 +121,13 @@ struct OnboardingView: View {
         .sheet(isPresented: $showConceptSheet) {
             conceptSheet
         }
+        .onAppear {
+            guard walletManager.hasIncompleteICloudRestore else { return }
+            currentStep = .iCloudRestore
+            iCloudRestorePhase = .preview
+            detectedICloudBackup = nil
+            isDetectingICloudBackup = true
+        }
     }
 
     // Quiet crossfade between steps — no lateral slide. A horizontal push read

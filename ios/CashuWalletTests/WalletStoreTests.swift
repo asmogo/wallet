@@ -278,6 +278,49 @@ final class WalletStoreTests: XCTestCase {
         ))
     }
 
+    func testIncompleteICloudRestoreSuppressesBackupWrites() {
+        XCTAssertFalse(ICloudRestorePolicy.shouldPerformBackup(restoreIncomplete: true))
+        XCTAssertTrue(ICloudRestorePolicy.shouldPerformBackup(restoreIncomplete: false))
+    }
+
+    func testIncompleteICloudRestoreRequiresOnboardingWithStoredSeed() {
+        XCTAssertTrue(ICloudRestorePolicy.needsOnboarding(
+            hasStoredMnemonic: true,
+            restoreIncomplete: true
+        ))
+        XCTAssertFalse(ICloudRestorePolicy.needsOnboarding(
+            hasStoredMnemonic: true,
+            restoreIncomplete: false
+        ))
+        XCTAssertTrue(ICloudRestorePolicy.needsOnboarding(
+            hasStoredMnemonic: false,
+            restoreIncomplete: false
+        ))
+    }
+
+    func testIncompleteICloudRestoreOverridesPublishedCacheAfterRuntimeFailure() {
+        XCTAssertTrue(WalletStartupPolicy.needsOnboardingAfterRuntimeFailure(
+            cachedWalletPublished: true,
+            iCloudRestoreIncomplete: true
+        ))
+    }
+
+    func testIncompleteICloudRestoreStatePersistsUntilCleared() {
+        let suiteName = "ICloudRestoreStateTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+
+        XCTAssertFalse(ICloudRestoreState.isIncomplete(defaults: defaults))
+
+        ICloudRestoreState.setIncomplete(true, defaults: defaults)
+        XCTAssertTrue(ICloudRestoreState.isIncomplete(
+            defaults: UserDefaults(suiteName: suiteName)!
+        ))
+
+        ICloudRestoreState.setIncomplete(false, defaults: defaults)
+        XCTAssertFalse(ICloudRestoreState.isIncomplete(defaults: defaults))
+    }
+
     // MARK: - removeAllWalletData
 
     func testRemoveAllWalletDataClearsMints() {
