@@ -138,6 +138,7 @@
 		T2B0000000000008 /* TokenParserTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = T1B0000000000008 /* TokenParserTests.swift */; };
 		T2B0000000000009 /* PaymentRequestDecoderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = T1B0000000000009 /* PaymentRequestDecoderTests.swift */; };
 		T2B000000000000A /* CurrencyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = T1B000000000000A /* CurrencyTests.swift */; };
+		T2B000000000000B /* ReceiveAutoPasteTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = T1B000000000000B /* ReceiveAutoPasteTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -287,6 +288,7 @@
 		T1B0000000000008 /* TokenParserTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = TokenParserTests.swift; path = ../CI/IntegrationTests/Tests/TokenParserTests.swift; sourceTree = "<group>"; };
 		T1B0000000000009 /* PaymentRequestDecoderTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = PaymentRequestDecoderTests.swift; path = ../CI/IntegrationTests/Tests/PaymentRequestDecoderTests.swift; sourceTree = "<group>"; };
 		T1B000000000000A /* CurrencyTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = CurrencyTests.swift; path = ../CI/IntegrationTests/Tests/CurrencyTests.swift; sourceTree = "<group>"; };
+		T1B000000000000B /* ReceiveAutoPasteTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = ReceiveAutoPasteTests.swift; path = CashuWalletTests/ReceiveAutoPasteTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -336,6 +338,7 @@
 				T1B0000000000008 /* TokenParserTests.swift */,
 				T1B0000000000009 /* PaymentRequestDecoderTests.swift */,
 				T1B000000000000A /* CurrencyTests.swift */,
+				T1B000000000000B /* ReceiveAutoPasteTests.swift */,
 			);
 			name = CashuWalletTests;
 			sourceTree = "<group>";
@@ -876,6 +879,7 @@
 				T2B0000000000008 /* TokenParserTests.swift in Sources */,
 				T2B0000000000009 /* PaymentRequestDecoderTests.swift in Sources */,
 				T2B000000000000A /* CurrencyTests.swift in Sources */,
+				T2B000000000000B /* ReceiveAutoPasteTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
