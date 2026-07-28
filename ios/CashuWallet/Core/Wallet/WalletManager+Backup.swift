@@ -59,14 +59,21 @@ extension WalletManager {
     var iCloudBackupEnabled: Bool {
         get { UserDefaults.standard.bool(forKey: Self.iCloudEnabledKey) }
         set {
-            UserDefaults.standard.set(newValue, forKey: Self.iCloudEnabledKey)
-            objectWillChange.send()
+            setICloudBackupEnabledLocally(newValue)
             if newValue {
                 performICloudBackup()
             } else {
                 clearICloudBackupData()
             }
         }
+    }
+
+    /// Updates the device-local preference without changing the remote backup.
+    /// Restore uses this to prevent clean-wallet installation and per-mint
+    /// recovery from replacing the only known mint list with an incomplete one.
+    private func setICloudBackupEnabledLocally(_ enabled: Bool) {
+        UserDefaults.standard.set(enabled, forKey: Self.iCloudEnabledKey)
+        objectWillChange.send()
     }
 
     var lastICloudBackupDate: Date? {
@@ -162,11 +169,40 @@ extension WalletManager {
             throw WalletError.networkError("iCloud Keychain item is missing.")
         }
         AppLogger.wallet.info("iCloud restore: starting, \(backup.mintURLs.count) mint(s) to restore")
-        try await initializeRestoredWallet(mnemonic: recoveredMnemonic)
-        for url in backup.mintURLs {
-            _ = try? await restoreFromMint(url: url)
+
+        // Installing a clean wallet normally performs an immediate backup. Keep
+        // backup writes disabled until every original mint has been recovered,
+        // otherwise the clean install (zero mints) or a partial restore can
+        // overwrite the only list of mints still needing recovery.
+        let wasBackupEnabled = iCloudBackupEnabled
+        setICloudBackupEnabledLocally(false)
+        do {
+            try await initializeRestoredWallet(mnemonic: recoveredMnemonic)
+        } catch {
+            setICloudBackupEnabledLocally(wasBackupEnabled)
+            throw error
         }
-        AppLogger.wallet.info("iCloud restore: complete, balance \(self.balance)")
+
+        var failedMintCount = 0
+        for url in backup.mintURLs {
+            do {
+                _ = try await restoreFromMint(url: url)
+            } catch {
+                failedMintCount += 1
+                AppLogger.wallet.error("iCloud restore: mint recovery failed for \(url): \(error)")
+            }
+        }
+
+        guard failedMintCount == 0 else {
+            AppLogger.wallet.error("iCloud restore: \(failedMintCount) mint(s) failed; preserving existing backup")
+            throw WalletError.networkError(
+                "Could not restore \(failedMintCount) of \(backup.mintURLs.count) mints. "
+                    + "Your iCloud backup was preserved. Try again when all mints are reachable."
+            )
+        }
+
+        // Only a complete restore may replace the backed-up mint list.
         iCloudBackupEnabled = true
+        AppLogger.wallet.info("iCloud restore: complete, balance \(self.balance)")
     }
 }
