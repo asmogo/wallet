@@ -25,6 +25,7 @@ import org.cashudevkit.PendingMelt
 import org.cashudevkit.QuoteState as CdkQuoteState
 import com.cashu.me.Core.CDK.CdkWalletGateway
 import com.cashu.me.Core.Platform.WalletDatabasePathManager
+import com.cashu.me.Core.Platform.WalletFileBackup
 import com.cashu.me.Core.Protocols.SecureStorage
 import com.cashu.me.Core.Protocols.StorageKeys
 import com.cashu.me.Core.Protocols.WalletServiceProtocol
@@ -54,6 +55,13 @@ class WalletManager(
     private val databasePathManager: WalletDatabasePathManager,
     private val gateway: CdkWalletGateway,
 ) : WalletServiceProtocol, NPCQuoteClaimHandler {
+    private data class WalletReplacementSnapshot(
+        val databaseBackups: List<WalletFileBackup>,
+        val wallet: PreferenceSnapshot,
+        val settings: SettingsWalletScopedSnapshot,
+        val nwc: NwcWalletScopedSnapshot,
+    )
+
     internal var cashuRequestListener: CashuRequestListener? = null
 
     private val exceptionHandler = CoroutineExceptionHandler { _, error ->
@@ -243,7 +251,7 @@ class WalletManager(
 
     override suspend fun deleteWallet() {
         withLoading {
-            cashuRequestListener?.stop()
+            cashuRequestListener?.pauseForWalletBoundary()
             nwcManager.resetForWalletBoundary()
             gateway.closeWalletRepository()
             secureStorage.delete(StorageKeys.secureWalletMnemonic)
@@ -1063,12 +1071,25 @@ class WalletManager(
 
     private suspend fun installCleanWallet(mnemonic: String, needsOnboarding: Boolean) {
         val previousMnemonic = secureStorage.loadString(StorageKeys.secureWalletMnemonic)
-        val backups = databasePathManager.backupWalletDatabaseFiles()
-        val walletSnapshot = walletStore.snapshotWalletScopedData()
-        val settingsSnapshot = settingsManager.snapshotWalletScopedData()
-        val nwcSnapshot = nwcManager.snapshotWalletScopedData()
+        cashuRequestListener?.pauseForWalletBoundary()
+        val replacementSnapshot = try {
+            WalletReplacementSnapshot(
+                // Capture preference state before moving the database so a
+                // preparation failure can resume the untouched wallet.
+                wallet = walletStore.snapshotWalletScopedData(),
+                settings = settingsManager.snapshotWalletScopedData(),
+                nwc = nwcManager.snapshotWalletScopedData(),
+                databaseBackups = databasePathManager.backupWalletDatabaseFiles(),
+            )
+        } catch (error: Throwable) {
+            cashuRequestListener?.resetForWalletBoundary(restart = previousMnemonic != null)
+            throw error
+        }
+        val backups = replacementSnapshot.databaseBackups
+        val walletSnapshot = replacementSnapshot.wallet
+        val settingsSnapshot = replacementSnapshot.settings
+        val nwcSnapshot = replacementSnapshot.nwc
 
-        cashuRequestListener?.stop()
         runCatching {
             // NwcService retains the native CDK wallet, so it must stop before
             // the repository/database it is backed by is closed.

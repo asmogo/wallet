@@ -1,6 +1,7 @@
 package com.cashu.me.Core
 
 import java.util.Base64
+import java.util.concurrent.atomic.AtomicLong
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -37,11 +38,20 @@ class CashuRequestListener(
         save = walletStore::saveProcessedNip17GiftWraps,
     )
     private var client: NostrInboxClient? = null
+    private val retiringClients = mutableSetOf<NostrInboxClient>()
+    private val listenerGeneration = AtomicLong()
+    private var pausedForWalletBoundary = false
+    private var startAfterRetirement = false
     private val mutableState = MutableStateFlow(CashuRequestListenerState())
     val state: StateFlow<CashuRequestListenerState> = mutableState.asStateFlow()
 
+    @Synchronized
     fun start() {
-        if (client != null) return
+        if (client != null || pausedForWalletBoundary) return
+        if (retiringClients.isNotEmpty()) {
+            startAfterRetirement = true
+            return
+        }
         val nostr = nostrService.state.value
         val privateKeyHex = nostrService.currentPrivateKey()
         if (!nostr.isInitialized || nostr.publicKeyHex.isBlank() || privateKeyHex.isNullOrBlank()) {
@@ -59,35 +69,91 @@ class CashuRequestListener(
         reloadProcessedIds()
         val since = subscriptionSince(System.currentTimeMillis() / 1000)
         val recipientPrivateKey = NIP44.hexToBytes(privateKeyHex)
-        client = NostrInboxClient(
+        val generation = listenerGeneration.incrementAndGet()
+        val newClient = NostrInboxClient(
             pubkeyHex = nostr.publicKeyHex,
             relays = relays,
             since = since,
         ) { event ->
-            handle(event, recipientPrivateKey)
-        }.also { it.start() }
+            handle(event, recipientPrivateKey, generation)
+        }
+        client = newClient
+        newClient.start()
         mutableState.value = CashuRequestListenerState(isRunning = true)
         AppLogger.wallet.info("CashuRequestListener: started on ${relays.size} relays since=$since")
     }
 
     fun stop() {
-        client?.stop()
-        client = null
-        mutableState.value = CashuRequestListenerState(isRunning = false)
+        val detached = synchronized(this) {
+            startAfterRetirement = false
+            detachClient()?.also { retiringClients += it }
+        } ?: return
+        detached.stop()
+        scope.launch {
+            detached.stopAndJoin()
+            val shouldRestart = synchronized(this@CashuRequestListener) {
+                retiringClients -= detached
+                val requested = startAfterRetirement &&
+                    retiringClients.isEmpty() &&
+                    !pausedForWalletBoundary
+                if (requested) startAfterRetirement = false
+                requested
+            }
+            if (shouldRestart) start()
+        }
     }
 
-    fun resetForWalletBoundary(restart: Boolean) {
-        stop()
+    suspend fun pauseForWalletBoundary() {
+        quiesceForWalletBoundary()
+    }
+
+    suspend fun resetForWalletBoundary(restart: Boolean) {
+        quiesceForWalletBoundary()
         processedEvents.clear()
+        synchronized(this) {
+            pausedForWalletBoundary = false
+        }
         if (restart) start()
     }
 
-    private suspend fun handle(event: NostrIncomingEvent, recipientPrivateKey: ByteArray) {
+    private suspend fun quiesceForWalletBoundary() {
+        val clients = synchronized(this) {
+            pausedForWalletBoundary = true
+            startAfterRetirement = false
+            detachClient()?.let { retiringClients += it }
+            retiringClients.toList()
+        }
+        clients.forEach { it.stop() }
+        clients.forEach { it.stopAndJoin() }
+        synchronized(this) {
+            retiringClients.removeAll(clients.toSet())
+        }
+    }
+
+    /** Must be called while holding this listener's monitor. */
+    private fun detachClient(): NostrInboxClient? {
+        listenerGeneration.incrementAndGet()
+        val detached = client
+        client = null
+        mutableState.value = CashuRequestListenerState(isRunning = false)
+        return detached
+    }
+
+    private fun isCurrentGeneration(generation: Long): Boolean =
+        listenerGeneration.get() == generation
+
+    private suspend fun handle(
+        event: NostrIncomingEvent,
+        recipientPrivateKey: ByteArray,
+        generation: Long,
+    ) {
+        if (!isCurrentGeneration(generation)) return
         if (event.kind != 1059) return
         if (!processedEvents.begin(event.id)) return
 
         var terminalOutcome = false
         try {
+            if (!isCurrentGeneration(generation)) return
             val rumor = runCatching { NIP17.unwrap(event, recipientPrivateKey) }
                 .onFailure { AppLogger.wallet.debug("CashuRequestListener: NIP-17 unwrap failed: ${it.message}") }
                 .getOrNull()
@@ -95,13 +161,21 @@ class CashuRequestListener(
                 terminalOutcome = true
                 return
             }
-            terminalOutcome = tryClaim(rumor.content, event.id) != ClaimOutcome.TransientFailure
+            if (!isCurrentGeneration(generation)) return
+            terminalOutcome = tryClaim(rumor.content, event.id, generation) != ClaimOutcome.TransientFailure
         } finally {
-            processedEvents.finish(event.id, terminalOutcome)
+            processedEvents.finish(
+                eventId = event.id,
+                terminalOutcome = terminalOutcome && isCurrentGeneration(generation),
+            )
         }
     }
 
-    private suspend fun tryClaim(rumorContent: String, eventId: String): ClaimOutcome {
+    private suspend fun tryClaim(
+        rumorContent: String,
+        eventId: String,
+        generation: Long,
+    ): ClaimOutcome {
         val payload = runCatching { paymentPayloadToToken(rumorContent) }
             .onFailure { AppLogger.wallet.debug("CashuRequestListener: malformed PaymentRequestPayload") }
             .getOrNull() ?: return ClaimOutcome.Unclaimable
@@ -121,11 +195,15 @@ class CashuRequestListener(
             ClaimOutcome.Claimed
         }.onFailure { error ->
             AppLogger.wallet.error("CashuRequestListener: redeem failed", error)
-            scope.launch {
-                mutableState.value = CashuRequestListenerState(
-                    isRunning = client != null,
-                    lastError = error.userFacingWalletMessage,
-                )
+            if (isCurrentGeneration(generation)) {
+                scope.launch {
+                    if (isCurrentGeneration(generation)) {
+                        mutableState.value = CashuRequestListenerState(
+                            isRunning = mutableState.value.isRunning,
+                            lastError = error.userFacingWalletMessage,
+                        )
+                    }
+                }
             }
         }.getOrElse { ClaimOutcome.TransientFailure }
     }

@@ -4,9 +4,7 @@ import java.util.UUID
 import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.cancelChildren
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.Json
@@ -27,7 +25,8 @@ class NostrInboxClient(
     since: Long,
     private val onEvent: suspend (NostrIncomingEvent) -> Unit,
 ) {
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private val lifecycleJob = SupervisorJob()
+    private val scope = CoroutineScope(lifecycleJob + Dispatchers.IO)
     private val client = OkHttpClient.Builder()
         .connectTimeout(15, TimeUnit.SECONDS)
         .readTimeout(0, TimeUnit.SECONDS)
@@ -40,7 +39,7 @@ class NostrInboxClient(
     private val sinceTimestamp = since
 
     fun start() {
-        if (running) return
+        if (running || !lifecycleJob.isActive) return
         running = true
         relays.distinct().forEach { relay ->
             scope.launch { connectLoop(relay) }
@@ -49,11 +48,16 @@ class NostrInboxClient(
 
     fun stop() {
         running = false
-        scope.coroutineContext.cancelChildren()
+        lifecycleJob.cancel()
         synchronized(sockets) {
             sockets.forEach { it.close(1000, "closed") }
             sockets.clear()
         }
+    }
+
+    suspend fun stopAndJoin() {
+        stop()
+        lifecycleJob.join()
     }
 
     private suspend fun connectLoop(relay: String) {
@@ -70,9 +74,23 @@ class NostrInboxClient(
         val request = runCatching { Request.Builder().url(relay).build() }.getOrNull() ?: return
         val listener = InboxWebSocketListener()
         val socket = client.newWebSocket(request, listener)
-        synchronized(sockets) { sockets += socket }
-        listener.awaitClosed()
-        synchronized(sockets) { sockets -= socket }
+        val accepted = synchronized(sockets) {
+            if (running) {
+                sockets += socket
+                true
+            } else {
+                false
+            }
+        }
+        if (!accepted) {
+            socket.close(1000, "closed")
+            return
+        }
+        try {
+            listener.awaitClosed()
+        } finally {
+            synchronized(sockets) { sockets -= socket }
+        }
     }
 
     private fun subscribe(socket: WebSocket) {
@@ -81,12 +99,14 @@ class NostrInboxClient(
     }
 
     private suspend fun handleMessage(text: String) {
+        if (!running) return
         val array = runCatching { json.parseToJsonElement(text).jsonArray }.getOrNull() ?: return
         val messageType = array.firstOrNull()?.jsonPrimitive?.content ?: return
         if (messageType != "EVENT" || array.size < 3) return
         val event = runCatching {
             json.decodeFromJsonElement<NostrIncomingEvent>(array[2].jsonObject)
         }.getOrNull() ?: return
+        if (!running) return
         onEvent(event)
     }
 
@@ -94,11 +114,15 @@ class NostrInboxClient(
         private val closed = kotlinx.coroutines.CompletableDeferred<Unit>()
 
         override fun onOpen(webSocket: WebSocket, response: Response) {
-            subscribe(webSocket)
+            if (running) {
+                subscribe(webSocket)
+            } else {
+                webSocket.close(1000, "closed")
+            }
         }
 
         override fun onMessage(webSocket: WebSocket, text: String) {
-            scope.launch { handleMessage(text) }
+            if (running) scope.launch { handleMessage(text) }
         }
 
         override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
