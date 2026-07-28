@@ -49,6 +49,7 @@ import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.cashu.me.Core.AppLockManager
 import com.cashu.me.Core.NostrService
 import com.cashu.me.Core.NostrSignerType
 import com.cashu.me.Core.NwcManager
@@ -63,6 +64,7 @@ import com.cashu.me.ui.components.NavRow
 import com.cashu.me.ui.components.PrimaryButton
 import com.cashu.me.ui.components.SectionHeader
 import com.cashu.me.ui.components.ToolbarIcon
+import com.cashu.me.ui.security.rememberWalletAuthenticationLauncher
 import com.cashu.me.ui.theme.CashuTheme
 import kotlinx.coroutines.delay
 
@@ -74,6 +76,7 @@ fun NostrScreen(
     nostrService: NostrService,
     settingsManager: SettingsManager,
     nwcManager: NwcManager,
+    appLockManager: AppLockManager,
     onOpenWalletConnect: () -> Unit,
     onClose: () -> Unit,
 ) {
@@ -81,6 +84,7 @@ fun NostrScreen(
     val settings by settingsManager.state.collectAsState()
     val nwcState by nwcManager.state.collectAsState()
     val clipboard = LocalClipboardManager.current
+    val authenticate = rememberWalletAuthenticationLauncher(appLockManager)
     var nsecRevealed by remember { mutableStateOf(false) }
     var nsecCopied by remember { mutableStateOf(false) }
     LaunchedEffect(nsecCopied) {
@@ -182,7 +186,17 @@ fun NostrScreen(
                     maxLines = 1,
                     overflow = TextOverflow.MiddleEllipsis,
                 )
-                IconButton(onClick = { nsecRevealed = !nsecRevealed }) {
+                IconButton(
+                    onClick = {
+                        if (nsecRevealed) {
+                            nsecRevealed = false
+                        } else {
+                            authenticate("Reveal your Nostr private key") {
+                                nsecRevealed = true
+                            }
+                        }
+                    },
+                ) {
                     Icon(
                         imageVector = if (nsecRevealed) Icons.Outlined.VisibilityOff
                         else Icons.Outlined.Visibility,
@@ -191,8 +205,10 @@ fun NostrScreen(
                 }
                 IconButton(
                     onClick = {
-                        clipboard.setText(AnnotatedString(nostrState.nsec))
-                        nsecCopied = true
+                        authenticate("Copy your Nostr private key") {
+                            clipboard.setText(AnnotatedString(nostrState.nsec))
+                            nsecCopied = true
+                        }
                     },
                     enabled = nostrState.nsec.isNotBlank(),
                 ) {

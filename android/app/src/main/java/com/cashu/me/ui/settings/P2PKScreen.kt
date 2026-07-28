@@ -29,6 +29,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import com.cashu.me.Core.AppLockManager
 import com.cashu.me.Core.LockedReceiveRequest
 import com.cashu.me.Core.NostrService
 import com.cashu.me.Core.SettingsManager
@@ -51,6 +52,7 @@ private data class QrPayload(val title: String, val content: String)
 fun P2PKScreen(
     settingsManager: SettingsManager,
     nostrService: NostrService,
+    appLockManager: AppLockManager,
     onOpenAdvancedKeys: () -> Unit,
     onClose: () -> Unit,
 ) {
@@ -61,7 +63,7 @@ fun P2PKScreen(
 
     var showExplainer by remember { mutableStateOf(false) }
     var activeQr by remember { mutableStateOf<QrPayload?>(null) }
-    var revealNsec by remember { mutableStateOf<String?>(null) }
+    var showPrivateKeyBackup by remember { mutableStateOf(false) }
 
     Scaffold(
         topBar = {
@@ -117,7 +119,7 @@ fun P2PKScreen(
                             }
                         },
                         KeyCardAction("Reveal key", Icons.Outlined.Visibility) {
-                            P2PKKeyDisplay.nsec(primaryKey.privateKeyHex)?.let { revealNsec = it }
+                            showPrivateKeyBackup = true
                         },
                     ),
                     modifier = Modifier.padding(horizontal = CashuTheme.spacing.comfortable),
@@ -164,11 +166,12 @@ fun P2PKScreen(
             onDismiss = { activeQr = null },
         )
     }
-    revealNsec?.let { nsec ->
+    if (showPrivateKeyBackup && primaryKey != null) {
         PrivateKeyRevealSheet(
             title = "Your Key",
-            nsec = nsec,
-            onDismiss = { revealNsec = null },
+            loadNsec = { P2PKKeyDisplay.nsec(primaryKey.privateKeyHex) },
+            appLockManager = appLockManager,
+            onDismiss = { showPrivateKeyBackup = false },
         )
     }
 }

@@ -31,6 +31,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import com.cashu.me.Core.AppLockManager
 import com.cashu.me.Core.SettingsManager
 import com.cashu.me.ui.components.CashuTextField
 import com.cashu.me.ui.components.DestructiveTextButton
@@ -47,6 +48,7 @@ import com.cashu.me.ui.theme.CashuTheme
 @Composable
 fun DeviceKeyDetailScreen(
     settingsManager: SettingsManager,
+    appLockManager: AppLockManager,
     keyId: String,
     onClose: () -> Unit,
 ) {
@@ -55,7 +57,7 @@ fun DeviceKeyDetailScreen(
 
     var nameText by remember { mutableStateOf(key?.label.orEmpty()) }
     var activeQr by remember { mutableStateOf<String?>(null) }
-    var revealNsec by remember { mutableStateOf<String?>(null) }
+    var showPrivateKeyBackup by remember { mutableStateOf(false) }
     var showRemoveConfirm by remember { mutableStateOf(false) }
 
     // Pop when the key is removed underneath us (iOS onChange dismiss).
@@ -97,9 +99,7 @@ fun DeviceKeyDetailScreen(
                         activeQr = P2PKKeyDisplay.canonical(key.publicKey)
                     },
                     KeyCardAction("Back up key", Icons.Outlined.Key) {
-                        settingsManager.p2pkPrivateKeyHex(key.id)
-                            ?.let(P2PKKeyDisplay::nsec)
-                            ?.let { revealNsec = it }
+                        showPrivateKeyBackup = true
                     },
                 ),
                 modifier = Modifier.padding(horizontal = CashuTheme.spacing.comfortable),
@@ -137,11 +137,15 @@ fun DeviceKeyDetailScreen(
     activeQr?.let { content ->
         QrDetailSheet(title = "Key", content = content, onDismiss = { activeQr = null })
     }
-    revealNsec?.let { nsec ->
+    if (showPrivateKeyBackup) {
         PrivateKeyRevealSheet(
             title = "Back up key",
-            nsec = nsec,
-            onDismiss = { revealNsec = null },
+            loadNsec = {
+                settingsManager.p2pkPrivateKeyHex(key.id)
+                    ?.let(P2PKKeyDisplay::nsec)
+            },
+            appLockManager = appLockManager,
+            onDismiss = { showPrivateKeyBackup = false },
         )
     }
     if (showRemoveConfirm) {

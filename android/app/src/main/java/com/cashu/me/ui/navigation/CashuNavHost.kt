@@ -181,6 +181,7 @@ fun CashuNavHost(
             P2PKScreen(
                 settingsManager = container.settingsManager,
                 nostrService = container.nostrService,
+                appLockManager = container.appLockManager,
                 onOpenAdvancedKeys = { navController.navigate(Routes.SETTINGS_P2PK_ADVANCED) },
                 onClose = { navController.popBackStack() },
             )
@@ -207,6 +208,7 @@ fun CashuNavHost(
             val keyId = URLDecoder.decode(encoded, StandardCharsets.UTF_8.name())
             DeviceKeyDetailScreen(
                 settingsManager = container.settingsManager,
+                appLockManager = container.appLockManager,
                 keyId = keyId,
                 onClose = { navController.popBackStack() },
             )
@@ -216,6 +218,7 @@ fun CashuNavHost(
                 nostrService = container.nostrService,
                 settingsManager = container.settingsManager,
                 nwcManager = container.nwcManager,
+                appLockManager = container.appLockManager,
                 onOpenWalletConnect = { navController.navigate(Routes.SETTINGS_NWC) },
                 onClose = { navController.popBackStack() },
             )
