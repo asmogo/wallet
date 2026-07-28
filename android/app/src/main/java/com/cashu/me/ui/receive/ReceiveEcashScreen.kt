@@ -59,10 +59,10 @@ internal fun automaticReceiveClipboardToken(
     enabled: Boolean,
     currentInput: String,
     prefilledPayload: String?,
-    clipboardText: String?,
+    clipboardText: () -> String?,
 ): String? {
     if (!enabled || currentInput.isNotBlank() || !prefilledPayload.isNullOrBlank()) return null
-    return clipboardText?.let(TokenParser::extractToken)
+    return clipboardText()?.let(TokenParser::extractToken)
 }
 
 /**
@@ -160,7 +160,7 @@ fun ReceiveEcashScreen(
             enabled = settings.autoPasteEcashReceive,
             currentInput = input,
             prefilledPayload = prefilledPayload,
-            clipboardText = clipboard.getText()?.text,
+            clipboardText = { clipboard.getText()?.text },
         )?.let { input = it }
     }
 

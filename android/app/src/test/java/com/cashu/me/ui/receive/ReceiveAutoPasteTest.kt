@@ -13,7 +13,7 @@ class ReceiveAutoPasteTest {
                 enabled = true,
                 currentInput = "",
                 prefilledPayload = null,
-                clipboardText = "cashu:cashuA-token",
+                clipboardText = { "cashu:cashuA-token" },
             ),
         )
         assertNull(
@@ -21,7 +21,7 @@ class ReceiveAutoPasteTest {
                 enabled = true,
                 currentInput = "",
                 prefilledPayload = null,
-                clipboardText = "lightning:lnbc1invoice",
+                clipboardText = { "lightning:lnbc1invoice" },
             ),
         )
     }
@@ -33,7 +33,7 @@ class ReceiveAutoPasteTest {
                 enabled = true,
                 currentInput = "cashuB-existing",
                 prefilledPayload = null,
-                clipboardText = "cashuA-clipboard",
+                clipboardText = { "cashuA-clipboard" },
             ),
         )
         assertNull(
@@ -41,16 +41,21 @@ class ReceiveAutoPasteTest {
                 enabled = true,
                 currentInput = "",
                 prefilledPayload = "cashuB-deep-link",
-                clipboardText = "cashuA-clipboard",
+                clipboardText = { "cashuA-clipboard" },
             ),
         )
+        var clipboardRead = false
         assertNull(
             automaticReceiveClipboardToken(
                 enabled = false,
                 currentInput = "",
                 prefilledPayload = null,
-                clipboardText = "cashuA-clipboard",
+                clipboardText = {
+                    clipboardRead = true
+                    "cashuA-clipboard"
+                },
             ),
         )
+        assertEquals(false, clipboardRead)
     }
 }

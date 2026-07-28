@@ -11,14 +11,14 @@ final class ReceiveAutoPasteTests: XCTestCase {
             UnifiedReceiveView.automaticReceiveClipboardToken(
                 enabled: true,
                 currentInput: "",
-                clipboardText: "cashu:cashuA-token"
+                clipboardText: { "cashu:cashuA-token" }
             )
         )
         XCTAssertNil(
             UnifiedReceiveView.automaticReceiveClipboardToken(
                 enabled: true,
                 currentInput: "",
-                clipboardText: "lightning:lnbc1invoice"
+                clipboardText: { "lightning:lnbc1invoice" }
             )
         )
     }
@@ -28,21 +28,26 @@ final class ReceiveAutoPasteTests: XCTestCase {
             UnifiedReceiveView.automaticReceiveClipboardToken(
                 enabled: true,
                 currentInput: "cashuB-existing",
-                clipboardText: "cashuA-clipboard"
+                clipboardText: { "cashuA-clipboard" }
             )
         )
+        var clipboardRead = false
         XCTAssertNil(
             UnifiedReceiveView.automaticReceiveClipboardToken(
                 enabled: false,
                 currentInput: "",
-                clipboardText: "cashuA-clipboard"
+                clipboardText: {
+                    clipboardRead = true
+                    return "cashuA-clipboard"
+                }
             )
         )
+        XCTAssertFalse(clipboardRead)
         XCTAssertNil(
             UnifiedReceiveView.automaticReceiveClipboardToken(
                 enabled: true,
                 currentInput: "",
-                clipboardText: nil
+                clipboardText: { nil }
             )
         )
     }

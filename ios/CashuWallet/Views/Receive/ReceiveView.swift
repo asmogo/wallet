@@ -222,7 +222,7 @@ struct UnifiedReceiveView: View {
                     guard let token = Self.automaticReceiveClipboardToken(
                         enabled: settings.autoPasteEcashReceive,
                         currentInput: tokenInput,
-                        clipboardText: UIPasteboard.general.string
+                        clipboardText: { UIPasteboard.general.string }
                     ) else { return }
                     tokenInput = token
                 }
@@ -238,11 +238,11 @@ struct UnifiedReceiveView: View {
     static func automaticReceiveClipboardToken(
         enabled: Bool,
         currentInput: String,
-        clipboardText: String?
+        clipboardText: () -> String?
     ) -> String? {
         guard enabled,
               currentInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
-              let clipboardText else { return nil }
+              let clipboardText = clipboardText() else { return nil }
         return TokenParser.normalizedToken(from: clipboardText)
     }
 
