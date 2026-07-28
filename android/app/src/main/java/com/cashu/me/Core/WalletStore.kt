@@ -79,6 +79,11 @@ class WalletStore(
     fun saveProcessedCashuRequests(requestIds: List<String>) =
         saveList(StorageKeys.walletProcessedCashuRequests, String.serializer(), requestIds)
 
+    fun loadProcessedNip17GiftWraps(): List<String> =
+        loadList(StorageKeys.walletProcessedNip17GiftWraps, String.serializer())
+    fun saveProcessedNip17GiftWraps(eventIds: List<String>) =
+        saveList(StorageKeys.walletProcessedNip17GiftWraps, String.serializer(), eventIds)
+
     override fun loadCashuRequests(): List<CashuRequest> =
         loadList(StorageKeys.cashuRequests, CashuRequest.serializer()).map { it.withLegacyPaymentFallback() }
     override fun saveCashuRequests(requests: List<CashuRequest>) =

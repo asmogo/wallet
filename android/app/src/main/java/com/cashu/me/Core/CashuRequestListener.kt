@@ -1,7 +1,7 @@
 package com.cashu.me.Core
 
-import android.content.Context
 import java.util.Base64
+import java.util.concurrent.atomic.AtomicLong
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -11,7 +11,6 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
-import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
@@ -21,7 +20,6 @@ import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
-import com.cashu.me.Core.Protocols.StorageKeys
 import com.cashu.me.Core.Wallet.userFacingWalletMessage
 import com.cashu.me.Models.PendingReceiveToken
 import com.cashu.me.Models.TokenInfo
@@ -33,33 +31,45 @@ data class CashuRequestListenerState(
 )
 
 class CashuRequestListener(
-    context: Context,
     private val nostrService: NostrService,
     private val settingsManager: SettingsManager,
     private val walletManager: WalletManager,
     private val cashuRequestStore: CashuRequestStore,
+    private val walletStore: WalletStore,
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
-    private val metadataStore = DataStorePreferenceStore(context.applicationContext, "settings_store")
-    private val json = Json { ignoreUnknownKeys = true; encodeDefaults = true }
+    private val processedEvents = ProcessedNip17EventTracker(
+        load = walletStore::loadProcessedNip17GiftWraps,
+        save = walletStore::saveProcessedNip17GiftWraps,
+    )
     private var client: NostrInboxClient? = null
+    private val retiringClients = mutableSetOf<NostrInboxClient>()
+    private val listenerGeneration = AtomicLong()
+    private var pausedForWalletBoundary = false
+    private var startAfterRetirement = false
     private val eventMutex = Mutex()
     private val heldClaimMutex = Mutex()
-    private var processedIds: Set<String> = emptySet()
-    private var processedOrder: List<String> = emptyList()
     private val mutableState = MutableStateFlow(CashuRequestListenerState())
     val state: StateFlow<CashuRequestListenerState> = mutableState.asStateFlow()
 
+    @Synchronized
     fun start() {
         if (!settingsManager.state.value.enablePaymentRequests) {
             stop()
             return
         }
-        if (client != null) return
+        if (client != null || pausedForWalletBoundary) return
+        if (retiringClients.isNotEmpty()) {
+            startAfterRetirement = true
+            return
+        }
         val nostr = nostrService.state.value
         val privateKeyHex = nostrService.currentPrivateKey()
         if (!nostr.isInitialized || nostr.publicKeyHex.isBlank() || privateKeyHex.isNullOrBlank()) {
-            mutableState.value = CashuRequestListenerState(lastError = "Nostr key is not initialized.")
+            mutableState.value = mutableState.value.copy(
+                isRunning = false,
+                lastError = "Nostr key is not initialized.",
+            )
             return
         }
         val relays = settingsManager.state.value.nostrRelays
@@ -67,55 +77,136 @@ class CashuRequestListener(
             .filter { it.startsWith("ws://") || it.startsWith("wss://") }
             .distinct()
         if (relays.isEmpty()) {
-            mutableState.value = CashuRequestListenerState(lastError = "No Nostr relays configured.")
+            mutableState.value = mutableState.value.copy(
+                isRunning = false,
+                lastError = "No Nostr relays configured.",
+            )
             return
         }
-        loadProcessedIds()
-        // The old moving cursor is unsafe for NIP-59 gift wraps because their
-        // created_at values are deliberately backdated. Always re-scan a fixed
-        // window and de-duplicate by event id instead.
-        metadataStore.removeKeys(listOf(LegacySinceKey))
+        processedEvents.reload()
         val since = lookbackSince(System.currentTimeMillis() / 1000)
         val recipientPrivateKey = NIP44.hexToBytes(privateKeyHex)
-        client = NostrInboxClient(
+        val generation = listenerGeneration.incrementAndGet()
+        val newClient = NostrInboxClient(
             pubkeyHex = nostr.publicKeyHex,
             relays = relays,
             since = since,
         ) { event ->
-            handle(event, recipientPrivateKey)
-        }.also { it.start() }
+            handle(event, recipientPrivateKey, generation)
+        }
+        client = newClient
+        newClient.start()
         mutableState.value = mutableState.value.copy(isRunning = true, lastError = null)
         AppLogger.wallet.info("CashuRequestListener: started on ${relays.size} relays since=$since")
     }
 
     fun stop() {
-        client?.stop()
+        val detached = synchronized(this) {
+            startAfterRetirement = false
+            detachClient()?.also { retiringClients += it }
+        } ?: return
+        detached.stop()
+        scope.launch {
+            detached.stopAndJoin()
+            val shouldRestart = synchronized(this@CashuRequestListener) {
+                retiringClients -= detached
+                val requested = startAfterRetirement &&
+                    retiringClients.isEmpty() &&
+                    !pausedForWalletBoundary
+                if (requested) startAfterRetirement = false
+                requested
+            }
+            if (shouldRestart) start()
+        }
+    }
+
+    suspend fun pauseForWalletBoundary() {
+        quiesceForWalletBoundary()
+    }
+
+    suspend fun resetForWalletBoundary(restart: Boolean) {
+        quiesceForWalletBoundary()
+        processedEvents.clear()
+        mutableState.value = CashuRequestListenerState()
+        synchronized(this) {
+            pausedForWalletBoundary = false
+        }
+        if (restart) start()
+    }
+
+    private suspend fun quiesceForWalletBoundary() {
+        val clients = synchronized(this) {
+            pausedForWalletBoundary = true
+            startAfterRetirement = false
+            detachClient()?.let { retiringClients += it }
+            retiringClients.toList()
+        }
+        clients.forEach { it.stop() }
+        clients.forEach { it.stopAndJoin() }
+        synchronized(this) {
+            retiringClients.removeAll(clients.toSet())
+        }
+    }
+
+    /** Must be called while holding this listener's monitor. */
+    private fun detachClient(): NostrInboxClient? {
+        listenerGeneration.incrementAndGet()
+        val detached = client
         client = null
         mutableState.value = mutableState.value.copy(isRunning = false)
+        return detached
     }
+
+    private fun isCurrentGeneration(generation: Long): Boolean =
+        listenerGeneration.get() == generation
 
     fun dismissHeldPayment() {
         mutableState.value = mutableState.value.copy(heldForApproval = null)
     }
 
-    private suspend fun handle(event: NostrIncomingEvent, recipientPrivateKey: ByteArray) {
+    private suspend fun handle(
+        event: NostrIncomingEvent,
+        recipientPrivateKey: ByteArray,
+        generation: Long,
+    ) {
+        if (!isCurrentGeneration(generation)) return
         eventMutex.withLock {
-            if (event.kind != 1059) return
-            if (event.id in processedIds) return
-            val rumor = runCatching { NIP17.unwrap(event, recipientPrivateKey) }
-                .onFailure { AppLogger.wallet.debug("CashuRequestListener: NIP-17 unwrap failed: ${it.message}") }
-                .getOrNull()
-            if (rumor == null || rumor.kind != 14) {
-                markProcessed(event.id)
-                return
-            }
-            if (shouldMarkProcessed(tryClaim(rumor.content, event.id))) {
-                markProcessed(event.id)
+            if (!isCurrentGeneration(generation)) return@withLock
+            if (event.kind != 1059) return@withLock
+            if (!processedEvents.begin(event.id)) return@withLock
+
+            var terminalOutcome = false
+            try {
+                if (!isCurrentGeneration(generation)) return@withLock
+                val rumor = runCatching { NIP17.unwrap(event, recipientPrivateKey) }
+                    .onFailure {
+                        AppLogger.wallet.debug(
+                            "CashuRequestListener: NIP-17 unwrap failed: ${it.message}",
+                        )
+                    }
+                    .getOrNull()
+                if (rumor == null || rumor.kind != 14) {
+                    terminalOutcome = true
+                    return@withLock
+                }
+                if (!isCurrentGeneration(generation)) return@withLock
+                terminalOutcome = shouldMarkProcessed(
+                    tryClaim(rumor.content, event.id, generation),
+                )
+            } finally {
+                processedEvents.finish(
+                    eventId = event.id,
+                    terminalOutcome = terminalOutcome && isCurrentGeneration(generation),
+                )
             }
         }
     }
 
-    private suspend fun tryClaim(rumorContent: String, eventId: String): ClaimOutcome {
+    private suspend fun tryClaim(
+        rumorContent: String,
+        eventId: String,
+        generation: Long,
+    ): ClaimOutcome {
         val payload = runCatching { paymentPayloadToToken(rumorContent) }
             .onFailure { AppLogger.wallet.debug("CashuRequestListener: malformed PaymentRequestPayload") }
             .getOrNull() ?: return ClaimOutcome.Unclaimable
@@ -125,7 +216,7 @@ class CashuRequestListener(
             mintKnown = walletManager.isMintKnown(info.mint),
         )
         if (!shouldAutoClaim) {
-            return holdForApproval(payload, info, eventId)
+            return holdForApproval(payload, info, eventId, generation)
         }
         return runCatching {
             val amount = walletManager.receiveCashuRequestPayment(
@@ -142,13 +233,18 @@ class CashuRequestListener(
             }
             ClaimOutcome.Claimed
         }.getOrElse { error ->
-            AppLogger.wallet.error("CashuRequestListener: redeem failed; payment remains retryable", error)
-            scope.launch(Dispatchers.Main.immediate) {
-                mutableState.value = CashuRequestListenerState(
-                    isRunning = client != null,
-                    lastError = error.userFacingWalletMessage,
-                    heldForApproval = mutableState.value.heldForApproval,
-                )
+            AppLogger.wallet.error(
+                "CashuRequestListener: redeem failed; payment remains retryable",
+                error,
+            )
+            if (isCurrentGeneration(generation)) {
+                scope.launch(Dispatchers.Main.immediate) {
+                    if (isCurrentGeneration(generation)) {
+                        mutableState.value = mutableState.value.copy(
+                            lastError = error.userFacingWalletMessage,
+                        )
+                    }
+                }
             }
             ClaimOutcome.TransientFailure
         }
@@ -158,11 +254,14 @@ class CashuRequestListener(
         payload: PaymentPayloadToken,
         info: TokenInfo,
         eventId: String,
+        generation: Long,
     ): ClaimOutcome {
         val existing = walletManager.state.value.pendingReceiveTokens
             .firstOrNull { it.token == payload.token }
         if (existing != null) {
-            mutableState.value = mutableState.value.copy(heldForApproval = existing)
+            if (isCurrentGeneration(generation)) {
+                mutableState.value = mutableState.value.copy(heldForApproval = existing)
+            }
             return ClaimOutcome.Held
         }
 
@@ -187,10 +286,12 @@ class CashuRequestListener(
         return runCatching {
             walletManager.savePendingReceiveToken(pending)
             walletManager.loadTransactions()
-            mutableState.value = mutableState.value.copy(
-                lastError = null,
-                heldForApproval = pending,
-            )
+            if (isCurrentGeneration(generation)) {
+                mutableState.value = mutableState.value.copy(
+                    lastError = null,
+                    heldForApproval = pending,
+                )
+            }
             AppLogger.wallet.info("CashuRequestListener: payment held for explicit approval")
             ClaimOutcome.Held
         }.getOrElse { error ->
@@ -249,24 +350,6 @@ class CashuRequestListener(
         scope.launch { claimEligibleHeldPayments() }
     }
 
-    private fun loadProcessedIds() {
-        val stored = metadataStore.string(StorageKeys.cashuRequestsProcessedNip17Ids)
-            ?.let { raw -> runCatching { json.decodeFromString<List<String>>(raw) }.getOrNull() }
-            .orEmpty()
-            .takeLast(MaxProcessedIds)
-        processedOrder = stored.distinct()
-        processedIds = processedOrder.toSet()
-    }
-
-    private fun markProcessed(id: String) {
-        processedOrder = appendProcessedId(processedOrder, id, MaxProcessedIds)
-        processedIds = processedOrder.toSet()
-        metadataStore.putString(
-            StorageKeys.cashuRequestsProcessedNip17Ids,
-            json.encodeToString(processedOrder),
-        )
-    }
-
     data class PaymentPayloadToken(
         val token: String,
         val requestId: String?,
@@ -281,9 +364,7 @@ class CashuRequestListener(
 
     companion object {
         internal const val MaxHeldPayments = 50
-        internal const val MaxProcessedIds = 1_000
         internal const val LookbackWindowSeconds = 7 * 24 * 60 * 60L
-        private const val LegacySinceKey = "cashuRequests.nip17.since.v1"
         private val payloadJson = Json { ignoreUnknownKeys = true; encodeDefaults = true }
 
         internal fun shouldAutoClaim(autoClaimEnabled: Boolean, mintKnown: Boolean): Boolean =
@@ -300,15 +381,6 @@ class CashuRequestListener(
 
         internal fun lookbackSince(nowEpochSeconds: Long): Long =
             nowEpochSeconds - LookbackWindowSeconds
-
-        internal fun appendProcessedId(
-            current: List<String>,
-            id: String,
-            limit: Int,
-        ): List<String> {
-            if (id in current) return current
-            return (current + id).takeLast(limit)
-        }
 
         fun paymentPayloadToToken(content: String): PaymentPayloadToken {
             val fields = payloadJson.parseToJsonElement(content).jsonObject
@@ -344,6 +416,62 @@ class CashuRequestListener(
                 token = "cashuA$encoded",
                 requestId = fields["id"]?.jsonPrimitive?.contentOrNull,
             )
+        }
+    }
+}
+
+internal class ProcessedNip17EventTracker(
+    private val load: () -> List<String>,
+    private val save: (List<String>) -> Unit,
+    private val maxProcessedIds: Int = 1_000,
+) {
+    private val lock = Any()
+    private val processedIds = mutableSetOf<String>()
+    private val processedOrder = mutableListOf<String>()
+    private val inFlightIds = mutableSetOf<String>()
+
+    init {
+        require(maxProcessedIds > 0) { "maxProcessedIds must be positive." }
+    }
+
+    fun reload() {
+        val stored = load().distinct().takeLast(maxProcessedIds)
+        synchronized(lock) {
+            processedOrder.clear()
+            processedOrder.addAll(stored)
+            processedIds.clear()
+            processedIds.addAll(stored)
+            inFlightIds.clear()
+        }
+    }
+
+    fun clear() {
+        synchronized(lock) {
+            processedIds.clear()
+            processedOrder.clear()
+            inFlightIds.clear()
+        }
+    }
+
+    fun begin(eventId: String): Boolean = synchronized(lock) {
+        if (eventId in processedIds || eventId in inFlightIds) {
+            false
+        } else {
+            inFlightIds += eventId
+            true
+        }
+    }
+
+    fun finish(eventId: String, terminalOutcome: Boolean) {
+        synchronized(lock) {
+            inFlightIds -= eventId
+            if (!terminalOutcome || !processedIds.add(eventId)) return
+            processedOrder += eventId
+            if (processedOrder.size > maxProcessedIds) {
+                val removed = processedOrder.removeAt(0)
+                processedIds -= removed
+            }
+            save(processedOrder.toList())
         }
     }
 }
