@@ -1581,6 +1581,7 @@ struct ICloudBackupSettingsView: View {
     private func backupErrorMessage(for outcome: ICloudBackupOutcome) -> String? {
         switch outcome {
         case .success: return nil
+        case .deferred: return "iCloud backup is paused until wallet recovery finishes."
         case .unavailable: return "iCloud is unavailable. Sign in to iCloud in Settings and try again."
         case .noSeed: return "There's no wallet seed to back up."
         case .failed(let message): return message

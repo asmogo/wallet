@@ -12,9 +12,42 @@ struct ICloudBackupInfo: Sendable {
 /// instead of an unconditional "Backed up ✓".
 enum ICloudBackupOutcome: Equatable {
     case success(mintCount: Int)
+    case deferred
     case unavailable
     case noSeed
     case failed(String)
+}
+
+enum ICloudRestoreState {
+    private static let incompleteKey = "cashu.local.icloudRestoreIncomplete"
+
+    static func isIncomplete(defaults: UserDefaults = .standard) -> Bool {
+        defaults.bool(forKey: incompleteKey)
+    }
+
+    static func setIncomplete(
+        _ incomplete: Bool,
+        defaults: UserDefaults = .standard
+    ) {
+        if incomplete {
+            defaults.set(true, forKey: incompleteKey)
+        } else {
+            defaults.removeObject(forKey: incompleteKey)
+        }
+    }
+}
+
+enum ICloudRestorePolicy {
+    static func shouldPerformBackup(restoreIncomplete: Bool) -> Bool {
+        !restoreIncomplete
+    }
+
+    static func needsOnboarding(
+        hasStoredMnemonic: Bool,
+        restoreIncomplete: Bool
+    ) -> Bool {
+        !hasStoredMnemonic || restoreIncomplete
+    }
 }
 
 extension WalletManager {
@@ -59,7 +92,8 @@ extension WalletManager {
     var iCloudBackupEnabled: Bool {
         get { UserDefaults.standard.bool(forKey: Self.iCloudEnabledKey) }
         set {
-            setICloudBackupEnabledLocally(newValue)
+            UserDefaults.standard.set(newValue, forKey: Self.iCloudEnabledKey)
+            objectWillChange.send()
             if newValue {
                 performICloudBackup()
             } else {
@@ -68,11 +102,12 @@ extension WalletManager {
         }
     }
 
-    /// Updates the device-local preference without changing the remote backup.
-    /// Restore uses this to prevent clean-wallet installation and per-mint
-    /// recovery from replacing the only known mint list with an incomplete one.
-    private func setICloudBackupEnabledLocally(_ enabled: Bool) {
-        UserDefaults.standard.set(enabled, forKey: Self.iCloudEnabledKey)
+    var hasIncompleteICloudRestore: Bool {
+        ICloudRestoreState.isIncomplete()
+    }
+
+    func setICloudRestoreIncomplete(_ incomplete: Bool) {
+        ICloudRestoreState.setIncomplete(incomplete)
         objectWillChange.send()
     }
 
@@ -123,6 +158,13 @@ extension WalletManager {
 
     @discardableResult
     func performICloudBackup() -> ICloudBackupOutcome {
+        guard ICloudRestorePolicy.shouldPerformBackup(
+            restoreIncomplete: hasIncompleteICloudRestore
+        ) else {
+            AppLogger.wallet.info("iCloud backup deferred: wallet restore is incomplete")
+            lastICloudBackupOutcome = .deferred
+            return .deferred
+        }
         guard iCloudBackupEnabled, iCloudAvailable() else {
             AppLogger.wallet.error("iCloud backup skipped: iCloud unavailable")
             lastICloudBackupOutcome = .unavailable
@@ -170,24 +212,20 @@ extension WalletManager {
         }
         AppLogger.wallet.info("iCloud restore: starting, \(backup.mintURLs.count) mint(s) to restore")
 
-        // Installing a clean wallet normally performs an immediate backup. Keep
-        // backup writes disabled until every original mint has been recovered,
-        // otherwise the clean install (zero mints) or a partial restore can
-        // overwrite the only list of mints still needing recovery.
-        let wasBackupEnabled = iCloudBackupEnabled
-        setICloudBackupEnabledLocally(false)
-        do {
-            try await initializeRestoredWallet(mnemonic: recoveredMnemonic)
-        } catch {
-            setICloudBackupEnabledLocally(wasBackupEnabled)
-            throw error
-        }
+        // Keep the user's backup preference intact while independently
+        // suppressing writes. Persist the marker so an interruption cannot make
+        // a partial wallet look complete on the next launch.
+        setICloudRestoreIncomplete(true)
+        try await initializeRestoredWallet(mnemonic: recoveredMnemonic)
 
         var failedMintCount = 0
         for url in backup.mintURLs {
             do {
                 _ = try await restoreFromMint(url: url)
             } catch {
+                if error is CancellationError {
+                    throw error
+                }
                 failedMintCount += 1
                 AppLogger.wallet.error("iCloud restore: mint recovery failed for \(url): \(error)")
             }
@@ -202,6 +240,7 @@ extension WalletManager {
         }
 
         // Only a complete restore may replace the backed-up mint list.
+        setICloudRestoreIncomplete(false)
         iCloudBackupEnabled = true
         AppLogger.wallet.info("iCloud restore: complete, balance \(self.balance)")
     }
