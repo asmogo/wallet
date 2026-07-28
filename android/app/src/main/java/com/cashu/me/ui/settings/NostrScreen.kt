@@ -85,7 +85,9 @@ fun NostrScreen(
     val nwcState by nwcManager.state.collectAsState()
     val clipboard = LocalClipboardManager.current
     val authenticate = rememberWalletAuthenticationLauncher(appLockManager)
-    var nsecRevealed by remember { mutableStateOf(false) }
+    // Keep the authenticated value tied to this key. Replacing/importing/resetting
+    // the Nostr key creates fresh hidden state, even if the previous key was visible.
+    var revealedNsec by remember(nostrState.nsec) { mutableStateOf<String?>(null) }
     var nsecCopied by remember { mutableStateOf(false) }
     LaunchedEffect(nsecCopied) {
         if (nsecCopied) {
@@ -178,8 +180,7 @@ fun NostrScreen(
                 horizontalArrangement = Arrangement.spacedBy(CashuTheme.spacing.snug),
             ) {
                 Text(
-                    text = if (nsecRevealed) nostrState.nsec.ifBlank { "—" }
-                    else "•".repeat(12),
+                    text = revealedNsec?.ifBlank { "—" } ?: "•".repeat(12),
                     style = MaterialTheme.typography.bodyMedium.copy(fontFamily = FontFamily.Monospace),
                     color = MaterialTheme.colorScheme.onSurface,
                     modifier = Modifier.weight(1f),
@@ -188,19 +189,19 @@ fun NostrScreen(
                 )
                 IconButton(
                     onClick = {
-                        if (nsecRevealed) {
-                            nsecRevealed = false
+                        if (revealedNsec != null) {
+                            revealedNsec = null
                         } else {
                             authenticate("Reveal your Nostr private key") {
-                                nsecRevealed = true
+                                revealedNsec = nostrState.nsec
                             }
                         }
                     },
                 ) {
                     Icon(
-                        imageVector = if (nsecRevealed) Icons.Outlined.VisibilityOff
+                        imageVector = if (revealedNsec != null) Icons.Outlined.VisibilityOff
                         else Icons.Outlined.Visibility,
-                        contentDescription = if (nsecRevealed) "Hide" else "Reveal",
+                        contentDescription = if (revealedNsec != null) "Hide" else "Reveal",
                     )
                 }
                 IconButton(
