@@ -5,6 +5,7 @@ import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
+import com.cashu.me.Core.Protocols.StorageKeys
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -33,5 +34,20 @@ class CashuRequestListenerTest {
         assertEquals("sat", fields["unit"]!!.jsonPrimitive.content)
         assertEquals("Thanks", fields["memo"]!!.jsonPrimitive.content)
         assertEquals(1, entry["proofs"]!!.jsonArray.size)
+    }
+
+    @Test
+    fun subscriptionAlwaysUsesFixedSevenDayLookback() {
+        val now = 2_000_000_000L
+
+        assertEquals(
+            now - CashuRequestListener.LookbackSeconds,
+            CashuRequestListener.subscriptionSince(now),
+        )
+    }
+
+    @Test
+    fun processedGiftWrapsAreClearedAtWalletBoundary() {
+        assertTrue(StorageKeys.walletProcessedNip17GiftWraps in StorageKeys.walletBoundaryKeys)
     }
 }

@@ -54,6 +54,8 @@ class WalletManager(
     private val databasePathManager: WalletDatabasePathManager,
     private val gateway: CdkWalletGateway,
 ) : WalletServiceProtocol, NPCQuoteClaimHandler {
+    internal var cashuRequestListener: CashuRequestListener? = null
+
     private val exceptionHandler = CoroutineExceptionHandler { _, error ->
         AppLogger.wallet.error("Unhandled wallet coroutine error", error)
         update { copy(isLoading = false, errorMessage = error.message ?: error::class.simpleName) }
@@ -241,6 +243,7 @@ class WalletManager(
 
     override suspend fun deleteWallet() {
         withLoading {
+            cashuRequestListener?.stop()
             nwcManager.resetForWalletBoundary()
             gateway.closeWalletRepository()
             secureStorage.delete(StorageKeys.secureWalletMnemonic)
@@ -250,6 +253,7 @@ class WalletManager(
             settingsManager.resetWalletScopedData()
             npcService.resetForWalletBoundary()
             nostrMintBackupService.resetForWalletBoundary()
+            cashuRequestListener?.resetForWalletBoundary(restart = false)
             MintLogoBitmapCache.clear()
             update {
                 WalletState(
@@ -1063,6 +1067,7 @@ class WalletManager(
         val settingsSnapshot = settingsManager.snapshotWalletScopedData()
         val nwcSnapshot = nwcManager.snapshotWalletScopedData()
 
+        cashuRequestListener?.stop()
         runCatching {
             // NwcService retains the native CDK wallet, so it must stop before
             // the repository/database it is backed by is closed.
@@ -1095,6 +1100,7 @@ class WalletManager(
                     loadCachedState(needsOnboarding = false)
                     nwcManager.startIfEnabled()
                 }
+                cashuRequestListener?.resetForWalletBoundary(restart = true)
             } else {
                 secureStorage.delete(StorageKeys.secureWalletMnemonic)
                 update {
@@ -1105,9 +1111,11 @@ class WalletManager(
                         canExitOnboarding = false,
                     )
                 }
+                cashuRequestListener?.resetForWalletBoundary(restart = false)
             }
             throw error
         }
+        cashuRequestListener?.resetForWalletBoundary(restart = !needsOnboarding)
     }
 
     private fun loadCachedState(needsOnboarding: Boolean) {

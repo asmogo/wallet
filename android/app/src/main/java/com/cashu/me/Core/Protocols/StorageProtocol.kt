@@ -59,6 +59,7 @@ object StorageKeys {
     const val walletMintQuoteTimestamps = "wallet.mintQuoteTimestamps"
     const val walletProcessedNPCQuotes = "wallet.processedNPCQuotes"
     const val walletProcessedCashuRequests = "wallet.processedCashuRequests"
+    const val walletProcessedNip17GiftWraps = "wallet.processedNip17GiftWraps"
     const val cashuRequests = "cashuRequests.v1"
     const val cashuRequestsCurrentId = "cashuRequests.currentId.v1"
 
@@ -127,6 +128,7 @@ object StorageKeys {
         walletMintQuoteTimestamps,
         walletProcessedNPCQuotes,
         walletProcessedCashuRequests,
+        walletProcessedNip17GiftWraps,
         cashuRequests,
         cashuRequestsCurrentId,
         settingsP2PKKeys,

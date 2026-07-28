@@ -1,6 +1,5 @@
 package com.cashu.me.Core
 
-import android.content.Context
 import java.util.Base64
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -26,16 +25,17 @@ data class CashuRequestListenerState(
 )
 
 class CashuRequestListener(
-    context: Context,
     private val nostrService: NostrService,
     private val settingsManager: SettingsManager,
     private val walletManager: WalletManager,
     private val cashuRequestStore: CashuRequestStore,
+    private val walletStore: WalletStore,
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
-    private val metadataStore = DataStorePreferenceStore(context.applicationContext, "settings_store")
-    private val json = Json { ignoreUnknownKeys = true; encodeDefaults = true }
-    private val sinceKey = "cashuRequests.nip17.since.v1"
+    private val processedLock = Any()
+    private val processedIds = mutableSetOf<String>()
+    private val processedOrder = mutableListOf<String>()
+    private val inFlightIds = mutableSetOf<String>()
     private var client: NostrInboxClient? = null
     private val mutableState = MutableStateFlow(CashuRequestListenerState())
     val state: StateFlow<CashuRequestListenerState> = mutableState.asStateFlow()
@@ -56,7 +56,8 @@ class CashuRequestListener(
             mutableState.value = CashuRequestListenerState(lastError = "No Nostr relays configured.")
             return
         }
-        val since = metadataStore.long(sinceKey, (System.currentTimeMillis() / 1000) - 48 * 60 * 60)
+        reloadProcessedIds()
+        val since = subscriptionSince(System.currentTimeMillis() / 1000)
         val recipientPrivateKey = NIP44.hexToBytes(privateKeyHex)
         client = NostrInboxClient(
             pubkeyHex = nostr.publicKeyHex,
@@ -75,22 +76,40 @@ class CashuRequestListener(
         mutableState.value = CashuRequestListenerState(isRunning = false)
     }
 
-    private suspend fun handle(event: NostrIncomingEvent, recipientPrivateKey: ByteArray) {
-        if (event.kind != 1059) return
-        metadataStore.putLong(sinceKey, event.createdAt)
-        client?.updateSince(event.createdAt)
-        val rumor = runCatching { NIP17.unwrap(event, recipientPrivateKey) }
-            .onFailure { AppLogger.wallet.debug("CashuRequestListener: NIP-17 unwrap failed: ${it.message}") }
-            .getOrNull() ?: return
-        if (rumor.kind != 14) return
-        tryClaim(rumor.content, event.id)
+    fun resetForWalletBoundary(restart: Boolean) {
+        stop()
+        synchronized(processedLock) {
+            processedIds.clear()
+            processedOrder.clear()
+            inFlightIds.clear()
+        }
+        if (restart) start()
     }
 
-    private suspend fun tryClaim(rumorContent: String, eventId: String) {
+    private suspend fun handle(event: NostrIncomingEvent, recipientPrivateKey: ByteArray) {
+        if (event.kind != 1059) return
+        if (!beginProcessing(event.id)) return
+
+        var terminalOutcome = false
+        try {
+            val rumor = runCatching { NIP17.unwrap(event, recipientPrivateKey) }
+                .onFailure { AppLogger.wallet.debug("CashuRequestListener: NIP-17 unwrap failed: ${it.message}") }
+                .getOrNull()
+            if (rumor == null || rumor.kind != 14) {
+                terminalOutcome = true
+                return
+            }
+            terminalOutcome = tryClaim(rumor.content, event.id) != ClaimOutcome.TransientFailure
+        } finally {
+            finishProcessing(event.id, terminalOutcome)
+        }
+    }
+
+    private suspend fun tryClaim(rumorContent: String, eventId: String): ClaimOutcome {
         val payload = runCatching { paymentPayloadToToken(rumorContent) }
             .onFailure { AppLogger.wallet.debug("CashuRequestListener: malformed PaymentRequestPayload") }
-            .getOrNull() ?: return
-        runCatching {
+            .getOrNull() ?: return ClaimOutcome.Unclaimable
+        return runCatching {
             val amount = walletManager.receiveCashuRequestPayment(
                 tokenString = payload.token,
                 requestId = payload.requestId,
@@ -103,6 +122,7 @@ class CashuRequestListener(
                     amount = amount,
                 )
             }
+            ClaimOutcome.Claimed
         }.onFailure { error ->
             AppLogger.wallet.error("CashuRequestListener: redeem failed", error)
             scope.launch {
@@ -111,8 +131,45 @@ class CashuRequestListener(
                     lastError = error.userFacingWalletMessage,
                 )
             }
+        }.getOrElse { ClaimOutcome.TransientFailure }
+    }
+
+    private fun reloadProcessedIds() {
+        val stored = walletStore.loadProcessedNip17GiftWraps()
+            .distinct()
+            .takeLast(MaxProcessedIds)
+        synchronized(processedLock) {
+            processedOrder.clear()
+            processedOrder.addAll(stored)
+            processedIds.clear()
+            processedIds.addAll(stored)
+            inFlightIds.clear()
         }
     }
+
+    private fun beginProcessing(eventId: String): Boolean = synchronized(processedLock) {
+        if (eventId in processedIds || eventId in inFlightIds) {
+            false
+        } else {
+            inFlightIds += eventId
+            true
+        }
+    }
+
+    private fun finishProcessing(eventId: String, terminalOutcome: Boolean) {
+        synchronized(processedLock) {
+            inFlightIds -= eventId
+            if (!terminalOutcome || !processedIds.add(eventId)) return
+            processedOrder += eventId
+            if (processedOrder.size > MaxProcessedIds) {
+                val removed = processedOrder.removeAt(0)
+                processedIds -= removed
+            }
+            walletStore.saveProcessedNip17GiftWraps(processedOrder)
+        }
+    }
+
+    private enum class ClaimOutcome { Claimed, Unclaimable, TransientFailure }
 
     data class PaymentPayloadToken(
         val token: String,
@@ -120,7 +177,12 @@ class CashuRequestListener(
     )
 
     companion object {
+        internal const val LookbackSeconds = 7L * 24 * 60 * 60
+        private const val MaxProcessedIds = 1_000
         private val payloadJson = Json { ignoreUnknownKeys = true; encodeDefaults = true }
+
+        internal fun subscriptionSince(nowEpochSeconds: Long): Long =
+            nowEpochSeconds - LookbackSeconds
 
         fun paymentPayloadToToken(content: String): PaymentPayloadToken {
             val fields = payloadJson.parseToJsonElement(content).jsonObject

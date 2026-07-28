@@ -69,11 +69,11 @@ class AppContainer(context: Context) {
     val priceService = PriceService(settingsStore)
     val mintDiscoveryManager = MintDiscoveryManager(settingsManager, cdkGateway)
     val cashuRequestListener = CashuRequestListener(
-        context = appContext,
         nostrService = nostrService,
         settingsManager = settingsManager,
         walletManager = walletManager,
         cashuRequestStore = cashuRequestStore,
+        walletStore = walletStore,
     )
     val nfcReceiveCoordinator = NfcReceiveCoordinator(
         context = appContext,
@@ -82,6 +82,7 @@ class AppContainer(context: Context) {
     )
 
     init {
+        walletManager.cashuRequestListener = cashuRequestListener
         npcService.quoteClaimHandler = walletManager
         settingsManager.sentryService = sentryService
         // Seed-derived primary P2PK key (iOS primaryP2PKPublicKey/PrivateKeyHex):
