@@ -147,7 +147,11 @@ fun ReceiveEcashDetailScreen(
                     onReceive = { review?.let(::claim) },
                     onReceiveLater = {
                         review?.let {
-                            walletManager.savePendingReceiveToken(pendingReceiveTokenFrom(it))
+                            val alreadyPending = walletManager.state.value.pendingReceiveTokens
+                                .any { pending -> pending.token == it.token }
+                            if (!alreadyPending) {
+                                walletManager.savePendingReceiveToken(pendingReceiveTokenFrom(it))
+                            }
                             onDone()
                         }
                     },

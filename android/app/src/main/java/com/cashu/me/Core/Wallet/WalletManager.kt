@@ -861,6 +861,13 @@ class WalletManager(
         return amount
     }
 
+    fun isMintKnown(url: String): Boolean {
+        val normalized = normalizedMintUrlForSelection(url) ?: return false
+        return state.value.mints.any {
+            normalizedMintUrlForSelection(it.url) == normalized
+        }
+    }
+
     suspend fun receiveNfcCashuRequestPayment(
         tokenString: String,
         processedId: String,
@@ -912,7 +919,23 @@ class WalletManager(
     }
 
     suspend fun claimPendingReceiveToken(token: PendingReceiveToken): Long {
-        val amount = receiveTokens(token.token)
+        val amount = if (token.cashuRequestId != null || token.processedId != null) {
+            receiveCashuRequestPayment(
+                tokenString = token.token,
+                requestId = token.cashuRequestId,
+                processedId = token.processedId,
+            ).also { received ->
+                if (received > 0 && !token.cashuRequestId.isNullOrBlank()) {
+                    cashuRequestStore.attachPayment(
+                        requestId = token.cashuRequestId,
+                        transactionId = token.processedId ?: token.cashuRequestId,
+                        amount = received,
+                    )
+                }
+            }
+        } else {
+            receiveTokens(token.token)
+        }
         removePendingReceiveToken(token.tokenId)
         return amount
     }

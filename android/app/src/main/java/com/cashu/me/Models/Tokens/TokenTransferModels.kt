@@ -31,6 +31,8 @@ data class PendingReceiveToken(
     val dateEpochMillis: Long,
     val mintUrl: String,
     val unit: String = "sat",
+    val cashuRequestId: String? = null,
+    val processedId: String? = null,
 ) {
     val id: String get() = tokenId
 }

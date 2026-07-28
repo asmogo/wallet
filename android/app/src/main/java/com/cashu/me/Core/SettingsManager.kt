@@ -169,7 +169,6 @@ class SettingsManager(
     }
     fun setCheckSentTokens(value: Boolean) = update { settingsStore.checkSentTokens = value }
     fun setAutoPasteEcashReceive(value: Boolean) = update { settingsStore.autoPasteEcashReceive = value }
-    // TODO(runtime-parity): Payment request processing is not started from these Swift parity toggles yet.
     fun setEnablePaymentRequests(value: Boolean) = update { settingsStore.enablePaymentRequests = value }
     fun setReceivePaymentRequestsAutomatically(value: Boolean) = update {
         settingsStore.receivePaymentRequestsAutomatically = value

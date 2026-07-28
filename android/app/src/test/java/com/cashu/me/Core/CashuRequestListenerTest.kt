@@ -6,6 +6,7 @@ import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -33,5 +34,13 @@ class CashuRequestListenerTest {
         assertEquals("sat", fields["unit"]!!.jsonPrimitive.content)
         assertEquals("Thanks", fields["memo"]!!.jsonPrimitive.content)
         assertEquals(1, entry["proofs"]!!.jsonArray.size)
+    }
+
+    @Test
+    fun automaticClaimRequiresOptInAndPreviouslyTrustedMint() {
+        assertFalse(CashuRequestListener.shouldAutoClaim(autoClaimEnabled = false, mintKnown = false))
+        assertFalse(CashuRequestListener.shouldAutoClaim(autoClaimEnabled = false, mintKnown = true))
+        assertFalse(CashuRequestListener.shouldAutoClaim(autoClaimEnabled = true, mintKnown = false))
+        assertTrue(CashuRequestListener.shouldAutoClaim(autoClaimEnabled = true, mintKnown = true))
     }
 }
