@@ -17,8 +17,8 @@ data class SettingsState(
     val checkSentTokens: Boolean = true,
     val autoPasteEcashReceive: Boolean = true,
     val useWebsockets: Boolean = true,
-    val enablePaymentRequests: Boolean = false,
-    val receivePaymentRequestsAutomatically: Boolean = false,
+    val enablePaymentRequests: Boolean = true,
+    val receivePaymentRequestsAutomatically: Boolean = true,
     val showP2PKButtonInDrawer: Boolean = false,
     val amountDisplayPrimary: String = "fiat",
     val homeBalanceUnit: String = "sat",
@@ -134,6 +134,7 @@ class SettingsManager(
 
     // Wired by AppContainer (same pattern as NPCService.quoteClaimHandler).
     var sentryService: SentryService? = null
+    var claimEligibleHeldPayments: (() -> Unit)? = null
 
     // Wired by AppContainer: the seed-derived primary P2PK key (iOS
     // primaryP2PKPublicKey/PrivateKeyHex). Null until the wallet seed is loaded.
@@ -169,10 +170,15 @@ class SettingsManager(
     }
     fun setCheckSentTokens(value: Boolean) = update { settingsStore.checkSentTokens = value }
     fun setAutoPasteEcashReceive(value: Boolean) = update { settingsStore.autoPasteEcashReceive = value }
-    // TODO(runtime-parity): Payment request processing is not started from these Swift parity toggles yet.
     fun setEnablePaymentRequests(value: Boolean) = update { settingsStore.enablePaymentRequests = value }
-    fun setReceivePaymentRequestsAutomatically(value: Boolean) = update {
-        settingsStore.receivePaymentRequestsAutomatically = value
+    fun setReceivePaymentRequestsAutomatically(value: Boolean) {
+        val previous = state.value.receivePaymentRequestsAutomatically
+        update {
+            settingsStore.receivePaymentRequestsAutomatically = value
+        }
+        if (value && !previous) {
+            claimEligibleHeldPayments?.invoke()
+        }
     }
     fun setShowP2PKButtonInDrawer(value: Boolean) = update { settingsStore.showP2PKButtonInDrawer = value }
     // Mirrors Swift SettingsManager.sentryEnabled didSet: persist, then start/stop the SDK on change.

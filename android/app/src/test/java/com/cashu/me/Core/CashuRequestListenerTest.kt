@@ -6,6 +6,7 @@ import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -33,5 +34,94 @@ class CashuRequestListenerTest {
         assertEquals("sat", fields["unit"]!!.jsonPrimitive.content)
         assertEquals("Thanks", fields["memo"]!!.jsonPrimitive.content)
         assertEquals(1, entry["proofs"]!!.jsonArray.size)
+    }
+
+    @Test
+    fun automaticClaimRequiresOptInAndPreviouslyTrustedMint() {
+        assertFalse(CashuRequestListener.shouldAutoClaim(autoClaimEnabled = false, mintKnown = false))
+        assertFalse(CashuRequestListener.shouldAutoClaim(autoClaimEnabled = false, mintKnown = true))
+        assertFalse(CashuRequestListener.shouldAutoClaim(autoClaimEnabled = true, mintKnown = false))
+        assertTrue(CashuRequestListener.shouldAutoClaim(autoClaimEnabled = true, mintKnown = true))
+    }
+
+    @Test
+    fun heldAutomaticClaimRequiresListenerOwnershipAndKnownMint() {
+        assertFalse(
+            CashuRequestListener.shouldClaimHeldPayment(
+                autoClaimEnabled = false,
+                listenerHeld = true,
+                mintKnown = true,
+            ),
+        )
+        assertFalse(
+            CashuRequestListener.shouldClaimHeldPayment(
+                autoClaimEnabled = true,
+                listenerHeld = false,
+                mintKnown = true,
+            ),
+        )
+        assertFalse(
+            CashuRequestListener.shouldClaimHeldPayment(
+                autoClaimEnabled = true,
+                listenerHeld = true,
+                mintKnown = false,
+            ),
+        )
+        assertTrue(
+            CashuRequestListener.shouldClaimHeldPayment(
+                autoClaimEnabled = true,
+                listenerHeld = true,
+                mintKnown = true,
+            ),
+        )
+    }
+
+    @Test
+    fun transientFailuresRemainRetryable() {
+        assertFalse(
+            CashuRequestListener.shouldMarkProcessed(
+                CashuRequestListener.ClaimOutcome.TransientFailure,
+            ),
+        )
+        assertTrue(
+            CashuRequestListener.shouldMarkProcessed(
+                CashuRequestListener.ClaimOutcome.Held,
+            ),
+        )
+        assertTrue(
+            CashuRequestListener.shouldMarkProcessed(
+                CashuRequestListener.ClaimOutcome.Claimed,
+            ),
+        )
+        assertTrue(
+            CashuRequestListener.shouldMarkProcessed(
+                CashuRequestListener.ClaimOutcome.Unclaimable,
+            ),
+        )
+    }
+
+    @Test
+    fun listenerUsesFixedLookbackAndBoundedProcessedIds() {
+        val now = 2_000_000L
+        assertEquals(
+            now - CashuRequestListener.LookbackWindowSeconds,
+            CashuRequestListener.lookbackSince(now),
+        )
+        assertEquals(
+            listOf("b", "c"),
+            CashuRequestListener.appendProcessedId(
+                current = listOf("a", "b"),
+                id = "c",
+                limit = 2,
+            ),
+        )
+        assertEquals(
+            listOf("a", "b"),
+            CashuRequestListener.appendProcessedId(
+                current = listOf("a", "b"),
+                id = "b",
+                limit = 2,
+            ),
+        )
     }
 }
