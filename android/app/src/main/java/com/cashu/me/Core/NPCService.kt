@@ -16,7 +16,6 @@ import kotlinx.coroutines.sync.withLock
 import com.cashu.me.Core.Protocols.StorageKeys
 import org.cashudevkit.NpubCashClient
 import org.cashudevkit.NpubCashQuote
-import org.cashudevkit.npubcashDeriveSecretKeyFromSeed
 import org.cashudevkit.npubcashGetPubkey
 
 data class NPCQuote(
@@ -82,12 +81,13 @@ class NPCService(
     }
 
     /**
-     * Initializes the npub.cash identity exactly as CDK does on iOS: derive the
-     * NIP-06 key from the 64-byte BIP39 seed, not from the wallet's legacy
-     * Nostr/P2PK key.
+     * TEMP recovery build only (remove next version): pre-#164 Android npub.cash
+     * used the legacy Nostr seed key (sha256(mnemonic utf8)) as the seckey
+     * directly — not CDK NIP-06 from the BIP39 seed.
      */
     fun initializeWithSeed(seed: ByteArray) {
-        val secretKey = npubcashDeriveSecretKeyFromSeed(seed)
+        require(seed.size >= 32) { "Legacy npub.cash seed must be at least 32 bytes." }
+        val secretKey = seed.copyOfRange(0, 32).joinToString("") { "%02x".format(it) }
         val publicKey = npubcashGetPubkey(secretKey)
         val npub = Bech32.encode("npub", NostrService.hexToBytes(publicKey))
 

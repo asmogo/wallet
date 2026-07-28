@@ -1238,18 +1238,15 @@ class WalletManager(
     }
 
     private suspend fun deriveNostrKey(mnemonic: String) {
-        // The app's legacy Nostr/P2PK identity remains sha256(mnemonic utf8).
+        // TEMP recovery build: both Nostr/P2PK and npub.cash use
+        // sha256(mnemonic utf8) — the pre-#164 Android npub.cash identity so
+        // users can reclaim funds sent to the old address. Revert next version.
         runCatching {
             val seed = java.security.MessageDigest.getInstance("SHA-256")
                 .digest(mnemonic.toByteArray(Charsets.UTF_8))
             nostrService.deriveKeypairFromSeed(seed)
-        }.onFailure { AppLogger.wallet.error("Nostr key derivation failed", it) }
-
-        // npub.cash is a separate NIP-06 identity derived by CDK from the
-        // 64-byte BIP39 seed. This matches iOS WalletManager+NPC exactly.
-        runCatching {
-            npcService.initializeWithSeed(walletBip39Seed(mnemonic))
-        }.onFailure { AppLogger.wallet.error("npub.cash key derivation failed", it) }
+            npcService.initializeWithSeed(seed)
+        }.onFailure { AppLogger.wallet.error("Nostr/npub.cash key derivation failed", it) }
     }
 
     private suspend fun openWalletRepositoryWithRecovery(mnemonic: String) {
