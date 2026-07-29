@@ -28,6 +28,14 @@ struct ContentView: View {
             }
         }
         .animation(.easeInOut(duration: 0.35), value: walletManager.needsOnboarding)
+        .onChange(of: navigationManager.pendingDeepLinkToken) {
+            navigationManager.presentPendingReceiveTokenIfReady(
+                isRuntimeReady: walletManager.isRuntimeReady
+            )
+        }
+        .onChange(of: walletManager.isRuntimeReady, initial: true) { _, isRuntimeReady in
+            navigationManager.presentPendingReceiveTokenIfReady(isRuntimeReady: isRuntimeReady)
+        }
         .fullScreenCover(isPresented: $navigationManager.showReceiveTokenSheet) {
             if let token = navigationManager.pendingDeepLinkToken {
                 ReceiveTokenDetailView(
