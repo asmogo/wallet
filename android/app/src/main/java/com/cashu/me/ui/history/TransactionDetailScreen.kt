@@ -45,6 +45,7 @@ import com.cashu.me.Core.AmountFormatter
 import com.cashu.me.Core.Protocols.CurrencyAmount
 import com.cashu.me.Core.Protocols.CurrencyRegistry
 import com.cashu.me.Core.OnchainExplorer
+import com.cashu.me.Core.ReceiveConfirmationOwner
 import com.cashu.me.Core.resolveTransactionForDetail
 import com.cashu.me.Core.SettingsManager
 import com.cashu.me.Core.TransactionDisplay
@@ -118,7 +119,12 @@ fun TransactionDetailScreen(
             openId = transactionId,
         )?.mintQuoteIdForStatusRefresh
             ?: return@LaunchedEffect
-        runCatching { walletManager.refreshPendingMintQuote(quoteId) }
+        runCatching {
+            walletManager.refreshPendingMintQuote(
+                quoteId,
+                confirmationOwner = ReceiveConfirmationOwner.Home,
+            )
+        }
     }
     // Tap-to-copy inspector rows (Address / Transaction ID / Payment Proof):
     // which row last copied, for the ContentCopy → green Check swap.
