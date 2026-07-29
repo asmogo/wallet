@@ -53,6 +53,13 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.CompositingStrategy
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.SubcomposeLayout
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.disabled
+import androidx.compose.ui.semantics.onClick
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.testTag as semanticsTestTag
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
@@ -90,6 +97,15 @@ private const val RECENT_LIMIT = 5
 
 // iOS MainWalletView: the received-delta beat auto-dismisses after 2.5s.
 private const val RECEIVED_DELTA_DISMISS_MS = 2_500L
+
+internal object HomeActionAccessibility {
+    const val ReceiveClickLabel =
+        "open the unified flow for a pasted ecash token or a new Cashu Request, " +
+            "Lightning invoice, BOLT12 offer, or Bitcoin address"
+    const val SendClickLabel =
+        "open the unified flow for ecash, Lightning addresses, BOLT11 invoices, " +
+            "BOLT12 offers, Bitcoin addresses, or Cashu Requests"
+}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -537,7 +553,7 @@ private fun HomeBalanceHero(
 private val PAGE_DOT_SIZE = 6.dp
 
 @Composable
-private fun ActionDuet(
+internal fun ActionDuet(
     onReceive: () -> Unit,
     onSend: () -> Unit,
     receiveEnabled: Boolean,
@@ -559,7 +575,13 @@ private fun ActionDuet(
             onClick = onReceive,
             modifier = Modifier
                 .weight(1f)
-                .testTag(UiTestTags.WalletReceive),
+                .homeActionSemantics(
+                    label = "Receive",
+                    onClickLabel = HomeActionAccessibility.ReceiveClickLabel,
+                    testTag = UiTestTags.WalletReceive,
+                    enabled = receiveEnabled,
+                    onClick = onReceive,
+                ),
             enabled = receiveEnabled,
             colors = actionColors,
         )
@@ -568,9 +590,40 @@ private fun ActionDuet(
             onClick = onSend,
             modifier = Modifier
                 .weight(1f)
-                .testTag(UiTestTags.WalletSend),
+                .homeActionSemantics(
+                    label = "Send",
+                    onClickLabel = HomeActionAccessibility.SendClickLabel,
+                    testTag = UiTestTags.WalletSend,
+                    enabled = sendEnabled,
+                    onClick = onSend,
+                ),
             enabled = sendEnabled,
             colors = actionColors,
         )
+    }
+}
+
+/**
+ * Replaces the Button's descendant semantics with one TalkBack node: the
+ * visible label is spoken once, while the click action describes the unified
+ * destination and accepted inputs.
+ */
+private fun Modifier.homeActionSemantics(
+    label: String,
+    onClickLabel: String,
+    testTag: String,
+    enabled: Boolean,
+    onClick: () -> Unit,
+): Modifier = clearAndSetSemantics {
+    contentDescription = label
+    semanticsTestTag = testTag
+    role = Role.Button
+    if (enabled) {
+        onClick(label = onClickLabel) {
+            onClick()
+            true
+        }
+    } else {
+        disabled()
     }
 }

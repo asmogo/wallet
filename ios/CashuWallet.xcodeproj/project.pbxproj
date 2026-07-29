@@ -139,6 +139,7 @@
 		T2B0000000000009 /* PaymentRequestDecoderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = T1B0000000000009 /* PaymentRequestDecoderTests.swift */; };
 		T2B000000000000A /* CurrencyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = T1B000000000000A /* CurrencyTests.swift */; };
 		T2B000000000000B /* ReceiveAutoPasteTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = T1B000000000000B /* ReceiveAutoPasteTests.swift */; };
+		T2B000000000000C /* HomeActionAccessibilityTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = T1B000000000000C /* HomeActionAccessibilityTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -289,6 +290,7 @@
 		T1B0000000000009 /* PaymentRequestDecoderTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = PaymentRequestDecoderTests.swift; path = ../CI/IntegrationTests/Tests/PaymentRequestDecoderTests.swift; sourceTree = "<group>"; };
 		T1B000000000000A /* CurrencyTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = CurrencyTests.swift; path = ../CI/IntegrationTests/Tests/CurrencyTests.swift; sourceTree = "<group>"; };
 		T1B000000000000B /* ReceiveAutoPasteTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = ReceiveAutoPasteTests.swift; path = CashuWalletTests/ReceiveAutoPasteTests.swift; sourceTree = "<group>"; };
+		T1B000000000000C /* HomeActionAccessibilityTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = HomeActionAccessibilityTests.swift; path = CashuWalletTests/HomeActionAccessibilityTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -339,6 +341,7 @@
 				T1B0000000000009 /* PaymentRequestDecoderTests.swift */,
 				T1B000000000000A /* CurrencyTests.swift */,
 				T1B000000000000B /* ReceiveAutoPasteTests.swift */,
+				T1B000000000000C /* HomeActionAccessibilityTests.swift */,
 			);
 			name = CashuWalletTests;
 			sourceTree = "<group>";
@@ -880,6 +883,7 @@
 				T2B0000000000009 /* PaymentRequestDecoderTests.swift in Sources */,
 				T2B000000000000A /* CurrencyTests.swift in Sources */,
 				T2B000000000000B /* ReceiveAutoPasteTests.swift in Sources */,
+				T2B000000000000C /* HomeActionAccessibilityTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
