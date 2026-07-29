@@ -690,8 +690,7 @@ private fun FirstMintFace(
     var selected by remember { mutableStateOf(setOf<String>()) }
     var customUrls by remember { mutableStateOf(listOf<String>()) }
     var customInputOpen by remember { mutableStateOf(false) }
-    var customInput by remember { mutableStateOf("") }
-    var localError by remember { mutableStateOf<String?>(null) }
+    var customDraft by remember { mutableStateOf(FirstMintUrlDraft()) }
     val clipboard = LocalClipboardManager.current
 
     fun toggle(url: String) {
@@ -700,16 +699,12 @@ private fun FirstMintFace(
     }
 
     fun commitCustomUrl() {
-        val normalized = normalizeMintUrl(customInput) ?: return
         val existing = RecommendedMints.map { it.url } + customUrls
-        if (existing.any { it.equals(normalized, ignoreCase = true) }) {
-            localError = "That mint is already in the list."
-            return
-        }
-        localError = null
+        val result = customDraft.stage(existing)
+        customDraft = result.draft
+        val normalized = result.stagedUrl ?: return
         customUrls = customUrls + normalized
         selected = selected + normalized
-        customInput = ""
         customInputOpen = false
     }
 
@@ -778,26 +773,25 @@ private fun FirstMintFace(
             } else {
                 Spacer(Modifier.height(CashuTheme.spacing.snug))
                 CashuTextField(
-                    value = customInput,
-                    onValueChange = {
-                        customInput = it
-                        localError = null
-                    },
+                    value = customDraft.input,
+                    onValueChange = { customDraft = customDraft.updateInput(it) },
                     modifier = Modifier
                         .fillMaxWidth()
                         .testTag(UiTestTags.CustomMintUrl),
                     placeholder = "https://mint.example.com",
                     textStyle = MaterialTheme.typography.bodyMedium.copy(fontFamily = FontFamily.Monospace),
                     singleLine = true,
-                    isError = localError != null,
+                    isError = customDraft.error != null,
                     keyboardOptions = KeyboardOptions(
                         capitalization = KeyboardCapitalization.None,
                         keyboardType = KeyboardType.Uri,
                     ),
                     trailingIcon = {
-                        if (customInput.isBlank()) {
+                        if (customDraft.input.isBlank()) {
                             IconButton(onClick = {
-                                clipboard.getText()?.text?.let { customInput = it.trim() }
+                                clipboard.getText()?.text?.let {
+                                    customDraft = customDraft.updateInput(it.trim())
+                                }
                             }) {
                                 Icon(Icons.Outlined.ContentPaste, contentDescription = "Paste")
                             }
@@ -809,7 +803,7 @@ private fun FirstMintFace(
                     },
                 )
             }
-            val notice = localError ?: errorText
+            val notice = customDraft.error ?: errorText
             if (notice != null) {
                 Spacer(Modifier.height(CashuTheme.spacing.snug))
                 InlineNotice(text = notice)
@@ -920,15 +914,3 @@ private fun RecommendedMintAvatar(name: String, url: String, iconUrl: String?, s
 /** iOS shortenUrl: strip scheme + trailing slash for display. */
 private fun shortenMintUrl(url: String): String =
     url.removePrefix("https://").removePrefix("http://").trimEnd('/')
-
-/** iOS normalizedMintUrl: quote-strip, https-default, trailing-slash trim. */
-private fun normalizeMintUrl(raw: String): String? {
-    var trimmed = raw.trim().trim('"', '\'')
-    if (trimmed.isEmpty()) return null
-    if (!trimmed.startsWith("http://", ignoreCase = true) &&
-        !trimmed.startsWith("https://", ignoreCase = true)
-    ) {
-        trimmed = "https://$trimmed"
-    }
-    return trimmed.trimEnd('/')
-}
