@@ -30,7 +30,7 @@ Platform-specific differences are intentionally excluded, including iCloud backu
 
 - [ ] **[P1 · iOS → Android] Gate payment actions on wallet runtime readiness.** iOS shows “Preparing wallet…” and disables Receive/Send until the runtime is ready; Android enables them based on mint presence alone. **Done when:** Android exposes a preparation state and cannot enter a money-moving flow before the runtime is ready.
 
-- [ ] **[P1 · Android → iOS] Add the no-mint Wallet empty state and CTA.** Android explains that a mint is needed and provides “Add mint”; iOS shows the generic “No Activity Yet” state even when no mint exists. **Done when:** iOS distinguishes “no mint” from “no activity” and links directly to mint setup.
+- [x] **[P1 · Android → iOS] Add the no-mint Wallet empty state and CTA.** Android explains that a mint is needed and provides “Add mint”; iOS shows the generic “No Activity Yet” state even when no mint exists. **Done when:** iOS distinguishes “no mint” from “no activity” and links directly to mint setup.
 
 - [ ] **[P1 · iOS → Android] Keep Receive usable without an active mint.** iOS can create an any-mint Cashu Request without an active mint; Android disables Receive on Home and pins new requests to the active mint. **Done when:** Android allows the any-mint ecash receive path without a mint while clearly disabling or explaining receive methods that truly require one.
 
