@@ -29,7 +29,7 @@ Platform-specific capabilities remain intentionally outside parity, including iC
 
 - [ ] **[P1 · iOS → Android] Honor the preferred primary balance unit on Wallet home.** Android always constructs the home balance with sats as the primary value, even when the user selected fiat; iOS uses the saved primary display. **Done when:** Android opens with the saved sats/fiat preference and its visible and accessibility values consistently reflect that preference. A Home-specific unit-switch interaction, if desired, is outside this parity item.
 
-- [ ] **[P1 · iOS → Android] Gate payment actions on wallet runtime readiness.** iOS shows “Preparing wallet…” and disables Receive/Send until the runtime is ready; Android enables them based on mint presence alone. **Done when:** Android exposes a preparation state and cannot enter a money-moving flow before the runtime is ready.
+- [x] **[P1 · iOS → Android] Gate payment actions on wallet runtime readiness.** iOS shows “Preparing wallet…” and disables Receive/Send until the runtime is ready; Android enables them based on mint presence alone. **Done when:** Android exposes a preparation state and cannot enter a money-moving flow before the runtime is ready.
 
 - [ ] **[P1 · Android → iOS] Add the no-mint Wallet empty state and CTA.** Android explains that a mint is needed and provides “Add mint”; iOS shows the generic “No Activity Yet” state even when no mint exists. **Done when:** iOS distinguishes “no mint” from “no activity” and links directly to mint setup.
 
