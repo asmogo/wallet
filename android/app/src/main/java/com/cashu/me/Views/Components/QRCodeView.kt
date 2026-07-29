@@ -20,6 +20,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.FilterQuality
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -99,6 +100,11 @@ fun QRCodeView(
                 bitmap = bitmap.asImageBitmap(),
                 contentDescription = "QR code",
                 modifier = Modifier.fillMaxWidth().aspectRatio(1f),
+                // QR modules must stay on a hard black/white pixel grid.
+                // Platform-dependent bitmap filtering introduces gray edge
+                // pixels and can make both scanners and screenshot goldens
+                // less reliable when the bitmap is scaled.
+                filterQuality = FilterQuality.None,
             )
         }
         if (showControls && sequence.totalParts > 1) {

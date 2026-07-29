@@ -59,6 +59,7 @@ import androidx.compose.ui.draw.blur
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
@@ -93,6 +94,7 @@ import com.cashu.me.ui.restore.RestoreSeedStep
 import com.cashu.me.ui.restore.restoreSeedInstallErrorMessage
 import com.cashu.me.ui.theme.CashuTheme
 import com.cashu.me.ui.theme.rememberReducedMotion
+import com.cashu.me.ui.testing.UiTestTags
 
 // ---------------------------------------------------------------------------
 // iOS OnboardingView parity. Source of truth: ios/CashuWallet/Views/Main/
@@ -222,6 +224,7 @@ fun OnboardingScreen(
         targetState = step,
         modifier = Modifier
             .fillMaxSize()
+            .testTag(UiTestTags.OnboardingRoot)
             .background(MaterialTheme.colorScheme.background)
             .statusBarsPadding()
             .navigationBarsPadding()
@@ -381,6 +384,7 @@ private fun WelcomeFace(
             PrimaryButton(
                 text = "Create Wallet",
                 onClick = onCreate,
+                modifier = Modifier.testTag(UiTestTags.CreateWallet),
                 loading = creating,
                 colors = ButtonDefaults.filledTonalButtonColors(),
             )
@@ -520,7 +524,8 @@ private fun ShowMnemonicFace(
                         enabled = !revealed,
                         onClickLabel = "Reveal seed phrase",
                         onClick = ::reveal,
-                    ),
+                    )
+                    .testTag(UiTestTags.RevealSeed),
                 contentAlignment = Alignment.Center,
             ) {
                 SeedGrid(words = words, revealed = revealed)
@@ -573,6 +578,7 @@ private fun ShowMnemonicFace(
                         haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                         acknowledged = !acknowledged
                     }
+                    .testTag(UiTestTags.AcknowledgeSeed)
                     .padding(horizontal = CashuTheme.spacing.micro),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(CashuTheme.spacing.snug),
@@ -597,6 +603,7 @@ private fun ShowMnemonicFace(
             PrimaryButton(
                 text = "I've Saved My Seed Phrase",
                 onClick = onSaved,
+                modifier = Modifier.testTag(UiTestTags.SeedSaved),
                 enabled = acknowledged,
             )
         }
@@ -623,6 +630,7 @@ private fun SeedGrid(words: List<String>, revealed: Boolean) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
+            .testTag(if (revealed) UiTestTags.SeedPhrase else UiTestTags.HiddenSeedPhrase)
             .then(if (revealed) Modifier else Modifier.blur(SeedBlurRadius)),
         verticalArrangement = Arrangement.spacedBy(SeedGridRowGap),
     ) {
@@ -750,6 +758,7 @@ private fun FirstMintFace(
                     modifier = Modifier
                         .fillMaxWidth()
                         .clickable(enabled = !busy) { customInputOpen = true }
+                        .testTag(UiTestTags.AddCustomMint)
                         .padding(vertical = CashuTheme.spacing.default),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(CashuTheme.spacing.micro),
@@ -774,7 +783,9 @@ private fun FirstMintFace(
                         customInput = it
                         localError = null
                     },
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag(UiTestTags.CustomMintUrl),
                     placeholder = "https://mint.example.com",
                     textStyle = MaterialTheme.typography.bodyMedium.copy(fontFamily = FontFamily.Monospace),
                     singleLine = true,
@@ -829,11 +840,13 @@ private fun FirstMintFace(
                 },
                 enabled = selected.isNotEmpty() && !busy,
                 loading = busy,
+                modifier = Modifier.testTag(UiTestTags.ContinueWithMint),
             )
             GhostButton(
                 text = "Skip for now",
                 onClick = onSkip,
                 enabled = !busy,
+                modifier = Modifier.testTag(UiTestTags.SkipMint),
             )
         }
     }

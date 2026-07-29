@@ -52,6 +52,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
@@ -74,6 +75,7 @@ import com.cashu.me.ui.components.TabTopBar
 import com.cashu.me.ui.components.groupItemShape
 import com.cashu.me.ui.theme.CashuTheme
 import com.cashu.me.ui.theme.withMonoDigits
+import com.cashu.me.ui.testing.UiTestTags
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3ExpressiveApi::class)
 @Composable
@@ -84,6 +86,7 @@ fun MintsScreen(
     onOpenMint: (MintInfo) -> Unit,
     onScan: () -> Unit,
     contentPadding: PaddingValues,
+    allowCleartextLocalTestMints: Boolean = false,
     scannedMintUrl: String? = null,
     onScannedMintUrlConsumed: () -> Unit = {},
 ) {
@@ -98,7 +101,10 @@ fun MintsScreen(
     LaunchedEffect(scannedMintUrl) {
         val payload = scannedMintUrl?.trim().orEmpty()
         if (payload.isNotEmpty()) {
-            addMintInitialUrl = normalizeUserMintUrl(payload) ?: payload
+            addMintInitialUrl = normalizeUserMintUrl(
+                payload,
+                allowCleartextLocalTestMints = allowCleartextLocalTestMints,
+            ) ?: payload
             addMintOpen = true
             onScannedMintUrlConsumed()
         }
@@ -115,6 +121,7 @@ fun MintsScreen(
 
     Scaffold(
         modifier = Modifier
+            .testTag(UiTestTags.MintsScreen)
             .padding(contentPadding)
             // The shell scaffold's padding already carries the status-bar inset;
             // consume it so the nested TopAppBar doesn't apply it a second time.
@@ -208,6 +215,7 @@ fun MintsScreen(
         AddMintSheet(
             walletManager = walletManager,
             initialUrl = addMintInitialUrl,
+            allowCleartextLocalTestMints = allowCleartextLocalTestMints,
             onScan = {
                 // Camera overlays render under dialog windows — yield the sheet
                 // first; a successful scan reopens via scannedMintUrl.
@@ -372,6 +380,7 @@ private fun MintRow(
     Box(
         modifier = Modifier
             .fillMaxWidth()
+            .testTag(UiTestTags.mintRow(mint.url))
             .clip(shape)
             .background(MaterialTheme.colorScheme.surfaceContainerHigh)
             .combinedClickable(

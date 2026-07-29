@@ -37,6 +37,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.platform.LocalInspectionMode
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.cashu.me.ui.theme.CashuTheme
@@ -78,7 +79,8 @@ fun PaymentStatusScreen(
     }
     // Screen entrance: the terminal fades + settles in over the form instead of
     // hard-cutting (callers mount it as a full replacement of the send body).
-    var appeared by remember { mutableStateOf(false) }
+    val inspectionMode = LocalInspectionMode.current
+    var appeared by remember { mutableStateOf(inspectionMode) }
     LaunchedEffect(Unit) { appeared = true }
     val entranceAlpha by animateFloatAsState(
         targetValue = if (appeared) 1f else 0f,

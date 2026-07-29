@@ -17,6 +17,7 @@ import androidx.compose.animation.scaleIn
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -64,6 +65,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.delay
@@ -95,6 +97,7 @@ import com.cashu.me.ui.components.ToolbarIcon
 import com.cashu.me.ui.theme.CashuTheme
 import com.cashu.me.ui.theme.rememberReducedMotion
 import com.cashu.me.ui.theme.withMonoDigits
+import com.cashu.me.ui.testing.UiTestTags
 
 // Inline status icons inside dense rows — smaller than the standard 20dp body icon.
 private val STATUS_ICON_SMALL = 18.dp
@@ -211,7 +214,11 @@ fun SendEcashScreen(
         }
     }
 
-    Column(modifier = Modifier.fillMaxHeight()) {
+    Column(
+        modifier = Modifier
+            .fillMaxHeight()
+            .testTag(UiTestTags.SendEcashScreen),
+    ) {
         SheetHeader(
             title = when (face) {
                 SendFace.Input -> "Send Ecash"
@@ -450,14 +457,20 @@ private fun InputFace(
     onSend: () -> Unit,
 ) {
     val canSend = amountValue in 1..mintBalance && !sending && !balanceLoading && canSendWithP2pk
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(horizontal = CashuTheme.spacing.comfortable)
-            .imePadding(),
-        verticalArrangement = Arrangement.spacedBy(CashuTheme.spacing.default),
-        horizontalAlignment = Alignment.CenterHorizontally,
-    ) {
+    val insufficient = !balanceLoading && amountValue > 0 && amountValue > mintBalance
+    BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+        val compactHeight = maxHeight < 600.dp
+        val noticeVisible = insufficient || errorText != null
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(horizontal = CashuTheme.spacing.comfortable)
+                .imePadding(),
+            verticalArrangement = Arrangement.spacedBy(
+                if (compactHeight) CashuTheme.spacing.micro else CashuTheme.spacing.default,
+            ),
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
         Spacer(Modifier.height(CashuTheme.spacing.micro))
         // One card: avatar + name + balance + Send Max pill + chevron
         // (iOS MintAmountSelectorRow parity).
@@ -471,11 +484,11 @@ private fun InputFace(
         }
 
         // iOS SendView: mint row on top, amount vertically centered between
-        // Spacers, keypad pinned below. Amount dims while over-balance.
-        // Notices are *overlaid* inside the bottom spacer — they must not
-        // consume layout height or the hero shifts up.
-        Spacer(Modifier.weight(1f, fill = true))
-        val insufficient = !balanceLoading && amountValue > 0 && amountValue > mintBalance
+        // spacers, keypad pinned below. On compact sheets a visible notice
+        // receives the upper flexible space so it cannot be clipped.
+        if (!noticeVisible) {
+            Spacer(Modifier.weight(1f, fill = true))
+        }
         val amountColor by animateColorAsState(
             targetValue = if (insufficient) {
                 MaterialTheme.colorScheme.onSurfaceVariant
@@ -533,7 +546,7 @@ private fun InputFace(
                     InlineNotice(
                         text = "Insufficient balance",
                         severity = NoticeSeverity.Warning,
-                        detail = if (mintName != null) {
+                        detail = if (!compactHeight && mintName != null) {
                             "You have $balanceText in $mintName."
                         } else {
                             null
@@ -558,7 +571,9 @@ private fun InputFace(
             onButtonClick = onSend,
             buttonEnabled = canSend,
             buttonLoading = sending,
+            buttonModifier = Modifier.testTag(UiTestTags.SendEcashSubmit),
         )
+        }
     }
 }
 

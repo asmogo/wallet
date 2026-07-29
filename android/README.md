@@ -36,4 +36,7 @@ Useful verification targets:
 ./gradlew --no-daemon :app:assembleRelease
 ```
 
+For emulator UI journeys, deterministic fixtures, local-mint tests, screenshot
+goldens, and CI tiers, see [`../docs/android/TESTING.md`](../docs/android/TESTING.md).
+
 The CDK dependency is managed by Gradle as `org.cashudevkit:cdk-kotlin` in `gradle/libs.versions.toml`.

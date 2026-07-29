@@ -54,6 +54,11 @@ class WalletManager(
     private val nostrMintBackupService: NostrMintBackupService,
     private val databasePathManager: WalletDatabasePathManager,
     private val gateway: CdkWalletGateway,
+    private val runStartupMaintenance: Boolean = true,
+    private val startNwc: Boolean = true,
+    private val pollQuotesInForeground: Boolean = true,
+    private val externalServicesEnabled: Boolean = true,
+    private val allowCleartextLocalTestMints: Boolean = false,
 ) : WalletServiceProtocol, NPCQuoteClaimHandler {
     private data class WalletReplacementSnapshot(
         val databaseBackups: List<WalletFileBackup>,
@@ -72,7 +77,7 @@ class WalletManager(
     private val mutableState = MutableStateFlow(WalletState())
     val state: StateFlow<WalletState> = mutableState.asStateFlow()
     private val initializationMutex = Mutex()
-    private val mintMetadataFetcher = WalletMintMetadataFetcher()
+    private val mintMetadataFetcher = WalletMintMetadataFetcher(allowCleartextLocalTestMints)
     private val mintQuoteSyncService = WalletMintQuoteSyncService(gateway, walletStore)
     private val transactionLoader = WalletTransactionLoader(walletStore, gateway)
     private val npcQuotesInFlight = mutableSetOf<String>()
@@ -135,7 +140,9 @@ class WalletManager(
                         deriveNostrKey(mnemonic)
                     }
                     update { copy(isRuntimeReady = true, errorMessage = null) }
-                    startDeferredStartupMaintenance(hasStoredWallet)
+                    if (runStartupMaintenance) {
+                        startDeferredStartupMaintenance(hasStoredWallet)
+                    }
                 }.onFailure { error ->
                     AppLogger.wallet.error("Wallet runtime initialization failed", error)
                     update {
@@ -181,8 +188,10 @@ class WalletManager(
                 runCatching { syncPendingMintQuotes() }
                     .onFailure { AppLogger.wallet.error("Startup pending mint quote sync failed", it) }
             }
-            runCatching { nwcManager.startIfEnabled() }
-                .onFailure { AppLogger.wallet.error("Deferred NWC startup failed", it) }
+            if (startNwc) {
+                runCatching { nwcManager.startIfEnabled() }
+                    .onFailure { AppLogger.wallet.error("Deferred NWC startup failed", it) }
+            }
 
             // Arm quote detection from the runtime-ready path as well: Process
             // lifecycle ON_START may have already fired before isRuntimeReady
@@ -315,7 +324,9 @@ class WalletManager(
                 }
             }
         }
-        scope.launch { nostrMintBackupService.backupCurrentMintsIfEnabled() }
+        if (externalServicesEnabled) {
+            scope.launch { nostrMintBackupService.backupCurrentMintsIfEnabled() }
+        }
     }
 
     override suspend fun removeMint(mint: MintInfo) {
@@ -330,7 +341,9 @@ class WalletManager(
             loadCachedState(needsOnboarding = false)
             refreshBalance()
         }
-        scope.launch { nostrMintBackupService.backupCurrentMintsIfEnabled() }
+        if (externalServicesEnabled) {
+            scope.launch { nostrMintBackupService.backupCurrentMintsIfEnabled() }
+        }
     }
 
     override suspend fun setActiveMint(mint: MintInfo) {
@@ -744,6 +757,7 @@ class WalletManager(
      * idempotent; mint sync is cooldown-gated).
      */
     fun onAppEnteredForeground() {
+        if (!pollQuotesInForeground) return
         startPendingQuoteForegroundPolling()
         if (!mutableState.value.isRuntimeReady) return
         scope.launch {
@@ -776,6 +790,7 @@ class WalletManager(
      * ON_STOP (not the Activity — ModalBottomSheet dialogs must not stop it).
      */
     fun startPendingQuoteForegroundPolling() {
+        if (!pollQuotesInForeground) return
         if (pendingQuotePollJob?.isActive == true) return
         pendingQuotePollJob = scope.launch {
             while (isActive) {
@@ -1089,7 +1104,9 @@ class WalletManager(
         // The restored mint list is final now — refresh the Nostr backup with it.
         // (Must not run earlier: publishing while the repository is still empty
         // would replace the addressable backup event with an empty list.)
-        scope.launch { nostrMintBackupService.backupCurrentMintsIfEnabled() }
+        if (externalServicesEnabled) {
+            scope.launch { nostrMintBackupService.backupCurrentMintsIfEnabled() }
+        }
     }
 
     private suspend fun installCleanWallet(mnemonic: String, needsOnboarding: Boolean) {
@@ -1105,7 +1122,9 @@ class WalletManager(
                 databaseBackups = databasePathManager.backupWalletDatabaseFiles(),
             )
         } catch (error: Throwable) {
-            cashuRequestListener?.resetForWalletBoundary(restart = previousMnemonic != null)
+            cashuRequestListener?.resetForWalletBoundary(
+                restart = externalServicesEnabled && previousMnemonic != null,
+            )
             throw error
         }
         val backups = replacementSnapshot.databaseBackups
@@ -1145,9 +1164,9 @@ class WalletManager(
                     openWalletRepositoryWithRecovery(previousMnemonic)
                     deriveNostrKey(previousMnemonic)
                     loadCachedState(needsOnboarding = false)
-                    nwcManager.startIfEnabled()
+                    if (startNwc) nwcManager.startIfEnabled()
                 }
-                cashuRequestListener?.resetForWalletBoundary(restart = true)
+                cashuRequestListener?.resetForWalletBoundary(restart = externalServicesEnabled)
             } else {
                 secureStorage.delete(StorageKeys.secureWalletMnemonic)
                 update {
@@ -1162,7 +1181,7 @@ class WalletManager(
             }
             throw error
         }
-        cashuRequestListener?.resetForWalletBoundary(restart = !needsOnboarding)
+        cashuRequestListener?.resetForWalletBoundary(restart = externalServicesEnabled && !needsOnboarding)
     }
 
     private fun loadCachedState(needsOnboarding: Boolean) {

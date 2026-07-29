@@ -87,6 +87,7 @@ internal fun cameraPermissionResultState(
 fun ScannerView(
     onClose: () -> Unit,
     onScanned: (String) -> Unit,
+    useDeterministicPermission: Boolean = false,
 ) {
     val context = LocalContext.current
     val activity = remember(context) { context.findActivity() }
@@ -94,8 +95,11 @@ fun ScannerView(
     val haptics = rememberWalletHaptics()
     var cameraPermissionState by remember {
         mutableStateOf(
-            if (context.hasCameraPermission()) CameraPermissionState.Granted
-            else CameraPermissionState.Checking,
+            when {
+                useDeterministicPermission -> CameraPermissionState.CanRequest
+                context.hasCameraPermission() -> CameraPermissionState.Granted
+                else -> CameraPermissionState.Checking
+            },
         )
     }
     var cameraError by remember { mutableStateOf<String?>(null) }
@@ -113,7 +117,9 @@ fun ScannerView(
     }
 
     LaunchedEffect(Unit) {
-        if (cameraPermissionState != CameraPermissionState.Granted) {
+        if (!useDeterministicPermission &&
+            cameraPermissionState != CameraPermissionState.Granted
+        ) {
             cameraPermissionState = CameraPermissionState.Requesting
             permissionLauncher.launch(Manifest.permission.CAMERA)
         }
@@ -121,7 +127,7 @@ fun ScannerView(
 
     DisposableEffect(lifecycleOwner, context) {
         val observer = LifecycleEventObserver { _, event ->
-            if (event == Lifecycle.Event.ON_RESUME) {
+            if (!useDeterministicPermission && event == Lifecycle.Event.ON_RESUME) {
                 if (context.hasCameraPermission()) {
                     cameraPermissionState = CameraPermissionState.Granted
                 } else if (cameraPermissionState == CameraPermissionState.Granted) {
@@ -134,8 +140,12 @@ fun ScannerView(
     }
 
     fun requestCameraPermission() {
-        cameraPermissionState = CameraPermissionState.Requesting
-        permissionLauncher.launch(Manifest.permission.CAMERA)
+        if (useDeterministicPermission) {
+            cameraPermissionState = CameraPermissionState.Granted
+        } else {
+            cameraPermissionState = CameraPermissionState.Requesting
+            permissionLauncher.launch(Manifest.permission.CAMERA)
+        }
     }
 
     when (cameraPermissionState) {
@@ -169,6 +179,15 @@ fun ScannerView(
         )
     }
     if (cameraPermissionState != CameraPermissionState.Granted) return
+
+    if (useDeterministicPermission) {
+        CameraPermissionView(
+            title = "Camera ready",
+            message = "The scanner is ready to read a QR code.",
+            onClose = onClose,
+        )
+        return
+    }
 
     cameraError?.let { message ->
         CameraPermissionView(

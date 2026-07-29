@@ -24,7 +24,9 @@ import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Assume.assumeTrue
 import org.junit.Test
+import com.cashu.me.test.FullOnly
 
+@FullOnly
 class NativeWalletLocalMintInstrumentedTest {
     private val args = InstrumentationRegistry.getArguments()
     private val context = InstrumentationRegistry.getInstrumentation().targetContext

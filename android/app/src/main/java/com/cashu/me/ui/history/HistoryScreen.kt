@@ -52,6 +52,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
@@ -84,6 +85,7 @@ import com.cashu.me.ui.components.TransactionRow
 import com.cashu.me.ui.components.TransactionRowModel
 import com.cashu.me.ui.components.formatRelativeTimestamp
 import com.cashu.me.ui.theme.CashuTheme
+import com.cashu.me.ui.testing.UiTestTags
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3ExpressiveApi::class)
 @Composable
@@ -140,6 +142,7 @@ fun HistoryScreen(
 
     Scaffold(
         modifier = Modifier
+            .testTag(UiTestTags.HistoryScreen)
             .padding(contentPadding)
             // The shell scaffold's padding already carries the status-bar inset;
             // consume it so the nested TopAppBar doesn't apply it a second time.
@@ -242,6 +245,7 @@ fun HistoryScreen(
                                 horizontal = CashuTheme.spacing.comfortable,
                                 vertical = CashuTheme.spacing.snug,
                             )
+                            .testTag(UiTestTags.HistorySearch)
                             .focusRequester(searchFocusRequester),
                         placeholder = "Search history",
                         keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
@@ -312,6 +316,9 @@ fun HistoryScreen(
                                                 secondaryAmount = amountDisplay.secondary,
                                             ),
                                             onClick = { onOpenTransaction(tx) },
+                                            modifier = Modifier.testTag(
+                                                UiTestTags.transactionRow(tx.id),
+                                            ),
                                         )
                                     }
                                     is HistoryItem.Req -> {

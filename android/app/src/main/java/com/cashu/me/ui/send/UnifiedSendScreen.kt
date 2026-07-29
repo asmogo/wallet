@@ -53,6 +53,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.style.TextOverflow
@@ -99,6 +100,7 @@ import com.cashu.me.ui.components.SheetHeader
 import com.cashu.me.ui.components.TwoFaceScreen
 import com.cashu.me.ui.theme.CashuTheme
 import com.cashu.me.ui.theme.withMonoDigits
+import com.cashu.me.ui.testing.UiTestTags
 
 private const val TYPE_DEBOUNCE_MS = 400L
 
@@ -392,11 +394,13 @@ fun UnifiedSendScreen(
     // amount/confirm/status need the full sheet for the keypad and pay scaffold.
     val prefersCompactSheet = status == null && step == SendStep.Input
     Column(
-        modifier = if (prefersCompactSheet) {
-            Modifier.fillMaxWidth()
-        } else {
-            Modifier.fillMaxHeight()
-        },
+        modifier = (
+            if (prefersCompactSheet) {
+                Modifier.fillMaxWidth()
+            } else {
+                Modifier.fillMaxHeight()
+            }
+            ).testTag(UiTestTags.SendSheet),
     ) {
         // Status terminal replaces the whole body (iOS PaymentStatusView slot).
         when (val current = status) {
@@ -667,7 +671,8 @@ private fun InputFace(
             onValueChange = onDestinationChange,
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(vertical = CashuTheme.spacing.default),
+                .padding(vertical = CashuTheme.spacing.default)
+                .testTag(UiTestTags.SendDestination),
             placeholder = "Address, invoice, or Cashu Request",
             singleLine = false,
             maxLines = 4,
@@ -1034,6 +1039,7 @@ private fun ConfirmFace(
         PrimaryButton(
             text = "Pay ${cashuAmountLabel ?: formatter.formatWalletSats(amountSats, useBitcoinSymbol)}",
             onClick = onPay,
+            modifier = Modifier.testTag(UiTestTags.SendPaymentSubmit),
             enabled = if (isMelt) {
                 quote != null && !insufficient && quoteError == null
             } else {

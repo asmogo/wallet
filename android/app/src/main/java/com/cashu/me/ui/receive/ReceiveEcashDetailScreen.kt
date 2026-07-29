@@ -30,6 +30,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import kotlinx.coroutines.launch
 import com.cashu.me.Core.AmountDisplayPrimary
 import com.cashu.me.Core.AmountFormatter
@@ -48,6 +49,7 @@ import com.cashu.me.ui.components.PrimaryButton
 import com.cashu.me.ui.components.ToolbarIcon
 import com.cashu.me.ui.theme.CashuTheme
 import com.cashu.me.ui.theme.withMonoDigits
+import com.cashu.me.ui.testing.UiTestTags
 
 /**
  * Full-screen "Receive Ecash" page — the iOS `ReceiveTokenDetailView`
@@ -122,7 +124,9 @@ fun ReceiveEcashDetailScreen(
     // container, so this also establishes LocalContentColor = onBackground —
     // without it, default content color is black on the dark canvas.
     Surface(
-        modifier = Modifier.fillMaxSize(),
+        modifier = Modifier
+            .fillMaxSize()
+            .testTag(UiTestTags.ReceiveEcashDetail),
         color = MaterialTheme.colorScheme.background,
     ) {
         when (val current = status) {

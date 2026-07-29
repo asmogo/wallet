@@ -3,7 +3,6 @@ package com.cashu.me.App
 import android.content.Context
 import androidx.compose.material3.SnackbarHostState
 import java.security.MessageDigest
-import com.cashu.me.Core.CDK.CdkWalletGatewayImpl
 import com.cashu.me.Core.AppLockManager
 import com.cashu.me.Core.CashuRequestListener
 import com.cashu.me.Core.CashuRequestStore
@@ -15,23 +14,24 @@ import com.cashu.me.Core.NostrService
 import com.cashu.me.Core.NwcManager
 import com.cashu.me.Core.NfcReceive.NfcReceiveCoordinator
 import com.cashu.me.Core.Platform.AndroidConnectivityObserver
-import com.cashu.me.Core.Platform.AndroidSecureStorage
 import com.cashu.me.Core.Platform.WalletDatabasePathManager
 import com.cashu.me.Core.PriceService
 import com.cashu.me.Core.PrimaryP2PKKey
 import com.cashu.me.Core.SentryService
 import com.cashu.me.Core.SettingsManager
-import com.cashu.me.Core.SettingsStore
 import com.cashu.me.Core.WalletManager
-import com.cashu.me.Core.WalletStore
 import com.cashu.me.Core.Protocols.StorageKeys
 
-class AppContainer(context: Context) {
+class AppContainer(
+    context: Context,
+    dependencies: AppContainerDependencies = AppContainerDependencies(),
+) {
     private val appContext = context.applicationContext
-    val secureStorage = AndroidSecureStorage(appContext)
-    val walletStore = WalletStore(appContext)
+    val runtimePolicy = dependencies.runtimePolicy
+    val secureStorage = dependencies.secureStorage(appContext)
+    val walletStore = dependencies.walletStore(appContext)
     val cashuRequestStore = CashuRequestStore(walletStore)
-    val settingsStore = SettingsStore(appContext)
+    val settingsStore = dependencies.settingsStore(appContext)
     val settingsManager = SettingsManager(settingsStore, secureStorage)
     val appLockManager = AppLockManager(appContext, settingsManager)
     val sentryService = SentryService(appContext, settingsStore)
@@ -40,7 +40,7 @@ class AppContainer(context: Context) {
     val snackbarHostState = SnackbarHostState()
     val connectivityObserver = AndroidConnectivityObserver(appContext)
     val walletDatabasePathManager = WalletDatabasePathManager(appContext)
-    val cdkGateway = CdkWalletGatewayImpl()
+    val cdkGateway = dependencies.walletGateway()
     val nwcManager = NwcManager(
         settingsStore = settingsStore,
         secureStorage = secureStorage,
@@ -65,6 +65,11 @@ class AppContainer(context: Context) {
         nostrMintBackupService = nostrMintBackupService,
         databasePathManager = walletDatabasePathManager,
         gateway = cdkGateway,
+        runStartupMaintenance = runtimePolicy.runStartupMaintenance,
+        startNwc = runtimePolicy.startNwc,
+        pollQuotesInForeground = runtimePolicy.pollQuotesInForeground,
+        externalServicesEnabled = runtimePolicy.startExternalListeners,
+        allowCleartextLocalTestMints = runtimePolicy.allowCleartextLocalTestMints,
     )
     val priceService = PriceService(settingsStore)
     val mintDiscoveryManager = MintDiscoveryManager(settingsManager, cdkGateway)

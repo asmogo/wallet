@@ -1,0 +1,263 @@
+name: Android UI Tests
+
+on:
+  workflow_call:
+    inputs:
+      tier:
+        description: Test depth to run.
+        required: false
+        default: pr
+        type: string
+  push:
+    branches: [main, develop]
+    paths:
+      - 'android/**'
+      - 'CI/**'
+      - '.github/workflows/android-ui-tests.yml'
+  pull_request:
+    paths:
+      - 'android/**'
+      - 'CI/**'
+      - '.github/workflows/android-ui-tests.yml'
+      - '.github/workflows/release.yml'
+  schedule:
+    - cron: '0 3 * * *'
+  workflow_dispatch:
+    inputs:
+      tier:
+        description: Test depth to run.
+        type: choice
+        default: pr
+        options:
+          - pr
+          - full
+
+concurrency:
+  group: android-ui-tests-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name != 'release' }}
+
+permissions:
+  contents: read
+
+jobs:
+  screenshot-validation:
+    name: Android Screenshot Validation
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    defaults:
+      run:
+        working-directory: android
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Setup JDK
+      uses: actions/setup-java@v4
+      with:
+        distribution: temurin
+        java-version: '21'
+        cache: gradle
+        cache-dependency-path: |
+          android/*.gradle.kts
+          android/gradle/libs.versions.toml
+          android/gradle/wrapper/gradle-wrapper.properties
+
+    - name: Setup Android SDK
+      uses: android-actions/setup-android@v3
+
+    - name: Validate Compose screenshot references
+      run: ./gradlew --no-daemon :app:validateDebugScreenshotTest
+
+    - name: Upload screenshot reports and diffs
+      if: failure()
+      uses: actions/upload-artifact@v4
+      with:
+        name: android-screenshot-test-failure
+        if-no-files-found: ignore
+        retention-days: 14
+        path: |
+          android/app/build/reports/screenshotTest/**
+          android/app/build/outputs/screenshotTest-results/**
+
+  primary-managed-device:
+    name: Android Managed Device Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 50
+    env:
+      UI_TIER: ${{ (github.event_name == 'schedule' && 'full') || inputs.tier || github.event.inputs.tier || 'pr' }}
+
+    defaults:
+      run:
+        working-directory: android
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Setup JDK
+      uses: actions/setup-java@v4
+      with:
+        distribution: temurin
+        java-version: '21'
+        cache: gradle
+        cache-dependency-path: |
+          android/*.gradle.kts
+          android/gradle/libs.versions.toml
+          android/gradle/wrapper/gradle-wrapper.properties
+
+    - name: Setup Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+
+    - name: Setup Android SDK
+      uses: android-actions/setup-android@v3
+
+    - name: Enable KVM
+      run: |
+        echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+        sudo udevadm control --reload-rules
+        sudo udevadm trigger --name-match=kvm
+
+    - name: Cache local mint runtimes
+      id: mint-cache
+      uses: actions/cache@v4
+      with:
+        path: |
+          CI/.nutshell-venv
+          CI/.cdk-bin
+        key: android-local-mints-${{ runner.os }}-${{ hashFiles('CI/setup-nutshell.sh', 'CI/setup-cdk.sh') }}
+
+    - name: Setup local Nutshell mint
+      if: steps.mint-cache.outputs.cache-hit != 'true'
+      working-directory: .
+      run: |
+        chmod +x CI/setup-nutshell.sh
+        ./CI/setup-nutshell.sh
+
+    - name: Setup local CDK mint
+      if: env.UI_TIER == 'full'
+      working-directory: .
+      run: |
+        chmod +x CI/setup-cdk.sh
+        ./CI/setup-cdk.sh 3339 android
+
+    - name: Start local test mints
+      working-directory: .
+      run: |
+        chmod +x CI/start-nutshell.sh CI/start-cdk.sh
+        ./CI/start-nutshell.sh 3338
+        if [ "$UI_TIER" = "full" ]; then
+          ./CI/start-cdk.sh
+        fi
+
+    - name: Run required Android UI suite
+      if: env.UI_TIER != 'full'
+      run: |
+        ./gradlew --no-daemon :app:pixel2Api35DebugAndroidTest \
+          -Pandroid.testInstrumentationRunnerArguments.notAnnotation=com.cashu.me.test.FullOnly \
+          -Pandroid.testInstrumentationRunnerArguments.cashu.liveUiLocalMintEnabled=true \
+          -Pandroid.testInstrumentationRunnerArguments.cashu.nutshellMintUrl=http://10.0.2.2:3338
+
+    - name: Run full Android UI and native suite
+      if: env.UI_TIER == 'full'
+      run: |
+        ./gradlew --no-daemon :app:modernApi36DebugAndroidTest \
+          -Pandroid.testInstrumentationRunnerArguments.cashu.liveUiLocalMintEnabled=true \
+          -Pandroid.testInstrumentationRunnerArguments.cashu.nativeWalletLocalMintIntegration=true \
+          -Pandroid.testInstrumentationRunnerArguments.cashu.nutshellMintUrl=http://10.0.2.2:3338 \
+          -Pandroid.testInstrumentationRunnerArguments.cashu.cdkMintUrl=http://10.0.2.2:3339
+
+    - name: Stop local test mints
+      if: always()
+      working-directory: .
+      run: |
+        chmod +x CI/stop-nutshell.sh CI/stop-cdk.sh
+        ./CI/stop-nutshell.sh
+        ./CI/stop-cdk.sh
+
+    - name: Upload managed-device failure diagnostics
+      if: failure()
+      uses: actions/upload-artifact@v4
+      with:
+        name: android-primary-managed-device-failure
+        if-no-files-found: ignore
+        retention-days: 14
+        path: |
+          android/app/build/outputs/androidTest-results/managedDevice/**
+          android/app/build/reports/androidTests/managedDevice/**
+          android/app/build/outputs/managed_device_android_test_additional_output/**
+          android/app/build/intermediates/managed_device_android_test_additional_output/**
+          CI/.nutshell.log
+          CI/.cdk.log
+
+    - name: Upload managed-device test results
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: android-primary-managed-device-results
+        if-no-files-found: ignore
+        retention-days: 14
+        path: |
+          android/app/build/outputs/androidTest-results/managedDevice/**
+          android/app/build/reports/androidTests/managedDevice/**
+
+  compatibility-managed-devices:
+    name: Android Compatibility (${{ matrix.device }})
+    if: github.event_name == 'schedule' || inputs.tier == 'full' || github.event.inputs.tier == 'full'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        device:
+          - compactApi26
+          - tabletApi35
+
+    defaults:
+      run:
+        working-directory: android
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Setup JDK
+      uses: actions/setup-java@v4
+      with:
+        distribution: temurin
+        java-version: '21'
+        cache: gradle
+        cache-dependency-path: |
+          android/*.gradle.kts
+          android/gradle/libs.versions.toml
+          android/gradle/wrapper/gradle-wrapper.properties
+
+    - name: Setup Android SDK
+      uses: android-actions/setup-android@v3
+
+    - name: Enable KVM
+      run: |
+        echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+        sudo udevadm control --reload-rules
+        sudo udevadm trigger --name-match=kvm
+
+    - name: Run compatibility behavior pack
+      run: |
+        ./gradlew --no-daemon :app:${{ matrix.device }}DebugAndroidTest \
+          -Pandroid.testInstrumentationRunnerArguments.annotation=com.cashu.me.test.Compatibility
+
+    - name: Upload compatibility diagnostics
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: android-${{ matrix.device }}-results
+        if-no-files-found: ignore
+        retention-days: 14
+        path: |
+          android/app/build/outputs/androidTest-results/managedDevice/**
+          android/app/build/reports/androidTests/managedDevice/**
+          android/app/build/outputs/managed_device_android_test_additional_output/**
+          android/app/build/intermediates/managed_device_android_test_additional_output/**

@@ -33,6 +33,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.delay
@@ -52,6 +53,7 @@ import com.cashu.me.ui.components.NoticeSeverity
 import com.cashu.me.ui.send.SendDestinationResolution
 import com.cashu.me.ui.send.resolveSendDestination
 import com.cashu.me.ui.theme.CashuTheme
+import com.cashu.me.ui.testing.UiTestTags
 
 private const val TYPE_DEBOUNCE_MS = 400L
 
@@ -92,6 +94,7 @@ fun ReceiveEcashScreen(
     onReceiveBitcoin: () -> Unit,
     prefilledPayload: String? = null,
     onPrefilledConsumed: () -> Unit = {},
+    allowAutomaticClipboardRead: Boolean = true,
 ) {
     val walletState by walletManager.state.collectAsState()
     val settings by settingsManager.state.collectAsState()
@@ -157,7 +160,7 @@ fun ReceiveEcashScreen(
 
     LaunchedEffect(Unit) {
         automaticReceiveClipboardToken(
-            enabled = settings.autoPasteEcashReceive,
+            enabled = allowAutomaticClipboardRead && settings.autoPasteEcashReceive,
             currentInput = input,
             prefilledPayload = prefilledPayload,
             clipboardText = { clipboard.getText()?.text },
@@ -182,7 +185,11 @@ fun ReceiveEcashScreen(
         onPrefilledConsumed()
     }
 
-    Column(modifier = Modifier.fillMaxWidth()) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .testTag(UiTestTags.ReceiveSheet),
+    ) {
         FlowSheetTitle(title = "Receive")
         // Wrap-content — the sheet settles just below Scan · Ecash · Bitcoin
         // (thumb-reachable), matching iOS's content-fit detent and the Send face.
