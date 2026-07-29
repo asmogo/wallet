@@ -215,8 +215,13 @@ object WalletErrorMessages {
             message.contains("FfiException") ||
             message.contains("errorMessage") ||
             message.contains("CALL_ERROR") ||
+            message.contains("::") ||
+            lowered.contains("cashudevkit") ||
+            lowered.contains("cdk_wallet") ||
+            lowered.contains("uniffi") ||
             lowered.contains("code=") ||
             lowered.contains("unknown error response") ||
+            lowered.contains("backtrace") ||
             lowered.contains("failed printing to std") ||
             lowered.contains("os error") ||
             lowered.contains("panicked at") ||
