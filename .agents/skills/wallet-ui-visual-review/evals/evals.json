@@ -1,0 +1,56 @@
+{
+  "skill_name": "wallet-ui-visual-review",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "Use $wallet-ui-visual-review to review PR #193 and produce local before/after UI evidence. Do not comment on GitHub.",
+      "expected_output": "The agent resolves the actual merge-base, routes only Android, traces the retry-safe Nostr inbox change to any exposed wallet state, captures a matched Android pair or labels an intentional no-visual-delta result, and keeps all artifacts local.",
+      "files": [],
+      "expectations": [
+        "Routes Android and explicitly skips iOS.",
+        "Uses separate before and after worktrees.",
+        "Uses the same exact stable Android runtime image for the pair.",
+        "Does not invent a visible change for backend-only behavior.",
+        "Performs no GitHub write."
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "Use $wallet-ui-visual-review to show the iOS UI impact of PR #195. Keep the result local.",
+      "expected_output": "The agent routes only iOS, uses the existing seeded-wallet UI-test environment where needed, captures the nearest restore/settings surface on one exact stable simulator runtime, and reports visual evidence plus behavioral limitations.",
+      "files": [],
+      "expectations": [
+        "Routes iOS and explicitly skips Android.",
+        "Records Xcode, simulator runtime build, device type, viewport, appearance, locale, and Dynamic Type.",
+        "Preserves normal simulator signing.",
+        "Uses only synthetic test wallet state.",
+        "Performs no GitHub write."
+      ]
+    },
+    {
+      "id": 3,
+      "prompt": "Use $wallet-ui-visual-review to compare PR #191 on every affected mobile platform and prepare a local report.",
+      "expected_output": "The agent detects compiled changes in both Android and iOS, builds one capture matrix per affected surface, captures matched evidence for both platforms, validates the versioned manifest, and explains any parity or no-delta result.",
+      "files": [],
+      "expectations": [
+        "Routes both Android and iOS from the diff.",
+        "Uses the exact same runtime and fixture within each platform pair.",
+        "Records source and binary hashes for all four builds.",
+        "Validates complete PNG streams and visually inspects every capture.",
+        "Keeps the report and artifacts outside tracked source folders."
+      ]
+    },
+    {
+      "id": 4,
+      "prompt": "Use $wallet-ui-visual-review on a branch that changes only documentation and agent files. Tell me what visual evidence is warranted.",
+      "expected_output": "The agent routes neither app, explains that no compiled Android or iOS input changed, produces a concise no-build report, and does not manufacture screenshots.",
+      "files": [],
+      "expectations": [
+        "Accounts for both platforms as skipped.",
+        "Does not build or launch either app.",
+        "Does not create an image manifest with fake evidence.",
+        "Identifies the target and exact comparison revisions."
+      ]
+    }
+  ]
+}
