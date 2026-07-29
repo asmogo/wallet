@@ -97,6 +97,8 @@ class AccessibilitySemanticsComposeTest {
         compose.onNodeWithTag("balanceDisplay")
             .assertIsDisplayed()
             .assertHasNoClickAction()
+        compose.onNodeWithContentDescription("Balance: 42 sat")
+            .assertIsDisplayed()
         compose.onNodeWithContentDescription("QR code. Long press for copy and share options.")
             .performScrollTo()
             .assertIsDisplayed()
@@ -122,5 +124,23 @@ class AccessibilitySemanticsComposeTest {
             assertEquals(1, rowClicks)
             assertFalse(privacyEnabled)
         }
+    }
+
+    @Test
+    fun balanceAccessibilityNamesThePreferredPrimaryAmount() {
+        compose.setCashuContent {
+            BalanceDisplay(
+                amount = AmountDisplayText(
+                    primary = "\$20.00",
+                    secondary = "100,000 sat",
+                    effectivePrimary = AmountDisplayPrimary.Fiat,
+                ),
+            )
+        }
+
+        compose.onNodeWithContentDescription("Balance: \$20.00")
+            .assertIsDisplayed()
+        compose.onNodeWithText("100,000 sat")
+            .assertIsDisplayed()
     }
 }

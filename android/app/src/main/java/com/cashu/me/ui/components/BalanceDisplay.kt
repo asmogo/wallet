@@ -21,6 +21,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -86,6 +88,9 @@ fun BalanceDisplay(
         ) {
             AmountText(
                 text = amount.primary,
+                modifier = Modifier.clearAndSetSemantics {
+                    contentDescription = "Balance: ${amount.primary}"
+                },
                 style = MaterialTheme.typography.displayMedium.copy(
                     fontWeight = FontWeight.Bold,
                     fontSize = BalanceHeroFontSize,

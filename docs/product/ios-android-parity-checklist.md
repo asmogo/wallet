@@ -26,7 +26,7 @@ Platform-specific differences are intentionally excluded, including iCloud backu
 
 ## App shell and Wallet home
 
-- [ ] **[P1 · iOS → Android] Honor the preferred primary balance unit on Wallet home.** Android always constructs the home balance with sats as the primary value, even when the user selected fiat; iOS uses `amountDisplayPrimary`. Neither Home implementation currently offers an amount-flip control. **Done when:** Android opens with the saved sats/fiat preference and its visible and accessibility values consistently reflect that preference. A Home-specific flip interaction, if desired, is a separate product decision.
+- [x] **[P1 · iOS → Android] Honor the preferred primary balance unit on Wallet home.** Android always constructs the home balance with sats as the primary value, even when the user selected fiat; iOS uses `amountDisplayPrimary`. Neither Home implementation currently offers an amount-flip control. **Done when:** Android opens with the saved sats/fiat preference and its visible and accessibility values consistently reflect that preference. A Home-specific flip interaction, if desired, is a separate product decision.
 
 - [ ] **[P1 · iOS → Android] Gate payment actions on wallet runtime readiness.** iOS shows “Preparing wallet…” and disables Receive/Send until the runtime is ready; Android enables them based on mint presence alone. **Done when:** Android exposes a preparation state and cannot enter a money-moving flow before the runtime is ready.
 
