@@ -56,6 +56,7 @@ import androidx.compose.ui.unit.sp
 import com.cashu.me.Core.Bip39WordList
 import com.cashu.me.Core.NostrMintBackupService
 import com.cashu.me.Core.WalletManager
+import com.cashu.me.Core.Wallet.userFacingWalletMessage
 import com.cashu.me.Core.mintUrlCandidates
 import com.cashu.me.Models.MintInfo
 import com.cashu.me.Models.RestoreMintResult
@@ -94,6 +95,9 @@ sealed interface RestoreMintPhase {
     data class Recovered(val result: RestoreMintResult) : RestoreMintPhase
     data class Failed(val message: String) : RestoreMintPhase
 }
+
+internal fun restoreMintFailurePhase(error: Throwable): RestoreMintPhase.Failed =
+    RestoreMintPhase.Failed(error.userFacingWalletMessage)
 
 @Composable
 fun restoreOnboardingTitleStyle(): TextStyle =
@@ -719,9 +723,7 @@ fun RestoreProgressStep(
         runCatching { walletManager.restoreFromMint(url) }
             .onSuccess { phases[url] = RestoreMintPhase.Recovered(it) }
             .onFailure {
-                phases[url] = RestoreMintPhase.Failed(
-                    it.message ?: "Could not restore from this mint.",
-                )
+                phases[url] = restoreMintFailurePhase(it)
             }
     }
 
