@@ -85,6 +85,7 @@ import kotlinx.coroutines.launch
 import com.cashu.me.Core.MnemonicInput
 import com.cashu.me.Core.NostrMintBackupService
 import com.cashu.me.Core.WalletManager
+import com.cashu.me.Core.WalletStartupFailure
 import com.cashu.me.Core.mintUrlCandidates
 import com.cashu.me.Models.MintInfo
 import com.cashu.me.ui.components.CanvasDivider
@@ -188,10 +189,12 @@ fun OnboardingScreen(
     nostrMintBackupService: NostrMintBackupService,
 ) {
     val scope = rememberCoroutineScope()
+    val walletState by walletManager.state.collectAsState()
 
     var step: OnboardingStep by remember { mutableStateOf(OnboardingStep.Welcome) }
     var infoOpen by remember { mutableStateOf(false) }
     var creating by remember { mutableStateOf(false) }
+    var retryingStartup by remember { mutableStateOf(false) }
     var createError by remember { mutableStateOf<String?>(null) }
     var restoring by remember { mutableStateOf(false) }
     var restoreError by remember { mutableStateOf<String?>(null) }
@@ -247,6 +250,18 @@ fun OnboardingScreen(
             OnboardingStep.Welcome -> WelcomeFace(
                 creating = creating,
                 errorText = createError,
+                startupFailure = walletState.startupFailure,
+                retryingStartup = retryingStartup,
+                onRetryStartup = {
+                    scope.launch {
+                        retryingStartup = true
+                        try {
+                            walletManager.initialize()
+                        } finally {
+                            retryingStartup = false
+                        }
+                    }
+                },
                 onCreate = {
                     scope.launch {
                         creating = true
@@ -346,9 +361,12 @@ fun OnboardingScreen(
 // ---------------------------------------------------------------------------
 
 @Composable
-private fun WelcomeFace(
+internal fun WelcomeFace(
     creating: Boolean,
     errorText: String?,
+    startupFailure: WalletStartupFailure?,
+    retryingStartup: Boolean,
+    onRetryStartup: () -> Unit,
     onCreate: () -> Unit,
     onRestore: () -> Unit,
     onInfo: () -> Unit,
@@ -375,6 +393,21 @@ private fun WelcomeFace(
             )
         }
         Spacer(Modifier.weight(1f))
+        if (startupFailure != null) {
+            Column(
+                modifier = Modifier.padding(horizontal = CtaPadding),
+                verticalArrangement = Arrangement.spacedBy(CashuTheme.spacing.snug),
+            ) {
+                InlineNotice(text = startupFailure.message)
+                PrimaryButton(
+                    text = startupFailure.recoveryActionLabel,
+                    onClick = onRetryStartup,
+                    loading = retryingStartup,
+                    modifier = Modifier.testTag(UiTestTags.RetryWalletStartup),
+                )
+            }
+            Spacer(Modifier.height(CashuTheme.spacing.snug))
+        }
         if (errorText != null) {
             InlineNotice(
                 text = errorText,
@@ -395,12 +428,13 @@ private fun WelcomeFace(
                 onClick = onCreate,
                 modifier = Modifier.testTag(UiTestTags.CreateWallet),
                 loading = creating,
+                enabled = !retryingStartup,
                 colors = ButtonDefaults.filledTonalButtonColors(),
             )
             SecondaryButton(
                 text = "Restore Wallet",
                 onClick = onRestore,
-                enabled = !creating,
+                enabled = !creating && !retryingStartup,
             )
             GhostButton(
                 text = "What is ecash?",
