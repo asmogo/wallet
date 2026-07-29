@@ -1,0 +1,160 @@
+{
+  "schema_version": 1,
+  "target": {
+    "kind": "pr",
+    "value": "PR #123",
+    "base_ref": "main",
+    "pr_number": 123
+  },
+  "revisions": {
+    "before_sha": "1111111111111111111111111111111111111111",
+    "after_sha": "2222222222222222222222222222222222222222"
+  },
+  "routing": {
+    "platforms": [
+      "android",
+      "ios"
+    ],
+    "skipped_platforms": []
+  },
+  "environments": [
+    {
+      "id": "android-api37-phone-light",
+      "platform": "android",
+      "stability": "stable",
+      "os_name": "Android",
+      "os_version": "17",
+      "os_build": "verified guest build",
+      "device_type": "Pixel phone profile",
+      "viewport_px": "1080x2400",
+      "theme": "light",
+      "locale": "en-US",
+      "font_scale": 1.0,
+      "details": {
+        "api_level": 37,
+        "build_fingerprint": "verified guest fingerprint",
+        "security_patch": "YYYY-MM-DD",
+        "abi": "arm64-v8a",
+        "density_dpi": 420,
+        "logical_viewport_dp": "411x914"
+      }
+    },
+    {
+      "id": "ios-26.5-iphone17pro-light",
+      "platform": "ios",
+      "stability": "stable",
+      "os_name": "iOS",
+      "os_version": "26.5",
+      "os_build": "23F77",
+      "device_type": "iPhone 17 Pro",
+      "viewport_px": "1206x2622",
+      "theme": "light",
+      "locale": "en-US",
+      "font_scale": 1.0,
+      "details": {
+        "runtime_build": "23F77",
+        "xcode_version": "26.6",
+        "xcode_build": "17F113",
+        "viewport_points": "402x874",
+        "display_scale": 3.0,
+        "dynamic_type": "Large"
+      }
+    }
+  ],
+  "builds": [
+    {
+      "id": "android-before-api37",
+      "platform": "android",
+      "side": "before",
+      "source_sha": "1111111111111111111111111111111111111111",
+      "environment_id": "android-api37-phone-light",
+      "app_id": "com.cashu.me.debug",
+      "app_version": "1.0",
+      "build_number": "4",
+      "binary_name": "app-debug.apk",
+      "binary_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    },
+    {
+      "id": "android-after-api37",
+      "platform": "android",
+      "side": "after",
+      "source_sha": "2222222222222222222222222222222222222222",
+      "environment_id": "android-api37-phone-light",
+      "app_id": "com.cashu.me.debug",
+      "app_version": "1.0",
+      "build_number": "4",
+      "binary_name": "app-debug.apk",
+      "binary_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+    },
+    {
+      "id": "ios-before-26.5",
+      "platform": "ios",
+      "side": "before",
+      "source_sha": "1111111111111111111111111111111111111111",
+      "environment_id": "ios-26.5-iphone17pro-light",
+      "app_id": "com.cashu.me",
+      "app_version": "1.0",
+      "build_number": "1",
+      "binary_name": "CashuWallet",
+      "binary_sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+    },
+    {
+      "id": "ios-after-26.5",
+      "platform": "ios",
+      "side": "after",
+      "source_sha": "2222222222222222222222222222222222222222",
+      "environment_id": "ios-26.5-iphone17pro-light",
+      "app_id": "com.cashu.me",
+      "app_version": "1.0",
+      "build_number": "1",
+      "binary_name": "CashuWallet",
+      "binary_sha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+    }
+  ],
+  "captures": [
+    {
+      "id": "android-settings-api37-light",
+      "platform": "android",
+      "environment_id": "android-api37-phone-light",
+      "surface": "Settings",
+      "state": "Synthetic seeded wallet with Settings open",
+      "fixture": "Fixed test seed; no mint or real balance",
+      "expected_change": "Describe the specific before/after visual hypothesis",
+      "before": {
+        "file": "android/android-before-settings-api37-411dp-light.png",
+        "build_id": "android-before-api37",
+        "sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+      },
+      "after": {
+        "file": "android/android-after-settings-api37-411dp-light.png",
+        "build_id": "android-after-api37",
+        "sha256": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+      },
+      "limitations": []
+    },
+    {
+      "id": "ios-settings-26.5-light",
+      "platform": "ios",
+      "environment_id": "ios-26.5-iphone17pro-light",
+      "surface": "Settings",
+      "state": "Synthetic seeded wallet with Settings open",
+      "fixture": "Existing UI-test seeded-wallet launch mode",
+      "expected_change": "Describe the specific before/after visual hypothesis",
+      "before": {
+        "file": "ios/ios-before-settings-ios26.5-iphone17pro-light.png",
+        "build_id": "ios-before-26.5",
+        "sha256": "1212121212121212121212121212121212121212121212121212121212121212"
+      },
+      "after": {
+        "file": "ios/ios-after-settings-ios26.5-iphone17pro-light.png",
+        "build_id": "ios-after-26.5",
+        "sha256": "3434343434343434343434343434343434343434343434343434343434343434"
+      },
+      "limitations": []
+    }
+  ],
+  "extras": [],
+  "limitations": [
+    "Static screenshots do not prove payment, secure-storage, NFC, or background behavior."
+  ]
+}

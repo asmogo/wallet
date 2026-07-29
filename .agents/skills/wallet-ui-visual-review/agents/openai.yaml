@@ -1,0 +1,4 @@
+interface:
+  display_name: "Wallet UI Visual Review"
+  short_description: "Review Android and iOS UI changes visually"
+  default_prompt: "Use $wallet-ui-visual-review to capture trustworthy before/after UI evidence for this change."
