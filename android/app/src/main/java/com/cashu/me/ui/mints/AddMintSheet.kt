@@ -27,6 +27,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import kotlinx.coroutines.launch
 import com.cashu.me.Core.Wallet.userFacingWalletMessage
@@ -39,6 +40,7 @@ import com.cashu.me.ui.components.GhostButton
 import com.cashu.me.ui.components.InlineNotice
 import com.cashu.me.ui.components.PrimaryButton
 import com.cashu.me.ui.theme.CashuTheme
+import com.cashu.me.ui.testing.UiTestTags
 
 /**
  * Bottom sheet for pasting/typing a mint URL — mirrors iOS `AddMintSheet`.
@@ -51,6 +53,7 @@ import com.cashu.me.ui.theme.CashuTheme
 fun AddMintSheet(
     walletManager: WalletManager,
     initialUrl: String = "",
+    allowCleartextLocalTestMints: Boolean = false,
     onScan: () -> Unit,
     onDismiss: () -> Unit,
 ) {
@@ -75,7 +78,10 @@ fun AddMintSheet(
     }
 
     fun addMint() {
-        val normalized = normalizeUserMintUrl(url)
+        val normalized = normalizeUserMintUrl(
+            url,
+            allowCleartextLocalTestMints = allowCleartextLocalTestMints,
+        )
         if (normalized == null) {
             error = "Enter a valid HTTPS mint URL."
             return
@@ -102,6 +108,7 @@ fun AddMintSheet(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
+                .testTag(UiTestTags.AddMintSheet)
                 .padding(horizontal = CashuTheme.spacing.comfortable)
                 .navigationBarsPadding()
                 .padding(bottom = CashuTheme.spacing.comfortable),
@@ -119,7 +126,9 @@ fun AddMintSheet(
                 placeholder = "https://…",
                 singleLine = true,
                 isError = error != null,
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag(UiTestTags.AddMintUrl),
                 keyboardOptions = KeyboardOptions(
                     capitalization = KeyboardCapitalization.None,
                 ),
@@ -159,6 +168,7 @@ fun AddMintSheet(
                 onClick = ::addMint,
                 enabled = url.isNotBlank() && !isAdding,
                 loading = isAdding,
+                modifier = Modifier.testTag(UiTestTags.AddMintSubmit),
             )
             GhostButton(
                 text = "Paste URL from clipboard",

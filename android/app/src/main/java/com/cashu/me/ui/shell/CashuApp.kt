@@ -31,6 +31,9 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.testTagsAsResourceId
 import androidx.compose.ui.unit.IntOffset
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
@@ -60,6 +63,7 @@ import com.cashu.me.ui.security.AppLockGate
 import com.cashu.me.ui.security.PrivacyCover
 import com.cashu.me.ui.security.SecureWindowEffect
 import com.cashu.me.ui.theme.CashuTheme
+import com.cashu.me.ui.testing.UiTestTags
 
 /**
  * Top-level entry. Replaces `App.ContentView.CashuWalletApp`.
@@ -76,11 +80,18 @@ import com.cashu.me.ui.theme.CashuTheme
 @Composable
 fun CashuApp(containerFlow: StateFlow<AppContainer?>) {
     CashuTheme {
-        val container by containerFlow.collectAsState()
-        if (container == null) {
-            LoadingScreen()
-        } else {
-            CashuAppContent(container = checkNotNull(container))
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .testTag(UiTestTags.AppRoot)
+                .semantics { testTagsAsResourceId = true },
+        ) {
+            val container by containerFlow.collectAsState()
+            if (container == null) {
+                LoadingScreen()
+            } else {
+                CashuAppContent(container = checkNotNull(container))
+            }
         }
     }
 }
@@ -109,19 +120,27 @@ private fun CashuAppContent(container: AppContainer) {
     }
 
     val isRuntimeReadyRef by rememberUpdatedState(isRuntimeReady)
-    val shouldListenForRequests = isRuntimeReady && settings.enablePaymentRequests
+    val shouldListenForRequests =
+        container.runtimePolicy.startExternalListeners &&
+            isRuntimeReady &&
+            settings.enablePaymentRequests
     val shouldListenForRequestsRef by rememberUpdatedState(shouldListenForRequests)
 
     LaunchedEffect(isRuntimeReady) {
         if (isRuntimeReady) {
             val currentSettings = container.settingsManager.state.value
-            if (currentSettings.checkPendingOnStartup && currentSettings.checkSentTokens) {
+            if (container.runtimePolicy.runStartupMaintenance &&
+                currentSettings.checkPendingOnStartup &&
+                currentSettings.checkSentTokens
+            ) {
                 container.walletManager.checkAllPendingTokens()
             }
             // Runtime became ready while the process is already foregrounded —
             // ProcessLifecycle ON_START won't re-fire. Arm quote detection now
             // (iOS deferred-startup parity).
-            if (ProcessLifecycleOwner.get().lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)) {
+            if (container.runtimePolicy.pollQuotesInForeground &&
+                ProcessLifecycleOwner.get().lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)
+            ) {
                 container.walletManager.onAppEnteredForeground()
             }
         } else {
@@ -144,7 +163,7 @@ private fun CashuAppContent(container: AppContainer) {
         val observer = LifecycleEventObserver { _, event ->
             when (event) {
                 Lifecycle.Event.ON_START -> {
-                    if (isRuntimeReadyRef) {
+                    if (container.runtimePolicy.pollQuotesInForeground && isRuntimeReadyRef) {
                         container.walletManager.onAppEnteredForeground()
                     }
                 }
@@ -333,11 +352,14 @@ private fun AuthenticatedShell(container: AppContainer) {
         )
         AnimatedVisibility(
             visible = activeScannerTarget != null,
+            modifier = Modifier.testTag(UiTestTags.ScannerRoot),
             enter = overlayEnter,
             exit = overlayExit,
         ) {
             ScannerView(
                 onClose = { scannerTarget = null },
+                useDeterministicPermission =
+                    container.runtimePolicy.useDeterministicCameraPermission,
                 onScanned = { payload ->
                     scannerTarget = null
                     routeScannedPayload(
@@ -461,6 +483,7 @@ private fun AuthenticatedShell(container: AppContainer) {
                 onReceiveBitcoin = { activeFlow = WalletFlow.ReceiveLightning },
                 prefilledPayload = pendingReceiveScan,
                 onPrefilledConsumed = { pendingReceiveScan = null },
+                allowAutomaticClipboardRead = container.runtimePolicy.allowAutomaticClipboardReads,
             )
 
             WalletFlow.ReceiveLightning -> ReceiveLightningScreen(

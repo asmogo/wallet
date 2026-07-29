@@ -5,9 +5,11 @@ plugins {
     alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.kotlin.serialization)
+    alias(libs.plugins.screenshot)
 }
 
 android {
+    experimentalProperties["android.experimental.enableScreenshotTest"] = true
     namespace = "com.cashu.me"
     // 37: required by the compose 1.12/material3 1.5 alpha line (M3 Expressive).
     compileSdk = 37
@@ -18,7 +20,9 @@ android {
         targetSdk = 36
         versionCode = 4
         versionName = "1.0"
-        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        testInstrumentationRunner = "com.cashu.me.test.CashuUiTestRunner"
+        testInstrumentationRunnerArguments["clearPackageData"] = "true"
+        testInstrumentationRunnerArguments["useTestStorageService"] = "true"
         vectorDrawables {
             useSupportLibrary = true
         }
@@ -71,12 +75,30 @@ android {
     }
 
     testOptions {
+        execution = "ANDROIDX_TEST_ORCHESTRATOR"
+        animationsDisabled = true
         managedDevices {
             localDevices {
                 create("pixel2Api35") {
                     device = "Pixel 2"
                     apiLevel = 35
                     systemImageSource = "aosp"
+                }
+                create("compactApi26") {
+                    device = "Pixel 2"
+                    apiLevel = 26
+                    // ATD images are not published for API 26.
+                    systemImageSource = "aosp"
+                }
+                create("modernApi36") {
+                    device = "Pixel 6"
+                    apiLevel = 36
+                    systemImageSource = "aosp"
+                }
+                create("tabletApi35") {
+                    device = "Pixel Tablet"
+                    apiLevel = 35
+                    systemImageSource = "aosp-atd"
                 }
             }
         }
@@ -120,14 +142,21 @@ dependencies {
 
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
+    androidTestImplementation(libs.androidx.test.core.ktx)
     androidTestImplementation(libs.androidx.test.runner)
     androidTestImplementation(libs.androidx.espresso.core)
+    androidTestImplementation(libs.androidx.test.uiautomator)
     androidTestImplementation(libs.androidx.concurrent.futures)
     androidTestImplementation(libs.androidx.concurrent.futures.ktx)
     androidTestImplementation(platform(libs.androidx.compose.bom))
     androidTestImplementation(libs.androidx.compose.ui.test.junit4)
+    androidTestImplementation(libs.androidx.compose.ui.test.junit4.accessibility)
+    androidTestUtil(libs.androidx.test.orchestrator)
+    androidTestUtil(libs.androidx.test.services)
     debugImplementation(libs.androidx.compose.ui.tooling)
     debugImplementation(libs.androidx.compose.ui.test.manifest)
+    screenshotTestImplementation(libs.screenshot.validation.api)
+    screenshotTestImplementation(libs.androidx.compose.ui.tooling)
 }
 
 tasks.register<Test>("androidLocalMintIntegrationTest") {

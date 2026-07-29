@@ -56,6 +56,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.style.TextAlign
@@ -80,6 +81,7 @@ import com.cashu.me.ui.components.ToolbarIcon
 import com.cashu.me.ui.components.neutralActionButtonColors
 import com.cashu.me.ui.theme.CapsuleShape
 import com.cashu.me.ui.theme.CashuTheme
+import com.cashu.me.ui.testing.UiTestTags
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -94,6 +96,7 @@ fun MintDetailScreen(
     var confirmingRemove by remember { mutableStateOf(false) }
 
     Scaffold(
+        modifier = Modifier.testTag(UiTestTags.MintDetailScreen),
         topBar = {
             TopAppBar(
                 title = { Text(mint?.name ?: "Mint", style = MaterialTheme.typography.titleMedium) },
@@ -119,7 +122,8 @@ fun MintDetailScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
-                .verticalScroll(rememberScrollState()),
+                .verticalScroll(rememberScrollState())
+                .testTag(UiTestTags.MintDetailContent),
             verticalArrangement = Arrangement.spacedBy(CashuTheme.spacing.snug),
         ) {
             HeaderBlock(mint = mint, isActive = isActive)

@@ -9,7 +9,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 
-class CashuWalletApplication : Application() {
+open class CashuWalletApplication : Application() {
     private val startupScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val mutableContainer = MutableStateFlow<AppContainer?>(null)
     val container: StateFlow<AppContainer?> = mutableContainer.asStateFlow()
@@ -19,16 +19,23 @@ class CashuWalletApplication : Application() {
 
     override fun onCreate() {
         super.onCreate()
+        if (!createContainerAutomatically) return
         // AppContainer loads DataStore-backed settings and cached wallet JSON.
         // Construct it away from the main thread so Application.onCreate can
         // return immediately and Android can draw the first frame.
         startupScope.launch {
-            val built = AppContainer(this@CashuWalletApplication)
+            val built = createContainer()
             publishContainer(built)
             // No-op unless the user opted into crash reports.
-            built.sentryService.initialize()
+            if (built.runtimePolicy.initializeTelemetry) {
+                built.sentryService.initialize()
+            }
         }
     }
+
+    protected open val createContainerAutomatically: Boolean = true
+
+    protected open fun createContainer(): AppContainer = AppContainer(this)
 
     @Synchronized
     fun handleDeepLink(url: String?) {
@@ -42,7 +49,7 @@ class CashuWalletApplication : Application() {
     }
 
     @Synchronized
-    private fun publishContainer(container: AppContainer) {
+    protected fun publishContainer(container: AppContainer) {
         pendingDeepLink?.let(container.navigationManager::handleDeepLink)
         pendingDeepLink = null
         mutableContainer.value = container

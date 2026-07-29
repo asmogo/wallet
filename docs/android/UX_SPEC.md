@@ -33,16 +33,19 @@ Cashu Wallet is a **system utility**, not a crypto dashboard. The bar is set by 
 
 ## 1. Shell
 
-**Bottom navigation: 4 tabs.**
+**Bottom navigation: 3 tabs.**
 
 | # | Tab | Icon (Material) | Destination |
 |---|-----|------|--------|
 | 1 | **Wallet** | `Icons.Outlined.AccountBalanceWallet` (selected: `Icons.Filled.AccountBalanceWallet`) | Home screen |
 | 2 | **History** | `Icons.Outlined.History` / `Icons.Filled.History` | Activity timeline |
 | 3 | **Mints** | `Icons.Outlined.AccountBalance` / `Icons.Filled.AccountBalance` | Mint list |
-| 4 | **Settings** | `Icons.Outlined.Settings` / `Icons.Filled.Settings` | Settings root |
 
-Send and Receive are **not tabs**. They are the two primary action buttons on the Wallet screen (alongside Scan), each opening a `ModalBottomSheet` chooser (Ecash / Bitcoin / Contactless).
+Settings is a pushed destination opened from the Wallet screen's settings
+button; returning from it preserves the selected bottom tab. Send and Receive
+are **not tabs**. They are the two primary action buttons on the Wallet screen
+(alongside Scan), each opening a `ModalBottomSheet` chooser (Ecash / Bitcoin /
+Contactless).
 
 **Gating states** (resolved by `WalletManager.state`):
 - `!isInitialized` → centered `CircularProgressIndicator` (full screen, no chrome).
@@ -128,7 +131,7 @@ Full-screen destination (route `scanner/{target}`). Pure black background, camer
 
 ## 4. History
 
-Pushed top-level destination from the History tab. `CenterAlignedTopAppBar(title = "History")` (carve-out from the original `LargeTopAppBar` spec — the three top-level destinations Home, History, Mints, Settings all use the compact `CenterAlignedTopAppBar` for a uniformly dense feel that matches iOS inline titles). Hides on scroll via `exitUntilCollapsedScrollBehavior`. Trailing actions: filter `IconButton` + search `IconButton` (opens M3 `SearchBar`).
+Top-level destination from the History tab. `CenterAlignedTopAppBar(title = "History")` (carve-out from the original `LargeTopAppBar` spec — the three top-level destinations Wallet, History, and Mints use compact app bars for a uniformly dense feel that matches iOS inline titles). Hides on scroll via `exitUntilCollapsedScrollBehavior`. Trailing actions: filter `IconButton` + search `IconButton` (opens M3 `SearchBar`).
 
 ### 4.1 Filter & search
 
@@ -232,7 +235,9 @@ Pushed route (not a sheet — it's a search list). `LargeTopAppBar(title = "Disc
 
 ## 6. Settings
 
-Pushed top-level destination from the Settings tab. `CenterAlignedTopAppBar(title = "Settings")` (compact — see §4 for the cross-tab carve-out from the original Large variant).
+Pushed destination opened from the Wallet screen's settings button.
+`CenterAlignedTopAppBar(title = "Settings")` uses the same compact treatment as
+the tab destinations and includes Android-native back navigation.
 
 `LazyColumn` of section groups. Each group:
 - Group header — `labelMedium`, uppercase, letter-spaced, `onSurfaceVariant`, 24dp top, 8dp bottom.
@@ -497,10 +502,10 @@ These pre-existing NotificationCenter events on iOS map to Kotlin `SharedFlow` o
 | iOS surface | Android screen / route | Notes |
 |--------------|--------------------------|-------|
 | Onboarding | `OnboardingScreen` (multi-step) | No bottom nav. |
-| Tab: Wallet (`MainWalletView`) | `home/HomeScreen` | 4-tab `WalletScaffold` host. |
+| Tab: Wallet (`MainWalletView`) | `home/HomeScreen` | 3-tab `WalletScaffold` host; opens Settings as a pushed route. |
 | Tab: History (`HistoryView`) | `history/HistoryScreen` | `CenterAlignedTopAppBar` (see §4 carve-out). |
 | Tab: Mints (`MintsListView`) | `mints/MintsScreen` | Inline add form + Discover. |
-| Tab: Settings (`SettingsView`) | `settings/SettingsScreen` | Group list. |
+| Settings (`SettingsView`) | `settings/SettingsScreen` | Pushed from Wallet; group list. |
 | Mint Detail | `mints/MintDetailScreen` (pushed) | |
 | Mint Discovery (sheet) | `mints/MintDiscoveryScreen` (pushed) | Search list → pushed route, not sheet. |
 | Settings sub-screens | `settings/{Backup,Lightning,P2PK,Nostr,NWC,Privacy,Appearance}Screen` (pushed) | |

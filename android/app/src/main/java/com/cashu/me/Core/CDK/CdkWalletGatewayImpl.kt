@@ -68,7 +68,7 @@ import org.cashudevkit.mnemonicToEntropy
 import org.cashudevkit.nwcDeriveServiceSecretKeyFromSeed
 import org.cashudevkit.proofsTotalAmount
 
-class CdkWalletGatewayImpl : CdkWalletGateway, NwcServiceGateway {
+class CdkWalletGatewayImpl : WalletGateway {
     private var database: CdkWalletSqliteDatabase? = null
     private var repository: CdkWalletRepository? = null
     private val operationMutex = Mutex()

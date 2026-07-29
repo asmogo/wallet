@@ -8,6 +8,7 @@ on:
       - 'android/**'
       - 'CI/**'
       - '.github/workflows/android-tests.yml'
+      - '.github/workflows/android-ui-tests.yml'
   workflow_dispatch:
 
 concurrency:
@@ -33,6 +34,11 @@ jobs:
       with:
         distribution: temurin
         java-version: '21'
+        cache: gradle
+        cache-dependency-path: |
+          android/*.gradle.kts
+          android/gradle/libs.versions.toml
+          android/gradle/wrapper/gradle-wrapper.properties
 
     - name: Setup Python
       uses: actions/setup-python@v5
@@ -42,6 +48,15 @@ jobs:
     - name: Setup Android SDK
       uses: android-actions/setup-android@v3
 
+    - name: Cache Android local mint runtimes
+      id: mint-cache
+      uses: actions/cache@v4
+      with:
+        path: |
+          CI/.nutshell-venv
+          CI/.cdk-bin
+        key: android-local-mints-${{ runner.os }}-${{ hashFiles('CI/setup-nutshell.sh', 'CI/setup-cdk.sh') }}
+
     - name: Run Android JVM tests
       run: ./gradlew --no-daemon :app:testDebugUnitTest
 
@@ -49,7 +64,9 @@ jobs:
       working-directory: .
       run: |
         chmod +x CI/setup-nutshell.sh CI/setup-cdk.sh
-        ./CI/setup-nutshell.sh
+        if [ "${{ steps.mint-cache.outputs.cache-hit }}" != "true" ]; then
+          ./CI/setup-nutshell.sh
+        fi
         ./CI/setup-cdk.sh 3339 android
 
     - name: Start Android local test mints
@@ -75,34 +92,3 @@ jobs:
 
     - name: Build Android release APK
       run: ./gradlew --no-daemon :app:assembleRelease
-
-  android-managed-device-tests:
-    name: Android Managed Device Tests
-    runs-on: ubuntu-latest
-    timeout-minutes: 45
-
-    defaults:
-      run:
-        working-directory: android
-
-    steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-
-    - name: Setup JDK
-      uses: actions/setup-java@v4
-      with:
-        distribution: temurin
-        java-version: '21'
-
-    - name: Setup Android SDK
-      uses: android-actions/setup-android@v3
-
-    - name: Enable KVM
-      run: |
-        echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
-        sudo udevadm control --reload-rules
-        sudo udevadm trigger --name-match=kvm
-
-    - name: Run Android managed-device tests
-      run: ./gradlew --no-daemon :app:pixel2Api35DebugAndroidTest

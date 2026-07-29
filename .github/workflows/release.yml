@@ -12,8 +12,16 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  android-ui-tests:
+    name: Android release UI gate
+    uses: ./.github/workflows/android-ui-tests.yml
+    with:
+      tier: full
+    secrets: inherit
+
   android-apk:
     name: Build and attach Android APK
+    needs: android-ui-tests
     runs-on: ubuntu-latest
     timeout-minutes: 30
 

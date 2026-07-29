@@ -45,6 +45,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Brush
@@ -83,6 +84,7 @@ import com.cashu.me.ui.components.ToolbarIcon
 import com.cashu.me.ui.components.neutralActionButtonColors
 import com.cashu.me.ui.components.formatRelativeTimestamp
 import com.cashu.me.ui.theme.CashuTheme
+import com.cashu.me.ui.testing.UiTestTags
 
 private const val RECENT_LIMIT = 5
 
@@ -181,6 +183,7 @@ fun HomeScreen(
         },
         modifier = Modifier
             .fillMaxSize()
+            .testTag(UiTestTags.WalletScreen)
             .padding(contentPadding)
             // The scaffold's contentPadding already carries the status-bar inset;
             // consume it so PinnedTop's statusBarsPadding() can't double-apply.
@@ -387,7 +390,10 @@ private fun PinnedTop(
                     tint = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
-            IconButton(onClick = onScan) {
+            IconButton(
+                onClick = onScan,
+                modifier = Modifier.testTag(UiTestTags.WalletScan),
+            ) {
                 ToolbarIcon(
                     imageVector = Icons.Outlined.QrCodeScanner,
                     contentDescription = "Scan QR",
@@ -551,14 +557,18 @@ private fun ActionDuet(
         PrimaryButton(
             text = "Receive",
             onClick = onReceive,
-            modifier = Modifier.weight(1f),
+            modifier = Modifier
+                .weight(1f)
+                .testTag(UiTestTags.WalletReceive),
             enabled = receiveEnabled,
             colors = actionColors,
         )
         PrimaryButton(
             text = "Send",
             onClick = onSend,
-            modifier = Modifier.weight(1f),
+            modifier = Modifier
+                .weight(1f)
+                .testTag(UiTestTags.WalletSend),
             enabled = sendEnabled,
             colors = actionColors,
         )

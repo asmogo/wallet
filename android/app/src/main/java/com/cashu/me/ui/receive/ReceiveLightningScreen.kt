@@ -55,6 +55,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
@@ -109,6 +110,7 @@ import com.cashu.me.ui.components.ToolbarIcon
 import com.cashu.me.ui.theme.CapsuleShape
 import com.cashu.me.ui.theme.CashuTheme
 import com.cashu.me.ui.theme.withMonoDigits
+import com.cashu.me.ui.testing.UiTestTags
 
 private sealed interface ReceiveLnFace {
     data object Input : ReceiveLnFace
@@ -366,7 +368,11 @@ fun ReceiveLightningScreen(
       if (terminal != null) {
         ReceiveSuccessTerminal(info = terminal, onDone = onClose)
       } else {
-        Column(modifier = Modifier.fillMaxHeight()) {
+        Column(
+            modifier = Modifier
+                .fillMaxHeight()
+                .testTag(UiTestTags.ReceiveLightningScreen),
+        ) {
         SheetHeader(
             title = when (val current = face) {
                 ReceiveLnFace.Input -> "Receive"

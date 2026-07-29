@@ -43,6 +43,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.style.TextAlign
 import com.cashu.me.BuildConfig
 import com.cashu.me.Core.PriceService
@@ -54,6 +55,7 @@ import com.cashu.me.ui.components.TabTopBar
 import com.cashu.me.ui.components.ToggleRow
 import com.cashu.me.ui.components.ToolbarIcon
 import com.cashu.me.ui.theme.CashuTheme
+import com.cashu.me.ui.testing.UiTestTags
 
 /**
  * Settings root — section order, rows, and copy mirror iOS SettingsView:
@@ -85,6 +87,7 @@ fun SettingsScreen(
 
     Scaffold(
         modifier = Modifier
+            .testTag(UiTestTags.SettingsScreen)
             .padding(contentPadding)
             // The shell scaffold's padding already carries the status-bar inset;
             // consume it so the nested TopAppBar doesn't apply it a second time.
@@ -105,7 +108,8 @@ fun SettingsScreen(
         LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(padding),
+                .padding(padding)
+                .testTag(UiTestTags.SettingsList),
             // Generous bottom inset so the footer clears the navigation bar.
             contentPadding = PaddingValues(bottom = CashuTheme.spacing.section + CashuTheme.spacing.snug),
         ) {
@@ -125,6 +129,7 @@ fun SettingsScreen(
                     leadingIcon = Icons.Outlined.CurrencyBitcoin,
                     checked = settings.useBitcoinSymbol,
                     onCheckedChange = settingsManager::setUseBitcoinSymbol,
+                    modifier = Modifier.testTag(UiTestTags.BitcoinSymbolToggle),
                 )
             }
 

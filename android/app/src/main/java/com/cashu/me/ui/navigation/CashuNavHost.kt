@@ -328,6 +328,8 @@ private fun NavGraphBuilder.tabDestinations(
             onOpenMint = { mint -> navController.navigate(mintDetailRouteFor(mint.url)) },
             onScan = onScan,
             contentPadding = contentPadding,
+            allowCleartextLocalTestMints =
+                container.runtimePolicy.allowCleartextLocalTestMints,
             scannedMintUrl = pendingMintScan,
             onScannedMintUrlConsumed = onPendingMintScanConsumed,
         )

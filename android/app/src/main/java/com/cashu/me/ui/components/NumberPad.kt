@@ -38,7 +38,9 @@ import com.cashu.me.ui.theme.CashuTheme
 // Minimal keypad: no background boxes, just numbers with subtle press feedback.
 // Matches iOS NumberPadAmountInput (10pt gaps, 64pt keys).
 private val KeyGap = 10.dp
-private val KeyHeight = 64.dp
+// Four rows plus the CTA must leave room for validation notices on compact
+// phones. 48dp remains the Material minimum interaction target.
+private val KeyHeight = 48.dp
 
 /**
  * Minimal numeric keypad for amount entry — no background boxes, just numbers
@@ -124,6 +126,7 @@ fun NumberPadFooter(
     decimals: Int = 0,
     buttonEnabled: Boolean = true,
     buttonLoading: Boolean = false,
+    buttonModifier: Modifier = Modifier,
 ) {
     Column(modifier = modifier) {
         NumberPad(amount = amount, onAmountChange = onAmountChange, decimals = decimals)
@@ -131,6 +134,7 @@ fun NumberPadFooter(
         PrimaryButton(
             text = buttonText,
             onClick = onButtonClick,
+            modifier = buttonModifier,
             enabled = buttonEnabled,
             loading = buttonLoading,
         )
