@@ -36,7 +36,7 @@ Platform-specific differences are intentionally excluded, including iCloud backu
 
 - [ ] **[P1 · iOS → Android] Drive the received-amount beat from an explicit receive event.** Android infers a receive from any balance increase, which can show a false `+amount` after a restore, mint operation, or unrelated balance refresh; iOS uses a receipt notification. **Done when:** Android only shows the beat for a confirmed incoming payment and only lets Home own the success haptic for background receipts that have no in-flow confirmation.
 
-- [ ] **[P2 · iOS → Android] Add an accessible loading label.** iOS shows “Loading Wallet…” with its progress indicator; Android shows an unlabeled indicator. **Done when:** Android visually or semantically identifies the startup operation as loading the wallet.
+- [x] **[P2 · iOS → Android] Add an accessible loading label.** iOS shows “Loading Wallet…” with its progress indicator; Android shows an unlabeled indicator. **Done when:** Android visually or semantically identifies the startup operation as loading the wallet.
 
 - [ ] **[P2 · Converge] Update Home action hints for the unified flows.** iOS accessibility hints still describe opening “options” for ecash and Lightning even though the buttons now open unified Send/Receive surfaces; Android exposes only the button names. **Done when:** both platforms describe the actual destination and supported inputs without referring to a retired chooser.
 
