@@ -1,8 +1,10 @@
 package com.cashu.me.ui.journeys
 
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.junit4.accessibility.enableAccessibilityChecks
 import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -87,6 +89,30 @@ class MainActivityJourneyTest {
             .pressSystemBack()
             .assertTagDoesNotExist(UiTestTags.ReceiveSheet)
             .awaitTag(UiTestTags.WalletScreen)
+    }
+
+    @Test
+    fun receiveWithoutMintCreatesAnyMintRequestAndExplainsBitcoinRequirement() {
+        launch(FixtureMode.SeededWithoutMint)
+
+        robot.awaitTag(UiTestTags.WalletScreen)
+            .tapText("Receive")
+            .awaitTag(UiTestTags.ReceiveSheet)
+            .awaitText("Ecash requests and token scans still work without one.", substring = true)
+        compose.onNodeWithContentDescription("Bitcoin").assertIsNotEnabled()
+        robot.tapDescription("Ecash")
+            .awaitText("Any mint")
+    }
+
+    @Test
+    fun newEcashRequestDoesNotPinTheActiveMint() {
+        launch(FixtureMode.SeededWithMint)
+
+        robot.awaitTag(UiTestTags.WalletScreen)
+            .tapText("Receive")
+            .awaitTag(UiTestTags.ReceiveSheet)
+            .tapDescription("Ecash")
+            .awaitText("Any mint")
     }
 
     @Test

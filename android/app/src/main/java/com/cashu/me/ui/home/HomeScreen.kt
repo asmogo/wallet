@@ -220,7 +220,9 @@ fun HomeScreen(
                         onReceive = onReceive,
                         // Send opens the unified surface directly — no chooser.
                         onSend = onSend,
-                        receiveEnabled = walletState.activeMint != null,
+                        // The unified Receive sheet always has mint-independent
+                        // ecash paths (paste/scan and an any-mint NUT-18 request).
+                        receiveEnabled = true,
                         // iOS parity: Send is tappable at zero balance; the sheet shows
                         // "Nothing to send yet" with a Receive CTA instead of disabling here.
                         sendEnabled = walletState.activeMint != null,
