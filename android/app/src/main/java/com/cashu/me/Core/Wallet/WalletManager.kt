@@ -139,18 +139,26 @@ class WalletManager(
                         openWalletRepositoryWithRecovery(mnemonic)
                         deriveNostrKey(mnemonic)
                     }
-                    update { copy(isRuntimeReady = true, errorMessage = null) }
+                    update {
+                        copy(
+                            isRuntimeReady = true,
+                            errorMessage = null,
+                            startupFailure = null,
+                        )
+                    }
                     if (runStartupMaintenance) {
                         startDeferredStartupMaintenance(hasStoredWallet)
                     }
                 }.onFailure { error ->
                     AppLogger.wallet.error("Wallet runtime initialization failed", error)
+                    val startupFailure = walletStartupFailure(hasStoredWallet)
                     update {
                         copy(
                             isInitialized = true,
                             isRuntimeReady = false,
                             isLoading = false,
-                            errorMessage = error.message,
+                            errorMessage = startupFailure.message,
+                            startupFailure = startupFailure,
                         )
                     }
                 }
@@ -1078,7 +1086,7 @@ class WalletManager(
         }
     }
 
-    fun clearError() = update { copy(errorMessage = null) }
+    fun clearError() = update { copy(errorMessage = null, startupFailure = null) }
 
     fun backupMnemonic(): String? = secureStorage.loadString(StorageKeys.secureWalletMnemonic)
 

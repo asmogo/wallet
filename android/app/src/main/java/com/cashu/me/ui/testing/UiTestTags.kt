@@ -11,6 +11,7 @@ object UiTestTags {
     const val ScannerRoot = "cashu.scanner"
     const val OnboardingRoot = "cashu.onboarding"
     const val CreateWallet = "cashu.onboarding.create"
+    const val RetryWalletStartup = "cashu.onboarding.startup.retry"
     const val RevealSeed = "cashu.onboarding.seed.reveal"
     const val SeedPhrase = "cashu.onboarding.seed.phrase"
     const val HiddenSeedPhrase = "cashu.onboarding.seed.hidden"
