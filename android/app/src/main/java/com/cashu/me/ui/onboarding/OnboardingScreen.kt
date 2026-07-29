@@ -60,6 +60,15 @@ import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.isTraversalGroup
+import androidx.compose.ui.semantics.onClick
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.testTag as semanticsTestTag
+import androidx.compose.ui.semantics.traversalIndex
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
@@ -514,40 +523,14 @@ private fun ShowMnemonicFace(
             verticalArrangement = Arrangement.spacedBy(CashuTheme.spacing.snug),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            Box(
+            SeedPhraseReveal(
+                words = words,
+                revealed = revealed,
+                onReveal = ::reveal,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = HeaderPadding)
-                    .clickable(
-                        interactionSource = remember { MutableInteractionSource() },
-                        indication = null,
-                        enabled = !revealed,
-                        onClickLabel = "Reveal seed phrase",
-                        onClick = ::reveal,
-                    )
-                    .testTag(UiTestTags.RevealSeed),
-                contentAlignment = Alignment.Center,
-            ) {
-                SeedGrid(words = words, revealed = revealed)
-                if (!revealed) {
-                    Column(
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.spacedBy(CashuTheme.spacing.micro),
-                    ) {
-                        Icon(
-                            imageVector = Icons.Outlined.Visibility,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.size(RevealEyeSize),
-                        )
-                        Text(
-                            text = "Tap to reveal",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                }
-            }
+                    .padding(horizontal = HeaderPadding),
+            )
             GhostButton(
                 text = if (copied) "Copied" else "Copy",
                 onClick = {
@@ -611,6 +594,65 @@ private fun ShowMnemonicFace(
 }
 
 /**
+ * Keeps the masked phrase out of TalkBack's tree and replaces the whole visual
+ * with one reveal control. Once revealed, the control semantics disappear so
+ * TalkBack can traverse the ordered words in [SeedGrid].
+ */
+@Composable
+internal fun SeedPhraseReveal(
+    words: List<String>,
+    revealed: Boolean,
+    onReveal: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val accessibilityModifier = if (revealed) {
+        Modifier
+    } else {
+        Modifier
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null,
+                onClickLabel = "Reveal seed phrase",
+                onClick = onReveal,
+            )
+            .clearAndSetSemantics {
+                semanticsTestTag = UiTestTags.RevealSeed
+                contentDescription = "Reveal seed phrase"
+                role = Role.Button
+                onClick(label = "Reveal seed phrase") {
+                    onReveal()
+                    true
+                }
+            }
+    }
+
+    Box(
+        modifier = modifier.then(accessibilityModifier),
+        contentAlignment = Alignment.Center,
+    ) {
+        SeedGrid(words = words, revealed = revealed)
+        if (!revealed) {
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(CashuTheme.spacing.micro),
+            ) {
+                Icon(
+                    imageVector = Icons.Outlined.Visibility,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(RevealEyeSize),
+                )
+                Text(
+                    text = "Tap to reveal",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+    }
+}
+
+/**
  * 3-column × 4-row seed grid, plain on the canvas (no card chrome) — iOS
  * mnemonicWordsGrid. Zero-padded indices in a fixed trailing-aligned column,
  * monospaced medium words.
@@ -630,7 +672,18 @@ private fun SeedGrid(words: List<String>, revealed: Boolean) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .testTag(if (revealed) UiTestTags.SeedPhrase else UiTestTags.HiddenSeedPhrase)
+            .then(
+                if (revealed) {
+                    Modifier.semantics {
+                        semanticsTestTag = UiTestTags.SeedPhrase
+                        isTraversalGroup = true
+                    }
+                } else {
+                    Modifier.clearAndSetSemantics {
+                        semanticsTestTag = UiTestTags.HiddenSeedPhrase
+                    }
+                },
+            )
             .then(if (revealed) Modifier else Modifier.blur(SeedBlurRadius)),
         verticalArrangement = Arrangement.spacedBy(SeedGridRowGap),
     ) {
@@ -642,7 +695,18 @@ private fun SeedGrid(words: List<String>, revealed: Boolean) {
                 rowWords.forEachIndexed { columnIndex, word ->
                     val number = rowIndex * 3 + columnIndex + 1
                     Row(
-                        modifier = Modifier.weight(1f),
+                        modifier = Modifier
+                            .weight(1f)
+                            .then(
+                                if (revealed) {
+                                    Modifier.clearAndSetSemantics {
+                                        contentDescription = "$number. $word"
+                                        traversalIndex = number.toFloat()
+                                    }
+                                } else {
+                                    Modifier
+                                },
+                            ),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(CashuTheme.spacing.micro),
                     ) {
