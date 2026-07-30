@@ -39,10 +39,10 @@ import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.delay
 import com.cashu.me.Core.CashuRequestStore
 import com.cashu.me.Core.NostrService
-import com.cashu.me.Core.PaymentRequestBuilder
 import com.cashu.me.Core.SettingsManager
 import com.cashu.me.Core.TokenParser
 import com.cashu.me.Core.WalletManager
+import com.cashu.me.Core.createNostrCashuRequest
 import com.cashu.me.ui.components.CashuTextField
 import com.cashu.me.ui.components.CircularMethodButton
 import com.cashu.me.ui.components.FlowSheetTitle
@@ -120,17 +120,11 @@ fun ReceiveEcashScreen(
         inputHint = null
         runCatching {
             val id = com.cashu.me.Models.CashuRequest.newId()
-            val mints = emptyList<String>()
-            val encoded = PaymentRequestBuilder.build(
+            cashuRequestStore.createNostrCashuRequest(
                 id = id,
-                amount = null,
-                unit = "sat",
-                mints = mints,
-                description = null,
                 nostrPubkeyHex = nostr.publicKeyHex,
                 relays = relays,
             )
-            cashuRequestStore.createNew(id = id, mints = mints, encoded = encoded)
         }.onSuccess { request ->
             onOpenRequest(request.id)
         }.onFailure {
