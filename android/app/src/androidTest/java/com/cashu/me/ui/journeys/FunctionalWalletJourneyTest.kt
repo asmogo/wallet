@@ -147,6 +147,30 @@ class FunctionalWalletJourneyTest {
     }
 
     @Test
+    fun unknownMintReceiveRequiresExplicitTrustConfirmation() {
+        val fixture = launch(
+            FixtureMode.SeededWithMint,
+            deepLink = "cashu:${FakeWalletGateway.UnknownMintDeterministicToken}",
+        )
+        val fake = checkNotNull(fixture.fakeGateway)
+
+        robot.awaitTag(UiTestTags.ReceiveEcashDetail)
+            .awaitText("New mint: mint.minibits.cash")
+            .tapTextWithinTag(UiTestTags.ReceiveEcashDetail, "Receive")
+            .awaitText("Trust this mint?")
+            .awaitText("mint.minibits.cash")
+
+        assertEquals(0L, runBlocking { fake.totalBalance(FakeWalletGateway.TestMintUrl) })
+
+        robot.tapText("Trust & receive")
+            .awaitText("Payment received")
+            .tapText("Done")
+            .awaitTag(UiTestTags.WalletScreen)
+
+        assertEquals(25L, runBlocking { fake.totalBalance(FakeWalletGateway.TestMintUrl) })
+    }
+
+    @Test
     fun lightningReceiveTransitionsToPaidSuccessAndHistory() {
         val fixture = launch(FixtureMode.SeededWithMint)
         val fake = checkNotNull(fixture.fakeGateway)

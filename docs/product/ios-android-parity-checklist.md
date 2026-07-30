@@ -76,7 +76,7 @@ Platform-specific capabilities remain intentionally outside parity, including iC
 
 - [ ] **[P1 · Converge] Use one Nostr-readiness rule and recovery message.** Android requires both a public key and relays and says “check your relays”; iOS checks initialized identity and points broadly to Settings → Nostr. **Done when:** both validate every prerequisite needed for a deliverable request and name the exact setting that needs attention.
 
-- [ ] **[P0 · iOS → Android] Warn before receiving from an unknown mint.** iOS identifies that receiving will add a new mint and asks the user to continue only if they trust it; Android has no equivalent trust warning. **Done when:** Android displays the normalized mint host, explains that the mint will be added, and blocks an accidental one-tap claim.
+- [x] **[P0 · iOS → Android] Warn before receiving from an unknown mint.** iOS identifies that receiving will add a new mint and asks the user to continue only if they trust it; Android has no equivalent trust warning. **Done when:** Android displays the normalized mint host, explains that the mint will be added, and blocks an accidental one-tap claim.
 
 - [x] **[P1 · iOS → Android] Show the actual P2PK lock target.** Android uses a generic “Requires your key” row only when the key is not held and hides the row when it is held; iOS identifies the recipient. **Done when:** Android always identifies a locked token’s recipient and clearly distinguishes claimable from unclaimable before the user acts.
 
