@@ -91,6 +91,11 @@ class AmountFormatterTest {
     }
 
     @Test
+    fun fiatEntryPreservesKeypadCentsWithTheCurrencySymbol() {
+        assertEquals("$1,234.50", formatter.entryFiatDisplay(raw = "1234.50", currencyCode = "USD"))
+    }
+
+    @Test
     fun usdUsesBareLeadingDollarSymbolRegardlessOfDeviceLocale() {
         val germanFormatter = AmountFormatter(Locale.GERMANY)
 
