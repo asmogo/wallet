@@ -48,6 +48,9 @@ private sealed interface BalanceStatusLine {
     /** Transient "+2,500" received beat (takes over the fiat slot). */
     data class Delta(val text: String) : BalanceStatusLine
 
+    /** A wallet lifecycle message that takes precedence over the regular sub-amount. */
+    data class Status(val text: String) : BalanceStatusLine
+
     /** The regular fiat/secondary sub-amount. */
     data class Secondary(val text: String) : BalanceStatusLine
 
@@ -65,6 +68,8 @@ private sealed interface BalanceStatusLine {
  *   it takes over the secondary slot with the sanctioned celebration spring
  *   (scale 0.9 + fade in, fade out), then the fiat line fades back. Same slot,
  *   so the swap never reflows the balance.
+ * @param statusMessage wallet lifecycle copy, such as runtime preparation,
+ *   shown ahead of the regular secondary amount.
  */
 @Composable
 fun BalanceDisplay(
@@ -72,6 +77,7 @@ fun BalanceDisplay(
     modifier: Modifier = Modifier,
     padding: PaddingValues = PaddingValues(),
     receivedDelta: String? = null,
+    statusMessage: String? = null,
 ) {
     val reduceMotion = rememberReducedMotion()
     Column(
@@ -100,6 +106,7 @@ fun BalanceDisplay(
         }
         val statusLine: BalanceStatusLine = when {
             receivedDelta != null -> BalanceStatusLine.Delta(receivedDelta)
+            statusMessage != null -> BalanceStatusLine.Status(statusMessage)
             amount.secondary != null -> BalanceStatusLine.Secondary(amount.secondary)
             else -> BalanceStatusLine.None
         }
@@ -137,6 +144,12 @@ fun BalanceDisplay(
                             style = MaterialTheme.typography.titleMedium
                                 .withMonoDigits()
                                 .copy(fontWeight = FontWeight.SemiBold),
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    is BalanceStatusLine.Status ->
+                        Text(
+                            text = line.text,
+                            style = MaterialTheme.typography.titleMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     is BalanceStatusLine.Secondary ->

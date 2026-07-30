@@ -1,6 +1,18 @@
 import CoreNFC
 import SwiftUI
 
+enum HomeActionAccessibility {
+    static let receiveHint = """
+    Opens the unified flow for a pasted ecash token or a new Cashu Request, \
+    Lightning invoice, BOLT12 offer, or Bitcoin address
+    """
+
+    static let sendHint = """
+    Opens the unified flow for ecash, Lightning addresses, BOLT11 invoices, \
+    BOLT12 offers, Bitcoin addresses, or Cashu Requests
+    """
+}
+
 struct MainWalletView: View {
     /// Called when the user taps "View all activity" — switches the tab
     /// container to the History tab. Lives at the call-site so
@@ -442,13 +454,13 @@ struct MainWalletView: View {
                     actionButton(
                         "Receive",
                         identifier: "wallet-action-receive",
-                        hint: "Opens options to receive ecash or lightning payments"
+                        hint: HomeActionAccessibility.receiveHint
                     ) { activeSheet = .receive }
 
                     actionButton(
                         "Send",
                         identifier: "wallet-action-send",
-                        hint: "Opens options to send ecash or pay lightning invoices"
+                        hint: HomeActionAccessibility.sendHint
                     ) { activeSheet = .send }
                 }
             }
@@ -460,14 +472,14 @@ struct MainWalletView: View {
                 }
                 .glassButton()
                 .accessibilityIdentifier("wallet-action-receive")
-                .accessibilityHint("Opens options to receive ecash or lightning payments")
+                .accessibilityHint(HomeActionAccessibility.receiveHint)
 
                 Button { activeSheet = .send } label: {
                     Text("Send")
                 }
                 .glassButton()
                 .accessibilityIdentifier("wallet-action-send")
-                .accessibilityHint("Opens options to send ecash or pay lightning invoices")
+                .accessibilityHint(HomeActionAccessibility.sendHint)
             }
             .disabled(!walletManager.isRuntimeReady)
         }
@@ -501,16 +513,28 @@ struct MainWalletView: View {
     private var recentContent: some View {
         let items = recentItems
         if items.isEmpty {
-            // Same shared component, size, and centered placement as the
-            // History empty state, but with its own tray icon and copy
-            // (recent-activity framing vs. History's clock + "history"). No
-            // "Recent" header here: with nothing to label it's redundant, and
-            // dropping it matches History's clean full-screen empty state.
-            NativeEmptyState(
-                title: "No Activity Yet",
-                systemImage: "tray",
-                description: "Your recent payments will show up here."
-            )
+            Group {
+                if walletManager.mints.isEmpty {
+                    NativeEmptyState(
+                        title: "Add a mint to get started",
+                        systemImage: "bitcoinsign.bank.building",
+                        description: "Mints custody your ecash. Add one to begin.",
+                        actionTitle: "Add mint",
+                        action: { activeSheet = .addMint }
+                    )
+                } else {
+                    // Same shared component, size, and centered placement as the
+                    // History empty state, but with its own tray icon and copy
+                    // (recent-activity framing vs. History's clock + "history"). No
+                    // "Recent" header here: with nothing to label it's redundant,
+                    // and dropping it matches History's clean full-screen empty state.
+                    NativeEmptyState(
+                        title: "No Activity Yet",
+                        systemImage: "tray",
+                        description: "Your recent payments will show up here."
+                    )
+                }
+            }
             .containerRelativeFrame(.vertical)
             .padding(.horizontal, 16)
         } else {
@@ -722,6 +746,11 @@ struct MainWalletView: View {
                 .canvasSheetBackground()
         case .flow(let flow):
             flowView(for: flow)
+        case .addMint:
+            AddMintSheet()
+                .environmentObject(walletManager)
+                .presentationDetents([.medium, .large])
+                .presentationDragIndicator(.visible)
         case .discoverMints:
             MintDiscoverySheet { url in
                 Task { try? await walletManager.addMint(url: url) }
@@ -796,6 +825,7 @@ private enum WalletSheet: Identifiable {
     case send
     case scanner
     case flow(WalletFlow)
+    case addMint
     case discoverMints
 
     var id: String {
@@ -808,6 +838,8 @@ private enum WalletSheet: Identifiable {
             return "scanner"
         case .flow(let flow):
             return "flow-\(flow.id)"
+        case .addMint:
+            return "addMint"
         case .discoverMints:
             return "discoverMints"
         }

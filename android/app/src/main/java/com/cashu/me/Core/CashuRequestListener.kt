@@ -223,6 +223,7 @@ class CashuRequestListener(
                 tokenString = payload.token,
                 requestId = payload.requestId,
                 processedId = eventId,
+                confirmationOwner = ReceiveConfirmationOwner.Home,
             )
             if (amount > 0 && !payload.requestId.isNullOrBlank()) {
                 cashuRequestStore.attachPayment(

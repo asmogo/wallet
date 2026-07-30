@@ -73,6 +73,7 @@ import com.cashu.me.Core.Protocols.CurrencyAmount
 import com.cashu.me.Core.Protocols.CurrencyRegistry
 import com.cashu.me.Core.OnchainExplorer
 import com.cashu.me.Core.OnchainPaymentObservation
+import com.cashu.me.Core.ReceiveConfirmationOwner
 import com.cashu.me.Core.SettingsManager
 import com.cashu.me.Core.UnitAmountEntry
 import com.cashu.me.Core.Wallet.userFacingWalletMessage
@@ -340,7 +341,12 @@ fun ReceiveLightningScreen(
                     abandonedOnchainQuoteIds = abandonedOnchainQuoteIds - quoteId
                     continue
                 }
-                val minted = runCatching { walletManager.refreshPendingMintQuote(quoteId) }
+                val minted = runCatching {
+                    walletManager.refreshPendingMintQuote(
+                        quoteId,
+                        confirmationOwner = ReceiveConfirmationOwner.InFlow,
+                    )
+                }
                     .getOrDefault(false)
                 if (!minted) continue
                 abandonedOnchainQuoteIds = abandonedOnchainQuoteIds - quoteId
@@ -608,7 +614,12 @@ fun ReceiveLightningScreen(
                                 // Mint on the wallet's app-lifetime scope so a
                                 // dismissal never cancels a mint mid-flight.
                                 walletManager.launch {
-                                    runCatching { walletManager.refreshPendingMintQuote(quote.id) }
+                                    runCatching {
+                                        walletManager.refreshPendingMintQuote(
+                                            quote.id,
+                                            confirmationOwner = ReceiveConfirmationOwner.InFlow,
+                                        )
+                                    }
                                 }
                             }
                             delay(30_000)
@@ -653,7 +664,12 @@ fun ReceiveLightningScreen(
                                 liveQuote.state == MintQuoteState.Issued
                             ) {
                                 walletManager.launch {
-                                    runCatching { walletManager.refreshPendingMintQuote(liveQuote.id) }
+                                    runCatching {
+                                        walletManager.refreshPendingMintQuote(
+                                            liveQuote.id,
+                                            confirmationOwner = ReceiveConfirmationOwner.InFlow,
+                                        )
+                                    }
                                 }
                             }
                             return@LaunchedEffect
@@ -664,7 +680,15 @@ fun ReceiveLightningScreen(
                             // Finish the UX immediately and mint on the wallet's
                             // app-lifetime scope so the dismiss never cancels it
                             // (iOS: unstructured task that outlives the sheet).
-                            walletManager.launch { runCatching { walletManager.mintTokens(liveQuote.id) } }
+                            walletManager.launch {
+                                runCatching {
+                                    walletManager.mintTokens(
+                                        quoteId = liveQuote.id,
+                                        unit = liveQuote.unit,
+                                        confirmationOwner = ReceiveConfirmationOwner.InFlow,
+                                    )
+                                }
+                            }
                             successInfo = ReceiveSuccessInfo(
                                 amountLabel = amountLabel,
                                 mintName = activeMint?.name,
