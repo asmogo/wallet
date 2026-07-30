@@ -161,7 +161,7 @@ class FunctionalWalletJourneyTest {
             .awaitText("2 sat")
             .tapTag(UiTestTags.SendPaymentSubmit)
             .awaitText("Payment sent")
-            .awaitText("Fee")
+            .awaitText("Network fee")
             .awaitText("₿2")
 
         assertEquals(477L, runBlocking { fake.totalBalance(FakeWalletGateway.TestMintUrl) })

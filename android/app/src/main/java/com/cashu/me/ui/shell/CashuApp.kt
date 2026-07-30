@@ -536,6 +536,7 @@ private fun AuthenticatedShell(container: AppContainer) {
             WalletFlow.Send -> UnifiedSendScreen(
                 walletManager = container.walletManager,
                 settingsManager = container.settingsManager,
+                priceService = container.priceService,
                 onClose = close,
                 onScan = {
                     flowHandoff.requestScanner(close)

@@ -55,6 +55,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.style.TextOverflow
@@ -62,15 +64,18 @@ import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import com.cashu.me.Core.AmountDisplayPrimary
 import com.cashu.me.Core.AmountFormatter
 import com.cashu.me.Core.CashuPaymentRequestRoute
 import com.cashu.me.Core.PaymentRequestDecodeResult
 import com.cashu.me.Core.PaymentRequestDecoder
+import com.cashu.me.Core.PriceService
 import com.cashu.me.Core.SettingsManager
 import com.cashu.me.Core.Wallet.WalletMessage
 import com.cashu.me.Core.Wallet.userFacingWalletMessage
 import com.cashu.me.Core.Wallet.walletMessage
 import com.cashu.me.Core.WalletManager
+import com.cashu.me.Core.normalizedMintUrlForSelection
 import com.cashu.me.Core.routeForCashuPaymentRequest
 import com.cashu.me.Models.MeltPaymentResult
 import com.cashu.me.Models.MeltQuoteInfo
@@ -108,30 +113,18 @@ private const val TYPE_DEBOUNCE_MS = 400L
 
 private enum class SendStep { Input, Amount, Confirm }
 
-/** The rail the destination locked onto. */
-private sealed interface LockedRail {
-    val raw: String
+internal sealed interface SendStatus {
+    val details: SendPaymentDetails
 
-    data class Melt(
-        override val raw: String,
-        val decoded: PaymentRequestDecodeResult,
-        val knownAmount: Long?,
-    ) : LockedRail
-
-    data class Creq(
-        override val raw: String,
-        val decoded: PaymentRequestDecodeResult.CashuPaymentRequest,
-        val knownAmount: Long?,
-        // Arrived pre-formed (scan/deep link) vs. typed/pasted — iOS shows the
-        // raw request string only in the latter case (mirrors UnifiedSendView).
-        val fromScan: Boolean = false,
-    ) : LockedRail
-}
-
-private sealed interface SendStatus {
-    data object Sending : SendStatus
-    data class Sent(val result: MeltPaymentResult?) : SendStatus
-    data class Failed(val message: WalletMessage) : SendStatus
+    data class Sending(override val details: SendPaymentDetails) : SendStatus
+    data class Sent(
+        override val details: SendPaymentDetails,
+        val result: MeltPaymentResult?,
+    ) : SendStatus
+    data class Failed(
+        override val details: SendPaymentDetails,
+        val message: WalletMessage,
+    ) : SendStatus
 }
 
 /**
@@ -147,6 +140,7 @@ private sealed interface SendStatus {
 fun UnifiedSendScreen(
     walletManager: WalletManager,
     settingsManager: SettingsManager,
+    priceService: PriceService,
     onClose: () -> Unit,
     onScan: () -> Unit,
     onContactless: () -> Unit,
@@ -160,6 +154,7 @@ fun UnifiedSendScreen(
 ) {
     val walletState by walletManager.state.collectAsState()
     val settings by settingsManager.state.collectAsState()
+    val priceState by priceService.state.collectAsState()
     val formatter = remember { AmountFormatter() }
     val unsupportedCashuRequestUnit =
         stringResource(R.string.send_cashu_request_unsupported_unit)
@@ -189,8 +184,13 @@ fun UnifiedSendScreen(
     var quoteError by remember { mutableStateOf<String?>(null) }
     var confirmError by remember { mutableStateOf<String?>(null) }
 
+    val entryContext = UnifiedSendAmountEntry.context(
+        preferredPrimary = settings.amountDisplayPrimary,
+        btcPrice = priceState.btcPrice,
+    )
+    var previousEntryContext by remember { mutableStateOf(entryContext) }
     val activeMintUrl = selectedMintUrl ?: walletState.activeMint?.url
-    val enteredAmount = amount.toLongOrNull() ?: 0L
+    val enteredAmount = UnifiedSendAmountEntry.amountSats(amount, entryContext)
     val confirmAmount = locked?.let { rail ->
         when (rail) {
             is LockedRail.Melt -> rail.knownAmount ?: enteredAmount
@@ -269,15 +269,23 @@ fun UnifiedSendScreen(
 
     fun pay() {
         val rail = locked ?: return
+        var paymentDetails = buildSendPaymentDetails(
+            rail = rail,
+            cashuRoute = cashuRoute,
+            amountSats = confirmAmount,
+            mint = activeMint,
+            meltQuote = meltQuote,
+        )
         confirmError = null
-        status = SendStatus.Sending
+        status = SendStatus.Sending(paymentDetails)
         scope.launch {
             try {
                 when (rail) {
                     is LockedRail.Melt -> {
                         val quote = meltQuote ?: error("No quote.")
                         val result = walletManager.meltTokens(quote.id, activeMintUrl)
-                        status = SendStatus.Sent(result)
+                        paymentDetails = paymentDetails.withMeltResult(result)
+                        status = SendStatus.Sent(paymentDetails, result)
                     }
                     is LockedRail.Creq -> {
                         when (val route = cashuRoute) {
@@ -290,8 +298,17 @@ fun UnifiedSendScreen(
                                     amountSats = null,
                                     preferredMintURL = activeMintUrl,
                                 )
+                                paymentDetails = paymentDetails.withNetworkFeeUpperBound(quote.feeReserve)
+                                    .withMintName(
+                                        walletState.mints.firstOrNull {
+                                            normalizedMintUrlForSelection(it.url) ==
+                                                normalizedMintUrlForSelection(quote.mintUrl)
+                                        }?.name ?: quote.mintUrl,
+                                    )
+                                status = SendStatus.Sending(paymentDetails)
                                 val result = walletManager.meltTokens(quote.id, activeMintUrl)
-                                status = SendStatus.Sent(result)
+                                paymentDetails = paymentDetails.withMeltResult(result)
+                                status = SendStatus.Sent(paymentDetails, result)
                                 return@launch
                             }
                             is CashuPaymentRequestRoute.AddMintToPay -> {
@@ -316,13 +333,13 @@ fun UnifiedSendScreen(
                                 walletManager.payCashuPaymentRequest(rail.raw, confirmAmount, activeMintUrl)
                             }
                         }
-                        status = SendStatus.Sent(null)
+                        status = SendStatus.Sent(paymentDetails, null)
                     }
                 }
             } catch (cancellation: CancellationException) {
                 throw cancellation
             } catch (t: Throwable) {
-                status = SendStatus.Failed(t.walletMessage)
+                status = SendStatus.Failed(paymentDetails.resolvingFailed(), t.walletMessage)
             }
         }
     }
@@ -364,6 +381,19 @@ fun UnifiedSendScreen(
         onPrefilledConsumed()
     }
 
+    // Re-express an in-progress amount when fiat entry becomes available (or
+    // the saved primary changes), preserving the economic amount through sats.
+    LaunchedEffect(entryContext.primary, entryContext.btcPrice) {
+        if (previousEntryContext.primary != entryContext.primary) {
+            amount = UnifiedSendAmountEntry.convert(
+                raw = amount,
+                from = previousEntryContext,
+                to = entryContext,
+            )
+        }
+        previousEntryContext = entryContext
+    }
+
     // Confirm entry prefetches the melt quote (iOS shows fee/total skeleton).
     LaunchedEffect(step, locked, confirmAmount, activeMintUrl) {
         if (step != SendStep.Confirm) return@LaunchedEffect
@@ -386,11 +416,11 @@ fun UnifiedSendScreen(
 
     // Block sheet dismissal while the melt is in flight — a stray swipe must
     // not tear down the coroutine mid-payment.
-    LaunchedEffect(status) { onDismissLockChanged(status == SendStatus.Sending) }
+    LaunchedEffect(status) { onDismissLockChanged(status is SendStatus.Sending) }
 
     // System back mirrors the header chevron: unwind Confirm → Amount → Input;
     // swallow back entirely while sending. From Input the sheet handles it.
-    BackHandler(enabled = status == SendStatus.Sending || (status == null && step != SendStep.Input)) {
+    BackHandler(enabled = status is SendStatus.Sending || (status == null && step != SendStep.Input)) {
         if (status == null) goBack()
     }
 
@@ -408,16 +438,15 @@ fun UnifiedSendScreen(
     ) {
         // Status terminal replaces the whole body (iOS PaymentStatusView slot).
         when (val current = status) {
-            SendStatus.Sending -> Box(Modifier.weight(1f).fillMaxWidth()) {
-                PaymentStatusScreen(phase = PaymentStatusPhase.Processing, title = "Sending payment…")
+            is SendStatus.Sending -> Box(Modifier.weight(1f).fillMaxWidth()) {
+                PaymentStatusScreen(
+                    phase = PaymentStatusPhase.Processing,
+                    title = "Sending payment…",
+                    rows = { SendPaymentDetailRows(current.details, formatter, settings.useBitcoinSymbol) },
+                    showRowsDuringProcessing = true,
+                )
             }
             is SendStatus.Sent -> Box(Modifier.weight(1f).fillMaxWidth()) {
-                // Amount/Fee/Mint metadata rows (iOS PaymentStatusView success
-                // rows). Melt carries its own result; creq falls back to the
-                // confirmed amount and active mint.
-                val sentAmount = current.result?.amount ?: confirmAmount
-                val sentFee = current.result?.feePaid ?: 0L
-                val sentMint = current.result?.mintUrl ?: activeMintUrl
                 // An async-accepted (NUT-05) melt — typical for on-chain — isn't
                 // settled yet: the mint took the payment and pays out in the
                 // background, so say "processing", not "sent" (iOS parity).
@@ -427,29 +456,7 @@ fun UnifiedSendScreen(
                     title = if (settlementPending) "Payment processing" else "Payment sent",
                     onDone = onClose,
                     rows = {
-                        if (sentAmount > 0L) {
-                            InspectorRow(
-                                label = "Amount",
-                                value = formatter.formatWalletSats(sentAmount, settings.useBitcoinSymbol),
-                                leadingIcon = Icons.Outlined.Payments,
-                            )
-                        }
-                        if (sentFee > 0L) {
-                            CanvasDivider(leadingInset = 16.dp)
-                            InspectorRow(
-                                label = "Fee",
-                                value = formatter.formatWalletSats(sentFee, settings.useBitcoinSymbol),
-                                leadingIcon = Icons.Outlined.Receipt,
-                            )
-                        }
-                        if (sentMint != null) {
-                            CanvasDivider(leadingInset = 16.dp)
-                            InspectorRow(
-                                label = "Mint",
-                                value = sentMint,
-                                leadingIcon = Icons.Outlined.AccountBalance,
-                            )
-                        }
+                        SendPaymentDetailRows(current.details, formatter, settings.useBitcoinSymbol)
                     },
                 )
             }
@@ -464,6 +471,7 @@ fun UnifiedSendScreen(
                     onDone = {
                         if (current.message.isTerminal) onClose() else status = null
                     },
+                    rows = { SendPaymentDetailRows(current.details, formatter, settings.useBitcoinSymbol) },
                 )
             }
             null -> {
@@ -532,8 +540,13 @@ fun UnifiedSendScreen(
                         },
                         onPickMint = { mintPickerOpen = true },
                         onUseMax = {
-                            activeMint?.balance?.takeIf { it > 0 }?.let { amount = it.toString() }
+                            activeMint?.balance?.takeIf { it > 0 }?.let {
+                                amount = UnifiedSendAmountEntry.maxRawForBalance(it, entryContext)
+                            }
                         },
+                        amountSats = enteredAmount,
+                        entryPrimary = entryContext.primary,
+                        fiatCurrencyCode = priceState.currencyCode,
                         useBitcoinSymbol = settings.useBitcoinSymbol,
                         formatter = formatter,
                         onContinue = {
@@ -586,6 +599,10 @@ fun UnifiedSendScreen(
                         mintBalance = activeMint?.balance ?: 0L,
                         formatter = formatter,
                         useBitcoinSymbol = settings.useBitcoinSymbol,
+                        preferredPrimary = settings.amountDisplayPrimary,
+                        showFiat = settings.showFiatBalance,
+                        btcPrice = priceState.btcPrice,
+                        currencyCode = priceState.currencyCode,
                         topUpLoading = topUpLoading,
                         topUpError = topUpError,
                         onPay = ::pay,
@@ -617,6 +634,57 @@ fun UnifiedSendScreen(
         )
     }
 }
+
+@Composable
+internal fun SendPaymentDetailRows(
+    details: SendPaymentDetails,
+    formatter: AmountFormatter,
+    useBitcoinSymbol: Boolean,
+) {
+    details.rows.forEachIndexed { index, row ->
+        if (index > 0) CanvasDivider(leadingInset = 16.dp)
+        val loading = row.value == SendPaymentDetailValue.Pending
+        val value = when (val detailValue = row.value) {
+            SendPaymentDetailValue.Pending -> ""
+            SendPaymentDetailValue.Unavailable -> "Unavailable"
+            is SendPaymentDetailValue.Text -> detailValue.text
+            is SendPaymentDetailValue.Sats -> {
+                val formatted = formatter.formatWalletSats(detailValue.amount, useBitcoinSymbol)
+                when {
+                    row.key in FeeDetailKeys && detailValue.amount == 0L -> "No fee"
+                    detailValue.isUpperBound -> "Up to $formatted"
+                    else -> formatted
+                }
+            }
+        }
+        InspectorRow(
+            label = row.label,
+            value = value,
+            modifier = if (loading) {
+                Modifier.semantics { stateDescription = "Loading" }
+            } else {
+                Modifier
+            },
+            leadingIcon = when (row.key) {
+                SendPaymentDetailKey.Method,
+                SendPaymentDetailKey.Amount,
+                SendPaymentDetailKey.Route -> Icons.Outlined.Payments
+                SendPaymentDetailKey.NetworkFee,
+                SendPaymentDetailKey.InputFee,
+                SendPaymentDetailKey.Memo -> Icons.Outlined.Receipt
+                SendPaymentDetailKey.Mint -> Icons.Outlined.AccountBalance
+                SendPaymentDetailKey.Destination -> null
+            },
+            valueMonospaced = row.valueMonospaced,
+            loading = loading,
+        )
+    }
+}
+
+private val FeeDetailKeys = setOf(
+    SendPaymentDetailKey.NetworkFee,
+    SendPaymentDetailKey.InputFee,
+)
 
 @Composable
 private fun InputFace(
@@ -799,13 +867,17 @@ private fun AmountFace(
     balanceText: String?,
     onPickMint: () -> Unit,
     onUseMax: () -> Unit,
+    amountSats: Long,
+    entryPrimary: AmountDisplayPrimary,
+    fiatCurrencyCode: String,
     useBitcoinSymbol: Boolean,
     formatter: AmountFormatter,
     onContinue: () -> Unit,
 ) {
-    val amountValue = amount.toLongOrNull() ?: 0L
     val mintBalance = mint?.balance ?: 0L
-    val insufficient = amountValue > 0 && amountValue > mintBalance
+    val validation = UnifiedSendAmountEntry.validation(amountSats, mintBalance)
+    val insufficient = validation == UnifiedSendAmountValidation.InsufficientBalance
+    val isFiatEntry = entryPrimary == AmountDisplayPrimary.Fiat
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -827,11 +899,12 @@ private fun AmountFace(
         Spacer(Modifier.weight(1f))
         AmountEntryHero(
             entryRaw = amount,
-            isSat = true,
-            unit = "sat",
-            decimals = 0,
+            isSat = !isFiatEntry,
+            unit = if (isFiatEntry) fiatCurrencyCode else "sat",
+            decimals = if (isFiatEntry) 2 else 0,
             useBitcoinSymbol = useBitcoinSymbol,
             formatter = formatter,
+            fiatCurrencyCode = fiatCurrencyCode.takeIf { isFiatEntry },
         )
         Spacer(Modifier.weight(1f))
         if (insufficient) {
@@ -846,7 +919,8 @@ private fun AmountFace(
             onAmountChange = onAmountChange,
             buttonText = "Continue",
             onButtonClick = onContinue,
-            buttonEnabled = amountValue > 0 && !insufficient,
+            decimals = if (isFiatEntry) 2 else 0,
+            buttonEnabled = validation == UnifiedSendAmountValidation.Valid,
         )
     }
 }
@@ -866,6 +940,10 @@ private fun ConfirmFace(
     mintBalance: Long,
     formatter: AmountFormatter,
     useBitcoinSymbol: Boolean,
+    preferredPrimary: String,
+    showFiat: Boolean,
+    btcPrice: Double?,
+    currencyCode: String,
     topUpLoading: Boolean,
     topUpError: String?,
     onPay: () -> Unit,
@@ -873,6 +951,7 @@ private fun ConfirmFace(
     val isMelt = rail is LockedRail.Melt
     val isOnchain = (rail as? LockedRail.Melt)?.decoded is PaymentRequestDecodeResult.Onchain
     val cashuAmountLabel = (rail as? LockedRail.Creq)?.decoded?.summary?.let(PaymentRequestDecoder::amountLabel)
+    val amountUnit = (rail as? LockedRail.Creq)?.decoded?.summary?.unit ?: "sat"
     val creqDescription = (rail as? LockedRail.Creq)?.decoded?.summary?.description
     val hideCreqDestination = (rail as? LockedRail.Creq)?.fromScan == true
     val total = quote?.totalAmount ?: amountSats
@@ -901,9 +980,15 @@ private fun ConfirmFace(
         }
         if (!hideCreqDestination) rail?.let { ToPill(destination = it.raw) }
         Spacer(Modifier.height(CashuTheme.spacing.section))
-        AmountText(
-            text = cashuAmountLabel ?: formatter.formatWalletSats(amountSats, useBitcoinSymbol),
-            style = MaterialTheme.typography.displayMedium.withMonoDigits(),
+        PaymentConfirmationAmount(
+            amount = amountSats,
+            unit = amountUnit,
+            preferredPrimary = preferredPrimary,
+            showFiat = showFiat,
+            btcPrice = btcPrice,
+            currencyCode = currencyCode,
+            useBitcoinSymbol = useBitcoinSymbol,
+            formatter = formatter,
         )
         Spacer(Modifier.height(CashuTheme.spacing.section))
         Column(modifier = Modifier.fillMaxWidth()) {

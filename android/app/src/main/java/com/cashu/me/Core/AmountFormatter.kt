@@ -56,6 +56,29 @@ class AmountFormatter(
         return "$number ${unit.uppercase()}"
     }
 
+    /**
+     * Partial-aware fiat entry presentation. The keypad owns the decimal
+     * fraction, so keep its trailing zeroes while applying the saved currency's
+     * canonical symbol and integer grouping.
+     */
+    fun entryFiatDisplay(raw: String, currencyCode: String): String {
+        val parts = raw.split(".")
+        val intValue = parts.getOrNull(0)?.toLongOrNull() ?: 0L
+        val grouped = NumberFormat.getIntegerInstance(locale).format(intValue)
+        val number = if (raw.contains(".")) {
+            "$grouped.${parts.getOrNull(1).orEmpty()}"
+        } else {
+            grouped
+        }
+        val format = NumberFormat.getCurrencyInstance(Locale.US).apply {
+            runCatching { currency = java.util.Currency.getInstance(currencyCode.uppercase()) }
+        }
+        val decimalFormat = format as? java.text.DecimalFormat
+        val prefix = decimalFormat?.positivePrefix?.trim().orEmpty()
+        val suffix = decimalFormat?.positiveSuffix?.trim().orEmpty()
+        return "$prefix$number$suffix"
+    }
+
     fun formatBitcoin(amountSats: Long, useBitcoinSymbol: Boolean): String {
         val btc = amountSats.toDouble() / 100_000_000.0
         val symbol = if (useBitcoinSymbol) "₿" else "BTC"

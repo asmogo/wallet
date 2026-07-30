@@ -30,6 +30,7 @@ private val HeroMinFontSize = 26.sp
  * @param isSat    true for a sat wallet; false routes through the unit code
  * @param unit     effective unit code for non-sat mints (e.g. "USD")
  * @param decimals fractional places for the empty-state placeholder
+ * @param fiatCurrencyCode applies the saved fiat symbol instead of a mint-unit suffix
  * @param color    dims to `onSurfaceVariant` on insufficient balance (Send Ecash)
  */
 @Composable
@@ -40,6 +41,7 @@ fun AmountEntryHero(
     decimals: Int,
     useBitcoinSymbol: Boolean,
     formatter: AmountFormatter,
+    fiatCurrencyCode: String? = null,
     color: Color = MaterialTheme.colorScheme.onSurface,
 ) {
     val raw = when {
@@ -48,7 +50,11 @@ fun AmountEntryHero(
         else -> "0"
     }
     AmountText(
-        text = formatter.entryDisplay(raw, isSat, unit, useBitcoinSymbol),
+        text = if (fiatCurrencyCode != null) {
+            formatter.entryFiatDisplay(raw, fiatCurrencyCode)
+        } else {
+            formatter.entryDisplay(raw, isSat, unit, useBitcoinSymbol)
+        },
         modifier = Modifier.fillMaxWidth(),
         style = MaterialTheme.typography.displayMedium
             .copy(
