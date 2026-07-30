@@ -564,6 +564,33 @@ class CdkWalletGatewayImpl : WalletGateway {
         }.getOrDefault(0L)
     }
 
+    override suspend fun estimateCashuPaymentRequestFee(amountSats: Long, mintUrl: String): Long = cdkCall {
+        require(amountSats > 0) { "Cashu Request fee preview requires an amount." }
+        val options = CdkSendOptions(
+            memo = null,
+            conditions = null,
+            amountSplitTarget = CdkSplitTarget.None,
+            sendKind = CdkSendKind.OnlineExact,
+            // CDK's pay_request includes the recipient's input fee so they net
+            // the requested amount. The preview must use the identical mode.
+            includeFee = true,
+            useP2bk = false,
+            maxProofs = null,
+            metadata = emptyMap(),
+            p2pkSigningKeys = emptyList(),
+            p2pkLockedProofSendMode = CdkP2pkLockedProofSendMode.SWAP,
+        )
+        val prepared = walletFor(mintUrl, CdkCurrencyUnit.Sat)
+            .prepareSend(amountSats.toCdkAmount(), options)
+        try {
+            prepared.fee().value.toLong()
+        } finally {
+            // A preview must never leave proofs reserved for a payment the user
+            // has not confirmed.
+            prepared.cancel()
+        }
+    }
+
     override suspend fun checkTokenSpendable(token: String, mintUrl: String): Boolean = cdkCall {
         val tokenObj = CdkToken.decode(token)
         val tokenUnit = tokenObj.unit() ?: CdkCurrencyUnit.Sat

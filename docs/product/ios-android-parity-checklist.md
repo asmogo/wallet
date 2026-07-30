@@ -48,7 +48,7 @@ Platform-specific capabilities remain intentionally outside parity, including iC
 
 - [ ] **[P1 · iOS → Android] Honor the preferred unit on payment confirmation.** Android confirmation renders a fixed sat string; iOS keeps the saved primary value and alternate conversion available. **Done when:** Android confirmation leads with the persisted primary unit and makes the alternate value available visually and to accessibility services through a native Android presentation. An identical iOS flip control is not required.
 
-- [ ] **[P1 · iOS → Android] Show the Cashu Request fee estimate before payment.** iOS calculates the input fee and shows loading, no-fee, amount, or unavailable state; Android omits a fee row from Cashu Request confirmation. **Done when:** Android reserves and fills a fee row before the Pay action and does not present an unknown estimate as zero.
+- [x] **[P1 · iOS → Android] Show the Cashu Request fee estimate before payment.** iOS calculates the input fee and shows loading, no-fee, amount, or unavailable state; Android omits a fee row from Cashu Request confirmation. **Done when:** Android reserves and fills a fee row before the Pay action and does not present an unknown estimate as zero.
 
 - [ ] **[P1 · iOS → Android] Preserve relevant payment facts through terminal states.** Android’s processing, success, and failure screen can drop facts shown during confirmation. **Done when:** each rail has a documented stable row set across processing, success, and failure: amount and method; mint when applicable; destination for on-chain; network/input fees when applicable; and Cashu Request memo, route, or fee context when applicable.
 

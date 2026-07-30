@@ -184,6 +184,9 @@ fun UnifiedSendScreen(
     var topUpError by remember { mutableStateOf<String?>(null) }
     var quoteError by remember { mutableStateOf<String?>(null) }
     var confirmError by remember { mutableStateOf<String?>(null) }
+    var cashuRequestFeeEstimate by remember {
+        mutableStateOf<CashuRequestFeeEstimate>(CashuRequestFeeEstimate.Unrequested)
+    }
 
     val activeMintUrl = selectedMintUrl ?: walletState.activeMint?.url
     val enteredAmount = amount.toLongOrNull() ?: 0L
@@ -207,6 +210,21 @@ fun UnifiedSendScreen(
         is CashuPaymentRequestRoute.PayWithEcash -> route.mint
         else -> walletState.mints.firstOrNull { it.url == activeMintUrl } ?: walletState.activeMint
     }
+    val cashuRequestFeeKey = (locked as? LockedRail.Creq)?.let { rail ->
+        (cashuRoute as? CashuPaymentRequestRoute.PayWithEcash)?.let { route ->
+            CashuRequestFeeEstimateKey(
+                request = rail.raw,
+                amountSats = route.amountSats,
+                mintUrl = route.mint.url,
+            )
+        }
+    }
+    // Render loading on the very first confirmation frame and whenever the
+    // route changes; the effect below then fills this reserved row in place.
+    val displayedCashuRequestFeeEstimate = cashuRequestFeeKey?.let { key ->
+        cashuRequestFeeEstimate.takeIf { it.key == key }
+            ?: CashuRequestFeeEstimate.Loading(key)
+    } ?: CashuRequestFeeEstimate.Unrequested
     // Only a scanned/deep-linked Cashu Request hides the raw string and swaps
     // the header (iOS CashuPaymentRequestPayView); typed/pasted ones keep the
     // "To" pill like iOS's UnifiedSendView.
@@ -221,6 +239,7 @@ fun UnifiedSendScreen(
         topUpError = null
         quoteError = null
         confirmError = null
+        cashuRequestFeeEstimate = CashuRequestFeeEstimate.Unrequested
         cameFromAmount = false
         if (toInput) step = SendStep.Input
     }
@@ -378,6 +397,22 @@ fun UnifiedSendScreen(
         } catch (failure: Throwable) {
             quoteError = failure.userFacingWalletMessage
         }
+    }
+
+    // Cashu Request payments use CDK's include-fee coin selection. Key the
+    // preview to every input that can change that selection, cancel obsolete
+    // work automatically, and reject a stale completion as a final backstop.
+    LaunchedEffect(step, cashuRequestFeeKey) {
+        val key = cashuRequestFeeKey
+        if (step != SendStep.Confirm || key == null) {
+            cashuRequestFeeEstimate = CashuRequestFeeEstimate.Unrequested
+            return@LaunchedEffect
+        }
+        cashuRequestFeeEstimate = CashuRequestFeeEstimate.Loading(key)
+        val result = resolveCashuRequestFeeEstimate(key) { amountSats, mintUrl ->
+            walletManager.estimateCashuPaymentRequestFee(amountSats, mintUrl)
+        }
+        cashuRequestFeeEstimate = cashuRequestFeeEstimate.acceptIfCurrent(result)
     }
 
     // Block sheet dismissal while the melt is in flight — a stray swipe must
@@ -570,6 +605,7 @@ fun UnifiedSendScreen(
                             }
                         },
                         quote = meltQuote,
+                        cashuRequestFeeEstimate = displayedCashuRequestFeeEstimate,
                         quoteError = quoteError,
                         onRetryQuote = {
                             quoteError = null
@@ -856,6 +892,7 @@ private fun ConfirmFace(
     onPickMint: () -> Unit,
     onCreateTopUp: (mintUrl: String, requestedAmountSats: Long) -> Unit,
     quote: MeltQuoteInfo?,
+    cashuRequestFeeEstimate: CashuRequestFeeEstimate,
     quoteError: String?,
     onRetryQuote: () -> Unit,
     confirmError: String?,
@@ -945,6 +982,16 @@ private fun ConfirmFace(
                     CanvasDivider(leadingInset = 16.dp)
                     InspectorRow(label = "Memo", value = creqDescription)
                 }
+                CanvasDivider(leadingInset = 16.dp)
+                val feePresentation = cashuRequestFeeEstimate.presentation { fee ->
+                    formatter.formatWalletSats(fee, useBitcoinSymbol)
+                }
+                InspectorRow(
+                    label = "Fee",
+                    value = feePresentation.value,
+                    valueMonospaced = feePresentation.valueMonospaced,
+                    loading = feePresentation.loading,
+                )
                 when (val route = cashuRoute) {
                     is CashuPaymentRequestRoute.PayWithEcash -> {
                         CanvasDivider(leadingInset = 16.dp)

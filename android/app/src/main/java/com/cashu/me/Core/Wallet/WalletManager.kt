@@ -1115,6 +1115,9 @@ class WalletManager(
 
     suspend fun calculateReceiveFee(tokenString: String): Long = gateway.calculateReceiveFee(tokenString)
 
+    suspend fun estimateCashuPaymentRequestFee(amountSats: Long, mintUrl: String): Long =
+        gateway.estimateCashuPaymentRequestFee(amountSats, mintUrl)
+
     suspend fun checkTokenSpent(tokenString: String, mintUrl: String): Boolean =
         gateway.checkTokenSpendable(tokenString, mintUrl)
 
