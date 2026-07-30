@@ -27,6 +27,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
@@ -42,6 +43,7 @@ import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.outlined.AccountBalance
 import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.Close
+import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.IosShare
 import androidx.compose.material.icons.outlined.LockOpen
 import androidx.compose.material.icons.outlined.Payments
@@ -70,7 +72,10 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -97,6 +102,7 @@ import com.cashu.me.ui.components.TwoFaceScreen
 import com.cashu.me.ui.components.UnitPickerSheet
 import com.cashu.me.ui.components.shareText
 import com.cashu.me.ui.components.ToolbarIcon
+import com.cashu.me.ui.settings.P2PKKeyDisplay
 import com.cashu.me.ui.theme.CashuTheme
 import com.cashu.me.ui.theme.rememberReducedMotion
 import com.cashu.me.ui.theme.withMonoDigits
@@ -147,6 +153,7 @@ fun SendEcashScreen(
     var p2pkOn by remember { mutableStateOf(false) }
     var p2pkInput by remember { mutableStateOf("") }
     var p2pkInputError by remember { mutableStateOf<String?>(null) }
+    var p2pkEditing by remember { mutableStateOf(true) }
 
     val activeMintUrl = selectedMintUrl ?: walletState.activeMint?.url
     val activeMint = walletState.mints.firstOrNull { it.url == activeMintUrl } ?: walletState.activeMint
@@ -206,6 +213,22 @@ fun SendEcashScreen(
         else runCatching {
             com.cashu.me.Core.SettingsManager.normalizeP2PKPublicKeyForSend(p2pkInput)
         }.getOrNull()
+    }
+    val primaryP2pkPublicKey = settingsManager.primaryP2PKKeyInfo()?.publicKey
+    val p2pkRecipientIsOwnKey = validatedP2pkPubkey?.let { recipient ->
+        isOwnP2pkRecipient(
+            recipient = recipient,
+            ownPublicKeys = buildList {
+                primaryP2pkPublicKey?.let(::add)
+                addAll(settings.p2pkKeys.map { it.publicKey })
+            },
+        )
+    } == true
+    LaunchedEffect(p2pkOn, validatedP2pkPubkey) {
+        when {
+            !p2pkOn -> p2pkEditing = true
+            validatedP2pkPubkey != null -> p2pkEditing = false
+        }
     }
     LaunchedEffect(p2pkOn, p2pkInput) {
         if (!p2pkOn) {
@@ -337,13 +360,20 @@ fun SendEcashScreen(
                     p2pkInput = p2pkInput,
                     onP2pkInputChange = { p2pkInput = it },
                     p2pkInputError = p2pkInputError,
+                    confirmedP2pkPubkey = validatedP2pkPubkey?.takeUnless { p2pkEditing },
+                    p2pkRecipientIsOwnKey = p2pkRecipientIsOwnKey,
+                    onEditP2pkRecipient = { p2pkEditing = true },
+                    onRemoveP2pkRecipient = {
+                        p2pkInput = ""
+                        p2pkOn = false
+                    },
                     // iOS "Lock to my key" shortcut: opt-in via the Locked Ecash
                     // toggle, and it targets the seed-derived primary key.
                     p2pkMyKeyHex = if (settings.showP2PKButtonInDrawer) {
-                        settingsManager.primaryP2PKKeyInfo()?.publicKey
+                        primaryP2pkPublicKey
                     } else null,
                     onUseMyP2pkKey = {
-                        settingsManager.primaryP2PKKeyInfo()?.let { p2pkInput = it.publicKey }
+                        primaryP2pkPublicKey?.let { p2pkInput = it }
                     },
                     canSendWithP2pk = !p2pkOn || validatedP2pkPubkey != null,
                     onSend = {
@@ -481,6 +511,10 @@ private fun InputFace(
     p2pkInput: String,
     onP2pkInputChange: (String) -> Unit,
     p2pkInputError: String?,
+    confirmedP2pkPubkey: String?,
+    p2pkRecipientIsOwnKey: Boolean,
+    onEditP2pkRecipient: () -> Unit,
+    onRemoveP2pkRecipient: () -> Unit,
     p2pkMyKeyHex: String?,
     onUseMyP2pkKey: () -> Unit,
     canSendWithP2pk: Boolean,
@@ -544,6 +578,10 @@ private fun InputFace(
                 input = p2pkInput,
                 onInputChange = onP2pkInputChange,
                 inputError = p2pkInputError,
+                confirmedPubkey = confirmedP2pkPubkey,
+                recipientIsOwnKey = p2pkRecipientIsOwnKey,
+                onEditRecipient = onEditP2pkRecipient,
+                onRemoveRecipient = onRemoveP2pkRecipient,
                 myKeyHex = p2pkMyKeyHex,
                 onUseMyKey = onUseMyP2pkKey,
             )
@@ -608,14 +646,94 @@ private fun InputFace(
     }
 }
 
+internal fun isOwnP2pkRecipient(
+    recipient: String,
+    ownPublicKeys: Iterable<String>,
+): Boolean {
+    val comparableRecipient = SettingsManager.normalizeP2PKPublicKeyForComparison(recipient)
+    return ownPublicKeys.any { ownKey ->
+        SettingsManager.normalizeP2PKPublicKeyForComparison(ownKey) == comparableRecipient
+    }
+}
+
 @Composable
-private fun P2pkLockSection(
+internal fun P2pkLockSection(
     input: String,
     onInputChange: (String) -> Unit,
     inputError: String?,
+    confirmedPubkey: String?,
+    recipientIsOwnKey: Boolean,
+    onEditRecipient: () -> Unit,
+    onRemoveRecipient: () -> Unit,
     myKeyHex: String?,
     onUseMyKey: () -> Unit,
 ) {
+    if (confirmedPubkey != null) {
+        val recipientLabel = if (recipientIsOwnKey) {
+            "Your key"
+        } else {
+            P2PKKeyDisplay.shortLabel(confirmedPubkey)
+        }
+        Surface(
+            modifier = Modifier
+                .fillMaxWidth()
+                .semantics {
+                    contentDescription = "Locked ecash recipient: $recipientLabel"
+                },
+            shape = MaterialTheme.shapes.medium,
+            color = MaterialTheme.colorScheme.surfaceContainerHigh,
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(min = 56.dp)
+                    .padding(start = CashuTheme.spacing.default, end = CashuTheme.spacing.micro),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(CashuTheme.spacing.tight),
+            ) {
+                Icon(
+                    imageVector = Icons.Outlined.CheckCircle,
+                    contentDescription = null,
+                    tint = CashuTheme.colors.received,
+                    modifier = Modifier.size(CashuTheme.spacing.comfortable),
+                )
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = "Locked to",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Text(
+                        text = recipientLabel,
+                        style = MaterialTheme.typography.bodyMedium.copy(
+                            fontFamily = if (recipientIsOwnKey) {
+                                FontFamily.Default
+                            } else {
+                                FontFamily.Monospace
+                            },
+                        ),
+                        color = MaterialTheme.colorScheme.onSurface,
+                        maxLines = 1,
+                        overflow = TextOverflow.MiddleEllipsis,
+                    )
+                }
+                IconButton(onClick = onEditRecipient) {
+                    Icon(
+                        imageVector = Icons.Outlined.Edit,
+                        contentDescription = "Edit locked ecash recipient",
+                    )
+                }
+                IconButton(onClick = onRemoveRecipient) {
+                    Icon(
+                        imageVector = Icons.Outlined.Close,
+                        contentDescription = "Remove locked ecash recipient",
+                    )
+                }
+            }
+        }
+        return
+    }
+
     Column(
         modifier = Modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(CashuTheme.spacing.tight),

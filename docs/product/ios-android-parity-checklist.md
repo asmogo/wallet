@@ -62,7 +62,7 @@ Platform-specific capabilities remain intentionally outside parity, including iC
 
 - [ ] **[P1 · iOS → Android] Add scanning for a P2PK recipient key.** iOS can scan a public key and validate it before locking; Android only provides manual entry and “Lock to my key.” **Done when:** Android can scan, paste, or type a recipient key through one validation path with equivalent error handling.
 
-- [ ] **[P2 · iOS → Android] Show a clear confirmed P2PK recipient state.** Android leaves the full technical input field in the amount layout after validation; iOS replaces it with a compact confirmation. **Done when:** Android clearly identifies the validated recipient, distinguishes “your key” where applicable, and provides accessible edit and remove actions. The exact iOS chip treatment is not required.
+- [x] **[P2 · iOS → Android] Show a clear confirmed P2PK recipient state.** Android leaves the full technical input field in the amount layout after validation; iOS replaces it with a compact confirmation. **Done when:** Android clearly identifies the validated recipient, distinguishes “your key” where applicable, and provides accessible edit and remove actions. The exact iOS chip treatment is not required.
 
 - [ ] **[P2 · iOS → Android] Replace protocol jargon in lock accessibility copy.** Android announces “P2PK off” and “P2PK locked”; iOS describes the user outcome. **Done when:** Android’s visible and assistive copy leads with “Lock ecash” and the recipient effect, with P2PK only as optional supporting terminology.
 
