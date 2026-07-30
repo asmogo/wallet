@@ -70,6 +70,14 @@ interface CdkWalletGateway {
     ): NfcReceiveReceipt
     suspend fun settleForeignNfcToken(tokenString: String, settlementMintUrl: String): ForeignNfcSettlement
     suspend fun calculateReceiveFee(tokenString: String): Long
+
+    /**
+     * Exact input fee for paying a Cashu Request from [mintUrl].
+     *
+     * The preview must use the same `includeFee = true` coin selection as
+     * `payCashuPaymentRequest`, then release any prepared proofs.
+     */
+    suspend fun estimateCashuPaymentRequestFee(amountSats: Long, mintUrl: String): Long
     suspend fun checkTokenSpendable(token: String, mintUrl: String): Boolean
     suspend fun listTransactions(unitsByMint: Map<String, List<String>>): List<WalletTransaction>
     suspend fun payCashuPaymentRequest(encoded: String, customAmountSats: Long?, preferredMintURL: String?)
