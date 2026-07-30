@@ -1106,6 +1106,13 @@ struct MintConfirmSelectorRow: View {
 
 // MARK: - Unified destination-first Send
 
+enum SendPaymentCopy {
+    static let unsupportedCashuRequestUnit = String(
+        localized: "Cashu Wallet can only pay sat-denominated Cashu Requests.",
+        comment: "Warning shown when a Cashu payment request uses a unit the wallet cannot pay."
+    )
+}
+
 /// The single entry point for sending — one grounded screen modeled on the Family
 /// wallet. The title "Send" and a pinned "To [recipient]" pill stay put; only the
 /// area below transitions through steps: input → amount keypad → confirm(fee) →
@@ -2171,7 +2178,7 @@ struct UnifiedSendView: View {
 
             if !creq.isSatUnit {
                 InlineNotice(
-                    message: "This wallet can only pay sat-denominated Cashu Requests.",
+                    message: SendPaymentCopy.unsupportedCashuRequestUnit,
                     severity: .caution
                 )
                 .padding(.top, 12)

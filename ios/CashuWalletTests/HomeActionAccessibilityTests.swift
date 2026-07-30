@@ -30,3 +30,18 @@ final class HomeActionAccessibilityTests: XCTestCase {
         XCTAssertFalse(lowercased.contains("chooser"), file: file, line: line)
     }
 }
+
+final class SendPaymentCopyTests: XCTestCase {
+    func testUnsupportedCashuRequestWarningUsesPlatformNeutralProductLanguage() {
+        XCTAssertEqual(
+            SendPaymentCopy.unsupportedCashuRequestUnit,
+            "Cashu Wallet can only pay sat-denominated Cashu Requests."
+        )
+        XCTAssertFalse(
+            SendPaymentCopy.unsupportedCashuRequestUnit.range(
+                of: #"\b(?:Android|iOS)\b"#,
+                options: [.regularExpression, .caseInsensitive]
+            ) != nil
+        )
+    }
+}

@@ -4,4 +4,6 @@
     <string name="nfc_receive_aid_description">Cashu NFC payment request</string>
     <string name="app_name">Cashu</string>
     <string name="loading_wallet">Loading wallet…</string>
+    <string name="send_cashu_request_unsupported_unit">Cashu Wallet can only pay sat-denominated Cashu Requests.</string>
+    <string name="send_cashu_request_lightning_fallback">The requested Cashu mint is unavailable. Cashu Wallet can pay this request using Lightning instead.</string>
 </resources>

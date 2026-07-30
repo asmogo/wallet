@@ -1,10 +1,14 @@
 package com.cashu.me.Core
 
 import com.cashu.me.Models.MintInfo
+import java.io.File
+import javax.xml.parsers.DocumentBuilderFactory
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import org.w3c.dom.Element
 
 class CashuPaymentRequestMintSelectorTest {
     @Test
@@ -179,6 +183,49 @@ class CashuPaymentRequestMintSelectorTest {
         )
 
         assertTrue(route is CashuPaymentRequestRoute.PayBolt11Fallback)
+    }
+
+    @Test
+    fun paymentWarningCopyUsesPlatformNeutralProductLanguage() {
+        val unsupportedUnit = stringResource("send_cashu_request_unsupported_unit")
+        val lightningFallback = stringResource("send_cashu_request_lightning_fallback")
+
+        assertEquals(
+            "Cashu Wallet can only pay sat-denominated Cashu Requests.",
+            unsupportedUnit,
+        )
+        assertEquals(
+            "The requested Cashu mint is unavailable. " +
+                "Cashu Wallet can pay this request using Lightning instead.",
+            lightningFallback,
+        )
+        listOf(unsupportedUnit, lightningFallback).forEach { message ->
+            assertFalse(Regex("""\b(?:android|ios)\b""", RegexOption.IGNORE_CASE).containsMatchIn(message))
+        }
+    }
+
+    private fun stringResource(name: String): String {
+        val strings = sourceFile(
+            "src/main/res/values/strings.xml",
+            "app/src/main/res/values/strings.xml",
+        )
+        val resources = DocumentBuilderFactory.newInstance()
+            .newDocumentBuilder()
+            .parse(strings)
+            .documentElement
+            .getElementsByTagName("string")
+        return (0 until resources.length)
+            .map { resources.item(it) as Element }
+            .first { it.getAttribute("name") == name }
+            .textContent
+    }
+
+    private fun sourceFile(vararg candidates: String): File {
+        val roots = generateSequence(File("").absoluteFile) { it.parentFile }
+        return roots
+            .flatMap { root -> candidates.asSequence().map { File(root, it) } }
+            .firstOrNull { it.exists() }
+            ?: error("Missing test fixture: ${candidates.joinToString()}")
     }
 
     private fun request(mints: List<String>) = CashuPaymentRequestSummary(
