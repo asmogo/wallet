@@ -33,7 +33,7 @@ Platform-specific capabilities remain intentionally outside parity, including iC
 
 - [ ] **[P1 · Android → iOS] Add the no-mint Wallet empty state and CTA.** Android explains that a mint is needed and provides “Add mint”; iOS shows the generic “No Activity Yet” state even when no mint exists. **Done when:** iOS distinguishes “no mint” from “no activity” and links directly to mint setup.
 
-- [ ] **[P1 · iOS → Android] Keep Receive usable without an active mint.** iOS can create an any-mint Cashu Request without an active mint; Android disables Receive on Home and pins new requests to the active mint. **Done when:** Android allows the any-mint ecash receive path without a mint while clearly disabling or explaining receive methods that truly require one.
+- [x] **[P1 · iOS → Android] Keep Receive usable without an active mint.** iOS can create an any-mint Cashu Request without an active mint; Android disables Receive on Home and pins new requests to the active mint. **Done when:** Android allows the any-mint ecash receive path without a mint while clearly disabling or explaining receive methods that truly require one.
 
 - [x] **[P1 · iOS → Android] Drive the received-amount beat from an explicit receive event.** Android infers a receive from any balance increase, which can show a false `+amount` after a restore, mint operation, or unrelated balance refresh; iOS uses a receipt notification. **Done when:** Android only shows the beat for a confirmed incoming payment and only lets Home own the success haptic for background receipts that have no in-flow confirmation.
 
