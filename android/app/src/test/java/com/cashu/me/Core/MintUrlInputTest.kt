@@ -17,6 +17,14 @@ class MintUrlInputTest {
     }
 
     @Test
+    fun normalizeUserMintUrlRejectsMalformedOrMissingHosts() {
+        assertNull(normalizeUserMintUrl("https:///mint.example.com"))
+        assertNull(normalizeUserMintUrl("https://"))
+        assertNull(normalizeUserMintUrl("https://mint example.com"))
+        assertNull(normalizeUserMintUrl("https://[not-an-ipv6-address]"))
+    }
+
+    @Test
     fun mintUrlCandidatesParsesClipboardSeparatorsAndDeduplicates() {
         assertEquals(
             listOf("https://mint.one", "https://mint.two/path"),

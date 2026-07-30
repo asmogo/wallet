@@ -49,6 +49,7 @@ class LiveLocalMintMainActivityJourneyTest {
             .tapText("Add mint")
             .awaitTag(UiTestTags.AddMintSheet)
             .typeIntoTag(UiTestTags.AddMintUrl, mintUrl)
+            .pressSystemBack()
             .tapTag(UiTestTags.AddMintSubmit)
             .awaitTag(UiTestTags.mintRow(mintUrl), timeoutMillis = 20_000)
     }
