@@ -33,6 +33,22 @@ class TransactionDisplayTest {
     }
 
     @Test
+    fun incomingEcashHistoryDisplaysSettledFee() {
+        // Incoming CDK rows carry the fee recorded by settlement. History must
+        // render that value directly rather than any earlier receive preview.
+        val transaction = transaction(
+            kind = TransactionKind.Ecash,
+            type = TransactionType.Incoming,
+            fee = 7,
+        )
+
+        val fields = TransactionDisplay.detailFields(transaction)
+
+        assertTrue(fields.any { it.label == "Fee" && it.value == "7 sat" })
+        assertTrue(fields.none { it.label == "Fee" && it.value == "3 sat" })
+    }
+
+    @Test
     fun unpaidInvoiceTitlesAsInvoiceUntilPaid() {
         val unpaid = transaction(
             kind = TransactionKind.Lightning,
