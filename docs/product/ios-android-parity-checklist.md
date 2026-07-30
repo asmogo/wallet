@@ -50,7 +50,7 @@ Platform-specific capabilities remain intentionally outside parity, including iC
 
 - [ ] **[P1 · iOS → Android] Show the Cashu Request fee estimate before payment.** iOS calculates the input fee and shows loading, no-fee, amount, or unavailable state; Android omits a fee row from Cashu Request confirmation. **Done when:** Android reserves and fills a fee row before the Pay action and does not present an unknown estimate as zero.
 
-- [ ] **[P1 · iOS → Android] Preserve relevant payment facts through terminal states.** Android’s processing, success, and failure screen can drop facts shown during confirmation. **Done when:** each rail has a documented stable row set across processing, success, and failure: amount and method; mint when applicable; destination for on-chain; network/input fees when applicable; and Cashu Request memo, route, or fee context when applicable.
+- [x] **[P1 · iOS → Android] Preserve relevant payment facts through terminal states.** Android’s processing, success, and failure screen can drop facts shown during confirmation. **Done when:** each rail has a documented stable row set across processing, success, and failure: amount and method; mint when applicable; destination for on-chain; network/input fees when applicable; and Cashu Request memo, route, or fee context when applicable.
 
 - [ ] **[P1 · Android → iOS] Explain rail-changing fallback and recovery routes.** Android explicitly identifies Lightning fallback, adding a requested mint, or topping up the target mint; iOS can rely only on a mint row or CTA wording. **Done when:** iOS names a route whenever it materially changes how the request will be paid or what recovery will occur. The ordinary compatible-mint route does not need a duplicate “Pay from” label.
 

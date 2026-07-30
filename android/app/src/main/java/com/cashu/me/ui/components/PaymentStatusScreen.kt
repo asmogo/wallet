@@ -56,8 +56,9 @@ enum class PaymentStatusPhase { Processing, Success, Failure }
  * beat — a single bounce and a blur-to-sharp materialize; nothing else
  * springs, and failure stays deliberately still.
  * Success/failure require an explicit Done tap; processing shows no actions.
- * Terminal states may pass [rows] (InspectorRow metadata — Amount/Fee/Mint,
- * the iOS success detail rows) rendered under the title block.
+ * Callers may pass [rows] (InspectorRow metadata — Amount/Fee/Mint, the iOS
+ * payment detail rows). Set [showRowsDuringProcessing] when the row set must
+ * stay anchored across processing, success, and failure.
  */
 @Composable
 fun PaymentStatusScreen(
@@ -68,6 +69,7 @@ fun PaymentStatusScreen(
     doneLabel: String = "Done",
     onDone: (() -> Unit)? = null,
     rows: (@Composable ColumnScope.() -> Unit)? = null,
+    showRowsDuringProcessing: Boolean = false,
 ) {
     val haptics = LocalHapticFeedback.current
     LaunchedEffect(phase) {
@@ -92,10 +94,10 @@ fun PaymentStatusScreen(
         animationSpec = spring(stiffness = Spring.StiffnessMediumLow),
         label = "status-entrance-scale",
     )
-    // Terminal details (title is crossfaded; rows + Done fade in) arrive with
-    // the glyph morph instead of popping. animateFloatAsState starts at its
-    // target, so screens mounted directly in a terminal phase skip the fade.
-    val detailsAlpha by animateFloatAsState(
+    // Opted-in rows stay visible across every phase. The action arrives with the
+    // terminal glyph morph; animateFloatAsState starts at its target for screens
+    // mounted directly in a terminal phase.
+    val terminalAlpha by animateFloatAsState(
         targetValue = if (phase != PaymentStatusPhase.Processing) 1f else 0f,
         animationSpec = tween(durationMillis = 220, delayMillis = 120),
         label = "status-details-alpha",
@@ -200,14 +202,16 @@ fun PaymentStatusScreen(
                     textAlign = TextAlign.Center,
                 )
             }
-            // Metadata rows (iOS PaymentStatusView detail rows) sit under the
-            // title block; only terminal phases pass them so processing stays bare.
-            if (rows != null && phase != PaymentStatusPhase.Processing) {
+            // Opted-in payment flows keep the same metadata slot throughout
+            // processing and terminal outcomes.
+            if (rows != null && (phase != PaymentStatusPhase.Processing || showRowsDuringProcessing)) {
                 Spacer(Modifier.height(CashuTheme.spacing.section))
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .graphicsLayer { alpha = detailsAlpha },
+                        .graphicsLayer {
+                            alpha = if (showRowsDuringProcessing) 1f else terminalAlpha
+                        },
                 ) { rows() }
             }
         }
@@ -220,7 +224,7 @@ fun PaymentStatusScreen(
                     .padding(horizontal = CashuTheme.spacing.comfortable)
                     .navigationBarsPadding()
                     .padding(bottom = CashuTheme.spacing.comfortable)
-                    .graphicsLayer { alpha = detailsAlpha },
+                    .graphicsLayer { alpha = terminalAlpha },
             )
         }
     }
