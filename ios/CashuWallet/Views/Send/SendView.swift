@@ -1162,6 +1162,9 @@ struct UnifiedSendView: View {
     @State private var errorSeverity: ErrorSeverity = .error
     @State private var errorShowsMintAction = false
     @State private var errorIsTerminal = false
+    /// Persisted across confirmation → processing/success/failure so a
+    /// rail-changing or recovery route cannot disappear as wallet state updates.
+    @State private var activeRouteExplanation: CashuRequestRouteExplanation?
     @State private var inputHint: String?
     @State private var autoAdvanceTask: Task<Void, Never>?
     /// Set when the user taps the pill to edit: auto-advance stays suppressed while
@@ -1603,6 +1606,7 @@ struct UnifiedSendView: View {
             switch walletManager.routeForCashuPaymentRequest(summary, rawContent: raw) {
             case .payWithEcash, .acquireThenPay:
                 locked = .cashuRequest(summary)
+                activeRouteExplanation = nil
                 selectedMint = nil
                 errorMessage = nil
                 HapticFeedback.selection()
@@ -1613,7 +1617,12 @@ struct UnifiedSendView: View {
                     goToAmount()
                 }
             case .payBolt11Fallback(let bolt11):
-                lockMelt(request: bolt11, mode: .lightning, decoded: PaymentRequestDecoder.decode(bolt11))
+                lockMelt(
+                    request: bolt11,
+                    mode: .lightning,
+                    decoded: PaymentRequestDecoder.decode(bolt11),
+                    routeExplanation: CashuRequestRouteExplanation(state: .lightningFallback)
+                )
                 startMeltConfirm()
             }
         case .unrecognized:
@@ -1626,8 +1635,14 @@ struct UnifiedSendView: View {
         }
     }
 
-    private func lockMelt(request: String, mode: MeltView.MeltMode, decoded: PaymentRequestDecodeResult) {
+    private func lockMelt(
+        request: String,
+        mode: MeltView.MeltMode,
+        decoded: PaymentRequestDecodeResult,
+        routeExplanation: CashuRequestRouteExplanation? = nil
+    ) {
         locked = .melt(request: request, mode: mode, decoded: decoded)
+        activeRouteExplanation = routeExplanation
         selectedMint = nil
         meltQuote = nil
         errorMessage = nil
@@ -1811,6 +1826,10 @@ struct UnifiedSendView: View {
                 creqDetailRow(icon: "arrow.up.right", label: "To", value: request)
                 creqDivider
             }
+            if let explanation = activeRouteExplanation {
+                CashuRequestRouteExplanationRow(explanation: explanation)
+                creqDivider
+            }
             creqDetailRow(
                 icon: "arrow.up.arrow.down",
                 label: "Network fee",
@@ -1913,6 +1932,13 @@ struct UnifiedSendView: View {
                     label: "Amount",
                     value: AmountFormatter.sats(quote.amount, useBitcoinSymbol: settings.useBitcoinSymbol)
                 ))
+                if let explanation = activeRouteExplanation {
+                    rows.append(.init(
+                        icon: "arrow.triangle.branch",
+                        label: "Route",
+                        value: explanation.localizedValue
+                    ))
+                }
                 rows.append(.init(
                     icon: "arrow.up.arrow.down",
                     label: "Network fee",
@@ -1944,6 +1970,13 @@ struct UnifiedSendView: View {
                 isPending: paymentAmountForCreq == nil
             ))
             rows.append(creqStatusMintRow)
+            if let explanation = activeRouteExplanation {
+                rows.append(.init(
+                    icon: "arrow.triangle.branch",
+                    label: "Route",
+                    value: explanation.localizedValue
+                ))
+            }
             rows.append(creqStatusFeeRow)
             if let memo = creq.description?.trimmingCharacters(in: .whitespacesAndNewlines), !memo.isEmpty {
                 rows.append(.init(icon: "quote.bubble", label: "Memo", value: memo))
@@ -2218,6 +2251,7 @@ struct UnifiedSendView: View {
         }
 
         guard let creq = currentCreq, creqCanPay, let mint = selectedPaymentMint else { return }
+        activeRouteExplanation = creqRouteExplanation
         HapticFeedback.impact(.medium)
         errorMessage = nil
         withAnimation(.smooth(duration: 0.3)) { step = .sending }
@@ -2240,6 +2274,7 @@ struct UnifiedSendView: View {
     /// to a top-up QR (`NeedsExternalTopUp`) when no held mint can bankroll it.
     private func runCreqAcquireAndPay(targetMintURL: String, amount: UInt64) {
         guard let creq = currentCreq else { return }
+        activeRouteExplanation = creqRouteExplanation
         HapticFeedback.impact(.medium)
         errorMessage = nil
         withAnimation(.smooth(duration: 0.3)) { step = .sending }
@@ -2354,6 +2389,19 @@ struct UnifiedSendView: View {
     private var acquireTargetHost: String? { acquireTargetURL.map(extractMintHost) }
     private var needsAcquire: Bool { acquireTargetURL != nil }
     private var acquireAddsNewMint: Bool { selectedPaymentMint == nil }
+
+    private var creqRouteExplanation: CashuRequestRouteExplanation? {
+        guard let creq = currentCreq, creq.isSatUnit, paymentAmountForCreq != nil else {
+            return CashuRequestRouteExplanation(state: .unavailable)
+        }
+        guard needsAcquire else {
+            return CashuRequestRouteExplanation(state: .compatibleMint)
+        }
+        let state: CashuRequestRouteExplanation.State = acquireAddsNewMint
+            ? .addRequestedMint(targetMintURL: acquireTargetURL)
+            : .topUpTargetMint(targetMintURL: acquireTargetURL)
+        return CashuRequestRouteExplanation(state: state)
+    }
 
     private var creqPayButtonTitle: String {
         guard needsAcquire else { return "Pay" }
@@ -2479,6 +2527,10 @@ struct UnifiedSendView: View {
             VStack(spacing: 0) {
                 if creqTopMint(creq) == nil {
                     creqMintRow(creq)
+                    creqDivider
+                }
+                if let explanation = creqRouteExplanation {
+                    CashuRequestRouteExplanationRow(explanation: explanation)
                     creqDivider
                 }
                 if let memo = creqMemo(creq) {
@@ -2767,6 +2819,7 @@ struct MeltView: View {
     @ObservedObject private var priceService = PriceService.shared
 
     private let autoQuoteOnAppear: Bool
+    private let routeExplanation: CashuRequestRouteExplanation?
     private let onComplete: (() -> Void)?
 
     @State private var requestInput: String
@@ -2845,9 +2898,11 @@ struct MeltView: View {
         initialAmount: String = "",
         initialMode: MeltMode = .lightning,
         autoQuoteOnAppear: Bool = false,
+        routeExplanation: CashuRequestRouteExplanation? = nil,
         onComplete: (() -> Void)? = nil
     ) {
         self.autoQuoteOnAppear = autoQuoteOnAppear
+        self.routeExplanation = routeExplanation
         self.onComplete = onComplete
         _requestInput = State(initialValue: initialRequest)
         _amountString = State(initialValue: initialAmount)
@@ -3268,6 +3323,10 @@ struct MeltView: View {
         } details: {
             VStack(spacing: 0) {
                 meltDetailRow(icon: "bolt", label: "Method", value: methodName)
+                if let routeExplanation {
+                    meltDivider
+                    CashuRequestRouteExplanationRow(explanation: routeExplanation)
+                }
                 meltDivider
                 if quote?.paymentMethod == .onchain {
                     meltDetailRow(
@@ -3369,6 +3428,13 @@ struct MeltView: View {
             // spinner). The mint — a top chip on confirm, which the status scaffold has
             // no room for — becomes the trailing row here.
             rows.append(.init(icon: "bolt", label: "Method", value: quote.paymentMethod.displayName))
+            if let routeExplanation {
+                rows.append(.init(
+                    icon: "arrow.triangle.branch",
+                    label: "Route",
+                    value: routeExplanation.localizedValue
+                ))
+            }
             if quote.paymentMethod == .onchain {
                 rows.append(.init(
                     icon: "arrow.up.right",
