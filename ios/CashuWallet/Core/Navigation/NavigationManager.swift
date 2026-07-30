@@ -57,14 +57,27 @@ class NavigationManager: ObservableObject {
             return
         }
         
-        // Store the token and trigger the receive sheet
+        // Store the token before presentation. ContentView waits for the wallet
+        // runtime before presenting this payment surface.
         pendingDeepLinkToken = token
         
         // Dismiss any open sheets first
         dismissAll()
         
-        // Show the receive token sheet
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+    }
+
+    /// Presents a queued Cashu token only after the encrypted wallet runtime is
+    /// available. Re-check the token after the presentation delay so a newer
+    /// deep link cannot present stale content.
+    func presentPendingReceiveTokenIfReady(isRuntimeReady: Bool) {
+        guard isRuntimeReady,
+              !showReceiveTokenSheet,
+              let token = pendingDeepLinkToken else { return }
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in
+            guard let self,
+                  self.pendingDeepLinkToken == token,
+                  !self.showReceiveTokenSheet else { return }
             self.showReceiveTokenSheet = true
         }
     }

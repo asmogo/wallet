@@ -111,6 +111,26 @@ internal object HomeActionAccessibility {
             "BOLT12 offers, Bitcoin addresses, or Cashu Requests"
 }
 
+internal const val PREPARING_WALLET_LABEL = "Preparing wallet…"
+
+internal data class HomePaymentActionAvailability(
+    val isPreparingWallet: Boolean,
+    val receiveEnabled: Boolean,
+    val sendEnabled: Boolean,
+)
+
+internal fun homePaymentActionAvailability(
+    isRuntimeReady: Boolean,
+    hasActiveMint: Boolean,
+): HomePaymentActionAvailability {
+    return HomePaymentActionAvailability(
+        isPreparingWallet = !isRuntimeReady,
+        // Unified Receive always has mint-independent ecash paths.
+        receiveEnabled = isRuntimeReady,
+        sendEnabled = isRuntimeReady && hasActiveMint,
+    )
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun HomeScreen(
@@ -133,6 +153,10 @@ fun HomeScreen(
     val haptics = rememberWalletHaptics()
     val scope = rememberCoroutineScope()
     var refreshing by remember { mutableStateOf(false) }
+    val paymentActions = homePaymentActionAvailability(
+        isRuntimeReady = walletState.isRuntimeReady,
+        hasActiveMint = walletState.activeMint != null,
+    )
 
     val balanceDisplay = remember(walletState.balance, settings, priceState) {
         formatter.displayText(
@@ -228,6 +252,9 @@ fun HomeScreen(
                         onUnitSelected = settingsManager::setHomeBalanceUnit,
                         receivedPayment = receivedPayment,
                         formatter = formatter,
+                        statusMessage = PREPARING_WALLET_LABEL.takeIf {
+                            paymentActions.isPreparingWallet
+                        },
                     )
                 },
                 triptych = {
@@ -238,10 +265,10 @@ fun HomeScreen(
                         onSend = onSend,
                         // The unified Receive sheet always has mint-independent
                         // ecash paths (paste/scan and an any-mint NUT-18 request).
-                        receiveEnabled = true,
+                        receiveEnabled = paymentActions.receiveEnabled,
                         // iOS parity: Send is tappable at zero balance; the sheet shows
                         // "Nothing to send yet" with a Receive CTA instead of disabling here.
-                        sendEnabled = walletState.activeMint != null,
+                        sendEnabled = paymentActions.sendEnabled,
                     )
                 },
                 onOpenSettings = onOpenSettings,
@@ -453,6 +480,7 @@ private fun HomeBalanceHero(
     onUnitSelected: (String) -> Unit,
     receivedPayment: ReceivedPaymentEvent?,
     formatter: AmountFormatter,
+    statusMessage: String?,
 ) {
     val units = HomeBalance.homeBalanceUnits(balancesByUnit)
     val resolvedUnit = HomeBalance.resolvedUnit(persistedUnit, units)
@@ -508,6 +536,7 @@ private fun HomeBalanceHero(
                             )
                         },
                         receivedDelta = receivedDelta,
+                        statusMessage = statusMessage,
                         modifier = Modifier.fillMaxWidth(),
                     )
                 }
@@ -517,6 +546,7 @@ private fun HomeBalanceHero(
                     receivedDelta = receivedPayment
                         ?.takeIf { it.unit.equals("sat", ignoreCase = true) }
                         ?.displayDelta(formatter),
+                    statusMessage = statusMessage,
                     modifier = Modifier.fillMaxWidth(),
                 )
             }

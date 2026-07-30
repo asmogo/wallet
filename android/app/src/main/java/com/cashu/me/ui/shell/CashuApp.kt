@@ -259,6 +259,8 @@ private enum class AppGate { Loading, Onboarding, Shell }
 @Composable
 private fun AuthenticatedShell(container: AppContainer) {
     val navController = rememberNavController()
+    val walletState by container.walletManager.state.collectAsState()
+    val isRuntimeReadyRef by rememberUpdatedState(walletState.isRuntimeReady)
     var showContactless by remember { mutableStateOf(false) }
     var scannerTarget by remember { mutableStateOf<ScannerTarget?>(null) }
     // The active money flow, hosted in a modal bottom sheet (iOS WalletFlow sheets).
@@ -279,6 +281,20 @@ private fun AuthenticatedShell(container: AppContainer) {
     // A fresh flow starts unlocked, whatever the last one left behind.
     LaunchedEffect(activeFlow) { flowDismissLocked = false }
     LaunchedEffect(receiveTokenDetail) { receiveDetailDismissLocked = false }
+    LaunchedEffect(walletState.isRuntimeReady) {
+        if (!walletState.isRuntimeReady) {
+            activeFlow = null
+            receiveTokenDetail = null
+            showContactless = false
+        }
+    }
+
+    val openPaymentFlow: (WalletFlow) -> Unit = { flow ->
+        if (isRuntimeReadyRef) activeFlow = flow
+    }
+    val openReceiveDetail: (String) -> Unit = { payload ->
+        if (isRuntimeReadyRef) receiveTokenDetail = payload
+    }
 
     val pendingDeepLink by container.navigationManager.pendingDeepLink.collectAsState()
     val connectivityState by container.connectivityObserver.state.collectAsState()
@@ -295,9 +311,11 @@ private fun AuthenticatedShell(container: AppContainer) {
         scannerTarget,
         showContactless,
         appLockState.isLocked,
+        walletState.isRuntimeReady,
     ) {
         val held = cashuRequestListenerState.heldForApproval ?: return@LaunchedEffect
-        val canPresent = receiveTokenDetail == null &&
+        val canPresent = walletState.isRuntimeReady &&
+            receiveTokenDetail == null &&
             activeFlow == null &&
             scannerTarget == null &&
             !showContactless &&
@@ -308,23 +326,28 @@ private fun AuthenticatedShell(container: AppContainer) {
         }
     }
 
-    LaunchedEffect(pendingDeepLink) {
+    LaunchedEffect(pendingDeepLink, walletState.isRuntimeReady) {
         val deepLink = pendingDeepLink ?: return@LaunchedEffect
+        // Keep payment deep links pending until the encrypted seed and CDK
+        // repository are available. Non-payment destinations can open normally.
+        if (!walletState.isRuntimeReady && deepLink.route in paymentRoutes) {
+            return@LaunchedEffect
+        }
         when (deepLink.route) {
             CashuRoute.Receive -> {
                 val payload = deepLink.payload.orEmpty()
                 if (payload.isNotBlank()) {
                     // Deep-linked token: full-screen claim page (iOS presents
                     // ReceiveTokenDetailView via .fullScreenCover from ContentView).
-                    receiveTokenDetail = payload
+                    openReceiveDetail(payload)
                 } else {
                     // Bare cashu: link with no token — open the paste sheet.
-                    activeFlow = WalletFlow.ReceiveEcash
+                    openPaymentFlow(WalletFlow.ReceiveEcash)
                 }
             }
             CashuRoute.Send -> {
                 pendingSendScan = deepLink.payload.orEmpty()
-                activeFlow = WalletFlow.Send
+                openPaymentFlow(WalletFlow.Send)
             }
             CashuRoute.Mints -> {
                 pendingMintScan = deepLink.payload.orEmpty()
@@ -334,7 +357,7 @@ private fun AuthenticatedShell(container: AppContainer) {
             CashuRoute.History -> navController.navigateToTab(TopTab.History)
             CashuRoute.Settings -> navController.navigate(Routes.SETTINGS)
             CashuRoute.Scanner -> scannerTarget = ScannerTarget.Auto
-            CashuRoute.Contactless -> showContactless = true
+            CashuRoute.Contactless -> if (isRuntimeReadyRef) showContactless = true
         }
         container.navigationManager.consumeDeepLink()
     }
@@ -350,13 +373,13 @@ private fun AuthenticatedShell(container: AppContainer) {
             container = container,
             connectivityState = connectivityState,
             onScan = { scannerTarget = ScannerTarget.Auto },
-            onReceiveEcash = { activeFlow = WalletFlow.ReceiveEcash },
-            onReceiveLightning = { activeFlow = WalletFlow.ReceiveLightning },
-            onSend = { activeFlow = WalletFlow.Send },
+            onReceiveEcash = { openPaymentFlow(WalletFlow.ReceiveEcash) },
+            onReceiveLightning = { openPaymentFlow(WalletFlow.ReceiveLightning) },
+            onSend = { openPaymentFlow(WalletFlow.Send) },
             pendingMintScan = pendingMintScan,
             onPendingMintScanConsumed = { pendingMintScan = null },
             // Pending "Receive later" tokens claim on the full-screen page.
-            onClaimReceiveToken = { receiveTokenDetail = it },
+            onClaimReceiveToken = openReceiveDetail,
             navController = navController,
         )
         AnimatedVisibility(
@@ -377,15 +400,19 @@ private fun AuthenticatedShell(container: AppContainer) {
                         // In-sheet scan (ScannerTarget.Receive): back to the
                         // sheet's Review face — the user is inside the paste flow.
                         onReceiveInSheet = {
-                            pendingReceiveScan = it
-                            activeFlow = WalletFlow.ReceiveEcash
+                            if (isRuntimeReadyRef) {
+                                pendingReceiveScan = it
+                                openPaymentFlow(WalletFlow.ReceiveEcash)
+                            }
                         },
                         // Main scan button: tokens read as a brand-new full
                         // screen, never the home sheet (iOS scanner parity).
-                        onReceiveDetail = { receiveTokenDetail = it },
+                        onReceiveDetail = openReceiveDetail,
                         onSend = {
-                            pendingSendScan = it
-                            activeFlow = WalletFlow.Send
+                            if (isRuntimeReadyRef) {
+                                pendingSendScan = it
+                                openPaymentFlow(WalletFlow.Send)
+                            }
                         },
                         onMint = {
                             pendingMintScan = it
@@ -402,7 +429,7 @@ private fun AuthenticatedShell(container: AppContainer) {
         var lastReceiveTokenDetail by remember { mutableStateOf("") }
         if (receiveTokenDetail != null) lastReceiveTokenDetail = receiveTokenDetail!!
         AnimatedVisibility(
-            visible = receiveTokenDetail != null,
+            visible = walletState.isRuntimeReady && receiveTokenDetail != null,
             enter = overlayEnter,
             exit = overlayExit,
         ) {
@@ -448,13 +475,17 @@ private fun AuthenticatedShell(container: AppContainer) {
     }
 
     WalletFlowSheetHost(
-        flow = activeFlow,
+        // The effect above clears stale state; this synchronous gate also
+        // prevents a sheet from mounting for a frame if readiness drops.
+        flow = activeFlow.takeIf { walletState.isRuntimeReady },
         dismissLocked = flowDismissLocked,
         onDismissed = {
             activeFlow = null
             flowHandoff.completeDismissal(
                 openScanner = { scannerTarget = ScannerTarget.Auto },
-                openContactless = { showContactless = true },
+                openContactless = {
+                    if (isRuntimeReadyRef) showContactless = true
+                },
             )
         },
         snackbarHostState = container.snackbarHostState,
@@ -543,18 +574,24 @@ private fun AuthenticatedShell(container: AppContainer) {
         }
     }
 
-    if (showContactless) {
+    if (walletState.isRuntimeReady && showContactless) {
         ContactlessPaySheet(
             walletManager = container.walletManager,
             onDismissed = { showContactless = false },
             onLightningRequest = { invoice ->
                 showContactless = false
                 pendingSendScan = invoice
-                activeFlow = WalletFlow.Send
+                openPaymentFlow(WalletFlow.Send)
             },
         )
     }
 }
+
+private val paymentRoutes = setOf(
+    CashuRoute.Receive,
+    CashuRoute.Send,
+    CashuRoute.Contactless,
+)
 
 // Camera-surface overlay motion: slide up over the shell, slide back down on close.
 private val overlayEnter = slideInVertically(
