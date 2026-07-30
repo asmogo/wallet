@@ -4,9 +4,11 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.AccountBalance
+import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material.icons.outlined.Payments
 import androidx.compose.material.icons.outlined.Receipt
+import androidx.compose.material.icons.outlined.WarningAmber
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
@@ -26,6 +28,8 @@ import com.cashu.me.ui.components.CanvasDivider
 import com.cashu.me.ui.components.InspectorRow
 import com.cashu.me.ui.components.PaymentStatusPhase
 import com.cashu.me.ui.components.PaymentStatusScreen
+import com.cashu.me.ui.settings.P2PKKeyDisplay
+import com.cashu.me.ui.theme.CashuTheme
 
 /**
  * Shared review/claim core for ecash tokens — one implementation behind both
@@ -41,7 +45,34 @@ internal data class TokenReview(
     val token: String,
     val info: TokenInfo,
     val fee: Long,
-    val locked: Boolean,
+    val p2pkLock: P2PKLockState,
+) {
+    val canClaim: Boolean
+        get() = p2pkLock !is P2PKLockState.Locked || p2pkLock.claimable
+}
+
+/**
+ * Explicit P2PK review state. Keeping the public targets is important: a
+ * claimability boolean alone cannot tell the user who the token was locked to.
+ */
+internal sealed interface P2PKLockState {
+    data object Unlocked : P2PKLockState
+
+    data class Locked(
+        val targets: List<String>,
+        val claimable: Boolean,
+    ) : P2PKLockState {
+        init {
+            require(targets.isNotEmpty()) { "A locked token must identify a P2PK target." }
+        }
+    }
+}
+
+/** Display-safe projection shared by the Compose rows and focused UI tests. */
+internal data class P2PKLockPresentation(
+    val targetLabels: List<String>,
+    val statusText: String,
+    val claimable: Boolean,
 )
 
 internal sealed interface TokenParseOutcome {
@@ -61,6 +92,51 @@ internal fun parseToken(raw: String): TokenParseOutcome {
 }
 
 /**
+ * Parses the token's public P2PK targets and resolves whether this wallet has a
+ * usable signing key. The callback boundary keeps private key material out of
+ * the review state and makes held/unheld behavior independently testable.
+ */
+internal fun p2pkLockState(
+    token: String,
+    hasSigningKey: (List<String>) -> Boolean,
+): P2PKLockState = p2pkLockStateForTargets(
+    targets = TokenParser.p2pkPubkeys(token),
+    hasSigningKey = hasSigningKey,
+)
+
+/** Pure state seam used to verify held/unheld behavior without native CDK I/O. */
+internal fun p2pkLockStateForTargets(
+    targets: List<String>,
+    hasSigningKey: (List<String>) -> Boolean,
+): P2PKLockState {
+    val canonicalTargets = targets
+        .map(P2PKKeyDisplay::canonical)
+        .filter(String::isNotEmpty)
+        .distinctBy(SettingsManager::normalizeP2PKPublicKeyForComparison)
+    return if (canonicalTargets.isEmpty()) {
+        P2PKLockState.Unlocked
+    } else {
+        P2PKLockState.Locked(
+            targets = canonicalTargets,
+            claimable = hasSigningKey(canonicalTargets),
+        )
+    }
+}
+
+internal fun P2PKLockState.presentation(): P2PKLockPresentation? = when (this) {
+    P2PKLockState.Unlocked -> null
+    is P2PKLockState.Locked -> P2PKLockPresentation(
+        targetLabels = targets.map(P2PKKeyDisplay::shortLabel),
+        statusText = if (claimable) {
+            "Claimable · Your key"
+        } else {
+            "Unclaimable · Key unavailable"
+        },
+        claimable = claimable,
+    )
+}
+
+/**
  * Async half of validation: receive-swap fee preview + P2PK lock check.
  * Fee failures degrade to 0 (matching the historical sheet behavior); the
  * redeem itself is the source of truth.
@@ -72,13 +148,15 @@ internal suspend fun tokenReviewDetails(
     settingsManager: SettingsManager,
 ): TokenReview {
     val fee = runCatching { walletManager.calculateReceiveFee(token) }.getOrDefault(0L)
-    val locks = TokenParser.p2pkPubkeys(token)
-    val unlocked = if (locks.isEmpty()) {
-        true
-    } else {
-        settingsManager.p2pkSigningKeysFor(locks).isNotEmpty()
+    val p2pkLock = p2pkLockState(token) { targets ->
+        // p2pkSigningKeysFor deliberately throws when no usable matching key is
+        // held. Convert that expected guard into stable review state so an
+        // unclaimable token can still identify its recipient before action.
+        runCatching {
+            settingsManager.p2pkSigningKeysFor(targets).isNotEmpty()
+        }.getOrDefault(false)
     }
-    return TokenReview(token = token, info = info, fee = fee, locked = !unlocked)
+    return TokenReview(token = token, info = info, fee = fee, p2pkLock = p2pkLock)
 }
 
 /**
@@ -162,11 +240,12 @@ internal fun pendingReceiveTokenFrom(review: TokenReview): PendingReceiveToken =
 internal fun TokenInspectorRows(
     info: TokenInfo,
     fee: Long?,
-    locked: Boolean,
+    p2pkLock: P2PKLockState?,
     modifier: Modifier = Modifier,
 ) {
     val isSatToken = info.unit.equals("sat", ignoreCase = true)
     val tokenCurrency = CurrencyRegistry.currencyForMintUnit(info.unit)
+    val lockPresentation = p2pkLock?.presentation()
     Column(modifier = modifier.fillMaxWidth()) {
         InspectorRow(
             label = "Fee",
@@ -185,12 +264,32 @@ internal fun TokenInspectorRows(
             value = info.mint,
             leadingIcon = Icons.Outlined.AccountBalance,
         )
-        if (locked) {
+        lockPresentation?.let { lock ->
+            lock.targetLabels.forEachIndexed { index, target ->
+                CanvasDivider(leadingInset = 16.dp)
+                InspectorRow(
+                    label = if (index == 0) "Locked to" else "Also locked to",
+                    value = target,
+                    leadingIcon = Icons.Outlined.Lock,
+                    valueMonospaced = true,
+                )
+            }
             CanvasDivider(leadingInset = 16.dp)
+            val statusColor = if (lock.claimable) {
+                CashuTheme.colors.received
+            } else {
+                CashuTheme.colors.pending
+            }
             InspectorRow(
-                label = "P2PK",
-                value = "Requires your key",
-                leadingIcon = Icons.Outlined.Lock,
+                label = "Status",
+                value = lock.statusText,
+                trailingIcon = if (lock.claimable) {
+                    Icons.Outlined.CheckCircle
+                } else {
+                    Icons.Outlined.WarningAmber
+                },
+                trailingIconTint = statusColor,
+                valueColor = statusColor,
             )
         }
         if (info.memo != null) {
