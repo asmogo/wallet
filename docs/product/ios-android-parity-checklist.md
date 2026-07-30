@@ -46,7 +46,7 @@ Platform-specific capabilities remain intentionally outside parity, including iC
 
 - [ ] **[P1 · iOS → Android] Support fiat-primary amount entry.** iOS converts keypad input according to the saved sats/fiat primary setting; Android’s unified Send amount step always interprets the input as sats. **Done when:** Android entry, Send Max, validation, and amount presentation honor the selected primary unit without changing the sat amount being paid.
 
-- [ ] **[P1 · iOS → Android] Honor the preferred unit on payment confirmation.** Android confirmation renders a fixed sat string; iOS keeps the saved primary value and alternate conversion available. **Done when:** Android confirmation leads with the persisted primary unit and makes the alternate value available visually and to accessibility services through a native Android presentation. An identical iOS flip control is not required.
+- [x] **[P1 · iOS → Android] Honor the preferred unit on payment confirmation.** Android confirmation renders a fixed sat string; iOS keeps the saved primary value and alternate conversion available. **Done when:** Android confirmation leads with the persisted primary unit and makes the alternate value available visually and to accessibility services through a native Android presentation. An identical iOS flip control is not required.
 
 - [ ] **[P1 · iOS → Android] Show the Cashu Request fee estimate before payment.** iOS calculates the input fee and shows loading, no-fee, amount, or unavailable state; Android omits a fee row from Cashu Request confirmation. **Done when:** Android reserves and fills a fee row before the Pay action and does not present an unknown estimate as zero.
 
