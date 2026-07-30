@@ -39,7 +39,7 @@ Platform-specific capabilities remain intentionally outside parity, including iC
 
 - [x] **[P2 · iOS → Android] Add an accessible loading label.** iOS shows “Loading Wallet…” with its progress indicator; Android shows an unlabeled indicator. **Done when:** Android visually or semantically identifies the startup operation as loading the wallet.
 
-- [ ] **[P2 · Converge] Correct Home action accessibility descriptions.** iOS hints still refer to retired ecash and Lightning “options,” while Android exposes only the action names. **Done when:** stale hints are removed, each action names its real unified destination, and an extra hint is used only where the visible label does not adequately describe accepted inputs.
+- [x] **[P2 · Converge] Update Home action hints for the unified flows.** iOS accessibility hints still describe opening “options” for ecash and Lightning even though the buttons now open unified Send/Receive surfaces; Android exposes only the button names. **Done when:** both platforms describe the actual destination and supported inputs without referring to a retired chooser.
 
 ### Send — unified destination and payment flow
 
