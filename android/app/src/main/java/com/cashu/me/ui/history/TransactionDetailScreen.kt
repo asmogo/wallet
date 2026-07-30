@@ -32,22 +32,33 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import com.cashu.me.Core.AmountFormatter
+import com.cashu.me.Core.PendingTokenClaimCheckResult
 import com.cashu.me.Core.Protocols.CurrencyAmount
 import com.cashu.me.Core.Protocols.CurrencyRegistry
 import com.cashu.me.Core.OnchainExplorer
 import com.cashu.me.Core.ReceiveConfirmationOwner
+import com.cashu.me.Core.pendingSentTokenFor
 import com.cashu.me.Core.resolveTransactionForDetail
+import com.cashu.me.Core.runPendingTokenClaimCheck
 import com.cashu.me.Core.SettingsManager
+import com.cashu.me.Core.shouldOfferManualClaimCheck
 import com.cashu.me.Core.TransactionDisplay
 import com.cashu.me.Core.WalletManager
 import com.cashu.me.Models.TransactionKind
@@ -60,6 +71,8 @@ import com.cashu.me.ui.components.DetailActionFooter
 import com.cashu.me.ui.components.EmptyState
 import com.cashu.me.ui.components.ExplorerLinkRow
 import com.cashu.me.ui.components.InspectorRow
+import com.cashu.me.ui.components.InlineNotice
+import com.cashu.me.ui.components.NoticeSeverity
 import com.cashu.me.ui.components.PrimaryButton
 import com.cashu.me.ui.components.QrCard
 import com.cashu.me.ui.components.ToolbarIcon
@@ -68,6 +81,7 @@ import com.cashu.me.ui.components.openInBrowser
 import com.cashu.me.ui.components.shareText
 import com.cashu.me.ui.theme.CashuTheme
 import com.cashu.me.ui.theme.withMonoDigits
+import com.cashu.me.ui.testing.UiTestTags
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -84,6 +98,7 @@ fun TransactionDetailScreen(
     val context = LocalContext.current
     val clipboard = LocalClipboardManager.current
     val formatter = remember { AmountFormatter() }
+    val scope = rememberCoroutineScope()
 
     // Pending mint-quote rows use id == quoteId; after mint CDK swaps in a new
     // transaction id with the same quoteId. Keep the open-time identity so the
@@ -102,6 +117,10 @@ fun TransactionDetailScreen(
     val transaction = resolved ?: openSnapshot
 
     var copied by remember { mutableStateOf(false) }
+    var checkingClaim by remember(transactionId) { mutableStateOf(false) }
+    var manualCheckResult: PendingTokenClaimCheckResult? by remember(transactionId) {
+        mutableStateOf(null)
+    }
     LaunchedEffect(copied) {
         if (copied) {
             delay(2000)
@@ -181,8 +200,15 @@ fun TransactionDetailScreen(
                 transaction.type == TransactionType.Incoming &&
                 transaction.status == TransactionStatus.Pending
         }
+        val pendingSentToken = pendingSentTokenFor(transaction, walletState.pendingTokens)
+        val offersManualClaimCheck = shouldOfferManualClaimCheck(
+            automaticChecksEnabled = settings.checkSentTokens,
+            pendingToken = pendingSentToken,
+        )
         val hasPrimaryAction =
-            (pendingReceiveToken != null && onClaimReceiveToken != null) || copyableContent != null
+            (pendingReceiveToken != null && onClaimReceiveToken != null) ||
+                offersManualClaimCheck ||
+                copyableContent != null
 
         Column(
             modifier = Modifier
@@ -263,6 +289,26 @@ fun TransactionDetailScreen(
                         ExplorerLinkRow(onClick = { context.openInBrowser(explorerUrl) })
                     }
                 }
+                if (offersManualClaimCheck) {
+                    when (val outcome = manualCheckResult) {
+                        PendingTokenClaimCheckResult.NotClaimed -> InlineNotice(
+                            text = "Status checked",
+                            detail = "This token has not been claimed yet.",
+                            severity = NoticeSeverity.Info,
+                            modifier = Modifier.semantics {
+                                liveRegion = LiveRegionMode.Polite
+                            },
+                        )
+                        is PendingTokenClaimCheckResult.Failed -> InlineNotice(
+                            text = "Couldn't check status",
+                            detail = outcome.message.text,
+                            modifier = Modifier.semantics {
+                                liveRegion = LiveRegionMode.Polite
+                            },
+                        )
+                        PendingTokenClaimCheckResult.Claimed, null -> Unit
+                    }
+                }
                 Spacer(Modifier.height(CashuTheme.spacing.snug))
             }
 
@@ -273,18 +319,52 @@ fun TransactionDetailScreen(
                             text = "Receive",
                             onClick = { onClaimReceiveToken(pendingReceiveToken) },
                         )
-                    } else if (copyableContent != null) {
-                        // Copy is a secondary convenience, not a primary action —
-                        // quiet neutral tonal fill (matches Home's Send/Receive)
-                        // rather than the loud inverted-ink primary.
-                        PrimaryButton(
-                            text = if (copied) "Copied" else "Copy",
-                            onClick = {
-                                clipboard.setText(AnnotatedString(copyableContent))
-                                copied = true
-                            },
-                            colors = neutralActionButtonColors(),
-                        )
+                    } else {
+                        if (offersManualClaimCheck && pendingSentToken != null) {
+                            PrimaryButton(
+                                text = if (checkingClaim) "Checking…" else "Check Status",
+                                onClick = {
+                                    checkingClaim = true
+                                    manualCheckResult = null
+                                    scope.launch {
+                                        try {
+                                            manualCheckResult = runPendingTokenClaimCheck {
+                                                walletManager.checkPendingTokenStatus(pendingSentToken)
+                                            }
+                                        } finally {
+                                            checkingClaim = false
+                                        }
+                                    }
+                                },
+                                loading = checkingClaim,
+                                modifier = Modifier
+                                    .testTag(UiTestTags.HistoryCheckTokenStatus)
+                                    .semantics {
+                                        contentDescription = if (checkingClaim) {
+                                            "Checking claim status"
+                                        } else {
+                                            "Check Status"
+                                        }
+                                        liveRegion = LiveRegionMode.Polite
+                                    },
+                            )
+                        }
+                        if (offersManualClaimCheck && copyableContent != null) {
+                            Spacer(Modifier.height(CashuTheme.spacing.tight))
+                        }
+                        if (copyableContent != null) {
+                            // Copy is a secondary convenience, not a primary action —
+                            // quiet neutral tonal fill (matches Home's Send/Receive)
+                            // rather than the loud inverted-ink primary.
+                            PrimaryButton(
+                                text = if (copied) "Copied" else "Copy",
+                                onClick = {
+                                    clipboard.setText(AnnotatedString(copyableContent))
+                                    copied = true
+                                },
+                                colors = neutralActionButtonColors(),
+                            )
+                        }
                     }
                 }
             }

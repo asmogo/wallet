@@ -42,10 +42,12 @@ object UiTestTags {
     const val SendEcashScreen = "cashu.sheet.send-ecash"
     const val SendEcashSubmit = "cashu.send.ecash.submit"
     const val LockEcashToggle = "cashu.send.ecash.lock-toggle"
+    const val SendEcashCheckStatus = "cashu.send.ecash.check-status"
     const val AddMintSheet = "cashu.sheet.add-mint"
     const val AddMintUrl = "cashu.sheet.add-mint.url"
     const val AddMintSubmit = "cashu.sheet.add-mint.submit"
     const val HistorySearch = "cashu.history.search"
+    const val HistoryCheckTokenStatus = "cashu.history.check-token-status"
 
     fun mintRow(url: String): String = "cashu.mint.${url.hashCode().toUInt().toString(16)}"
 

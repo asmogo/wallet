@@ -48,6 +48,7 @@ import androidx.compose.material.icons.outlined.IosShare
 import androidx.compose.material.icons.outlined.LockOpen
 import androidx.compose.material.icons.outlined.Payments
 import androidx.compose.material.icons.outlined.Receipt
+import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material.icons.outlined.Schedule
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.LoadingIndicator
@@ -71,8 +72,10 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.AnnotatedString
@@ -85,12 +88,15 @@ import com.cashu.me.Core.AmountFormatter
 import com.cashu.me.Core.Protocols.CurrencyAmount
 import com.cashu.me.Core.Protocols.CurrencyRegistry
 import com.cashu.me.Core.SettingsManager
+import com.cashu.me.Core.PendingTokenClaimCheckResult
+import com.cashu.me.Core.runPendingTokenClaimCheck
 import com.cashu.me.Core.Wallet.isInsufficientBalance
 import com.cashu.me.Core.Wallet.userFacingWalletMessage
 import com.cashu.me.Core.WalletManager
 import com.cashu.me.Models.SendTokenResult
 import com.cashu.me.ui.components.AmountEntryHero
 import com.cashu.me.ui.components.CashuTextField
+import com.cashu.me.ui.components.GhostButton
 import com.cashu.me.ui.components.InlineNotice
 import com.cashu.me.ui.components.NoticeSeverity
 import com.cashu.me.ui.components.MintPickerSheet
@@ -824,8 +830,12 @@ private fun GeneratedFace(
     onDone: () -> Unit,
 ) {
     val clipboard = LocalClipboardManager.current
+    val scope = rememberCoroutineScope()
     var copied by remember { mutableStateOf(false) }
     var claimState: ClaimState by remember(result.token) { mutableStateOf(ClaimState.Pending) }
+    var manualCheckResult: PendingTokenClaimCheckResult? by remember(result.token) {
+        mutableStateOf(null)
+    }
     LaunchedEffect(copied) {
         if (copied) {
             delay(2000)
@@ -837,19 +847,23 @@ private fun GeneratedFace(
     // (flipping Pending↔Checking per probe made the row flicker), intervals
     // back off 5s → 15s, and after 10 checks the row rests at Pending.
     LaunchedEffect(result.token, mintUrl, pollingEnabled) {
-        if (!pollingEnabled) return@LaunchedEffect
+        if (!pollingEnabled) {
+            if (claimState != ClaimState.Claimed) claimState = ClaimState.Pending
+            return@LaunchedEffect
+        }
         claimState = ClaimState.Checking
         var interval = 5_000L
         repeat(10) {
             delay(interval)
-            // checkTokenSpent returns true once any proof is spent (redeemed);
-            // null means the check failed — keep watching, never fake a claim.
-            val spent = runCatching {
-                walletManager.checkTokenSpent(result.token, mintUrl)
-            }.getOrNull()
-            if (spent == true) {
-                claimState = ClaimState.Claimed
-                return@LaunchedEffect
+            // A spent proof moves the tracked token to Claimed. Probe failures
+            // stay Pending and the automatic watcher keeps trying.
+            when (checkGeneratedTokenClaim(walletManager, result.token, mintUrl)) {
+                PendingTokenClaimCheckResult.Claimed -> {
+                    claimState = ClaimState.Claimed
+                    return@LaunchedEffect
+                }
+                PendingTokenClaimCheckResult.NotClaimed -> Unit
+                is PendingTokenClaimCheckResult.Failed -> Unit
             }
             interval = (interval + 1_000L).coerceAtMost(15_000L)
         }
@@ -916,6 +930,49 @@ private fun GeneratedFace(
             )
             GeneratedEcashAmount(presentation = amountPresentation)
             ClaimStatusRow(claimState = claimState)
+            if (!pollingEnabled) {
+                GhostButton(
+                    text = if (claimState == ClaimState.Checking) "Checking…" else "Check Status",
+                    onClick = {
+                        claimState = ClaimState.Checking
+                        manualCheckResult = null
+                        scope.launch {
+                            val outcome = checkGeneratedTokenClaim(
+                                walletManager = walletManager,
+                                token = result.token,
+                                mintUrl = mintUrl,
+                            )
+                            manualCheckResult = outcome
+                            claimState = if (outcome == PendingTokenClaimCheckResult.Claimed) {
+                                ClaimState.Claimed
+                            } else {
+                                ClaimState.Pending
+                            }
+                        }
+                    },
+                    enabled = claimState != ClaimState.Checking,
+                    trailingIcon = if (claimState == ClaimState.Checking) null else Icons.Outlined.Refresh,
+                    modifier = Modifier.testTag(UiTestTags.SendEcashCheckStatus),
+                )
+                when (val outcome = manualCheckResult) {
+                    PendingTokenClaimCheckResult.NotClaimed -> InlineNotice(
+                        text = "Status checked",
+                        detail = "This token has not been claimed yet.",
+                        severity = NoticeSeverity.Info,
+                        modifier = Modifier.semantics {
+                            liveRegion = LiveRegionMode.Polite
+                        },
+                    )
+                    is PendingTokenClaimCheckResult.Failed -> InlineNotice(
+                        text = "Couldn't check status",
+                        detail = outcome.message.text,
+                        modifier = Modifier.semantics {
+                            liveRegion = LiveRegionMode.Polite
+                        },
+                    )
+                    PendingTokenClaimCheckResult.Claimed, null -> Unit
+                }
+            }
             // Detail rows: Fee -> Unit -> Fiat (sat-only) -> Mint (iOS order).
             Column(modifier = Modifier.fillMaxWidth()) {
                 formatSendEcashFee(result.fee, unit)?.let { feeLabel ->
@@ -1003,9 +1060,13 @@ private fun GeneratedEcashAmount(
 private enum class ClaimState { Pending, Checking, Claimed }
 
 @Composable
-private fun ClaimStatusRow(claimState: ClaimState) {
+private fun ClaimStatusRow(
+    claimState: ClaimState,
+    modifier: Modifier = Modifier,
+) {
     AnimatedContent(
         targetState = claimState,
+        modifier = modifier.semantics { liveRegion = LiveRegionMode.Polite },
         transitionSpec = { fadeIn(tween(220)) togetherWith fadeOut(tween(220)) },
         label = "claim-state",
     ) { state ->
@@ -1057,6 +1118,29 @@ private fun ClaimStatusRow(claimState: ClaimState) {
                 }
             }
             ClaimState.Claimed -> Unit
+        }
+    }
+}
+
+private suspend fun checkGeneratedTokenClaim(
+    walletManager: WalletManager,
+    token: String,
+    mintUrl: String,
+): PendingTokenClaimCheckResult = runPendingTokenClaimCheck {
+    val walletState = walletManager.state.value
+    when {
+        walletState.claimedTokens.any { it.token == token } -> true
+        else -> {
+            val pending = walletState.pendingTokens.firstOrNull { it.token == token }
+            if (pending != null) {
+                // This path both checks the mint and moves the local History
+                // record from Pending to Claimed when a proof is spent.
+                walletManager.checkPendingTokenStatus(pending)
+            } else {
+                // Defensive fallback for a legacy/generated token with no local
+                // pending record. New sends always take the tracked path above.
+                walletManager.checkTokenSpent(token, mintUrl)
+            }
         }
     }
 }
