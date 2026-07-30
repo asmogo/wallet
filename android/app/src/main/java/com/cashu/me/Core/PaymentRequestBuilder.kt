@@ -1,5 +1,6 @@
 package com.cashu.me.Core
 
+import java.net.URI
 import java.util.Base64
 
 object PaymentRequestBuilder {
@@ -93,6 +94,72 @@ object PaymentRequestBuilder {
     }
 }
 
+sealed interface CashuRequestNostrReadiness {
+    data class Ready(
+        val publicKeyHex: String,
+        val relays: List<String>,
+    ) : CashuRequestNostrReadiness
+
+    data class Blocked(
+        val recoveryMessage: String,
+    ) : CashuRequestNostrReadiness
+
+    companion object {
+        const val NOSTR_KEY_RECOVERY =
+            "Your Nostr key isn't ready. Check Settings → Nostr → Nostr key, then try again."
+        const val RELAY_RECOVERY =
+            "No usable Nostr relay is configured. Add a ws:// or wss:// relay in Settings → Nostr → Relays, then try again."
+        const val LISTENER_RECOVERY =
+            "Cashu Request listening is off. Turn on Settings → Privacy → Listen for payment requests, then try again."
+
+        fun current(
+            nostrService: NostrService,
+            settingsManager: SettingsManager,
+        ): CashuRequestNostrReadiness {
+            val nostr = nostrService.state.value
+            val settings = settingsManager.state.value
+            return evaluate(
+                isIdentityInitialized = nostr.isInitialized,
+                publicKeyHex = nostr.publicKeyHex,
+                privateKeyHex = nostrService.currentPrivateKey(),
+                relays = settings.nostrRelays,
+                listenerEnabled = settings.enablePaymentRequests,
+            )
+        }
+
+        internal fun evaluate(
+            isIdentityInitialized: Boolean,
+            publicKeyHex: String,
+            privateKeyHex: String?,
+            relays: List<String>,
+            listenerEnabled: Boolean,
+        ): CashuRequestNostrReadiness {
+            if (!isIdentityInitialized ||
+                !publicKeyHex.isHexKey() ||
+                privateKeyHex?.isHexKey() != true
+            ) {
+                return Blocked(NOSTR_KEY_RECOVERY)
+            }
+            val usableRelays = normalizedRelays(relays)
+            if (usableRelays.isEmpty()) return Blocked(RELAY_RECOVERY)
+            if (!listenerEnabled) return Blocked(LISTENER_RECOVERY)
+            return Ready(publicKeyHex = publicKeyHex, relays = usableRelays)
+        }
+
+        internal fun normalizedRelays(relays: List<String>): List<String> =
+            relays.map(String::trim)
+                .filter { relay ->
+                    runCatching { URI(relay) }.getOrNull()?.let { uri ->
+                        uri.scheme?.lowercase() in setOf("ws", "wss") && !uri.host.isNullOrBlank()
+                    } == true
+                }
+                .distinct()
+
+        private fun String.isHexKey(): Boolean =
+            length == 64 && all { it in '0'..'9' || it.lowercaseChar() in 'a'..'f' }
+    }
+}
+
 /**
  * Builds the "receive locked ecash" artifact: a NUT-18 Cashu payment request that
  * locks any payment to the wallet's primary (seed-derived) P2PK key and routes the
@@ -105,9 +172,9 @@ object LockedReceiveRequest {
         settingsManager: SettingsManager,
         amount: Long? = null,
     ): String? {
-        val nostrPubkey = nostrService.state.value.publicKeyHex.takeIf { it.isNotBlank() } ?: return null
+        val readiness = CashuRequestNostrReadiness.current(nostrService, settingsManager)
+        if (readiness !is CashuRequestNostrReadiness.Ready) return null
         val primary = settingsManager.primaryP2PKKeyInfo() ?: return null
-        val relays = settingsManager.state.value.nostrRelays.takeIf { it.isNotEmpty() } ?: return null
         return runCatching {
             PaymentRequestBuilder.build(
                 id = com.cashu.me.Models.CashuRequest.newId(),
@@ -115,8 +182,8 @@ object LockedReceiveRequest {
                 unit = "sat",
                 mints = emptyList(),
                 description = null,
-                nostrPubkeyHex = nostrPubkey,
-                relays = relays,
+                nostrPubkeyHex = readiness.publicKeyHex,
+                relays = readiness.relays,
                 p2pkPubkeyHex = primary.publicKey,
             )
         }.getOrNull()

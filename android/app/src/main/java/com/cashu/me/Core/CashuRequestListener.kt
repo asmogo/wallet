@@ -72,10 +72,9 @@ class CashuRequestListener(
             )
             return
         }
-        val relays = settingsManager.state.value.nostrRelays
-            .map(String::trim)
-            .filter { it.startsWith("ws://") || it.startsWith("wss://") }
-            .distinct()
+        val relays = CashuRequestNostrReadiness.normalizedRelays(
+            settingsManager.state.value.nostrRelays,
+        )
         if (relays.isEmpty()) {
             mutableState.value = mutableState.value.copy(
                 isRunning = false,

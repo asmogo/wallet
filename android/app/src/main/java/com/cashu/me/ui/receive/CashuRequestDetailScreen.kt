@@ -53,6 +53,7 @@ import java.util.Date
 import kotlinx.coroutines.delay
 import com.cashu.me.Core.AmountFormatter
 import com.cashu.me.Core.CashuRequestStore
+import com.cashu.me.Core.CashuRequestNostrReadiness
 import com.cashu.me.Core.NostrService
 import com.cashu.me.Core.NfcReceive.NfcReceiveCoordinator
 import com.cashu.me.Core.NfcReceive.NfcReceivePhase
@@ -129,12 +130,12 @@ fun CashuRequestDetailScreen(
     ) {
         if (nfcReceiveCoordinator.state.value.phase.isNfcTransferActive()) return
         val req = request ?: return
-        val nostr = nostrService.state.value
-        val relays = settings.nostrRelays
-        if (nostr.publicKeyHex.isBlank() || relays.isEmpty()) {
-            regenerateError = "Nostr isn't ready — check your relays in Settings."
+        val readiness = CashuRequestNostrReadiness.current(nostrService, settingsManager)
+        if (readiness is CashuRequestNostrReadiness.Blocked) {
+            regenerateError = readiness.recoveryMessage
             return
         }
+        readiness as CashuRequestNostrReadiness.Ready
         val resolvedUnit = walletState.mints.firstOrNull { it.url == nextMints.firstOrNull() }
             ?.resolvedMintUnit(nextUnit ?: req.unit) ?: (nextUnit ?: req.unit)
         // A stored integer means something different after a unit change; clear
@@ -147,8 +148,8 @@ fun CashuRequestDetailScreen(
                 unit = resolvedUnit,
                 mints = nextMints,
                 description = req.memo,
-                nostrPubkeyHex = nostr.publicKeyHex,
-                relays = relays,
+                nostrPubkeyHex = readiness.publicKeyHex,
+                relays = readiness.relays,
             )
         }.onSuccess { encoded ->
             cashuRequestStore.update(

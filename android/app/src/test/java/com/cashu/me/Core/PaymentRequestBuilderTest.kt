@@ -79,6 +79,86 @@ class PaymentRequestBuilderTest {
         )
     }
 
+    @Test
+    fun nostrReadinessReturnsNormalizedDeliverableConfiguration() {
+        val publicKey = NostrService.publicKeyHex(PRIVATE_KEY_HEX)
+
+        val readiness = CashuRequestNostrReadiness.evaluate(
+            isIdentityInitialized = true,
+            publicKeyHex = publicKey,
+            privateKeyHex = PRIVATE_KEY_HEX,
+            relays = listOf(
+                " https://not-a-relay.example ",
+                " wss://relay.example ",
+                "wss://relay.example",
+                "ws://localhost:7777",
+            ),
+            listenerEnabled = true,
+        )
+
+        assertEquals(
+            CashuRequestNostrReadiness.Ready(
+                publicKeyHex = publicKey,
+                relays = listOf("wss://relay.example", "ws://localhost:7777"),
+            ),
+            readiness,
+        )
+    }
+
+    @Test
+    fun nostrReadinessNamesNostrKeySettingForMissingKeyMaterial() {
+        val readiness = CashuRequestNostrReadiness.evaluate(
+            isIdentityInitialized = true,
+            publicKeyHex = "not-a-key",
+            privateKeyHex = null,
+            relays = listOf("wss://relay.example"),
+            listenerEnabled = true,
+        )
+
+        assertEquals(
+            CashuRequestNostrReadiness.Blocked(
+                "Your Nostr key isn't ready. Check Settings → Nostr → Nostr key, then try again.",
+            ),
+            readiness,
+        )
+    }
+
+    @Test
+    fun nostrReadinessNamesRelaySettingWhenNoUsableRelayExists() {
+        val readiness = CashuRequestNostrReadiness.evaluate(
+            isIdentityInitialized = true,
+            publicKeyHex = NostrService.publicKeyHex(PRIVATE_KEY_HEX),
+            privateKeyHex = PRIVATE_KEY_HEX,
+            relays = listOf("", "https://relay.example", "wss://"),
+            listenerEnabled = true,
+        )
+
+        assertEquals(
+            CashuRequestNostrReadiness.Blocked(
+                "No usable Nostr relay is configured. Add a ws:// or wss:// relay in Settings → Nostr → Relays, then try again.",
+            ),
+            readiness,
+        )
+    }
+
+    @Test
+    fun nostrReadinessNamesListenerSettingWhenListeningIsOff() {
+        val readiness = CashuRequestNostrReadiness.evaluate(
+            isIdentityInitialized = true,
+            publicKeyHex = NostrService.publicKeyHex(PRIVATE_KEY_HEX),
+            privateKeyHex = PRIVATE_KEY_HEX,
+            relays = listOf("wss://relay.example"),
+            listenerEnabled = false,
+        )
+
+        assertEquals(
+            CashuRequestNostrReadiness.Blocked(
+                "Cashu Request listening is off. Turn on Settings → Privacy → Listen for payment requests, then try again.",
+            ),
+            readiness,
+        )
+    }
+
     private companion object {
         private const val PRIVATE_KEY_HEX = "0000000000000000000000000000000000000000000000000000000000000001"
 

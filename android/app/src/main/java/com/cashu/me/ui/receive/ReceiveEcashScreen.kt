@@ -38,6 +38,7 @@ import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.delay
 import com.cashu.me.Core.CashuRequestStore
+import com.cashu.me.Core.CashuRequestNostrReadiness
 import com.cashu.me.Core.NostrService
 import com.cashu.me.Core.SettingsManager
 import com.cashu.me.Core.TokenParser
@@ -111,19 +112,21 @@ fun ReceiveEcashScreen(
     // Keep it mint-agnostic even when an active mint exists; the request detail
     // screen lets the user opt into a specific mint later.
     fun createNewRequest() {
-        val nostr = nostrService.state.value
-        val relays = settings.nostrRelays
-        if (nostr.publicKeyHex.isBlank() || relays.isEmpty()) {
-            inputHint = "Nostr isn't ready — check your relays in Settings."
+        val readiness = CashuRequestNostrReadiness.current(nostrService, settingsManager)
+        if (readiness is CashuRequestNostrReadiness.Blocked) {
+            inputHint = readiness.recoveryMessage
             return
         }
+        readiness as CashuRequestNostrReadiness.Ready
         inputHint = null
         runCatching {
             val id = com.cashu.me.Models.CashuRequest.newId()
             cashuRequestStore.createNostrCashuRequest(
                 id = id,
-                nostrPubkeyHex = nostr.publicKeyHex,
-                relays = relays,
+                amount = null,
+                unit = "sat",
+                nostrPubkeyHex = readiness.publicKeyHex,
+                relays = readiness.relays,
             )
         }.onSuccess { request ->
             onOpenRequest(request.id)

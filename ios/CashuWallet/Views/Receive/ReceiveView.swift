@@ -135,13 +135,15 @@ struct ReceiveView: View {
     }
 
     private var lockedKeyUnavailable: some View {
-        VStack(spacing: 12) {
+        let recoveryMessage = CashuRequestNostrReadiness.current().recoveryMessage
+            ?? "Set up your primary key in Settings → Locked Ecash, then try again."
+        return VStack(spacing: 12) {
             Image(systemName: "key.slash")
                 .font(.largeTitle)
                 .foregroundStyle(.secondary)
             Text("Couldn't create a request")
                 .font(.headline)
-            Text("This needs your wallet set up with a Nostr relay. Check Settings → Nostr, then try again.")
+            Text(recoveryMessage)
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
@@ -432,9 +434,9 @@ struct UnifiedReceiveView: View {
     /// builder + store as the legacy `ReceiveEcashView.createNewRequest`.
     private func createNewRequest() {
         HapticFeedback.selection()
-        let nostr = NostrService.shared
-        guard nostr.isInitialized, !nostr.publicKeyHex.isEmpty else {
-            inputHint = "Your Nostr identity isn't ready yet. Check Settings → Nostr, then try again."
+        let readiness = CashuRequestNostrReadiness.current()
+        guard case let .ready(publicKeyHex, relays) = readiness else {
+            inputHint = readiness.recoveryMessage
             return
         }
         let id = CashuRequest.newId()
@@ -445,8 +447,8 @@ struct UnifiedReceiveView: View {
                 unit: "sat",
                 mints: [],
                 description: nil,
-                nostrPubkeyHex: nostr.publicKeyHex,
-                relays: SettingsManager.shared.nostrRelays
+                nostrPubkeyHex: publicKeyHex,
+                relays: relays
             )
             let request = CashuRequestStore.shared.createNew(
                 id: id,
@@ -639,9 +641,9 @@ struct ReceiveEcashView: View {
 
     private func createNewRequest() {
         HapticFeedback.selection()
-        let nostr = NostrService.shared
-        guard nostr.isInitialized, !nostr.publicKeyHex.isEmpty else {
-            errorMessage = "Your Nostr identity isn't ready yet. Check Settings → Nostr, then try again."
+        let readiness = CashuRequestNostrReadiness.current()
+        guard case let .ready(publicKeyHex, relays) = readiness else {
+            errorMessage = readiness.recoveryMessage
             return
         }
         let id = CashuRequest.newId()
@@ -652,8 +654,8 @@ struct ReceiveEcashView: View {
                 unit: "sat",
                 mints: [],
                 description: nil,
-                nostrPubkeyHex: nostr.publicKeyHex,
-                relays: SettingsManager.shared.nostrRelays
+                nostrPubkeyHex: publicKeyHex,
+                relays: relays
             )
             let request = CashuRequestStore.shared.createNew(
                 id: id,

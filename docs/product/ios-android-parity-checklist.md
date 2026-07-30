@@ -74,7 +74,7 @@ Platform-specific capabilities remain intentionally outside parity, including iC
 
 - [x] **[P1 · iOS → Android] Create new ecash requests as any-mint requests by default.** iOS creates a NUT-18 request with no mint restriction; Android silently inserts the active mint, changing who can pay. **Done when:** Android leaves the mint list empty unless the user explicitly selects a mint, and tests cover request creation with and without a restriction.
 
-- [ ] **[P1 · Converge] Use one Nostr-readiness rule and recovery message.** Android requires both a public key and relays and says “check your relays”; iOS checks initialized identity and points broadly to Settings → Nostr. **Done when:** both validate every prerequisite needed for a deliverable request and name the exact setting that needs attention.
+- [x] **[P1 · Converge] Use one Nostr-readiness rule and recovery message.** Android requires both a public key and relays and says “check your relays”; iOS checks initialized identity and points broadly to Settings → Nostr. **Done when:** both validate every prerequisite needed for a deliverable request and name the exact setting that needs attention.
 
 - [x] **[P0 · iOS → Android] Warn before receiving from an unknown mint.** iOS identifies that receiving will add a new mint and asks the user to continue only if they trust it; Android has no equivalent trust warning. **Done when:** Android displays the normalized mint host and explains that the mint will be added; claim remains one-tap after the user has seen the caution (iOS parity).
 

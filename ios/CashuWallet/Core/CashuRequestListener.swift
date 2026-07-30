@@ -54,7 +54,9 @@ final class CashuRequestListener: ObservableObject {
             AppLogger.wallet.error("CashuRequestListener: NostrService not initialized")
             return
         }
-        let relays = SettingsManager.shared.nostrRelays
+        let relays = CashuRequestNostrReadiness.normalizedRelays(
+            SettingsManager.shared.nostrRelays
+        )
         guard !relays.isEmpty else {
             AppLogger.wallet.error("CashuRequestListener: no Nostr relays configured — cannot receive Cashu Request payments")
             return

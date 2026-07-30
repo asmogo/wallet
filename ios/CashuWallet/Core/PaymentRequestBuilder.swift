@@ -88,6 +88,79 @@ enum PaymentRequestBuilder {
     }
 }
 
+enum CashuRequestNostrReadiness: Equatable {
+    case ready(publicKeyHex: String, relays: [String])
+    case blocked(recoveryMessage: String)
+
+    static let nostrKeyRecovery =
+        "Your Nostr key isn't ready. Check Settings → Nostr → Nostr key, then try again."
+    static let relayRecovery =
+        "No usable Nostr relay is configured. Add a ws:// or wss:// relay in Settings → Nostr → Relays, then try again."
+    static let listenerRecovery =
+        "Cashu Request listening is off. Turn on Settings → Privacy → Listen for payment requests, then try again."
+
+    var recoveryMessage: String? {
+        guard case .blocked(let recoveryMessage) = self else { return nil }
+        return recoveryMessage
+    }
+
+    @MainActor
+    static func current() -> CashuRequestNostrReadiness {
+        let nostr = NostrService.shared
+        let settings = SettingsManager.shared
+        return evaluate(
+            isIdentityInitialized: nostr.isInitialized,
+            publicKeyHex: nostr.publicKeyHex,
+            privateKeyHex: nostr.getPrivateKeyHex(),
+            relays: settings.nostrRelays,
+            listenerEnabled: settings.enablePaymentRequests
+        )
+    }
+
+    static func evaluate(
+        isIdentityInitialized: Bool,
+        publicKeyHex: String,
+        privateKeyHex: String?,
+        relays: [String],
+        listenerEnabled: Bool
+    ) -> CashuRequestNostrReadiness {
+        guard isIdentityInitialized,
+              isHexKey(publicKeyHex),
+              privateKeyHex.map(isHexKey) == true else {
+            return .blocked(recoveryMessage: nostrKeyRecovery)
+        }
+        let usableRelays = normalizedRelays(relays)
+        guard !usableRelays.isEmpty else {
+            return .blocked(recoveryMessage: relayRecovery)
+        }
+        guard listenerEnabled else {
+            return .blocked(recoveryMessage: listenerRecovery)
+        }
+        return .ready(publicKeyHex: publicKeyHex, relays: usableRelays)
+    }
+
+    static func normalizedRelays(_ relays: [String]) -> [String] {
+        var seen: Set<String> = []
+        return relays.compactMap { relay -> String? in
+            let trimmed = relay.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard let components = URLComponents(string: trimmed),
+                  let scheme = components.scheme?.lowercased(),
+                  ["ws", "wss"].contains(scheme),
+                  components.host?.isEmpty == false,
+                  seen.insert(trimmed).inserted else {
+                return nil
+            }
+            return trimmed
+        }
+    }
+
+    private static func isHexKey(_ value: String) -> Bool {
+        value.count == 64 && value.unicodeScalars.allSatisfy {
+            CharacterSet(charactersIn: "0123456789abcdefABCDEF").contains($0)
+        }
+    }
+}
+
 // MARK: - Locked Receive Request
 
 /// Builds the "receive locked ecash" artifact: a NUT-18 Cashu payment request that
@@ -97,19 +170,15 @@ enum PaymentRequestBuilder {
 enum LockedReceiveRequest {
     @MainActor
     static func build(amount: UInt64? = nil) -> String? {
-        let nostr = NostrService.shared
-        guard nostr.isInitialized,
-              !nostr.publicKeyHex.isEmpty,
+        guard case let .ready(publicKeyHex, relays) = CashuRequestNostrReadiness.current(),
               let pubkey = SettingsManager.shared.primaryP2PKPublicKey else { return nil }
-        let relays = SettingsManager.shared.nostrRelays
-        guard !relays.isEmpty else { return nil }
         return try? PaymentRequestBuilder.build(
             id: CashuRequest.newId(),
             amount: amount,
             unit: "sat",
             mints: [],
             description: nil,
-            nostrPubkeyHex: nostr.publicKeyHex,
+            nostrPubkeyHex: publicKeyHex,
             relays: relays,
             p2pkPubkeyHex: pubkey
         )
