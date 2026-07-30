@@ -16,6 +16,73 @@ enum CashuRequestRoute {
     case acquireThenPay(CashuPaymentRequestSummary)
 }
 
+/// User-visible explanation for a Cashu Request route that materially changes
+/// rails or requires recovery. The ordinary compatible-mint path intentionally
+/// maps to nil so confirmations do not repeat the mint selector as "Pay from".
+enum CashuRequestRouteExplanation: Equatable, Sendable {
+    enum State: Equatable, Sendable {
+        case compatibleMint
+        case lightningFallback
+        case addRequestedMint(targetMintURL: String?)
+        case topUpTargetMint(targetMintURL: String?)
+        case unavailable
+    }
+
+    case lightningFallback
+    case addRequestedMint(target: String?)
+    case topUpTargetMint(target: String?)
+
+    init?(state: State) {
+        switch state {
+        case .compatibleMint, .unavailable:
+            return nil
+        case .lightningFallback:
+            self = .lightningFallback
+        case .addRequestedMint(let targetMintURL):
+            self = .addRequestedMint(target: Self.displayTarget(from: targetMintURL))
+        case .topUpTargetMint(let targetMintURL):
+            self = .topUpTargetMint(target: Self.displayTarget(from: targetMintURL))
+        }
+    }
+
+    /// Localized row value shared by confirmation and terminal status screens.
+    var localizedValue: String {
+        switch self {
+        case .lightningFallback:
+            return String(localized: "Lightning fallback")
+        case .addRequestedMint(let target):
+            if let target {
+                return String(localized: "Add requested mint: \(target)")
+            }
+            return String(localized: "Add requested mint")
+        case .topUpTargetMint(let target):
+            if let target {
+                return String(localized: "Top up target mint: \(target)")
+            }
+            return String(localized: "Top up target mint")
+        }
+    }
+
+    private static func displayTarget(from rawURL: String?) -> String? {
+        guard let rawURL else { return nil }
+        let trimmed = rawURL.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+
+        guard let components = URLComponents(string: trimmed) else {
+            return trimmed
+        }
+        if let host = components.host, !host.isEmpty {
+            if let port = components.port {
+                return "\(host):\(port)"
+            }
+            return host
+        }
+        // A malformed absolute URL is not useful payment context. A bare mint
+        // name remains useful and is kept as a safe fallback.
+        return components.scheme == nil ? trimmed : nil
+    }
+}
+
 /// Progress checkpoints for the "Add mint & pay" flow, driven back to the
 /// confirm screen's overlay so the user sees what's happening.
 enum AddMintPayStage: Equatable {

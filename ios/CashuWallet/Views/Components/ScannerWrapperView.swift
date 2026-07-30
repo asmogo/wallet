@@ -175,6 +175,7 @@ struct ScannerWrapperView: View {
     @State private var scannedCashuPaymentRequest: CashuPaymentRequestSummary?
     @State private var scannedMeltMode: MeltView.MeltMode = .lightning
     @State private var scannedMeltAutoQuote = false
+    @State private var scannedMeltRouteExplanation: CashuRequestRouteExplanation?
     @State private var navigateToDetail = false
     @State private var navigateToMelt = false
     @State private var navigateToCashuPaymentRequest = false
@@ -343,6 +344,7 @@ struct ScannerWrapperView: View {
                         initialRequest: meltRequest,
                         initialMode: scannedMeltMode,
                         autoQuoteOnAppear: scannedMeltAutoQuote,
+                        routeExplanation: scannedMeltRouteExplanation,
                         onComplete: {
                             dismiss()
                         }
@@ -501,6 +503,7 @@ struct ScannerWrapperView: View {
                 scannedMeltRequest = bolt11
                 scannedMeltMode = .lightning
                 scannedMeltAutoQuote = true
+                scannedMeltRouteExplanation = CashuRequestRouteExplanation(state: .lightningFallback)
                 navigateToMelt = true
             }
 
@@ -521,6 +524,7 @@ struct ScannerWrapperView: View {
                     scannedMeltMode = .lightning
                     scannedMeltAutoQuote = true
                 }
+                scannedMeltRouteExplanation = nil
                 navigateToMelt = true
 
             case .lightningAddress:
@@ -530,6 +534,7 @@ struct ScannerWrapperView: View {
                 scannedMeltRequest = content
                 scannedMeltMode = .lightning
                 scannedMeltAutoQuote = false
+                scannedMeltRouteExplanation = nil
                 navigateToMelt = true
 
             case .cashuPaymentRequest, .unrecognized:
@@ -561,6 +566,29 @@ struct ScannerWrapperView: View {
     }
 }
 
+/// Native detail row used whenever a Cashu Request changes rail or enters a
+/// recovery route. Grouping keeps VoiceOver's route label and value together.
+struct CashuRequestRouteExplanationRow: View {
+    let explanation: CashuRequestRouteExplanation
+
+    var body: some View {
+        HStack {
+            Label("Route", systemImage: "arrow.triangle.branch")
+                .foregroundStyle(.secondary)
+            Spacer()
+            Text(explanation.localizedValue)
+                .fontWeight(.medium)
+                .multilineTextAlignment(.trailing)
+                .lineLimit(2)
+                .truncationMode(.tail)
+        }
+        .font(.subheadline)
+        .padding(.horizontal, 4)
+        .padding(.vertical, 14)
+        .accessibilityElement(children: .combine)
+    }
+}
+
 struct CashuPaymentRequestPayView: View {
     let request: CashuPaymentRequestSummary
     var onComplete: (() -> Void)?
@@ -577,6 +605,7 @@ struct CashuPaymentRequestPayView: View {
     /// Drives the full-screen processing → success → failure status screen.
     /// nil while the user is still on the confirm screen.
     @State private var paymentPhase: PaymentStatusView.Phase?
+    @State private var activeRouteExplanation: CashuRequestRouteExplanation?
     @State private var showingMintPicker = false
     @State private var selectedMint: MintInfo?
 
@@ -866,6 +895,10 @@ struct CashuPaymentRequestPayView: View {
             let memo = requestMemo
 
             VStack(spacing: 0) {
+                if let routeExplanation {
+                    CashuRequestRouteExplanationRow(explanation: routeExplanation)
+                    canvasDivider
+                }
                 if let memo {
                     detailRow(icon: "quote.bubble", label: "Memo", value: memo)
                     canvasDivider
@@ -1062,6 +1095,19 @@ struct CashuPaymentRequestPayView: View {
     /// Whether the target mint isn't in the wallet yet (affects CTA wording).
     private var acquireAddsNewMint: Bool { selectedPaymentMint == nil }
 
+    private var routeExplanation: CashuRequestRouteExplanation? {
+        guard request.isSatUnit, paymentAmount != nil else {
+            return CashuRequestRouteExplanation(state: .unavailable)
+        }
+        guard needsAcquire else {
+            return CashuRequestRouteExplanation(state: .compatibleMint)
+        }
+        let state: CashuRequestRouteExplanation.State = acquireAddsNewMint
+            ? .addRequestedMint(targetMintURL: acquireTargetURL)
+            : .topUpTargetMint(targetMintURL: acquireTargetURL)
+        return CashuRequestRouteExplanation(state: state)
+    }
+
     private var payButtonTitle: String {
         guard needsAcquire else { return "Pay" }
         if acquireAddsNewMint {
@@ -1178,6 +1224,7 @@ struct CashuPaymentRequestPayView: View {
 
         guard canPay, let mint = selectedPaymentMint else { return }
 
+        activeRouteExplanation = routeExplanation
         isPaying = true
         errorMessage = nil
         HapticFeedback.impact(.medium)
@@ -1213,6 +1260,7 @@ struct CashuPaymentRequestPayView: View {
     /// Add/fund the target mint over Lightning, then pay the request. Falls back
     /// to a top-up QR (`NeedsExternalTopUp`) when no held mint can bankroll it.
     private func runAcquireAndPay(targetMintURL: String, amount: UInt64) {
+        activeRouteExplanation = routeExplanation
         isPaying = true
         errorMessage = nil
         HapticFeedback.impact(.medium)
@@ -1275,8 +1323,15 @@ struct CashuPaymentRequestPayView: View {
                 isPending: paymentAmount == nil
             ),
             statusMintRow,
-            statusFeeRow,
         ]
+        if let explanation = activeRouteExplanation {
+            rows.append(.init(
+                icon: "arrow.triangle.branch",
+                label: "Route",
+                value: explanation.localizedValue
+            ))
+        }
+        rows.append(statusFeeRow)
         if let memo = requestMemo {
             rows.append(.init(icon: "quote.bubble", label: "Memo", value: memo))
         }
@@ -1559,6 +1614,13 @@ struct CashuTopUpInvoiceSheet: View {
                             }
 
                         CurrencyAmountDisplay(sats: context.amount, primary: $settings.amountDisplayPrimary)
+
+                        if let explanation = CashuRequestRouteExplanation(
+                            state: .topUpTargetMint(targetMintURL: context.targetMintURL)
+                        ) {
+                            CashuRequestRouteExplanationRow(explanation: explanation)
+                                .padding(.horizontal)
+                        }
 
                         statusRow
 
