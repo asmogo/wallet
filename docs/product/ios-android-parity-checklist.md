@@ -54,7 +54,7 @@ Platform-specific capabilities remain intentionally outside parity, including iC
 
 - [x] **[P1 · Android → iOS] Explain rail-changing fallback and recovery routes.** Android explicitly identifies Lightning fallback, adding a requested mint, or topping up the target mint; iOS can rely only on a mint row or CTA wording. **Done when:** iOS names a route whenever it materially changes how the request will be paid or what recovery will occur. The ordinary compatible-mint route does not need a duplicate “Pay from” label.
 
-- [ ] **[P2 · Converge] Remove platform names from payment warnings.** Android says “supported on Android” and “Android can pay…” while iOS says “this wallet.” **Done when:** shared limitations and fallback messages use product language and equivalent terminology on both platforms.
+- [x] **[P2 · Converge] Remove platform names from payment warnings.** Android says “supported on Android” and “Android can pay…” while iOS says “this wallet.” **Done when:** shared limitations and fallback messages use product language and equivalent terminology on both platforms.
 
 ### Send — ecash and locked ecash
 

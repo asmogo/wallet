@@ -54,6 +54,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontWeight
@@ -81,6 +82,7 @@ import com.cashu.me.Models.MeltQuoteInfo
 import com.cashu.me.Models.MeltSettlement
 import com.cashu.me.Models.MintInfo
 import com.cashu.me.Models.MintQuoteInfo
+import com.cashu.me.R
 import com.cashu.me.ui.components.AmountEntryHero
 import com.cashu.me.ui.components.AmountText
 import com.cashu.me.ui.components.CanvasDivider
@@ -154,6 +156,8 @@ fun UnifiedSendScreen(
     val settings by settingsManager.state.collectAsState()
     val priceState by priceService.state.collectAsState()
     val formatter = remember { AmountFormatter() }
+    val unsupportedCashuRequestUnit =
+        stringResource(R.string.send_cashu_request_unsupported_unit)
     val scope = rememberCoroutineScope()
     val clipboard = LocalClipboardManager.current
     val context = androidx.compose.ui.platform.LocalContext.current
@@ -323,7 +327,7 @@ fun UnifiedSendScreen(
                                 error("Enter an amount before paying this Cashu Request.")
                             }
                             is CashuPaymentRequestRoute.UnsupportedUnit -> {
-                                error("Only sat Cashu Requests are supported on Android right now.")
+                                error(unsupportedCashuRequestUnit)
                             }
                             null -> {
                                 walletManager.payCashuPaymentRequest(rail.raw, confirmAmount, activeMintUrl)
@@ -956,6 +960,10 @@ private fun ConfirmFace(
         cashuRoute is CashuPaymentRequestRoute.PayWithEcash ||
         cashuRoute is CashuPaymentRequestRoute.PayBolt11Fallback ||
         cashuRoute is CashuPaymentRequestRoute.AddMintToPay
+    val unsupportedCashuRequestUnit =
+        stringResource(R.string.send_cashu_request_unsupported_unit)
+    val lightningFallback =
+        stringResource(R.string.send_cashu_request_lightning_fallback)
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -1069,7 +1077,7 @@ private fun ConfirmFace(
             is CashuPaymentRequestRoute.UnsupportedUnit -> {
                 Spacer(Modifier.height(CashuTheme.spacing.default))
                 InlineNotice(
-                    text = "Only sat Cashu Requests are supported on Android right now.",
+                    text = unsupportedCashuRequestUnit,
                     severity = NoticeSeverity.Warning,
                 )
             }
@@ -1105,7 +1113,7 @@ private fun ConfirmFace(
             is CashuPaymentRequestRoute.PayBolt11Fallback -> {
                 Spacer(Modifier.height(CashuTheme.spacing.default))
                 InlineNotice(
-                    text = "The requested Cashu mint is unavailable. Android can pay this request through its Lightning fallback.",
+                    text = lightningFallback,
                     severity = NoticeSeverity.Info,
                 )
             }
