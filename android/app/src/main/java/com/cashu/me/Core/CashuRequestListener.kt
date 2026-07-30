@@ -283,6 +283,7 @@ class CashuRequestListener(
             unit = info.unit,
             cashuRequestId = payload.requestId,
             processedId = eventId,
+            memo = info.memo,
         )
         return runCatching {
             walletManager.savePendingReceiveToken(pending)

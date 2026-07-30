@@ -151,6 +151,7 @@ internal fun pendingReceiveTokenFrom(review: TokenReview): PendingReceiveToken =
         mintUrl = review.info.mint,
         dateEpochMillis = System.currentTimeMillis(),
         unit = review.info.unit,
+        memo = review.info.memo,
     )
 
 /**

@@ -79,6 +79,18 @@ class WalletJourneyRobot(
         return this
     }
 
+    fun awaitTextWithinTag(
+        parentTag: String,
+        text: String,
+        substring: Boolean = false,
+    ): WalletJourneyRobot {
+        val matcher = hasText(text, substring = substring)
+            .and(hasAnyAncestor(hasTestTag(parentTag)))
+        await(matcher, DefaultTimeout)
+        compose.onNode(matcher, useUnmergedTree = true).assertIsDisplayed()
+        return this
+    }
+
     fun scrollToText(containerTag: String, text: String): WalletJourneyRobot {
         compose.onNodeWithTag(containerTag, useUnmergedTree = true)
             .performScrollToNode(hasText(text))

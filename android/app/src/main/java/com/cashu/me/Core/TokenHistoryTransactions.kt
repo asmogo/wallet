@@ -34,6 +34,7 @@ internal fun pendingReceiveTokenTransactions(tokens: List<PendingReceiveToken>):
             type = TransactionType.Incoming,
             kind = TransactionKind.Ecash,
             dateEpochMillis = token.dateEpochMillis,
+            memo = token.memo,
             status = TransactionStatus.Pending,
             mintUrl = token.mintUrl,
             token = token.token,

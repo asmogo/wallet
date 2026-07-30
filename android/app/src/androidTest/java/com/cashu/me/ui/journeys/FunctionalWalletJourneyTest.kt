@@ -120,6 +120,33 @@ class FunctionalWalletJourneyTest {
     }
 
     @Test
+    fun receiveLaterMemoAppearsInHistoryAndLaterClaimReview() {
+        val fixture = launch(
+            FixtureMode.SeededWithMint,
+            deepLink = "cashu:${FakeWalletGateway.MemoDeterministicToken}",
+        )
+
+        robot.awaitTag(UiTestTags.ReceiveEcashDetail)
+            .awaitTextWithinTag(UiTestTags.ReceiveEcashDetail, "Memo")
+            .awaitTextWithinTag(UiTestTags.ReceiveEcashDetail, "Coffee from Alice")
+            .tapTextWithinTag(UiTestTags.ReceiveEcashDetail, "Receive later")
+            .awaitTag(UiTestTags.WalletScreen)
+
+        val pending = fixture.container.walletManager.state.value.pendingReceiveTokens.single()
+        assertEquals("Coffee from Alice", pending.memo)
+
+        robot.tapText("History")
+            .awaitTag(UiTestTags.HistoryScreen)
+            .tapTag(UiTestTags.transactionRow(pending.tokenId))
+            .awaitText("Memo")
+            .awaitText("Coffee from Alice")
+            .tapText("Receive")
+            .awaitTag(UiTestTags.ReceiveEcashDetail)
+            .awaitTextWithinTag(UiTestTags.ReceiveEcashDetail, "Memo")
+            .awaitTextWithinTag(UiTestTags.ReceiveEcashDetail, "Coffee from Alice")
+    }
+
+    @Test
     fun lightningReceiveTransitionsToPaidSuccessAndHistory() {
         val fixture = launch(FixtureMode.SeededWithMint)
         val fake = checkNotNull(fixture.fakeGateway)
