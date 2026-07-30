@@ -68,7 +68,7 @@ Platform-specific capabilities remain intentionally outside parity, including iC
 
 - [ ] **[P1 · iOS → Android] Provide manual claim-status checking when automatic checks are disabled.** iOS adds “Check Status” to pending-token actions; Android leaves the token at Pending with no equivalent action. **Done when:** Android users can run a one-off spent check without re-enabling background polling.
 
-- [ ] **[P1 · iOS → Android] Include the send fee on the Claimed receipt.** iOS shows the fee when the token-generation swap charged one; Android’s pending view shows it but the full-screen Claimed terminal drops it. **Done when:** Android’s Claimed details preserve Amount, applicable Fee, and Mint.
+- [x] **[P1 · iOS → Android] Include the send fee on the Claimed receipt.** iOS shows the fee when the token-generation swap charged one; Android’s pending view shows it but the full-screen Claimed terminal drops it. **Done when:** Android’s Claimed details preserve Amount, applicable Fee, and Mint.
 
 ### Receive — unified entry and Cashu tokens
 
