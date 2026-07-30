@@ -108,6 +108,8 @@ fun ReceiveEcashScreen(
 
     // iOS "New Request": publish a fresh any-amount NUT-18 request over the
     // wallet's Nostr identity and open its inspector — no intermediate form.
+    // Keep it mint-agnostic even when an active mint exists; the request detail
+    // screen lets the user opt into a specific mint later.
     fun createNewRequest() {
         val nostr = nostrService.state.value
         val relays = settings.nostrRelays
@@ -118,7 +120,7 @@ fun ReceiveEcashScreen(
         inputHint = null
         runCatching {
             val id = com.cashu.me.Models.CashuRequest.newId()
-            val mints = listOfNotNull(walletState.activeMint?.url)
+            val mints = emptyList<String>()
             val encoded = PaymentRequestBuilder.build(
                 id = id,
                 amount = null,
@@ -272,6 +274,14 @@ fun ReceiveEcashScreen(
                     icon = Icons.Outlined.CurrencyBitcoin,
                     label = "Bitcoin",
                     onClick = onReceiveBitcoin,
+                    enabled = walletState.activeMint != null,
+                )
+            }
+            if (walletState.activeMint == null) {
+                Spacer(Modifier.height(CashuTheme.spacing.comfortable))
+                InlineNotice(
+                    text = "Add a mint to receive bitcoin. Ecash requests and token scans still work without one.",
+                    severity = NoticeSeverity.Info,
                 )
             }
         }

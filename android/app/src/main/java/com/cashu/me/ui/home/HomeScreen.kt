@@ -63,6 +63,7 @@ import androidx.compose.ui.semantics.testTag as semanticsTestTag
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 import com.cashu.me.Core.AmountDisplayPrimary
 import com.cashu.me.Core.AmountDisplayText
@@ -72,11 +73,14 @@ import com.cashu.me.Core.HomeBalance
 import com.cashu.me.Core.Protocols.CurrencyAmount
 import com.cashu.me.Core.Protocols.CurrencyRegistry
 import com.cashu.me.Core.PriceService
+import com.cashu.me.Core.ReceivedPaymentEvent
 import com.cashu.me.Core.SettingsManager
 import com.cashu.me.Core.TransactionDisplay
+import com.cashu.me.Core.WalletHaptic
 import com.cashu.me.Core.WalletManager
 import com.cashu.me.Core.displayText
 import com.cashu.me.Core.recentCompletedTransactions
+import com.cashu.me.Core.rememberWalletHaptics
 import com.cashu.me.Models.WalletTransaction
 import com.cashu.me.ui.components.BalanceDisplay
 import com.cashu.me.ui.components.BalanceHeroHeight
@@ -126,6 +130,7 @@ fun HomeScreen(
     val settings by settingsManager.state.collectAsState()
     val priceState by priceService.state.collectAsState()
     val formatter = remember { AmountFormatter() }
+    val haptics = rememberWalletHaptics()
     val scope = rememberCoroutineScope()
     var refreshing by remember { mutableStateOf(false) }
 
@@ -144,29 +149,23 @@ fun HomeScreen(
         recentCompletedTransactions(walletState.transactions, RECENT_LIMIT)
     }
 
-    // Received-delta beat (iOS MainWalletView "payment-received celebration"):
-    // when the balance rises while Home is composed (receives land behind the
-    // flow sheet), a transient monochrome "+N" takes over the fiat slot for
-    // 2.5s, then fiat fades back. Rapid receives coalesce last-write-wins (the
-    // LaunchedEffect restart cancels the prior dismiss timer); a balance drop
-    // clears the beat immediately. Tracking only starts once the wallet is
-    // initialized and idle, so the startup 0 → N load can't fire a spurious
-    // beat (iOS keys this off an explicit token-received notification instead).
-    var lastObservedBalance by remember { mutableStateOf<Long?>(null) }
-    var receivedDelta by remember { mutableStateOf<String?>(null) }
-    LaunchedEffect(walletState.balance, walletState.isInitialized, walletState.isLoading) {
-        if (!walletState.isInitialized || walletState.isLoading) return@LaunchedEffect
-        val previous = lastObservedBalance
-        lastObservedBalance = walletState.balance
-        if (previous != null && walletState.balance > previous) {
-            receivedDelta = "+" + formatter.formatSats(
-                walletState.balance - previous,
-                includeUnit = false,
-            )
+    // Received-payment beat (iOS MainWalletView notification parity): collect
+    // only explicit, confirmed credits from WalletManager. Balance refreshes,
+    // restore, mint recovery, and reclaim therefore cannot trigger it.
+    //
+    // A receive flow owns its PaymentStatusScreen success haptic. Home performs
+    // the success haptic only for passive receipts with no in-flow terminal.
+    // collectLatest keeps rapid receipts last-write-wins and restarts the 2.5s
+    // dismissal timer.
+    var receivedPayment by remember { mutableStateOf<ReceivedPaymentEvent?>(null) }
+    LaunchedEffect(walletManager) {
+        walletManager.receivedPayments.collectLatest { event ->
+            receivedPayment = event
+            if (event.homeOwnsSuccessHaptic) {
+                haptics.perform(WalletHaptic.Success)
+            }
             delay(RECEIVED_DELTA_DISMISS_MS)
-            receivedDelta = null
-        } else {
-            receivedDelta = null
+            receivedPayment = null
         }
     }
 
@@ -227,7 +226,8 @@ fun HomeScreen(
                         satAmount = balanceDisplay,
                         persistedUnit = settings.homeBalanceUnit,
                         onUnitSelected = settingsManager::setHomeBalanceUnit,
-                        receivedDelta = receivedDelta,
+                        receivedPayment = receivedPayment,
+                        formatter = formatter,
                     )
                 },
                 triptych = {
@@ -236,7 +236,9 @@ fun HomeScreen(
                         onReceive = onReceive,
                         // Send opens the unified surface directly — no chooser.
                         onSend = onSend,
-                        receiveEnabled = walletState.activeMint != null,
+                        // The unified Receive sheet always has mint-independent
+                        // ecash paths (paste/scan and an any-mint NUT-18 request).
+                        receiveEnabled = true,
                         // iOS parity: Send is tappable at zero balance; the sheet shows
                         // "Nothing to send yet" with a Receive CTA instead of disabling here.
                         sendEnabled = walletState.activeMint != null,
@@ -449,7 +451,8 @@ private fun HomeBalanceHero(
     satAmount: AmountDisplayText,
     persistedUnit: String,
     onUnitSelected: (String) -> Unit,
-    receivedDelta: String?,
+    receivedPayment: ReceivedPaymentEvent?,
+    formatter: AmountFormatter,
 ) {
     val units = HomeBalance.homeBalanceUnits(balancesByUnit)
     val resolvedUnit = HomeBalance.resolvedUnit(persistedUnit, units)
@@ -488,6 +491,9 @@ private fun HomeBalanceHero(
                 ) { page ->
                     val unit = units.getOrElse(page) { "sat" }
                     val isSat = unit.equals("sat", ignoreCase = true)
+                    val receivedDelta = receivedPayment
+                        ?.takeIf { it.unit.equals(unit, ignoreCase = true) }
+                        ?.displayDelta(formatter)
                     BalanceDisplay(
                         amount = if (isSat) {
                             satAmount
@@ -501,14 +507,16 @@ private fun HomeBalanceHero(
                                 effectivePrimary = AmountDisplayPrimary.Sats,
                             )
                         },
-                        receivedDelta = if (isSat) receivedDelta else null,
+                        receivedDelta = receivedDelta,
                         modifier = Modifier.fillMaxWidth(),
                     )
                 }
             } else {
                 BalanceDisplay(
                     amount = satAmount,
-                    receivedDelta = receivedDelta,
+                    receivedDelta = receivedPayment
+                        ?.takeIf { it.unit.equals("sat", ignoreCase = true) }
+                        ?.displayDelta(formatter),
                     modifier = Modifier.fillMaxWidth(),
                 )
             }
@@ -549,6 +557,16 @@ private fun HomeBalanceHero(
         }
     }
 }
+
+private fun ReceivedPaymentEvent.displayDelta(formatter: AmountFormatter): String =
+    if (unit.equals("sat", ignoreCase = true)) {
+        "+" + formatter.formatSats(amount, includeUnit = false)
+    } else {
+        "+" + CurrencyAmount(
+            amount,
+            CurrencyRegistry.currencyForMintUnit(unit),
+        ).formatted()
+    }
 
 private val PAGE_DOT_SIZE = 6.dp
 
