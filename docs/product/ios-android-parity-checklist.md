@@ -34,7 +34,7 @@ Platform-specific differences are intentionally excluded, including iCloud backu
 
 - [ ] **[P1 · iOS → Android] Keep Receive usable without an active mint.** iOS can create an any-mint Cashu Request without an active mint; Android disables Receive on Home and pins new requests to the active mint. **Done when:** Android allows the any-mint ecash receive path without a mint while clearly disabling or explaining receive methods that truly require one.
 
-- [ ] **[P1 · iOS → Android] Drive the received-amount beat from an explicit receive event.** Android infers a receive from any balance increase, which can show a false `+amount` after a restore, mint operation, or unrelated balance refresh; iOS uses a receipt notification. **Done when:** Android only shows the beat for a confirmed incoming payment and only lets Home own the success haptic for background receipts that have no in-flow confirmation.
+- [x] **[P1 · iOS → Android] Drive the received-amount beat from an explicit receive event.** Android infers a receive from any balance increase, which can show a false `+amount` after a restore, mint operation, or unrelated balance refresh; iOS uses a receipt notification. **Done when:** Android only shows the beat for a confirmed incoming payment and only lets Home own the success haptic for background receipts that have no in-flow confirmation.
 
 - [ ] **[P2 · iOS → Android] Add an accessible loading label.** iOS shows “Loading Wallet…” with its progress indicator; Android shows an unlabeled indicator. **Done when:** Android visually or semantically identifies the startup operation as loading the wallet.
 

@@ -6,6 +6,12 @@ import com.cashu.me.Models.MintQuoteState
 import com.cashu.me.Models.PaymentMethodKind
 import kotlinx.coroutines.CancellationException
 
+internal data class MintQuoteSyncResult(
+    val minted: Boolean,
+    val receivedAmount: Long? = null,
+    val unit: String = "sat",
+)
+
 internal class WalletMintQuoteSyncService(
     private val gateway: CdkWalletGateway,
     private val walletStore: WalletStore,
@@ -24,12 +30,12 @@ internal class WalletMintQuoteSyncService(
         quoteId: String,
         allowPendingOnchainMintAttempt: Boolean,
         force: Boolean = false,
-    ): Boolean {
+    ): MintQuoteSyncResult {
         val now = System.currentTimeMillis()
         val prior = checkThrottle[quoteId]
-        if (!MintQuoteCheckBackoff.shouldCheck(prior, now, force)) return false
+        if (!MintQuoteCheckBackoff.shouldCheck(prior, now, force)) return MintQuoteSyncResult(minted = false)
 
-        if (!mintQuoteSyncsInFlight.add(quoteId)) return false
+        if (!mintQuoteSyncsInFlight.add(quoteId)) return MintQuoteSyncResult(minted = false)
         return try {
             val updatedQuote = try {
                 gateway.checkMintQuote(quoteId).also { rememberMintQuoteTimestamp(it.id) }
@@ -40,7 +46,7 @@ internal class WalletMintQuoteSyncService(
                 if (!isMissingQuoteError(error)) {
                     AppLogger.wallet.error("Failed to refresh pending quote $quoteId", error)
                 }
-                return false
+                return MintQuoteSyncResult(minted = false)
             }
 
             val shouldAttemptMint = updatedQuote.state == MintQuoteState.Paid ||
@@ -48,7 +54,7 @@ internal class WalletMintQuoteSyncService(
                 (allowPendingOnchainMintAttempt && updatedQuote.paymentMethod == PaymentMethodKind.Onchain)
             if (!shouldAttemptMint) {
                 checkThrottle[quoteId] = MintQuoteCheckBackoff.afterUnpaidOrError(prior, now)
-                return false
+                return MintQuoteSyncResult(minted = false)
             }
 
             if (updatedQuote.paymentMethod == PaymentMethodKind.Bolt12 &&
@@ -58,11 +64,12 @@ internal class WalletMintQuoteSyncService(
                 // Still fully caught up — treat as a quiet miss so passive
                 // polling backs off instead of re-hitting every 30s.
                 checkThrottle[quoteId] = MintQuoteCheckBackoff.afterUnpaidOrError(prior, now)
-                return false
+                return MintQuoteSyncResult(minted = false)
             }
 
+            var receivedAmount: Long? = null
             val minted = try {
-                gateway.mintTokens(quoteId)
+                receivedAmount = gateway.mintTokens(quoteId)
                 true
             } catch (error: CancellationException) {
                 throw error
@@ -85,7 +92,11 @@ internal class WalletMintQuoteSyncService(
             } else {
                 MintQuoteCheckBackoff.afterUnpaidOrError(prior, now)
             }
-            minted
+            MintQuoteSyncResult(
+                minted = minted,
+                receivedAmount = receivedAmount?.takeIf { minted },
+                unit = updatedQuote.unit,
+            )
         } finally {
             mintQuoteSyncsInFlight.remove(quoteId)
         }

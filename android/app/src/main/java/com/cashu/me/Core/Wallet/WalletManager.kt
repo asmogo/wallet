@@ -11,10 +11,14 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
@@ -76,6 +80,11 @@ class WalletManager(
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate + exceptionHandler)
     private val mutableState = MutableStateFlow(WalletState())
     val state: StateFlow<WalletState> = mutableState.asStateFlow()
+    private val mutableReceivedPayments = MutableSharedFlow<ReceivedPaymentEvent>(
+        extraBufferCapacity = 1,
+        onBufferOverflow = BufferOverflow.DROP_OLDEST,
+    )
+    val receivedPayments: SharedFlow<ReceivedPaymentEvent> = mutableReceivedPayments.asSharedFlow()
     private val initializationMutex = Mutex()
     private val mintMetadataFetcher = WalletMintMetadataFetcher(allowCleartextLocalTestMints)
     private val mintQuoteSyncService = WalletMintQuoteSyncService(gateway, walletStore)
@@ -518,27 +527,47 @@ class WalletManager(
     fun subscribeToMintQuote(quoteId: String): Flow<MintQuoteInfo> = gateway.subscribeToMintQuote(quoteId)
 
     override suspend fun mintTokens(quoteId: String): Long =
-        withLoadingResult {
+        mintTokens(
+            quoteId = quoteId,
+            unit = "sat",
+            confirmationOwner = ReceiveConfirmationOwner.InFlow,
+        )
+
+    suspend fun mintTokens(
+        quoteId: String,
+        unit: String,
+        confirmationOwner: ReceiveConfirmationOwner,
+    ): Long {
+        val amount = withLoadingResult {
             gateway.mintTokens(quoteId).also {
                 refreshBalance()
                 loadTransactions()
             }
         }
+        publishReceivedPayment(amount, unit, confirmationOwner)
+        return amount
+    }
 
     /**
      * Silent single-quote check + mint if paid. Used by Receive (per-quote
      * poll) and transaction detail open — must not flip the global loading
      * flag (passive UX). Forced past unpaid backoff (brief debounce only).
      */
-    suspend fun refreshPendingMintQuote(quoteId: String): Boolean {
-        val minted = mintQuoteSyncService.syncPendingMintQuote(
+    suspend fun refreshPendingMintQuote(
+        quoteId: String,
+        confirmationOwner: ReceiveConfirmationOwner,
+    ): Boolean {
+        val result = mintQuoteSyncService.syncPendingMintQuote(
             quoteId,
             allowPendingOnchainMintAttempt = true,
             force = true,
         )
-        if (minted) refreshBalance()
+        if (result.minted) refreshBalance()
         loadTransactions()
-        return minted
+        result.receivedAmount?.let { amount ->
+            publishReceivedPayment(amount, result.unit, confirmationOwner)
+        }
+        return result.minted
     }
 
     /**
@@ -595,19 +624,27 @@ class WalletManager(
                 ordered.take(MintQuoteCheckBackoff.MAX_PASSIVE_CHECKS_PER_PASS)
             }
             var mintedCount = 0
+            val receivedPayments = mutableListOf<MintQuoteSyncResult>()
             toCheck.forEach { quote ->
-                if (
-                    mintQuoteSyncService.syncPendingMintQuote(
-                        quote.id,
-                        allowPendingOnchainMintAttempt = false,
-                        force = force,
-                    )
-                ) {
+                val result = mintQuoteSyncService.syncPendingMintQuote(
+                    quote.id,
+                    allowPendingOnchainMintAttempt = false,
+                    force = force,
+                )
+                if (result.minted) {
                     mintedCount += 1
                 }
+                if (result.receivedAmount != null) receivedPayments += result
             }
             if (mintedCount > 0) refreshBalance()
             loadTransactions()
+            receivedPayments.forEach { result ->
+                publishReceivedPayment(
+                    amount = checkNotNull(result.receivedAmount),
+                    unit = result.unit,
+                    confirmationOwner = ReceiveConfirmationOwner.Home,
+                )
+            }
             return mintedCount
         } finally {
             isSyncingMintQuotes.set(false)
@@ -629,6 +666,11 @@ class WalletManager(
             p2pkPubkey?.let(settingsManager::markP2PKKeyUsed)
             refreshBalance()
             loadTransactions()
+            publishReceivedPayment(
+                amount = amount,
+                unit = "sat",
+                confirmationOwner = ReceiveConfirmationOwner.Home,
+            )
             amount > 0 || isNPCQuoteProcessed(quote.id)
         } catch (error: Throwable) {
             if (mintQuoteSyncService.isAlreadyIssuedMintError(error)) {
@@ -863,7 +905,17 @@ class WalletManager(
     }
 
     override suspend fun receiveTokens(tokenString: String): Long =
-        withLoadingResult {
+        receiveTokens(
+            tokenString = tokenString,
+            confirmationOwner = ReceiveConfirmationOwner.InFlow,
+        )
+
+    private suspend fun receiveTokens(
+        tokenString: String,
+        confirmationOwner: ReceiveConfirmationOwner?,
+    ): Long {
+        val unit = com.cashu.me.Models.TokenInfo.parse(tokenString)?.unit ?: "sat"
+        val amount = withLoadingResult {
             val p2pkPubkeys = TokenParser.p2pkPubkeys(tokenString)
             val signingKeys = settingsManager.p2pkSigningKeysFor(p2pkPubkeys)
             gateway.receiveEcashToken(tokenString, signingKeys).also {
@@ -884,13 +936,21 @@ class WalletManager(
                 loadTransactions()
             }
         }
+        confirmationOwner?.let { publishReceivedPayment(amount, unit, it) }
+        return amount
+    }
 
-    suspend fun receiveCashuRequestPayment(tokenString: String, requestId: String?, processedId: String? = requestId): Long {
+    suspend fun receiveCashuRequestPayment(
+        tokenString: String,
+        requestId: String?,
+        processedId: String? = requestId,
+        confirmationOwner: ReceiveConfirmationOwner = ReceiveConfirmationOwner.InFlow,
+    ): Long {
         val normalizedProcessedId = processedId?.trim()?.takeIf { it.isNotEmpty() }
         if (normalizedProcessedId != null && normalizedProcessedId in walletStore.loadProcessedCashuRequests()) {
             return 0
         }
-        val amount = receiveTokens(tokenString)
+        val amount = receiveTokens(tokenString, confirmationOwner)
         normalizedProcessedId?.let { id ->
             walletStore.saveProcessedCashuRequests((walletStore.loadProcessedCashuRequests() + id).distinct().sorted())
         }
@@ -907,38 +967,56 @@ class WalletManager(
     suspend fun receiveNfcCashuRequestPayment(
         tokenString: String,
         processedId: String,
-    ): com.cashu.me.Core.CDK.NfcReceiveReceipt = withLoadingResult {
-        require(processedId !in walletStore.loadProcessedCashuRequests()) { "This payment was already received." }
-        val p2pkPubkeys = TokenParser.p2pkPubkeys(tokenString)
-        val signingKeys = settingsManager.p2pkSigningKeysFor(p2pkPubkeys)
-        gateway.receiveNfcEcashToken(tokenString, signingKeys).also {
-            p2pkPubkeys.forEach(settingsManager::markP2PKKeyUsed)
-            trackMintForReceivedToken(
-                tokenString = tokenString,
-                onTrackingFailed = { AppLogger.wallet.error("Failed to track mint for received NFC token", it) },
-                ensureMintTracked = { ensureMintTracked(it) },
-            )
-            walletStore.saveProcessedCashuRequests(
-                (walletStore.loadProcessedCashuRequests() + processedId).distinct().sorted(),
-            )
-            refreshBalance()
-            loadTransactions()
+    ): com.cashu.me.Core.CDK.NfcReceiveReceipt {
+        val unit = com.cashu.me.Models.TokenInfo.parse(tokenString)?.unit ?: "sat"
+        val receipt = withLoadingResult {
+            require(processedId !in walletStore.loadProcessedCashuRequests()) { "This payment was already received." }
+            val p2pkPubkeys = TokenParser.p2pkPubkeys(tokenString)
+            val signingKeys = settingsManager.p2pkSigningKeysFor(p2pkPubkeys)
+            gateway.receiveNfcEcashToken(tokenString, signingKeys).also {
+                p2pkPubkeys.forEach(settingsManager::markP2PKKeyUsed)
+                trackMintForReceivedToken(
+                    tokenString = tokenString,
+                    onTrackingFailed = { AppLogger.wallet.error("Failed to track mint for received NFC token", it) },
+                    ensureMintTracked = { ensureMintTracked(it) },
+                )
+                walletStore.saveProcessedCashuRequests(
+                    (walletStore.loadProcessedCashuRequests() + processedId).distinct().sorted(),
+                )
+                refreshBalance()
+                loadTransactions()
+            }
         }
+        publishReceivedPayment(
+            receipt.amountReceived,
+            unit,
+            ReceiveConfirmationOwner.InFlow,
+        )
+        return receipt
     }
 
     suspend fun settleForeignNfcToken(
         tokenString: String,
         settlementMintUrl: String,
         processedId: String,
-    ): com.cashu.me.Core.CDK.ForeignNfcSettlement = withLoadingResult {
-        require(processedId !in walletStore.loadProcessedCashuRequests()) { "This payment was already received." }
-        gateway.settleForeignNfcToken(tokenString, settlementMintUrl).also {
-            walletStore.saveProcessedCashuRequests(
-                (walletStore.loadProcessedCashuRequests() + processedId).distinct().sorted(),
-            )
-            refreshBalance()
-            loadTransactions()
+    ): com.cashu.me.Core.CDK.ForeignNfcSettlement {
+        val unit = com.cashu.me.Models.TokenInfo.parse(tokenString)?.unit ?: "sat"
+        val settlement = withLoadingResult {
+            require(processedId !in walletStore.loadProcessedCashuRequests()) { "This payment was already received." }
+            gateway.settleForeignNfcToken(tokenString, settlementMintUrl).also {
+                walletStore.saveProcessedCashuRequests(
+                    (walletStore.loadProcessedCashuRequests() + processedId).distinct().sorted(),
+                )
+                refreshBalance()
+                loadTransactions()
+            }
         }
+        publishReceivedPayment(
+            settlement.amountReceived,
+            unit,
+            ReceiveConfirmationOwner.InFlow,
+        )
+        return settlement
     }
 
     fun savePendingReceiveToken(token: PendingReceiveToken) {
@@ -970,7 +1048,7 @@ class WalletManager(
                 }
             }
         } else {
-            receiveTokens(token.token)
+            receiveTokens(token.token, ReceiveConfirmationOwner.InFlow)
         }
         removePendingReceiveToken(token.tokenId)
         return amount
@@ -1027,7 +1105,9 @@ class WalletManager(
     }
 
     suspend fun reclaimPendingToken(pendingToken: PendingToken): Long {
-        val amount = receiveTokens(pendingToken.token)
+        // Reclaiming our own unspent outgoing token restores balance, but is
+        // not an incoming payment and must not publish a Home receive beat.
+        val amount = receiveTokens(pendingToken.token, confirmationOwner = null)
         removePendingToken(pendingToken.tokenId)
         loadTransactions()
         return amount
@@ -1309,6 +1389,16 @@ class WalletManager(
 
     private fun update(transform: WalletState.() -> WalletState) {
         mutableState.value = mutableState.value.transform()
+    }
+
+    private fun publishReceivedPayment(
+        amount: Long,
+        unit: String,
+        confirmationOwner: ReceiveConfirmationOwner,
+    ) {
+        confirmedReceivedPaymentEvent(amount, unit, confirmationOwner)?.let {
+            mutableReceivedPayments.tryEmit(it)
+        }
     }
 
     fun launch(block: suspend CoroutineScope.() -> Unit) {
