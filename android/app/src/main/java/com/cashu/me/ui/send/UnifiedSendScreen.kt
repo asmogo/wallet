@@ -65,6 +65,7 @@ import com.cashu.me.Core.AmountFormatter
 import com.cashu.me.Core.CashuPaymentRequestRoute
 import com.cashu.me.Core.PaymentRequestDecodeResult
 import com.cashu.me.Core.PaymentRequestDecoder
+import com.cashu.me.Core.PriceService
 import com.cashu.me.Core.SettingsManager
 import com.cashu.me.Core.Wallet.WalletMessage
 import com.cashu.me.Core.Wallet.userFacingWalletMessage
@@ -145,6 +146,7 @@ private sealed interface SendStatus {
 fun UnifiedSendScreen(
     walletManager: WalletManager,
     settingsManager: SettingsManager,
+    priceService: PriceService,
     onClose: () -> Unit,
     onScan: () -> Unit,
     onContactless: () -> Unit,
@@ -158,6 +160,7 @@ fun UnifiedSendScreen(
 ) {
     val walletState by walletManager.state.collectAsState()
     val settings by settingsManager.state.collectAsState()
+    val priceState by priceService.state.collectAsState()
     val formatter = remember { AmountFormatter() }
     val scope = rememberCoroutineScope()
     val clipboard = LocalClipboardManager.current
@@ -582,6 +585,10 @@ fun UnifiedSendScreen(
                         mintBalance = activeMint?.balance ?: 0L,
                         formatter = formatter,
                         useBitcoinSymbol = settings.useBitcoinSymbol,
+                        preferredPrimary = settings.amountDisplayPrimary,
+                        showFiat = settings.showFiatBalance,
+                        btcPrice = priceState.btcPrice,
+                        currencyCode = priceState.currencyCode,
                         topUpLoading = topUpLoading,
                         topUpError = topUpError,
                         onPay = ::pay,
@@ -862,6 +869,10 @@ private fun ConfirmFace(
     mintBalance: Long,
     formatter: AmountFormatter,
     useBitcoinSymbol: Boolean,
+    preferredPrimary: String,
+    showFiat: Boolean,
+    btcPrice: Double?,
+    currencyCode: String,
     topUpLoading: Boolean,
     topUpError: String?,
     onPay: () -> Unit,
@@ -869,6 +880,7 @@ private fun ConfirmFace(
     val isMelt = rail is LockedRail.Melt
     val isOnchain = (rail as? LockedRail.Melt)?.decoded is PaymentRequestDecodeResult.Onchain
     val cashuAmountLabel = (rail as? LockedRail.Creq)?.decoded?.summary?.let(PaymentRequestDecoder::amountLabel)
+    val amountUnit = (rail as? LockedRail.Creq)?.decoded?.summary?.unit ?: "sat"
     val creqDescription = (rail as? LockedRail.Creq)?.decoded?.summary?.description
     val hideCreqDestination = (rail as? LockedRail.Creq)?.fromScan == true
     val total = quote?.totalAmount ?: amountSats
@@ -893,9 +905,15 @@ private fun ConfirmFace(
         }
         if (!hideCreqDestination) rail?.let { ToPill(destination = it.raw) }
         Spacer(Modifier.height(CashuTheme.spacing.section))
-        AmountText(
-            text = cashuAmountLabel ?: formatter.formatWalletSats(amountSats, useBitcoinSymbol),
-            style = MaterialTheme.typography.displayMedium.withMonoDigits(),
+        PaymentConfirmationAmount(
+            amount = amountSats,
+            unit = amountUnit,
+            preferredPrimary = preferredPrimary,
+            showFiat = showFiat,
+            btcPrice = btcPrice,
+            currencyCode = currencyCode,
+            useBitcoinSymbol = useBitcoinSymbol,
+            formatter = formatter,
         )
         Spacer(Modifier.height(CashuTheme.spacing.section))
         Column(modifier = Modifier.fillMaxWidth()) {
