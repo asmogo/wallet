@@ -88,6 +88,7 @@ fun ScannerView(
     onClose: () -> Unit,
     onScanned: (String) -> Unit,
     useDeterministicPermission: Boolean = false,
+    promptText: String = "Scan Cashu token, payment request, invoice, or Bitcoin address",
 ) {
     val context = LocalContext.current
     val activity = remember(context) { context.findActivity() }
@@ -243,6 +244,7 @@ fun ScannerView(
         ScannerStatusOverlay(
             progress = animatedProgress,
             error = animatedError,
+            promptText = promptText,
             modifier = Modifier
                 .align(Alignment.BottomCenter)
                 .navigationBarsPadding()
@@ -255,6 +257,7 @@ fun ScannerView(
 private fun ScannerStatusOverlay(
     progress: Float,
     error: String?,
+    promptText: String,
     modifier: Modifier = Modifier,
 ) {
     Column(
@@ -281,7 +284,7 @@ private fun ScannerStatusOverlay(
             )
         } else {
             Text(
-                text = "Scan Cashu token, payment request, invoice, or Bitcoin address",
+                text = promptText,
                 color = Color.White,
                 style = MaterialTheme.typography.bodyMedium,
                 textAlign = TextAlign.Center,

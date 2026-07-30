@@ -80,6 +80,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import com.cashu.me.Views.Components.ScannerView
 import com.cashu.me.Core.AmountFormatter
 import com.cashu.me.Core.Protocols.CurrencyAmount
 import com.cashu.me.Core.Protocols.CurrencyRegistry
@@ -140,6 +141,32 @@ private sealed interface SendFace {
     ) : SendFace
 }
 
+internal data class P2PKRecipientKeyValidation(
+    val normalizedKey: String?,
+    val errorMessage: String?,
+)
+
+/**
+ * The single validation path for every P2PK recipient-key intake: typing,
+ * clipboard paste, camera scan, and the wallet's own-key shortcut.
+ */
+internal fun validateP2PKRecipientKey(raw: String): P2PKRecipientKeyValidation {
+    if (raw.isBlank()) return P2PKRecipientKeyValidation(normalizedKey = null, errorMessage = null)
+
+    return runCatching {
+        SettingsManager.normalizeP2PKPublicKeyForSend(raw)
+    }.fold(
+        onSuccess = { P2PKRecipientKeyValidation(normalizedKey = it, errorMessage = null) },
+        onFailure = {
+            P2PKRecipientKeyValidation(
+                normalizedKey = null,
+                errorMessage = it.message
+                    ?: "Invalid P2PK pubkey. Use a 66-character hex key with 02/03 prefix.",
+            )
+        },
+    )
+}
+
 @Composable
 fun SendEcashScreen(
     walletManager: WalletManager,
@@ -169,6 +196,12 @@ fun SendEcashScreen(
     var p2pkInput by remember { mutableStateOf("") }
     var p2pkInputError by remember { mutableStateOf<String?>(null) }
     var p2pkEditing by remember { mutableStateOf(true) }
+    var p2pkScannerVisible by remember { mutableStateOf(false) }
+    val clipboard = LocalClipboardManager.current
+
+    fun acceptP2pkRecipientInput(raw: String) {
+        p2pkInput = raw
+    }
 
     val activeMintUrl = selectedMintUrl ?: walletState.activeMint?.url
     val activeMint = walletState.mints.firstOrNull { it.url == activeMintUrl } ?: walletState.activeMint
@@ -222,13 +255,11 @@ fun SendEcashScreen(
         previousAmountEntryContext = amountEntryContext
     }
 
-    // Normalize and validate the P2PK input only when the lock is on.
-    val validatedP2pkPubkey: String? = remember(p2pkOn, p2pkInput) {
-        if (!p2pkOn) null
-        else runCatching {
-            com.cashu.me.Core.SettingsManager.normalizeP2PKPublicKeyForSend(p2pkInput)
-        }.getOrNull()
-    }
+    // Scan, paste, manual typing, and the own-key shortcut all update
+    // [p2pkInput], so normalization and error copy cannot diverge by source.
+    val p2pkValidation = remember(p2pkInput) { validateP2PKRecipientKey(p2pkInput) }
+    val validatedP2pkPubkey = p2pkValidation.normalizedKey.takeIf { p2pkOn }
+    val p2pkInputError = p2pkValidation.errorMessage.takeIf { p2pkOn }
     val primaryP2pkPublicKey = settingsManager.primaryP2PKKeyInfo()?.publicKey
     val p2pkRecipientIsOwnKey = validatedP2pkPubkey?.let { recipient ->
         isOwnP2pkRecipient(
@@ -245,20 +276,6 @@ fun SendEcashScreen(
             validatedP2pkPubkey != null -> p2pkEditing = false
         }
     }
-    LaunchedEffect(p2pkOn, p2pkInput) {
-        if (!p2pkOn) {
-            p2pkInputError = null
-            return@LaunchedEffect
-        }
-        val trimmed = p2pkInput.trim()
-        if (trimmed.isEmpty()) {
-            p2pkInputError = null
-            return@LaunchedEffect
-        }
-        p2pkInputError = runCatching {
-            com.cashu.me.Core.SettingsManager.normalizeP2PKPublicKeyForSend(trimmed)
-        }.exceptionOrNull()?.let { LockEcashCopy.InvalidRecipientKey }
-    }
 
     // Generation counts as money-in-motion: block sheet dismissal.
     LaunchedEffect(sending) { onDismissLockChanged(sending) }
@@ -267,10 +284,24 @@ fun SendEcashScreen(
     // Send surface. Swallow back while a token is being generated.
     BackHandler(enabled = true) {
         when {
+            p2pkScannerVisible -> p2pkScannerVisible = false
             sending -> Unit
             face is SendFace.Generated -> face = SendFace.Input
             else -> onBack()
         }
+    }
+
+    if (p2pkScannerVisible) {
+        ScannerView(
+            onClose = { p2pkScannerVisible = false },
+            onScanned = { scanned ->
+                p2pkOn = true
+                acceptP2pkRecipientInput(scanned)
+                p2pkScannerVisible = false
+            },
+            promptText = "Scan a P2PK recipient key",
+        )
+        return
     }
 
     Column(
@@ -368,7 +399,7 @@ fun SendEcashScreen(
                     errorText = errorText,
                     p2pkOn = p2pkOn,
                     p2pkInput = p2pkInput,
-                    onP2pkInputChange = { p2pkInput = it },
+                    onP2pkInputChange = ::acceptP2pkRecipientInput,
                     p2pkInputError = p2pkInputError,
                     confirmedP2pkPubkey = validatedP2pkPubkey?.takeUnless { p2pkEditing },
                     p2pkRecipientIsOwnKey = p2pkRecipientIsOwnKey,
@@ -377,6 +408,11 @@ fun SendEcashScreen(
                         p2pkInput = ""
                         p2pkOn = false
                     },
+                    onScanP2pkKey = { p2pkScannerVisible = true },
+                    onPasteP2pkKey = {
+                        clipboard.getText()?.text?.let(::acceptP2pkRecipientInput)
+                    },
+                    canPasteP2pkKey = clipboard.hasText(),
                     // iOS "Lock to my key" shortcut: opt-in via the Locked Ecash
                     // toggle, and it targets the seed-derived primary key.
                     p2pkMyKeyHex = if (settings.showP2PKButtonInDrawer) {
@@ -525,6 +561,9 @@ private fun InputFace(
     p2pkRecipientIsOwnKey: Boolean,
     onEditP2pkRecipient: () -> Unit,
     onRemoveP2pkRecipient: () -> Unit,
+    onScanP2pkKey: () -> Unit,
+    onPasteP2pkKey: () -> Unit,
+    canPasteP2pkKey: Boolean,
     p2pkMyKeyHex: String?,
     onUseMyP2pkKey: () -> Unit,
     canSendWithP2pk: Boolean,
@@ -592,6 +631,9 @@ private fun InputFace(
                 recipientIsOwnKey = p2pkRecipientIsOwnKey,
                 onEditRecipient = onEditP2pkRecipient,
                 onRemoveRecipient = onRemoveP2pkRecipient,
+                onScanKey = onScanP2pkKey,
+                onPasteKey = onPasteP2pkKey,
+                canPasteKey = canPasteP2pkKey,
                 myKeyHex = p2pkMyKeyHex,
                 onUseMyKey = onUseMyP2pkKey,
             )
@@ -697,6 +739,9 @@ internal fun P2pkLockSection(
     recipientIsOwnKey: Boolean,
     onEditRecipient: () -> Unit,
     onRemoveRecipient: () -> Unit,
+    onScanKey: () -> Unit,
+    onPasteKey: () -> Unit,
+    canPasteKey: Boolean,
     myKeyHex: String?,
     onUseMyKey: () -> Unit,
 ) {
@@ -800,6 +845,22 @@ internal fun P2pkLockSection(
                 text = inputError,
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.error,
+            )
+        }
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(CashuTheme.spacing.tight),
+        ) {
+            com.cashu.me.ui.components.GhostButton(
+                text = "Scan key",
+                onClick = onScanKey,
+                modifier = Modifier.weight(1f),
+            )
+            com.cashu.me.ui.components.GhostButton(
+                text = "Paste key",
+                onClick = onPasteKey,
+                modifier = Modifier.weight(1f),
+                enabled = canPasteKey,
             )
         }
         if (myKeyHex != null) {
