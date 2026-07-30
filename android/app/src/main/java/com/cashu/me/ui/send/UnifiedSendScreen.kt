@@ -63,6 +63,7 @@ import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import com.cashu.me.Core.AmountDisplayPrimary
 import com.cashu.me.Core.AmountFormatter
 import com.cashu.me.Core.CashuPaymentRequestRoute
 import com.cashu.me.Core.PaymentRequestDecodeResult
@@ -179,8 +180,13 @@ fun UnifiedSendScreen(
     var quoteError by remember { mutableStateOf<String?>(null) }
     var confirmError by remember { mutableStateOf<String?>(null) }
 
+    val entryContext = UnifiedSendAmountEntry.context(
+        preferredPrimary = settings.amountDisplayPrimary,
+        btcPrice = priceState.btcPrice,
+    )
+    var previousEntryContext by remember { mutableStateOf(entryContext) }
     val activeMintUrl = selectedMintUrl ?: walletState.activeMint?.url
-    val enteredAmount = amount.toLongOrNull() ?: 0L
+    val enteredAmount = UnifiedSendAmountEntry.amountSats(amount, entryContext)
     val confirmAmount = locked?.let { rail ->
         when (rail) {
             is LockedRail.Melt -> rail.knownAmount ?: enteredAmount
@@ -371,6 +377,19 @@ fun UnifiedSendScreen(
         onPrefilledConsumed()
     }
 
+    // Re-express an in-progress amount when fiat entry becomes available (or
+    // the saved primary changes), preserving the economic amount through sats.
+    LaunchedEffect(entryContext.primary, entryContext.btcPrice) {
+        if (previousEntryContext.primary != entryContext.primary) {
+            amount = UnifiedSendAmountEntry.convert(
+                raw = amount,
+                from = previousEntryContext,
+                to = entryContext,
+            )
+        }
+        previousEntryContext = entryContext
+    }
+
     // Confirm entry prefetches the melt quote (iOS shows fee/total skeleton).
     LaunchedEffect(step, locked, confirmAmount, activeMintUrl) {
         if (step != SendStep.Confirm) return@LaunchedEffect
@@ -517,8 +536,13 @@ fun UnifiedSendScreen(
                         },
                         onPickMint = { mintPickerOpen = true },
                         onUseMax = {
-                            activeMint?.balance?.takeIf { it > 0 }?.let { amount = it.toString() }
+                            activeMint?.balance?.takeIf { it > 0 }?.let {
+                                amount = UnifiedSendAmountEntry.maxRawForBalance(it, entryContext)
+                            }
                         },
+                        amountSats = enteredAmount,
+                        entryPrimary = entryContext.primary,
+                        fiatCurrencyCode = priceState.currencyCode,
                         useBitcoinSymbol = settings.useBitcoinSymbol,
                         formatter = formatter,
                         onContinue = {
@@ -839,13 +863,17 @@ private fun AmountFace(
     balanceText: String?,
     onPickMint: () -> Unit,
     onUseMax: () -> Unit,
+    amountSats: Long,
+    entryPrimary: AmountDisplayPrimary,
+    fiatCurrencyCode: String,
     useBitcoinSymbol: Boolean,
     formatter: AmountFormatter,
     onContinue: () -> Unit,
 ) {
-    val amountValue = amount.toLongOrNull() ?: 0L
     val mintBalance = mint?.balance ?: 0L
-    val insufficient = amountValue > 0 && amountValue > mintBalance
+    val validation = UnifiedSendAmountEntry.validation(amountSats, mintBalance)
+    val insufficient = validation == UnifiedSendAmountValidation.InsufficientBalance
+    val isFiatEntry = entryPrimary == AmountDisplayPrimary.Fiat
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -867,11 +895,12 @@ private fun AmountFace(
         Spacer(Modifier.weight(1f))
         AmountEntryHero(
             entryRaw = amount,
-            isSat = true,
-            unit = "sat",
-            decimals = 0,
+            isSat = !isFiatEntry,
+            unit = if (isFiatEntry) fiatCurrencyCode else "sat",
+            decimals = if (isFiatEntry) 2 else 0,
             useBitcoinSymbol = useBitcoinSymbol,
             formatter = formatter,
+            fiatCurrencyCode = fiatCurrencyCode.takeIf { isFiatEntry },
         )
         Spacer(Modifier.weight(1f))
         if (insufficient) {
@@ -886,7 +915,8 @@ private fun AmountFace(
             onAmountChange = onAmountChange,
             buttonText = "Continue",
             onButtonClick = onContinue,
-            buttonEnabled = amountValue > 0 && !insufficient,
+            decimals = if (isFiatEntry) 2 else 0,
+            buttonEnabled = validation == UnifiedSendAmountValidation.Valid,
         )
     }
 }
