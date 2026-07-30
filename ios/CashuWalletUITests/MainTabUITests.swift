@@ -6,6 +6,27 @@ final class MainTabUITests: UITestBase {
 
     // MARK: - Tests
 
+    func testWalletNoMintEmptyStateLinksToMintSetup() throws {
+        waitForMainTab()
+
+        XCTAssertTrue(
+            app.staticTexts["Add a mint to get started"].waitForExistence(timeout: 5),
+            "A wallet without mints should explain that a mint is required"
+        )
+
+        let addMint = app.buttons["Add mint"]
+        tapWhenReady(addMint)
+
+        XCTAssertTrue(
+            app.navigationBars["Add Mint"].waitForExistence(timeout: 5),
+            "The Wallet empty-state CTA should open mint setup directly"
+        )
+        XCTAssertTrue(
+            app.textFields["mints-add-url-field"].waitForExistence(timeout: 5),
+            "Mint setup should expose the mint URL field"
+        )
+    }
+
     func testPrimaryNavigationAndEmptyMintsState() throws {
         waitForMainTab()
 
