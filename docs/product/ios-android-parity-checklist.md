@@ -88,7 +88,7 @@ Platform-specific capabilities remain intentionally outside parity, including iC
 
 ### Receive — Lightning, reusable invoices, on-chain, and Cashu Requests
 
-- [ ] **[P1 · iOS → Android] Support fiat-primary amount entry on Bitcoin receive rails.** iOS lets a sat Lightning invoice be entered in fiat; Android’s receive keypad uses fixed sat entry. **Done when:** Android entry and validation honor the persisted primary display setting without changing the sat-denominated quote.
+- [x] **[P1 · iOS → Android] Support fiat-primary amount entry on Bitcoin receive rails.** iOS lets a sat Lightning invoice be entered in fiat; Android’s receive keypad uses fixed sat entry. **Done when:** Android entry and validation honor the persisted primary display setting without changing the sat-denominated quote.
 
 - [ ] **[P2 · iOS → Android] Honor the preferred unit on generated invoice details.** iOS keeps sats and fiat available under a BOLT11 or fixed BOLT12 QR; Android renders a fixed amount string. **Done when:** Android leads with the saved primary unit and exposes the alternate conversion visually and accessibly through a native presentation.
 

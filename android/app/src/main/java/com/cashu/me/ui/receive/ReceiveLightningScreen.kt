@@ -73,9 +73,9 @@ import com.cashu.me.Core.Protocols.CurrencyAmount
 import com.cashu.me.Core.Protocols.CurrencyRegistry
 import com.cashu.me.Core.OnchainExplorer
 import com.cashu.me.Core.OnchainPaymentObservation
+import com.cashu.me.Core.PriceService
 import com.cashu.me.Core.ReceiveConfirmationOwner
 import com.cashu.me.Core.SettingsManager
-import com.cashu.me.Core.UnitAmountEntry
 import com.cashu.me.Core.Wallet.userFacingWalletMessage
 import com.cashu.me.Core.WalletManager
 import com.cashu.me.Core.mintQuoteDisplayExpiry
@@ -124,10 +124,12 @@ fun ReceiveLightningScreen(
     walletManager: WalletManager,
     cashuRequestStore: CashuRequestStore,
     settingsManager: SettingsManager,
+    priceService: PriceService,
     onClose: () -> Unit,
 ) {
     val walletState by walletManager.state.collectAsState()
     val settings by settingsManager.state.collectAsState()
+    val priceState by priceService.state.collectAsState()
     val cashuRequestState by cashuRequestStore.state.collectAsState()
     val formatter = remember { AmountFormatter() }
     val scope = rememberCoroutineScope()
@@ -166,6 +168,14 @@ fun ReceiveLightningScreen(
     }
     val currency = CurrencyRegistry.currencyForMintUnit(effectiveUnit)
     val isSatUnit = effectiveUnit.equals("sat", ignoreCase = true)
+    val amountEntryContext = ReceiveAmountEntry.context(
+        quoteUnit = effectiveUnit,
+        mintUnitDecimals = currency.decimals,
+        preferredPrimary = settings.amountDisplayPrimary,
+        btcPrice = priceState.btcPrice,
+    )
+    var previousAmountEntryContext by remember { mutableStateOf(amountEntryContext) }
+    val amountValidation = ReceiveAmountEntry.validation(amount, amountEntryContext)
     val showsUnitSelector = activeMint?.supportsMultipleMintUnits == true &&
         method != PaymentMethodKind.Onchain
 
@@ -188,9 +198,14 @@ fun ReceiveLightningScreen(
         requestMethod: PaymentMethodKind,
         amountless: Boolean,
         forceNewReusableOffer: Boolean = false,
+        amountOverride: Long? = null,
     ) {
-        val explicit = UnitAmountEntry.baseUnits(amount, currency.decimals)
-            .takeIf { it > 0 }
+        val explicit = amountOverride?.takeIf { it > 0L }
+            ?: ReceiveAmountEntry.quoteAmount(
+                raw = amount,
+                context = amountEntryContext,
+                amountless = false,
+            )
         if (!amountless && requestMethod.requiresMintAmount && explicit == null) {
             errorText = "Enter an amount."
             return
@@ -206,7 +221,11 @@ fun ReceiveLightningScreen(
         errorText = null
         scope.launch {
             try {
-                val requestUnit = if (requestMethod == PaymentMethodKind.Onchain) "sat" else effectiveUnit
+                val requestUnit = if (requestMethod == PaymentMethodKind.Onchain) {
+                    "sat"
+                } else {
+                    amountEntryContext.quoteUnit
+                }
                 val quote = if (
                     requestMethod == PaymentMethodKind.Bolt12 &&
                     amountless &&
@@ -281,10 +300,17 @@ fun ReceiveLightningScreen(
         } else {
             val quoteUnit = (face as? ReceiveLnFace.Display)?.quote?.unit ?: effectiveUnit
             val decimals = CurrencyRegistry.currencyForMintUnit(quoteUnit).decimals
-            amount = UnitAmountEntry.entryString(nextAmount, decimals)
+            val nextContext = ReceiveAmountEntry.context(
+                quoteUnit = quoteUnit,
+                mintUnitDecimals = decimals,
+                preferredPrimary = settings.amountDisplayPrimary,
+                btcPrice = priceState.btcPrice,
+            )
+            amount = ReceiveAmountEntry.rawForBaseUnits(nextAmount, nextContext)
             createMintRequest(
                 requestMethod = PaymentMethodKind.Bolt12,
                 amountless = false,
+                amountOverride = nextAmount,
             )
         }
     }
@@ -311,6 +337,17 @@ fun ReceiveLightningScreen(
             // path, not a keypad that can't create without an amount.
             applyMethodOption(fallback)
         }
+    }
+
+    // Preserve the represented sat amount if a cached price becomes available
+    // or the persisted primary setting changes while this screen is open.
+    LaunchedEffect(amountEntryContext) {
+        amount = ReceiveAmountEntry.convert(
+            raw = amount,
+            from = previousAmountEntryContext,
+            to = amountEntryContext,
+        )
+        previousAmountEntryContext = amountEntryContext
     }
 
     // System back unwinds Display → Input; from Input the sheet handles it.
@@ -522,17 +559,24 @@ fun ReceiveLightningScreen(
                                 formatter.formatWalletSats(it.balance, settings.useBitcoinSymbol)
                             },
                             onPickMint = { mintPickerOpen = true },
-                            isSat = isSatUnit,
-                            unit = effectiveUnit,
+                            isSat = isSatUnit && !amountEntryContext.isFiatPrimary,
+                            unit = if (amountEntryContext.isFiatPrimary) {
+                                priceState.currencyCode
+                            } else {
+                                effectiveUnit
+                            },
                             useBitcoinSymbol = settings.useBitcoinSymbol,
                             formatter = formatter,
-                            decimals = currency.decimals,
+                            decimals = amountEntryContext.entryDecimals,
+                            fiatCurrencyCode = priceState.currencyCode
+                                .takeIf { amountEntryContext.isFiatPrimary },
+                            amountValid = amountValidation == ReceiveAmountValidation.Valid,
                             errorText = errorText,
                             onCreate = {
                                 createMintRequest(
                                     requestMethod = method,
                                     amountless = !method.requiresMintAmount &&
-                                        UnitAmountEntry.baseUnits(amount, currency.decimals) <= 0,
+                                        amountValidation == ReceiveAmountValidation.Empty,
                                 )
                             },
                         )
@@ -795,11 +839,18 @@ fun ReceiveLightningScreen(
         val quoteUnit = displayQuote.unit
         val isSat = quoteUnit.equals("sat", ignoreCase = true)
         val quoteCurrency = CurrencyRegistry.currencyForMintUnit(quoteUnit)
+        val editEntryContext = ReceiveAmountEntry.context(
+            quoteUnit = quoteUnit,
+            mintUnitDecimals = quoteCurrency.decimals,
+            preferredPrimary = settings.amountDisplayPrimary,
+            btcPrice = priceState.btcPrice,
+        )
         ReusableAmountEditSheet(
             initialAmount = displayQuote.amount.takeUnless { displayQuote.isAmountless },
             isSat = isSat,
             unit = quoteUnit,
-            decimals = quoteCurrency.decimals,
+            entryContext = editEntryContext,
+            fiatCurrencyCode = priceState.currencyCode,
             useBitcoinSymbol = settings.useBitcoinSymbol,
             formatter = formatter,
             onDone = { next ->
@@ -853,6 +904,8 @@ private fun InputFace(
     useBitcoinSymbol: Boolean,
     formatter: AmountFormatter,
     decimals: Int,
+    fiatCurrencyCode: String?,
+    amountValid: Boolean,
     errorText: String?,
     onCreate: () -> Unit,
 ) {
@@ -896,6 +949,7 @@ private fun InputFace(
             decimals = decimals,
             useBitcoinSymbol = useBitcoinSymbol,
             formatter = formatter,
+            fiatCurrencyCode = fiatCurrencyCode,
         )
         if (errorText != null) {
             Spacer(Modifier.height(CashuTheme.spacing.default))
@@ -908,7 +962,7 @@ private fun InputFace(
             decimals = decimals,
             buttonText = if (creating) "Creating…" else selectedMethod.createActionTitle,
             onButtonClick = onCreate,
-            buttonEnabled = !creating,
+            buttonEnabled = !creating && (!selectedMethod.requiresMintAmount || amountValid),
             buttonLoading = creating,
         )
     }
@@ -1141,7 +1195,8 @@ private fun ReusableAmountEditSheet(
     initialAmount: Long?,
     isSat: Boolean,
     unit: String,
-    decimals: Int,
+    entryContext: ReceiveAmountEntryContext,
+    fiatCurrencyCode: String,
     useBitcoinSymbol: Boolean,
     formatter: AmountFormatter,
     onDone: (Long?) -> Unit,
@@ -1149,7 +1204,12 @@ private fun ReusableAmountEditSheet(
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     var amount by remember {
-        mutableStateOf(UnitAmountEntry.entryString(initialAmount ?: 0, decimals))
+        mutableStateOf(ReceiveAmountEntry.rawForBaseUnits(initialAmount ?: 0, entryContext))
+    }
+    var previousEntryContext by remember { mutableStateOf(entryContext) }
+    LaunchedEffect(entryContext) {
+        amount = ReceiveAmountEntry.convert(amount, previousEntryContext, entryContext)
+        previousEntryContext = entryContext
     }
     ModalBottomSheet(
         onDismissRequest = onDismiss,
@@ -1171,20 +1231,24 @@ private fun ReusableAmountEditSheet(
             Spacer(Modifier.weight(1f))
             AmountEntryHero(
                 entryRaw = amount,
-                isSat = isSat,
-                unit = unit,
-                decimals = decimals,
+                isSat = isSat && !entryContext.isFiatPrimary,
+                unit = if (entryContext.isFiatPrimary) fiatCurrencyCode else unit,
+                decimals = entryContext.entryDecimals,
                 useBitcoinSymbol = useBitcoinSymbol,
                 formatter = formatter,
+                fiatCurrencyCode = fiatCurrencyCode.takeIf { entryContext.isFiatPrimary },
             )
             Spacer(Modifier.weight(1f))
             NumberPadFooter(
                 amount = amount,
                 onAmountChange = { amount = it },
-                decimals = decimals,
+                decimals = entryContext.entryDecimals,
                 buttonText = "Done",
                 onButtonClick = {
-                    onDone(UnitAmountEntry.baseUnits(amount, decimals).takeIf { it > 0 })
+                    onDone(
+                        ReceiveAmountEntry.amountBaseUnits(amount, entryContext)
+                            .takeIf { it > 0L },
+                    )
                 },
             )
         }
