@@ -95,6 +95,16 @@ object PaymentRequestBuilder {
 }
 
 sealed interface CashuRequestNostrReadiness {
+    data class RequestConfiguration(
+        val publicKeyHex: String,
+        val relays: List<String>,
+    )
+
+    data class DeliveryNotice(
+        val title: String,
+        val message: String,
+    )
+
     data class Ready(
         val publicKeyHex: String,
         val relays: List<String>,
@@ -102,7 +112,36 @@ sealed interface CashuRequestNostrReadiness {
 
     data class Blocked(
         val recoveryMessage: String,
+        val requestConfiguration: RequestConfiguration? = null,
     ) : CashuRequestNostrReadiness
+
+    fun requestConfigurationOrNull(): RequestConfiguration? = when (this) {
+        is Ready -> RequestConfiguration(publicKeyHex = publicKeyHex, relays = relays)
+        is Blocked -> requestConfiguration
+    }
+
+    /**
+     * Contextual copy for an already-created request. It avoids the "try again"
+     * wording used for creation errors because the QR remains shareable while
+     * the wallet's receive path is unavailable.
+     */
+    fun deliveryNoticeOrNull(): DeliveryNotice? {
+        val recoveryMessage = (this as? Blocked)?.recoveryMessage ?: return null
+        return when (recoveryMessage) {
+            NOSTR_KEY_RECOVERY -> DeliveryNotice(
+                title = "Nostr key unavailable",
+                message = "This wallet can't receive payments for this request. Check Settings → Nostr → Nostr key.",
+            )
+            RELAY_RECOVERY -> DeliveryNotice(
+                title = "No usable relay",
+                message = "This wallet can't receive payments for this request. Add a ws:// or wss:// relay in Settings → Nostr → Relays.",
+            )
+            else -> DeliveryNotice(
+                title = "Payment requests are off",
+                message = "You can share this request, but this wallet won't receive payments until you turn on Settings → Privacy → Listen for payment requests.",
+            )
+        }
+    }
 
     companion object {
         const val NOSTR_KEY_RECOVERY =
@@ -142,7 +181,11 @@ sealed interface CashuRequestNostrReadiness {
             }
             val usableRelays = normalizedRelays(relays)
             if (usableRelays.isEmpty()) return Blocked(RELAY_RECOVERY)
-            if (!listenerEnabled) return Blocked(LISTENER_RECOVERY)
+            val requestConfiguration = RequestConfiguration(
+                publicKeyHex = publicKeyHex,
+                relays = usableRelays,
+            )
+            if (!listenerEnabled) return Blocked(LISTENER_RECOVERY, requestConfiguration)
             return Ready(publicKeyHex = publicKeyHex, relays = usableRelays)
         }
 

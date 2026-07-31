@@ -142,7 +142,7 @@ class PaymentRequestBuilderTest {
     }
 
     @Test
-    fun nostrReadinessNamesListenerSettingWhenListeningIsOff() {
+    fun nostrReadinessKeepsRequestBuildableWhenListeningIsOff() {
         val readiness = CashuRequestNostrReadiness.evaluate(
             isIdentityInitialized = true,
             publicKeyHex = NostrService.publicKeyHex(PRIVATE_KEY_HEX),
@@ -154,8 +154,31 @@ class PaymentRequestBuilderTest {
         assertEquals(
             CashuRequestNostrReadiness.Blocked(
                 "Cashu Request listening is off. Turn on Settings → Privacy → Listen for payment requests, then try again.",
+                requestConfiguration = CashuRequestNostrReadiness.RequestConfiguration(
+                    publicKeyHex = NostrService.publicKeyHex(PRIVATE_KEY_HEX),
+                    relays = listOf("wss://relay.example"),
+                ),
             ),
             readiness,
+        )
+    }
+
+    @Test
+    fun listenerDisabledReadinessUsesRequestDetailNotice() {
+        val readiness = CashuRequestNostrReadiness.evaluate(
+            isIdentityInitialized = true,
+            publicKeyHex = NostrService.publicKeyHex(PRIVATE_KEY_HEX),
+            privateKeyHex = PRIVATE_KEY_HEX,
+            relays = listOf("wss://relay.example"),
+            listenerEnabled = false,
+        )
+
+        assertEquals(
+            CashuRequestNostrReadiness.DeliveryNotice(
+                title = "Payment requests are off",
+                message = "You can share this request, but this wallet won't receive payments until you turn on Settings → Privacy → Listen for payment requests.",
+            ),
+            readiness.deliveryNoticeOrNull(),
         )
     }
 

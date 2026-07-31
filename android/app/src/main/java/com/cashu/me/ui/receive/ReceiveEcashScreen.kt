@@ -113,11 +113,11 @@ fun ReceiveEcashScreen(
     // screen lets the user opt into a specific mint later.
     fun createNewRequest() {
         val readiness = CashuRequestNostrReadiness.current(nostrService, settingsManager)
-        if (readiness is CashuRequestNostrReadiness.Blocked) {
-            inputHint = readiness.recoveryMessage
+        val configuration = readiness.requestConfigurationOrNull()
+        if (configuration == null) {
+            inputHint = (readiness as? CashuRequestNostrReadiness.Blocked)?.recoveryMessage
             return
         }
-        readiness as CashuRequestNostrReadiness.Ready
         inputHint = null
         runCatching {
             val id = com.cashu.me.Models.CashuRequest.newId()
@@ -125,8 +125,8 @@ fun ReceiveEcashScreen(
                 id = id,
                 amount = null,
                 unit = "sat",
-                nostrPubkeyHex = readiness.publicKeyHex,
-                relays = readiness.relays,
+                nostrPubkeyHex = configuration.publicKeyHex,
+                relays = configuration.relays,
             )
         }.onSuccess { request ->
             onOpenRequest(request.id)
