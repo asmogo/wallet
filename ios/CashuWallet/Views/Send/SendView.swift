@@ -37,6 +37,7 @@ struct SendView: View {
     @State private var isCheckingClaim = false
     @State private var tokenClaimed = false
     @State private var checkingTask: Task<Void, Never>?
+    @State private var manualClaimCheckResult: PendingTokenClaimCheckResult?
 
     // Copy button feedback
     @State private var copyButtonText = "Copy"
@@ -620,13 +621,6 @@ struct SendView: View {
                             Button(action: { showShareSheet = true }) {
                                 Label("Share", systemImage: "square.and.arrow.up")
                             }
-                            if !settings.checkSentTokens {
-                                Button(action: {
-                                    Task { await checkTokenClaimNow(token: token) }
-                                }) {
-                                    Label("Check Status", systemImage: "arrow.clockwise")
-                                }
-                            }
                         }
 
                     // Amount — sats keep the fiat-flip display; a non-sat token
@@ -681,6 +675,47 @@ struct SendView: View {
                     .animation(reduceMotion ? .easeInOut(duration: 0.2) : .spring(response: 0.5, dampingFraction: 0.7), value: tokenClaimed)
                     .animation(.easeInOut(duration: 0.2), value: isCheckingClaim)
 
+                    if !settings.checkSentTokens {
+                        Button(action: { startManualClaimCheck(token: token) }) {
+                            Label {
+                                Text(isCheckingClaim ? "Checking…" : "Check Status")
+                            } icon: {
+                                if isCheckingClaim {
+                                    ProgressView()
+                                        .controlSize(.small)
+                                } else {
+                                    Image(systemName: "arrow.clockwise")
+                                }
+                            }
+                        }
+                        .textLinkButton()
+                        .frame(minHeight: 44)
+                        .contentShape(Rectangle())
+                        .disabled(isCheckingClaim)
+                        .accessibilityIdentifier("cashu.send.ecash.check-status")
+                        .accessibilityLabel(isCheckingClaim ? "Checking claim status" : "Check Status")
+                        .accessibilityInputLabels(["Check Status"])
+
+                        switch manualClaimCheckResult {
+                        case .notClaimed:
+                            InlineNotice(
+                                message: "This token has not been claimed yet.",
+                                title: "Status checked",
+                                severity: .info,
+                                tinted: true
+                            )
+                        case .failed(let message):
+                            InlineNotice(
+                                message: message.text,
+                                title: "Couldn't check status",
+                                severity: message.severity,
+                                tinted: true
+                            )
+                        case .claimed, nil:
+                            EmptyView()
+                        }
+                    }
+
                     // Detail rows on canvas with hairline dividers — same
                     // pattern as the Lightning Invoice screen.
                     VStack(spacing: 0) {
@@ -720,8 +755,9 @@ struct SendView: View {
             .padding(.bottom, 16)
         }
         .onAppear {
-            guard settings.checkSentTokens else { return }
-            startClaimPolling(token: token)
+            guard settings.checkSentTokens,
+                  let mintUrl = generatedTokenMintURL else { return }
+            startClaimPolling(token: token, mintUrl: mintUrl)
         }
     }
 
@@ -938,7 +974,7 @@ struct SendView: View {
 
     // MARK: - Token Claim Detection
 
-    private func startClaimPolling(token: String) {
+    private func startClaimPolling(token: String, mintUrl: String) {
         // Cancel any existing task
         checkingTask?.cancel()
 
@@ -946,60 +982,99 @@ struct SendView: View {
 
         checkingTask = Task {
             let maxChecks = 10
-            let maxInterval: UInt64 = 15_000_000_000
+            let maxInterval = 15
             var checkCount = 0
-            var interval: UInt64 = 5_000_000_000
+            var interval = 5
 
             while !Task.isCancelled && !tokenClaimed && checkCount < maxChecks {
-                try? await Task.sleep(nanoseconds: interval)
+                do {
+                    try await Task.sleep(for: .seconds(interval))
+                } catch {
+                    break
+                }
 
-                guard !Task.isCancelled else { break }
+                let outcome: PendingTokenClaimCheckResult
+                do {
+                    outcome = try await runPendingTokenClaimCheck {
+                        try await checkGeneratedTokenClaim(token: token, mintUrl: mintUrl)
+                    }
+                } catch {
+                    break
+                }
 
-                // Check if token has been spent
-                let isSpent = await walletManager.checkTokenSpendable(token: token)
-
-                if isSpent {
+                if case .claimed = outcome {
                     // Flipping `tokenClaimed` swaps the body to the full-screen
                     // success (owns its own success haptic on appear, so don't
                     // buzz here). It stays until the user taps Done.
-                    await MainActor.run {
-                        tokenClaimed = true
-                        isCheckingClaim = false
-                    }
-
-                    // Remove from pending and reload transactions so HistoryView updates
-                    // We need to find the pending token ID - it's stored when we create the token
-                    await walletManager.markTokenAsClaimed(token: token)
+                    tokenClaimed = true
+                    isCheckingClaim = false
                     break
                 }
 
                 checkCount += 1
-                interval = min(interval + 1_000_000_000, maxInterval)
+                interval = min(interval + 1, maxInterval)
             }
 
-            await MainActor.run {
-                isCheckingClaim = false
+            isCheckingClaim = false
+        }
+    }
+
+    private func startManualClaimCheck(token: String) {
+        guard let mintUrl = generatedTokenMintURL else {
+            let message = WalletError.notInitialized.walletMessage
+            manualClaimCheckResult = .failed(message)
+            announceClaimCheckResult(.failed(message))
+            return
+        }
+
+        checkingTask?.cancel()
+        checkingTask = Task {
+            isCheckingClaim = true
+            manualClaimCheckResult = nil
+            defer { isCheckingClaim = false }
+
+            do {
+                let outcome = try await runPendingTokenClaimCheck {
+                    try await checkGeneratedTokenClaim(token: token, mintUrl: mintUrl)
+                }
+                guard !Task.isCancelled else { return }
+
+                manualClaimCheckResult = outcome
+                if case .claimed = outcome {
+                    tokenClaimed = true
+                }
+                announceClaimCheckResult(outcome)
+            } catch is CancellationError {
+                return
+            } catch {
+                return
             }
         }
     }
 
-    private func checkTokenClaimNow(token: String) async {
-        await MainActor.run {
-            isCheckingClaim = true
+    private func checkGeneratedTokenClaim(token: String, mintUrl: String) async throws -> Bool {
+        if let pendingToken = walletManager.pendingTokens.first(where: { $0.token == token }) {
+            return try await walletManager.checkPendingTokenStatus(pendingToken: pendingToken)
         }
 
-        let isSpent = await walletManager.checkTokenSpendable(token: token)
+        let isSpent = try await walletManager.checkTokenSpent(token: token, mintUrl: mintUrl)
         if isSpent {
-            // Full-screen success owns the screen + its haptic; stays until Done.
-            await MainActor.run {
-                tokenClaimed = true
-            }
             await walletManager.markTokenAsClaimed(token: token)
         }
+        return isSpent
+    }
 
-        await MainActor.run {
-            isCheckingClaim = false
+    private func announceClaimCheckResult(_ outcome: PendingTokenClaimCheckResult) {
+        let announcement: String
+        switch outcome {
+        case .claimed:
+            announcement = "Token claimed."
+        case .notClaimed:
+            announcement = "Status checked. This token has not been claimed yet."
+        case .failed(let message):
+            announcement = "Couldn't check status. \(message.text)"
         }
+        AccessibilityNotification.Announcement(announcement).post()
     }
 }
 

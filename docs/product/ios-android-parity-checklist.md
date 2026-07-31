@@ -66,7 +66,7 @@ Platform-specific capabilities remain intentionally outside parity, including iC
 
 - [x] **[P2 · iOS → Android] Replace protocol jargon in lock accessibility copy.** Android announces “P2PK off” and “P2PK locked”; iOS describes the user outcome. **Done when:** Android’s visible and assistive copy leads with “Lock ecash” and the recipient effect, with P2PK only as optional supporting terminology.
 
-- [x] **[P1 · iOS → Android] Provide manual claim-status checking when automatic checks are disabled.** iOS adds “Check Status” to pending-token actions; Android’s pending-token view previously had no per-token equivalent. **Done when:** Android users can run a one-off spent check on a pending token without re-enabling background polling.
+- [x] **[P1 · Converge] Provide manual claim-status checking when automatic checks are disabled.** Both generated-token screens and pending outgoing ecash details expose “Check Status,” distinguish claimed, unclaimed, and failed checks, and keep errors retryable. **Done when:** users on either platform can run a one-off spent check without re-enabling background polling.
 
 - [x] **[P1 · iOS → Android] Include the send fee on the Claimed receipt.** iOS shows the fee when the token-generation swap charged one; Android’s pending view shows it but the full-screen Claimed terminal drops it. **Done when:** Android’s Claimed details preserve Amount, applicable Fee, and Mint.
 
