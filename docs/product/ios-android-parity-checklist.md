@@ -72,7 +72,7 @@ Platform-specific capabilities remain intentionally outside parity, including iC
 
 ### Receive — unified entry and Cashu tokens
 
-- [ ] **[P1 · iOS → Android] Create new ecash requests as any-mint requests by default.** iOS creates a NUT-18 request with no mint restriction; Android silently inserts the active mint, changing who can pay. **Done when:** Android leaves the mint list empty unless the user explicitly selects a mint, and tests cover request creation with and without a restriction.
+- [x] **[P1 · iOS → Android] Create new ecash requests as any-mint requests by default.** iOS creates a NUT-18 request with no mint restriction; Android silently inserts the active mint, changing who can pay. **Done when:** Android leaves the mint list empty unless the user explicitly selects a mint, and tests cover request creation with and without a restriction.
 
 - [ ] **[P1 · Converge] Use one Nostr-readiness rule and recovery message.** Android requires both a public key and relays and says “check your relays”; iOS checks initialized identity and points broadly to Settings → Nostr. **Done when:** both validate every prerequisite needed for a deliverable request and name the exact setting that needs attention.
 
