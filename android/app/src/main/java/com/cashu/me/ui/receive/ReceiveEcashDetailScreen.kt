@@ -11,7 +11,6 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Close
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -20,7 +19,6 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -92,7 +90,6 @@ fun ReceiveEcashDetailScreen(
     val parsed = remember(payload) { parseToken(payload) }
     var review by remember(payload) { mutableStateOf<TokenReview?>(null) }
     var status by remember(payload) { mutableStateOf<TokenClaimStatus?>(null) }
-    var pendingTrustConfirmation by remember(payload) { mutableStateOf<TokenReview?>(null) }
     val mintTrust = remember(parsed, walletState.mints) {
         (parsed as? TokenParseOutcome.Ok)?.let {
             receiveMintTrust(
@@ -121,13 +118,8 @@ fun ReceiveEcashDetailScreen(
     // Belt-and-braces: swallow back directly while the redeem is in flight.
     BackHandler(enabled = status == TokenClaimStatus.Claiming) {}
 
-    fun claim(target: TokenReview, userConfirmed: Boolean = false) {
+    fun claim(target: TokenReview) {
         if (status != null) return
-        if (mintTrust?.claimAction(userConfirmed) == ReceiveMintClaimAction.RequestConfirmation) {
-            pendingTrustConfirmation = target
-            return
-        }
-        pendingTrustConfirmation = null
         status = TokenClaimStatus.Claiming
         scope.launch {
             status = claimToken(target, walletManager, claimPendingReceiveToken)
@@ -199,16 +191,6 @@ fun ReceiveEcashDetailScreen(
         }
     }
 
-    pendingTrustConfirmation?.let { target ->
-        val trust = mintTrust
-        if (trust != null) {
-            UnknownMintTrustConfirmationDialog(
-                trust = trust,
-                onConfirm = { claim(target, userConfirmed = true) },
-                onDismiss = { pendingTrustConfirmation = null },
-            )
-        }
-    }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -280,7 +262,7 @@ private fun ConfirmContent(
             p2pkLock = review?.p2pkLock,
             modifier = Modifier.padding(horizontal = CashuTheme.spacing.comfortable),
         )
-        if (mintTrust?.requiresConfirmation == true) {
+        if (mintTrust?.showWarning == true) {
             Spacer(Modifier.height(CashuTheme.spacing.comfortable))
             UnknownMintTrustNotice(
                 trust = mintTrust,
@@ -325,41 +307,6 @@ internal fun UnknownMintTrustNotice(
         detail = "Receiving this token will add the mint to your wallet. Continue only if you trust it.",
         severity = NoticeSeverity.Warning,
         modifier = modifier,
-    )
-}
-
-@Composable
-internal fun UnknownMintTrustConfirmationDialog(
-    trust: ReceiveMintTrust,
-    onConfirm: () -> Unit,
-    onDismiss: () -> Unit,
-) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("Trust this mint?") },
-        text = {
-            Column {
-                Text(
-                    text = trust.host,
-                    style = MaterialTheme.typography.titleMedium,
-                )
-                Spacer(Modifier.height(CashuTheme.spacing.snug))
-                Text(
-                    text = "Receiving this token will add the mint to your wallet. Only continue if you trust it.",
-                    style = MaterialTheme.typography.bodyMedium,
-                )
-            }
-        },
-        confirmButton = {
-            TextButton(onClick = onConfirm) {
-                Text("Trust & receive")
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text("Cancel")
-            }
-        },
     )
 }
 

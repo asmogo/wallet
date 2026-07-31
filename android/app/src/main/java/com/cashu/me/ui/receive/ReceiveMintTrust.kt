@@ -4,30 +4,18 @@ import java.net.IDN
 import java.net.URI
 import com.cashu.me.Core.normalizedMintUrlForSelection
 
-internal enum class ReceiveMintClaimAction {
-    Claim,
-    RequestConfirmation,
-}
-
 /**
- * Trust decision for the mint encoded in a received bearer token.
+ * Trust context for the mint encoded in a received bearer token.
  *
  * Receiving from an untracked mint adds it to the wallet after redemption, so
- * the first receive must require an explicit second confirmation. Tracked mints
- * keep the normal one-tap claim path.
+ * the review screen shows a caution notice (iOS parity). Claim stays one-tap;
+ * the notice is the trust gate — not a second dialog.
  */
 internal data class ReceiveMintTrust(
     val host: String,
     val mintKnown: Boolean,
 ) {
-    val requiresConfirmation: Boolean get() = !mintKnown
-
-    fun claimAction(userConfirmed: Boolean): ReceiveMintClaimAction =
-        if (requiresConfirmation && !userConfirmed) {
-            ReceiveMintClaimAction.RequestConfirmation
-        } else {
-            ReceiveMintClaimAction.Claim
-        }
+    val showWarning: Boolean get() = !mintKnown
 }
 
 internal fun receiveMintTrust(

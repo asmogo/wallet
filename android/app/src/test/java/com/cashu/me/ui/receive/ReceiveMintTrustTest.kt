@@ -7,35 +7,25 @@ import org.junit.Test
 
 class ReceiveMintTrustTest {
     @Test
-    fun unknownMintBlocksClaimUntilExplicitConfirmation() {
+    fun unknownMintShowsWarning() {
         val trust = receiveMintTrust(
             mintUrl = "https://new-mint.example/path/",
             knownMintUrls = listOf("https://trusted.example"),
         )
 
-        assertTrue(trust.requiresConfirmation)
-        assertEquals(
-            ReceiveMintClaimAction.RequestConfirmation,
-            trust.claimAction(userConfirmed = false),
-        )
-        assertEquals(
-            ReceiveMintClaimAction.Claim,
-            trust.claimAction(userConfirmed = true),
-        )
+        assertTrue(trust.showWarning)
+        assertEquals("new-mint.example", trust.host)
     }
 
     @Test
-    fun knownMintAvoidsUnnecessaryWarningAndClaimsImmediately() {
+    fun knownMintSkipsWarning() {
         val trust = receiveMintTrust(
             mintUrl = " HTTPS://MINT.EXAMPLE.COM/wallet/ ",
             knownMintUrls = listOf("https://mint.example.com/wallet"),
         )
 
-        assertFalse(trust.requiresConfirmation)
-        assertEquals(
-            ReceiveMintClaimAction.Claim,
-            trust.claimAction(userConfirmed = false),
-        )
+        assertFalse(trust.showWarning)
+        assertEquals("mint.example.com", trust.host)
     }
 
     @Test
