@@ -6,6 +6,7 @@ struct CashuRequestDetailView: View {
     @EnvironmentObject var walletManager: WalletManager
     @ObservedObject private var store = CashuRequestStore.shared
     @ObservedObject private var settings = SettingsManager.shared
+    @ObservedObject private var nostr = NostrService.shared
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     let onClose: (() -> Void)?
@@ -16,6 +17,7 @@ struct CashuRequestDetailView: View {
     @State private var showAmountPicker = false
     @State private var showUnitPicker = false
     @State private var paymentObservation: CashuRequestPaymentObservation
+    @State private var regenerationError: String?
     @State private var didAutoComplete = false
     /// Amount of the payment that just landed, for the shared success screen.
     @State private var receivedAmount: UInt64?
@@ -195,7 +197,11 @@ struct CashuRequestDetailView: View {
                         }
                     }
 
-                    statusBadge
+                    deliveryStatus(for: request)
+
+                    if let regenerationError {
+                        InlineNotice(message: regenerationError, severity: .error)
+                    }
 
                     VStack(spacing: 0) {
                         // Only the ecash NUT-18 request can re-mint its Mint /
@@ -296,6 +302,23 @@ struct CashuRequestDetailView: View {
         .animation(.easeInOut(duration: 0.2), value: paymentCount)
     }
 
+    @ViewBuilder
+    private func deliveryStatus(for request: CashuRequest) -> some View {
+        if paymentCount > 0 || request.rail != .ecash {
+            statusBadge
+        } else if let notice = CashuRequestNostrReadiness.current().deliveryNotice {
+            InlineNotice(
+                message: notice.message,
+                title: notice.title,
+                severity: .caution,
+                tinted: true
+            )
+            .transition(reduceMotion ? .opacity : .opacity.combined(with: .scale(scale: 0.98)))
+        } else {
+            statusBadge
+        }
+    }
+
     // MARK: - Detail rows
 
     private func detailRow(icon: String, label: String, value: String) -> some View {
@@ -389,9 +412,12 @@ struct CashuRequestDetailView: View {
     /// second entry for the same receive intent.
     private func regenerate(amount: UInt64?? = nil, unit: String? = nil, mints: [String]? = nil) {
         HapticFeedback.selection()
-        let nostr = NostrService.shared
-        guard nostr.isInitialized, !nostr.publicKeyHex.isEmpty,
-              let existing = request else { return }
+        guard let existing = request else { return }
+        let readiness = CashuRequestNostrReadiness.current()
+        guard let configuration = readiness.requestConfiguration else {
+            regenerationError = readiness.recoveryMessage
+            return
+        }
         let nextMints = mints ?? existing.mints
         // Validate the unit against the (possibly newly chosen) mint: keep the
         // requested/existing unit when that mint supports it, else fall back to
@@ -417,12 +443,14 @@ struct CashuRequestDetailView: View {
                 unit: nextUnit,
                 mints: nextMints,
                 description: existing.memo,
-                nostrPubkeyHex: nostr.publicKeyHex,
-                relays: SettingsManager.shared.nostrRelays
+                nostrPubkeyHex: configuration.publicKeyHex,
+                relays: configuration.relays
             )
             store.update(id: existing.id, amount: nextAmount, unit: nextUnit, mints: nextMints, encoded: encoded)
+            regenerationError = nil
         } catch {
             AppLogger.wallet.error("Could not regenerate request: \(String(describing: error))")
+            regenerationError = "Couldn't update the request. Please try again."
         }
     }
 

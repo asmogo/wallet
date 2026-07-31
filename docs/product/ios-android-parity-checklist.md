@@ -64,7 +64,7 @@ Platform-specific capabilities remain intentionally outside parity, including iC
 
 - [x] **[P2 · iOS → Android] Show a clear confirmed P2PK recipient state.** Android leaves the full technical input field in the amount layout after validation; iOS replaces it with a compact confirmation. **Done when:** Android clearly identifies the validated recipient, distinguishes “your key” where applicable, and provides accessible edit and remove actions. The exact iOS chip treatment is not required.
 
-- [ ] **[P2 · iOS → Android] Replace protocol jargon in lock accessibility copy.** Android announces “P2PK off” and “P2PK locked”; iOS describes the user outcome. **Done when:** Android’s visible and assistive copy leads with “Lock ecash” and the recipient effect, with P2PK only as optional supporting terminology.
+- [x] **[P2 · iOS → Android] Replace protocol jargon in lock accessibility copy.** Android announces “P2PK off” and “P2PK locked”; iOS describes the user outcome. **Done when:** Android’s visible and assistive copy leads with “Lock ecash” and the recipient effect, with P2PK only as optional supporting terminology.
 
 - [ ] **[P1 · iOS → Android] Provide manual claim-status checking when automatic checks are disabled.** iOS adds “Check Status” to pending-token actions; Android leaves the token at Pending with no equivalent action. **Done when:** Android users can run a one-off spent check without re-enabling background polling.
 
@@ -74,7 +74,7 @@ Platform-specific capabilities remain intentionally outside parity, including iC
 
 - [x] **[P1 · iOS → Android] Create new ecash requests as any-mint requests by default.** iOS creates a NUT-18 request with no mint restriction; Android silently inserts the active mint, changing who can pay. **Done when:** Android leaves the mint list empty unless the user explicitly selects a mint, and tests cover request creation with and without a restriction.
 
-- [ ] **[P1 · Converge] Use one Nostr-readiness rule and recovery message.** Android requires both a public key and relays and says “check your relays”; iOS checks initialized identity and points broadly to Settings → Nostr. **Done when:** both validate every prerequisite needed for a deliverable request and name the exact setting that needs attention.
+- [x] **[P1 · Converge] Use one Nostr-readiness rule and recovery message.** Android requires both a public key and relays and says “check your relays”; iOS checks initialized identity and points broadly to Settings → Nostr. **Done when:** both validate every prerequisite needed for a deliverable request and name the exact setting that needs attention.
 
 - [x] **[P0 · iOS → Android] Warn before receiving from an unknown mint.** iOS identifies that receiving will add a new mint and asks the user to continue only if they trust it; Android has no equivalent trust warning. **Done when:** Android displays the normalized mint host and explains that the mint will be added; claim remains one-tap after the user has seen the caution (iOS parity).
 
