@@ -52,6 +52,10 @@ class LockEcashAccessibilityComposeTest {
                 input = "",
                 onInputChange = {},
                 inputError = null,
+                confirmedPubkey = null,
+                recipientIsOwnKey = false,
+                onEditRecipient = {},
+                onRemoveRecipient = {},
                 myKeyHex = "02${"a".repeat(64)}",
                 onUseMyKey = {},
             )
