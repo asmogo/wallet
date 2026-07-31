@@ -30,10 +30,7 @@ class SendEcashRecipientKeyTest {
 
         validations.forEach { assertNull(it.normalizedKey) }
         assertEquals(1, validations.map { it.errorMessage }.distinct().size)
-        assertEquals(
-            "Invalid P2PK pubkey. Use a 66-character hex key with 02/03 prefix.",
-            validations.first().errorMessage,
-        )
+        assertEquals(LockEcashCopy.InvalidRecipientKey, validations.first().errorMessage)
     }
 
     @Test

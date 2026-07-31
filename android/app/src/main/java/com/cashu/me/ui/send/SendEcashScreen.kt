@@ -15,6 +15,8 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
 import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -40,11 +42,14 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.Key
 import androidx.compose.material.icons.outlined.AccountBalance
 import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.Close
+import androidx.compose.material.icons.outlined.ContentPaste
 import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.IosShare
+import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material.icons.outlined.LockOpen
 import androidx.compose.material.icons.outlined.Payments
 import androidx.compose.material.icons.outlined.Schedule
@@ -72,16 +77,23 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.AccessibilityAction
+import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import com.cashu.me.Views.Components.ScannerView
+import com.cashu.me.Views.Components.ScannerQuickAction
 import com.cashu.me.Core.AmountFormatter
+import com.cashu.me.Core.WalletHaptic
+import com.cashu.me.Core.rememberWalletHaptics
 import com.cashu.me.Core.Protocols.CurrencyAmount
 import com.cashu.me.Core.Protocols.CurrencyRegistry
 import com.cashu.me.Core.SettingsManager
@@ -116,16 +128,10 @@ private val CHECKING_PROGRESS_SIZE = 14.dp
 
 internal object LockEcashCopy {
     const val Label = "Lock ecash"
+    const val Hint = "Lock this ecash to a public key"
+    const val InvalidRecipientKey = "That's not a valid public key."
     const val RecipientEffect = "Only the recipient with this public key can claim it."
     const val RecipientKeyLabel = "Recipient public key (P2PK)"
-    const val InvalidRecipientKey =
-        "Enter a valid recipient public key: 64 hex characters, or 66 beginning with 02 or 03."
-
-    fun stateDescription(locked: Boolean): String = if (locked) {
-        "On. Only the recipient with the selected key can claim it."
-    } else {
-        "Off. Anyone with the ecash token can claim it."
-    }
 }
 
 private sealed interface SendFace {
@@ -160,8 +166,7 @@ internal fun validateP2PKRecipientKey(raw: String): P2PKRecipientKeyValidation {
         onFailure = {
             P2PKRecipientKeyValidation(
                 normalizedKey = null,
-                errorMessage = it.message
-                    ?: "Invalid P2PK pubkey. Use a 66-character hex key with 02/03 prefix.",
+                errorMessage = LockEcashCopy.InvalidRecipientKey,
             )
         },
     )
@@ -182,6 +187,7 @@ fun SendEcashScreen(
     val formatter = remember { AmountFormatter() }
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
+    val haptics = rememberWalletHaptics()
 
     var face: SendFace by remember { mutableStateOf(SendFace.Input) }
     var amount by remember { mutableStateOf("") }
@@ -194,14 +200,8 @@ fun SendEcashScreen(
     var nonSatBalance by remember { mutableStateOf<Long?>(null) }
     var p2pkOn by remember { mutableStateOf(false) }
     var p2pkInput by remember { mutableStateOf("") }
-    var p2pkInputError by remember { mutableStateOf<String?>(null) }
-    var p2pkEditing by remember { mutableStateOf(true) }
     var p2pkScannerVisible by remember { mutableStateOf(false) }
     val clipboard = LocalClipboardManager.current
-
-    fun acceptP2pkRecipientInput(raw: String) {
-        p2pkInput = raw
-    }
 
     val activeMintUrl = selectedMintUrl ?: walletState.activeMint?.url
     val activeMint = walletState.mints.firstOrNull { it.url == activeMintUrl } ?: walletState.activeMint
@@ -255,26 +255,36 @@ fun SendEcashScreen(
         previousAmountEntryContext = amountEntryContext
     }
 
-    // Scan, paste, manual typing, and the own-key shortcut all update
-    // [p2pkInput], so normalization and error copy cannot diverge by source.
+    // Scan, paste, and the own-key shortcut all update [p2pkInput], so
+    // normalization and error copy cannot diverge by source.
     val p2pkValidation = remember(p2pkInput) { validateP2PKRecipientKey(p2pkInput) }
     val validatedP2pkPubkey = p2pkValidation.normalizedKey.takeIf { p2pkOn }
-    val p2pkInputError = p2pkValidation.errorMessage.takeIf { p2pkOn }
     val primaryP2pkPublicKey = settingsManager.primaryP2PKKeyInfo()?.publicKey
-    val p2pkRecipientIsOwnKey = validatedP2pkPubkey?.let { recipient ->
-        isOwnP2pkRecipient(
+    val p2pkRecipientIsPrimaryKey = validatedP2pkPubkey?.let { recipient ->
+        isPrimaryP2pkRecipient(
             recipient = recipient,
-            ownPublicKeys = buildList {
-                primaryP2pkPublicKey?.let(::add)
-                addAll(settings.p2pkKeys.map { it.publicKey })
-            },
+            primaryPublicKey = primaryP2pkPublicKey,
         )
     } == true
-    LaunchedEffect(p2pkOn, validatedP2pkPubkey) {
-        when {
-            !p2pkOn -> p2pkEditing = true
-            validatedP2pkPubkey != null -> p2pkEditing = false
+    val validClipboardText = clipboard.getText()?.text?.takeIf {
+        validateP2PKRecipientKey(it).normalizedKey != null
+    }
+
+    fun closeP2pkScanner() { p2pkScannerVisible = false }
+
+    fun selectP2pkRecipient(raw: String) {
+        val validation = validateP2PKRecipientKey(raw)
+        val normalized = validation.normalizedKey
+        if (normalized != null) {
+            p2pkInput = normalized
+            p2pkOn = true
+            errorText = null
+            haptics.perform(WalletHaptic.Success)
+        } else {
+            errorText = validation.errorMessage ?: LockEcashCopy.InvalidRecipientKey
+            haptics.perform(WalletHaptic.Error)
         }
+        closeP2pkScanner()
     }
 
     // Generation counts as money-in-motion: block sheet dismissal.
@@ -284,7 +294,7 @@ fun SendEcashScreen(
     // Send surface. Swallow back while a token is being generated.
     BackHandler(enabled = true) {
         when {
-            p2pkScannerVisible -> p2pkScannerVisible = false
+            p2pkScannerVisible -> closeP2pkScanner()
             sending -> Unit
             face is SendFace.Generated -> face = SendFace.Input
             else -> onBack()
@@ -292,14 +302,25 @@ fun SendEcashScreen(
     }
 
     if (p2pkScannerVisible) {
+        val scannerQuickActions = buildList {
+            if (settings.showP2PKButtonInDrawer && primaryP2pkPublicKey != null) {
+                add(ScannerQuickAction("Lock to my key", Icons.Filled.Key) {
+                    haptics.perform(WalletHaptic.Selection)
+                    selectP2pkRecipient(primaryP2pkPublicKey)
+                })
+            }
+            if (validClipboardText != null) {
+                add(ScannerQuickAction("Paste key", Icons.Outlined.ContentPaste) {
+                    haptics.perform(WalletHaptic.Selection)
+                    selectP2pkRecipient(validClipboardText)
+                })
+            }
+        }
         ScannerView(
-            onClose = { p2pkScannerVisible = false },
-            onScanned = { scanned ->
-                p2pkOn = true
-                acceptP2pkRecipientInput(scanned)
-                p2pkScannerVisible = false
-            },
-            promptText = "Scan a P2PK recipient key",
+            onClose = ::closeP2pkScanner,
+            onScanned = ::selectP2pkRecipient,
+            promptText = "Scan a public key to lock to",
+            quickActions = scannerQuickActions,
         )
         return
     }
@@ -333,8 +354,7 @@ fun SendEcashScreen(
                 } else if (current is SendFace.Input) {
                     // iOS toolbar order: lock, then unit (unit sits to the lock's right).
                     LockEcashToolbarAction(
-                        locked = p2pkOn,
-                        onToggle = { p2pkOn = !p2pkOn },
+                        onClick = { p2pkScannerVisible = true },
                     )
                     if (activeMint?.supportsMultipleUnits == true) {
                         androidx.compose.material3.TextButton(onClick = { unitPickerOpen = true }) {
@@ -397,29 +417,13 @@ fun SendEcashScreen(
                     },
                     sending = sending,
                     errorText = errorText,
-                    p2pkOn = p2pkOn,
-                    p2pkInput = p2pkInput,
-                    onP2pkInputChange = ::acceptP2pkRecipientInput,
-                    p2pkInputError = p2pkInputError,
-                    confirmedP2pkPubkey = validatedP2pkPubkey?.takeUnless { p2pkEditing },
-                    p2pkRecipientIsOwnKey = p2pkRecipientIsOwnKey,
-                    onEditP2pkRecipient = { p2pkEditing = true },
+                    confirmedP2pkPubkey = validatedP2pkPubkey,
+                    p2pkRecipientIsPrimaryKey = p2pkRecipientIsPrimaryKey,
+                    onEditP2pkRecipient = { p2pkScannerVisible = true },
                     onRemoveP2pkRecipient = {
                         p2pkInput = ""
                         p2pkOn = false
-                    },
-                    onScanP2pkKey = { p2pkScannerVisible = true },
-                    onPasteP2pkKey = {
-                        clipboard.getText()?.text?.let(::acceptP2pkRecipientInput)
-                    },
-                    canPasteP2pkKey = clipboard.hasText(),
-                    // iOS "Lock to my key" shortcut: opt-in via the Locked Ecash
-                    // toggle, and it targets the seed-derived primary key.
-                    p2pkMyKeyHex = if (settings.showP2PKButtonInDrawer) {
-                        primaryP2pkPublicKey
-                    } else null,
-                    onUseMyP2pkKey = {
-                        primaryP2pkPublicKey?.let { p2pkInput = it }
+                        errorText = null
                     },
                     canSendWithP2pk = !p2pkOn || validatedP2pkPubkey != null,
                     onSend = {
@@ -433,7 +437,7 @@ fun SendEcashScreen(
                             return@InputFace
                         }
                         if (p2pkOn && validatedP2pkPubkey == null) {
-                            errorText = p2pkInputError ?: LockEcashCopy.InvalidRecipientKey
+                            errorText = LockEcashCopy.InvalidRecipientKey
                             return@InputFace
                         }
                         sending = true
@@ -553,19 +557,10 @@ private fun InputFace(
     fiatCurrencyCode: String?,
     sending: Boolean,
     errorText: String?,
-    p2pkOn: Boolean,
-    p2pkInput: String,
-    onP2pkInputChange: (String) -> Unit,
-    p2pkInputError: String?,
     confirmedP2pkPubkey: String?,
-    p2pkRecipientIsOwnKey: Boolean,
+    p2pkRecipientIsPrimaryKey: Boolean,
     onEditP2pkRecipient: () -> Unit,
     onRemoveP2pkRecipient: () -> Unit,
-    onScanP2pkKey: () -> Unit,
-    onPasteP2pkKey: () -> Unit,
-    canPasteP2pkKey: Boolean,
-    p2pkMyKeyHex: String?,
-    onUseMyP2pkKey: () -> Unit,
     canSendWithP2pk: Boolean,
     onSend: () -> Unit,
 ) {
@@ -622,20 +617,12 @@ private fun InputFace(
             color = amountColor,
         )
 
-        AnimatedVisibility(visible = p2pkOn) {
-            P2pkLockSection(
-                input = p2pkInput,
-                onInputChange = onP2pkInputChange,
-                inputError = p2pkInputError,
-                confirmedPubkey = confirmedP2pkPubkey,
-                recipientIsOwnKey = p2pkRecipientIsOwnKey,
+        confirmedP2pkPubkey?.let { pubkey ->
+            P2pkRecipientConfirmation(
+                confirmedPubkey = pubkey,
+                recipientIsPrimaryKey = p2pkRecipientIsPrimaryKey,
                 onEditRecipient = onEditP2pkRecipient,
                 onRemoveRecipient = onRemoveP2pkRecipient,
-                onScanKey = onScanP2pkKey,
-                onPasteKey = onPasteP2pkKey,
-                canPasteKey = canPasteP2pkKey,
-                myKeyHex = p2pkMyKeyHex,
-                onUseMyKey = onUseMyP2pkKey,
             )
         }
 
@@ -710,23 +697,110 @@ internal fun isOwnP2pkRecipient(
 
 @Composable
 internal fun LockEcashToolbarAction(
+    onClick: () -> Unit,
+) = LockEcashToolbarAction(onClick = onClick, legacyStateDescription = null)
+
+@Composable
+internal fun LockEcashToolbarAction(
     locked: Boolean,
     onToggle: () -> Unit,
+) = LockEcashToolbarAction(
+    onClick = onToggle,
+    legacyStateDescription = if (locked) {
+        "On. Only the recipient with the selected key can claim it."
+    } else {
+        "Off. Anyone with the ecash token can claim it."
+    },
+)
+
+@Composable
+private fun LockEcashToolbarAction(
+    onClick: () -> Unit,
+    legacyStateDescription: String?,
 ) {
+    val haptics = rememberWalletHaptics()
     IconButton(
-        onClick = onToggle,
+        onClick = {
+            haptics.perform(WalletHaptic.Selection)
+            onClick()
+        },
         modifier = Modifier
             .testTag(UiTestTags.LockEcashToggle)
             .semantics {
-                stateDescription = LockEcashCopy.stateDescription(locked)
+                this[SemanticsActions.OnClick] = AccessibilityAction(LockEcashCopy.Hint, null)
+                if (legacyStateDescription != null) {
+                    stateDescription = legacyStateDescription
+                }
             },
     ) {
         ToolbarIcon(
-            imageVector = if (locked) Icons.Filled.Lock else Icons.Outlined.LockOpen,
+            imageVector = Icons.Outlined.Lock,
             contentDescription = LockEcashCopy.Label,
-            tint = if (locked) MaterialTheme.colorScheme.onSurface
-            else MaterialTheme.colorScheme.onSurfaceVariant,
+            tint = MaterialTheme.colorScheme.onSurface,
         )
+    }
+}
+
+internal fun isPrimaryP2pkRecipient(
+    recipient: String,
+    primaryPublicKey: String?,
+): Boolean {
+    if (primaryPublicKey == null) return false
+    val comparableRecipient = SettingsManager.normalizeP2PKPublicKeyForComparison(recipient)
+    return SettingsManager.normalizeP2PKPublicKeyForComparison(primaryPublicKey) == comparableRecipient
+}
+
+@Composable
+internal fun P2pkRecipientConfirmation(
+    confirmedPubkey: String,
+    recipientIsPrimaryKey: Boolean,
+    onEditRecipient: () -> Unit,
+    onRemoveRecipient: () -> Unit,
+) {
+    val haptics = rememberWalletHaptics()
+    val recipientLabel = if (recipientIsPrimaryKey) "Your key" else P2PKKeyDisplay.shortLabel(confirmedPubkey)
+    Surface(
+        modifier = Modifier.fillMaxWidth().testTag(UiTestTags.P2pkRecipientConfirmation),
+        shape = androidx.compose.foundation.shape.RoundedCornerShape(14.dp),
+        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Row(
+                modifier = Modifier
+                    .weight(1f)
+                    .heightIn(min = 48.dp)
+                    .clickable(onClickLabel = "Change the key") {
+                        haptics.perform(WalletHaptic.Selection)
+                        onEditRecipient()
+                    }
+                    .semantics { contentDescription = "Locked to public key" },
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(30.dp)
+                        .background(MaterialTheme.colorScheme.surfaceContainerHighest, CircleShape),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(Icons.Filled.Lock, null, tint = MaterialTheme.colorScheme.onSurface, modifier = Modifier.size(18.dp))
+                }
+                Column(Modifier.weight(1f)) {
+                    Text("LOCKED TO", style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold, letterSpacing = 0.5.sp), color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(recipientLabel, style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Medium), color = MaterialTheme.colorScheme.onSurface, maxLines = 1, overflow = TextOverflow.MiddleEllipsis)
+                }
+            }
+            IconButton(onClick = {
+                haptics.perform(WalletHaptic.Selection)
+                onRemoveRecipient()
+            }) {
+                Icon(Icons.Outlined.Close, "Remove lock", tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(16.dp))
+            }
+        }
     }
 }
 
@@ -739,9 +813,9 @@ internal fun P2pkLockSection(
     recipientIsOwnKey: Boolean,
     onEditRecipient: () -> Unit,
     onRemoveRecipient: () -> Unit,
-    onScanKey: () -> Unit,
-    onPasteKey: () -> Unit,
-    canPasteKey: Boolean,
+    onScanKey: () -> Unit = {},
+    onPasteKey: () -> Unit = {},
+    canPasteKey: Boolean = false,
     myKeyHex: String?,
     onUseMyKey: () -> Unit,
 ) {
