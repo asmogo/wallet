@@ -29,7 +29,7 @@ class ReceiveActualFeeComposeTest {
                 proofCount = 1,
             ),
             fee = 3,
-            locked = false,
+            p2pkLock = P2PKLockState.Unlocked,
         )
         val claimed = settledTokenClaim(review, creditedAmount = 93)
 
