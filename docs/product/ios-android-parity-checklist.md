@@ -58,7 +58,7 @@ Platform-specific capabilities remain intentionally outside parity, including iC
 
 ### Send — ecash and locked ecash
 
-- [ ] **[P1 · iOS → Android] Support fiat-primary entry when creating ecash.** iOS allows sat-denominated ecash to be entered in the preferred fiat unit; Android’s ecash keypad always uses sats. **Done when:** Android entry, validation, Send Max, and the generated amount honor the saved primary unit.
+- [x] **[P1 · iOS → Android] Support fiat-primary entry when creating ecash.** iOS allows sat-denominated ecash to be entered in the preferred fiat unit; Android’s ecash keypad always uses sats. **Done when:** Android entry, validation, Send Max, and the generated amount honor the saved primary unit.
 
 - [ ] **[P1 · iOS → Android] Add scanning for a P2PK recipient key.** iOS can scan a public key and validate it before locking; Android only provides manual entry and “Lock to my key.” **Done when:** Android can scan, paste, or type a recipient key through one validation path with equivalent error handling.
 

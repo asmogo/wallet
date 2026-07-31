@@ -33,6 +33,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.windowInsetsBottomHeight
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -51,6 +52,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -66,6 +68,8 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.delay
@@ -74,7 +78,6 @@ import com.cashu.me.Core.AmountFormatter
 import com.cashu.me.Core.Protocols.CurrencyAmount
 import com.cashu.me.Core.Protocols.CurrencyRegistry
 import com.cashu.me.Core.SettingsManager
-import com.cashu.me.Core.UnitAmountEntry
 import com.cashu.me.Core.Wallet.isInsufficientBalance
 import com.cashu.me.Core.Wallet.userFacingWalletMessage
 import com.cashu.me.Core.WalletManager
@@ -166,7 +169,14 @@ fun SendEcashScreen(
     }
     val currency = CurrencyRegistry.currencyForMintUnit(effectiveUnit)
     val isSatUnit = effectiveUnit.equals("sat", ignoreCase = true)
-    val amountValue = UnitAmountEntry.baseUnits(amount, currency.decimals)
+    val amountEntryContext = SendEcashAmountEntry.context(
+        unit = effectiveUnit,
+        unitDecimals = currency.decimals,
+        preferredPrimary = settings.amountDisplayPrimary,
+        btcPrice = priceState.btcPrice,
+    )
+    var previousAmountEntryContext by remember { mutableStateOf(amountEntryContext) }
+    val amountValue = amountEntryContext.amountBaseUnits(amount)
 
     // Per-(mint, unit) spendable balance. Sat answers from cache; non-sat loads
     // through the CDK unit wallet on demand.
@@ -178,6 +188,17 @@ fun SendEcashScreen(
     }
     val mintBalance = if (isSatUnit) activeMint?.balance ?: 0L else nonSatBalance ?: 0L
     val balanceLoading = !isSatUnit && nonSatBalance == null
+
+    // Re-express a live sat amount when fiat entry becomes available or the
+    // saved primary changes. The conversion boundary preserves its sat value.
+    LaunchedEffect(amountEntryContext) {
+        amount = SendEcashAmountEntry.convert(
+            raw = amount,
+            from = previousAmountEntryContext,
+            to = amountEntryContext,
+        )
+        previousAmountEntryContext = amountEntryContext
+    }
 
     // Normalize and validate the P2PK input only when the lock is on.
     val validatedP2pkPubkey: String? = remember(p2pkOn, p2pkInput) {
@@ -284,7 +305,7 @@ fun SendEcashScreen(
                     onPickMint = { pickerOpen = true },
                     onUseMax = {
                         if (mintBalance > 0L) {
-                            amount = UnitAmountEntry.entryString(mintBalance, currency.decimals)
+                            amount = amountEntryContext.maxRawForBalance(mintBalance)
                         }
                     },
                     canUseMax = mintBalance > 0L,
@@ -298,11 +319,18 @@ fun SendEcashScreen(
                         isSatUnit -> formatter.formatWalletSats(mintBalance, settings.useBitcoinSymbol)
                         else -> CurrencyAmount(mintBalance, currency).formatted()
                     },
-                    isSat = isSatUnit,
-                    unit = effectiveUnit,
+                    isSat = isSatUnit && !amountEntryContext.isFiatEntry,
+                    unit = if (amountEntryContext.isFiatEntry) {
+                        priceState.currencyCode
+                    } else {
+                        effectiveUnit
+                    },
                     useBitcoinSymbol = settings.useBitcoinSymbol,
                     formatter = formatter,
-                    decimals = currency.decimals,
+                    decimals = amountEntryContext.keypadDecimals,
+                    fiatCurrencyCode = priceState.currencyCode.takeIf {
+                        amountEntryContext.isFiatEntry
+                    },
                     sending = sending,
                     errorText = errorText,
                     p2pkOn = p2pkOn,
@@ -369,23 +397,24 @@ fun SendEcashScreen(
                     result = current.result,
                     mintUrl = current.mintUrl,
                     unit = current.unit,
-                    amountSats = current.amount,
                     pollingEnabled = settings.checkSentTokens,
-                    amountLabel = if (current.unit.equals("sat", ignoreCase = true)) {
-                        formatter.formatWalletSats(current.amount, settings.useBitcoinSymbol)
-                    } else {
-                        CurrencyAmount(
-                            current.amount,
-                            CurrencyRegistry.currencyForMintUnit(current.unit),
-                        ).formatted()
-                    },
+                    amountPresentation = paymentConfirmationAmountPresentation(
+                        amount = current.amount,
+                        unit = current.unit,
+                        preferredPrimary = settings.amountDisplayPrimary,
+                        showFiat = settings.showFiatBalance,
+                        btcPrice = priceState.btcPrice,
+                        currencyCode = priceState.currencyCode,
+                        useBitcoinSymbol = settings.useBitcoinSymbol,
+                        formatter = formatter,
+                    ),
                     fiatLabel = if (current.unit.equals("sat", ignoreCase = true) &&
                         settings.showFiatBalance && priceState.btcPrice > 0
                     ) {
                         formatter.formatFiat(
                             current.amount,
                             priceState.btcPrice,
-                            settings.bitcoinPriceCurrency,
+                            priceState.currencyCode,
                         )
                     } else {
                         null
@@ -445,6 +474,7 @@ private fun InputFace(
     useBitcoinSymbol: Boolean,
     formatter: AmountFormatter,
     decimals: Int,
+    fiatCurrencyCode: String?,
     sending: Boolean,
     errorText: String?,
     p2pkOn: Boolean,
@@ -505,6 +535,7 @@ private fun InputFace(
             decimals = decimals,
             useBitcoinSymbol = useBitcoinSymbol,
             formatter = formatter,
+            fiatCurrencyCode = fiatCurrencyCode,
             color = amountColor,
         )
 
@@ -626,9 +657,8 @@ private fun GeneratedFace(
     result: SendTokenResult,
     mintUrl: String,
     unit: String,
-    amountSats: Long,
     pollingEnabled: Boolean,
-    amountLabel: String,
+    amountPresentation: PaymentConfirmationAmountPresentation,
     fiatLabel: String?,
     onDone: () -> Unit,
 ) {
@@ -675,7 +705,7 @@ private fun GeneratedFace(
             rows = {
                 com.cashu.me.ui.components.InspectorRow(
                     label = "Amount",
-                    value = amountLabel,
+                    value = amountPresentation.primary,
                     leadingIcon = Icons.Outlined.Payments,
                 )
                 com.cashu.me.ui.components.CanvasDivider(leadingInset = 16.dp)
@@ -708,11 +738,7 @@ private fun GeneratedFace(
                 content = result.token,
                 shareSubject = "Cashu token",
             )
-            Text(
-                text = amountLabel,
-                style = MaterialTheme.typography.headlineMedium.withMonoDigits(),
-                color = MaterialTheme.colorScheme.onSurface,
-            )
+            GeneratedEcashAmount(presentation = amountPresentation)
             ClaimStatusRow(claimState = claimState)
             // Detail rows: Fee -> Unit -> Fiat (sat-only) -> Mint (iOS order).
             Column(modifier = Modifier.fillMaxWidth()) {
@@ -764,6 +790,41 @@ private fun GeneratedFace(
             ),
         )
         Spacer(Modifier.windowInsetsBottomHeight(WindowInsets.navigationBars))
+    }
+}
+
+@Composable
+private fun GeneratedEcashAmount(
+    presentation: PaymentConfirmationAmountPresentation,
+) {
+    Column(
+        modifier = Modifier.clearAndSetSemantics {
+            contentDescription = presentation.talkBackDescription
+        },
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(CashuTheme.spacing.snug),
+    ) {
+        Text(
+            text = presentation.primary,
+            style = MaterialTheme.typography.headlineMedium.withMonoDigits(),
+            color = MaterialTheme.colorScheme.onSurface,
+        )
+        presentation.alternate?.let { alternate ->
+            Surface(
+                shape = CircleShape,
+                color = MaterialTheme.colorScheme.surfaceVariant,
+                contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+            ) {
+                Text(
+                    text = alternate,
+                    modifier = Modifier.padding(
+                        horizontal = CashuTheme.spacing.default,
+                        vertical = CashuTheme.spacing.micro,
+                    ),
+                    style = MaterialTheme.typography.labelLarge.withMonoDigits(),
+                )
+            }
+        }
     }
 }
 
