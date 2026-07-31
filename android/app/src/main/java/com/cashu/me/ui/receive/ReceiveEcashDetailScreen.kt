@@ -246,7 +246,7 @@ private fun ConfirmContent(
         TokenInspectorRows(
             info = info,
             fee = fee,
-            locked = review?.locked == true,
+            p2pkLock = review?.p2pkLock,
             modifier = Modifier.padding(horizontal = CashuTheme.spacing.comfortable),
         )
         Spacer(Modifier.weight(FooterWeight))
@@ -261,7 +261,7 @@ private fun ConfirmContent(
                 onClick = onReceive,
                 // Disabled until the fee/lock preview lands (net amount must be
                 // known before committing) and while P2PK-locked to foreign keys.
-                enabled = review != null && !review.locked,
+                enabled = review?.canClaim == true,
                 // The app's one inverted-ink CTA — mirrors iOS's sole
                 // .glassButton(prominent: true) on the receive commit
                 // (ReceiveView.swift); every other bottom CTA is neutral gray.
