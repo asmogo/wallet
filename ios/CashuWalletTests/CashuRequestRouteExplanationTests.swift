@@ -62,8 +62,10 @@ final class CashuRequestNostrReadinessTests: XCTestCase {
                 ]
             ),
             .ready(
-                publicKeyHex: publicKeyHex,
-                relays: ["wss://relay.example", "ws://localhost:7777"]
+                configuration: .init(
+                    publicKeyHex: publicKeyHex,
+                    relays: ["wss://relay.example", "ws://localhost:7777"]
+                )
             )
         )
     }
@@ -79,7 +81,8 @@ final class CashuRequestNostrReadinessTests: XCTestCase {
             ),
             .blocked(
                 recoveryMessage:
-                    "Your Nostr key isn't ready. Check Settings → Nostr → Nostr key, then try again."
+                    "Your Nostr key isn't ready. Check Settings → Nostr → Nostr key, then try again.",
+                requestConfiguration: nil
             )
         )
     }
@@ -89,17 +92,32 @@ final class CashuRequestNostrReadinessTests: XCTestCase {
             evaluate(relays: ["", "https://relay.example", "wss://"]),
             .blocked(
                 recoveryMessage:
-                    "No usable Nostr relay is configured. Add a ws:// or wss:// relay in Settings → Nostr → Relays, then try again."
+                    "No usable Nostr relay is configured. Add a ws:// or wss:// relay in Settings → Nostr → Relays, then try again.",
+                requestConfiguration: nil
             )
         )
     }
 
-    func testDisabledListenerNamesExactPrivacySetting() {
+    func testDisabledListenerKeepsRequestBuildableAndNamesExactPrivacySetting() {
         XCTAssertEqual(
             evaluate(listenerEnabled: false),
             .blocked(
                 recoveryMessage:
-                    "Cashu Request listening is off. Turn on Settings → Privacy → Listen for payment requests, then try again."
+                    "Cashu Request listening is off. Turn on Settings → Privacy → Listen for payment requests, then try again.",
+                requestConfiguration: .init(
+                    publicKeyHex: publicKeyHex,
+                    relays: ["wss://relay.example"]
+                )
+            )
+        )
+    }
+
+    func testDisabledListenerUsesContextualDetailNotice() {
+        XCTAssertEqual(
+            evaluate(listenerEnabled: false).deliveryNotice,
+            .init(
+                title: "Payment requests are off",
+                message: "You can share this request, but this wallet won't receive payments until you turn on Settings → Privacy → Listen for payment requests."
             )
         )
     }

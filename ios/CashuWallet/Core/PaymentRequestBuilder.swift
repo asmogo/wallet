@@ -89,8 +89,18 @@ enum PaymentRequestBuilder {
 }
 
 enum CashuRequestNostrReadiness: Equatable {
-    case ready(publicKeyHex: String, relays: [String])
-    case blocked(recoveryMessage: String)
+    struct RequestConfiguration: Equatable {
+        let publicKeyHex: String
+        let relays: [String]
+    }
+
+    struct DeliveryNotice: Equatable {
+        let title: String
+        let message: String
+    }
+
+    case ready(configuration: RequestConfiguration)
+    case blocked(recoveryMessage: String, requestConfiguration: RequestConfiguration?)
 
     static let nostrKeyRecovery =
         "Your Nostr key isn't ready. Check Settings → Nostr → Nostr key, then try again."
@@ -100,8 +110,44 @@ enum CashuRequestNostrReadiness: Equatable {
         "Cashu Request listening is off. Turn on Settings → Privacy → Listen for payment requests, then try again."
 
     var recoveryMessage: String? {
-        guard case .blocked(let recoveryMessage) = self else { return nil }
+        guard case .blocked(let recoveryMessage, _) = self else { return nil }
         return recoveryMessage
+    }
+
+    /// The key and relay data needed to encode a request. A listener-disabled
+    /// wallet still has a valid configuration, so request creation can continue
+    /// while the detail screen explains that receiving is currently unavailable.
+    var requestConfiguration: RequestConfiguration? {
+        switch self {
+        case .ready(let configuration):
+            return configuration
+        case .blocked(_, let requestConfiguration):
+            return requestConfiguration
+        }
+    }
+
+    /// Contextual copy for an already-created request. This deliberately avoids
+    /// the "try again" language used by creation errors because the QR is valid
+    /// and remains shareable while the wallet's receive path is unavailable.
+    var deliveryNotice: DeliveryNotice? {
+        guard let recoveryMessage else { return nil }
+        switch recoveryMessage {
+        case Self.nostrKeyRecovery:
+            return DeliveryNotice(
+                title: "Nostr key unavailable",
+                message: "This wallet can't receive payments for this request. Check Settings → Nostr → Nostr key."
+            )
+        case Self.relayRecovery:
+            return DeliveryNotice(
+                title: "No usable relay",
+                message: "This wallet can't receive payments for this request. Add a ws:// or wss:// relay in Settings → Nostr → Relays."
+            )
+        default:
+            return DeliveryNotice(
+                title: "Payment requests are off",
+                message: "You can share this request, but this wallet won't receive payments until you turn on Settings → Privacy → Listen for payment requests."
+            )
+        }
     }
 
     @MainActor
@@ -127,16 +173,29 @@ enum CashuRequestNostrReadiness: Equatable {
         guard isIdentityInitialized,
               isHexKey(publicKeyHex),
               privateKeyHex.map(isHexKey) == true else {
-            return .blocked(recoveryMessage: nostrKeyRecovery)
+            return .blocked(
+                recoveryMessage: nostrKeyRecovery,
+                requestConfiguration: nil
+            )
         }
         let usableRelays = normalizedRelays(relays)
         guard !usableRelays.isEmpty else {
-            return .blocked(recoveryMessage: relayRecovery)
+            return .blocked(
+                recoveryMessage: relayRecovery,
+                requestConfiguration: nil
+            )
         }
+        let configuration = RequestConfiguration(
+            publicKeyHex: publicKeyHex,
+            relays: usableRelays
+        )
         guard listenerEnabled else {
-            return .blocked(recoveryMessage: listenerRecovery)
+            return .blocked(
+                recoveryMessage: listenerRecovery,
+                requestConfiguration: configuration
+            )
         }
-        return .ready(publicKeyHex: publicKeyHex, relays: usableRelays)
+        return .ready(configuration: configuration)
     }
 
     static func normalizedRelays(_ relays: [String]) -> [String] {
@@ -170,7 +229,7 @@ enum CashuRequestNostrReadiness: Equatable {
 enum LockedReceiveRequest {
     @MainActor
     static func build(amount: UInt64? = nil) -> String? {
-        guard case let .ready(publicKeyHex, relays) = CashuRequestNostrReadiness.current(),
+        guard case let .ready(configuration) = CashuRequestNostrReadiness.current(),
               let pubkey = SettingsManager.shared.primaryP2PKPublicKey else { return nil }
         return try? PaymentRequestBuilder.build(
             id: CashuRequest.newId(),
@@ -178,8 +237,8 @@ enum LockedReceiveRequest {
             unit: "sat",
             mints: [],
             description: nil,
-            nostrPubkeyHex: publicKeyHex,
-            relays: relays,
+            nostrPubkeyHex: configuration.publicKeyHex,
+            relays: configuration.relays,
             p2pkPubkeyHex: pubkey
         )
     }

@@ -435,7 +435,7 @@ struct UnifiedReceiveView: View {
     private func createNewRequest() {
         HapticFeedback.selection()
         let readiness = CashuRequestNostrReadiness.current()
-        guard case let .ready(publicKeyHex, relays) = readiness else {
+        guard let configuration = readiness.requestConfiguration else {
             inputHint = readiness.recoveryMessage
             return
         }
@@ -447,8 +447,8 @@ struct UnifiedReceiveView: View {
                 unit: "sat",
                 mints: [],
                 description: nil,
-                nostrPubkeyHex: publicKeyHex,
-                relays: relays
+                nostrPubkeyHex: configuration.publicKeyHex,
+                relays: configuration.relays
             )
             let request = CashuRequestStore.shared.createNew(
                 id: id,
@@ -642,7 +642,7 @@ struct ReceiveEcashView: View {
     private func createNewRequest() {
         HapticFeedback.selection()
         let readiness = CashuRequestNostrReadiness.current()
-        guard case let .ready(publicKeyHex, relays) = readiness else {
+        guard let configuration = readiness.requestConfiguration else {
             errorMessage = readiness.recoveryMessage
             return
         }
@@ -654,8 +654,8 @@ struct ReceiveEcashView: View {
                 unit: "sat",
                 mints: [],
                 description: nil,
-                nostrPubkeyHex: publicKeyHex,
-                relays: relays
+                nostrPubkeyHex: configuration.publicKeyHex,
+                relays: configuration.relays
             )
             let request = CashuRequestStore.shared.createNew(
                 id: id,
