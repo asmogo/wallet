@@ -68,6 +68,6 @@ class ReceiveActualFeeTest {
             proofCount = 1,
         ),
         fee = previewFee,
-        locked = false,
+        p2pkLock = P2PKLockState.Unlocked,
     )
 }
