@@ -1,6 +1,41 @@
 import SwiftUI
 import Cdk
 
+/// Immutable review copy derived from a decoded token before the recipient can
+/// claim it. Keeping normalization and accessibility text outside the view
+/// makes nil/blank handling and the review-before-claim order directly testable.
+struct ReceiveTokenReviewPresentation: Equatable {
+    struct Memo: Equatable {
+        let text: String
+
+        var accessibilityLabel: String { "Memo" }
+        var accessibilityValue: String { text }
+        var accessibilityIdentifier: String { "receive-token-review-memo" }
+    }
+
+    enum ConfirmationElement: Equatable {
+        case memo(String)
+        case claimAction
+    }
+
+    let memo: Memo?
+
+    var claimActionTitle: String { "Receive" }
+
+    init(rawMemo: String?) {
+        let trimmed = rawMemo?.trimmingCharacters(in: .whitespacesAndNewlines)
+        memo = trimmed.flatMap { $0.isEmpty ? nil : Memo(text: $0) }
+    }
+
+    /// The confirmation contract: when a sender memo exists, the recipient
+    /// reviews it before the claim action becomes the next flow element.
+    var confirmationElements: [ConfirmationElement] {
+        var elements = memo.map { [ConfirmationElement.memo($0.text)] } ?? []
+        elements.append(.claimAction)
+        return elements
+    }
+}
+
 struct ReceiveTokenDetailView: View {
     let tokenString: String
     var onComplete: (() -> Void)? = nil
@@ -17,7 +52,7 @@ struct ReceiveTokenDetailView: View {
     @Environment(\.dismiss) var dismiss
     @ObservedObject private var settings = SettingsManager.shared
 
-    @State private var decodedToken: Token?
+    private let reviewPresentation: ReceiveTokenReviewPresentation
     @State private var tokenAmount: UInt64
     /// The token's own unit ("sat", "eur", "usd", or a custom string). Drives
     /// unit-native amount/fee formatting so a non-sat token isn't shown as sats.
@@ -68,6 +103,7 @@ struct ReceiveTokenDetailView: View {
         _tokenAmount = State(initialValue: amount)
         let unit = (decoded?.unit() ?? nil).map(PaymentRequestDecoder.unitDescription) ?? "sat"
         _tokenUnit = State(initialValue: unit)
+        reviewPresentation = ReceiveTokenReviewPresentation(rawMemo: decoded?.memo())
     }
 
     /// Whether the token is denominated in sats (the common path — keep the
@@ -172,6 +208,10 @@ struct ReceiveTokenDetailView: View {
                     }
                     canvasDivider
                     detailRow(icon: "bitcoinsign.bank.building", label: "Mint", value: shortMintUrl(mintUrl))
+                    if let memo = reviewPresentation.memo {
+                        canvasDivider
+                        memoRow(memo)
+                    }
                     if !p2pkPubkeys.isEmpty {
                         canvasDivider
                         lockedToRow
@@ -197,7 +237,7 @@ struct ReceiveTokenDetailView: View {
         } footer: {
             VStack(spacing: 12) {
                 Button(action: receiveToken) {
-                    Text("Receive")
+                    Text(reviewPresentation.claimActionTitle)
                 }
                 .glassButton()
                 .disabled(!tokenLockedToKnownKey)
@@ -317,6 +357,28 @@ struct ReceiveTokenDetailView: View {
         .padding(.vertical, 14)
     }
 
+    /// Sender-provided prose stays fully reviewable instead of inheriting the
+    /// single-line, middle-truncated treatment used for identifiers.
+    private func memoRow(_ memo: ReceiveTokenReviewPresentation.Memo) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 12) {
+            Label(memo.accessibilityLabel, systemImage: "quote.bubble")
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: true, vertical: false)
+            Spacer(minLength: 0)
+            Text(memo.text)
+                .fontWeight(.medium)
+                .multilineTextAlignment(.trailing)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .font(.subheadline)
+        .padding(.horizontal, 4)
+        .padding(.vertical, 14)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(memo.accessibilityLabel)
+        .accessibilityValue(memo.accessibilityValue)
+        .accessibilityIdentifier(memo.accessibilityIdentifier)
+    }
+
     /// Hairline separator on the flat canvas — matches the pay/receive detail
     /// surfaces (no boxed background).
     private var canvasDivider: some View {
@@ -335,7 +397,6 @@ struct ReceiveTokenDetailView: View {
     func parseToken() {
         do {
             let token = try walletManager.decodeToken(tokenString: tokenString)
-            self.decodedToken = token
             // `tokenAmount` is parsed eagerly in init (same Token.decode path), so
             // the hero already holds the final value — no reassignment here, which
             // would be a no-op at best and re-trigger the entry animation at worst.
@@ -443,7 +504,7 @@ struct ReceiveTokenDetailView: View {
             unit: tokenUnit,
             date: Date(),
             mintUrl: mintUrl,
-            memo: decodedToken?.memo()
+            memo: reviewPresentation.memo?.text
         )
         walletManager.savePendingReceiveToken(pendingReceive)
         // Rebuild History so the parked token shows as a claimable row right away.

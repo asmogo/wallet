@@ -80,7 +80,7 @@ Platform-specific capabilities remain intentionally outside parity, including iC
 
 - [x] **[P1 · iOS → Android] Show the actual P2PK lock target.** Android uses a generic “Requires your key” row only when the key is not held and hides the row when it is held; iOS identifies the recipient. **Done when:** Android always identifies a locked token’s recipient and clearly distinguishes claimable from unclaimable before the user acts.
 
-- [ ] **[P1 · Android → iOS] Show the token memo during review.** Android includes a Memo row when present; iOS does not. **Done when:** iOS lets the recipient review the sender’s memo before claiming.
+- [x] **[P1 · Android → iOS] Show the token memo during review.** Android includes a Memo row when present; iOS does not. **Done when:** iOS lets the recipient review the sender’s memo before claiming.
 
 - [ ] **[P1 · iOS → Android] Preserve a memo when choosing Receive later.** iOS stores the decoded token memo in the pending receive; Android’s pending-token conversion drops it. **Done when:** the Android History row and later claim retain the original memo.
 
