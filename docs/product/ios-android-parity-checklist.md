@@ -82,7 +82,7 @@ Platform-specific capabilities remain intentionally outside parity, including iC
 
 - [x] **[P1 · Android → iOS] Show the token memo during review.** Android includes a Memo row when present; iOS does not. **Done when:** iOS lets the recipient review the sender’s memo before claiming.
 
-- [ ] **[P1 · iOS → Android] Preserve a memo when choosing Receive later.** iOS stores the decoded token memo in the pending receive; Android’s pending-token conversion drops it. **Done when:** the Android History row and later claim retain the original memo.
+- [x] **[P1 · iOS → Android] Preserve a memo when choosing Receive later.** iOS stores the decoded token memo in the pending receive; Android’s pending-token conversion drops it. **Done when:** the Android History row and later claim retain the original memo.
 
 - [ ] **[P0 · iOS → Android] Report the actually paid receive fee.** iOS derives the final fee from gross token value minus the amount credited; Android carries the preview fee into success even if settlement differs. **Done when:** Android’s receipt reconciles the displayed fee against the credited amount and tests cover a settlement that differs from the preview.
 

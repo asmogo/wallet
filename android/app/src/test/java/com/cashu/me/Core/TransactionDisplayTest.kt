@@ -134,6 +134,22 @@ class TransactionDisplayTest {
         assertEquals("Ecash token", TransactionDisplay.qrLabel(transaction))
     }
 
+    @Test
+    fun memoAppearsInHistoryDetailsOnlyWhenPresent() {
+        val withMemo = transaction(
+            kind = TransactionKind.Ecash,
+            type = TransactionType.Incoming,
+            memo = "Coffee from Alice",
+        )
+        val withoutMemo = withMemo.copy(memo = null)
+
+        assertTrue(
+            TransactionDisplay.detailFields(withMemo)
+                .any { it.label == "Memo" && it.value == "Coffee from Alice" },
+        )
+        assertTrue(TransactionDisplay.detailFields(withoutMemo).none { it.label == "Memo" })
+    }
+
     private fun transaction(
         kind: TransactionKind,
         type: TransactionType,
@@ -141,6 +157,7 @@ class TransactionDisplayTest {
         invoice: String? = null,
         preimage: String? = null,
         fee: Long = 0,
+        memo: String? = null,
     ) = WalletTransaction(
         id = "tx",
         amount = 10,
@@ -153,5 +170,6 @@ class TransactionDisplayTest {
         token = token,
         invoice = invoice,
         fee = fee,
+        memo = memo,
     )
 }

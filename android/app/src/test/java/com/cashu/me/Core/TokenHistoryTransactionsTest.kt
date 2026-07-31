@@ -51,6 +51,7 @@ class TokenHistoryTransactionsTest {
                     dateEpochMillis = 200,
                     mintUrl = MintUrl,
                     unit = "eur",
+                    memo = "Coffee from Alice",
                 ),
             ),
         )
@@ -62,6 +63,7 @@ class TokenHistoryTransactionsTest {
         assertEquals("cashu-receive", row.token)
         assertEquals(0L, row.fee)
         assertEquals("eur", row.unit)
+        assertEquals("Coffee from Alice", row.memo)
         assertTrue(row.isPendingToken)
     }
 

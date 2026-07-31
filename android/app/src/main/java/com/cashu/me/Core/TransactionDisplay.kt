@@ -101,6 +101,9 @@ object TransactionDisplay {
             add(TransactionDetailField("Date", formatDetailDate(transaction.dateEpochMillis)))
             if (transaction.fee > 0) add(TransactionDetailField("Fee", formatNativeAmount(transaction.fee, transaction.unit)))
             transaction.mintUrl?.let { add(TransactionDetailField("Mint", mintHost(it))) }
+            transaction.memo
+                ?.takeIf { it.isNotBlank() }
+                ?.let { add(TransactionDetailField("Memo", it)) }
             if (transaction.kind == TransactionKind.Onchain) {
                 // Address/txid are reference blobs — show the decoder's standard
                 // 8…6 short form; tap-to-copy carries the full value.

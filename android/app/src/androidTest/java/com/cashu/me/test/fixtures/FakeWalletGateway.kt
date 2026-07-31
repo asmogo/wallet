@@ -388,6 +388,8 @@ class FakeWalletGateway(
             "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about"
         const val DeterministicToken =
             "cashuAeyJ0b2tlbiI6W3sicHJvb2ZzIjpbXSwibWludCI6Imh0dHBzOi8vbWludC5taW5pYml0cy5jYXNoIn1dfQ"
+        const val MemoDeterministicToken =
+            "cashuAeyJ0b2tlbiI6W3sibWludCI6Imh0dHBzOi8vbWludC5taW5pYml0cy5jYXNoIiwicHJvb2ZzIjpbXX1dLCJ1bml0Ijoic2F0IiwibWVtbyI6IkNvZmZlZSBmcm9tIEFsaWNlIn0"
     }
 }
 
