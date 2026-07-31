@@ -53,6 +53,7 @@ import java.util.Date
 import kotlinx.coroutines.delay
 import com.cashu.me.Core.AmountFormatter
 import com.cashu.me.Core.CashuRequestStore
+import com.cashu.me.Core.CashuRequestNostrReadiness
 import com.cashu.me.Core.NostrService
 import com.cashu.me.Core.NfcReceive.NfcReceiveCoordinator
 import com.cashu.me.Core.NfcReceive.NfcReceivePhase
@@ -70,10 +71,12 @@ import com.cashu.me.ui.components.AmountText
 import com.cashu.me.ui.components.CanvasDivider
 import com.cashu.me.ui.components.DetailActionFooter
 import com.cashu.me.ui.components.GhostButton
+import com.cashu.me.ui.components.InlineNotice
 import com.cashu.me.ui.components.InlineNoticeHost
 import com.cashu.me.ui.components.InspectorRow
 import com.cashu.me.ui.components.MintPickerSheet
 import com.cashu.me.ui.components.NumberPadFooter
+import com.cashu.me.ui.components.NoticeSeverity
 import com.cashu.me.ui.components.PaymentStatusPhase
 import com.cashu.me.ui.components.PaymentStatusScreen
 import com.cashu.me.ui.components.QrCard
@@ -104,12 +107,16 @@ fun CashuRequestDetailScreen(
     val storeState by cashuRequestStore.state.collectAsState()
     val walletState by walletManager.state.collectAsState()
     val settings by settingsManager.state.collectAsState()
+    val nostrState by nostrService.state.collectAsState()
     val nfcState by nfcReceiveCoordinator.state.collectAsState()
     val formatter = remember { AmountFormatter() }
     val context = LocalContext.current
     val clipboard = LocalClipboardManager.current
 
     val request = storeState.requests.firstOrNull { it.id == requestId }
+    val requestReadiness = remember(settings, nostrState) {
+        CashuRequestNostrReadiness.current(nostrService, settingsManager)
+    }
     var copied by remember { mutableStateOf(false) }
     var mintPickerOpen by remember { mutableStateOf(false) }
     var amountPickerOpen by remember { mutableStateOf(false) }
@@ -129,10 +136,10 @@ fun CashuRequestDetailScreen(
     ) {
         if (nfcReceiveCoordinator.state.value.phase.isNfcTransferActive()) return
         val req = request ?: return
-        val nostr = nostrService.state.value
-        val relays = settings.nostrRelays
-        if (nostr.publicKeyHex.isBlank() || relays.isEmpty()) {
-            regenerateError = "Nostr isn't ready — check your relays in Settings."
+        val readiness = CashuRequestNostrReadiness.current(nostrService, settingsManager)
+        val configuration = readiness.requestConfigurationOrNull()
+        if (configuration == null) {
+            regenerateError = (readiness as? CashuRequestNostrReadiness.Blocked)?.recoveryMessage
             return
         }
         val resolvedUnit = walletState.mints.firstOrNull { it.url == nextMints.firstOrNull() }
@@ -147,8 +154,8 @@ fun CashuRequestDetailScreen(
                 unit = resolvedUnit,
                 mints = nextMints,
                 description = req.memo,
-                nostrPubkeyHex = nostr.publicKeyHex,
-                relays = relays,
+                nostrPubkeyHex = configuration.publicKeyHex,
+                relays = configuration.relays,
             )
         }.onSuccess { encoded ->
             cashuRequestStore.update(
@@ -329,10 +336,19 @@ fun CashuRequestDetailScreen(
                     NfcReceiveIndicator(coordinator = nfcReceiveCoordinator)
                 }
 
-                StatusBlock(
-                    received = request.receivedPayments.isNotEmpty(),
-                    paymentCount = paymentCount,
-                )
+                val deliveryNotice = requestReadiness.deliveryNoticeOrNull()
+                if (request.isEcashRequest && request.receivedPayments.isEmpty() && deliveryNotice != null) {
+                    InlineNotice(
+                        text = deliveryNotice.title,
+                        detail = deliveryNotice.message,
+                        severity = NoticeSeverity.Warning,
+                    )
+                } else {
+                    StatusBlock(
+                        received = request.receivedPayments.isNotEmpty(),
+                        paymentCount = paymentCount,
+                    )
+                }
 
                 Column(modifier = Modifier.fillMaxWidth()) {
                     val activeMintUrl = request.mints.firstOrNull()
