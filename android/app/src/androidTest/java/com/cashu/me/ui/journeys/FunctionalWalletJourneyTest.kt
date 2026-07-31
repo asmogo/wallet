@@ -147,6 +147,24 @@ class FunctionalWalletJourneyTest {
     }
 
     @Test
+    fun unknownMintReceiveShowsWarningAndClaimsOnReceive() {
+        val fixture = launch(
+            FixtureMode.SeededWithMint,
+            deepLink = "cashu:${FakeWalletGateway.UnknownMintDeterministicToken}",
+        )
+        val fake = checkNotNull(fixture.fakeGateway)
+
+        robot.awaitTag(UiTestTags.ReceiveEcashDetail)
+            .awaitText("New mint: mint.minibits.cash")
+            .tapTextWithinTag(UiTestTags.ReceiveEcashDetail, "Receive")
+            .awaitText("Payment received")
+            .tapText("Done")
+            .awaitTag(UiTestTags.WalletScreen)
+
+        assertEquals(25L, runBlocking { fake.totalBalance(FakeWalletGateway.TestMintUrl) })
+    }
+
+    @Test
     fun lightningReceiveTransitionsToPaidSuccessAndHistory() {
         val fixture = launch(FixtureMode.SeededWithMint)
         val fake = checkNotNull(fixture.fakeGateway)

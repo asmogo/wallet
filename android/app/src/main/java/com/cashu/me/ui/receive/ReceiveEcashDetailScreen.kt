@@ -43,6 +43,8 @@ import com.cashu.me.Models.PendingReceiveToken
 import com.cashu.me.ui.components.AmountFlipDisplay
 import com.cashu.me.ui.components.AmountText
 import com.cashu.me.ui.components.GhostButton
+import com.cashu.me.ui.components.InlineNotice
+import com.cashu.me.ui.components.NoticeSeverity
 import com.cashu.me.ui.components.PaymentStatusPhase
 import com.cashu.me.ui.components.PaymentStatusScreen
 import com.cashu.me.ui.components.PrimaryButton
@@ -88,6 +90,14 @@ fun ReceiveEcashDetailScreen(
     val parsed = remember(payload) { parseToken(payload) }
     var review by remember(payload) { mutableStateOf<TokenReview?>(null) }
     var status by remember(payload) { mutableStateOf<TokenClaimStatus?>(null) }
+    val mintTrust = remember(parsed, walletState.mints) {
+        (parsed as? TokenParseOutcome.Ok)?.let {
+            receiveMintTrust(
+                mintUrl = it.info.mint,
+                knownMintUrls = walletState.mints.map { mint -> mint.url },
+            )
+        }
+    }
 
     // Fee preview + P2PK lock check land async; the fee row shows the
     // skeleton fill-in until then.
@@ -157,8 +167,9 @@ fun ReceiveEcashDetailScreen(
                     useBitcoinSymbol = settings.useBitcoinSymbol,
                     amountPrimary = AmountDisplayPrimary.fromRaw(settings.amountDisplayPrimary),
                     onFlipPrimary = { settingsManager.setAmountDisplayPrimary(it.rawValue) },
+                    mintTrust = mintTrust,
                     onClose = onDone,
-                    onReceive = { review?.let(::claim) },
+                    onReceive = { review?.let { target -> claim(target) } },
                     secondaryActionText = if (heldPayment != null) "Decline" else "Receive later",
                     onSecondaryAction = {
                         if (heldPayment != null) {
@@ -179,6 +190,7 @@ fun ReceiveEcashDetailScreen(
             }
         }
     }
+
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -192,6 +204,7 @@ private fun ConfirmContent(
     useBitcoinSymbol: Boolean,
     amountPrimary: AmountDisplayPrimary,
     onFlipPrimary: (AmountDisplayPrimary) -> Unit,
+    mintTrust: ReceiveMintTrust?,
     onClose: () -> Unit,
     onReceive: () -> Unit,
     secondaryActionText: String,
@@ -249,6 +262,13 @@ private fun ConfirmContent(
             p2pkLock = review?.p2pkLock,
             modifier = Modifier.padding(horizontal = CashuTheme.spacing.comfortable),
         )
+        if (mintTrust?.showWarning == true) {
+            Spacer(Modifier.height(CashuTheme.spacing.comfortable))
+            UnknownMintTrustNotice(
+                trust = mintTrust,
+                modifier = Modifier.padding(horizontal = CashuTheme.spacing.comfortable),
+            )
+        }
         Spacer(Modifier.weight(FooterWeight))
         Column(
             modifier = Modifier
@@ -275,6 +295,19 @@ private fun ConfirmContent(
             Spacer(Modifier.navigationBarsPadding())
         }
     }
+}
+
+@Composable
+internal fun UnknownMintTrustNotice(
+    trust: ReceiveMintTrust,
+    modifier: Modifier = Modifier,
+) {
+    InlineNotice(
+        text = "New mint: ${trust.host}",
+        detail = "Receiving this token will add the mint to your wallet. Continue only if you trust it.",
+        severity = NoticeSeverity.Warning,
+        modifier = modifier,
+    )
 }
 
 // Vertical rhythm of the confirm page (approximates the iOS screenshot:
