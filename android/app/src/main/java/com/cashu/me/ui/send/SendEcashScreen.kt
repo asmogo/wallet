@@ -73,6 +73,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.style.TextOverflow
@@ -111,6 +112,20 @@ import com.cashu.me.ui.testing.UiTestTags
 // Inline status icons inside dense rows — smaller than the standard 20dp body icon.
 private val STATUS_ICON_SMALL = 18.dp
 private val CHECKING_PROGRESS_SIZE = 14.dp
+
+internal object LockEcashCopy {
+    const val Label = "Lock ecash"
+    const val RecipientEffect = "Only the recipient with this public key can claim it."
+    const val RecipientKeyLabel = "Recipient public key (P2PK)"
+    const val InvalidRecipientKey =
+        "Enter a valid recipient public key: 64 hex characters, or 66 beginning with 02 or 03."
+
+    fun stateDescription(locked: Boolean): String = if (locked) {
+        "On. Only the recipient with the selected key can claim it."
+    } else {
+        "Off. Anyone with the ecash token can claim it."
+    }
+}
 
 private sealed interface SendFace {
     data object Input : SendFace
@@ -242,7 +257,7 @@ fun SendEcashScreen(
         }
         p2pkInputError = runCatching {
             com.cashu.me.Core.SettingsManager.normalizeP2PKPublicKeyForSend(trimmed)
-        }.exceptionOrNull()?.message
+        }.exceptionOrNull()?.let { LockEcashCopy.InvalidRecipientKey }
     }
 
     // Generation counts as money-in-motion: block sheet dismissal.
@@ -286,15 +301,10 @@ fun SendEcashScreen(
                     }
                 } else if (current is SendFace.Input) {
                     // iOS toolbar order: lock, then unit (unit sits to the lock's right).
-                    IconButton(onClick = { p2pkOn = !p2pkOn }) {
-                        ToolbarIcon(
-                            imageVector = if (p2pkOn) Icons.Filled.Lock
-                            else Icons.Outlined.LockOpen,
-                            contentDescription = if (p2pkOn) "P2PK locked" else "P2PK off",
-                            tint = if (p2pkOn) MaterialTheme.colorScheme.onSurface
-                            else MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
+                    LockEcashToolbarAction(
+                        locked = p2pkOn,
+                        onToggle = { p2pkOn = !p2pkOn },
+                    )
                     if (activeMint?.supportsMultipleUnits == true) {
                         androidx.compose.material3.TextButton(onClick = { unitPickerOpen = true }) {
                             Text(
@@ -387,7 +397,7 @@ fun SendEcashScreen(
                             return@InputFace
                         }
                         if (p2pkOn && validatedP2pkPubkey == null) {
-                            errorText = p2pkInputError ?: "Enter a valid P2PK pubkey."
+                            errorText = p2pkInputError ?: LockEcashCopy.InvalidRecipientKey
                             return@InputFace
                         }
                         sending = true
@@ -657,6 +667,28 @@ internal fun isOwnP2pkRecipient(
 }
 
 @Composable
+internal fun LockEcashToolbarAction(
+    locked: Boolean,
+    onToggle: () -> Unit,
+) {
+    IconButton(
+        onClick = onToggle,
+        modifier = Modifier
+            .testTag(UiTestTags.LockEcashToggle)
+            .semantics {
+                stateDescription = LockEcashCopy.stateDescription(locked)
+            },
+    ) {
+        ToolbarIcon(
+            imageVector = if (locked) Icons.Filled.Lock else Icons.Outlined.LockOpen,
+            contentDescription = LockEcashCopy.Label,
+            tint = if (locked) MaterialTheme.colorScheme.onSurface
+            else MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
+}
+
+@Composable
 internal fun P2pkLockSection(
     input: String,
     onInputChange: (String) -> Unit,
@@ -738,12 +770,22 @@ internal fun P2pkLockSection(
         modifier = Modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(CashuTheme.spacing.tight),
     ) {
+        Text(
+            text = LockEcashCopy.Label,
+            style = MaterialTheme.typography.titleSmall,
+            color = MaterialTheme.colorScheme.onSurface,
+        )
+        Text(
+            text = LockEcashCopy.RecipientEffect,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
         CashuTextField(
             value = input,
             onValueChange = onInputChange,
             modifier = Modifier.fillMaxWidth(),
-            label = "Recipient P2PK pubkey",
-            placeholder = "02… or 64-char hex",
+            label = LockEcashCopy.RecipientKeyLabel,
+            placeholder = "02… or 64-character hex",
             singleLine = true,
             keyboardOptions = KeyboardOptions(
                 capitalization = androidx.compose.ui.text.input.KeyboardCapitalization.None,
@@ -762,7 +804,7 @@ internal fun P2pkLockSection(
         }
         if (myKeyHex != null) {
             com.cashu.me.ui.components.GhostButton(
-                text = "Lock to my key",
+                text = "Lock ecash to my key",
                 onClick = onUseMyKey,
             )
         }
