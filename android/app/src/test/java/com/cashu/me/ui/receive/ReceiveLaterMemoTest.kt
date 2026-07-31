@@ -19,7 +19,7 @@ class ReceiveLaterMemoTest {
                     proofCount = 0,
                 ),
                 fee = 0,
-                locked = false,
+                p2pkLock = P2PKLockState.Unlocked,
             ),
         )
 
@@ -40,7 +40,7 @@ class ReceiveLaterMemoTest {
                     proofCount = 1,
                 ),
                 fee = 0,
-                locked = false,
+                p2pkLock = P2PKLockState.Unlocked,
             ),
         )
 
