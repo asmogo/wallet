@@ -170,6 +170,29 @@ internal sealed interface TokenClaimStatus {
     data class Failed(val message: WalletMessage) : TokenClaimStatus
 }
 
+/**
+ * Reconciles the receive preview with CDK's settled credit.
+ *
+ * The decoded token amount is gross while [creditedAmount] is the exact net
+ * amount added to the wallet. Clamp only for the subtraction so a malformed
+ * value cannot produce a negative fee; the receipt still reports the
+ * non-negative credited amount returned by settlement.
+ */
+internal fun settledTokenClaim(
+    review: TokenReview,
+    creditedAmount: Long,
+): TokenClaimStatus.Claimed {
+    val grossAmount = review.info.amount.coerceAtLeast(0L)
+    val safeCreditedAmount = creditedAmount.coerceAtLeast(0L)
+    val paidFee = grossAmount - safeCreditedAmount.coerceAtMost(grossAmount)
+    return TokenClaimStatus.Claimed(
+        amount = safeCreditedAmount,
+        fee = paidFee,
+        unit = review.info.unit,
+        mint = review.info.mint,
+    )
+}
+
 // iOS ReceiveTokenDetailView: floor the redeem at 500ms so the "Claiming…"
 // spinner is legible on instant redeems. Not a fake delay — the redeem itself
 // hits the mint; we only pad the *display* of an early result.
@@ -202,20 +225,10 @@ internal suspend fun claimToken(
     val elapsed = System.currentTimeMillis() - startedAt
     if (elapsed < MinClaimingBeatMillis) delay(MinClaimingBeatMillis - elapsed)
     return result.fold(
-        onSuccess = { credited ->
-            TokenClaimStatus.Claimed(
-                // The gateway reports what was actually credited (net of the
-                // receive-swap fee); fall back to the reviewed net amount.
-                amount = if (credited > 0L) {
-                    credited
-                } else {
-                    review.info.amount - review.fee.coerceIn(0L, review.info.amount)
-                },
-                fee = review.fee,
-                unit = review.info.unit,
-                mint = review.info.mint,
-            )
-        },
+        // The gateway's exact net credit supersedes the preview. Reconcile the
+        // receipt from gross − credited so both amount and fee describe the
+        // same settlement.
+        onSuccess = { credited -> settledTokenClaim(review, credited) },
         onFailure = { TokenClaimStatus.Failed(it.walletMessage) },
     )
 }
