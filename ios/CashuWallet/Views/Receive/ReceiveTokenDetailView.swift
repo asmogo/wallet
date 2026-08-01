@@ -204,7 +204,14 @@ struct ReceiveTokenDetailView: View {
                         .padding(.horizontal, 4)
                         .padding(.vertical, 14)
                     } else {
-                        detailRow(icon: "arrow.up.arrow.down", label: "Fee", value: formatFee(receiveFee))
+                        // Prospective charge (docs/product/copy-guidance.md):
+                        // "No fee" states the user is charged nothing; a bare
+                        // "0 sat" reads as an accounting figure.
+                        detailRow(
+                            icon: "arrow.up.arrow.down",
+                            label: "Fee",
+                            value: receiveFee == 0 ? "No fee" : formatFee(receiveFee)
+                        )
                     }
                     canvasDivider
                     detailRow(icon: "bitcoinsign.bank.building", label: "Mint", value: shortMintUrl(mintUrl))
@@ -281,7 +288,9 @@ struct ReceiveTokenDetailView: View {
     /// Status rows for the processing/success screen. "Amount" is the net
     /// credited to the balance: the estimate (token value − previewed fee)
     /// while claiming, then the exact net CDK returned. The fee row likewise
-    /// firms up from the preview to the actually charged fee.
+    /// firms up from the preview to the actually charged fee; a zero fee
+    /// omits the row — receipts never render "0 sat" (accounting value,
+    /// docs/product/copy-guidance.md).
     private var successRows: [PaymentStatusView.DetailRow] {
         let paidFee = claimedAmount.map { tokenAmount - min($0, tokenAmount) }
         var rows: [PaymentStatusView.DetailRow] = [
@@ -290,8 +299,11 @@ struct ReceiveTokenDetailView: View {
                 label: "Amount",
                 value: formatAmount(claimedAmount ?? netReceiveAmount)
             ),
-            .init(icon: "arrow.up.arrow.down", label: "Fee", value: formatFee(paidFee ?? receiveFee)),
         ]
+        let settledFee = paidFee ?? receiveFee
+        if settledFee > 0 {
+            rows.append(.init(icon: "arrow.up.arrow.down", label: "Fee", value: formatFee(settledFee)))
+        }
         if !mintUrl.isEmpty {
             rows.append(.init(
                 icon: "bitcoinsign.bank.building",
