@@ -172,7 +172,7 @@ Platform-specific capabilities remain intentionally outside parity, including iC
 
 - [ ] **[P1 · iOS → Android] Add initialization and setup feedback.** iOS distinguishes active setup from “Wallet not fully initialized”; Android collapses both into an empty address message. **Done when:** Android communicates progress separately from a recoverable initialization problem and gives an actionable recovery.
 
-- [ ] **[P2 · iOS → Android] Rename “Check for paid quotes now.”** iOS uses “Check for payments”; Android exposes quote jargon. **Done when:** both use payment language in the primary action.
+- [x] **[P2 · iOS → Android] Rename “Check for paid quotes now.”** iOS uses “Check for payments”; Android exposes quote jargon. **Done when:** both use payment language in the primary action.
 
 - [ ] **[P1 · iOS → Android] Expose Lightning-address connection state accessibly.** iOS combines the address with Connected, Connecting, or error text; Android encodes state only in a colored dot. **Done when:** TalkBack announces the address and current state, and color is never the only signal.
 
