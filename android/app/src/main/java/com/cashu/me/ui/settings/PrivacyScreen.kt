@@ -158,8 +158,8 @@ fun PrivacyScreen(
 
             SectionHeader("Diagnostics")
             ToggleRow(
-                title = "Send anonymous crash reports",
-                subtitle = "Opt-in. Screenshots and view hierarchy are never attached, and no Sentry PII is collected.",
+                title = "Send crash reports",
+                subtitle = "Opt-in. Screenshots and view hierarchy are not attached. Reports can include technical error details and recent wallet actions.",
                 checked = settings.sentryEnabled,
                 onCheckedChange = settingsManager::setSentryEnabled,
             )

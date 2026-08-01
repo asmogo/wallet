@@ -56,8 +56,8 @@ struct PrivacySettingsSection: View {
 
                 Toggle(isOn: $settings.sentryEnabled) {
                     VStack(alignment: .leading, spacing: 2) {
-                        Text("Send anonymous crash reports")
-                        Text("Helps improve the app. No personal data, wallet addresses, or amounts are ever sent.")
+                        Text("Send crash reports")
+                        Text("Opt-in. Screenshots and view hierarchy are not attached. Reports can include technical error details and recent wallet actions.")
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
