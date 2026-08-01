@@ -307,11 +307,13 @@ class NPCService(
     private fun applyPollingPreferences() {
         val settings = settingsManager.state.value
         val state = mutableState.value
-        if (!state.isEnabled || !state.isConnected || !settings.checkIncomingInvoices) {
-            stopBackgroundRefresh()
-            return
-        }
-        if (!settings.periodicallyCheckIncomingInvoices) {
+        val shouldRun = shouldRunPeriodicInvoiceChecks(
+            isEnabled = state.isEnabled,
+            isConnected = state.isConnected,
+            checkIncomingInvoices = settings.checkIncomingInvoices,
+            periodicallyCheckIncomingInvoices = settings.periodicallyCheckIncomingInvoices,
+        )
+        if (!shouldRun) {
             stopBackgroundRefresh()
             return
         }
@@ -377,6 +379,13 @@ class NPCService(
             quotes
                 .filter { it.isPaid && it.id !in processedQuoteIds }
                 .sortedBy { it.paidAtEpochSeconds ?: it.createdAtEpochSeconds ?: Long.MAX_VALUE }
+
+        internal fun shouldRunPeriodicInvoiceChecks(
+            isEnabled: Boolean,
+            isConnected: Boolean,
+            checkIncomingInvoices: Boolean,
+            periodicallyCheckIncomingInvoices: Boolean,
+        ): Boolean = isEnabled && isConnected && checkIncomingInvoices && periodicallyCheckIncomingInvoices
 
     }
 

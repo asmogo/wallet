@@ -122,6 +122,7 @@ fun PrivacyScreen(
                 subtitle = "Refresh quote status on a timer",
                 checked = settings.periodicallyCheckIncomingInvoices,
                 onCheckedChange = settingsManager::setPeriodicallyCheckIncomingInvoices,
+                enabled = settings.checkIncomingInvoices,
             )
 
             SectionHeader("Network")
