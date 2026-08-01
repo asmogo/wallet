@@ -23,16 +23,24 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
+import androidx.compose.material.icons.automirrored.outlined.OpenInNew
+import androidx.compose.material.icons.outlined.AlternateEmail
 import androidx.compose.material.icons.outlined.ArrowDownward
 import androidx.compose.material.icons.outlined.ArrowUpward
 import androidx.compose.material.icons.outlined.Check
 import androidx.compose.material.icons.outlined.ContentCopy
 import androidx.compose.material.icons.outlined.CurrencyBitcoin
+import androidx.compose.material.icons.outlined.Description
+import androidx.compose.material.icons.outlined.Inventory2
+import androidx.compose.material.icons.outlined.Key
 import androidx.compose.material.icons.outlined.KeyboardArrowDown
 import androidx.compose.material.icons.outlined.Lock
+import androidx.compose.material.icons.outlined.MailOutline
 import androidx.compose.material.icons.outlined.Payments
+import androidx.compose.material.icons.outlined.Person
 import androidx.compose.material.icons.outlined.Public
 import androidx.compose.material.icons.outlined.Remove
+import androidx.compose.material.icons.outlined.Send
 import androidx.compose.material.icons.outlined.Straighten
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -55,7 +63,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontFamily
@@ -82,6 +92,7 @@ import com.cashu.me.ui.components.SectionHeader
 import com.cashu.me.ui.components.SpinnerRing
 import com.cashu.me.ui.components.ToolbarIcon
 import com.cashu.me.ui.components.neutralActionButtonColors
+import com.cashu.me.ui.components.openInBrowser
 import com.cashu.me.ui.theme.CapsuleShape
 import com.cashu.me.ui.theme.CashuTheme
 import com.cashu.me.ui.testing.UiTestTags
@@ -366,12 +377,61 @@ fun MintDetailScreen(
                 }
             }
 
+            // Contact: every channel the live mint reported (blank values are
+            // skipped — no dead rows). A row only becomes tappable when its
+            // target parses into the mailto:/http(s) allowlist; anything else
+            // stays plain text (iOS `contactSection` + `contactURL`).
+            val context = LocalContext.current
+            val contactRows = liveInfo?.contacts.orEmpty()
+                .filter { it.info.isNotBlank() }
+                .map { contact -> contact to mintContactLink(contact.method, contact.info) }
+            if (contactRows.isNotEmpty()) {
+                SectionHeader("Contact")
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    contactRows.forEachIndexed { index, (contact, link) ->
+                        InspectorRow(
+                            label = contact.method.replaceFirstChar { it.uppercase() },
+                            value = contact.info,
+                            leadingIcon = mintContactIcon(contact.method),
+                            onClick = link?.let { target -> { context.openInBrowser(target) } },
+                            valueColor = if (link != null) MaterialTheme.colorScheme.primary else null,
+                        )
+                        if (index < contactRows.lastIndex) CanvasDivider(leadingInset = 16.dp)
+                    }
+                }
+            }
+
+            // Details: software and terms come only from the live NUT-06 record
+            // (iOS gates on `cdkInfo`) — absent or unparseable values render no
+            // row rather than a placeholder or a dead link.
+            val tosUrl = safeExternalHttpUrl(liveInfo?.tosUrl)
+            val software = liveInfo?.software
             SectionHeader("Details")
-            InspectorRow(
-                label = "Units",
-                value = mint.units.joinToString(", ").ifBlank { "sat" },
-                leadingIcon = Icons.Outlined.Straighten,
-            )
+            Column(modifier = Modifier.fillMaxWidth()) {
+                if (software != null) {
+                    InspectorRow(
+                        label = "Software",
+                        value = "${software.name} ${software.version}",
+                        leadingIcon = Icons.Outlined.Inventory2,
+                    )
+                    CanvasDivider(leadingInset = 16.dp)
+                }
+                InspectorRow(
+                    label = "Units",
+                    value = mint.units.joinToString(", ").ifBlank { "sat" },
+                    leadingIcon = Icons.Outlined.Straighten,
+                )
+                if (tosUrl != null) {
+                    CanvasDivider(leadingInset = 16.dp)
+                    InspectorRow(
+                        label = "Terms of Service",
+                        value = externalUrlHost(tosUrl) ?: tosUrl,
+                        leadingIcon = Icons.Outlined.Description,
+                        onClick = { context.openInBrowser(tosUrl) },
+                        trailingIcon = Icons.AutoMirrored.Outlined.OpenInNew,
+                    )
+                }
+            }
 
             Spacer(Modifier.height(CashuTheme.spacing.comfortable))
             Column(
@@ -647,6 +707,16 @@ private enum class MintConnectionState(val label: String) {
     Checking("Checking…"),
     Online("Online"),
     Offline("Offline"),
+}
+
+/// Per-channel contact glyph (iOS `contactIcon`).
+private fun mintContactIcon(method: String): ImageVector = when (method.trim().lowercase()) {
+    "email" -> Icons.Outlined.MailOutline
+    "twitter", "x" -> Icons.Outlined.AlternateEmail
+    "nostr" -> Icons.Outlined.Key
+    "website", "url", "web" -> Icons.Outlined.Public
+    "telegram" -> Icons.Outlined.Send
+    else -> Icons.Outlined.Person
 }
 
 // Inline copy-row glyph (smaller than the body 20dp).

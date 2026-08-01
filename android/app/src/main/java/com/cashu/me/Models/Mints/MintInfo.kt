@@ -20,6 +20,11 @@ data class MintInfo(
     val supportedMintMethods: List<PaymentMethodKind>? = null,
     val supportedMeltMethods: List<PaymentMethodKind>? = null,
     val onchainMintConfirmations: Int? = null,
+    // NUT-06 self-reported metadata (contact / terms / software). Empty or null
+    // when the mint did not report it — the UI never invents placeholders.
+    val contacts: List<MintContact> = emptyList(),
+    val tosUrl: String? = null,
+    val software: MintSoftware? = null,
     val descriptionLong: String? = null,
     val motd: String? = null,
     val nutSupport: NutSupport = NutSupport(),
@@ -58,6 +63,23 @@ data class MintInfo(
         else -> candidates.sorted().firstOrNull() ?: "sat"
     }
 }
+
+/**
+ * One contact channel the mint self-reports via NUT-06 (`method` is e.g.
+ * "email", "nostr", "twitter"; `info` the address/handle/URL).
+ */
+@Serializable
+data class MintContact(
+    val method: String,
+    val info: String,
+)
+
+/** Mint implementation name + version self-reported via NUT-06. */
+@Serializable
+data class MintSoftware(
+    val name: String,
+    val version: String,
+)
 
 /**
  * Per-NUT capability flags reported by the mint (NUT-06 info). All default false so

@@ -20,10 +20,12 @@ import com.cashu.me.Models.MeltPaymentResult
 import com.cashu.me.Models.MeltQuoteInfo
 import com.cashu.me.Models.MeltQuoteState
 import com.cashu.me.Models.MeltSettlement
+import com.cashu.me.Models.MintContact
 import com.cashu.me.Models.MintInfo
 import com.cashu.me.Models.MintQuoteInfo
-import com.cashu.me.Models.NutSupport
 import com.cashu.me.Models.MintQuoteState
+import com.cashu.me.Models.MintSoftware
+import com.cashu.me.Models.NutSupport
 import com.cashu.me.Models.PaymentMethodKind
 import com.cashu.me.Models.RestoreMintResult
 import com.cashu.me.Models.SendTokenResult
@@ -747,6 +749,9 @@ class CdkWalletGatewayImpl : WalletGateway {
             mintUnits = mintUnits,
             supportedMintMethods = mintMethods,
             supportedMeltMethods = meltMethods,
+            contacts = contact.orEmpty().map { MintContact(method = it.method, info = it.info) },
+            tosUrl = tosUrl,
+            software = version?.let { MintSoftware(name = it.name, version = it.version) },
             descriptionLong = descriptionLong,
             motd = motd,
             nutSupport = NutSupport(
