@@ -223,7 +223,7 @@ fun LightningScreen(
             Spacer(Modifier.height(CashuTheme.spacing.comfortable))
             Column(modifier = Modifier.fillMaxWidth().padding(horizontal = CashuTheme.spacing.comfortable)) {
                 PrimaryButton(
-                    text = if (npcState.isCheckingPayments) "Checking…" else "Check for paid quotes now",
+                    text = if (npcState.isCheckingPayments) "Checking…" else "Check for payments",
                     onClick = { npcService.checkAndClaimPayments() },
                     enabled = npcState.isEnabled && !npcState.isCheckingPayments,
                     loading = npcState.isCheckingPayments,
