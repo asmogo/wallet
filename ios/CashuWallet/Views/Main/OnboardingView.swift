@@ -31,6 +31,9 @@ struct OnboardingView: View {
     @State private var seedRevealed = false
     @State private var seedAcknowledged = false
     @State private var seedCopied = false
+    // Snapshot of the seed words taken when the seed step appears, so wallet
+    // manager publishes during the step can't rebuild (and re-animate) the grid.
+    @State private var mnemonicWords: [String] = []
 
     // First-mint state (create path)
     @State private var showConceptSheet = false
@@ -638,56 +641,58 @@ struct OnboardingView: View {
                 .padding(.horizontal, 28)
             }
 
-            stagger(appeared: mnemonicAppeared, index: 1) {
-                VStack(spacing: 12) {
-                    // Mnemonic words — plain on canvas, blurred until revealed
-                    ZStack {
-                        mnemonicWordsGrid(words: walletManager.getMnemonicWords())
-                            // Hide the seed at the CONTENT level, not just visually.
-                            // A bare `.blur` is animatable, and on this screen's
-                            // entrance transition SwiftUI ramps the radius up from its
-                            // identity (0 = fully legible), briefly exposing the phrase
-                            // before it settles at 9 — the "flicker" users reported.
-                            // Redaction can't be defeated by an animation: while
-                            // unrevealed the real characters are never drawn, so no
-                            // animation timing can leak them. The blur stays purely for
-                            // the reveal aesthetic and animates 9 → 0 on tap; the
-                            // simultaneous un-redact is masked under that blur.
-                            .redacted(reason: seedRevealed ? [] : .placeholder)
-                            .blur(radius: seedRevealed ? 0 : 9)
-                            .allowsHitTesting(seedRevealed)
-                            // Keep the secret words out of the accessibility tree
-                            // until revealed — otherwise VoiceOver reads all 12
-                            // aloud while they're still blurred on screen.
-                            .accessibilityHidden(!seedRevealed)
+            // The seed grid deliberately gets NO stagger entrance: any offset/
+            // blur ramp on this block reads as a flicker on first paint, and
+            // re-composition mid-entrance restarts it. The step crossfade owns
+            // its appearance; the tap-to-reveal animation is untouched.
+            VStack(spacing: 12) {
+                // Mnemonic words — plain on canvas, blurred until revealed
+                ZStack {
+                    mnemonicWordsGrid(words: mnemonicWords)
+                        // Hide the seed at the CONTENT level, not just visually.
+                        // A bare `.blur` is animatable, and on this screen's
+                        // entrance transition SwiftUI ramps the radius up from its
+                        // identity (0 = fully legible), briefly exposing the phrase
+                        // before it settles at 9 — the "flicker" users reported.
+                        // Redaction can't be defeated by an animation: while
+                        // unrevealed the real characters are never drawn, so no
+                        // animation timing can leak them. The blur stays purely for
+                        // the reveal aesthetic and animates 9 → 0 on tap; the
+                        // simultaneous un-redact is masked under that blur.
+                        .redacted(reason: seedRevealed ? [] : .placeholder)
+                        .blur(radius: seedRevealed ? 0 : 9)
+                        .allowsHitTesting(seedRevealed)
+                        // Keep the secret words out of the accessibility tree
+                        // until revealed — otherwise VoiceOver reads all 12
+                        // aloud while they're still blurred on screen.
+                        .accessibilityHidden(!seedRevealed)
 
-                        if !seedRevealed {
-                            VStack(spacing: 6) {
-                                Image(systemName: "eye")
-                                    .font(.title3)
-                                Text("Tap to reveal")
-                                    .font(.subheadline)
-                            }
-                            .foregroundStyle(.secondary)
-                            .accessibilityElement(children: .ignore)
-                            .accessibilityLabel("Reveal seed phrase")
-                            .accessibilityHint("Shows your 12-word recovery phrase")
-                            .accessibilityAddTraits(.isButton)
-                            .accessibilityAction(.default, revealSeed)
+                    if !seedRevealed {
+                        VStack(spacing: 6) {
+                            Image(systemName: "eye")
+                                .font(.title3)
+                            Text("Tap to reveal")
+                                .font(.subheadline)
                         }
+                        .foregroundStyle(.secondary)
+                        .accessibilityElement(children: .ignore)
+                        .accessibilityLabel("Reveal seed phrase")
+                        .accessibilityHint("Shows your 12-word recovery phrase")
+                        .accessibilityAddTraits(.isButton)
+                        .accessibilityAction(.default, revealSeed)
                     }
-                    .contentShape(Rectangle())
-                    .onTapGesture(perform: revealSeed)
-                    .padding(.horizontal, 28)
-
-                    Button(action: copyMnemonic) {
-                        Text(seedCopied ? "Copied" : "Copy")
-                            .contentTransition(.opacity)
-                    }
-                    .textLinkButton()
                 }
-                .padding(.top, 24)
+                .contentShape(Rectangle())
+                .onTapGesture(perform: revealSeed)
+                .padding(.horizontal, 28)
+
+                Button(action: copyMnemonic) {
+                    Text(seedCopied ? "Copied" : "Copy")
+                        .contentTransition(.opacity)
+                }
+                .textLinkButton()
             }
+            .padding(.top, 24)
 
             Spacer()
 
@@ -729,6 +734,7 @@ struct OnboardingView: View {
             }
         }
         .onAppear {
+            mnemonicWords = walletManager.getMnemonicWords()
             triggerEntrance { mnemonicAppeared = true }
         }
     }
@@ -742,7 +748,7 @@ struct OnboardingView: View {
     }
 
     private func copyMnemonic() {
-        UIPasteboard.general.string = walletManager.getMnemonicWords().joined(separator: " ")
+        UIPasteboard.general.string = mnemonicWords.joined(separator: " ")
         withAnimation(.snappy) { seedCopied = true }
         HapticFeedback.selection()
         DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
@@ -1502,6 +1508,14 @@ struct OnboardingView: View {
     // MARK: - Actions
 
     private func createWallet() {
+        // An interrupted onboarding may have already created and persisted a
+        // wallet. Never regenerate its seed — the user may have written those
+        // words down. Re-show the existing phrase instead.
+        if walletManager.mnemonic != nil {
+            advance(to: .showMnemonic)
+            return
+        }
+
         isCreating = true
         errorMessage = nil
 

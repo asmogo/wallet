@@ -44,9 +44,34 @@ enum ICloudRestorePolicy {
 
     static func needsOnboarding(
         hasStoredMnemonic: Bool,
-        restoreIncomplete: Bool
+        restoreIncomplete: Bool,
+        onboardingCompleted: Bool
     ) -> Bool {
-        !hasStoredMnemonic || restoreIncomplete
+        !hasStoredMnemonic || restoreIncomplete || !onboardingCompleted
+    }
+}
+
+/// Tracks whether onboarding was fully passed (create path: past the first-mint
+/// screen via Continue or Skip; restore path: restore finished). The seed is
+/// persisted the moment a wallet is installed, so its presence alone cannot
+/// distinguish "wallet ready" from "killed mid-onboarding" — this marker can.
+/// Absent on installs that predate it; those are grandfathered to completed at
+/// launch, before any routing decision.
+enum OnboardingCompletionState {
+    static func isCompleted(defaults: UserDefaults = .standard) -> Bool {
+        defaults.bool(forKey: StorageKeys.onboardingCompleted)
+    }
+
+    static func hasMarker(defaults: UserDefaults = .standard) -> Bool {
+        defaults.object(forKey: StorageKeys.onboardingCompleted) != nil
+    }
+
+    static func setCompleted(_ completed: Bool, defaults: UserDefaults = .standard) {
+        defaults.set(completed, forKey: StorageKeys.onboardingCompleted)
+    }
+
+    static func clear(defaults: UserDefaults = .standard) {
+        defaults.removeObject(forKey: StorageKeys.onboardingCompleted)
     }
 }
 
