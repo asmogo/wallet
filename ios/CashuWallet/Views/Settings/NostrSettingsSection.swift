@@ -1,5 +1,15 @@
 import SwiftUI
 
+private enum NostrIdentityReplacementWarning {
+    static let generate = "This replaces your current Nostr key with a newly generated key. Your Lightning address will change, Nostr apps and messages will use a different identity, and your old key will be replaced."
+    static let importKey = "This replaces your current Nostr key with the imported key. Your Lightning address will change, Nostr apps and messages will use a different identity, and your old key will be replaced."
+    static let reset = "This switches to the Nostr key derived from your wallet seed. Your Lightning address will change, Nostr apps and messages will use a different identity, and your old custom key will be deleted and replaced."
+
+    static func switchSigner(to type: NostrSignerType) -> String {
+        "This switches your Nostr key source to \(type.displayName). Your Lightning address will change, Nostr apps and messages will use a different identity, and your old key will be replaced."
+    }
+}
+
 // MARK: - Nostr Keys Section
 
 /// The Nostr key hub, built on the shared single-canvas settings recipe so it
@@ -13,6 +23,7 @@ struct NostrKeysSettingsSection: View {
     @State private var importNsecText = ""
     @State private var showGenerateKeyConfirm = false
     @State private var showResetKeyConfirm = false
+    @State private var pendingSignerType: NostrSignerType?
     @State private var nostrKeyError: String?
     @State private var showNsecReveal = false
     @State private var copiedValue: String?
@@ -71,7 +82,7 @@ struct NostrKeysSettingsSection: View {
                 generateNewKey()
             }
         } message: {
-            Text("This will create a new random Nostr key. Your Lightning address will change. The old key will be replaced.")
+            Text(NostrIdentityReplacementWarning.generate)
         }
         .alert("Reset to Wallet Seed", isPresented: $showResetKeyConfirm) {
             Button("Cancel", role: .cancel) {}
@@ -79,11 +90,23 @@ struct NostrKeysSettingsSection: View {
                 resetToSeedKey()
             }
         } message: {
-            Text("This will switch back to the Nostr key derived from your wallet seed. Your custom key will be deleted.")
+            Text(NostrIdentityReplacementWarning.reset)
+        }
+        .alert("Switch Nostr Key?", isPresented: Binding(
+            get: { pendingSignerType != nil },
+            set: { if !$0 { pendingSignerType = nil } }
+        )) {
+            Button("Cancel", role: .cancel) { pendingSignerType = nil }
+            Button("Switch", role: .destructive) { confirmSignerTypeChange() }
+        } message: {
+            if let pendingSignerType {
+                Text(NostrIdentityReplacementWarning.switchSigner(to: pendingSignerType))
+            }
         }
         .sheet(isPresented: $showImportNsec) {
             ImportNsecSheet(
                 nsecText: $importNsecText,
+                replacementWarning: NostrIdentityReplacementWarning.importKey,
                 onImport: importNsec
             )
         }
@@ -211,6 +234,16 @@ struct NostrKeysSettingsSection: View {
             showGenerateKeyConfirm = true
             return
         }
+        if type == .seed {
+            showResetKeyConfirm = true
+            return
+        }
+        pendingSignerType = type
+    }
+
+    private func confirmSignerTypeChange() {
+        guard let type = pendingSignerType else { return }
+        pendingSignerType = nil
         do {
             try nostrService.switchSignerType(to: type)
         } catch {

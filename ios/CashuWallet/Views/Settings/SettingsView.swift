@@ -1656,10 +1656,12 @@ struct MintPickerSheet: View {
 
 struct ImportNsecSheet: View {
     @Binding var nsecText: String
+    let replacementWarning: String
     let onImport: () -> Void
 
     @Environment(\.dismiss) private var dismiss
     @State private var errorMessage: String?
+    @State private var showReplacementConfirm = false
 
     var body: some View {
         NavigationStack {
@@ -1688,8 +1690,8 @@ struct ImportNsecSheet: View {
                 }
 
                 Section {
-                    Button("Import Key") {
-                        if validateNsec() { onImport() }
+                    Button("Review Import") {
+                        if validateNsec() { showReplacementConfirm = true }
                     }
                     .disabled(nsecText.isEmpty)
                 }
@@ -1701,6 +1703,12 @@ struct ImportNsecSheet: View {
                     Button("Cancel") { dismiss() }
                 }
             }
+        }
+        .alert("Replace Nostr Key?", isPresented: $showReplacementConfirm) {
+            Button("Cancel", role: .cancel) {}
+            Button("Import", role: .destructive) { onImport() }
+        } message: {
+            Text(replacementWarning)
         }
     }
 
