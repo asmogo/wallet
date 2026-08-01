@@ -190,7 +190,7 @@ Platform-specific capabilities remain intentionally outside parity, including iC
 
 - [ ] **[P0 · Converge] Make every identity-replacement warning complete.** Current generate/reset warnings split consequences between platforms, while import and signer-change paths do not consistently confirm replacement. **Done when:** generate, import, reset, and signer-change paths warn as applicable that the Lightning address changes, Nostr apps/messages use a different identity, and the old key is replaced before destructive confirmation.
 
-- [ ] **[P2 · iOS → Android] Give key generation native destructive semantics.** Android’s Generate action is visually neutral even though it replaces an identity; iOS uses a destructive confirmation role. **Done when:** Android uses the platform’s destructive semantic role and accessible announcement for the replacement action. It need not copy iOS styling.
+- [x] **[P2 · iOS → Android] Give key generation native destructive semantics.** Android’s Generate action is visually neutral even though it replaces an identity; iOS uses a destructive confirmation role. **Done when:** Android uses the platform’s destructive semantic role and accessible announcement for the replacement action. It need not copy iOS styling.
 
 - [ ] **[P2 · iOS → Android] Add the relay-purpose explanation.** iOS explains that relays synchronize npub.cash-compatible data and backups; Android lists relays without that context. **Done when:** Android explains why changing the relay list affects wallet features.
 

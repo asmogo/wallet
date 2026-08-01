@@ -56,6 +56,7 @@ import com.cashu.me.Core.NwcManager
 import com.cashu.me.Core.SettingsManager
 import com.cashu.me.ui.components.CanvasDivider
 import com.cashu.me.ui.components.CashuTextField
+import com.cashu.me.ui.components.DestructiveTextButton
 import com.cashu.me.ui.components.GhostButton
 import com.cashu.me.ui.components.IconSwap
 import com.cashu.me.ui.components.InlineNotice
@@ -362,10 +363,10 @@ fun NostrScreen(
                 )
             },
             confirmButton = {
-                TextButton(onClick = {
+                DestructiveTextButton(text = "Generate", onClick = {
                     showGenerateConfirm = false
                     runCatching { nostrService.generateRandomKeypair() }
-                }) { Text("Generate") }
+                })
             },
             dismissButton = {
                 TextButton(onClick = { showGenerateConfirm = false }) { Text("Cancel") }
