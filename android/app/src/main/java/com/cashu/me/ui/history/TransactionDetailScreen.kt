@@ -48,11 +48,14 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import com.cashu.me.Core.AmountDisplayPrimary
 import com.cashu.me.Core.AmountFormatter
+import com.cashu.me.Core.DetailAmountPresentation
 import com.cashu.me.Core.PendingTokenClaimCheckResult
 import com.cashu.me.Core.Protocols.CurrencyAmount
 import com.cashu.me.Core.Protocols.CurrencyRegistry
 import com.cashu.me.Core.OnchainExplorer
+import com.cashu.me.Core.PriceService
 import com.cashu.me.Core.ReceiveConfirmationOwner
 import com.cashu.me.Core.pendingSentTokenFor
 import com.cashu.me.Core.resolveTransactionForDetail
@@ -61,13 +64,15 @@ import com.cashu.me.Core.SettingsManager
 import com.cashu.me.Core.shouldOfferManualClaimCheck
 import com.cashu.me.Core.TransactionDisplay
 import com.cashu.me.Core.WalletManager
+import com.cashu.me.Core.isPendingReceiveToken
 import com.cashu.me.Models.TransactionKind
 import com.cashu.me.Models.TransactionStatus
-import com.cashu.me.Models.TransactionType
 import com.cashu.me.Models.WalletTransaction
+import com.cashu.me.ui.components.AmountFlipDisplay
 import com.cashu.me.ui.components.AmountText
 import com.cashu.me.ui.components.CanvasDivider
 import com.cashu.me.ui.components.DetailActionFooter
+import com.cashu.me.ui.components.DestructiveTextButton
 import com.cashu.me.ui.components.EmptyState
 import com.cashu.me.ui.components.ExplorerLinkRow
 import com.cashu.me.ui.components.InspectorRow
@@ -88,6 +93,7 @@ import com.cashu.me.ui.testing.UiTestTags
 fun TransactionDetailScreen(
     walletManager: WalletManager,
     settingsManager: SettingsManager,
+    priceService: PriceService,
     transactionId: String,
     onClose: () -> Unit,
     onClaimReceiveToken: ((String) -> Unit)? = null,
@@ -95,6 +101,7 @@ fun TransactionDetailScreen(
 ) {
     val walletState by walletManager.state.collectAsState()
     val settings by settingsManager.state.collectAsState()
+    val priceState by priceService.state.collectAsState()
     val context = LocalContext.current
     val clipboard = LocalClipboardManager.current
     val formatter = remember { AmountFormatter() }
@@ -195,11 +202,8 @@ fun TransactionDetailScreen(
         }
 
         val explorerUrl = remember(transaction) { transaction.explorerUrl() }
-        val pendingReceiveToken = transaction.token?.takeIf {
-            transaction.isPendingToken &&
-                transaction.type == TransactionType.Incoming &&
-                transaction.status == TransactionStatus.Pending
-        }
+        val pendingReceiveToken = transaction.token?.takeIf { transaction.isPendingReceiveToken }
+        var removeParkedToken by remember { mutableStateOf(false) }
         val pendingSentToken = pendingSentTokenFor(transaction, walletState.pendingTokens)
         val offersManualClaimCheck = shouldOfferManualClaimCheck(
             automaticChecksEnabled = settings.checkSentTokens,
@@ -254,6 +258,14 @@ fun TransactionDetailScreen(
                 HeroAmount(
                     transaction = transaction,
                     formatter = formatter,
+                    amountPrimary = AmountDisplayPrimary.fromRaw(settings.amountDisplayPrimary),
+                    onFlipPrimary = { settingsManager.setAmountDisplayPrimary(it.rawValue) },
+                    btcPrice = if (settings.showFiatBalance) {
+                        priceState.btcPrice.takeIf { it > 0 }
+                    } else {
+                        null
+                    },
+                    currencyCode = settings.bitcoinPriceCurrency,
                     useBitcoinSymbol = settings.useBitcoinSymbol,
                     compact = showsQr,
                 )
@@ -319,6 +331,14 @@ fun TransactionDetailScreen(
                             text = "Receive",
                             onClick = { onClaimReceiveToken(pendingReceiveToken) },
                         )
+                        Spacer(Modifier.height(CashuTheme.spacing.snug))
+                        // Discard is the ordinary parked-token counterpart of
+                        // declining a held Cashu Request payment (iOS History
+                        // swipe-action parity, surfaced on the detail too).
+                        DestructiveTextButton(
+                            text = "Remove",
+                            onClick = { removeParkedToken = true },
+                        )
                     } else {
                         if (copyableContent != null) {
                             // Copy is a secondary convenience, not a primary action —
@@ -369,6 +389,20 @@ fun TransactionDetailScreen(
                 }
             }
         }
+
+        if (removeParkedToken) {
+            ParkedTokenRemovalDialog(
+                onConfirm = {
+                    // The synthetic row id is the pending token id; the reload
+                    // drops the row from History before the user lands back.
+                    removeParkedToken = false
+                    walletManager.removePendingReceiveToken(transaction.id)
+                    scope.launch { walletManager.loadTransactions() }
+                    onClose()
+                },
+                onDismiss = { removeParkedToken = false },
+            )
+        }
     }
 }
 
@@ -380,29 +414,53 @@ private val MonospacedLabels = setOf("Request", "Address", "Payment Proof", "Tra
 
 // Crisp primary amount hero — direction already lives in the screen title, so
 // the historical detail keeps the amount itself quiet and unsigned like iOS.
+// Sat-denominated Lightning/ecash records lead with the saved primary unit and
+// keep the alternate on the flip pill (iOS CurrencyAmountDisplay parity);
+// on-chain stays in sats and non-sat mint units stay native.
 @Composable
 private fun HeroAmount(
     transaction: WalletTransaction,
     formatter: AmountFormatter,
+    amountPrimary: AmountDisplayPrimary,
+    onFlipPrimary: (AmountDisplayPrimary) -> Unit,
+    btcPrice: Double?,
+    currencyCode: String,
     useBitcoinSymbol: Boolean,
     compact: Boolean,
 ) {
-    val formatted = if (transaction.unit.equals("sat", ignoreCase = true)) {
-        formatter.formatWalletSats(transaction.amount, useBitcoinSymbol)
+    val heroStyle = (if (compact) {
+        MaterialTheme.typography.headlineLarge
     } else {
-        CurrencyAmount(
-            transaction.amount,
-            CurrencyRegistry.currencyForMintUnit(transaction.unit),
-        ).formatted()
+        MaterialTheme.typography.displayMedium
+    }).copy(fontWeight = FontWeight.Bold)
+    when (TransactionDisplay.amountPresentation(transaction)) {
+        DetailAmountPresentation.PreferredUnit -> AmountFlipDisplay(
+            amountSats = transaction.amount,
+            primary = amountPrimary,
+            onFlip = onFlipPrimary,
+            btcPrice = btcPrice,
+            currencyCode = currencyCode,
+            useBitcoinSymbol = useBitcoinSymbol,
+            modifier = Modifier.padding(vertical = 5.dp),
+            primaryTextStyle = heroStyle,
+            primaryAccessibilityPrefix = "Amount",
+        )
+        DetailAmountPresentation.SatsOnly -> AmountText(
+            text = formatter.formatWalletSats(transaction.amount, useBitcoinSymbol),
+            style = heroStyle.withMonoDigits(),
+            color = MaterialTheme.colorScheme.onSurface,
+            modifier = Modifier.padding(vertical = 5.dp),
+        )
+        DetailAmountPresentation.NativeUnit -> AmountText(
+            text = CurrencyAmount(
+                transaction.amount,
+                CurrencyRegistry.currencyForMintUnit(transaction.unit),
+            ).formatted(),
+            style = heroStyle.withMonoDigits(),
+            color = MaterialTheme.colorScheme.onSurface,
+            modifier = Modifier.padding(vertical = 5.dp),
+        )
     }
-    AmountText(
-        text = formatted,
-        style = (if (compact) MaterialTheme.typography.headlineLarge else MaterialTheme.typography.displayMedium)
-            .copy(fontWeight = FontWeight.Bold)
-            .withMonoDigits(),
-        color = MaterialTheme.colorScheme.onSurface,
-        modifier = Modifier.padding(vertical = 5.dp),
-    )
 }
 
 private fun WalletTransaction.explorerUrl(): String? {

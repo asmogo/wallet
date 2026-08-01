@@ -16,6 +16,30 @@ data class TransactionDetailField(
     val copyValue: String? = null,
 )
 
+/**
+ * Incoming ecash the user hasn't claimed yet — a "Receive later" token or a
+ * NUT-18 payment held for approval (iOS `WalletTransaction.isPendingReceiveToken`).
+ * These synthetic rows use the pending token id as the row id, so History
+ * removal is `WalletManager.removePendingReceiveToken(transaction.id)`.
+ */
+val WalletTransaction.isPendingReceiveToken: Boolean
+    get() = token != null &&
+        isPendingToken &&
+        type == TransactionType.Incoming &&
+        status == TransactionStatus.Pending
+
+/** How the transaction-detail hero amount picks its unit (iOS TransactionDetailView parity). */
+enum class DetailAmountPresentation {
+    /** Sat-denominated Lightning/ecash: the saved primary unit leads; the alternate flips in. */
+    PreferredUnit,
+
+    /** On-chain records always stay in sats — never fiat-converted. */
+    SatsOnly,
+
+    /** Non-sat mint units render natively — never BTC-price converted. */
+    NativeUnit,
+}
+
 object TransactionDisplay {
     // Kind-first, capitalized kind, lowercase verb — single source of truth for
     // rows AND the detail title, so a row and the sheet it opens read identically.
@@ -89,6 +113,18 @@ object TransactionDisplay {
         TransactionKind.Ecash -> "Ecash token"
         TransactionKind.Lightning -> "Payment request"
         TransactionKind.Onchain -> "Bitcoin address"
+    }
+
+    /**
+     * Hero-unit rule for the detail amount (iOS TransactionDetailView parity):
+     * sat-denominated Lightning/ecash records lead with the saved primary unit
+     * and keep the alternate available; on-chain stays in sats; non-sat mint
+     * units render natively with no fiat conversion.
+     */
+    fun amountPresentation(transaction: WalletTransaction): DetailAmountPresentation = when {
+        !transaction.unit.equals("sat", ignoreCase = true) -> DetailAmountPresentation.NativeUnit
+        transaction.kind == TransactionKind.Onchain -> DetailAmountPresentation.SatsOnly
+        else -> DetailAmountPresentation.PreferredUnit
     }
 
     // Detail rows follow the iOS canon: Status first (monochrome), Date, then

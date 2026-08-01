@@ -9,10 +9,10 @@ import java.util.Locale
 import com.cashu.me.Models.TransactionStatus
 import com.cashu.me.Models.WalletTransaction
 
-enum class HistoryFilter(val label: String) {
-    All("All"),
-    Pending("Pending"),
-    Completed("Completed"),
+enum class HistoryFilter(val label: String, val accessibilityValue: String) {
+    All("All", "All"),
+    Pending("Pending", "Pending only"),
+    Completed("Completed", "Completed only"),
 }
 
 const val HistoryPageSize = 10

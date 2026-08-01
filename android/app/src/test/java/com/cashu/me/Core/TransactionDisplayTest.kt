@@ -151,8 +151,44 @@ class TransactionDisplayTest {
     }
 
     @Test
-    fun memoAppearsInHistoryDetailsOnlyWhenPresent() {
-        val withMemo = transaction(
+    fun parkedIncomingTokenIsFlaggedForRemoval() {
+        val parked = transaction(
+            kind = TransactionKind.Ecash,
+            type = TransactionType.Incoming,
+            token = "cashu-token",
+        ).copy(status = TransactionStatus.Pending, isPendingToken = true)
+        assertTrue(parked.isPendingReceiveToken)
+
+        // An unclaimed outgoing send is reclaimable, not discardable here.
+        val outgoingPending = parked.copy(type = TransactionType.Outgoing)
+        assertTrue(!outgoingPending.isPendingReceiveToken)
+
+        // Claimed rows and tokenless rows are never removable parked tokens.
+        assertTrue(!parked.copy(status = TransactionStatus.Completed).isPendingReceiveToken)
+        assertTrue(!parked.copy(token = null).isPendingReceiveToken)
+    }
+
+    @Test
+    fun detailAmountPresentationHonorsUnitAndRailExceptions() {
+        // Sat-denominated Lightning/ecash records follow the saved primary unit.
+        val lightning = transaction(kind = TransactionKind.Lightning, type = TransactionType.Incoming)
+        assertEquals(DetailAmountPresentation.PreferredUnit, TransactionDisplay.amountPresentation(lightning))
+        val ecash = transaction(kind = TransactionKind.Ecash, type = TransactionType.Outgoing)
+        assertEquals(DetailAmountPresentation.PreferredUnit, TransactionDisplay.amountPresentation(ecash))
+
+        // On-chain records always stay in sats (iOS TransactionDetailView parity).
+        val onchain = transaction(kind = TransactionKind.Onchain, type = TransactionType.Incoming)
+        assertEquals(DetailAmountPresentation.SatsOnly, TransactionDisplay.amountPresentation(onchain))
+
+        // Non-sat mint units render natively — never fiat-converted.
+        val usd = lightning.copy(unit = "usd")
+        assertEquals(DetailAmountPresentation.NativeUnit, TransactionDisplay.amountPresentation(usd))
+        val usdOnchain = onchain.copy(unit = "usd")
+        assertEquals(DetailAmountPresentation.NativeUnit, TransactionDisplay.amountPresentation(usdOnchain))
+    }
+
+    @Test
+    fun memoAppearsInHistoryDetailsOnlyWhenPresent() {        val withMemo = transaction(
             kind = TransactionKind.Ecash,
             type = TransactionType.Incoming,
             memo = "Coffee from Alice",

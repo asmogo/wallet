@@ -76,6 +76,15 @@ class HistoryFiltersTest {
         assertEquals(listOf("earlier"), groups[4].transactions.map { it.id })
     }
 
+    @Test
+    fun filterAnnouncesTheActiveSelection() {
+        // TalkBack reports the selected filter on the History filter control
+        // (iOS .accessibilityValue(filter.label) parity).
+        assertEquals("All", HistoryFilter.All.accessibilityValue)
+        assertEquals("Pending only", HistoryFilter.Pending.accessibilityValue)
+        assertEquals("Completed only", HistoryFilter.Completed.accessibilityValue)
+    }
+
     private fun transaction(
         id: String,
         status: TransactionStatus,

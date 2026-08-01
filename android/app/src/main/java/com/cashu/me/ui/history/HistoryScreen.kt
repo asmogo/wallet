@@ -56,6 +56,8 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.input.nestedscroll.nestedScroll
@@ -70,6 +72,7 @@ import com.cashu.me.Core.SettingsManager
 import com.cashu.me.Core.TransactionDisplay
 import com.cashu.me.Core.WalletManager
 import com.cashu.me.Core.displayText
+import com.cashu.me.Core.isPendingReceiveToken
 import com.cashu.me.Models.CashuRequest
 import com.cashu.me.Models.TransactionStatus
 import com.cashu.me.Models.WalletTransaction
@@ -111,6 +114,7 @@ fun HistoryScreen(
     var query by remember { mutableStateOf("") }
     var refreshing by remember { mutableStateOf(false) }
     var requestPendingDelete by remember { mutableStateOf<CashuRequest?>(null) }
+    var receiveTokenPendingDelete by remember { mutableStateOf<WalletTransaction?>(null) }
     val searchFocusRequester = remember { FocusRequester() }
     val keyboardController = LocalSoftwareKeyboardController.current
 
@@ -172,12 +176,19 @@ fun HistoryScreen(
                         )
                     }
                     Box {
-                        IconButton(onClick = { filterMenuOpen = true }) {
+                        IconButton(
+                            onClick = { filterMenuOpen = true },
+                            // TalkBack reports the active filter on the control
+                            // (iOS .accessibilityValue(filter.label) parity).
+                            modifier = Modifier.semantics {
+                                stateDescription = filter.accessibilityValue
+                            },
+                        ) {
                             // Outlined ↔ filled glyph swap animates (symbol-replace parity).
                             IconSwap(
                                 icon = if (filter == HistoryFilter.All)
                                     Icons.Outlined.FilterList else Icons.Filled.FilterList,
-                                contentDescription = "Filter",
+                                contentDescription = "Filter transactions",
                                 iconSize = CashuTheme.iconSizes.toolbar,
                             )
                         }
@@ -319,6 +330,19 @@ fun HistoryScreen(
                                             modifier = Modifier.testTag(
                                                 UiTestTags.transactionRow(tx.id),
                                             ),
+                                            // Parked incoming ecash can be
+                                            // discarded from the list (iOS
+                                            // swipe-action parity).
+                                            onLongClick = if (tx.isPendingReceiveToken) {
+                                                { receiveTokenPendingDelete = tx }
+                                            } else {
+                                                null
+                                            },
+                                            onLongClickLabel = if (tx.isPendingReceiveToken) {
+                                                "Remove"
+                                            } else {
+                                                null
+                                            },
                                         )
                                     }
                                     is HistoryItem.Req -> {
@@ -356,7 +380,9 @@ fun HistoryScreen(
             title = { Text("Remove from history?") },
             text = {
                 Text(
-                    "Payments already received stay in your wallet; only the request entry is removed.",
+                    "Payments already received stay in your wallet, and the QR and any " +
+                        "pending payment routing stay valid. Only the entry is removed " +
+                        "from your history.",
                     style = MaterialTheme.typography.bodyMedium,
                 )
             },
@@ -373,6 +399,47 @@ fun HistoryScreen(
             },
         )
     }
+
+    receiveTokenPendingDelete?.let { tx ->
+        ParkedTokenRemovalDialog(
+            onConfirm = {
+                // The synthetic row id is the pending token id; discarding it
+                // drops the unclaimed ecash for good (iOS parity — only the
+                // sender can re-issue it).
+                walletManager.removePendingReceiveToken(tx.id)
+                receiveTokenPendingDelete = null
+                scope.launch { walletManager.loadTransactions() }
+            },
+            onDismiss = { receiveTokenPendingDelete = null },
+        )
+    }
+}
+
+/** Confirmation for discarding an unclaimed incoming token (iOS HistoryView parity). */
+@Composable
+internal fun ParkedTokenRemovalDialog(
+    onConfirm: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Remove this unclaimed ecash?") },
+        text = {
+            Text(
+                "This ecash hasn't been claimed. Removing it discards the token — " +
+                    "only the sender can re-issue it.",
+                style = MaterialTheme.typography.bodyMedium,
+            )
+        },
+        confirmButton = {
+            TextButton(onClick = onConfirm) {
+                Text("Remove", color = MaterialTheme.colorScheme.error)
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("Cancel") }
+        },
+    )
 }
 
 @Composable
@@ -465,8 +532,14 @@ internal fun unifiedFiltered(
                     tx.memo?.contains(query, ignoreCase = true) == true
             }
             is HistoryItem.Req -> {
+                // Matches the requested total and, once payments landed, the
+                // aggregate received total the row actually shows (iOS
+                // matchesSearch parity) — same raw-digit normalization as the
+                // transaction amount match.
                 item.request.displayTitle.contains(query, ignoreCase = true) ||
                     (item.request.amount?.toString()?.contains(query) == true) ||
+                    (item.request.totalReceived > 0 &&
+                        item.request.totalReceived.toString().contains(query)) ||
                     item.request.memo?.contains(query, ignoreCase = true) == true
             }
         }

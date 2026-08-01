@@ -1,7 +1,8 @@
 package com.cashu.me.ui.components
 
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -47,12 +48,20 @@ data class TransactionRowModel(
  * arrow's orientation, never colour); kind is named in the title. The amount is
  * the ledger signal: received is green with a plus, sent is primary with no
  * sign, and pending/expired is muted with no sign.
+ *
+ * [onLongClick] is the row-level secondary action (iOS swipe-action parity —
+ * e.g. removing an unclaimed incoming token from History); with TalkBack it
+ * surfaces as the standard double-tap-and-hold action, labelled by
+ * [onLongClickLabel].
  */
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun TransactionRow(
     model: TransactionRowModel,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
+    onLongClick: (() -> Unit)? = null,
+    onLongClickLabel: String? = null,
 ) {
     val tx = model.transaction
     val incoming = tx.type == TransactionType.Incoming
@@ -78,7 +87,11 @@ fun TransactionRow(
             .semantics {
                 contentDescription = semanticParts.joinToString(", ")
             }
-            .clickable(onClick = onClick)
+            .combinedClickable(
+                onClick = onClick,
+                onLongClick = onLongClick,
+                onLongClickLabel = onLongClickLabel,
+            )
             // Slightly looser than the original 16pt so home Recent + History
             // breathe between rows without going sparse.
             .padding(horizontal = CashuTheme.spacing.comfortable, vertical = 18.dp),
