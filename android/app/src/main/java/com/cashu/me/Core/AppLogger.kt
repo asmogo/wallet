@@ -7,6 +7,15 @@ object AppLogger {
     private val nostrSecretPattern = Regex("""\bnsec1[023456789acdefghjklmnpqrstuvwxyz]+\b""", RegexOption.IGNORE_CASE)
     private val nwcUriPattern = Regex("""\bnostr\+walletconnect://[^\s,;)"']+""", RegexOption.IGNORE_CASE)
     private val cashuTokenPattern = Regex("""\bcashu[ab][a-z0-9_\-=]{16,}\b""", RegexOption.IGNORE_CASE)
+    private val cashuRequestPattern = Regex("""\bcreq(?:a|b1)[a-z0-9_\-=]{8,}\b""", RegexOption.IGNORE_CASE)
+    private val lightningPayloadPattern = Regex(
+        """\b(?:lnbc|lntb|lnbcrt|lno|lni|lnr|lnurl)[a-z0-9]{16,}\b""",
+        RegexOption.IGNORE_CASE,
+    )
+    private val bitcoinUriPattern = Regex("""\bbitcoin:(?://)?[^\s,;)"']+""", RegexOption.IGNORE_CASE)
+    private val bech32BitcoinAddressPattern = Regex("""\b(?:bc1|tb1|bcrt1)[a-z0-9]{20,}\b""", RegexOption.IGNORE_CASE)
+    private val base58BitcoinAddressPattern = Regex("""\b[13mn2][a-km-zA-HJ-NP-Z1-9]{25,34}\b""")
+    private val emailPattern = Regex("""\b[A-Z0-9._%+\-]+@[A-Z0-9.\-]+\.[A-Z]{2,}\b""", RegexOption.IGNORE_CASE)
     private val urlPattern = Regex("""https?://[^\s,;)"']+""", RegexOption.IGNORE_CASE)
     private val localPathPattern = Regex("""(?<![A-Za-z0-9])/(?:Users|private|data|var|tmp|storage|sdcard)/[^\s,;)"']+""")
     private val labeledSecretPattern = Regex(
@@ -42,6 +51,12 @@ object AppLogger {
             .replace(nostrSecretPattern, "<redacted-nsec>")
             .replace(nwcUriPattern, "<redacted-nwc-uri>")
             .replace(cashuTokenPattern, "<redacted-cashu-token>")
+            .replace(cashuRequestPattern, "<redacted-cashu-request>")
+            .replace(lightningPayloadPattern, "<redacted-lightning-payload>")
+            .replace(bitcoinUriPattern, "<redacted-bitcoin-uri>")
+            .replace(bech32BitcoinAddressPattern, "<redacted-bitcoin-address>")
+            .replace(base58BitcoinAddressPattern, "<redacted-bitcoin-address>")
+            .replace(emailPattern, "<redacted-email>")
             .replace(urlPattern, "<redacted-url>")
             .replace(localPathPattern, "<redacted-path>")
             .replace(labeledSecretPattern) { match ->

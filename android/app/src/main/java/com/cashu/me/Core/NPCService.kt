@@ -175,7 +175,10 @@ class NPCService(
                 update {
                     copy(
                         isConnected = false,
-                        errorMessage = if (current.isEnabled) "npub.cash keys are not initialized." else null,
+                        // Key setup follows wallet-runtime initialization. This is a
+                        // readiness state, not a connection failure; the settings UI
+                        // can distinguish active setup from a setup that needs retrying.
+                        errorMessage = null,
                     )
                 }
                 return@withLock

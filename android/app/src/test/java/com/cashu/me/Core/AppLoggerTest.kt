@@ -50,6 +50,22 @@ class AppLoggerTest {
     }
 
     @Test
+    fun privacySafeMessageRedactsPaymentPayloadsAndContactDetails() {
+        val message = AppLogger.privacySafeMessage(
+            "request creqAabcdefghijklmnopqrstuvwxyz0123456789 " +
+                "invoice lnbc1abcdefghijklmnopqrstuvwxyz0123456789 " +
+                "offer lno1abcdefghijklmnopqrstuvwxyz0123456789 " +
+                "bitcoin:bc1qexamplewalletaddress0123456789 and alice@example.com",
+        )
+
+        assertEquals(
+            "request <redacted-cashu-request> invoice <redacted-lightning-payload> " +
+                "offer <redacted-lightning-payload> <redacted-bitcoin-uri> and <redacted-email>",
+            message,
+        )
+    }
+
+    @Test
     fun privacySafeThrowableRedactsMessageButKeepsStack() {
         val error = IllegalStateException("failed token cashuAabcdefghijklmnopqrstuvwxyz0123456789")
         error.stackTrace = arrayOf(StackTraceElement("Example", "method", "Example.kt", 12))

@@ -51,16 +51,20 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.cashu.me.Core.AppLockManager
 import com.cashu.me.Core.NostrService
+import com.cashu.me.Core.NostrSignerSelectionAction
 import com.cashu.me.Core.NostrSignerType
 import com.cashu.me.Core.NwcManager
 import com.cashu.me.Core.SettingsManager
+import com.cashu.me.Core.nostrSignerSelectionAction
 import com.cashu.me.ui.components.CanvasDivider
 import com.cashu.me.ui.components.CashuTextField
+import com.cashu.me.ui.components.DestructiveTextButton
 import com.cashu.me.ui.components.GhostButton
 import com.cashu.me.ui.components.IconSwap
 import com.cashu.me.ui.components.InlineNotice
 import com.cashu.me.ui.components.InspectorRow
 import com.cashu.me.ui.components.NavRow
+import com.cashu.me.ui.components.NoticeSeverity
 import com.cashu.me.ui.components.PrimaryButton
 import com.cashu.me.ui.components.SectionHeader
 import com.cashu.me.ui.components.ToolbarIcon
@@ -69,6 +73,17 @@ import com.cashu.me.ui.theme.CashuTheme
 import kotlinx.coroutines.delay
 
 private const val NsecCopiedFeedbackMillis = 2_000L
+internal const val NostrPrivateKeyWarningText =
+    "Your nsec controls your Nostr identity and Lightning address. Never share it."
+
+@Composable
+internal fun NostrPrivateKeyWarning(modifier: Modifier = Modifier) {
+    InlineNotice(
+        text = NostrPrivateKeyWarningText,
+        modifier = modifier,
+        severity = NoticeSeverity.Warning,
+    )
+}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -99,6 +114,7 @@ fun NostrScreen(
     var importError by remember { mutableStateOf<String?>(null) }
     var addRelayOpen by remember { mutableStateOf(false) }
     var addRelayError by remember { mutableStateOf<String?>(null) }
+    var showMissingCustomKeyChoice by remember { mutableStateOf(false) }
     var showGenerateConfirm by remember { mutableStateOf(false) }
     var showResetConfirm by remember { mutableStateOf(false) }
 
@@ -135,7 +151,21 @@ fun NostrScreen(
                             ),
                             selected = kind == nostrState.signerType,
                             onClick = {
-                                runCatching { nostrService.switchSignerType(kind) }
+                                when (
+                                    nostrSignerSelectionAction(
+                                        current = nostrState.signerType,
+                                        requested = kind,
+                                        hasCustomKey = nostrService.hasCustomPrivateKey(),
+                                    )
+                                ) {
+                                    NostrSignerSelectionAction.NoChange -> Unit
+                                    NostrSignerSelectionAction.ChooseCustomKey -> {
+                                        showMissingCustomKeyChoice = true
+                                    }
+                                    NostrSignerSelectionAction.Switch -> {
+                                        runCatching { nostrService.switchSignerType(kind) }
+                                    }
+                                }
                             },
                         ) { Text(kind.displayName) }
                     }
@@ -169,6 +199,9 @@ fun NostrScreen(
             )
 
             SectionHeader("Private key")
+            NostrPrivateKeyWarning(
+                modifier = Modifier.padding(horizontal = CashuTheme.spacing.comfortable),
+            )
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -291,6 +324,9 @@ fun NostrScreen(
                     }
                 }
             }
+            FooterText(
+                "Relays sync your Nostr data for compatible features like npub.cash and backups.",
+            )
             Column(
                 modifier = Modifier.fillMaxWidth().padding(horizontal = CashuTheme.spacing.comfortable),
                 verticalArrangement = Arrangement.spacedBy(CashuTheme.spacing.snug),
@@ -316,6 +352,36 @@ fun NostrScreen(
             )
             Spacer(Modifier.height(CashuTheme.spacing.section))
         }
+    }
+
+    if (showMissingCustomKeyChoice) {
+        AlertDialog(
+            onDismissRequest = { showMissingCustomKeyChoice = false },
+            title = { Text("Choose a custom key") },
+            text = {
+                Text(
+                    "Generate a new Nostr identity or import an existing nsec before switching to Custom Key.",
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    showMissingCustomKeyChoice = false
+                    showGenerateConfirm = true
+                }) { Text("Generate") }
+            },
+            dismissButton = {
+                Row {
+                    TextButton(onClick = { showMissingCustomKeyChoice = false }) {
+                        Text("Cancel")
+                    }
+                    TextButton(onClick = {
+                        showMissingCustomKeyChoice = false
+                        showImport = true
+                    }) { Text("Import") }
+                }
+            },
+        )
     }
 
     if (showImport) {
@@ -362,10 +428,10 @@ fun NostrScreen(
                 )
             },
             confirmButton = {
-                TextButton(onClick = {
+                DestructiveTextButton(text = "Generate", onClick = {
                     showGenerateConfirm = false
                     runCatching { nostrService.generateRandomKeypair() }
-                }) { Text("Generate") }
+                })
             },
             dismissButton = {
                 TextButton(onClick = { showGenerateConfirm = false }) { Text("Cancel") }
