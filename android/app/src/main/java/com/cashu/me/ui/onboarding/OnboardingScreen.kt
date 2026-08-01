@@ -43,7 +43,9 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.SheetValue
 import androidx.compose.material3.Text
+import androidx.compose.material3.rememberBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -453,41 +455,58 @@ internal fun WelcomeFace(
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun EcashConceptSheet(onDismiss: () -> Unit) {
-    ModalBottomSheet(onDismissRequest = onDismiss) {
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        // Skip the partially-expanded detent. At that height a short viewport
+        // (360x800dp) or a large font scale pushed "Got it" past the sheet edge,
+        // where it was clipped and the gesture pill drew across it.
+        sheetState = rememberBottomSheetState(
+            initialValue = SheetValue.Hidden,
+            enabledValues = setOf(SheetValue.Hidden, SheetValue.Expanded),
+        ),
+    ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = HeaderPadding)
                 .padding(bottom = CashuTheme.spacing.comfortable)
                 .navigationBarsPadding(),
-            verticalArrangement = Arrangement.spacedBy(CashuTheme.spacing.comfortable),
         ) {
-            Text(
-                text = "Ecash is bearer cash for Bitcoin.",
-                style = MaterialTheme.typography.headlineMedium.copy(
-                    fontWeight = FontWeight.ExtraBold,
-                    letterSpacing = (-0.3).sp,
-                ),
-                color = MaterialTheme.colorScheme.onSurface,
-            )
-            Column(verticalArrangement = Arrangement.spacedBy(CashuTheme.spacing.default)) {
+            // Prose scrolls; the CTA stays pinned below it. iOS gets the same
+            // shape from a Spacer() ahead of the button in `conceptSheet`.
+            Column(
+                modifier = Modifier
+                    .weight(1f, fill = false)
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(CashuTheme.spacing.comfortable),
+            ) {
                 Text(
-                    text = "Whoever holds it, owns it. Your balance stays on this device, hidden from everyone else.",
-                    style = MaterialTheme.typography.bodyLarge,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    text = "Ecash is bearer cash for Bitcoin.",
+                    style = MaterialTheme.typography.headlineMedium.copy(
+                        fontWeight = FontWeight.ExtraBold,
+                        letterSpacing = (-0.3).sp,
+                    ),
+                    color = MaterialTheme.colorScheme.onSurface,
                 )
-                Text(
-                    text = "Mints hold the Bitcoin behind your ecash. You can use several at once.",
-                    style = MaterialTheme.typography.bodyLarge,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                Text(
-                    text = "Send instantly. Cash out to Lightning anytime.",
-                    style = MaterialTheme.typography.bodyLarge,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
+                Column(verticalArrangement = Arrangement.spacedBy(CashuTheme.spacing.default)) {
+                    Text(
+                        text = "Whoever holds it, owns it. Your balance stays on this device, hidden from everyone else.",
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Text(
+                        text = "Mints hold the Bitcoin behind your ecash. You can use several at once.",
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Text(
+                        text = "Send instantly. Cash out to Lightning anytime.",
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
             }
-            Spacer(Modifier.height(CashuTheme.spacing.snug))
+            Spacer(Modifier.height(CashuTheme.spacing.comfortable))
             PrimaryButton(text = "Got it", onClick = onDismiss)
         }
     }
