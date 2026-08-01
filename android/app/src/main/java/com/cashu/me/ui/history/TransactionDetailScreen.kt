@@ -335,9 +335,12 @@ fun TransactionDetailScreen(
                         // Discard is the ordinary parked-token counterpart of
                         // declining a held Cashu Request payment (iOS History
                         // swipe-action parity, surfaced on the detail too).
+                        // Full width keeps the label centered under the Receive
+                        // capsule (Remove mint on MintDetailScreen precedent).
                         DestructiveTextButton(
                             text = "Remove",
                             onClick = { removeParkedToken = true },
+                            modifier = Modifier.fillMaxWidth(),
                         )
                     } else {
                         if (copyableContent != null) {
