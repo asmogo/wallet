@@ -175,6 +175,29 @@ class WalletManager(
         }
     }
 
+    /**
+     * Retries only the prerequisites needed by Lightning-address settings.
+     *
+     * A wallet runtime startup failure is retried first. If the runtime is
+     * already healthy but npub.cash key derivation previously failed, avoid
+     * reopening the repository and derive that identity again from the stored
+     * wallet seed.
+     */
+    suspend fun retryLightningAddressSetup() {
+        if (!mutableState.value.isRuntimeReady) initialize()
+        check(mutableState.value.isRuntimeReady) { "Wallet runtime is not ready." }
+        if (npcService.state.value.isInitialized) return
+
+        val mnemonic = withContext(Dispatchers.IO) {
+            checkNotNull(secureStorage.loadString(StorageKeys.secureWalletMnemonic)) {
+                "Stored wallet seed could not be decrypted."
+            }
+        }
+        withContext(Dispatchers.IO) {
+            npcService.initializeWithSeed(walletBip39Seed(mnemonic))
+        }
+    }
+
     private fun startDeferredStartupMaintenance(hasStoredWallet: Boolean) {
         scope.launch(Dispatchers.IO) {
             // Give Compose a scheduling opportunity to render cached state before
