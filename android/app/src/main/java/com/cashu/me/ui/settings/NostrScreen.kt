@@ -133,6 +133,9 @@ fun NostrScreen(
         }
     }
     var showImport by remember { mutableStateOf(false) }
+    var importInput by remember { mutableStateOf("") }
+    var pendingImportNsec by remember { mutableStateOf<String?>(null) }
+    var showImportConfirm by remember { mutableStateOf(false) }
     var importError by remember { mutableStateOf<String?>(null) }
     var addRelayOpen by remember { mutableStateOf(false) }
     var addRelayError by remember { mutableStateOf<String?>(null) }
@@ -164,6 +167,7 @@ fun NostrScreen(
             }
         }
     }
+    var pendingSignerType by remember { mutableStateOf<NostrSignerType?>(null) }
 
     Scaffold(
         topBar = {
@@ -211,10 +215,11 @@ fun NostrScreen(
                                         showMissingCustomKeyChoice = true
                                     }
                                     NostrSignerSelectionAction.Switch -> {
-                                        performIdentityMutation(
-                                            mutation = NostrIdentityMutation.SwitchSigner,
-                                            operation = { nostrService.switchSignerType(kind) },
-                                        )
+                                        if (kind == NostrSignerType.Seed) {
+                                            showResetConfirm = true
+                                        } else {
+                                            pendingSignerType = kind
+                                        }
                                     }
                                 }
                             },
@@ -446,7 +451,6 @@ fun NostrScreen(
     }
 
     if (showImport) {
-        var input by remember { mutableStateOf("") }
         AlertDialog(
             onDismissRequest = {
                 if (identityMutation != NostrIdentityMutation.ImportKey) {
@@ -458,8 +462,8 @@ fun NostrScreen(
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(CashuTheme.spacing.snug)) {
                     CashuTextField(
-                        value = input,
-                        onValueChange = { input = it; importError = null },
+                        value = importInput,
+                        onValueChange = { importInput = it; importError = null },
                         label = "nsec1…",
                         modifier = Modifier.fillMaxWidth(),
                         singleLine = true,
@@ -471,20 +475,12 @@ fun NostrScreen(
                 }
             },
             confirmButton = {
-                TextButton(
-                    enabled = identityMutation == null,
-                    onClick = {
-                        importError = null
-                        performIdentityMutation(
-                            mutation = NostrIdentityMutation.ImportKey,
-                            operation = { nostrService.importNsec(input.trim()) },
-                            onSuccess = { showImport = false; importError = null },
-                            onFailure = { importError = it },
-                        )
-                    },
-                ) {
-                    Text(if (identityMutation == NostrIdentityMutation.ImportKey) "Importing…" else "Import")
-                }
+                TextButton(onClick = {
+                    pendingImportNsec = importInput.trim()
+                    showImport = false
+                    showImportConfirm = true
+                    importError = null
+                }) { Text("Continue") }
             },
             dismissButton = {
                 TextButton(
@@ -495,13 +491,55 @@ fun NostrScreen(
         )
     }
 
+    if (showImportConfirm) {
+        AlertDialog(
+            onDismissRequest = {
+                showImportConfirm = false
+                pendingImportNsec = null
+            },
+            title = { Text("Replace Nostr key?") },
+            text = {
+                Text(
+                    NostrIdentityReplacementWarnings.Import,
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    val nsec = pendingImportNsec.orEmpty()
+                    showImportConfirm = false
+                    performIdentityMutation(
+                        mutation = NostrIdentityMutation.ImportKey,
+                        operation = { nostrService.importNsec(nsec) },
+                        onSuccess = {
+                            importInput = ""
+                            pendingImportNsec = null
+                            importError = null
+                        },
+                        onFailure = {
+                            pendingImportNsec = null
+                            importError = it
+                            showImport = true
+                        },
+                    )
+                }) { Text("Import") }
+            },
+            dismissButton = {
+                TextButton(onClick = {
+                    showImportConfirm = false
+                    pendingImportNsec = null
+                }) { Text("Cancel") }
+            },
+        )
+    }
+
     if (showGenerateConfirm) {
         AlertDialog(
             onDismissRequest = { showGenerateConfirm = false },
             title = { Text("Generate new key") },
             text = {
                 Text(
-                    "Replace your current Nostr identity with a freshly generated key? Your old public key will stop working for messages and contacts.",
+                    NostrIdentityReplacementWarnings.Generate,
                     style = MaterialTheme.typography.bodyMedium,
                 )
             },
@@ -526,7 +564,7 @@ fun NostrScreen(
             title = { Text("Reset to wallet seed") },
             text = {
                 Text(
-                    "Replace your Nostr identity with one derived from your wallet seed. Your current custom key will be removed.",
+                    NostrIdentityReplacementWarnings.Reset,
                     style = MaterialTheme.typography.bodyMedium,
                 )
             },
@@ -543,6 +581,31 @@ fun NostrScreen(
             },
             dismissButton = {
                 TextButton(onClick = { showResetConfirm = false }) { Text("Cancel") }
+            },
+        )
+    }
+
+    pendingSignerType?.let { signerType ->
+        AlertDialog(
+            onDismissRequest = { pendingSignerType = null },
+            title = { Text("Switch Nostr key?") },
+            text = {
+                Text(
+                    NostrIdentityReplacementWarnings.switchTo(signerType.displayName),
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    pendingSignerType = null
+                    performIdentityMutation(
+                        mutation = NostrIdentityMutation.SwitchSigner,
+                        operation = { nostrService.switchSignerType(signerType) },
+                    )
+                }) { Text("Switch") }
+            },
+            dismissButton = {
+                TextButton(onClick = { pendingSignerType = null }) { Text("Cancel") }
             },
         )
     }
