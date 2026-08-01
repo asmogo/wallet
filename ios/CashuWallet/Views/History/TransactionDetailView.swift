@@ -194,9 +194,18 @@ struct TransactionDetailView: View {
 
                 // Pending outgoing ecash gains the same one-off status action as
                 // the generated-token screen when automatic checks are disabled.
-                // Copy remains the quiet convenience action underneath.
+                // Keep it after Copy so the two surfaces share the same action order.
                 if offersManualClaimCheck || copyableContent != nil {
                     VStack(spacing: 12) {
+                        if let content = copyableContent {
+                            Button(action: { copyContent(content) }) {
+                                Text(copyButtonText)
+                            }
+                            .glassButton()
+                            .accessibilityLabel(copyButtonText == "Copied" ? "Copied" : "Copy \(qrContentTypeLabel)")
+                            .accessibilityHint("Copies the \(qrContentAccessibilityLabel) to clipboard")
+                        }
+
                         if offersManualClaimCheck, let pendingToken = pendingSentToken {
                             Button(action: { startManualClaimCheck(pendingToken) }) {
                                 if isCheckingClaim {
@@ -210,15 +219,6 @@ struct TransactionDetailView: View {
                             .accessibilityIdentifier("cashu.history.check-token-status")
                             .accessibilityLabel(isCheckingClaim ? "Checking claim status" : "Check Status")
                             .accessibilityInputLabels(["Check Status"])
-                        }
-
-                        if let content = copyableContent {
-                            Button(action: { copyContent(content) }) {
-                                Text(copyButtonText)
-                            }
-                            .glassButton()
-                            .accessibilityLabel(copyButtonText == "Copied" ? "Copied" : "Copy \(qrContentTypeLabel)")
-                            .accessibilityHint("Copies the \(qrContentAccessibilityLabel) to clipboard")
                         }
                     }
                     .padding(.horizontal)

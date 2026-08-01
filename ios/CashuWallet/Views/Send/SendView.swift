@@ -676,26 +676,6 @@ struct SendView: View {
                     .animation(.easeInOut(duration: 0.2), value: isCheckingClaim)
 
                     if !settings.checkSentTokens {
-                        Button(action: { startManualClaimCheck(token: token) }) {
-                            Label {
-                                Text(isCheckingClaim ? "Checking…" : "Check Status")
-                            } icon: {
-                                if isCheckingClaim {
-                                    ProgressView()
-                                        .controlSize(.small)
-                                } else {
-                                    Image(systemName: "arrow.clockwise")
-                                }
-                            }
-                        }
-                        .textLinkButton()
-                        .frame(minHeight: 44)
-                        .contentShape(Rectangle())
-                        .disabled(isCheckingClaim)
-                        .accessibilityIdentifier("cashu.send.ecash.check-status")
-                        .accessibilityLabel(isCheckingClaim ? "Checking claim status" : "Check Status")
-                        .accessibilityInputLabels(["Check Status"])
-
                         switch manualClaimCheckResult {
                         case .notClaimed:
                             InlineNotice(
@@ -747,10 +727,27 @@ struct SendView: View {
                 .padding(.horizontal)
             }
 
-            Button(action: { copyToken(token) }) {
-                Text(copyButtonText)
+            VStack(spacing: 12) {
+                Button(action: { copyToken(token) }) {
+                    Text(copyButtonText)
+                }
+                .glassButton()
+
+                if !settings.checkSentTokens {
+                    Button(action: { startManualClaimCheck(token: token) }) {
+                        if isCheckingClaim {
+                            ProgressView()
+                        } else {
+                            Text("Check Status")
+                        }
+                    }
+                    .glassButton()
+                    .disabled(isCheckingClaim)
+                    .accessibilityIdentifier("cashu.send.ecash.check-status")
+                    .accessibilityLabel(isCheckingClaim ? "Checking claim status" : "Check Status")
+                    .accessibilityInputLabels(["Check Status"])
+                }
             }
-            .glassButton()
             .padding(.horizontal)
             .padding(.bottom, 16)
         }

@@ -1066,29 +1066,6 @@ private fun GeneratedFace(
             GeneratedEcashAmount(presentation = amountPresentation)
             ClaimStatusRow(claimState = claimState)
             if (!pollingEnabled) {
-                GhostButton(
-                    text = if (claimState == ClaimState.Checking) "Checking…" else "Check Status",
-                    onClick = {
-                        claimState = ClaimState.Checking
-                        manualCheckResult = null
-                        scope.launch {
-                            val outcome = checkGeneratedTokenClaim(
-                                walletManager = walletManager,
-                                token = result.token,
-                                mintUrl = mintUrl,
-                            )
-                            manualCheckResult = outcome
-                            claimState = if (outcome == PendingTokenClaimCheckResult.Claimed) {
-                                ClaimState.Claimed
-                            } else {
-                                ClaimState.Pending
-                            }
-                        }
-                    },
-                    enabled = claimState != ClaimState.Checking,
-                    trailingIcon = if (claimState == ClaimState.Checking) null else Icons.Outlined.Refresh,
-                    modifier = Modifier.testTag(UiTestTags.SendEcashCheckStatus),
-                )
                 when (val outcome = manualCheckResult) {
                     PendingTokenClaimCheckResult.NotClaimed -> InlineNotice(
                         text = "Status checked",
@@ -1137,22 +1114,52 @@ private fun GeneratedFace(
                 )
             }
         }
-        // Gray tonal fill instead of the inverted-ink primary — the analog of
-        // iOS's non-prominent glass capsule; adapts to light/dark.
-        PrimaryButton(
-            text = if (copied) "Copied" else "Copy",
-            onClick = {
-                clipboard.setText(AnnotatedString(result.token))
-                copied = true
-            },
-            colors = neutralActionButtonColors(),
+        Column(
             modifier = Modifier.padding(
                 start = CashuTheme.spacing.comfortable,
                 end = CashuTheme.spacing.comfortable,
                 top = CashuTheme.spacing.micro,
                 bottom = CashuTheme.spacing.comfortable,
             ),
-        )
+        ) {
+            // Gray tonal fill instead of the inverted-ink primary — the analog of
+            // iOS's non-prominent glass capsule; adapts to light/dark.
+            PrimaryButton(
+                text = if (copied) "Copied" else "Copy",
+                onClick = {
+                    clipboard.setText(AnnotatedString(result.token))
+                    copied = true
+                },
+                colors = neutralActionButtonColors(),
+            )
+            if (!pollingEnabled) {
+                Spacer(Modifier.height(CashuTheme.spacing.tight))
+                // Keep manual status checks with the pinned actions, rather
+                // than inline beneath the QR code.
+                PrimaryButton(
+                    text = if (claimState == ClaimState.Checking) "Checking…" else "Check Status",
+                    onClick = {
+                        claimState = ClaimState.Checking
+                        manualCheckResult = null
+                        scope.launch {
+                            val outcome = checkGeneratedTokenClaim(
+                                walletManager = walletManager,
+                                token = result.token,
+                                mintUrl = mintUrl,
+                            )
+                            manualCheckResult = outcome
+                            claimState = if (outcome == PendingTokenClaimCheckResult.Claimed) {
+                                ClaimState.Claimed
+                            } else {
+                                ClaimState.Pending
+                            }
+                        }
+                    },
+                    loading = claimState == ClaimState.Checking,
+                    modifier = Modifier.testTag(UiTestTags.SendEcashCheckStatus),
+                )
+            }
+        }
         Spacer(Modifier.windowInsetsBottomHeight(WindowInsets.navigationBars))
     }
 }
