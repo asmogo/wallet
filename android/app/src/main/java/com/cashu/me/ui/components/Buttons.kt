@@ -41,6 +41,8 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -65,6 +67,7 @@ private val GhostButtonIconSize = 16.dp
 private const val PressedScale = 0.97f
 // iOS TextLinkButtonStyle: text links dim to 0.6 while pressed.
 private const val TextLinkPressedAlpha = 0.6f
+private const val DestructiveActionStateDescription = "Destructive action"
 
 @Composable
 private fun rememberPressScale(interactionSource: MutableInteractionSource): Float {
@@ -281,7 +284,13 @@ fun CircularMethodButton(
     }
 }
 
-/** Destructive inline action (Delete Wallet, Remove Mint). */
+/**
+ * Destructive inline action (Delete Wallet, Remove Mint).
+ *
+ * Material's error color communicates the action visually. The state description
+ * gives accessibility services the equivalent destructive announcement while the
+ * underlying [TextButton] continues to expose the native button role.
+ */
 @Composable
 fun DestructiveTextButton(
     text: String,
@@ -293,7 +302,9 @@ fun DestructiveTextButton(
     val alpha = rememberPressAlpha(interactionSource)
     TextButton(
         onClick = onClick,
-        modifier = modifier.graphicsLayer { this.alpha = alpha },
+        modifier = modifier
+            .semantics { stateDescription = DestructiveActionStateDescription }
+            .graphicsLayer { this.alpha = alpha },
         enabled = enabled,
         interactionSource = interactionSource,
         colors = ButtonDefaults.textButtonColors(
