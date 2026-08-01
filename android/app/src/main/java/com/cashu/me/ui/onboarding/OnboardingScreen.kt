@@ -43,7 +43,9 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.SheetValue
 import androidx.compose.material3.Text
+import androidx.compose.material3.rememberBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -121,7 +123,7 @@ private data class RecommendedMint(val name: String, val url: String, val iconUr
 // Mirrors iOS RecommendedMint.suggested (ActivityOrbView.swift).
 private val RecommendedMints = listOf(
     RecommendedMint("Minibits", "https://mint.minibits.cash/Bitcoin", "https://minibits.cash/icon-192.png"),
-    RecommendedMint("Coinos", "https://mint.coinos.io", "https://coinos.io/images/icon.png"),
+    RecommendedMint("Chorus OFF Mint", "https://mint.chorus.community", "https://chorus.community/apple-touch-icon.png"),
     RecommendedMint("Macadamia", "https://mint.macadamia.cash", "https://cypherbase.cc/images/logo_w256.png"),
 )
 
@@ -401,6 +403,10 @@ internal fun WelcomeFace(
                 .riseIn(appeared, 0),
             verticalArrangement = Arrangement.spacedBy(CashuTheme.spacing.default),
         ) {
+            // The only headline that keeps a hardcoded break. Left to wrap
+            // naturally it wraps after "In" — "Private cash. In" / "your
+            // pocket." — splitting the second sentence. Breaking at the
+            // sentence boundary is the deliberate exception.
             Text(
                 text = "Private cash.\nIn your pocket.",
                 style = onboardingTitleStyle(),
@@ -468,41 +474,58 @@ internal fun WelcomeFace(
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun EcashConceptSheet(onDismiss: () -> Unit) {
-    ModalBottomSheet(onDismissRequest = onDismiss) {
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        // Skip the partially-expanded detent. At that height a short viewport
+        // (360x800dp) or a large font scale pushed "Got it" past the sheet edge,
+        // where it was clipped and the gesture pill drew across it.
+        sheetState = rememberBottomSheetState(
+            initialValue = SheetValue.Hidden,
+            enabledValues = setOf(SheetValue.Hidden, SheetValue.Expanded),
+        ),
+    ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = HeaderPadding)
                 .padding(bottom = CashuTheme.spacing.comfortable)
                 .navigationBarsPadding(),
-            verticalArrangement = Arrangement.spacedBy(CashuTheme.spacing.comfortable),
         ) {
-            Text(
-                text = "Ecash is bearer cash\nfor Bitcoin.",
-                style = MaterialTheme.typography.headlineMedium.copy(
-                    fontWeight = FontWeight.ExtraBold,
-                    letterSpacing = (-0.3).sp,
-                ),
-                color = MaterialTheme.colorScheme.onSurface,
-            )
-            Column(verticalArrangement = Arrangement.spacedBy(CashuTheme.spacing.default)) {
+            // Prose scrolls; the CTA stays pinned below it. iOS gets the same
+            // shape from a Spacer() ahead of the button in `conceptSheet`.
+            Column(
+                modifier = Modifier
+                    .weight(1f, fill = false)
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(CashuTheme.spacing.comfortable),
+            ) {
                 Text(
-                    text = "Whoever holds it, owns it. Your balance stays on this device, hidden from everyone else.",
-                    style = MaterialTheme.typography.bodyLarge,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    text = "Ecash is bearer cash for Bitcoin.",
+                    style = MaterialTheme.typography.headlineMedium.copy(
+                        fontWeight = FontWeight.ExtraBold,
+                        letterSpacing = (-0.3).sp,
+                    ),
+                    color = MaterialTheme.colorScheme.onSurface,
                 )
-                Text(
-                    text = "Mints hold the Bitcoin behind your ecash. You can use several at once.",
-                    style = MaterialTheme.typography.bodyLarge,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                Text(
-                    text = "Send instantly. Cash out to Lightning anytime.",
-                    style = MaterialTheme.typography.bodyLarge,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
+                Column(verticalArrangement = Arrangement.spacedBy(CashuTheme.spacing.default)) {
+                    Text(
+                        text = "Whoever holds it, owns it. Your balance stays on this device, hidden from everyone else.",
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Text(
+                        text = "Mints hold the Bitcoin behind your ecash. You can use several at once.",
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Text(
+                        text = "Send instantly. Cash out to Lightning anytime.",
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
             }
-            Spacer(Modifier.height(CashuTheme.spacing.snug))
+            Spacer(Modifier.height(CashuTheme.spacing.comfortable))
             PrimaryButton(text = "Got it", onClick = onDismiss)
         }
     }
@@ -543,7 +566,7 @@ private fun ShowMnemonicFace(
             verticalArrangement = Arrangement.spacedBy(CashuTheme.spacing.default),
         ) {
             Text(
-                text = "Your Seed\nPhrase.",
+                text = "Your Seed Phrase.",
                 style = onboardingTitleStyle(),
                 color = MaterialTheme.colorScheme.onSurface,
             )
@@ -862,7 +885,7 @@ private fun FirstMintFace(
             verticalArrangement = Arrangement.spacedBy(CashuTheme.spacing.snug),
         ) {
             Text(
-                text = "Pick your\nfirst mint.",
+                text = "Pick your first mint.",
                 style = onboardingTitleStyle(),
                 color = MaterialTheme.colorScheme.onSurface,
             )
@@ -895,27 +918,20 @@ private fun FirstMintFace(
                 )
             }
             if (!customInputOpen) {
-                Row(
+                // iOS routes both this and "Skip for now" through
+                // `.textLinkButton()`; GhostButton is that style's analog, so the
+                // two stay centered and share press feedback on both platforms.
+                GhostButton(
+                    text = "Add custom mint URL",
+                    onClick = { customInputOpen = true },
+                    enabled = !busy,
+                    leadingIcon = Icons.Outlined.Add,
+                    contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .clickable(enabled = !busy) { customInputOpen = true }
-                        .testTag(UiTestTags.AddCustomMint)
-                        .padding(vertical = CashuTheme.spacing.default),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(CashuTheme.spacing.micro),
-                ) {
-                    Icon(
-                        imageVector = Icons.Outlined.Add,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.size(WarningIconSize),
-                    )
-                    Text(
-                        text = "Add custom mint URL",
-                        style = MaterialTheme.typography.labelLarge,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
+                        .padding(top = CashuTheme.spacing.micro)
+                        .testTag(UiTestTags.AddCustomMint),
+                )
             } else {
                 Spacer(Modifier.height(CashuTheme.spacing.snug))
                 CashuTextField(

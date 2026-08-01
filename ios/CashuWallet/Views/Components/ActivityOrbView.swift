@@ -251,7 +251,7 @@ struct RecommendedMint: Identifiable {
     /// The curated shortlist offered when a user has no mints to type from memory.
     static let suggested: [RecommendedMint] = [
         RecommendedMint(name: "Minibits", url: "https://mint.minibits.cash/Bitcoin", iconUrl: "https://minibits.cash/icon-192.png"),
-        RecommendedMint(name: "Coinos", url: "https://mint.coinos.io", iconUrl: "https://coinos.io/images/icon.png"),
+        RecommendedMint(name: "Chorus OFF Mint", url: "https://mint.chorus.community", iconUrl: "https://chorus.community/apple-touch-icon.png"),
         RecommendedMint(name: "Macadamia", url: "https://mint.macadamia.cash", iconUrl: "https://cypherbase.cc/images/logo_w256.png")
     ]
 }

@@ -210,6 +210,7 @@ fun GhostButton(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
+    leadingIcon: ImageVector? = null,
     trailingIcon: ImageVector? = null,
     textStyle: TextStyle = MaterialTheme.typography.labelLarge,
     contentColor: Color = Color.Unspecified,
@@ -227,6 +228,14 @@ fun GhostButton(
             ButtonDefaults.textButtonColors()
         },
     ) {
+        if (leadingIcon != null) {
+            Icon(
+                imageVector = leadingIcon,
+                contentDescription = null,
+                modifier = Modifier.size(GhostButtonIconSize),
+            )
+            Spacer(Modifier.width(CashuTheme.spacing.tight))
+        }
         Text(text = text, style = textStyle)
         if (trailingIcon != null) {
             Spacer(Modifier.width(CashuTheme.spacing.micro))
