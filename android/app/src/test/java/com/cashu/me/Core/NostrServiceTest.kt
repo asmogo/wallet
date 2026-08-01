@@ -3,9 +3,13 @@ package com.cashu.me.Core
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Assert.assertThrows
+import org.junit.Assert.fail
 import org.junit.Test
+import com.cashu.me.Core.Protocols.SecureStorage
+import com.cashu.me.Core.Protocols.StorageKeys
 
 class NostrServiceTest {
     @Test
@@ -49,6 +53,57 @@ class NostrServiceTest {
         val storedKey = "01".repeat(32)
 
         assertEquals(storedKey, NostrService.requireStoredCustomKey(storedKey))
+    }
+
+    @Test
+    fun failedGenerationRestoresStoredKeySignerAndObservableIdentity() {
+        val storage = FailingSecureStorage()
+        val settings = FakeNostrSignerSettings()
+        val service = NostrService(storage, settings)
+        val initial = service.deriveKeypairFromSeed(privateKey(1))
+        storage.failAfterNextSave = true
+
+        assertFails { service.generateRandomKeypair() }
+
+        assertEquals(initial, service.state.value)
+        assertEquals(initial.nsec, Bech32.encode("nsec", NostrService.hexToBytes(service.currentPrivateKey()!!)))
+        assertEquals(NostrSignerType.Seed.rawValue, settings.nostrSignerType)
+        assertNull(storage.loadString(StorageKeys.secureNostrPrivateKey))
+    }
+
+    @Test
+    fun failedResetRestoresCustomKeySignerAndObservableIdentity() {
+        val storage = FailingSecureStorage()
+        val settings = FakeNostrSignerSettings()
+        val service = NostrService(storage, settings)
+        service.deriveKeypairFromSeed(privateKey(1))
+        val customNsec = Bech32.encode("nsec", privateKey(2))
+        val initial = service.importNsec(customNsec)
+        val storedCustomKey = storage.loadString(StorageKeys.secureNostrPrivateKey)
+        storage.failAfterNextDelete = true
+
+        assertFails { service.resetToSeedKey() }
+
+        assertEquals(initial, service.state.value)
+        assertEquals(NostrSignerType.PrivateKey.rawValue, settings.nostrSignerType)
+        assertEquals(storedCustomKey, storage.loadString(StorageKeys.secureNostrPrivateKey))
+    }
+
+    @Test
+    fun failedSignerChangeRestoresSignerAndObservableIdentity() {
+        val storage = FailingSecureStorage(
+            mutableMapOf(StorageKeys.secureNostrPrivateKey to privateKey(2).toHexString()),
+        )
+        val settings = FakeNostrSignerSettings()
+        val service = NostrService(storage, settings)
+        val initial = service.deriveKeypairFromSeed(privateKey(1))
+        settings.failAfterNextSet = true
+
+        assertFails { service.switchSignerType(NostrSignerType.PrivateKey) }
+
+        assertEquals(initial, service.state.value)
+        assertEquals(NostrSignerType.Seed.rawValue, settings.nostrSignerType)
+        assertEquals(privateKey(2).toHexString(), storage.loadString(StorageKeys.secureNostrPrivateKey))
     }
 
     @Test
@@ -122,5 +177,60 @@ class NostrServiceTest {
             json,
         )
         assertFalse(json.contains("""\/"""))
+    }
+
+    private fun privateKey(value: Int): ByteArray = ByteArray(32).also { it[31] = value.toByte() }
+
+    private fun ByteArray.toHexString(): String = joinToString("") { "%02x".format(it) }
+
+    private fun assertFails(block: () -> Unit) {
+        try {
+            block()
+            fail("Expected operation to fail")
+        } catch (_: IllegalStateException) {
+            // Expected injected persistence failure.
+        }
+    }
+
+    private class FakeNostrSignerSettings : NostrSignerSettings {
+        private var value = NostrSignerType.Seed.rawValue
+        var failAfterNextSet = false
+
+        override var nostrSignerType: String
+            get() = value
+            set(newValue) {
+                value = newValue
+                if (failAfterNextSet) {
+                    failAfterNextSet = false
+                    throw IllegalStateException("Signer settings unavailable")
+                }
+            }
+    }
+
+    private class FailingSecureStorage(
+        private val values: MutableMap<String, String> = mutableMapOf(),
+    ) : SecureStorage {
+        var failAfterNextSave = false
+        var failAfterNextDelete = false
+
+        override fun loadString(key: String): String? = values[key]
+
+        override fun saveString(key: String, value: String) {
+            values[key] = value
+            if (failAfterNextSave) {
+                failAfterNextSave = false
+                throw IllegalStateException("Secure storage write failed")
+            }
+        }
+
+        override fun delete(key: String) {
+            values.remove(key)
+            if (failAfterNextDelete) {
+                failAfterNextDelete = false
+                throw IllegalStateException("Secure storage delete failed")
+            }
+        }
+
+        override fun contains(key: String): Boolean = values.containsKey(key)
     }
 }

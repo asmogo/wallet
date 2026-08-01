@@ -180,7 +180,7 @@ Platform-specific capabilities remain intentionally outside parity, including iC
 
 - [ ] **[P2 · iOS → Android] Add the Nostr feature introduction.** iOS explains that Nostr powers the Lightning address, npub.cash requests, encrypted backups, and Wallet Connect; Android starts with signer controls. **Done when:** Android provides equivalent user context before technical key management.
 
-- [ ] **[P0 · iOS → Android] Do not silently fail signer changes or key generation/reset.** iOS catches and renders errors; Android wraps several operations in `runCatching` and discards failures. **Done when:** every Android identity mutation has progress where needed, visible user-facing failure feedback, and unchanged state on failure.
+- [x] **[P0 · iOS → Android] Do not silently fail signer changes or key generation/reset.** iOS catches and renders errors; Android wraps several operations in `runCatching` and discards failures. **Done when:** every Android identity mutation has progress where needed, visible user-facing failure feedback, and unchanged state on failure.
 
 - [x] **[P0 · iOS → Android] Require an explicit choice before switching to a missing custom key.** Android automatically generates a new identity when the user selects Custom Key without one; iOS prompts to generate or import. **Done when:** selecting Custom Key never creates or replaces an identity implicitly and asks the user to generate or import before the signer changes.
 

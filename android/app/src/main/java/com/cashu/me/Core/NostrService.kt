@@ -48,7 +48,7 @@ data class NostrState(
 
 class NostrService(
     private val secureStorage: SecureStorage,
-    private val settingsStore: SettingsStore,
+    private val settingsStore: NostrSignerSettings,
 ) {
     private val mutableState = MutableStateFlow(NostrState(signerType = NostrSignerType.fromRaw(settingsStore.nostrSignerType)))
     val state: StateFlow<NostrState> = mutableState.asStateFlow()
@@ -64,10 +64,10 @@ class NostrService(
         seedPrivateKeyBytes = seedKey.takeIf { isValidSecret(it) }?.copyOf()
         val customKey = secureStorage.loadString(StorageKeys.secureNostrPrivateKey)
         return if (NostrSignerType.fromRaw(settingsStore.nostrSignerType) == NostrSignerType.PrivateKey && customKey != null) {
-            setPrivateKey(hexToBytes(customKey), NostrSignerType.PrivateKey, persistCustomKey = false)
+            setPrivateKey(hexToBytes(customKey), NostrSignerType.PrivateKey)
         } else {
             settingsStore.nostrSignerType = NostrSignerType.Seed.rawValue
-            setPrivateKey(seedKey, NostrSignerType.Seed, persistCustomKey = false)
+            setPrivateKey(seedKey, NostrSignerType.Seed)
         }
     }
 
@@ -76,7 +76,7 @@ class NostrService(
     fun importNsec(nsec: String): NostrState {
         val key = Bech32.decode("nsec", nsec)
         require(key.size == 32) { "Invalid nsec private key length." }
-        return setPrivateKey(key, NostrSignerType.PrivateKey, persistCustomKey = true)
+        return setPrivateKey(key, NostrSignerType.PrivateKey, CustomKeyMutation.Save)
     }
 
     fun generateRandomKeypair(): NostrState {
@@ -84,14 +84,12 @@ class NostrService(
         do {
             secureRandom.nextBytes(key)
         } while (!isValidSecret(key))
-        return setPrivateKey(key, NostrSignerType.PrivateKey, persistCustomKey = true)
+        return setPrivateKey(key, NostrSignerType.PrivateKey, CustomKeyMutation.Save)
     }
 
     fun resetToSeedKey(): NostrState {
         val seed = currentSeed ?: throw IllegalStateException("No wallet seed is available for Nostr reset.")
-        secureStorage.delete(StorageKeys.secureNostrPrivateKey)
-        settingsStore.nostrSignerType = NostrSignerType.Seed.rawValue
-        return setPrivateKey(seed.copyOfRange(0, 32), NostrSignerType.Seed, persistCustomKey = false)
+        return setPrivateKey(seed.copyOfRange(0, 32), NostrSignerType.Seed, CustomKeyMutation.Delete)
     }
 
     fun switchSignerType(type: NostrSignerType): NostrState = when (type) {
@@ -100,7 +98,7 @@ class NostrService(
             val customKey = requireStoredCustomKey(
                 secureStorage.loadString(StorageKeys.secureNostrPrivateKey),
             )
-            setPrivateKey(hexToBytes(customKey), NostrSignerType.PrivateKey, persistCustomKey = false)
+            setPrivateKey(hexToBytes(customKey), NostrSignerType.PrivateKey, CustomKeyMutation.Keep)
         }
     }
 
@@ -158,19 +156,54 @@ class NostrService(
         mutableState.value = NostrState(signerType = NostrSignerType.Seed)
     }
 
-    private fun setPrivateKey(key: ByteArray, signerType: NostrSignerType, persistCustomKey: Boolean): NostrState {
+    private enum class CustomKeyMutation { Keep, Save, Delete }
+
+    private fun setPrivateKey(
+        key: ByteArray,
+        signerType: NostrSignerType,
+        customKeyMutation: CustomKeyMutation = CustomKeyMutation.Keep,
+    ): NostrState {
+        // Prepare the complete replacement before changing persistence or the
+        // observable identity. A malformed key can therefore never partially
+        // apply a signer change or reset.
         require(key.size == 32 && isValidSecret(key)) { "Invalid Nostr private key." }
-        if (persistCustomKey) secureStorage.saveString(StorageKeys.secureNostrPrivateKey, key.toHex())
-        settingsStore.nostrSignerType = signerType.rawValue
-        privateKeyBytes = key.copyOf()
         val publicKey = publicKeyXOnly(key)
-        return NostrState(
+        val nextState = NostrState(
             publicKeyHex = publicKey.toHex(),
             npub = Bech32.encode("npub", publicKey),
             nsec = Bech32.encode("nsec", key),
             isInitialized = true,
             signerType = signerType,
-        ).also { mutableState.value = it }
+        )
+
+        val previousCustomKey = secureStorage.loadString(StorageKeys.secureNostrPrivateKey)
+        val previousSignerType = settingsStore.nostrSignerType
+        try {
+            when (customKeyMutation) {
+                CustomKeyMutation.Keep -> Unit
+                CustomKeyMutation.Save -> secureStorage.saveString(StorageKeys.secureNostrPrivateKey, key.toHex())
+                CustomKeyMutation.Delete -> secureStorage.delete(StorageKeys.secureNostrPrivateKey)
+            }
+            settingsStore.nostrSignerType = signerType.rawValue
+        } catch (error: Exception) {
+            // Secure-storage implementations can throw after performing their
+            // write. Restore both persisted values best-effort, while retaining
+            // the original failure for the caller and UI.
+            runCatching {
+                if (previousCustomKey == null) {
+                    secureStorage.delete(StorageKeys.secureNostrPrivateKey)
+                } else {
+                    secureStorage.saveString(StorageKeys.secureNostrPrivateKey, previousCustomKey)
+                }
+            }.exceptionOrNull()?.let(error::addSuppressed)
+            runCatching { settingsStore.nostrSignerType = previousSignerType }
+                .exceptionOrNull()?.let(error::addSuppressed)
+            throw error
+        }
+
+        privateKeyBytes = key.copyOf()
+        mutableState.value = nextState
+        return nextState
     }
 
     companion object {

@@ -15,10 +15,14 @@ import kotlinx.serialization.json.longOrNull
 import com.cashu.me.Core.Protocols.StorageKeys
 import com.cashu.me.Models.P2PKKeyInfo
 
+interface NostrSignerSettings {
+    var nostrSignerType: String
+}
+
 class SettingsStore(
     context: Context,
     storeName: String = "settings_store",
-) {
+) : NostrSignerSettings {
     companion object {
         val defaultNostrRelays = listOf(
             "wss://relay.damus.io",
@@ -94,7 +98,7 @@ class SettingsStore(
         get() = store.boolean(StorageKeys.settingsPeriodicallyCheckIncomingInvoices, true)
         set(value) = store.putBoolean(StorageKeys.settingsPeriodicallyCheckIncomingInvoices, value)
 
-    var nostrSignerType: String
+    override var nostrSignerType: String
         get() = store.string(StorageKeys.settingsNostrSignerType) ?: "SEED"
         set(value) = store.putString(StorageKeys.settingsNostrSignerType, value)
 
