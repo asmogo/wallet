@@ -324,6 +324,9 @@ fun NostrScreen(
                     }
                 }
             }
+            FooterText(
+                "Relays sync your Nostr data for compatible features like npub.cash and backups.",
+            )
             Column(
                 modifier = Modifier.fillMaxWidth().padding(horizontal = CashuTheme.spacing.comfortable),
                 verticalArrangement = Arrangement.spacedBy(CashuTheme.spacing.snug),
