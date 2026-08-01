@@ -115,6 +115,8 @@ fun MintDetailScreen(
     val mint = walletState.mints.firstOrNull { it.url == mintUrl }
     val isActive = walletState.activeMint?.url == mintUrl
     var confirmingRemove by remember { mutableStateOf(false) }
+    var settingDefault by remember(mintUrl) { mutableStateOf(false) }
+    var setDefaultError by remember(mintUrl) { mutableStateOf<String?>(null) }
 
     Scaffold(
         modifier = Modifier.testTag(UiTestTags.MintDetailScreen),
@@ -467,10 +469,26 @@ fun MintDetailScreen(
             ) {
                 // When it's the default, the button disappears and the header
                 // shows a "Default mint" pill instead (iOS parity).
+                if (setDefaultError != null) {
+                    InlineNotice(text = setDefaultError.orEmpty())
+                }
                 if (!isActive) {
+                    // iOS parity: progress disables the action while in flight
+                    // and a failure renders inline without flipping the
+                    // apparent default (the pill/header only follow walletState).
                     PrimaryButton(
                         text = "Set as Default",
-                        onClick = { walletManager.launch { walletManager.setActiveMint(mint) } },
+                        loading = settingDefault,
+                        onClick = {
+                            if (settingDefault) return@PrimaryButton
+                            settingDefault = true
+                            setDefaultError = null
+                            walletManager.launch {
+                                runCatching { walletManager.setActiveMint(mint) }
+                                    .onFailure { setDefaultError = it.userFacingWalletMessage }
+                                settingDefault = false
+                            }
+                        },
                         colors = neutralActionButtonColors(),
                     )
                 }
