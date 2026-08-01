@@ -1,6 +1,6 @@
 # iOS and Android Wallet Parity Checklist
 
-Code-audit baseline: 2026-07-29. Reworked and revalidated: 2026-07-30.
+Code-audit baseline: 2026-07-29. Reworked and revalidated: 2026-07-30. Open items code-reverified: 2026-08-01.
 
 This checklist tracks verified differences in cross-platform product behavior. The iOS implementation is the default reference for what the product does; the [Android design charter](../android/DESIGN-ANDROID.md) remains authoritative for how Android looks, moves, and feels.
 
@@ -66,7 +66,7 @@ Platform-specific capabilities remain intentionally outside parity, including iC
 
 - [x] **[P2 · iOS → Android] Replace protocol jargon in lock accessibility copy.** Android announces “P2PK off” and “P2PK locked”; iOS describes the user outcome. **Done when:** Android’s visible and assistive copy leads with “Lock ecash” and the recipient effect, with P2PK only as optional supporting terminology.
 
-- [ ] **[P1 · iOS → Android] Provide manual claim-status checking when automatic checks are disabled.** iOS adds “Check Status” to pending-token actions; Android leaves the token at Pending with no equivalent action. **Done when:** Android users can run a one-off spent check without re-enabling background polling.
+- [ ] **[P1 · iOS → Android] Provide manual claim-status checking when automatic checks are disabled.** iOS adds “Check Status” to pending-token actions; Android’s pending-token view has no per-token equivalent. (Android users can force a global re-check of all pending sent tokens via pull-to-refresh on Home and History, but there is no per-token action.) **Done when:** Android users can run a one-off spent check on a pending token without re-enabling background polling.
 
 - [x] **[P1 · iOS → Android] Include the send fee on the Claimed receipt.** iOS shows the fee when the token-generation swap charged one; Android’s pending view shows it but the full-screen Claimed terminal drops it. **Done when:** Android’s Claimed details preserve Amount, applicable Fee, and Mint.
 
@@ -94,7 +94,7 @@ Platform-specific capabilities remain intentionally outside parity, including iC
 
 - [ ] **[P1 · iOS → Android] Make expiry the primary one-shot invoice status.** Android can keep “Waiting for payment” as the main status after expiry while only the small caption says Expired. **Done when:** the primary status, accessibility value, and available actions cannot contradict the expired state.
 
-- [ ] **[P1 · Android → iOS] Add Total received to reusable-invoice details.** Android shows a cumulative total after BOLT12 payments; iOS only changes the status badge. **Done when:** iOS exposes the unit-correct cumulative amount.
+- [ ] **[P1 · Android → iOS] Add Total received to reusable-invoice details.** Android shows a cumulative total after BOLT12 payments; iOS swaps to a paid success state but exposes no cumulative total anywhere. **Done when:** iOS exposes the unit-correct cumulative amount.
 
 - [x] **[P1 · Android → iOS] Correlate an open Cashu Request success to a new payment record.** Android watches the request’s received-payment IDs; iOS has a fallback that treats any balance increase while the receive sheet is open as payment for that request. **Done when:** iOS cannot show request success for an unrelated balance increase, with regression coverage for concurrent balance changes.
 
@@ -120,13 +120,13 @@ Platform-specific capabilities remain intentionally outside parity, including iC
 
 - [ ] **[P2 · Converge] Unify discovery-disabled recovery copy.** iOS says WebSockets are required and points to Settings; Android more usefully names Settings → Privacy. **Done when:** both explain why discovery is off and give the exact setting path.
 
-- [ ] **[P2 · iOS → Android] Make discovery empty states actionable and state-specific.** Android can show “Listening on Nostr…” or “No matches” without distinguishing active discovery, exhausted discovery, and a filtered-zero result. **Done when:** Android identifies the current state, safely repeats the query when applicable, and names the Retry or Refresh action that is actually available.
+- [ ] **[P2 · iOS → Android] Make the discovery empty state reflect an exhausted result.** Android distinguishes active discovery (“Discovering mints…”) and a filtered-zero result (“No matches”), but after discovery completes with zero results it keeps showing “Listening on Nostr…”, mislabeling an exhausted discovery as ongoing; iOS shows a terminal “No Mints Found” with pull-to-retry. **Done when:** Android identifies the exhausted state, safely repeats the query when applicable, and names the Retry or Refresh action that is actually available.
 
 ### Mint details
 
 - [ ] **[P2 · iOS → Android] Show the fiat secondary balance when enabled.** iOS adds the fiat conversion beneath the sat balance; Android shows only sats plus native non-sat-unit balances. **Done when:** Android mirrors the user’s global fiat-balance preference without converting balances whose unit is not sat.
 
-- [ ] **[P1 · iOS → Android] Distinguish cached mint metadata from live refresh state.** Android already shows Checking, Online, and Offline connection states, but it can silently display cached NUT-06 data after a live fetch fails. **Done when:** Android identifies loading or refresh, distinguishes cached/stale content from a successful live response, presents a user-facing failure explanation, and offers Retry where useful.
+- [ ] **[P1 · iOS → Android] Distinguish cached mint metadata from live refresh state.** Android already shows Checking, Online, and Offline connection states, but it can silently display cached NUT-06 data after a live fetch fails, with no failure message or retry. iOS surfaces the failure with a banner and Offline state, though it too falls back to cached description and payment methods without a stale label. **Done when:** Android identifies loading or refresh, distinguishes cached/stale content from a successful live response, presents a user-facing failure explanation, and offers Retry where useful.
 
 - [ ] **[P1 · iOS → Android] Add the Contact section.** iOS renders reported email, web, Nostr, Twitter/X, and Telegram contacts with appropriate actions; Android omits them. **Done when:** Android displays every reported contact, labels the remote source, and opens only safely parsed supported targets.
 
@@ -174,7 +174,7 @@ Platform-specific capabilities remain intentionally outside parity, including iC
 
 - [x] **[P2 · iOS → Android] Rename “Check for paid quotes now.”** iOS uses “Check for payments”; Android exposes quote jargon. **Done when:** both use payment language in the primary action.
 
-- [ ] **[P1 · iOS → Android] Expose Lightning-address connection state accessibly.** iOS combines the address with Connected, Connecting, or error text; Android encodes state only in a colored dot. **Done when:** TalkBack announces the address and current state, and color is never the only signal.
+- [ ] **[P1 · iOS → Android] Expose Lightning-address connection state accessibly.** iOS exposes Connected, Connecting, or error state in the address row’s accessibility label (and errors additionally as visible text); Android encodes state only in a colored dot with no semantics. **Done when:** TalkBack announces the address and current state, and color is never the only signal.
 
 ### Settings — Nostr identity and relays
 
@@ -186,7 +186,7 @@ Platform-specific capabilities remain intentionally outside parity, including iC
 
 - [x] **[P1 · iOS → Android] Warn next to private-key reveal and copy.** Android already authenticates reveal/copy but shows masked/reveal/copy controls without nearby consequence text. **Done when:** Android explains that the nsec controls the user’s Nostr identity and Lightning address and must not be shared, before or alongside the authenticated actions.
 
-- [ ] **[P1 · iOS → Android] Explain the consequences of nsec import.** Android already validates imports and reports errors; native text editing can provide paste, replace, and clear. The missing gap is product context. **Done when:** Android states that importing replaces the current custom identity and affects the Lightning address and Nostr apps/messages before confirmation, while keeping validation errors user-facing.
+- [ ] **[P1 · Converge] Explain the consequences of nsec import.** Both platforms validate imports and report errors, but neither confirms replacement: iOS shows only a Lightning-address footer with no confirmation step; Android shows a bare text field. **Done when:** both state that importing replaces the current custom identity and affects the Lightning address and Nostr apps/messages before confirmation, while keeping validation errors user-facing.
 
 - [x] **[P0 · Converge] Make every identity-replacement warning complete.** Current generate/reset warnings split consequences between platforms, while import and signer-change paths do not consistently confirm replacement. **Done when:** generate, import, reset, and signer-change paths warn as applicable that the Lightning address changes, Nostr apps/messages use a different identity, and the old key is replaced before destructive confirmation.
 
@@ -210,7 +210,7 @@ Platform-specific capabilities remain intentionally outside parity, including iC
 
 - [ ] **[P2 · Converge] Standardize zero-fee wording by meaning.** The apps alternate among “Free,” “No fee,” and “0 sat” for different concepts. **Done when:** shared copy guidance distinguishes a prospective user charge from an accounting value, and equivalent contexts communicate the same meaning. Platform-native wording may differ.
 
-- [ ] **[P2 · Converge] Standardize success language by context.** Live confirmations and compact historical statuses may intentionally use different tone. **Done when:** shared copy guidance defines the semantic distinction and both platforms use equivalent language within each context; exact capitalization and punctuation need not match.
+- [ ] **[P2 · Converge] Standardize success language by context.** History rows and live confirmations are now semantically equivalent across platforms; the remaining gap is Android’s internal inconsistency between “Payment Received!” (Lightning receive) and “Payment received” (other receive flows). **Done when:** shared copy guidance defines the semantic distinction and both platforms use equivalent language within each context; exact capitalization and punctuation need not match.
 
 - [ ] **[P2 · Android → iOS] Advertise QR context actions to assistive technology.** Android’s shared QR card announces long-press Copy/Share options; iOS’s base QR view can omit actionable context. **Done when:** every actionable iOS QR exposes native accessibility actions or an accurate hint; non-actionable QR views do not promise unavailable actions.
 
@@ -224,7 +224,7 @@ Platform-specific capabilities remain intentionally outside parity, including iC
 
 These items may improve efficiency or discoverability but are not required for functional parity and should not block a parity release.
 
-- [ ] **[Optional · iOS → Android] Offer direct switch-mint recovery for applicable failures.** The existing retry-then-mint-row path is functionally sufficient. **Done when:** a failure another mint can resolve offers a one-step switch that preserves quote context.
+- [ ] **[Optional · Converge] Offer direct switch-mint recovery for applicable failures.** Both platforms effectively ship the same retry-then-mint-row path today: iOS wires a “Choose another mint” failure action, but it is gated to the confirmation step and unreachable from the failure screen. **Done when:** a failure another mint can resolve offers a one-step switch that preserves quote context.
 
 - [ ] **[Optional · iOS → Android] Include the History query in the no-results message.** **Done when:** the empty state safely repeats the active query without making the message noisy.
 
