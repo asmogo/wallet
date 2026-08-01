@@ -45,7 +45,7 @@ class NfcReceiveSuccessTransitionComposeTest {
         compose.waitForIdle()
 
         compose.onNodeWithContentDescription("Success").assertIsDisplayed()
-        compose.onNodeWithText("Payment received").assertIsDisplayed()
+        compose.onNodeWithText("Payment Received!").assertIsDisplayed()
         compose.onNodeWithText("19 sat").assertIsDisplayed()
         compose.onNodeWithText("Minibits mint").assertIsDisplayed()
         compose.onNodeWithText("Done").assertIsDisplayed()

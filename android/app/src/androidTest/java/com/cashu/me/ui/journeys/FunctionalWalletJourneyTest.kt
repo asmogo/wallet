@@ -110,7 +110,7 @@ class FunctionalWalletJourneyTest {
         robot.awaitTag(UiTestTags.ReceiveEcashDetail)
             .awaitText("Receive Ecash")
             .tapTextWithinTag(UiTestTags.ReceiveEcashDetail, "Receive")
-            .awaitText("Payment received")
+            .awaitText("Payment Received!")
             .tapText("Done")
             .awaitTag(UiTestTags.WalletScreen)
             .tapText("History")
@@ -157,7 +157,7 @@ class FunctionalWalletJourneyTest {
         robot.awaitTag(UiTestTags.ReceiveEcashDetail)
             .awaitText("New mint: mint.minibits.cash")
             .tapTextWithinTag(UiTestTags.ReceiveEcashDetail, "Receive")
-            .awaitText("Payment received")
+            .awaitText("Payment Received!")
             .tapText("Done")
             .awaitTag(UiTestTags.WalletScreen)
 

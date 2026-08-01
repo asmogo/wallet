@@ -627,7 +627,7 @@ internal fun CashuRequestSuccessTerminal(
 ) {
     PaymentStatusScreen(
         phase = PaymentStatusPhase.Success,
-        title = "Payment received",
+        title = "Payment Received!",
         onDone = onDone,
         rows = {
             CashuRequestReceiptRows(amountLabel = amountLabel, mintName = mintName)
