@@ -433,6 +433,15 @@ fun MintDetailScreen(
                 }
             }
 
+            // Provenance (iOS `footerNote`): descriptions, contacts, software,
+            // and terms above are the mint's own claims, not wallet-verified.
+            Text(
+                text = "Information reported by the mint.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(horizontal = CashuTheme.spacing.comfortable),
+            )
+
             Spacer(Modifier.height(CashuTheme.spacing.comfortable))
             Column(
                 modifier = Modifier
