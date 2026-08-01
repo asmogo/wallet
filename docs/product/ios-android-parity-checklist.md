@@ -184,7 +184,7 @@ Platform-specific capabilities remain intentionally outside parity, including iC
 
 - [ ] **[P0 · iOS → Android] Require an explicit choice before switching to a missing custom key.** Android automatically generates a new identity when the user selects Custom Key without one; iOS prompts to generate or import. **Done when:** selecting Custom Key never creates or replaces an identity implicitly and asks the user to generate or import before the signer changes.
 
-- [ ] **[P1 · iOS → Android] Warn next to private-key reveal and copy.** Android already authenticates reveal/copy but shows masked/reveal/copy controls without nearby consequence text. **Done when:** Android explains that the nsec controls the user’s Nostr identity and Lightning address and must not be shared, before or alongside the authenticated actions.
+- [x] **[P1 · iOS → Android] Warn next to private-key reveal and copy.** Android already authenticates reveal/copy but shows masked/reveal/copy controls without nearby consequence text. **Done when:** Android explains that the nsec controls the user’s Nostr identity and Lightning address and must not be shared, before or alongside the authenticated actions.
 
 - [ ] **[P1 · iOS → Android] Explain the consequences of nsec import.** Android already validates imports and reports errors; native text editing can provide paste, replace, and clear. The missing gap is product context. **Done when:** Android states that importing replaces the current custom identity and affects the Lightning address and Nostr apps/messages before confirmation, while keeping validation errors user-facing.
 
