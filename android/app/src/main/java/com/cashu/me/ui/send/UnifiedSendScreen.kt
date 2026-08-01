@@ -478,7 +478,6 @@ fun UnifiedSendScreen(
                     phase = PaymentStatusPhase.Processing,
                     title = "Sending payment…",
                     rows = { SendPaymentDetailRows(current.details, formatter, settings.useBitcoinSymbol) },
-                    showRowsDuringProcessing = true,
                 )
             }
             is SendStatus.Sent -> Box(Modifier.weight(1f).fillMaxWidth()) {
