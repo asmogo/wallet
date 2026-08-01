@@ -12,9 +12,11 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.text.TextAutoSize
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.SwapVert
 import androidx.compose.material3.Icon
@@ -32,14 +34,20 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.cashu.me.Core.AmountDisplayPrimary
+import com.cashu.me.Core.AmountDisplayText
 import com.cashu.me.Core.AmountFormatter
 import com.cashu.me.Core.displayText
 import com.cashu.me.ui.theme.CashuTheme
 import com.cashu.me.ui.theme.withMonoDigits
 
 private val FlipPillIconSize = 14.dp
+private val EntryHeroFontSize = 64.sp
+private val EntryHeroMinFontSize = 26.sp
 
 /**
  * Hero amount with a tappable unit-flip pill beneath it — the Compose port of
@@ -47,6 +55,10 @@ private val FlipPillIconSize = 14.dp
  * (fiat or sats) sits in a small capsule with a ↕ glyph; tapping the pill
  * swaps which unit leads. The swap cross-fades, same as subsequent value
  * changes via [AmountText].
+ *
+ * When [entryRaw] is set, the primary line follows the typed keypad string
+ * (partial decimals included) while the secondary line keeps the mint-unit
+ * alternate — matching iOS live entry on Receive / Send.
  *
  * When no fiat price is available the pill is omitted and the amount renders
  * plain in sats.
@@ -60,55 +72,105 @@ fun AmountFlipDisplay(
     currencyCode: String,
     useBitcoinSymbol: Boolean,
     modifier: Modifier = Modifier,
+    entryRaw: String? = null,
     primaryTextStyle: TextStyle? = null,
     primaryAccessibilityPrefix: String? = null,
 ) {
     val haptics = LocalHapticFeedback.current
     val formatter = remember { AmountFormatter() }
-    val display = formatter.displayText(
-        amountSats = amountSats,
-        preferredPrimary = primary.rawValue,
-        showFiat = btcPrice != null && btcPrice > 0,
-        btcPrice = btcPrice,
-        currencyCode = currencyCode,
-        useBitcoinSymbol = useBitcoinSymbol,
-    )
+    val priceAvailable = btcPrice != null && btcPrice > 0
+    val display = if (entryRaw != null) {
+        formatter.entryDisplayText(
+            entryRaw = entryRaw,
+            amountSats = amountSats,
+            preferredPrimary = primary,
+            btcPrice = btcPrice,
+            currencyCode = currencyCode,
+            useBitcoinSymbol = useBitcoinSymbol,
+        )
+    } else {
+        formatter.displayText(
+            amountSats = amountSats,
+            preferredPrimary = primary.rawValue,
+            showFiat = priceAvailable,
+            btcPrice = btcPrice,
+            currencyCode = currencyCode,
+            useBitcoinSymbol = useBitcoinSymbol,
+        )
+    }
+    val entryHeroStyle = primaryTextStyle ?: if (entryRaw != null) {
+        MaterialTheme.typography.displayMedium.copy(
+            fontWeight = FontWeight.SemiBold,
+            fontSize = EntryHeroFontSize,
+            textAlign = TextAlign.Center,
+        )
+    } else {
+        null
+    }
     Column(
         modifier = modifier,
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(CashuTheme.spacing.snug),
     ) {
-        // The flip itself cross-fades the whole hero; inside a given unit,
-        // amount changes roll via the keyed digit ticker.
-        AnimatedContent(
-            targetState = display.effectivePrimary,
-            transitionSpec = {
-                fadeIn(spring(stiffness = Spring.StiffnessMedium))
-                    .togetherWith(fadeOut(spring(stiffness = Spring.StiffnessMedium)))
-            },
-            label = "amount-flip-hero",
-        ) { primaryState ->
-            // Re-derive the text for the state being rendered so the outgoing
-            // copy keeps its own unit during the cross-fade.
-            val stateDisplay = formatter.displayText(
-                amountSats = amountSats,
-                preferredPrimary = primaryState.rawValue,
-                showFiat = btcPrice != null && btcPrice > 0,
-                btcPrice = btcPrice,
-                currencyCode = currencyCode,
-                useBitcoinSymbol = useBitcoinSymbol,
-            )
+        val primaryStyle =
+            (entryHeroStyle ?: MaterialTheme.typography.displayMedium).withMonoDigits()
+        if (entryRaw != null) {
+            // Entry mode: the parent re-expresses [entryRaw] on flip, so animate
+            // the resulting string directly. Re-deriving the same raw under the
+            // opposite unit would briefly mint-unit-misread fiat digits as sats.
             AmountText(
-                text = stateDisplay.primary,
-                modifier = if (primaryAccessibilityPrefix != null) {
-                    Modifier.semantics {
-                        contentDescription = "$primaryAccessibilityPrefix: ${stateDisplay.primary}"
-                    }
-                } else {
-                    Modifier
-                },
-                style = (primaryTextStyle ?: MaterialTheme.typography.displayMedium).withMonoDigits(),
+                text = display.primary,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .then(
+                        if (primaryAccessibilityPrefix != null) {
+                            Modifier.semantics {
+                                contentDescription =
+                                    "$primaryAccessibilityPrefix: ${display.primary}"
+                            }
+                        } else {
+                            Modifier
+                        },
+                    ),
+                style = primaryStyle,
+                maxLines = 1,
+                autoSize = TextAutoSize.StepBased(
+                    minFontSize = EntryHeroMinFontSize,
+                    maxFontSize = EntryHeroFontSize,
+                ),
             )
+        } else {
+            // Display mode: amountSats is unit-agnostic, so cross-fade units
+            // while each side keeps its own formatting.
+            AnimatedContent(
+                targetState = display.effectivePrimary,
+                transitionSpec = {
+                    fadeIn(spring(stiffness = Spring.StiffnessMedium))
+                        .togetherWith(fadeOut(spring(stiffness = Spring.StiffnessMedium)))
+                },
+                label = "amount-flip-hero",
+            ) { primaryState ->
+                val stateDisplay = formatter.displayText(
+                    amountSats = amountSats,
+                    preferredPrimary = primaryState.rawValue,
+                    showFiat = priceAvailable,
+                    btcPrice = btcPrice,
+                    currencyCode = currencyCode,
+                    useBitcoinSymbol = useBitcoinSymbol,
+                )
+                AmountText(
+                    text = stateDisplay.primary,
+                    modifier = if (primaryAccessibilityPrefix != null) {
+                        Modifier.semantics {
+                            contentDescription =
+                                "$primaryAccessibilityPrefix: ${stateDisplay.primary}"
+                        }
+                    } else {
+                        Modifier
+                    },
+                    style = primaryStyle,
+                )
+            }
         }
         val secondary = display.secondary
         if (secondary != null) {
@@ -166,3 +228,54 @@ fun AmountFlipDisplay(
         }
     }
 }
+
+/**
+ * Live keypad presentation for sat-denominated entry. Primary follows the typed
+ * raw string; secondary always keeps the mint-unit alternate when a BTC price
+ * is loaded (including "$0.00"), matching iOS `CurrencyAmountDisplay` entry mode.
+ */
+internal fun AmountFormatter.entryDisplayText(
+    entryRaw: String,
+    amountSats: Long,
+    preferredPrimary: AmountDisplayPrimary,
+    btcPrice: Double?,
+    currencyCode: String,
+    useBitcoinSymbol: Boolean,
+): AmountDisplayText {
+    val priceAvailable = btcPrice != null && btcPrice > 0
+    val effective = if (preferredPrimary == AmountDisplayPrimary.Fiat && priceAvailable) {
+        AmountDisplayPrimary.Fiat
+    } else {
+        AmountDisplayPrimary.Sats
+    }
+    val satsText = formatWalletSats(amountSats, useBitcoinSymbol = useBitcoinSymbol)
+    val fiatSecondary = if (priceAvailable) {
+        formatFiat(amountSats, btcPrice, currencyCode)
+            ?: formatFiatZero(currencyCode)
+    } else {
+        null
+    }
+    val primaryRaw = entryRaw.ifEmpty {
+        if (effective == AmountDisplayPrimary.Fiat) "0.00" else "0"
+    }
+    return when (effective) {
+        AmountDisplayPrimary.Fiat -> AmountDisplayText(
+            primary = entryFiatDisplay(primaryRaw, currencyCode),
+            secondary = satsText,
+            effectivePrimary = effective,
+        )
+        AmountDisplayPrimary.Sats -> AmountDisplayText(
+            primary = entryDisplay(
+                raw = primaryRaw,
+                isSat = true,
+                unit = "sat",
+                useBitcoinSymbol = useBitcoinSymbol,
+            ),
+            secondary = fiatSecondary,
+            effectivePrimary = effective,
+        )
+    }
+}
+
+private fun AmountFormatter.formatFiatZero(currencyCode: String): String =
+    entryFiatDisplay("0.00", currencyCode)
