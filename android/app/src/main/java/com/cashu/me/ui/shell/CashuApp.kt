@@ -530,6 +530,7 @@ private fun AuthenticatedShell(container: AppContainer) {
                 walletManager = container.walletManager,
                 cashuRequestStore = container.cashuRequestStore,
                 settingsManager = container.settingsManager,
+                priceService = container.priceService,
                 onClose = close,
             )
 
