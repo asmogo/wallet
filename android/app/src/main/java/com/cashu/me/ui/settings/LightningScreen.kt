@@ -20,6 +20,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.outlined.QrCode2
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -34,6 +35,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -47,6 +49,7 @@ import androidx.compose.ui.unit.dp
 import com.cashu.me.Core.NPCService
 import com.cashu.me.Core.NPCState
 import com.cashu.me.Core.WalletManager
+import com.cashu.me.Core.WalletState
 import com.cashu.me.ui.components.CanvasDivider
 import com.cashu.me.ui.components.GhostButton
 import com.cashu.me.ui.components.InlineNotice
@@ -58,6 +61,26 @@ import com.cashu.me.ui.components.SectionHeader
 import com.cashu.me.ui.components.ToggleRow
 import com.cashu.me.ui.components.ToolbarIcon
 import com.cashu.me.ui.theme.CashuTheme
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.launch
+
+internal enum class LightningAddressSetupStatus {
+    Ready,
+    Empty,
+    SettingUp,
+    NeedsRecovery,
+}
+
+internal fun lightningAddressSetupStatus(
+    walletState: WalletState,
+    npcState: NPCState,
+): LightningAddressSetupStatus = when {
+    npcState.lightningAddress.isNotBlank() -> LightningAddressSetupStatus.Ready
+    !npcState.isEnabled -> LightningAddressSetupStatus.Empty
+    !walletState.isRuntimeReady && walletState.startupFailure == null ->
+        LightningAddressSetupStatus.SettingUp
+    else -> LightningAddressSetupStatus.NeedsRecovery
+}
 
 internal object LightningAddressSettingsCopy {
     const val EnableTitle = "Enable Lightning Address"
@@ -78,9 +101,12 @@ fun LightningScreen(
     val walletState by walletManager.state.collectAsState()
     val npcState by npcService.state.collectAsState()
     val clipboard = LocalClipboardManager.current
+    val scope = rememberCoroutineScope()
 
     var mintPickerOpen by remember { mutableStateOf(false) }
     var addressQrOpen by remember { mutableStateOf(false) }
+    var retryingSetup by remember { mutableStateOf(false) }
+    var setupRecoveryError by remember { mutableStateOf<String?>(null) }
 
     Scaffold(
         topBar = {
@@ -129,14 +155,26 @@ fun LightningScreen(
                         )
                     }
                 } else {
-                    Text(
-                        text = "No Lightning address configured. Enable below to receive at an @ address.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(
-                            horizontal = CashuTheme.spacing.comfortable,
-                            vertical = CashuTheme.spacing.snug,
-                        ),
+                    LightningAddressSetupFeedback(
+                        status = lightningAddressSetupStatus(walletState, npcState),
+                        retrying = retryingSetup,
+                        recoveryError = setupRecoveryError,
+                        onRetry = {
+                            scope.launch {
+                                retryingSetup = true
+                                setupRecoveryError = null
+                                try {
+                                    walletManager.retryLightningAddressSetup()
+                                } catch (cancellation: CancellationException) {
+                                    throw cancellation
+                                } catch (_: Throwable) {
+                                    setupRecoveryError =
+                                        "Lightning address setup couldn't finish. Try again or restart the app."
+                                } finally {
+                                    retryingSetup = false
+                                }
+                            }
+                        },
                     )
                 }
             }
@@ -238,6 +276,59 @@ fun LightningScreen(
                 )
                 Spacer(Modifier.height(CashuTheme.spacing.snug))
             }
+        }
+    }
+}
+
+@Composable
+internal fun LightningAddressSetupFeedback(
+    status: LightningAddressSetupStatus,
+    retrying: Boolean,
+    recoveryError: String?,
+    onRetry: () -> Unit,
+) {
+    val contentModifier = Modifier.padding(
+        horizontal = CashuTheme.spacing.comfortable,
+        vertical = CashuTheme.spacing.snug,
+    )
+    when (status) {
+        LightningAddressSetupStatus.Ready -> Unit
+        LightningAddressSetupStatus.Empty -> Text(
+            text = "No Lightning address configured. Enable below to receive at an @ address.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = contentModifier,
+        )
+        LightningAddressSetupStatus.SettingUp -> Row(
+            modifier = contentModifier,
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(CashuTheme.spacing.default),
+        ) {
+            CircularProgressIndicator(
+                modifier = Modifier.size(CashuTheme.spacing.loose),
+                strokeWidth = 2.dp,
+            )
+            Text(
+                text = "Setting up Lightning address…",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        LightningAddressSetupStatus.NeedsRecovery -> Column(
+            modifier = contentModifier,
+            verticalArrangement = Arrangement.spacedBy(CashuTheme.spacing.snug),
+        ) {
+            InlineNotice(
+                text = recoveryError
+                    ?: "Wallet not fully initialized. Try setup again to finish your Lightning address.",
+            )
+            PrimaryButton(
+                text = "Try setup again",
+                onClick = onRetry,
+                loading = retrying,
+                enabled = !retrying,
+                modifier = Modifier.fillMaxWidth(),
+            )
         }
     }
 }

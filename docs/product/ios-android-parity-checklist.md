@@ -170,7 +170,7 @@ Platform-specific capabilities remain intentionally outside parity, including iC
 
 - [ ] **[P1 · iOS → Android] Gate Lightning settings by feature state.** iOS shows disabled explanation, setup progress, initialization warning, or live controls as appropriate; Android always renders the empty address card and all preference/check controls. **Done when:** Android shows only actions meaningful in the current state.
 
-- [ ] **[P1 · iOS → Android] Add initialization and setup feedback.** iOS distinguishes active setup from “Wallet not fully initialized”; Android collapses both into an empty address message. **Done when:** Android communicates progress separately from a recoverable initialization problem and gives an actionable recovery.
+- [x] **[P1 · iOS → Android] Add initialization and setup feedback.** iOS distinguishes active setup from “Wallet not fully initialized”; Android collapses both into an empty address message. **Done when:** Android communicates progress separately from a recoverable initialization problem and gives an actionable recovery.
 
 - [ ] **[P2 · iOS → Android] Rename “Check for paid quotes now.”** iOS uses “Check for payments”; Android exposes quote jargon. **Done when:** both use payment language in the primary action.
 
