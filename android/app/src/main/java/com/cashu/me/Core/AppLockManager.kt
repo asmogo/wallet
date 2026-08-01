@@ -90,11 +90,37 @@ class AppLockManager(
     suspend fun authenticate(
         activity: FragmentActivity?,
         reason: String = "Unlock your wallet",
+    ): Boolean = authenticate(
+        activity = activity,
+        reason = reason,
+        succeedWhenUnavailable = true,
+    )
+
+    /**
+     * Confirms that the user can satisfy App Lock before the setting is enabled.
+     * Unlike the runtime unlock path, unavailable authentication must fail closed:
+     * persisting an unusable lock would leave the setting enabled without a
+     * successful device-owner challenge.
+     */
+    suspend fun authenticateForAppLockEnablement(
+        activity: FragmentActivity?,
+    ): Boolean = authenticate(
+        activity = activity,
+        reason = "Confirm to enable App Lock",
+        succeedWhenUnavailable = false,
+    )
+
+    private suspend fun authenticate(
+        activity: FragmentActivity?,
+        reason: String,
+        succeedWhenUnavailable: Boolean,
     ): Boolean {
         if (mutableState.value.isAuthenticating) return false
         if (!refreshAvailability()) {
-            applyRuntime(AppLockPolicy.authenticated(runtime))
-            return true
+            if (succeedWhenUnavailable) {
+                applyRuntime(AppLockPolicy.authenticated(runtime))
+            }
+            return succeedWhenUnavailable
         }
         if (activity == null) {
             AppLogger.security.error("Authentication unavailable: no FragmentActivity")
