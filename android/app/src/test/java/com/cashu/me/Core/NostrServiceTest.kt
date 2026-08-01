@@ -4,9 +4,53 @@ import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
+import org.junit.Assert.assertThrows
 import org.junit.Test
 
 class NostrServiceTest {
+    @Test
+    fun selectingMissingCustomKeyRequestsAChoiceWithoutSwitching() {
+        assertEquals(
+            NostrSignerSelectionAction.ChooseCustomKey,
+            nostrSignerSelectionAction(
+                current = NostrSignerType.Seed,
+                requested = NostrSignerType.PrivateKey,
+                hasCustomKey = false,
+            ),
+        )
+    }
+
+    @Test
+    fun selectingStoredCustomKeySwitchesSigner() {
+        assertEquals(
+            NostrSignerSelectionAction.Switch,
+            nostrSignerSelectionAction(
+                current = NostrSignerType.Seed,
+                requested = NostrSignerType.PrivateKey,
+                hasCustomKey = true,
+            ),
+        )
+    }
+
+    @Test
+    fun switchingToMissingCustomKeyRequiresExplicitSetup() {
+        val error = assertThrows(IllegalStateException::class.java) {
+            NostrService.requireStoredCustomKey(null)
+        }
+
+        assertEquals(
+            "Generate or import a custom key before switching key sources.",
+            error.message,
+        )
+    }
+
+    @Test
+    fun switchingToExistingCustomKeyUsesStoredIdentity() {
+        val storedKey = "01".repeat(32)
+
+        assertEquals(storedKey, NostrService.requireStoredCustomKey(storedKey))
+    }
+
     @Test
     fun bech32RoundTripsNsecPayload() {
         val key = ByteArray(32) { index -> (index + 1).toByte() }
