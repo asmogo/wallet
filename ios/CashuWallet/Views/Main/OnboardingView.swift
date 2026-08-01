@@ -898,10 +898,13 @@ struct OnboardingView: View {
             }
         }) {
             HStack(spacing: 12) {
-                MintAvatarView(iconUrl: recommended?.iconUrl, name: recommended?.name ?? shortenUrl(url))
+                MintAvatarView(
+                    iconUrl: recommended?.iconUrl ?? stagedMintIconUrls[url],
+                    name: recommended?.name ?? stagedMintNames[url] ?? shortenUrl(url)
+                )
 
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(recommended?.name ?? shortenUrl(url))
+                    Text(recommended?.name ?? stagedMintNames[url] ?? shortenUrl(url))
                         .font(.subheadline.weight(.medium))
                         .foregroundStyle(.primary)
                         .lineLimit(1)
@@ -988,6 +991,7 @@ struct OnboardingView: View {
             customMintInput = ""
             showCustomMintInput = false
         }
+        fetchStagedMintInfo(normalized)
     }
 
     private func continueFromFirstMint() {
