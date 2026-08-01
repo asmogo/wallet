@@ -1,6 +1,6 @@
 ---
 name: wallet-ui-visual-review
-description: Analyze a Cashu Wallet pull request, branch, or commit for user-visible Android and iOS changes, then produce reproducible before/after screenshots from isolated builds. Use for PR screenshots, visual change evidence, UI regression comparisons, Compose or SwiftUI before/after captures, responsive/theme/locale checks, cross-platform parity evidence, GitHub comments containing wallet UI evidence, or proving that a change has no visual delta. Do not use for implementing UI, ordinary code review without visual evidence, one-off README screenshots, patch files, or uncommitted working-tree comparisons.
+description: Analyze a Cashu Wallet pull request, branch, or commit for user-visible Android and iOS changes, then produce reproducible before/after screenshots from isolated builds. Use for PR screenshots, visual change evidence, UI regression comparisons, Compose or SwiftUI before/after captures, responsive/theme/locale checks, cross-platform parity evidence, finding divergences between the iOS and Android implementations, GitHub comments containing wallet UI evidence, or proving that a change has no visual delta. Do not use for implementing UI, ordinary code review without visual evidence, one-off README screenshots, patch files, or uncommitted working-tree comparisons.
 ---
 
 # Wallet UI Visual Review
@@ -59,6 +59,26 @@ python3 .agents/skills/wallet-ui-visual-review/scripts/route_platforms.py \
 Turn every visual hypothesis into a capture-matrix row before launching a
 device. Include surface, navigation, fixture, runtime, viewport, appearance,
 locale, text scale, expected before/after behavior, and a useful control.
+
+## Hunt for cross-platform divergence
+
+Treat divergence between the Android and iOS implementations as a first-class
+goal of every run, not a side effect. The wallet ships two apps that must
+behave alike; your job includes surfacing where they do not.
+
+- When both platforms are routed, add capture-matrix rows for the equivalent
+  surface on each platform under matched fixture, appearance, locale, and text
+  scale so the two are directly comparable.
+- When only one platform changed but the change alters a shared screen's
+  contract, capture the untouched platform's equivalent surface as a parity
+  control.
+- Compare equivalent captures and report every user-visible divergence:
+  missing screens, states, or actions on one platform; different labels,
+  ordering, defaults, or navigation flows; divergent layout, theme, or
+  empty-state contracts.
+- Label each divergence as introduced by the change or pre-existing. Do not
+  silently treat one platform as the reference; report both behaviors and let
+  the user decide which is correct.
 
 ## Select exact runtime images
 
@@ -156,6 +176,7 @@ Use [assets/report-template.md](assets/report-template.md). Include:
 - exact capture environments
 - concise diff-to-screen analysis
 - side-by-side paired evidence
+- cross-platform parity findings and divergences
 - fixture disclosure
 - intentional non-changes and visual noise
 - coverage limitations
@@ -174,6 +195,7 @@ writes even though they do not alter a source branch.
 ## Hand off
 
 Provide links to the report, manifest, and images; count captures by platform;
-summarize one result per surface; include a PR comment URL when published; state
+summarize one result per surface; list every cross-platform divergence found
+or state that none was observed; include a PR comment URL when published; state
 that the active checkout was not modified; and name any missing runtime,
 hardware, behavioral, or state coverage.
