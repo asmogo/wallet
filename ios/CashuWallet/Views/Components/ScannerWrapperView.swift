@@ -1583,6 +1583,9 @@ struct CashuTopUpInvoiceSheet: View {
     @State private var monitorTask: Task<Void, Never>?
     @State private var errorMessage: String?
     @State private var errorSeverity: ErrorSeverity = .error
+    /// VoiceOver Share action for the QR: ShareLink can't be invoked
+    /// imperatively, so the accessibility action presents the share sheet.
+    @State private var showShareSheet = false
 
     private enum Phase: Equatable {
         case awaitingPayment   // showing the QR, polling the quote
@@ -1599,7 +1602,13 @@ struct CashuTopUpInvoiceSheet: View {
                     VStack(spacing: 24) {
                         header
 
-                        QRCodeView(content: context.quote.request, showControls: false, staticOnly: true)
+                        QRCodeView(
+                            content: context.quote.request,
+                            showControls: false,
+                            staticOnly: true,
+                            onCopy: copyInvoice,
+                            onShare: { showShareSheet = true }
+                        )
                             .frame(width: 280, height: 280)
                             .padding(16)
                             .background(Color.white, in: RoundedRectangle(cornerRadius: 20))
@@ -1611,6 +1620,9 @@ struct CashuTopUpInvoiceSheet: View {
                                 ShareLink(item: context.quote.request) {
                                     Label("Share", systemImage: "square.and.arrow.up")
                                 }
+                            }
+                            .sheet(isPresented: $showShareSheet) {
+                                ShareSheet(items: [context.quote.request])
                             }
 
                         CurrencyAmountDisplay(sats: context.amount, primary: $settings.amountDisplayPrimary)

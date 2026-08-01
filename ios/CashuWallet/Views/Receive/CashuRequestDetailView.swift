@@ -22,6 +22,9 @@ struct CashuRequestDetailView: View {
     /// Amount of the payment that just landed, for the shared success screen.
     @State private var receivedAmount: UInt64?
     @State private var showPaymentSuccess = false
+    /// VoiceOver Share action for the QR: ShareLink can't be invoked
+    /// imperatively, so the accessibility action presents the share sheet.
+    @State private var showShareSheet = false
 
     init(request: CashuRequest, onClose: (() -> Void)? = nil) {
         self._requestId = State(initialValue: request.id)
@@ -163,7 +166,13 @@ struct CashuRequestDetailView: View {
         VStack(spacing: 0) {
             ScrollView {
                 VStack(spacing: 24) {
-                    QRCodeView(content: request.encoded, showControls: false, staticOnly: true)
+                    QRCodeView(
+                        content: request.encoded,
+                        showControls: false,
+                        staticOnly: true,
+                        onCopy: { copy(request.encoded) },
+                        onShare: { showShareSheet = true }
+                    )
                         .frame(width: 280, height: 280)
                         .padding(16)
                         .background(Color.white, in: RoundedRectangle(cornerRadius: 20))
@@ -175,6 +184,9 @@ struct CashuRequestDetailView: View {
                             ShareLink(item: request.encoded) {
                                 Label("Share", systemImage: "square.and.arrow.up")
                             }
+                        }
+                        .sheet(isPresented: $showShareSheet) {
+                            ShareSheet(items: [request.encoded])
                         }
 
                     if let amount = request.amount, amount > 0 {

@@ -52,6 +52,14 @@ enum QRSize: String, CaseIterable {
 
 // MARK: - QR Code View with Controls
 
+/// VoiceOver action names exposed on actionable QR codes. They mirror the
+/// Copy / Share entries of the long-press context menu the call site attaches —
+/// the same options Android's shared QrCard announces to TalkBack.
+enum QRContextAccessibility {
+    static let copyActionName = "Copy"
+    static let shareActionName = "Share"
+}
+
 /// QR Code display view with animation support for large data
 /// Includes per-QR speed and size controls like cashu.me
 struct QRCodeView: View {
@@ -63,6 +71,12 @@ struct QRCodeView: View {
     /// expect to scan as a single static frame. UR-animated QRs only make
     /// sense for our own long Cashu tokens.
     var staticOnly: Bool = false
+    /// VoiceOver Copy action, mirroring the long-press context menu's Copy.
+    /// Leave nil on non-actionable QRs so assistive tech never promises an
+    /// unavailable action.
+    var onCopy: (() -> Void)? = nil
+    /// VoiceOver Share action, mirroring the long-press context menu's Share.
+    var onShare: (() -> Void)? = nil
 
     // Local settings per QR instance
     @State private var speed: QRSpeed = .fast
@@ -88,6 +102,14 @@ struct QRCodeView: View {
                         .scaledToFit()
                         .accessibilityLabel("QR code")
                         .accessibilityHint("Contains scannable payment data")
+                        .accessibilityActions {
+                            if let onCopy {
+                                Button(QRContextAccessibility.copyActionName, action: onCopy)
+                            }
+                            if let onShare {
+                                Button(QRContextAccessibility.shareActionName, action: onShare)
+                            }
+                        }
                 } else {
                     Rectangle()
                         .fill(.tertiary)
