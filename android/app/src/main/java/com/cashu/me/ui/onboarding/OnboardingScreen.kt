@@ -382,8 +382,12 @@ internal fun WelcomeFace(
                 .riseIn(appeared, 0),
             verticalArrangement = Arrangement.spacedBy(CashuTheme.spacing.default),
         ) {
+            // The only headline that keeps a hardcoded break. Left to wrap
+            // naturally it wraps after "In" — "Private cash. In" / "your
+            // pocket." — splitting the second sentence. Breaking at the
+            // sentence boundary is the deliberate exception.
             Text(
-                text = "Private cash. In your pocket.",
+                text = "Private cash.\nIn your pocket.",
                 style = onboardingTitleStyle(),
                 color = MaterialTheme.colorScheme.onSurface,
             )

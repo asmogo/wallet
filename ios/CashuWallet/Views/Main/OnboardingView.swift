@@ -189,7 +189,11 @@ struct OnboardingView: View {
 
             stagger(appeared: welcomeAppeared, index: 0) {
                 VStack(alignment: .leading, spacing: 14) {
-                    Text("Private cash. In your pocket.")
+                    // The only headline that keeps a hardcoded break. Left to
+                    // wrap naturally it wraps after "In" — "Private cash. In" /
+                    // "your pocket." — splitting the second sentence. Breaking
+                    // at the sentence boundary is the deliberate exception.
+                    Text("Private cash.\nIn your pocket.")
                         .font(.largeTitle.weight(.heavy))
                         .tracking(-0.5)
                         .foregroundStyle(.primary)
