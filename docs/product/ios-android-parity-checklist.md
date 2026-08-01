@@ -246,7 +246,7 @@ These items may improve efficiency or discoverability but are not required for f
 
 These are important, but they belong in dedicated security/privacy, design-system, or style/tooling backlogs rather than the release parity gate.
 
-- [ ] **[P0 · Security/privacy] Audit crash-report data and narrow the displayed privacy promise.** **Done when:** captures and breadcrumbs are inventoried on both platforms, sensitive wallet payloads are sanitized, redaction is tested, and displayed promises are limited to guarantees the implementation enforces.
+- [x] **[P0 · Security/privacy] Audit crash-report data and narrow the displayed privacy promise.** **Done when:** captures and breadcrumbs are inventoried on both platforms, sensitive wallet payloads are sanitized, redaction is tested, and displayed promises are limited to guarantees the implementation enforces.
 
 - [ ] **[P2 · Design system] Define an accessible currency-row avatar rule.** **Done when:** the design system documents a neutral currency code or monogram rule instead of country flags or ambiguous symbols, while retaining ISO code and localized currency name in text.
 
