@@ -150,19 +150,19 @@ Platform-specific capabilities remain intentionally outside parity, including iC
 
 - [ ] **[P1 · iOS → Android] Show wallet-deletion failures.** iOS catches deletion errors and displays a banner; Android starts deletion without dedicated error feedback. **Done when:** Android reports failure and leaves the existing wallet state intact and understandable.
 
-- [ ] **[P1 · Android → iOS] Read the app version from build metadata.** Android uses `BuildConfig.VERSION_NAME`; iOS hard-codes `1.0.0`. **Done when:** iOS displays the shipped bundle version and, if included, its build number from metadata.
+- [x] **[P1 · Android → iOS] Read the app version from build metadata.** Android uses `BuildConfig.VERSION_NAME`; iOS hard-codes `1.0.0`. **Done when:** iOS displays the shipped bundle version and, if included, its build number from metadata.
 
 - [ ] **[P2 · Android → iOS] Add localized currency names.** Android shows the ISO code plus the localized currency name; iOS shows only the code. **Done when:** iOS rows are understandable without memorizing ISO-4217 codes.
 
-- [ ] **[P2 · iOS → Android] Show when the BTC price was last updated.** iOS includes a relative timestamp beside the price; Android omits it. **Done when:** Android exposes recency and handles never-loaded and stale states.
+- [x] **[P2 · iOS → Android] Show when the BTC price was last updated.** iOS includes a relative timestamp beside the price; Android omits it. **Done when:** Android exposes recency and handles never-loaded and stale states.
 
 ### Settings — privacy and background behavior
 
-- [ ] **[P1 · iOS → Android] Disable periodic invoice checks when incoming checks are off.** Android leaves the child control interactive even though the runtime requires incoming checks before periodic work runs. **Done when:** Android disables the child visually and semantically, preserves its saved preference for later re-enable, and keeps the effective runtime rule as the logical combination of both settings.
+- [x] **[P1 · iOS → Android] Disable periodic invoice checks when incoming checks are off.** Android leaves the child control interactive even though the runtime requires incoming checks before periodic work runs. **Done when:** Android disables the child visually and semantically, preserves its saved preference for later re-enable, and keeps the effective runtime rule as the logical combination of both settings.
 
-- [ ] **[P1 · Android → iOS] Keep WebSockets independent of invoice/token polling.** Android correctly notes that WebSockets also power Nostr discovery; iOS disables the toggle when both incoming-invoice and sent-token checks are off. **Done when:** iOS users can enable discovery and live Nostr features independently.
+- [x] **[P1 · Android → iOS] Keep WebSockets independent of invoice/token polling.** Android correctly notes that WebSockets also power Nostr discovery; iOS disables the toggle when both incoming-invoice and sent-token checks are off. **Done when:** iOS users can enable discovery and live Nostr features independently.
 
-- [ ] **[P2 · Converge] Align privacy-setting concepts and consequences.** Labels differ for sent-ecash checks, periodic invoice checks, and automatic receive. **Done when:** both platforms use equivalent plain-language concepts and explain timing, network activity, and consequences. Native label length and sentence structure may differ.
+- [x] **[P2 · Converge] Align privacy-setting concepts and consequences.** Labels differ for sent-ecash checks, periodic invoice checks, and automatic receive. **Done when:** both platforms use equivalent plain-language concepts and explain timing, network activity, and consequences. Native label length and sentence structure may differ.
 
 ### Settings — Lightning address
 
@@ -196,9 +196,9 @@ Platform-specific capabilities remain intentionally outside parity, including iC
 
 ### Settings — Wallet Connect and locked-ecash keys
 
-- [ ] **[P2 · iOS → Android] Complete the reset-connection recovery warning.** Android already says paired apps will stop working; iOS also explains that access remains broken until the new code is shared. **Done when:** Android states both the disruption and the recovery required before reset.
+- [x] **[P2 · iOS → Android] Complete the reset-connection recovery warning.** Android already says paired apps will stop working; iOS also explains that access remains broken until the new code is shared. **Done when:** Android states both the disruption and the recovery required before reset.
 
-- [ ] **[P1 · Android → iOS] Save a device-key nickname without requiring keyboard Submit.** Android persists each edit; iOS can lose the rename when the user navigates back. **Done when:** iOS saves on change, focus loss, or view disappearance and does not require a hidden keyboard-specific action.
+- [x] **[P1 · Android → iOS] Save a device-key nickname without requiring keyboard Submit.** Android persists each edit; iOS can lose the rename when the user navigates back. **Done when:** iOS saves on change, focus loss, or view disappearance and does not require a hidden keyboard-specific action.
 
 - [ ] **[P2 · Converge] Use complete P2PK import consequence copy.** iOS explains that an imported key can claim locked ecash; Android explains that it is device-only and absent from the seed backup. **Done when:** both state both facts before import.
 
@@ -208,11 +208,11 @@ Platform-specific capabilities remain intentionally outside parity, including iC
 
 - [ ] **[P1 · Converge] Standardize mint identity without hiding the trust boundary.** The apps alternate among friendly name, full URL, host, and shortened URL; friendly names are mint-reported and can collide. **Done when:** compact low-risk surfaces use friendly name with normalized-host fallback; payment confirmations and receipts show friendly name plus normalized host; compact lists may omit scheme/trailing slash; and copy, share, and detail always preserve the full URL.
 
-- [ ] **[P2 · Converge] Standardize zero-fee wording by meaning.** The apps alternate among “Free,” “No fee,” and “0 sat” for different concepts. **Done when:** shared copy guidance distinguishes a prospective user charge from an accounting value, and equivalent contexts communicate the same meaning. Platform-native wording may differ.
+- [x] **[P2 · Converge] Standardize zero-fee wording by meaning.** The apps alternate among “Free,” “No fee,” and “0 sat” for different concepts. **Done when:** shared copy guidance distinguishes a prospective user charge from an accounting value, and equivalent contexts communicate the same meaning. Platform-native wording may differ.
 
-- [ ] **[P2 · Converge] Standardize success language by context.** History rows and live confirmations are now semantically equivalent across platforms; the remaining gap is Android’s internal inconsistency between “Payment Received!” (Lightning receive) and “Payment received” (other receive flows). **Done when:** shared copy guidance defines the semantic distinction and both platforms use equivalent language within each context; exact capitalization and punctuation need not match.
+- [x] **[P2 · Converge] Standardize success language by context.** History rows and live confirmations are now semantically equivalent across platforms; the remaining gap is Android’s internal inconsistency between “Payment Received!” (Lightning receive) and “Payment received” (other receive flows). **Done when:** shared copy guidance defines the semantic distinction and both platforms use equivalent language within each context; exact capitalization and punctuation need not match.
 
-- [ ] **[P2 · Android → iOS] Advertise QR context actions to assistive technology.** Android’s shared QR card announces long-press Copy/Share options; iOS’s base QR view can omit actionable context. **Done when:** every actionable iOS QR exposes native accessibility actions or an accurate hint; non-actionable QR views do not promise unavailable actions.
+- [x] **[P2 · Android → iOS] Advertise QR context actions to assistive technology.** Android’s shared QR card announces long-press Copy/Share options; iOS’s base QR view can omit actionable context. **Done when:** every actionable iOS QR exposes native accessibility actions or an accurate hint; non-actionable QR views do not promise unavailable actions.
 
 - [ ] **[P2 · Converge] Acknowledge copy success consistently and accessibly.** Some actions change text, some show a check, and some rely on system clipboard feedback. **Done when:** comparable copy actions receive an unambiguous acknowledgement within each platform, assistive technology is notified, and repeated actions cannot produce contradictory state. Visual form and reset timing remain platform-native.
 
