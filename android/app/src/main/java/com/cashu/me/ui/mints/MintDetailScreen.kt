@@ -23,16 +23,24 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
+import androidx.compose.material.icons.automirrored.outlined.OpenInNew
+import androidx.compose.material.icons.outlined.AlternateEmail
 import androidx.compose.material.icons.outlined.ArrowDownward
 import androidx.compose.material.icons.outlined.ArrowUpward
 import androidx.compose.material.icons.outlined.Check
 import androidx.compose.material.icons.outlined.ContentCopy
 import androidx.compose.material.icons.outlined.CurrencyBitcoin
+import androidx.compose.material.icons.outlined.Description
+import androidx.compose.material.icons.outlined.Inventory2
+import androidx.compose.material.icons.outlined.Key
 import androidx.compose.material.icons.outlined.KeyboardArrowDown
 import androidx.compose.material.icons.outlined.Lock
+import androidx.compose.material.icons.outlined.MailOutline
 import androidx.compose.material.icons.outlined.Payments
+import androidx.compose.material.icons.outlined.Person
 import androidx.compose.material.icons.outlined.Public
 import androidx.compose.material.icons.outlined.Remove
+import androidx.compose.material.icons.outlined.Send
 import androidx.compose.material.icons.outlined.Straighten
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -55,7 +63,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontFamily
@@ -63,8 +73,12 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.delay
+import com.cashu.me.Core.AmountFormatter
+import com.cashu.me.Core.PriceService
 import com.cashu.me.Core.Protocols.CurrencyAmount
 import com.cashu.me.Core.Protocols.CurrencyRegistry
+import com.cashu.me.Core.SettingsManager
+import com.cashu.me.Core.Wallet.userFacingWalletMessage
 import com.cashu.me.Core.WalletManager
 import com.cashu.me.Core.shortenMintUrl
 import com.cashu.me.Models.MintInfo
@@ -73,12 +87,15 @@ import com.cashu.me.ui.components.CanvasDivider
 import com.cashu.me.ui.components.DestructiveTextButton
 import com.cashu.me.ui.components.GhostButton
 import com.cashu.me.ui.components.IconSwap
+import com.cashu.me.ui.components.InlineNotice
 import com.cashu.me.ui.components.InspectorRow
 import com.cashu.me.ui.components.MintAvatar
 import com.cashu.me.ui.components.PrimaryButton
 import com.cashu.me.ui.components.SectionHeader
+import com.cashu.me.ui.components.SpinnerRing
 import com.cashu.me.ui.components.ToolbarIcon
 import com.cashu.me.ui.components.neutralActionButtonColors
+import com.cashu.me.ui.components.openInBrowser
 import com.cashu.me.ui.theme.CapsuleShape
 import com.cashu.me.ui.theme.CashuTheme
 import com.cashu.me.ui.testing.UiTestTags
@@ -87,13 +104,19 @@ import com.cashu.me.ui.testing.UiTestTags
 @Composable
 fun MintDetailScreen(
     walletManager: WalletManager,
+    settingsManager: SettingsManager,
+    priceService: PriceService,
     mintUrl: String,
     onClose: () -> Unit,
 ) {
     val walletState by walletManager.state.collectAsState()
+    val settings by settingsManager.state.collectAsState()
+    val priceState by priceService.state.collectAsState()
     val mint = walletState.mints.firstOrNull { it.url == mintUrl }
     val isActive = walletState.activeMint?.url == mintUrl
     var confirmingRemove by remember { mutableStateOf(false) }
+    var settingDefault by remember(mintUrl) { mutableStateOf(false) }
+    var setDefaultError by remember(mintUrl) { mutableStateOf<String?>(null) }
 
     Scaffold(
         modifier = Modifier.testTag(UiTestTags.MintDetailScreen),
@@ -145,25 +168,62 @@ fun MintDetailScreen(
             // metadata (long description, MOTD, capabilities) — mirroring iOS's
             // `cdkInfo`. `info` prefers the fetched record, falling back to the
             // persisted mint until it lands (persisted supplies balance/icon/name).
+            // A failed fetch surfaces an inline explanation + Retry, and the rows
+            // below keep showing the saved record (stale), never a fake success.
             var liveInfo by remember(mint.url) { mutableStateOf<MintInfo?>(null) }
             var connection by remember(mint.url) { mutableStateOf(MintConnectionState.Checking) }
-            LaunchedEffect(mint.url) {
+            var infoError by remember(mint.url) { mutableStateOf<String?>(null) }
+            var refreshNonce by remember(mint.url) { mutableStateOf(0) }
+            LaunchedEffect(mint.url, refreshNonce) {
+                connection = MintConnectionState.Checking
+                infoError = null
                 runCatching { walletManager.fetchLiveMintInfo(mint.url) }
                     .fold(
                         { fetched ->
-                            liveInfo = fetched
-                            connection = if (fetched != null) MintConnectionState.Online
-                            else MintConnectionState.Offline
+                            if (fetched != null) {
+                                liveInfo = fetched
+                                connection = MintConnectionState.Online
+                            } else {
+                                connection = MintConnectionState.Offline
+                                infoError = "The mint did not respond."
+                            }
                         },
-                        { connection = MintConnectionState.Offline },
+                        { error ->
+                            connection = MintConnectionState.Offline
+                            infoError = error.userFacingWalletMessage
+                        },
                     )
             }
             val info = liveInfo ?: mint
+
+            if (infoError != null) {
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    InlineNotice(
+                        text = infoError.orEmpty(),
+                        detail = "Showing saved information.",
+                    )
+                    GhostButton(
+                        text = "Retry",
+                        onClick = { refreshNonce += 1 },
+                        enabled = connection != MintConnectionState.Checking,
+                        modifier = Modifier.padding(horizontal = CashuTheme.spacing.comfortable),
+                    )
+                }
+            }
 
             Column(modifier = Modifier.fillMaxWidth()) {
                 InspectorRow(
                     label = "Balance",
                     value = "${mint.balance} sat",
+                    // iOS parity: the fiat conversion rides beneath the sat
+                    // balance when the user enabled it — sats only, never the
+                    // non-sat unit rows below.
+                    secondaryValue = mintSatBalanceFiatSecondary(
+                        balanceSats = mint.balance,
+                        showFiat = settings.showFiatBalance,
+                        btcPrice = priceState.btcPrice,
+                        currencyCode = settings.bitcoinPriceCurrency,
+                    ),
                     leadingIcon = Icons.Outlined.CurrencyBitcoin,
                     valueMonospaced = true,
                 )
@@ -189,6 +249,33 @@ fun MintDetailScreen(
                         MintConnectionState.Online -> null
                     },
                 )
+            }
+
+            // iOS `loadingRow`: remote metadata is still in flight — hold the
+            // sections' place with a quiet spinner line instead of popping them
+            // in unannounced.
+            if (liveInfo == null && connection == MintConnectionState.Checking) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(CashuTheme.spacing.default),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(
+                            horizontal = CashuTheme.spacing.comfortable,
+                            vertical = CashuTheme.spacing.loose,
+                        ),
+                ) {
+                    SpinnerRing(
+                        size = 18.dp,
+                        strokeWidth = 2.dp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Text(
+                        text = "Loading mint info…",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
             }
 
             // About: short description reads primary/white; the long description
@@ -281,26 +368,96 @@ fun MintDetailScreen(
                 TechnicalDetails(nut = live.nutSupport)
             }
 
-            SectionHeader("Payment methods")
-            Column(modifier = Modifier.fillMaxWidth()) {
-                InspectorRow(
-                    label = "Receive",
-                    value = mint.supportedMintMethods.distinct().joinToString(" · ") { it.displayName }.ifBlank { "None" },
-                    leadingIcon = Icons.Outlined.ArrowDownward,
-                )
-                CanvasDivider(leadingInset = 16.dp)
-                InspectorRow(
-                    label = "Send",
-                    value = mint.supportedMeltMethods.distinct().joinToString(" · ") { it.displayName }.ifBlank { "None" },
-                    leadingIcon = Icons.Outlined.ArrowUpward,
-                )
+            // Live NUT-06 is authoritative for the rails; the persisted report
+            // fills in until it lands, and the BOLT11 compatibility default only
+            // applies to a mint that was never fetched (tri-state — a direction
+            // the live mint reported as absent is hidden, matching iOS).
+            val receiveMethods = liveInfo?.supportedMintMethods ?: mint.effectiveMintMethods
+            val sendMethods = liveInfo?.supportedMeltMethods ?: mint.effectiveMeltMethods
+            if (receiveMethods.isNotEmpty() || sendMethods.isNotEmpty()) {
+                SectionHeader("Payment methods")
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    if (receiveMethods.isNotEmpty()) {
+                        InspectorRow(
+                            label = "Receive",
+                            value = receiveMethods.joinToString(" · ") { it.displayName },
+                            leadingIcon = Icons.Outlined.ArrowDownward,
+                        )
+                    }
+                    if (sendMethods.isNotEmpty()) {
+                        if (receiveMethods.isNotEmpty()) CanvasDivider(leadingInset = 16.dp)
+                        InspectorRow(
+                            label = "Send",
+                            value = sendMethods.joinToString(" · ") { it.displayName },
+                            leadingIcon = Icons.Outlined.ArrowUpward,
+                        )
+                    }
+                }
             }
 
+            // Contact: every channel the live mint reported (blank values are
+            // skipped — no dead rows). A row only becomes tappable when its
+            // target parses into the mailto:/http(s) allowlist; anything else
+            // stays plain text (iOS `contactSection` + `contactURL`).
+            val context = LocalContext.current
+            val contactRows = liveInfo?.contacts.orEmpty()
+                .filter { it.info.isNotBlank() }
+                .map { contact -> contact to mintContactLink(contact.method, contact.info) }
+            if (contactRows.isNotEmpty()) {
+                SectionHeader("Contact")
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    contactRows.forEachIndexed { index, (contact, link) ->
+                        InspectorRow(
+                            label = contact.method.replaceFirstChar { it.uppercase() },
+                            value = contact.info,
+                            leadingIcon = mintContactIcon(contact.method),
+                            onClick = link?.let { target -> { context.openInBrowser(target) } },
+                            valueColor = if (link != null) MaterialTheme.colorScheme.primary else null,
+                        )
+                        if (index < contactRows.lastIndex) CanvasDivider(leadingInset = 16.dp)
+                    }
+                }
+            }
+
+            // Details: software and terms come only from the live NUT-06 record
+            // (iOS gates on `cdkInfo`) — absent or unparseable values render no
+            // row rather than a placeholder or a dead link.
+            val tosUrl = safeExternalHttpUrl(liveInfo?.tosUrl)
+            val software = liveInfo?.software
             SectionHeader("Details")
-            InspectorRow(
-                label = "Units",
-                value = mint.units.joinToString(", ").ifBlank { "sat" },
-                leadingIcon = Icons.Outlined.Straighten,
+            Column(modifier = Modifier.fillMaxWidth()) {
+                if (software != null) {
+                    InspectorRow(
+                        label = "Software",
+                        value = "${software.name} ${software.version}",
+                        leadingIcon = Icons.Outlined.Inventory2,
+                    )
+                    CanvasDivider(leadingInset = 16.dp)
+                }
+                InspectorRow(
+                    label = "Units",
+                    value = mint.units.joinToString(", ").ifBlank { "sat" },
+                    leadingIcon = Icons.Outlined.Straighten,
+                )
+                if (tosUrl != null) {
+                    CanvasDivider(leadingInset = 16.dp)
+                    InspectorRow(
+                        label = "Terms of Service",
+                        value = externalUrlHost(tosUrl) ?: tosUrl,
+                        leadingIcon = Icons.Outlined.Description,
+                        onClick = { context.openInBrowser(tosUrl) },
+                        trailingIcon = Icons.AutoMirrored.Outlined.OpenInNew,
+                    )
+                }
+            }
+
+            // Provenance (iOS `footerNote`): descriptions, contacts, software,
+            // and terms above are the mint's own claims, not wallet-verified.
+            Text(
+                text = "Information reported by the mint.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(horizontal = CashuTheme.spacing.comfortable),
             )
 
             Spacer(Modifier.height(CashuTheme.spacing.comfortable))
@@ -312,10 +469,26 @@ fun MintDetailScreen(
             ) {
                 // When it's the default, the button disappears and the header
                 // shows a "Default mint" pill instead (iOS parity).
+                if (setDefaultError != null) {
+                    InlineNotice(text = setDefaultError.orEmpty())
+                }
                 if (!isActive) {
+                    // iOS parity: progress disables the action while in flight
+                    // and a failure renders inline without flipping the
+                    // apparent default (the pill/header only follow walletState).
                     PrimaryButton(
                         text = "Set as Default",
-                        onClick = { walletManager.launch { walletManager.setActiveMint(mint) } },
+                        loading = settingDefault,
+                        onClick = {
+                            if (settingDefault) return@PrimaryButton
+                            settingDefault = true
+                            setDefaultError = null
+                            walletManager.launch {
+                                runCatching { walletManager.setActiveMint(mint) }
+                                    .onFailure { setDefaultError = it.userFacingWalletMessage }
+                                settingDefault = false
+                            }
+                        },
                         colors = neutralActionButtonColors(),
                     )
                 }
@@ -577,6 +750,33 @@ private enum class MintConnectionState(val label: String) {
     Checking("Checking…"),
     Online("Online"),
     Offline("Offline"),
+}
+
+/// Per-channel contact glyph (iOS `contactIcon`).
+private fun mintContactIcon(method: String): ImageVector = when (method.trim().lowercase()) {
+    "email" -> Icons.Outlined.MailOutline
+    "twitter", "x" -> Icons.Outlined.AlternateEmail
+    "nostr" -> Icons.Outlined.Key
+    "website", "url", "web" -> Icons.Outlined.Public
+    "telegram" -> Icons.Outlined.Send
+    else -> Icons.Outlined.Person
+}
+
+/**
+ * Fiat caption beneath a sat balance (iOS `showFiat`): only when the user's
+ * fiat-balance preference is on and a usable BTC price is loaded. Sub-cent
+ * conversions stay hidden (`AmountFormatter.formatFiat` returns null), and
+ * non-sat unit balances never reach here — they render native-only.
+ */
+internal fun mintSatBalanceFiatSecondary(
+    balanceSats: Long,
+    showFiat: Boolean,
+    btcPrice: Double,
+    currencyCode: String,
+    formatter: AmountFormatter = AmountFormatter(),
+): String? {
+    if (!showFiat || btcPrice <= 0) return null
+    return formatter.formatFiat(balanceSats, btcPrice, currencyCode)
 }
 
 // Inline copy-row glyph (smaller than the body 20dp).

@@ -20,10 +20,12 @@ import com.cashu.me.Models.MeltPaymentResult
 import com.cashu.me.Models.MeltQuoteInfo
 import com.cashu.me.Models.MeltQuoteState
 import com.cashu.me.Models.MeltSettlement
+import com.cashu.me.Models.MintContact
 import com.cashu.me.Models.MintInfo
 import com.cashu.me.Models.MintQuoteInfo
-import com.cashu.me.Models.NutSupport
 import com.cashu.me.Models.MintQuoteState
+import com.cashu.me.Models.MintSoftware
+import com.cashu.me.Models.NutSupport
 import com.cashu.me.Models.PaymentMethodKind
 import com.cashu.me.Models.RestoreMintResult
 import com.cashu.me.Models.SendTokenResult
@@ -724,19 +726,10 @@ class CdkWalletGatewayImpl : WalletGateway {
     }
 
     private fun CdkMintInfo.toDomain(mintUrl: String): MintInfo {
-        // NUT-04 methods are no longer filtered to sat — minting into usd/eur is
-        // supported. NUT-05 melt stays sat-only (pay-side non-sat is deferred).
-        val mintMethods = nuts.nut04.methods
-            .map { it.method.toDomain() }
-            .distinct()
-            .sortedBy { it.sortOrder }
-            .ifEmpty { listOf(PaymentMethodKind.Bolt11) }
-        val meltMethods = nuts.nut05.methods
-            .filter { it.unit == CdkCurrencyUnit.Sat }
-            .map { it.method.toDomain() }
-            .distinct()
-            .sortedBy { it.sortOrder }
-            .ifEmpty { listOf(PaymentMethodKind.Bolt11) }
+        // NUT-04/05 rails keep their reported-empty state (an absent direction is
+        // hidden, not replaced with BOLT11); see CdkMintMethodMapping.kt.
+        val mintMethods = nuts.reportedMintMethods()
+        val meltMethods = nuts.reportedMeltMethods()
         val units = (nuts.mintUnits + nuts.meltUnits)
             .map { it.toDomainUnit() }
             .distinct()
@@ -756,6 +749,9 @@ class CdkWalletGatewayImpl : WalletGateway {
             mintUnits = mintUnits,
             supportedMintMethods = mintMethods,
             supportedMeltMethods = meltMethods,
+            contacts = contact.orEmpty().map { MintContact(method = it.method, info = it.info) },
+            tosUrl = tosUrl,
+            software = version?.let { MintSoftware(name = it.name, version = it.version) },
             descriptionLong = descriptionLong,
             motd = motd,
             nutSupport = NutSupport(

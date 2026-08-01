@@ -124,21 +124,21 @@ Platform-specific capabilities remain intentionally outside parity, including iC
 
 ### Mint details
 
-- [ ] **[P2 · iOS → Android] Show the fiat secondary balance when enabled.** iOS adds the fiat conversion beneath the sat balance; Android shows only sats plus native non-sat-unit balances. **Done when:** Android mirrors the user’s global fiat-balance preference without converting balances whose unit is not sat.
+- [x] **[P2 · iOS → Android] Show the fiat secondary balance when enabled.** iOS adds the fiat conversion beneath the sat balance; Android shows only sats plus native non-sat-unit balances. **Done when:** Android mirrors the user’s global fiat-balance preference without converting balances whose unit is not sat.
 
-- [ ] **[P1 · iOS → Android] Distinguish cached mint metadata from live refresh state.** Android already shows Checking, Online, and Offline connection states, but it can silently display cached NUT-06 data after a live fetch fails, with no failure message or retry. iOS surfaces the failure with a banner and Offline state, though it too falls back to cached description and payment methods without a stale label. **Done when:** Android identifies loading or refresh, distinguishes cached/stale content from a successful live response, presents a user-facing failure explanation, and offers Retry where useful.
+- [x] **[P1 · iOS → Android] Distinguish cached mint metadata from live refresh state.** Android already shows Checking, Online, and Offline connection states, but it can silently display cached NUT-06 data after a live fetch fails, with no failure message or retry. iOS surfaces the failure with a banner and Offline state, though it too falls back to cached description and payment methods without a stale label. **Done when:** Android identifies loading or refresh, distinguishes cached/stale content from a successful live response, presents a user-facing failure explanation, and offers Retry where useful.
 
-- [ ] **[P1 · iOS → Android] Add the Contact section.** iOS renders reported email, web, Nostr, Twitter/X, and Telegram contacts with appropriate actions; Android omits them. **Done when:** Android displays every reported contact, labels the remote source, and opens only safely parsed supported targets.
+- [x] **[P1 · iOS → Android] Add the Contact section.** iOS renders reported email, web, Nostr, Twitter/X, and Telegram contacts with appropriate actions; Android omits them. **Done when:** Android displays every reported contact, labels the remote source, and opens only safely parsed supported targets.
 
-- [ ] **[P1 · iOS → Android] Show reported Terms of Service.** iOS includes the mint’s live Terms link; Android omits it. **Done when:** Android shows a safely parsed external link when reported, clearly identifies the destination, and handles an invalid or absent value without a dead row.
+- [x] **[P1 · iOS → Android] Show reported Terms of Service.** iOS includes the mint’s live Terms link; Android omits it. **Done when:** Android shows a safely parsed external link when reported, clearly identifies the destination, and handles an invalid or absent value without a dead row.
 
-- [ ] **[P2 · iOS → Android] Show reported mint software and version.** iOS includes the live software name/version; Android omits it. **Done when:** Android displays the fields when reported and does not invent placeholders for absent values.
+- [x] **[P2 · iOS → Android] Show reported mint software and version.** iOS includes the live software name/version; Android omits it. **Done when:** Android displays the fields when reported and does not invent placeholders for absent values.
 
-- [ ] **[P2 · iOS → Android] Add the metadata provenance footer.** iOS says “Information reported by the mint”; Android does not identify the source of remote descriptions, contacts, software, or terms. **Done when:** Android includes an equivalent qualification near the metadata.
+- [x] **[P2 · iOS → Android] Add the metadata provenance footer.** iOS says “Information reported by the mint”; Android does not identify the source of remote descriptions, contacts, software, or terms. **Done when:** Android includes an equivalent qualification near the metadata.
 
-- [ ] **[P1 · iOS → Android] Preserve and hide absent payment methods.** Android’s domain mapping substitutes BOLT11 when a live NUT-04 or NUT-05 method list is empty, and details always render both directions. **Done when:** Android preserves whether each direction was actually reported, uses compatibility fallback only when metadata is genuinely unknown, and hides a direction the live mint reports as absent.
+- [x] **[P1 · iOS → Android] Preserve and hide absent payment methods.** Android’s domain mapping substitutes BOLT11 when a live NUT-04 or NUT-05 method list is empty, and details always render both directions. **Done when:** Android preserves whether each direction was actually reported, uses compatibility fallback only when metadata is genuinely unknown, and hides a direction the live mint reports as absent.
 
-- [ ] **[P1 · iOS → Android] Surface Set as Default progress and errors.** iOS disables the action, shows progress, and renders an inline failure; Android launches the operation with no visible progress or error. **Done when:** Android prevents duplicate submission and clearly reports success or failure without changing the apparent default on failure.
+- [x] **[P1 · iOS → Android] Surface Set as Default progress and errors.** iOS disables the action, shows progress, and renders an inline failure; Android launches the operation with no visible progress or error. **Done when:** Android prevents duplicate submission and clearly reports success or failure without changing the apparent default on failure.
 
 ### Settings — information architecture, display, and destructive actions
 

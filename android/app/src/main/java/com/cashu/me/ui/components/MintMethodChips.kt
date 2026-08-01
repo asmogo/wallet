@@ -36,7 +36,7 @@ fun MintMethodChips(
     modifier: Modifier = Modifier,
 ) {
     val methods = remember(mint.supportedMintMethods, mint.supportedMeltMethods) {
-        (mint.supportedMintMethods + mint.supportedMeltMethods).distinct().sortedBy { it.sortOrder }
+        (mint.effectiveMintMethods + mint.effectiveMeltMethods).distinct().sortedBy { it.sortOrder }
     }
     MintMethodChips(methods = methods, modifier = modifier)
 }

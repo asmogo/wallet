@@ -38,6 +38,8 @@ private val InspectorEditHintSize = 16.dp
  * @param loading skeleton fill-in (iOS `.redacted(.placeholder)` on confirm fee
  *   rows): while true a quiet placeholder bar holds the value slot, then the
  *   real value crossfades in place when it lands.
+ * @param secondaryValue optional caption beneath the value (iOS mint detail's
+ *   fiat conversion under the sat balance), always quiet onSurfaceVariant.
  */
 @Composable
 fun InspectorRow(
@@ -51,6 +53,7 @@ fun InspectorRow(
     trailingIconTint: Color? = null,
     valueMonospaced: Boolean = false,
     valueColor: Color? = null,
+    secondaryValue: String? = null,
     loading: Boolean = false,
 ) {
     val rowMod = if (onClick != null) {
@@ -83,16 +86,30 @@ fun InspectorRow(
         // flush against the trailing edge, matching iOS (HStack + Spacer).
         Box(modifier = Modifier.weight(1f), contentAlignment = Alignment.CenterEnd) {
             SkeletonValue(loading = loading) {
-                Text(
-                    text = value,
-                    style = if (valueMonospaced) {
-                        MaterialTheme.typography.bodyMedium.withMonoDigits()
-                    } else MaterialTheme.typography.bodyMedium,
-                    color = valueColor ?: MaterialTheme.colorScheme.onSurface,
-                    maxLines = 1,
-                    overflow = TextOverflow.MiddleEllipsis,
-                    textAlign = TextAlign.End,
-                )
+                Column(horizontalAlignment = Alignment.End) {
+                    Text(
+                        text = value,
+                        style = if (valueMonospaced) {
+                            MaterialTheme.typography.bodyMedium.withMonoDigits()
+                        } else MaterialTheme.typography.bodyMedium,
+                        color = valueColor ?: MaterialTheme.colorScheme.onSurface,
+                        maxLines = 1,
+                        overflow = TextOverflow.MiddleEllipsis,
+                        textAlign = TextAlign.End,
+                    )
+                    if (secondaryValue != null) {
+                        Text(
+                            text = secondaryValue,
+                            style = if (valueMonospaced) {
+                                MaterialTheme.typography.bodySmall.withMonoDigits()
+                            } else MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                            overflow = TextOverflow.MiddleEllipsis,
+                            textAlign = TextAlign.End,
+                        )
+                    }
+                }
             }
         }
         if (editable) {

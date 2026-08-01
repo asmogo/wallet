@@ -60,7 +60,7 @@ class NativeWalletLocalMintInstrumentedTest {
             payer.gateway.ensureWallet(nutshellMintUrl)
             val nutshellInfo = payer.gateway.fetchMintInfo(nutshellMintUrl)
             assertNotNull(nutshellInfo)
-            assertTrue(nutshellInfo!!.supportedMintMethods.contains(PaymentMethodKind.Bolt11))
+            assertTrue(nutshellInfo!!.supportedMintMethods.orEmpty().contains(PaymentMethodKind.Bolt11))
 
             step = "Nutshell BOLT11 mint"
             val paidQuote = payer.gateway.createMintQuote(
@@ -108,8 +108,8 @@ class NativeWalletLocalMintInstrumentedTest {
             payer.gateway.ensureWallet(cdkMintUrl)
             val cdkInfo = payer.gateway.fetchMintInfo(cdkMintUrl)
             assertNotNull(cdkInfo)
-            assertTrue(cdkInfo!!.supportedMintMethods.contains(PaymentMethodKind.Bolt12))
-            assertTrue(cdkInfo.supportedMintMethods.contains(PaymentMethodKind.Onchain))
+            assertTrue(cdkInfo!!.supportedMintMethods.orEmpty().contains(PaymentMethodKind.Bolt12))
+            assertTrue(cdkInfo.supportedMintMethods.orEmpty().contains(PaymentMethodKind.Onchain))
             assertTrue(cdkInfo.effectiveMintUnits.contains("usd"))
 
             step = "CDK BOLT11 sat mint"

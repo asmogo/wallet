@@ -455,8 +455,11 @@ class WalletManager(
                 iconUrl = fetched.iconUrl ?: mint.iconUrl,
                 units = fetched.units.ifEmpty { mint.units },
                 mintUnits = fetched.mintUnits.ifEmpty { mint.mintUnits },
-                supportedMintMethods = fetched.supportedMintMethods.ifEmpty { mint.supportedMintMethods },
-                supportedMeltMethods = fetched.supportedMeltMethods.ifEmpty { mint.supportedMeltMethods },
+                // A live report is authoritative — including a reported-empty
+                // list (the mint dropped a rail); only an unknown (unfetched)
+                // value keeps the previously stored one.
+                supportedMintMethods = fetched.supportedMintMethods ?: mint.supportedMintMethods,
+                supportedMeltMethods = fetched.supportedMeltMethods ?: mint.supportedMeltMethods,
                 lastUpdatedEpochMillis = System.currentTimeMillis(),
                 balance = mint.balance,
                 isActive = mint.isActive,
