@@ -20,22 +20,35 @@ import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import com.cashu.me.Core.AppLockManager
 import com.cashu.me.Core.SettingsManager
 import com.cashu.me.ui.components.CanvasDivider
 import com.cashu.me.ui.components.SectionHeader
 import com.cashu.me.ui.components.ToggleRow
 import com.cashu.me.ui.components.ToolbarIcon
+import com.cashu.me.ui.security.findFragmentActivity
 import com.cashu.me.ui.theme.CashuTheme
+import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun PrivacyScreen(
     settingsManager: SettingsManager,
+    appLockManager: AppLockManager,
     onClose: () -> Unit,
 ) {
     val settings by settingsManager.state.collectAsState()
+    val context = LocalContext.current
+    val activity = remember(context) { context.findFragmentActivity() }
+    val scope = rememberCoroutineScope()
+    var isEnablingAppLock by remember { mutableStateOf(false) }
     Scaffold(
         topBar = {
             TopAppBar(
@@ -62,7 +75,24 @@ fun PrivacyScreen(
                 title = "App Lock",
                 subtitle = "Require device authentication when returning to the wallet",
                 checked = settings.appLockEnabled,
-                onCheckedChange = settingsManager::setAppLockEnabled,
+                onCheckedChange = { enabled ->
+                    if (!enabled) {
+                        settingsManager.setAppLockEnabled(false)
+                    } else {
+                        scope.launch {
+                            isEnablingAppLock = true
+                            try {
+                                enableAppLockAfterAuthentication(
+                                    authenticate = { appLockManager.authenticateForAppLockEnablement(activity) },
+                                    setEnabled = settingsManager::setAppLockEnabled,
+                                )
+                            } finally {
+                                isEnablingAppLock = false
+                            }
+                        }
+                    }
+                },
+                enabled = !isEnablingAppLock,
             )
 
             SectionHeader("Background work")
@@ -136,4 +166,11 @@ fun PrivacyScreen(
 
         }
     }
+}
+
+internal suspend fun enableAppLockAfterAuthentication(
+    authenticate: suspend () -> Boolean,
+    setEnabled: (Boolean) -> Unit,
+) {
+    setEnabled(authenticate())
 }
