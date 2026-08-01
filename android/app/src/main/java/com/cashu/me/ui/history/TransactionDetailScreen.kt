@@ -320,7 +320,23 @@ fun TransactionDetailScreen(
                             onClick = { onClaimReceiveToken(pendingReceiveToken) },
                         )
                     } else {
+                        if (copyableContent != null) {
+                            // Copy is a secondary convenience, not a primary action —
+                            // quiet neutral tonal fill (matches Home's Send/Receive)
+                            // rather than the loud inverted-ink primary.
+                            PrimaryButton(
+                                text = if (copied) "Copied" else "Copy",
+                                onClick = {
+                                    clipboard.setText(AnnotatedString(copyableContent))
+                                    copied = true
+                                },
+                                colors = neutralActionButtonColors(),
+                            )
+                        }
                         if (offersManualClaimCheck && pendingSentToken != null) {
+                            if (copyableContent != null) {
+                                Spacer(Modifier.height(CashuTheme.spacing.tight))
+                            }
                             PrimaryButton(
                                 text = if (checkingClaim) "Checking…" else "Check Status",
                                 onClick = {
@@ -347,22 +363,6 @@ fun TransactionDetailScreen(
                                         }
                                         liveRegion = LiveRegionMode.Polite
                                     },
-                            )
-                        }
-                        if (offersManualClaimCheck && copyableContent != null) {
-                            Spacer(Modifier.height(CashuTheme.spacing.tight))
-                        }
-                        if (copyableContent != null) {
-                            // Copy is a secondary convenience, not a primary action —
-                            // quiet neutral tonal fill (matches Home's Send/Receive)
-                            // rather than the loud inverted-ink primary.
-                            PrimaryButton(
-                                text = if (copied) "Copied" else "Copy",
-                                onClick = {
-                                    clipboard.setText(AnnotatedString(copyableContent))
-                                    copied = true
-                                },
-                                colors = neutralActionButtonColors(),
                             )
                         }
                     }
