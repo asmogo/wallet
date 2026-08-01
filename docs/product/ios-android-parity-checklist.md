@@ -104,15 +104,15 @@ Platform-specific capabilities remain intentionally outside parity, including iC
 
 - [ ] **[P1 · Android → iOS] Search transaction and request memos.** Android includes memos in History search; iOS searches titles and numeric amounts only. **Done when:** iOS matches memo text case-insensitively for both item types.
 
-- [ ] **[P2 · iOS → Android] Search a Cashu Request’s Total received amount.** iOS includes the aggregate received value in search; Android only searches the requested amount. **Done when:** Android matches both configured and received totals using the same normalized amount formats as other History search.
+- [x] **[P2 · iOS → Android] Search a Cashu Request’s Total received amount.** iOS includes the aggregate received value in search; Android only searches the requested amount. **Done when:** Android matches both configured and received totals using the same normalized amount formats as other History search.
 
-- [ ] **[P1 · iOS → Android] Explain all consequences of removing a Cashu Request row.** iOS says the QR and pending payment routing remain valid; Android only says received payments stay in the wallet. **Done when:** Android states before deletion that previously received funds remain, the QR and payment routing remain valid, and only the History row is removed.
+- [x] **[P1 · iOS → Android] Explain all consequences of removing a Cashu Request row.** iOS says the QR and pending payment routing remain valid; Android only says received payments stay in the wallet. **Done when:** Android states before deletion that previously received funds remain, the QR and payment routing remain valid, and only the History row is removed.
 
-- [ ] **[P1 · iOS → Android] Add removal for an ordinary parked incoming token.** Android already supports declining a held Cashu Request payment, but it has no equivalent removal for a normal unclaimed token. **Done when:** Android provides a discoverable removal action for ordinary parked tokens and warns that the ecash will be discarded and only the sender can reissue it.
+- [x] **[P1 · iOS → Android] Add removal for an ordinary parked incoming token.** Android already supports declining a held Cashu Request payment, but it has no equivalent removal for a normal unclaimed token. **Done when:** Android provides a discoverable removal action for ordinary parked tokens and warns that the ecash will be discarded and only the sender can reissue it.
 
-- [ ] **[P2 · iOS → Android] Honor the preferred amount unit in transaction details.** iOS makes sats and fiat available for sat-denominated Lightning/ecash records; Android always displays sats. **Done when:** Android leads with the saved primary setting, exposes the alternate value accessibly, and preserves on-chain and non-sat-unit exceptions.
+- [x] **[P2 · iOS → Android] Honor the preferred amount unit in transaction details.** iOS makes sats and fiat available for sat-denominated Lightning/ecash records; Android always displays sats. **Done when:** Android leads with the saved primary setting, exposes the alternate value accessibly, and preserves on-chain and non-sat-unit exceptions.
 
-- [ ] **[P2 · iOS → Android] Announce the active History filter.** iOS exposes the selected filter as an accessibility value; Android’s filter control is announced only as “Filter.” **Done when:** TalkBack reports All, Pending only, or Completed only on the control.
+- [x] **[P2 · iOS → Android] Announce the active History filter.** iOS exposes the selected filter as an accessibility value; Android’s filter control is announced only as “Filter.” **Done when:** TalkBack reports All, Pending only, or Completed only on the control.
 
 ### Mints list, add, and discovery
 
