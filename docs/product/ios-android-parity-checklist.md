@@ -192,7 +192,7 @@ Platform-specific capabilities remain intentionally outside parity, including iC
 
 - [ ] **[P2 · iOS → Android] Give key generation native destructive semantics.** Android’s Generate action is visually neutral even though it replaces an identity; iOS uses a destructive confirmation role. **Done when:** Android uses the platform’s destructive semantic role and accessible announcement for the replacement action. It need not copy iOS styling.
 
-- [ ] **[P2 · iOS → Android] Add the relay-purpose explanation.** iOS explains that relays synchronize npub.cash-compatible data and backups; Android lists relays without that context. **Done when:** Android explains why changing the relay list affects wallet features.
+- [x] **[P2 · iOS → Android] Add the relay-purpose explanation.** iOS explains that relays synchronize npub.cash-compatible data and backups; Android lists relays without that context. **Done when:** Android explains why changing the relay list affects wallet features.
 
 ### Settings — Wallet Connect and locked-ecash keys
 
