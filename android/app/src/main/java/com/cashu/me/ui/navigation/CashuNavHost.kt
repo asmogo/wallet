@@ -96,6 +96,8 @@ fun CashuNavHost(
             val mintUrl = URLDecoder.decode(encoded, StandardCharsets.UTF_8.name())
             MintDetailScreen(
                 walletManager = container.walletManager,
+                settingsManager = container.settingsManager,
+                priceService = container.priceService,
                 mintUrl = mintUrl,
                 onClose = { navController.popBackStack() },
             )

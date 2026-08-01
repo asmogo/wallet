@@ -73,8 +73,11 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.delay
+import com.cashu.me.Core.AmountFormatter
+import com.cashu.me.Core.PriceService
 import com.cashu.me.Core.Protocols.CurrencyAmount
 import com.cashu.me.Core.Protocols.CurrencyRegistry
+import com.cashu.me.Core.SettingsManager
 import com.cashu.me.Core.Wallet.userFacingWalletMessage
 import com.cashu.me.Core.WalletManager
 import com.cashu.me.Core.shortenMintUrl
@@ -101,10 +104,14 @@ import com.cashu.me.ui.testing.UiTestTags
 @Composable
 fun MintDetailScreen(
     walletManager: WalletManager,
+    settingsManager: SettingsManager,
+    priceService: PriceService,
     mintUrl: String,
     onClose: () -> Unit,
 ) {
     val walletState by walletManager.state.collectAsState()
+    val settings by settingsManager.state.collectAsState()
+    val priceState by priceService.state.collectAsState()
     val mint = walletState.mints.firstOrNull { it.url == mintUrl }
     val isActive = walletState.activeMint?.url == mintUrl
     var confirmingRemove by remember { mutableStateOf(false) }
@@ -206,6 +213,15 @@ fun MintDetailScreen(
                 InspectorRow(
                     label = "Balance",
                     value = "${mint.balance} sat",
+                    // iOS parity: the fiat conversion rides beneath the sat
+                    // balance when the user enabled it — sats only, never the
+                    // non-sat unit rows below.
+                    secondaryValue = mintSatBalanceFiatSecondary(
+                        balanceSats = mint.balance,
+                        showFiat = settings.showFiatBalance,
+                        btcPrice = priceState.btcPrice,
+                        currencyCode = settings.bitcoinPriceCurrency,
+                    ),
                     leadingIcon = Icons.Outlined.CurrencyBitcoin,
                     valueMonospaced = true,
                 )
@@ -726,6 +742,23 @@ private fun mintContactIcon(method: String): ImageVector = when (method.trim().l
     "website", "url", "web" -> Icons.Outlined.Public
     "telegram" -> Icons.Outlined.Send
     else -> Icons.Outlined.Person
+}
+
+/**
+ * Fiat caption beneath a sat balance (iOS `showFiat`): only when the user's
+ * fiat-balance preference is on and a usable BTC price is loaded. Sub-cent
+ * conversions stay hidden (`AmountFormatter.formatFiat` returns null), and
+ * non-sat unit balances never reach here — they render native-only.
+ */
+internal fun mintSatBalanceFiatSecondary(
+    balanceSats: Long,
+    showFiat: Boolean,
+    btcPrice: Double,
+    currencyCode: String,
+    formatter: AmountFormatter = AmountFormatter(),
+): String? {
+    if (!showFiat || btcPrice <= 0) return null
+    return formatter.formatFiat(balanceSats, btcPrice, currencyCode)
 }
 
 // Inline copy-row glyph (smaller than the body 20dp).
