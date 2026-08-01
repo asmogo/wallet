@@ -51,9 +51,11 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.cashu.me.Core.AppLockManager
 import com.cashu.me.Core.NostrService
+import com.cashu.me.Core.NostrSignerSelectionAction
 import com.cashu.me.Core.NostrSignerType
 import com.cashu.me.Core.NwcManager
 import com.cashu.me.Core.SettingsManager
+import com.cashu.me.Core.nostrSignerSelectionAction
 import com.cashu.me.ui.components.CanvasDivider
 import com.cashu.me.ui.components.CashuTextField
 import com.cashu.me.ui.components.DestructiveTextButton
@@ -112,6 +114,7 @@ fun NostrScreen(
     var importError by remember { mutableStateOf<String?>(null) }
     var addRelayOpen by remember { mutableStateOf(false) }
     var addRelayError by remember { mutableStateOf<String?>(null) }
+    var showMissingCustomKeyChoice by remember { mutableStateOf(false) }
     var showGenerateConfirm by remember { mutableStateOf(false) }
     var showResetConfirm by remember { mutableStateOf(false) }
 
@@ -148,7 +151,21 @@ fun NostrScreen(
                             ),
                             selected = kind == nostrState.signerType,
                             onClick = {
-                                runCatching { nostrService.switchSignerType(kind) }
+                                when (
+                                    nostrSignerSelectionAction(
+                                        current = nostrState.signerType,
+                                        requested = kind,
+                                        hasCustomKey = nostrService.hasCustomPrivateKey(),
+                                    )
+                                ) {
+                                    NostrSignerSelectionAction.NoChange -> Unit
+                                    NostrSignerSelectionAction.ChooseCustomKey -> {
+                                        showMissingCustomKeyChoice = true
+                                    }
+                                    NostrSignerSelectionAction.Switch -> {
+                                        runCatching { nostrService.switchSignerType(kind) }
+                                    }
+                                }
                             },
                         ) { Text(kind.displayName) }
                     }
@@ -332,6 +349,36 @@ fun NostrScreen(
             )
             Spacer(Modifier.height(CashuTheme.spacing.section))
         }
+    }
+
+    if (showMissingCustomKeyChoice) {
+        AlertDialog(
+            onDismissRequest = { showMissingCustomKeyChoice = false },
+            title = { Text("Choose a custom key") },
+            text = {
+                Text(
+                    "Generate a new Nostr identity or import an existing nsec before switching to Custom Key.",
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    showMissingCustomKeyChoice = false
+                    showGenerateConfirm = true
+                }) { Text("Generate") }
+            },
+            dismissButton = {
+                Row {
+                    TextButton(onClick = { showMissingCustomKeyChoice = false }) {
+                        Text("Cancel")
+                    }
+                    TextButton(onClick = {
+                        showMissingCustomKeyChoice = false
+                        showImport = true
+                    }) { Text("Import") }
+                }
+            },
+        )
     }
 
     if (showImport) {

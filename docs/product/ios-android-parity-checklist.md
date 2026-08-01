@@ -182,7 +182,7 @@ Platform-specific capabilities remain intentionally outside parity, including iC
 
 - [ ] **[P0 · iOS → Android] Do not silently fail signer changes or key generation/reset.** iOS catches and renders errors; Android wraps several operations in `runCatching` and discards failures. **Done when:** every Android identity mutation has progress where needed, visible user-facing failure feedback, and unchanged state on failure.
 
-- [ ] **[P0 · iOS → Android] Require an explicit choice before switching to a missing custom key.** Android automatically generates a new identity when the user selects Custom Key without one; iOS prompts to generate or import. **Done when:** selecting Custom Key never creates or replaces an identity implicitly and asks the user to generate or import before the signer changes.
+- [x] **[P0 · iOS → Android] Require an explicit choice before switching to a missing custom key.** Android automatically generates a new identity when the user selects Custom Key without one; iOS prompts to generate or import. **Done when:** selecting Custom Key never creates or replaces an identity implicitly and asks the user to generate or import before the signer changes.
 
 - [x] **[P1 · iOS → Android] Warn next to private-key reveal and copy.** Android already authenticates reveal/copy but shows masked/reveal/copy controls without nearby consequence text. **Done when:** Android explains that the nsec controls the user’s Nostr identity and Lightning address and must not be shared, before or alongside the authenticated actions.
 
