@@ -302,24 +302,32 @@ class TokenService: ObservableObject {
     /// decoded from a token created under an IDv2 keyset may carry a short/legacy
     /// keyset ID and CDK's `checkProofsSpent` will throw:
     ///   "Short keyset id does not match any of the provided IDv2s"
+    func checkTokenSpent(token: String, mintUrl: String) async throws -> Bool {
+        guard let repo = walletRepository() else {
+            throw WalletError.notInitialized
+        }
+
+        let tokenObj = try Token.decode(encodedToken: token)
+        let mintUrlObj = MintUrl(url: mintUrl)
+        let tokenUnit = tokenObj.unit() ?? .sat
+
+        let wallet = try await repo.getWallet(mintUrl: mintUrlObj, unit: tokenUnit)
+        let keysets = try await wallet.getMintKeysets(filter: .all)
+        let proofs = try tokenObj.proofs(mintKeysets: keysets)
+        let spentStates = try await wallet.checkProofsSpent(proofs: proofs)
+
+        // If any proofs are spent, the token has been redeemed.
+        return spentStates.contains(true)
+    }
+
+    /// Passive checks keep their historical non-throwing contract. Interactive
+    /// checks call `checkTokenSpent` so failures can be shown instead of being
+    /// misreported as a definitive "not claimed" result.
     func checkTokenSpendable(token: String, mintUrl: String) async -> Bool {
-        guard let repo = walletRepository() else { return false }
-
         do {
-            let tokenObj = try Token.decode(encodedToken: token)
-            let mintUrlObj = MintUrl(url: mintUrl)
-            let tokenUnit = tokenObj.unit() ?? .sat
-
-            let wallet = try await repo.getWallet(mintUrl: mintUrlObj, unit: tokenUnit)
-            let keysets = try await wallet.getMintKeysets(filter: .all)
-            let proofs = try tokenObj.proofs(mintKeysets: keysets)
-
-            let spentStates = try await wallet.checkProofsSpent(proofs: proofs)
-
-            // If any proofs are spent, the token has been redeemed
-            return spentStates.contains(true)
+            return try await checkTokenSpent(token: token, mintUrl: mintUrl)
         } catch {
-            print("Error checking token spendable: \(error)")
+            AppLogger.wallet.error("Error checking token spent status: \(error)")
             return false
         }
     }

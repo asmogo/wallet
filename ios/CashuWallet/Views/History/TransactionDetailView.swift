@@ -13,6 +13,9 @@ struct TransactionDetailView: View {
     /// Label of the row whose value was just copied — drives the doc.on.doc →
     /// green checkmark swap on tap-to-copy rows (Address / Transaction ID / …).
     @State private var copiedRowLabel: String?
+    @State private var isCheckingClaim = false
+    @State private var manualClaimCheckResult: PendingTokenClaimCheckResult?
+    @State private var manualClaimCheckTask: Task<Void, Never>?
 
     init(transaction: WalletTransaction) {
         self.seed = transaction
@@ -45,6 +48,20 @@ struct TransactionDetailView: View {
         if showsQR { return qrContent }
         if transaction.kind == .ecash, let token = transaction.token { return token }
         return nil
+    }
+
+    private var pendingSentToken: PendingToken? {
+        pendingSentTokenFor(
+            transaction: transaction,
+            pendingTokens: walletManager.pendingTokens
+        )
+    }
+
+    private var offersManualClaimCheck: Bool {
+        shouldOfferManualClaimCheck(
+            automaticChecksEnabled: settings.checkSentTokens,
+            pendingToken: pendingSentToken
+        )
     }
 
     /// A reusable BOLT12 offer — its bech32 human-readable prefix is `lno`.
@@ -150,25 +167,62 @@ struct TransactionDetailView: View {
                         }
                         .padding(.top, 8)
                         .padding(.horizontal, 4)
+
+                        if offersManualClaimCheck {
+                            switch manualClaimCheckResult {
+                            case .notClaimed:
+                                InlineNotice(
+                                    message: "This token has not been claimed yet.",
+                                    title: "Status checked",
+                                    severity: .info,
+                                    tinted: true
+                                )
+                            case .failed(let message):
+                                InlineNotice(
+                                    message: message.text,
+                                    title: "Couldn't check status",
+                                    severity: message.severity,
+                                    tinted: true
+                                )
+                            case .claimed, nil:
+                                EmptyView()
+                            }
+                        }
                     }
                     .padding(.horizontal)
                 }
 
-                // Single primary action — Copy. Appears for an actionable
-                // artifact (unclaimed token / pending or reusable invoice /
-                // on-chain address) and, as a receipt, for a settled ecash token.
-                // Share stays top-right in the toolbar, gated on `showsQR`, so a
-                // spent token is never re-presented as a shareable payment code.
-                // See DESIGN.md → Share-At-Top Rule + settled-ecash receipt carve-out.
-                if let content = copyableContent {
-                    Button(action: { copyContent(content) }) {
-                        Text(copyButtonText)
+                // Pending outgoing ecash gains the same one-off status action as
+                // the generated-token screen when automatic checks are disabled.
+                // Keep it after Copy so the two surfaces share the same action order.
+                if offersManualClaimCheck || copyableContent != nil {
+                    VStack(spacing: 12) {
+                        if let content = copyableContent {
+                            Button(action: { copyContent(content) }) {
+                                Text(copyButtonText)
+                            }
+                            .glassButton()
+                            .accessibilityLabel(copyButtonText == "Copied" ? "Copied" : "Copy \(qrContentTypeLabel)")
+                            .accessibilityHint("Copies the \(qrContentAccessibilityLabel) to clipboard")
+                        }
+
+                        if offersManualClaimCheck, let pendingToken = pendingSentToken {
+                            Button(action: { startManualClaimCheck(pendingToken) }) {
+                                if isCheckingClaim {
+                                    ProgressView()
+                                } else {
+                                    Text("Check Status")
+                                }
+                            }
+                            .glassButton()
+                            .disabled(isCheckingClaim)
+                            .accessibilityIdentifier("cashu.history.check-token-status")
+                            .accessibilityLabel(isCheckingClaim ? "Checking claim status" : "Check Status")
+                            .accessibilityInputLabels(["Check Status"])
+                        }
                     }
-                    .glassButton()
                     .padding(.horizontal)
                     .padding(.bottom, 16)
-                    .accessibilityLabel(copyButtonText == "Copied" ? "Copied" : "Copy \(qrContentTypeLabel)")
-                    .accessibilityHint("Copies the \(qrContentAccessibilityLabel) to clipboard")
                 }
             }
             .navigationBarTitleDisplayMode(.inline)
@@ -203,6 +257,9 @@ struct TransactionDetailView: View {
             .task(id: seed.id) {
                 guard let quoteId = seed.mintQuoteIdForStatusRefresh else { return }
                 _ = await walletManager.refreshPendingMintQuote(quoteId: quoteId)
+            }
+            .onDisappear {
+                manualClaimCheckTask?.cancel()
             }
         }
     }
@@ -454,5 +511,41 @@ struct TransactionDetailView: View {
         DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
             copyButtonText = "Copy"
         }
+    }
+
+    private func startManualClaimCheck(_ pendingToken: PendingToken) {
+        manualClaimCheckTask?.cancel()
+        manualClaimCheckTask = Task {
+            isCheckingClaim = true
+            manualClaimCheckResult = nil
+            defer { isCheckingClaim = false }
+
+            do {
+                let outcome = try await runPendingTokenClaimCheck {
+                    try await walletManager.checkPendingTokenStatus(pendingToken: pendingToken)
+                }
+                guard !Task.isCancelled else { return }
+
+                manualClaimCheckResult = outcome
+                announceClaimCheckResult(outcome)
+            } catch is CancellationError {
+                return
+            } catch {
+                return
+            }
+        }
+    }
+
+    private func announceClaimCheckResult(_ outcome: PendingTokenClaimCheckResult) {
+        let announcement: String
+        switch outcome {
+        case .claimed:
+            announcement = "Token claimed."
+        case .notClaimed:
+            announcement = "Status checked. This token has not been claimed yet."
+        case .failed(let message):
+            announcement = "Couldn't check status. \(message.text)"
+        }
+        AccessibilityNotification.Announcement(announcement).post()
     }
 }

@@ -245,6 +245,113 @@ final class TransactionServiceTests: XCTestCase {
         XCTAssertEqual(service.pendingTokens.count, 1, "Unrelated pending token should remain")
     }
 
+    // MARK: - Manual pending-token claim checks
+
+    func testManualClaimCheckIsOnlyOfferedWhenAutomaticChecksAreDisabled() {
+        let pending = pendingToken(id: "manual", amount: 42)
+
+        XCTAssertTrue(
+            shouldOfferManualClaimCheck(
+                automaticChecksEnabled: false,
+                pendingToken: pending
+            )
+        )
+        XCTAssertFalse(
+            shouldOfferManualClaimCheck(
+                automaticChecksEnabled: true,
+                pendingToken: pending
+            )
+        )
+        XCTAssertFalse(
+            shouldOfferManualClaimCheck(
+                automaticChecksEnabled: false,
+                pendingToken: nil
+            )
+        )
+    }
+
+    func testPendingSentTokenResolvesMergedHistoryRowByEncodedToken() {
+        let pending = pendingToken(id: "local-pending-id", amount: 42)
+        var mergedRow = transaction(
+            id: "cdk-transaction-id",
+            status: .pending,
+            date: pending.date
+        )
+        mergedRow.isPendingToken = true
+        mergedRow.token = pending.token
+
+        let resolved = pendingSentTokenFor(
+            transaction: mergedRow,
+            pendingTokens: [pending]
+        )
+
+        XCTAssertEqual(resolved?.tokenId, pending.tokenId)
+    }
+
+    func testPendingSentTokenRejectsIncomingAndCompletedRows() {
+        let pending = pendingToken(id: "local-pending-id", amount: 42)
+        var incoming = transaction(
+            id: pending.tokenId,
+            status: .pending,
+            date: pending.date,
+            type: .incoming
+        )
+        incoming.isPendingToken = true
+        incoming.token = pending.token
+
+        var completed = transaction(
+            id: pending.tokenId,
+            status: .completed,
+            date: pending.date
+        )
+        completed.isPendingToken = true
+        completed.token = pending.token
+
+        XCTAssertNil(
+            pendingSentTokenFor(transaction: incoming, pendingTokens: [pending])
+        )
+        XCTAssertNil(
+            pendingSentTokenFor(transaction: completed, pendingTokens: [pending])
+        )
+    }
+
+    func testPendingTokenClaimCheckDistinguishesAllOutcomes() async throws {
+        let claimed = try await runPendingTokenClaimCheck { true }
+        guard case .claimed = claimed else {
+            return XCTFail("Expected claimed result")
+        }
+
+        let notClaimed = try await runPendingTokenClaimCheck { false }
+        guard case .notClaimed = notClaimed else {
+            return XCTFail("Expected not-claimed result")
+        }
+
+        let failed = try await runPendingTokenClaimCheck {
+            throw WalletError.networkError("network connection failed")
+        }
+        guard case .failed(let message) = failed else {
+            return XCTFail("Expected failed result")
+        }
+        XCTAssertEqual(
+            message.text,
+            "Couldn't reach the mint. Check your connection and try again."
+        )
+        XCTAssertEqual(message.recoverability, .retryable)
+    }
+
+    func testPendingTokenClaimCheckPreservesCancellation() async {
+        do {
+            _ = try await runPendingTokenClaimCheck {
+                throw CancellationError()
+            }
+            XCTFail("Expected cancellation")
+        } catch is CancellationError {
+            // Expected: leaving the screen must cancel instead of showing an error.
+        } catch {
+            XCTFail("Expected CancellationError, got \(error)")
+        }
+    }
+
     // MARK: - Pending Receive Tokens
 
     func testPendingReceiveTokensEmptyInitially() {

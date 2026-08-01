@@ -212,11 +212,21 @@ extension WalletManager {
         return await tokenService.checkTokenSpendable(token: token, mintUrl: resolvedMintUrl)
     }
 
-    func checkPendingTokenStatus(pendingToken: PendingToken) async {
-        let isSpent = await checkTokenSpendable(token: pendingToken.token, mintUrl: pendingToken.mintUrl)
+    func checkTokenSpent(token: String, mintUrl: String) async throws -> Bool {
+        try await tokenService.checkTokenSpent(token: token, mintUrl: mintUrl)
+    }
+
+    @discardableResult
+    func checkPendingTokenStatus(pendingToken: PendingToken) async throws -> Bool {
+        let isSpent = try await checkTokenSpent(
+            token: pendingToken.token,
+            mintUrl: pendingToken.mintUrl
+        )
         if isSpent {
             transactionService.markTokenAsClaimed(token: pendingToken.token)
+            await loadTransactions()
         }
+        return isSpent
     }
 
     func checkAllPendingTokens() async {
@@ -225,7 +235,19 @@ extension WalletManager {
         guard !pendingTokens.isEmpty else { return }
 
         for token in pendingTokens {
-            await checkPendingTokenStatus(pendingToken: token)
+            do {
+                let isSpent = try await tokenService.checkTokenSpent(
+                    token: token.token,
+                    mintUrl: token.mintUrl
+                )
+                if isSpent {
+                    transactionService.markTokenAsClaimed(token: token.token)
+                }
+            } catch is CancellationError {
+                return
+            } catch {
+                AppLogger.wallet.error("Pending token status check failed: \(error)")
+            }
         }
         await loadTransactions()
     }
