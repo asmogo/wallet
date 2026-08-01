@@ -189,7 +189,7 @@ struct OnboardingView: View {
 
             stagger(appeared: welcomeAppeared, index: 0) {
                 VStack(alignment: .leading, spacing: 14) {
-                    Text("Private cash.\nIn your pocket.")
+                    Text("Private cash. In your pocket.")
                         .font(.largeTitle.weight(.heavy))
                         .tracking(-0.5)
                         .foregroundStyle(.primary)
@@ -268,10 +268,11 @@ struct OnboardingView: View {
 
     private var conceptSheet: some View {
         VStack(alignment: .leading, spacing: 20) {
-            Text("Ecash is bearer cash\nfor Bitcoin.")
+            Text("Ecash is bearer cash for Bitcoin.")
                 .font(.title.weight(.heavy))
                 .tracking(-0.3)
                 .lineSpacing(-1)
+                .fixedSize(horizontal: false, vertical: true)
                 .padding(.top, 8)
 
             VStack(alignment: .leading, spacing: 16) {
@@ -619,7 +620,7 @@ struct OnboardingView: View {
 
             stagger(appeared: mnemonicAppeared, index: 0) {
                 VStack(alignment: .leading, spacing: 14) {
-                    Text("Your Seed\nPhrase.")
+                    Text("Your Seed Phrase.")
                         .font(.largeTitle.weight(.heavy))
                         .tracking(-0.5)
                         .foregroundStyle(.primary)
@@ -778,7 +779,7 @@ struct OnboardingView: View {
         VStack(spacing: 16) {
             stagger(appeared: firstMintAppeared, index: 0) {
                 VStack(alignment: .leading, spacing: 8) {
-                    Text("Pick your\nfirst mint.")
+                    Text("Pick your first mint.")
                         .font(.largeTitle.weight(.heavy))
                         .tracking(-0.5)
                         .fixedSize(horizontal: false, vertical: true)
