@@ -21,6 +21,23 @@ enum class NostrSignerType(val rawValue: String, val displayName: String) {
     }
 }
 
+internal enum class NostrSignerSelectionAction {
+    NoChange,
+    Switch,
+    ChooseCustomKey,
+}
+
+internal fun nostrSignerSelectionAction(
+    current: NostrSignerType,
+    requested: NostrSignerType,
+    hasCustomKey: Boolean,
+): NostrSignerSelectionAction = when {
+    current == requested -> NostrSignerSelectionAction.NoChange
+    requested == NostrSignerType.PrivateKey && !hasCustomKey ->
+        NostrSignerSelectionAction.ChooseCustomKey
+    else -> NostrSignerSelectionAction.Switch
+}
+
 data class NostrState(
     val publicKeyHex: String = "",
     val npub: String = "",
@@ -80,9 +97,10 @@ class NostrService(
     fun switchSignerType(type: NostrSignerType): NostrState = when (type) {
         NostrSignerType.Seed -> resetToSeedKey()
         NostrSignerType.PrivateKey -> {
-            secureStorage.loadString(StorageKeys.secureNostrPrivateKey)
-                ?.let { setPrivateKey(hexToBytes(it), NostrSignerType.PrivateKey, persistCustomKey = false) }
-                ?: generateRandomKeypair()
+            val customKey = requireStoredCustomKey(
+                secureStorage.loadString(StorageKeys.secureNostrPrivateKey),
+            )
+            setPrivateKey(hexToBytes(customKey), NostrSignerType.PrivateKey, persistCustomKey = false)
         }
     }
 
@@ -156,6 +174,11 @@ class NostrService(
     }
 
     companion object {
+        internal fun requireStoredCustomKey(customKey: String?): String =
+            customKey ?: throw IllegalStateException(
+                "Generate or import a custom key before switching key sources.",
+            )
+
         private val params = SECNamedCurves.getByName("secp256k1")
         private val curve = params.curve
         private val generator = params.g

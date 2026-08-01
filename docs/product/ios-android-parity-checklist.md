@@ -88,7 +88,7 @@ Platform-specific capabilities remain intentionally outside parity, including iC
 
 ### Receive — Lightning, reusable invoices, on-chain, and Cashu Requests
 
-- [ ] **[P1 · iOS → Android] Support fiat-primary amount entry on Bitcoin receive rails.** iOS lets a sat Lightning invoice be entered in fiat; Android’s receive keypad uses fixed sat entry. **Done when:** Android entry and validation honor the persisted primary display setting without changing the sat-denominated quote.
+- [x] **[P1 · iOS → Android] Support fiat-primary amount entry on Bitcoin receive rails.** iOS lets a sat Lightning invoice be entered in fiat; Android’s receive keypad uses fixed sat entry. **Done when:** Android entry and validation honor the persisted primary display setting without changing the sat-denominated quote.
 
 - [ ] **[P2 · iOS → Android] Honor the preferred unit on generated invoice details.** iOS keeps sats and fiat available under a BOLT11 or fixed BOLT12 QR; Android renders a fixed amount string. **Done when:** Android leads with the saved primary unit and exposes the alternate conversion visually and accessibly through a native presentation.
 
@@ -144,7 +144,7 @@ Platform-specific capabilities remain intentionally outside parity, including iC
 
 - [ ] **[P2 · iOS → Android] Make App Lock discoverable in a security-oriented Settings location.** Android currently places the toggle under Privacy even though it controls local device access. **Done when:** App Lock is discoverable under a clear security or backup-and-security destination while privacy/background networking controls remain conceptually separate. The exact iOS hierarchy is not required.
 
-- [ ] **[P0 · iOS → Android] Authenticate before enabling App Lock.** iOS verifies device-owner authentication and reverts with an error if enabling fails; Android directly persists the toggle. **Done when:** Android cannot enable App Lock until a device-owner challenge succeeds, and cancellation or failure leaves it disabled.
+- [x] **[P0 · iOS → Android] Authenticate before enabling App Lock.** iOS verifies device-owner authentication and reverts with an error if enabling fails; Android directly persists the toggle. **Done when:** Android cannot enable App Lock until a device-owner challenge succeeds, and cancellation or failure leaves it disabled.
 
 - [ ] **[P1 · iOS → Android] Explain unavailable App Lock and preserve access.** iOS detects the absence of a device passcode, gives setup guidance, and explains that seed reveal always authenticates; Android exposes no equivalent guidance. Android’s manager currently fails open, so this is not an established lockout bug. **Done when:** Android reports capability state, points to device security setup, states the seed-reveal guarantee, and never presents an unavailable lock as active.
 
@@ -166,13 +166,13 @@ Platform-specific capabilities remain intentionally outside parity, including iC
 
 ### Settings — Lightning address
 
-- [ ] **[P1 · iOS → Android] Replace “Enable Nostr-NPC bridge” with user-facing language.** iOS says “Enable Lightning Address”; Android exposes internal protocol/component names such as “NPC quote handler.” **Done when:** Android leads with the user outcome and moves implementation terminology to optional technical help.
+- [x] **[P1 · iOS → Android] Replace “Enable Nostr-NPC bridge” with user-facing language.** iOS says “Enable Lightning Address”; Android exposes internal protocol/component names such as “NPC quote handler.” **Done when:** Android leads with the user outcome and moves implementation terminology to optional technical help.
 
 - [ ] **[P1 · iOS → Android] Gate Lightning settings by feature state.** iOS shows disabled explanation, setup progress, initialization warning, or live controls as appropriate; Android always renders the empty address card and all preference/check controls. **Done when:** Android shows only actions meaningful in the current state.
 
-- [ ] **[P1 · iOS → Android] Add initialization and setup feedback.** iOS distinguishes active setup from “Wallet not fully initialized”; Android collapses both into an empty address message. **Done when:** Android communicates progress separately from a recoverable initialization problem and gives an actionable recovery.
+- [x] **[P1 · iOS → Android] Add initialization and setup feedback.** iOS distinguishes active setup from “Wallet not fully initialized”; Android collapses both into an empty address message. **Done when:** Android communicates progress separately from a recoverable initialization problem and gives an actionable recovery.
 
-- [ ] **[P2 · iOS → Android] Rename “Check for paid quotes now.”** iOS uses “Check for payments”; Android exposes quote jargon. **Done when:** both use payment language in the primary action.
+- [x] **[P2 · iOS → Android] Rename “Check for paid quotes now.”** iOS uses “Check for payments”; Android exposes quote jargon. **Done when:** both use payment language in the primary action.
 
 - [ ] **[P1 · iOS → Android] Expose Lightning-address connection state accessibly.** iOS combines the address with Connected, Connecting, or error text; Android encodes state only in a colored dot. **Done when:** TalkBack announces the address and current state, and color is never the only signal.
 
@@ -182,17 +182,17 @@ Platform-specific capabilities remain intentionally outside parity, including iC
 
 - [ ] **[P0 · iOS → Android] Do not silently fail signer changes or key generation/reset.** iOS catches and renders errors; Android wraps several operations in `runCatching` and discards failures. **Done when:** every Android identity mutation has progress where needed, visible user-facing failure feedback, and unchanged state on failure.
 
-- [ ] **[P0 · iOS → Android] Require an explicit choice before switching to a missing custom key.** Android automatically generates a new identity when the user selects Custom Key without one; iOS prompts to generate or import. **Done when:** selecting Custom Key never creates or replaces an identity implicitly and asks the user to generate or import before the signer changes.
+- [x] **[P0 · iOS → Android] Require an explicit choice before switching to a missing custom key.** Android automatically generates a new identity when the user selects Custom Key without one; iOS prompts to generate or import. **Done when:** selecting Custom Key never creates or replaces an identity implicitly and asks the user to generate or import before the signer changes.
 
-- [ ] **[P1 · iOS → Android] Warn next to private-key reveal and copy.** Android already authenticates reveal/copy but shows masked/reveal/copy controls without nearby consequence text. **Done when:** Android explains that the nsec controls the user’s Nostr identity and Lightning address and must not be shared, before or alongside the authenticated actions.
+- [x] **[P1 · iOS → Android] Warn next to private-key reveal and copy.** Android already authenticates reveal/copy but shows masked/reveal/copy controls without nearby consequence text. **Done when:** Android explains that the nsec controls the user’s Nostr identity and Lightning address and must not be shared, before or alongside the authenticated actions.
 
 - [ ] **[P1 · iOS → Android] Explain the consequences of nsec import.** Android already validates imports and reports errors; native text editing can provide paste, replace, and clear. The missing gap is product context. **Done when:** Android states that importing replaces the current custom identity and affects the Lightning address and Nostr apps/messages before confirmation, while keeping validation errors user-facing.
 
 - [ ] **[P0 · Converge] Make every identity-replacement warning complete.** Current generate/reset warnings split consequences between platforms, while import and signer-change paths do not consistently confirm replacement. **Done when:** generate, import, reset, and signer-change paths warn as applicable that the Lightning address changes, Nostr apps/messages use a different identity, and the old key is replaced before destructive confirmation.
 
-- [ ] **[P2 · iOS → Android] Give key generation native destructive semantics.** Android’s Generate action is visually neutral even though it replaces an identity; iOS uses a destructive confirmation role. **Done when:** Android uses the platform’s destructive semantic role and accessible announcement for the replacement action. It need not copy iOS styling.
+- [x] **[P2 · iOS → Android] Give key generation native destructive semantics.** Android’s Generate action is visually neutral even though it replaces an identity; iOS uses a destructive confirmation role. **Done when:** Android uses the platform’s destructive semantic role and accessible announcement for the replacement action. It need not copy iOS styling.
 
-- [ ] **[P2 · iOS → Android] Add the relay-purpose explanation.** iOS explains that relays synchronize npub.cash-compatible data and backups; Android lists relays without that context. **Done when:** Android explains why changing the relay list affects wallet features.
+- [x] **[P2 · iOS → Android] Add the relay-purpose explanation.** iOS explains that relays synchronize npub.cash-compatible data and backups; Android lists relays without that context. **Done when:** Android explains why changing the relay list affects wallet features.
 
 ### Settings — Wallet Connect and locked-ecash keys
 
@@ -246,7 +246,7 @@ These items may improve efficiency or discoverability but are not required for f
 
 These are important, but they belong in dedicated security/privacy, design-system, or style/tooling backlogs rather than the release parity gate.
 
-- [ ] **[P0 · Security/privacy] Audit crash-report data and narrow the displayed privacy promise.** **Done when:** captures and breadcrumbs are inventoried on both platforms, sensitive wallet payloads are sanitized, redaction is tested, and displayed promises are limited to guarantees the implementation enforces.
+- [x] **[P0 · Security/privacy] Audit crash-report data and narrow the displayed privacy promise.** **Done when:** captures and breadcrumbs are inventoried on both platforms, sensitive wallet payloads are sanitized, redaction is tested, and displayed promises are limited to guarantees the implementation enforces.
 
 - [ ] **[P2 · Design system] Define an accessible currency-row avatar rule.** **Done when:** the design system documents a neutral currency code or monogram rule instead of country flags or ambiguous symbols, while retaining ISO code and localized currency name in text.
 

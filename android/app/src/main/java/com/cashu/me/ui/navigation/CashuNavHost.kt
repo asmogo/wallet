@@ -234,6 +234,7 @@ fun CashuNavHost(
         composable(Routes.SETTINGS_PRIVACY) {
             PrivacyScreen(
                 settingsManager = container.settingsManager,
+                appLockManager = container.appLockManager,
                 onClose = { navController.popBackStack() },
             )
         }

@@ -1,13 +1,11 @@
 package com.cashu.me.ui.send
 
 import com.cashu.me.Core.AmountDisplayPrimary
+import com.cashu.me.Core.BitcoinAmountEntry
+import com.cashu.me.Core.BitcoinAmountEntryContext
 import com.cashu.me.Core.UnitAmountEntry
-import kotlin.math.roundToLong
 
-internal data class UnifiedSendEntryContext(
-    val primary: AmountDisplayPrimary,
-    val btcPrice: Double,
-)
+internal typealias UnifiedSendEntryContext = BitcoinAmountEntryContext
 
 internal enum class UnifiedSendAmountValidation {
     Empty,
@@ -22,45 +20,14 @@ internal enum class UnifiedSendAmountValidation {
  * quotes and payments always receive the converted sat value.
  */
 internal object UnifiedSendAmountEntry {
-    fun context(preferredPrimary: String, btcPrice: Double): UnifiedSendEntryContext {
-        val preferred = AmountDisplayPrimary.fromRaw(preferredPrimary)
-        val effective = if (preferred == AmountDisplayPrimary.Fiat && btcPrice.isFinite() && btcPrice > 0.0) {
-            AmountDisplayPrimary.Fiat
-        } else {
-            AmountDisplayPrimary.Sats
-        }
-        return UnifiedSendEntryContext(effective, btcPrice)
-    }
+    fun context(preferredPrimary: String, btcPrice: Double): UnifiedSendEntryContext =
+        BitcoinAmountEntry.context(preferredPrimary, btcPrice)
 
     fun amountSats(raw: String, context: UnifiedSendEntryContext): Long =
-        when (context.primary) {
-            AmountDisplayPrimary.Sats -> raw.toLongOrNull()?.takeIf { it > 0L } ?: 0L
-            AmountDisplayPrimary.Fiat -> fiatCentsToSats(
-                cents = UnitAmountEntry.baseUnits(raw, FIAT_DECIMALS),
-                btcPrice = context.btcPrice,
-            )
-        }
+        BitcoinAmountEntry.amountSats(raw, context)
 
-    fun rawForSats(amountSats: Long, context: UnifiedSendEntryContext): String {
-        if (amountSats <= 0L) return ""
-        return when (context.primary) {
-            AmountDisplayPrimary.Sats -> amountSats.toString()
-            AmountDisplayPrimary.Fiat -> {
-                if (!context.btcPrice.isFinite() || context.btcPrice <= 0.0) return ""
-                val cents = (
-                    amountSats.toDouble() /
-                        SATS_PER_BITCOIN *
-                        context.btcPrice *
-                        CENTS_PER_FIAT
-                    ).roundToLong()
-                if (cents !in 1..MAX_ENTRY_BASE_UNITS) {
-                    ""
-                } else {
-                    UnitAmountEntry.entryString(cents, FIAT_DECIMALS)
-                }
-            }
-        }
-    }
+    fun rawForSats(amountSats: Long, context: UnifiedSendEntryContext): String =
+        BitcoinAmountEntry.rawForSats(amountSats, context)
 
     /**
      * Fiat cents cannot represent every sat balance exactly. Pick the closest
@@ -81,10 +48,7 @@ internal object UnifiedSendAmountEntry {
         raw: String,
         from: UnifiedSendEntryContext,
         to: UnifiedSendEntryContext,
-    ): String {
-        if (raw.isEmpty() || from.primary == to.primary) return raw
-        return rawForSats(amountSats(raw, from), to)
-    }
+    ): String = BitcoinAmountEntry.convert(raw, from, to)
 
     fun validation(amountSats: Long, balanceSats: Long): UnifiedSendAmountValidation =
         when {
@@ -93,18 +57,5 @@ internal object UnifiedSendAmountEntry {
             else -> UnifiedSendAmountValidation.Valid
         }
 
-    private fun fiatCentsToSats(cents: Long, btcPrice: Double): Long {
-        if (cents <= 0L || !btcPrice.isFinite() || btcPrice <= 0.0) return 0L
-        val sats = cents.toDouble() /
-            CENTS_PER_FIAT /
-            btcPrice *
-            SATS_PER_BITCOIN
-        if (!sats.isFinite() || sats <= 0.0 || sats > Long.MAX_VALUE.toDouble()) return 0L
-        return sats.roundToLong()
-    }
-
     private const val FIAT_DECIMALS = 2
-    private const val CENTS_PER_FIAT = 100.0
-    private const val SATS_PER_BITCOIN = 100_000_000.0
-    private const val MAX_ENTRY_BASE_UNITS = 99_999_999_999L
 }

@@ -292,6 +292,7 @@ fun OnboardingScreen(
                 busy = finishing,
                 addingMintUrl = addingMintUrl,
                 errorText = firstMintError,
+                walletManager = walletManager,
                 onContinue = { urls -> finishCreate(current.mnemonic, urls) },
                 onSkip = { finishCreate(current.mnemonic, emptyList()) },
             )
@@ -779,14 +780,17 @@ private fun FirstMintFace(
     busy: Boolean,
     addingMintUrl: String?,
     errorText: String?,
+    walletManager: WalletManager,
     onContinue: (List<String>) -> Unit,
     onSkip: () -> Unit,
 ) {
     val haptics = LocalHapticFeedback.current
     val appeared = rememberAppeared()
+    val scope = rememberCoroutineScope()
 
     var selected by remember { mutableStateOf(setOf<String>()) }
     var customUrls by remember { mutableStateOf(listOf<String>()) }
+    val customPreviews = remember { mutableStateMapOf<String, MintInfo>() }
     var customInputOpen by remember { mutableStateOf(false) }
     var customDraft by remember { mutableStateOf(FirstMintUrlDraft()) }
     val clipboard = LocalClipboardManager.current
@@ -804,6 +808,11 @@ private fun FirstMintFace(
         customUrls = customUrls + normalized
         selected = selected + normalized
         customInputOpen = false
+        scope.launch {
+            runCatching { walletManager.fetchLiveMintInfo(normalized) }
+                .getOrNull()
+                ?.let { customPreviews[normalized] = it }
+        }
     }
 
     Column(modifier = Modifier.fillMaxSize()) {
@@ -834,7 +843,9 @@ private fun FirstMintFace(
                 .padding(top = CashuTheme.spacing.snug),
         ) {
             val rows = RecommendedMints.map { Triple(it.name, it.url, it.iconUrl) } +
-                customUrls.map { Triple(shortenMintUrl(it), it, null) }
+                customUrls.map {
+                    Triple(customPreviews[it]?.name ?: shortenMintUrl(it), it, customPreviews[it]?.iconUrl)
+                }
             rows.forEachIndexed { index, (name, url, iconUrl) ->
                 if (index > 0) CanvasDivider()
                 MintSelectRow(
