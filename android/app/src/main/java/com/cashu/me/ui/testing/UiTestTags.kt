@@ -42,6 +42,7 @@ object UiTestTags {
     const val SendEcashScreen = "cashu.sheet.send-ecash"
     const val SendEcashSubmit = "cashu.send.ecash.submit"
     const val LockEcashToggle = "cashu.send.ecash.lock-toggle"
+    const val P2pkRecipientConfirmation = "cashu.send.ecash.p2pk-recipient"
     const val AddMintSheet = "cashu.sheet.add-mint"
     const val AddMintUrl = "cashu.sheet.add-mint.url"
     const val AddMintSubmit = "cashu.sheet.add-mint.submit"

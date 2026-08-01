@@ -21,8 +21,10 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -34,6 +36,7 @@ import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearWavyProgressIndicator
@@ -49,6 +52,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -83,11 +87,19 @@ internal fun cameraPermissionResultState(
     else -> CameraPermissionState.NeedsSettings
 }
 
+data class ScannerQuickAction(
+    val label: String,
+    val icon: ImageVector,
+    val onClick: () -> Unit,
+)
+
 @Composable
 fun ScannerView(
     onClose: () -> Unit,
     onScanned: (String) -> Unit,
     useDeterministicPermission: Boolean = false,
+    promptText: String = "Scan Cashu Token, Payment Request, or Bitcoin Address",
+    quickActions: List<ScannerQuickAction> = emptyList(),
 ) {
     val context = LocalContext.current
     val activity = remember(context) { context.findActivity() }
@@ -152,22 +164,22 @@ fun ScannerView(
         CameraPermissionState.Granted -> Unit
         CameraPermissionState.Checking,
         CameraPermissionState.Requesting -> CameraPermissionView(
-            title = "Camera access",
+            title = "Camera Access",
             message = "Waiting for permission to use the camera.",
             showsProgress = true,
             onClose = onClose,
         )
         CameraPermissionState.CanRequest -> CameraPermissionView(
-            title = "Camera access needed",
+            title = "Camera Access Needed",
             message = "Allow camera access to scan QR codes.",
-            actionText = "Allow camera",
+            actionText = "Allow Camera",
             onAction = { requestCameraPermission() },
             onClose = onClose,
         )
         CameraPermissionState.NeedsSettings -> CameraPermissionView(
-            title = "Camera access needed",
+            title = "Camera Access Needed",
             message = "Camera access is turned off. Enable it in Settings to scan QR codes.",
-            actionText = "Open settings",
+            actionText = "Open Settings",
             onAction = {
                 context.startActivity(
                     Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
@@ -182,7 +194,7 @@ fun ScannerView(
 
     if (useDeterministicPermission) {
         CameraPermissionView(
-            title = "Camera ready",
+            title = "Camera Ready",
             message = "The scanner is ready to read a QR code.",
             onClose = onClose,
         )
@@ -191,9 +203,9 @@ fun ScannerView(
 
     cameraError?.let { message ->
         CameraPermissionView(
-            title = "Camera unavailable",
+            title = "Camera Unavailable",
             message = message,
-            actionText = "Try again",
+            actionText = "Try Again",
             onAction = { cameraError = null },
             onClose = onClose,
         )
@@ -227,26 +239,21 @@ fun ScannerView(
             },
             onError = { error -> cameraError = error },
         )
-        // Close button top-right (with status bar inset to avoid clipping on notched devices)
-        Box(
+        ScannerTopBar(
+            onClose = onClose,
             modifier = Modifier
                 .fillMaxWidth()
-                .align(Alignment.TopEnd)
-                .statusBarsPadding()
-                .padding(12.dp),
-            contentAlignment = Alignment.TopEnd,
-        ) {
-            IconButton(onClick = onClose) {
-                Icon(Icons.Default.Close, contentDescription = "Close scanner", tint = Color.White)
-            }
-        }
+                .align(Alignment.TopCenter),
+        )
         ScannerStatusOverlay(
             progress = animatedProgress,
             error = animatedError,
+            promptText = promptText,
+            quickActions = quickActions,
             modifier = Modifier
                 .align(Alignment.BottomCenter)
                 .navigationBarsPadding()
-                .padding(bottom = 32.dp, start = 24.dp, end = 24.dp),
+                .padding(bottom = 50.dp, start = 24.dp, end = 24.dp),
         )
     }
 }
@@ -255,36 +262,74 @@ fun ScannerView(
 private fun ScannerStatusOverlay(
     progress: Float,
     error: String?,
+    promptText: String,
+    quickActions: List<ScannerQuickAction>,
     modifier: Modifier = Modifier,
 ) {
     Column(
-        modifier = modifier
-            .background(
-                color = Color.Black.copy(alpha = 0.6f),
-                shape = RoundedCornerShape(20.dp),
-            )
-            .padding(horizontal = 16.dp, vertical = 12.dp),
+        modifier = modifier.widthIn(max = 360.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(8.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         if (progress > 0f && progress < 1f) {
-            Text(
-                text = "Scanning animated QR...",
-                color = Color.White,
-                style = MaterialTheme.typography.bodyMedium,
-            )
-            LinearWavyProgressIndicator(progress = { progress.coerceIn(0f, 1f) }, modifier = Modifier.fillMaxWidth())
-            Text(
-                text = "${(progress * 100).toInt()}%",
-                color = Color.White.copy(alpha = 0.8f),
-                style = MaterialTheme.typography.bodySmall,
-            )
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(
+                        color = Color.Black.copy(alpha = 0.8f),
+                        shape = RoundedCornerShape(16.dp),
+                    )
+                    .padding(16.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Text(
+                    text = "Scanning Animated QR...",
+                    color = Color.White,
+                    style = MaterialTheme.typography.titleSmall,
+                )
+                LinearWavyProgressIndicator(
+                    progress = { progress.coerceIn(0f, 1f) },
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                Text(
+                    text = "${(progress * 100).toInt()}%",
+                    color = Color.White.copy(alpha = 0.8f),
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            }
         } else {
+            quickActions.forEach { action ->
+                FilledTonalButton(
+                    onClick = action.onClick,
+                    modifier = Modifier.heightIn(min = 48.dp),
+                    shape = RoundedCornerShape(percent = 50),
+                    contentPadding = PaddingValues(horizontal = 18.dp, vertical = 11.dp),
+                    colors = ButtonDefaults.filledTonalButtonColors(
+                        containerColor = Color.White.copy(alpha = 0.18f),
+                        contentColor = Color.White,
+                    ),
+                ) {
+                    Icon(
+                        imageVector = action.icon,
+                        contentDescription = null,
+                        modifier = Modifier.size(18.dp),
+                    )
+                    androidx.compose.foundation.layout.Spacer(Modifier.size(8.dp))
+                    Text(action.label)
+                }
+            }
             Text(
-                text = "Scan Cashu token, payment request, invoice, or Bitcoin address",
+                text = promptText,
                 color = Color.White,
-                style = MaterialTheme.typography.bodyMedium,
+                style = MaterialTheme.typography.bodySmall,
                 textAlign = TextAlign.Center,
+                modifier = Modifier
+                    .background(
+                        color = Color.Black.copy(alpha = 0.6f),
+                        shape = RoundedCornerShape(20.dp),
+                    )
+                    .padding(16.dp),
             )
         }
         error?.let {
@@ -311,19 +356,12 @@ private fun CameraPermissionView(
             .fillMaxSize()
             .background(Color.Black),
     ) {
-        IconButton(
-            onClick = onClose,
+        ScannerTopBar(
+            onClose = onClose,
             modifier = Modifier
-                .align(Alignment.TopEnd)
-                .statusBarsPadding()
-                .padding(12.dp),
-        ) {
-            Icon(
-                imageVector = Icons.Default.Close,
-                contentDescription = "Close scanner",
-                tint = Color.White,
-            )
-        }
+                .fillMaxWidth()
+                .align(Alignment.TopCenter),
+        )
 
         Column(
             modifier = Modifier
@@ -373,6 +411,36 @@ private fun CameraPermissionView(
                 )
             }
         }
+    }
+}
+
+@Composable
+private fun ScannerTopBar(
+    onClose: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Box(
+        modifier = modifier
+            .statusBarsPadding()
+            .heightIn(min = 56.dp)
+            .padding(horizontal = 4.dp),
+    ) {
+        IconButton(
+            onClick = onClose,
+            modifier = Modifier.align(Alignment.CenterStart),
+        ) {
+            Icon(
+                imageVector = Icons.Default.Close,
+                contentDescription = "Close",
+                tint = Color.White,
+            )
+        }
+        Text(
+            text = "Scan QR Code",
+            color = Color.White,
+            style = MaterialTheme.typography.titleMedium,
+            modifier = Modifier.align(Alignment.Center),
+        )
     }
 }
 
