@@ -41,6 +41,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -70,7 +71,11 @@ import com.cashu.me.ui.components.SectionHeader
 import com.cashu.me.ui.components.ToolbarIcon
 import com.cashu.me.ui.security.rememberWalletAuthenticationLauncher
 import com.cashu.me.ui.theme.CashuTheme
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 private const val NsecCopiedFeedbackMillis = 2_000L
 internal const val NostrPrivateKeyWarningText =
@@ -83,6 +88,22 @@ internal fun NostrPrivateKeyWarning(modifier: Modifier = Modifier) {
         modifier = modifier,
         severity = NoticeSeverity.Warning,
     )
+}
+
+internal enum class NostrIdentityMutation(
+    val progressMessage: String,
+    private val failureAction: String,
+) {
+    SwitchSigner("Updating Nostr key source…", "switch the Nostr key source"),
+    ImportKey("Importing Nostr key…", "import the Nostr key"),
+    GenerateKey("Generating a new Nostr key…", "generate a new Nostr key"),
+    ResetKey("Resetting to the wallet seed…", "reset the Nostr key"),
+    ;
+
+    fun failureMessage(error: Throwable): String {
+        val detail = error.message?.trim()?.takeIf(String::isNotEmpty) ?: "Please try again."
+        return "Couldn’t $failureAction. Your current identity was not changed. $detail"
+    }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -100,6 +121,7 @@ fun NostrScreen(
     val nwcState by nwcManager.state.collectAsState()
     val clipboard = LocalClipboardManager.current
     val authenticate = rememberWalletAuthenticationLauncher(appLockManager)
+    val scope = rememberCoroutineScope()
     // Keep the authenticated value tied to this key. Replacing/importing/resetting
     // the Nostr key creates fresh hidden state, even if the previous key was visible.
     var revealedNsec by remember(nostrState.nsec) { mutableStateOf<String?>(null) }
@@ -117,6 +139,31 @@ fun NostrScreen(
     var showMissingCustomKeyChoice by remember { mutableStateOf(false) }
     var showGenerateConfirm by remember { mutableStateOf(false) }
     var showResetConfirm by remember { mutableStateOf(false) }
+    var identityMutation by remember { mutableStateOf<NostrIdentityMutation?>(null) }
+    var identityMutationError by remember { mutableStateOf<String?>(null) }
+
+    fun performIdentityMutation(
+        mutation: NostrIdentityMutation,
+        operation: () -> Unit,
+        onSuccess: () -> Unit = {},
+        onFailure: (String) -> Unit = { identityMutationError = it },
+    ) {
+        if (identityMutation != null) return
+        identityMutation = mutation
+        identityMutationError = null
+        scope.launch {
+            try {
+                withContext(Dispatchers.Default) { operation() }
+                onSuccess()
+            } catch (error: CancellationException) {
+                throw error
+            } catch (error: Exception) {
+                onFailure(mutation.failureMessage(error))
+            } finally {
+                identityMutation = null
+            }
+        }
+    }
 
     Scaffold(
         topBar = {
@@ -150,6 +197,7 @@ fun NostrScreen(
                                 count = NostrSignerType.entries.size,
                             ),
                             selected = kind == nostrState.signerType,
+                            enabled = identityMutation == null,
                             onClick = {
                                 when (
                                     nostrSignerSelectionAction(
@@ -163,7 +211,10 @@ fun NostrScreen(
                                         showMissingCustomKeyChoice = true
                                     }
                                     NostrSignerSelectionAction.Switch -> {
-                                        runCatching { nostrService.switchSignerType(kind) }
+                                        performIdentityMutation(
+                                            mutation = NostrIdentityMutation.SwitchSigner,
+                                            operation = { nostrService.switchSignerType(kind) },
+                                        )
                                     }
                                 }
                             },
@@ -261,18 +312,28 @@ fun NostrScreen(
                 PrimaryButton(
                     text = "Generate new key",
                     onClick = { showGenerateConfirm = true },
+                    enabled = identityMutation == null,
+                    loading = identityMutation == NostrIdentityMutation.GenerateKey,
                 )
                 GhostButton(
                     text = "Import nsec…",
                     onClick = { showImport = true },
                     modifier = Modifier.fillMaxWidth(),
+                    enabled = identityMutation == null,
                 )
                 GhostButton(
                     text = "Reset to wallet seed",
                     onClick = { showResetConfirm = true },
                     modifier = Modifier.fillMaxWidth(),
-                    enabled = nostrState.signerType != NostrSignerType.Seed,
+                    enabled = nostrState.signerType != NostrSignerType.Seed && identityMutation == null,
                 )
+                identityMutation?.let {
+                    InlineNotice(
+                        text = it.progressMessage,
+                        severity = NoticeSeverity.Info,
+                    )
+                }
+                identityMutationError?.let { InlineNotice(text = it) }
             }
 
             SectionHeader("Relays")
@@ -387,7 +448,12 @@ fun NostrScreen(
     if (showImport) {
         var input by remember { mutableStateOf("") }
         AlertDialog(
-            onDismissRequest = { showImport = false; importError = null },
+            onDismissRequest = {
+                if (identityMutation != NostrIdentityMutation.ImportKey) {
+                    showImport = false
+                    importError = null
+                }
+            },
             title = { Text("Import nsec") },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(CashuTheme.spacing.snug)) {
@@ -405,14 +471,26 @@ fun NostrScreen(
                 }
             },
             confirmButton = {
-                TextButton(onClick = {
-                    runCatching { nostrService.importNsec(input.trim()) }
-                        .onSuccess { showImport = false; importError = null }
-                        .onFailure { importError = it.message ?: "Could not import." }
-                }) { Text("Import") }
+                TextButton(
+                    enabled = identityMutation == null,
+                    onClick = {
+                        importError = null
+                        performIdentityMutation(
+                            mutation = NostrIdentityMutation.ImportKey,
+                            operation = { nostrService.importNsec(input.trim()) },
+                            onSuccess = { showImport = false; importError = null },
+                            onFailure = { importError = it },
+                        )
+                    },
+                ) {
+                    Text(if (identityMutation == NostrIdentityMutation.ImportKey) "Importing…" else "Import")
+                }
             },
             dismissButton = {
-                TextButton(onClick = { showImport = false; importError = null }) { Text("Cancel") }
+                TextButton(
+                    enabled = identityMutation != NostrIdentityMutation.ImportKey,
+                    onClick = { showImport = false; importError = null },
+                ) { Text("Cancel") }
             },
         )
     }
@@ -430,7 +508,10 @@ fun NostrScreen(
             confirmButton = {
                 DestructiveTextButton(text = "Generate", onClick = {
                     showGenerateConfirm = false
-                    runCatching { nostrService.generateRandomKeypair() }
+                    performIdentityMutation(
+                        mutation = NostrIdentityMutation.GenerateKey,
+                        operation = { nostrService.generateRandomKeypair() },
+                    )
                 })
             },
             dismissButton = {
@@ -452,7 +533,10 @@ fun NostrScreen(
             confirmButton = {
                 TextButton(onClick = {
                     showResetConfirm = false
-                    runCatching { nostrService.resetToSeedKey() }
+                    performIdentityMutation(
+                        mutation = NostrIdentityMutation.ResetKey,
+                        operation = { nostrService.resetToSeedKey() },
+                    )
                 }) {
                     Text("Reset", color = MaterialTheme.colorScheme.error)
                 }
