@@ -13,9 +13,9 @@ enum QRSpeed: String, CaseIterable {
     
     var interval: Double {
         switch self {
-        case .fast: return 0.1
-        case .medium: return 0.3
-        case .slow: return 0.5
+        case .fast: return 0.01
+        case .medium: return 0.03
+        case .slow: return 0.05
         }
     }
     

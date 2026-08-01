@@ -33,9 +33,9 @@ import com.gorunjinian.bcur.UREncoder
 import kotlinx.coroutines.delay
 
 enum class QRSpeed(val label: String, val intervalMillis: Long) {
-    Fast("F", 100),
-    Medium("M", 300),
-    Slow("S", 500);
+    Fast("F", 10),
+    Medium("M", 30),
+    Slow("S", 50);
 
     fun next(): QRSpeed = when (this) {
         Fast -> Medium
