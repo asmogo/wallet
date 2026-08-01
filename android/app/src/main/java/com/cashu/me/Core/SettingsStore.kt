@@ -90,6 +90,13 @@ class SettingsStore(
         get() = store.boolean(StorageKeys.settingsAppLockEnabled, false)
         set(value) = store.putBoolean(StorageKeys.settingsAppLockEnabled, value)
 
+    var onboardingCompleted: Boolean
+        get() = store.boolean(StorageKeys.onboardingCompleted, false)
+        set(value) = store.putBoolean(StorageKeys.onboardingCompleted, value)
+
+    val hasOnboardingCompletionMarker: Boolean
+        get() = StorageKeys.onboardingCompleted in store.keys()
+
     var checkIncomingInvoices: Boolean
         get() = store.boolean(StorageKeys.settingsCheckIncomingInvoices, true)
         set(value) = store.putBoolean(StorageKeys.settingsCheckIncomingInvoices, value)
@@ -228,6 +235,7 @@ class SettingsStore(
         StorageKeys.nwcEnabled,
         StorageKeys.nwcSelectedMint,
         StorageKeys.nwcBudgetSats,
+        StorageKeys.onboardingCompleted,
     )
 }
 

@@ -86,6 +86,13 @@ object StorageKeys {
     const val settingsSentryEnabled = "settings.sentryEnabled"
     const val settingsAppLockEnabled = "settings.appLockEnabled"
 
+    // Onboarding completion marker. Written `false` when a wallet is installed
+    // during first-launch onboarding and `true` only once onboarding is fully
+    // passed (past the first-mint screen via Continue or Skip, or a finished
+    // restore); absent on installs that predate the marker — those are
+    // grandfathered to completed at launch.
+    const val onboardingCompleted = "cashu.local.onboardingCompleted"
+
     const val npcEnabled = "npc.enabled"
     const val npcAutomaticClaim = "npc.automaticClaim"
     const val npcSelectedMint = "npc.selectedMint"
