@@ -36,6 +36,14 @@ Expected change: EXPECTED_CHANGE.
 
 Fixture: SYNTHETIC_FIXTURE_DISCLOSURE.
 
+## Cross-platform parity
+
+| Surface | Android behavior | iOS behavior | Divergence | Introduced or pre-existing |
+|---|---|---|---|---|
+| SURFACE | ANDROID_RESULT | IOS_RESULT | DIVERGENCE_OR_NONE | INTRODUCED_OR_PRE_EXISTING |
+
+PARITY_EVIDENCE_IMAGE_LINKS_OR_NONE.
+
 ## Limitations and noise
 
 - BEHAVIOR_NOT_PROVEN_BY_SCREENSHOT

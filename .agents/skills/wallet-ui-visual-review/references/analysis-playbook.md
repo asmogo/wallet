@@ -89,6 +89,20 @@ layout may need several widths; a color change may need light and dark; a
 locale change needs the picker and selected locale; a backend-only fix usually
 needs one nearest-surface equality control.
 
+## Pair platforms for parity comparison
+
+Divergence between the Android and iOS implementations is a first-class
+finding. When both platforms are in scope, plan the matrix so equivalent
+surfaces are captured on both under matched fixture, appearance, locale, and
+text scale; otherwise the captures cannot be compared. When only one platform
+changed but the change touches a shared screen's contract, add the other
+platform's equivalent surface as a parity control.
+
+For each paired surface, ask whether the two apps show the same screens,
+states, actions, labels, ordering, defaults, navigation flows, and empty-state
+contracts. Record each divergence and whether the change introduced it or it
+pre-existed. Never assume one platform is the reference implementation.
+
 ## Add runtime boundaries deliberately
 
 Add another runtime only when the focused diff contains evidence such as:
