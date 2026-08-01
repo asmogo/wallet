@@ -496,6 +496,7 @@ private struct DeviceKeyDetailView: View {
                             .font(.body)
                             .submitLabel(.done)
                             .onSubmit { saveName() }
+                            .onChange(of: nameText) { _, _ in saveName() }
                             .padding(.horizontal, 4)
                             .padding(.vertical, 14)
                     }
@@ -527,6 +528,7 @@ private struct DeviceKeyDetailView: View {
         .navigationBarTitleDisplayMode(.inline)
         .toolbarBackground(.hidden, for: .navigationBar)
         .onAppear { nameText = key?.nickname ?? "" }
+        .onDisappear { saveName() }
         .onChange(of: key == nil) { _, removed in if removed { dismiss() } }
         .sheet(item: $activeQR) { payload in
             QRCodeDetailSheet(title: payload.title, content: payload.content)
@@ -552,6 +554,8 @@ private struct DeviceKeyDetailView: View {
     }
 
     private func saveName() {
+        let trimmed = nameText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard trimmed != (key?.nickname ?? "") else { return }
         settings.setP2PKKeyNickname(nameText, for: keyId)
     }
 
