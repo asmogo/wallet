@@ -512,7 +512,7 @@ fun NostrScreen(
                         mutation = NostrIdentityMutation.GenerateKey,
                         operation = { nostrService.generateRandomKeypair() },
                     )
-                }) { Text("Generate") }
+                })
             },
             dismissButton = {
                 TextButton(onClick = { showGenerateConfirm = false }) { Text("Cancel") }
