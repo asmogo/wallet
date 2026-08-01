@@ -59,6 +59,15 @@ import com.cashu.me.ui.components.ToggleRow
 import com.cashu.me.ui.components.ToolbarIcon
 import com.cashu.me.ui.theme.CashuTheme
 
+internal object LightningAddressSettingsCopy {
+    const val EnableTitle = "Enable Lightning Address"
+    const val EnableSubtitle =
+        "Receive Lightning payments to your wallet using a Lightning address."
+    const val AutomaticClaimTitle = "Auto-claim payments"
+    const val AutomaticClaimSubtitle =
+        "Add incoming payments to your wallet without confirmation."
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun LightningScreen(
@@ -134,15 +143,15 @@ fun LightningScreen(
 
             SectionHeader("Settings")
             ToggleRow(
-                title = "Enable Nostr-NPC bridge",
-                subtitle = "Route Lightning payments through the NPC quote handler",
+                title = LightningAddressSettingsCopy.EnableTitle,
+                subtitle = LightningAddressSettingsCopy.EnableSubtitle,
                 checked = npcState.isEnabled,
                 onCheckedChange = { npcService.setEnabled(it) },
             )
             CanvasDivider(leadingInset = 16.dp)
             ToggleRow(
-                title = "Automatic claim",
-                subtitle = "Mint paid quotes without confirmation",
+                title = LightningAddressSettingsCopy.AutomaticClaimTitle,
+                subtitle = LightningAddressSettingsCopy.AutomaticClaimSubtitle,
                 checked = npcState.automaticClaim,
                 onCheckedChange = { npcService.setAutomaticClaim(it) },
                 enabled = npcState.isEnabled,

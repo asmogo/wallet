@@ -166,7 +166,7 @@ Platform-specific capabilities remain intentionally outside parity, including iC
 
 ### Settings — Lightning address
 
-- [ ] **[P1 · iOS → Android] Replace “Enable Nostr-NPC bridge” with user-facing language.** iOS says “Enable Lightning Address”; Android exposes internal protocol/component names such as “NPC quote handler.” **Done when:** Android leads with the user outcome and moves implementation terminology to optional technical help.
+- [x] **[P1 · iOS → Android] Replace “Enable Nostr-NPC bridge” with user-facing language.** iOS says “Enable Lightning Address”; Android exposes internal protocol/component names such as “NPC quote handler.” **Done when:** Android leads with the user outcome and moves implementation terminology to optional technical help.
 
 - [ ] **[P1 · iOS → Android] Gate Lightning settings by feature state.** iOS shows disabled explanation, setup progress, initialization warning, or live controls as appropriate; Android always renders the empty address card and all preference/check controls. **Done when:** Android shows only actions meaningful in the current state.
 
