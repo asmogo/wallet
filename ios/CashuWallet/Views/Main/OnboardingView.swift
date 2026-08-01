@@ -860,8 +860,8 @@ struct OnboardingView: View {
                         }
                     }
                     .glassButton()
-                    .disabled(selectedMintUrls.isEmpty || isAddingFirstMints)
-                    .animation(.easeOut(duration: 0.2), value: selectedMintUrls.isEmpty)
+                    .disabled((selectedMintUrls.isEmpty && customMintInput.isEmpty) || isAddingFirstMints)
+                    .animation(.easeOut(duration: 0.2), value: selectedMintUrls.isEmpty && customMintInput.isEmpty)
                     .accessibilityIdentifier("onboarding-continue")
 
                     Button(action: skipFirstMint) {
@@ -995,6 +995,10 @@ struct OnboardingView: View {
     }
 
     private func continueFromFirstMint() {
+        if !customMintInput.isEmpty {
+            commitCustomMintInput()
+            guard customMintInput.isEmpty else { return }
+        }
         guard !selectedMintUrls.isEmpty else { return }
         isAddingFirstMints = true
         firstMintError = nil

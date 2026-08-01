@@ -815,6 +815,17 @@ private fun FirstMintFace(
         }
     }
 
+    fun handleContinue() {
+        if (customDraft.input.isNotBlank()) {
+            commitCustomUrl()
+            if (customDraft.error != null) return
+        }
+        if (selected.isEmpty()) return
+        // Preserve display order: recommended first, then customs.
+        val ordered = (RecommendedMints.map { it.url } + customUrls).filter { it in selected }
+        onContinue(ordered)
+    }
+
     Column(modifier = Modifier.fillMaxSize()) {
         Column(
             modifier = Modifier
@@ -936,12 +947,8 @@ private fun FirstMintFace(
         ) {
             PrimaryButton(
                 text = "Continue",
-                onClick = {
-                    // Preserve display order: recommended first, then customs.
-                    val ordered = (RecommendedMints.map { it.url } + customUrls).filter { it in selected }
-                    onContinue(ordered)
-                },
-                enabled = selected.isNotEmpty() && !busy,
+                onClick = ::handleContinue,
+                enabled = (selected.isNotEmpty() || customDraft.input.isNotBlank()) && !busy,
                 loading = busy,
                 modifier = Modifier.testTag(UiTestTags.ContinueWithMint),
             )
