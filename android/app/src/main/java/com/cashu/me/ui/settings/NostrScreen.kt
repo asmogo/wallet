@@ -61,6 +61,7 @@ import com.cashu.me.ui.components.IconSwap
 import com.cashu.me.ui.components.InlineNotice
 import com.cashu.me.ui.components.InspectorRow
 import com.cashu.me.ui.components.NavRow
+import com.cashu.me.ui.components.NoticeSeverity
 import com.cashu.me.ui.components.PrimaryButton
 import com.cashu.me.ui.components.SectionHeader
 import com.cashu.me.ui.components.ToolbarIcon
@@ -69,6 +70,17 @@ import com.cashu.me.ui.theme.CashuTheme
 import kotlinx.coroutines.delay
 
 private const val NsecCopiedFeedbackMillis = 2_000L
+internal const val NostrPrivateKeyWarningText =
+    "Your nsec controls your Nostr identity and Lightning address. Never share it."
+
+@Composable
+internal fun NostrPrivateKeyWarning(modifier: Modifier = Modifier) {
+    InlineNotice(
+        text = NostrPrivateKeyWarningText,
+        modifier = modifier,
+        severity = NoticeSeverity.Warning,
+    )
+}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -169,6 +181,9 @@ fun NostrScreen(
             )
 
             SectionHeader("Private key")
+            NostrPrivateKeyWarning(
+                modifier = Modifier.padding(horizontal = CashuTheme.spacing.comfortable),
+            )
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
