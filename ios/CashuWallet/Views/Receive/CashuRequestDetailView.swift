@@ -16,8 +16,8 @@ struct CashuRequestDetailView: View {
     @State private var showMintPicker = false
     @State private var showAmountPicker = false
     @State private var showUnitPicker = false
+    @State private var paymentObservation: CashuRequestPaymentObservation
     @State private var regenerationError: String?
-    @State private var receiveBaselineBalance: UInt64?
     @State private var didAutoComplete = false
     /// Amount of the payment that just landed, for the shared success screen.
     @State private var receivedAmount: UInt64?
@@ -25,6 +25,9 @@ struct CashuRequestDetailView: View {
 
     init(request: CashuRequest, onClose: (() -> Void)? = nil) {
         self._requestId = State(initialValue: request.id)
+        self._paymentObservation = State(
+            initialValue: CashuRequestPaymentObservation(existingPayments: request.receivedPayments)
+        )
         self.onClose = onClose
     }
 
@@ -101,28 +104,13 @@ struct CashuRequestDetailView: View {
                 .presentationDetents([.medium])
             }
         }
-        .onAppear {
-            // Baseline for the receive-flow balance watcher below.
-            receiveBaselineBalance = walletManager.balance
-        }
-        .onReceive(NotificationCenter.default.publisher(for: .cashuTokenReceived)) { note in
-            guard let source = note.userInfo?["source"] as? String,
-                  source == "cashu-request" else { return }
-            // Ignore a payment that names a *different* request, but if the payer
-            // didn't echo the request id back (common — many wallets omit it),
-            // assume the payment is for the request we're watching.
-            if let paidId = note.userInfo?["requestId"] as? String, paidId != requestId { return }
-            AppLogger.wallet.notice("CashuRequestDetailView: payment via notification")
-            markPaymentReceived(amount: note.userInfo?["amount"] as? UInt64)
-        }
-        .onChange(of: walletManager.balance) { _, newBalance in
-            // Robust fallback: the transient .cashuTokenReceived notification can
-            // be missed, but the listener's redeem always bumps the @Published
-            // balance on the main thread. In the receive flow, any balance
-            // increase while we're watching the QR is the payment landing.
-            guard onClose != nil, let baseline = receiveBaselineBalance, newBalance > baseline else { return }
-            AppLogger.wallet.notice("CashuRequestDetailView: payment via balance bump \(baseline)->\(newBalance)")
-            markPaymentReceived(amount: newBalance - baseline)
+        .onChange(of: request?.receivedPayments) { _, currentPayments in
+            guard let currentPayments,
+                  let payment = paymentObservation.newlyLinkedPayment(in: currentPayments) else { return }
+            AppLogger.wallet.notice(
+                "CashuRequestDetailView: linked payment \(payment.transactionId, privacy: .public)"
+            )
+            markPaymentReceived(amount: payment.amount)
         }
     }
 
@@ -476,5 +464,26 @@ struct CashuRequestDetailView: View {
     /// more than one unit.
     private func unitEditable(for request: CashuRequest) -> Bool {
         request.rail == .ecash && (requestMint(for: request)?.supportsMultipleUnits ?? false)
+    }
+}
+
+/// Tracks the request-specific transaction records that existed when its detail
+/// opened and returns only payments linked afterwards. Wallet balance changes
+/// are intentionally outside this correlation boundary.
+struct CashuRequestPaymentObservation {
+    private var observedTransactionIds: Set<String>
+
+    init(existingPayments: [CashuRequestPayment]) {
+        observedTransactionIds = Set(existingPayments.map(\.transactionId))
+    }
+
+    mutating func newlyLinkedPayment(
+        in currentPayments: [CashuRequestPayment]
+    ) -> CashuRequestPayment? {
+        let payment = currentPayments.last {
+            !observedTransactionIds.contains($0.transactionId)
+        }
+        observedTransactionIds = Set(currentPayments.map(\.transactionId))
+        return payment
     }
 }
