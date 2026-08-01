@@ -47,6 +47,7 @@ import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.IosShare
 import androidx.compose.material.icons.outlined.LockOpen
 import androidx.compose.material.icons.outlined.Payments
+import androidx.compose.material.icons.outlined.Receipt
 import androidx.compose.material.icons.outlined.Schedule
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.LoadingIndicator
@@ -856,8 +857,14 @@ private fun GeneratedFace(
     }
 
     // Claimed resolves to the shared full-screen terminal (iOS parity), with
-    // Amount/Mint metadata rows under the check.
+    // the same Amount/Fee/Mint facts shown while the token is pending.
     if (claimState == ClaimState.Claimed) {
+        val receipt = buildSendEcashReceiptDetails(
+            amountLabel = amountPresentation.primary,
+            fee = result.fee,
+            unit = unit,
+            mintUrl = mintUrl,
+        )
         com.cashu.me.ui.components.PaymentStatusScreen(
             phase = com.cashu.me.ui.components.PaymentStatusPhase.Success,
             title = "Claimed",
@@ -869,9 +876,18 @@ private fun GeneratedFace(
                     leadingIcon = Icons.Outlined.Payments,
                 )
                 com.cashu.me.ui.components.CanvasDivider(leadingInset = 16.dp)
+                receipt.fee?.let { feeLabel ->
+                    com.cashu.me.ui.components.InspectorRow(
+                        label = "Fee",
+                        value = feeLabel,
+                        valueMonospaced = true,
+                        leadingIcon = Icons.Outlined.Receipt,
+                    )
+                    com.cashu.me.ui.components.CanvasDivider(leadingInset = 16.dp)
+                }
                 com.cashu.me.ui.components.InspectorRow(
                     label = "Mint",
-                    value = com.cashu.me.Core.shortenMintUrl(mintUrl),
+                    value = receipt.mint,
                     leadingIcon = Icons.Outlined.AccountBalance,
                 )
             },
@@ -902,14 +918,10 @@ private fun GeneratedFace(
             ClaimStatusRow(claimState = claimState)
             // Detail rows: Fee -> Unit -> Fiat (sat-only) -> Mint (iOS order).
             Column(modifier = Modifier.fillMaxWidth()) {
-                if (result.fee > 0L) {
+                formatSendEcashFee(result.fee, unit)?.let { feeLabel ->
                     com.cashu.me.ui.components.InspectorRow(
                         label = "Fee",
-                        value = if (unit.equals("sat", ignoreCase = true)) {
-                            "${result.fee} sat"
-                        } else {
-                            CurrencyAmount(result.fee, CurrencyRegistry.currencyForMintUnit(unit)).formatted()
-                        },
+                        value = feeLabel,
                         valueMonospaced = true,
                     )
                     com.cashu.me.ui.components.CanvasDivider(leadingInset = 16.dp)
