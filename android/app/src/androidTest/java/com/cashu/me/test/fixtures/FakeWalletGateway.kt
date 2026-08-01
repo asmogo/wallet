@@ -115,6 +115,7 @@ class FakeWalletGateway(
 
     override suspend fun fetchMintInfo(mintUrl: String): MintInfo? {
         failIfRequested()
+        check(repositoryOpen) { "Fake wallet repository is not open." }
         val normalized = normalize(mintUrl)
         return mintInfo.getOrPut(normalized) { defaultMint(normalized) }
     }
