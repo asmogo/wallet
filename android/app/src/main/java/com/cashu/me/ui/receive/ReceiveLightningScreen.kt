@@ -561,17 +561,18 @@ fun ReceiveLightningScreen(
                                 formatter.formatWalletSats(it.balance, settings.useBitcoinSymbol)
                             },
                             onPickMint = { mintPickerOpen = true },
-                            isSat = isSatUnit && !amountEntryContext.isFiatPrimary,
-                            unit = if (amountEntryContext.isFiatPrimary) {
-                                priceState.currencyCode
-                            } else {
-                                effectiveUnit
+                            isSatUnit = isSatUnit,
+                            unit = effectiveUnit,
+                            amountSats = ReceiveAmountEntry.amountBaseUnits(amount, amountEntryContext),
+                            entryPrimary = amountEntryContext.bitcoin.primary,
+                            onFlipEntryPrimary = { next ->
+                                settingsManager.setAmountDisplayPrimary(next.rawValue)
                             },
+                            btcPrice = priceState.btcPrice.takeIf { it > 0 },
+                            fiatCurrencyCode = priceState.currencyCode,
                             useBitcoinSymbol = settings.useBitcoinSymbol,
                             formatter = formatter,
                             decimals = amountEntryContext.entryDecimals,
-                            fiatCurrencyCode = priceState.currencyCode
-                                .takeIf { amountEntryContext.isFiatPrimary },
                             amountValid = amountValidation == ReceiveAmountValidation.Valid,
                             errorText = errorText,
                             onCreate = {
@@ -864,8 +865,12 @@ fun ReceiveLightningScreen(
             unit = quoteUnit,
             entryContext = editEntryContext,
             fiatCurrencyCode = priceState.currencyCode,
+            btcPrice = priceState.btcPrice.takeIf { it > 0 },
             useBitcoinSymbol = settings.useBitcoinSymbol,
             formatter = formatter,
+            onFlipEntryPrimary = { next ->
+                settingsManager.setAmountDisplayPrimary(next.rawValue)
+            },
             onDone = { next ->
                 reusableAmountPickerOpen = false
                 setReusableOfferAmount(next)
@@ -912,12 +917,16 @@ private fun InputFace(
     mint: MintInfo?,
     mintBalanceText: String?,
     onPickMint: () -> Unit,
-    isSat: Boolean,
+    isSatUnit: Boolean,
     unit: String,
+    amountSats: Long,
+    entryPrimary: AmountDisplayPrimary,
+    onFlipEntryPrimary: (AmountDisplayPrimary) -> Unit,
+    btcPrice: Double?,
+    fiatCurrencyCode: String,
     useBitcoinSymbol: Boolean,
     formatter: AmountFormatter,
     decimals: Int,
-    fiatCurrencyCode: String?,
     amountValid: Boolean,
     errorText: String?,
     onCreate: () -> Unit,
@@ -955,15 +964,30 @@ private fun InputFace(
             )
             Spacer(Modifier.height(CashuTheme.spacing.snug))
         }
-        AmountEntryHero(
-            entryRaw = amount,
-            isSat = isSat,
-            unit = unit,
-            decimals = decimals,
-            useBitcoinSymbol = useBitcoinSymbol,
-            formatter = formatter,
-            fiatCurrencyCode = fiatCurrencyCode,
-        )
+        // Sat mint unit: iOS CurrencyAmountDisplay entry mode — preferred unit
+        // leads, mint-unit (sats) stays visible/flipable. Non-sat mint units
+        // stay native with no BTC-price conversion.
+        if (isSatUnit) {
+            AmountFlipDisplay(
+                amountSats = amountSats,
+                primary = entryPrimary,
+                onFlip = onFlipEntryPrimary,
+                btcPrice = btcPrice,
+                currencyCode = fiatCurrencyCode,
+                useBitcoinSymbol = useBitcoinSymbol,
+                entryRaw = amount,
+                primaryAccessibilityPrefix = "Request amount",
+            )
+        } else {
+            AmountEntryHero(
+                entryRaw = amount,
+                isSat = false,
+                unit = unit,
+                decimals = decimals,
+                useBitcoinSymbol = useBitcoinSymbol,
+                formatter = formatter,
+            )
+        }
         if (errorText != null) {
             Spacer(Modifier.height(CashuTheme.spacing.default))
             InlineNotice(text = errorText)
@@ -1263,8 +1287,10 @@ private fun ReusableAmountEditSheet(
     unit: String,
     entryContext: ReceiveAmountEntryContext,
     fiatCurrencyCode: String,
+    btcPrice: Double?,
     useBitcoinSymbol: Boolean,
     formatter: AmountFormatter,
+    onFlipEntryPrimary: (AmountDisplayPrimary) -> Unit,
     onDone: (Long?) -> Unit,
     onDismiss: () -> Unit,
 ) {
@@ -1295,15 +1321,27 @@ private fun ReusableAmountEditSheet(
                 onNavigationClick = onDismiss,
             )
             Spacer(Modifier.weight(1f))
-            AmountEntryHero(
-                entryRaw = amount,
-                isSat = isSat && !entryContext.isFiatPrimary,
-                unit = if (entryContext.isFiatPrimary) fiatCurrencyCode else unit,
-                decimals = entryContext.entryDecimals,
-                useBitcoinSymbol = useBitcoinSymbol,
-                formatter = formatter,
-                fiatCurrencyCode = fiatCurrencyCode.takeIf { entryContext.isFiatPrimary },
-            )
+            if (isSat) {
+                AmountFlipDisplay(
+                    amountSats = ReceiveAmountEntry.amountBaseUnits(amount, entryContext),
+                    primary = entryContext.bitcoin.primary,
+                    onFlip = onFlipEntryPrimary,
+                    btcPrice = btcPrice,
+                    currencyCode = fiatCurrencyCode,
+                    useBitcoinSymbol = useBitcoinSymbol,
+                    entryRaw = amount,
+                    primaryAccessibilityPrefix = "Offer amount",
+                )
+            } else {
+                AmountEntryHero(
+                    entryRaw = amount,
+                    isSat = false,
+                    unit = unit,
+                    decimals = entryContext.entryDecimals,
+                    useBitcoinSymbol = useBitcoinSymbol,
+                    formatter = formatter,
+                )
+            }
             Spacer(Modifier.weight(1f))
             NumberPadFooter(
                 amount = amount,
