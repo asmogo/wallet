@@ -14,8 +14,11 @@ data class MintInfo(
     // NUT-04 mintable units. Empty for records stored before multi-unit landed;
     // effectiveMintUnits falls back to the full unit set until the next refresh.
     val mintUnits: List<String> = emptyList(),
-    val supportedMintMethods: List<PaymentMethodKind> = listOf(PaymentMethodKind.Bolt11),
-    val supportedMeltMethods: List<PaymentMethodKind> = listOf(PaymentMethodKind.Bolt11),
+    // NUT-04/NUT-05 rails, tri-state: null = never fetched (unknown — the
+    // compatibility default applies), empty = the live mint reported none
+    // (absent — hide the direction), non-empty = the reported methods.
+    val supportedMintMethods: List<PaymentMethodKind>? = null,
+    val supportedMeltMethods: List<PaymentMethodKind>? = null,
     val onchainMintConfirmations: Int? = null,
     val descriptionLong: String? = null,
     val motd: String? = null,
@@ -23,6 +26,18 @@ data class MintInfo(
     val lastUpdatedEpochMillis: Long = System.currentTimeMillis(),
 ) {
     val id: String get() = url
+
+    /**
+     * Mint (receive) rails with the pre-fetch compatibility default: a mint whose
+     * NUT-06 metadata was never fetched is assumed BOLT11; a mint that reported
+     * an empty list stays empty.
+     */
+    val effectiveMintMethods: List<PaymentMethodKind>
+        get() = supportedMintMethods ?: listOf(PaymentMethodKind.Bolt11)
+
+    /** Melt (send) rails with the pre-fetch compatibility default (see [effectiveMintMethods]). */
+    val effectiveMeltMethods: List<PaymentMethodKind>
+        get() = supportedMeltMethods ?: listOf(PaymentMethodKind.Bolt11)
 
     val effectiveMintUnits: List<String> get() = mintUnits.ifEmpty { units }
 

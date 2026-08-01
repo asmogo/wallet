@@ -281,19 +281,31 @@ fun MintDetailScreen(
                 TechnicalDetails(nut = live.nutSupport)
             }
 
-            SectionHeader("Payment methods")
-            Column(modifier = Modifier.fillMaxWidth()) {
-                InspectorRow(
-                    label = "Receive",
-                    value = mint.supportedMintMethods.distinct().joinToString(" · ") { it.displayName }.ifBlank { "None" },
-                    leadingIcon = Icons.Outlined.ArrowDownward,
-                )
-                CanvasDivider(leadingInset = 16.dp)
-                InspectorRow(
-                    label = "Send",
-                    value = mint.supportedMeltMethods.distinct().joinToString(" · ") { it.displayName }.ifBlank { "None" },
-                    leadingIcon = Icons.Outlined.ArrowUpward,
-                )
+            // Live NUT-06 is authoritative for the rails; the persisted report
+            // fills in until it lands, and the BOLT11 compatibility default only
+            // applies to a mint that was never fetched (tri-state — a direction
+            // the live mint reported as absent is hidden, matching iOS).
+            val receiveMethods = liveInfo?.supportedMintMethods ?: mint.effectiveMintMethods
+            val sendMethods = liveInfo?.supportedMeltMethods ?: mint.effectiveMeltMethods
+            if (receiveMethods.isNotEmpty() || sendMethods.isNotEmpty()) {
+                SectionHeader("Payment methods")
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    if (receiveMethods.isNotEmpty()) {
+                        InspectorRow(
+                            label = "Receive",
+                            value = receiveMethods.joinToString(" · ") { it.displayName },
+                            leadingIcon = Icons.Outlined.ArrowDownward,
+                        )
+                    }
+                    if (sendMethods.isNotEmpty()) {
+                        if (receiveMethods.isNotEmpty()) CanvasDivider(leadingInset = 16.dp)
+                        InspectorRow(
+                            label = "Send",
+                            value = sendMethods.joinToString(" · ") { it.displayName },
+                            leadingIcon = Icons.Outlined.ArrowUpward,
+                        )
+                    }
+                }
             }
 
             SectionHeader("Details")

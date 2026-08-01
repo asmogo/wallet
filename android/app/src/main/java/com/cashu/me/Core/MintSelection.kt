@@ -28,7 +28,7 @@ internal fun compatibleMintsForMeltPayment(
     mints: List<MintInfo>,
     paymentMethod: PaymentMethodKind,
 ): List<MintInfo> =
-    mints.filter { paymentMethod in it.supportedMeltMethods }
+    mints.filter { paymentMethod in it.effectiveMeltMethods }
 
 internal fun selectMintForMeltPayment(
     mints: List<MintInfo>,

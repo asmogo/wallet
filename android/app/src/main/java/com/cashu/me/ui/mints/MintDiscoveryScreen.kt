@@ -231,7 +231,7 @@ private fun DiscoveryRow(
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.weight(1f, fill = false),
                 )
-                if (mint.supportedMintMethods.isNotEmpty() || mint.supportedMeltMethods.isNotEmpty()) {
+                if (!mint.supportedMintMethods.isNullOrEmpty() || !mint.supportedMeltMethods.isNullOrEmpty()) {
                     MintMethodChips(mint = mint)
                 }
             }

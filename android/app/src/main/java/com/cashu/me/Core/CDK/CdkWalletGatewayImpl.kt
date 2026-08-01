@@ -724,19 +724,10 @@ class CdkWalletGatewayImpl : WalletGateway {
     }
 
     private fun CdkMintInfo.toDomain(mintUrl: String): MintInfo {
-        // NUT-04 methods are no longer filtered to sat — minting into usd/eur is
-        // supported. NUT-05 melt stays sat-only (pay-side non-sat is deferred).
-        val mintMethods = nuts.nut04.methods
-            .map { it.method.toDomain() }
-            .distinct()
-            .sortedBy { it.sortOrder }
-            .ifEmpty { listOf(PaymentMethodKind.Bolt11) }
-        val meltMethods = nuts.nut05.methods
-            .filter { it.unit == CdkCurrencyUnit.Sat }
-            .map { it.method.toDomain() }
-            .distinct()
-            .sortedBy { it.sortOrder }
-            .ifEmpty { listOf(PaymentMethodKind.Bolt11) }
+        // NUT-04/05 rails keep their reported-empty state (an absent direction is
+        // hidden, not replaced with BOLT11); see CdkMintMethodMapping.kt.
+        val mintMethods = nuts.reportedMintMethods()
+        val meltMethods = nuts.reportedMeltMethods()
         val units = (nuts.mintUnits + nuts.meltUnits)
             .map { it.toDomainUnit() }
             .distinct()
