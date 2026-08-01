@@ -68,6 +68,7 @@ import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 import com.cashu.me.Core.AmountFormatter
+import com.cashu.me.Core.AmountDisplayPrimary
 import com.cashu.me.Core.CashuRequestStore
 import com.cashu.me.Core.Protocols.CurrencyAmount
 import com.cashu.me.Core.Protocols.CurrencyRegistry
@@ -86,6 +87,7 @@ import com.cashu.me.Models.MintQuoteInfo
 import com.cashu.me.Models.MintQuoteState
 import com.cashu.me.Models.PaymentMethodKind
 import com.cashu.me.ui.components.AmountEntryHero
+import com.cashu.me.ui.components.AmountFlipDisplay
 import com.cashu.me.ui.components.AmountText
 import com.cashu.me.ui.components.CanvasDivider
 import com.cashu.me.ui.components.ExplorerLinkRow
@@ -767,6 +769,17 @@ fun ReceiveLightningScreen(
                             .firstOrNull { it.quoteId == liveQuote.id }
                             ?.createdAtEpochMillis,
                         errorText = errorText,
+                        amountPrimary = AmountDisplayPrimary.fromRaw(settings.amountDisplayPrimary),
+                        onFlipAmountPrimary = {
+                            settingsManager.setAmountDisplayPrimary(it.rawValue)
+                        },
+                        fiatPrice = if (settings.showFiatBalance) {
+                            priceState.btcPrice.takeIf { it > 0 }
+                        } else {
+                            null
+                        },
+                        fiatCurrencyCode = settings.bitcoinPriceCurrency,
+                        useBitcoinSymbol = settings.useBitcoinSymbol,
                         pendingStatusText = when {
                             !isOnchain -> "Waiting for payment…"
                             observation != null -> "${observation.statusText}. Trying to mint…"
@@ -1032,6 +1045,11 @@ private fun DisplayFace(
     mintName: String?,
     createdAtEpochMillis: Long?,
     errorText: String?,
+    amountPrimary: AmountDisplayPrimary,
+    onFlipAmountPrimary: (AmountDisplayPrimary) -> Unit,
+    fiatPrice: Double?,
+    fiatCurrencyCode: String,
+    useBitcoinSymbol: Boolean,
     pendingStatusText: String,
     explorerLabel: String,
     onCopy: () -> Unit,
@@ -1060,13 +1078,16 @@ private fun DisplayFace(
             Spacer(Modifier.height(CashuTheme.spacing.comfortable))
             QrCard(content = quote.request, shareSubject = "Payment request", staticOnly = true)
             if (amountLabel != null) {
-                // SemiBold headlineMedium (~28sp) — heavier than the old thin
-                // headlineSmall, but still secondary to the QR (iOS 32pt intent).
-                AmountText(
-                    text = amountLabel,
-                    style = MaterialTheme.typography.headlineMedium
-                        .copy(fontWeight = FontWeight.SemiBold)
-                        .withMonoDigits(),
+                GeneratedInvoiceAmount(
+                    amount = quote.amount ?: 0L,
+                    amountLabel = amountLabel,
+                    unit = quote.unit,
+                    paymentMethod = quote.paymentMethod,
+                    primary = amountPrimary,
+                    onFlipPrimary = onFlipAmountPrimary,
+                    btcPrice = fiatPrice,
+                    currencyCode = fiatCurrencyCode,
+                    useBitcoinSymbol = useBitcoinSymbol,
                 )
             }
             if (isReusable) {
@@ -1152,6 +1173,51 @@ private fun DisplayFace(
             )
         }
         Spacer(Modifier.navigationBarsPadding())
+    }
+}
+
+/**
+ * Preferred-unit presentation for fixed Lightning requests. Amountless offers,
+ * on-chain deposits, and non-sat mint units retain their rail-native display.
+ */
+@Composable
+internal fun GeneratedInvoiceAmount(
+    amount: Long,
+    amountLabel: String,
+    unit: String,
+    paymentMethod: PaymentMethodKind,
+    primary: AmountDisplayPrimary,
+    onFlipPrimary: (AmountDisplayPrimary) -> Unit,
+    btcPrice: Double?,
+    currencyCode: String,
+    useBitcoinSymbol: Boolean,
+) {
+    val supportsPreferredUnit = amount > 0L &&
+        unit.equals("sat", ignoreCase = true) &&
+        (paymentMethod == PaymentMethodKind.Bolt11 || paymentMethod == PaymentMethodKind.Bolt12)
+    if (supportsPreferredUnit) {
+        AmountFlipDisplay(
+            amountSats = amount,
+            primary = primary,
+            onFlip = onFlipPrimary,
+            btcPrice = btcPrice,
+            currencyCode = currencyCode,
+            useBitcoinSymbol = useBitcoinSymbol,
+            primaryTextStyle = MaterialTheme.typography.headlineMedium
+                .copy(fontWeight = FontWeight.SemiBold),
+            primaryAccessibilityPrefix = when (paymentMethod) {
+                PaymentMethodKind.Bolt11 -> "Invoice amount"
+                PaymentMethodKind.Bolt12 -> "Offer amount"
+                PaymentMethodKind.Onchain -> "Amount"
+            },
+        )
+    } else {
+        AmountText(
+            text = amountLabel,
+            style = MaterialTheme.typography.headlineMedium
+                .copy(fontWeight = FontWeight.SemiBold)
+                .withMonoDigits(),
+        )
     }
 }
 

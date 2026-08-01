@@ -27,6 +27,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.unit.dp
 import com.cashu.me.Core.AmountDisplayPrimary
 import com.cashu.me.Core.AmountFormatter
@@ -55,6 +60,8 @@ fun AmountFlipDisplay(
     currencyCode: String,
     useBitcoinSymbol: Boolean,
     modifier: Modifier = Modifier,
+    primaryTextStyle: TextStyle? = null,
+    primaryAccessibilityPrefix: String? = null,
 ) {
     val haptics = LocalHapticFeedback.current
     val formatter = remember { AmountFormatter() }
@@ -93,7 +100,14 @@ fun AmountFlipDisplay(
             )
             AmountText(
                 text = stateDisplay.primary,
-                style = MaterialTheme.typography.displayMedium.withMonoDigits(),
+                modifier = if (primaryAccessibilityPrefix != null) {
+                    Modifier.semantics {
+                        contentDescription = "$primaryAccessibilityPrefix: ${stateDisplay.primary}"
+                    }
+                } else {
+                    Modifier
+                },
+                style = (primaryTextStyle ?: MaterialTheme.typography.displayMedium).withMonoDigits(),
             )
         }
         val secondary = display.secondary
@@ -105,6 +119,8 @@ fun AmountFlipDisplay(
                     .clickable(
                         interactionSource = remember { MutableInteractionSource() },
                         indication = null,
+                        role = Role.Button,
+                        onClickLabel = "Make $secondary primary",
                     ) {
                         haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                         onFlip(
@@ -114,6 +130,10 @@ fun AmountFlipDisplay(
                                 AmountDisplayPrimary.Fiat
                             },
                         )
+                    }
+                    .semantics(mergeDescendants = true) {
+                        role = Role.Button
+                        contentDescription = "Alternate amount: $secondary. Tap to make it primary."
                     }
                     .padding(
                         horizontal = CashuTheme.spacing.default,
@@ -138,7 +158,7 @@ fun AmountFlipDisplay(
                 }
                 Icon(
                     imageVector = Icons.Outlined.SwapVert,
-                    contentDescription = "Swap display unit",
+                    contentDescription = null,
                     tint = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.size(FlipPillIconSize),
                 )

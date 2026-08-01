@@ -90,7 +90,7 @@ Platform-specific capabilities remain intentionally outside parity, including iC
 
 - [x] **[P1 · iOS → Android] Support fiat-primary amount entry on Bitcoin receive rails.** iOS lets a sat Lightning invoice be entered in fiat; Android’s receive keypad uses fixed sat entry. **Done when:** Android entry and validation honor the persisted primary display setting without changing the sat-denominated quote.
 
-- [ ] **[P2 · iOS → Android] Honor the preferred unit on generated invoice details.** iOS keeps sats and fiat available under a BOLT11 or fixed BOLT12 QR; Android renders a fixed amount string. **Done when:** Android leads with the saved primary unit and exposes the alternate conversion visually and accessibly through a native presentation.
+- [x] **[P2 · iOS → Android] Honor the preferred unit on generated invoice details.** iOS keeps sats and fiat available under a BOLT11 or fixed BOLT12 QR; Android renders a fixed amount string. **Done when:** Android leads with the saved primary unit and exposes the alternate conversion visually and accessibly through a native presentation.
 
 - [ ] **[P1 · iOS → Android] Make expiry the primary one-shot invoice status.** Android can keep “Waiting for payment” as the main status after expiry while only the small caption says Expired. **Done when:** the primary status, accessibility value, and available actions cannot contradict the expired state.
 
