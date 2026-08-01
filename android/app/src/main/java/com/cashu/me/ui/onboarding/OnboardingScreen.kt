@@ -82,6 +82,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import com.cashu.me.Core.MnemonicInput
 import com.cashu.me.Core.NostrMintBackupService
 import com.cashu.me.Core.WalletManager
@@ -200,9 +202,19 @@ fun OnboardingScreen(
     var restoreError by remember { mutableStateOf<String?>(null) }
     // First-mint completion state (wallet installs once, then mints add sequentially).
     var walletInstalled by remember { mutableStateOf(false) }
+    val walletInstallMutex = remember { Mutex() }
     var finishing by remember { mutableStateOf(false) }
     var addingMintUrl by remember { mutableStateOf<String?>(null) }
     var firstMintError by remember { mutableStateOf<String?>(null) }
+
+    suspend fun ensureWalletInstalled(mnemonic: String) {
+        walletInstallMutex.withLock {
+            if (!walletInstalled) {
+                walletManager.initializeNewWalletForOnboarding(mnemonic)
+                walletInstalled = true
+            }
+        }
+    }
 
     fun finishCreate(mnemonic: String, mintUrls: List<String>) {
         scope.launch {
@@ -210,10 +222,7 @@ fun OnboardingScreen(
             firstMintError = null
             var current: String? = null
             try {
-                if (!walletInstalled) {
-                    walletManager.initializeNewWalletForOnboarding(mnemonic)
-                    walletInstalled = true
-                }
+                ensureWalletInstalled(mnemonic)
                 for (url in mintUrls) {
                     current = url
                     addingMintUrl = url
@@ -230,6 +239,15 @@ fun OnboardingScreen(
                 finishing = false
             }
         }
+    }
+
+    // CDK mint-info fetching requires an open wallet repository. Start that
+    // preparation as soon as this step appears; Continue shares the same mutex
+    // so a fast tap waits for this installation instead of racing a second one.
+    LaunchedEffect(step) {
+        val firstMint = step as? OnboardingStep.FirstMint ?: return@LaunchedEffect
+        runCatching { ensureWalletInstalled(firstMint.mnemonic) }
+            .onFailure { firstMintError = it.message ?: "Couldn't set up the wallet." }
     }
 
     AnimatedContent(
@@ -292,6 +310,7 @@ fun OnboardingScreen(
                 busy = finishing,
                 addingMintUrl = addingMintUrl,
                 errorText = firstMintError,
+                walletReady = walletInstalled,
                 walletManager = walletManager,
                 onContinue = { urls -> finishCreate(current.mnemonic, urls) },
                 onSkip = { finishCreate(current.mnemonic, emptyList()) },
@@ -780,13 +799,13 @@ private fun FirstMintFace(
     busy: Boolean,
     addingMintUrl: String?,
     errorText: String?,
+    walletReady: Boolean,
     walletManager: WalletManager,
     onContinue: (List<String>) -> Unit,
     onSkip: () -> Unit,
 ) {
     val haptics = LocalHapticFeedback.current
     val appeared = rememberAppeared()
-    val scope = rememberCoroutineScope()
 
     var selected by remember { mutableStateOf(setOf<String>()) }
     var customUrls by remember { mutableStateOf(listOf<String>()) }
@@ -808,10 +827,17 @@ private fun FirstMintFace(
         customUrls = customUrls + normalized
         selected = selected + normalized
         customInputOpen = false
-        scope.launch {
-            runCatching { walletManager.fetchLiveMintInfo(normalized) }
+    }
+
+    // A URL can be staged before repository preparation finishes. Keying this
+    // effect by both inputs retries all missing previews once the repository is
+    // ready, while leaving selection and Continue independent of network speed.
+    LaunchedEffect(walletReady, customUrls) {
+        if (!walletReady) return@LaunchedEffect
+        customUrls.filterNot { it in customPreviews }.forEach { url ->
+            runCatching { walletManager.fetchLiveMintInfo(url) }
                 .getOrNull()
-                ?.let { customPreviews[normalized] = it }
+                ?.let { customPreviews[url] = it }
         }
     }
 

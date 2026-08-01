@@ -54,6 +54,7 @@ class MainActivityJourneyTest {
             .tapTag(UiTestTags.AddCustomMint)
             .typeIntoTag(UiTestTags.CustomMintUrl, FakeWalletGateway.TestMintUrl)
             .tapDescription("Add mint")
+            .awaitText("Nutshell UI Test Mint")
             .tapTag(UiTestTags.ContinueWithMint)
             .awaitTag(UiTestTags.WalletScreen)
             .tapText("Mints")
