@@ -65,6 +65,7 @@ import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.delay
 import com.cashu.me.Core.Protocols.CurrencyAmount
 import com.cashu.me.Core.Protocols.CurrencyRegistry
+import com.cashu.me.Core.Wallet.userFacingWalletMessage
 import com.cashu.me.Core.WalletManager
 import com.cashu.me.Core.shortenMintUrl
 import com.cashu.me.Models.MintInfo
@@ -73,10 +74,12 @@ import com.cashu.me.ui.components.CanvasDivider
 import com.cashu.me.ui.components.DestructiveTextButton
 import com.cashu.me.ui.components.GhostButton
 import com.cashu.me.ui.components.IconSwap
+import com.cashu.me.ui.components.InlineNotice
 import com.cashu.me.ui.components.InspectorRow
 import com.cashu.me.ui.components.MintAvatar
 import com.cashu.me.ui.components.PrimaryButton
 import com.cashu.me.ui.components.SectionHeader
+import com.cashu.me.ui.components.SpinnerRing
 import com.cashu.me.ui.components.ToolbarIcon
 import com.cashu.me.ui.components.neutralActionButtonColors
 import com.cashu.me.ui.theme.CapsuleShape
@@ -145,20 +148,48 @@ fun MintDetailScreen(
             // metadata (long description, MOTD, capabilities) — mirroring iOS's
             // `cdkInfo`. `info` prefers the fetched record, falling back to the
             // persisted mint until it lands (persisted supplies balance/icon/name).
+            // A failed fetch surfaces an inline explanation + Retry, and the rows
+            // below keep showing the saved record (stale), never a fake success.
             var liveInfo by remember(mint.url) { mutableStateOf<MintInfo?>(null) }
             var connection by remember(mint.url) { mutableStateOf(MintConnectionState.Checking) }
-            LaunchedEffect(mint.url) {
+            var infoError by remember(mint.url) { mutableStateOf<String?>(null) }
+            var refreshNonce by remember(mint.url) { mutableStateOf(0) }
+            LaunchedEffect(mint.url, refreshNonce) {
+                connection = MintConnectionState.Checking
+                infoError = null
                 runCatching { walletManager.fetchLiveMintInfo(mint.url) }
                     .fold(
                         { fetched ->
-                            liveInfo = fetched
-                            connection = if (fetched != null) MintConnectionState.Online
-                            else MintConnectionState.Offline
+                            if (fetched != null) {
+                                liveInfo = fetched
+                                connection = MintConnectionState.Online
+                            } else {
+                                connection = MintConnectionState.Offline
+                                infoError = "The mint did not respond."
+                            }
                         },
-                        { connection = MintConnectionState.Offline },
+                        { error ->
+                            connection = MintConnectionState.Offline
+                            infoError = error.userFacingWalletMessage
+                        },
                     )
             }
             val info = liveInfo ?: mint
+
+            if (infoError != null) {
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    InlineNotice(
+                        text = infoError.orEmpty(),
+                        detail = "Showing saved information.",
+                    )
+                    GhostButton(
+                        text = "Retry",
+                        onClick = { refreshNonce += 1 },
+                        enabled = connection != MintConnectionState.Checking,
+                        modifier = Modifier.padding(horizontal = CashuTheme.spacing.comfortable),
+                    )
+                }
+            }
 
             Column(modifier = Modifier.fillMaxWidth()) {
                 InspectorRow(
@@ -189,6 +220,33 @@ fun MintDetailScreen(
                         MintConnectionState.Online -> null
                     },
                 )
+            }
+
+            // iOS `loadingRow`: remote metadata is still in flight — hold the
+            // sections' place with a quiet spinner line instead of popping them
+            // in unannounced.
+            if (liveInfo == null && connection == MintConnectionState.Checking) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(CashuTheme.spacing.default),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(
+                            horizontal = CashuTheme.spacing.comfortable,
+                            vertical = CashuTheme.spacing.loose,
+                        ),
+                ) {
+                    SpinnerRing(
+                        size = 18.dp,
+                        strokeWidth = 2.dp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Text(
+                        text = "Loading mint info…",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
             }
 
             // About: short description reads primary/white; the long description
