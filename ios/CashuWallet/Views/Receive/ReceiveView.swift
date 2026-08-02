@@ -192,11 +192,13 @@ struct UnifiedReceiveView: View {
     private enum ReceiveRoute: Identifiable {
         case token(String)
         case request(CashuRequest)
+        case requestFailure(String)
         case lightning
         var id: String {
             switch self {
             case .token(let token): return "token-\(token.prefix(48))"
             case .request(let request): return "request-\(request.id)"
+            case .requestFailure: return "request-failure"
             case .lightning: return "lightning"
             }
         }
@@ -365,6 +367,23 @@ struct UnifiedReceiveView: View {
                 )
                 .environmentObject(walletManager)
             }
+        case .requestFailure(let message):
+            NavigationStack {
+                PaymentStatusView(
+                    details: [],
+                    phase: .failure(message: message),
+                    failureTitle: "Couldn't Create Request",
+                    onDone: { self.route = nil },
+                    onRetry: { self.route = nil }
+                )
+                .navigationTitle("Receive Ecash")
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbar {
+                    ToolbarItem(placement: .cancellationAction) {
+                        SheetCloseButton(action: { self.route = nil })
+                    }
+                }
+            }
         case .lightning:
             ReceiveLightningView()
                 .environmentObject(walletManager)
@@ -461,7 +480,7 @@ struct UnifiedReceiveView: View {
             route = .request(request)
         } catch {
             AppLogger.ui.error("createNewRequest failed: \(String(describing: error), privacy: .public)")
-            inputHint = "Couldn't create the request. Please try again."
+            route = .requestFailure(error.userFacingWalletMessage)
         }
     }
 }
@@ -479,12 +498,16 @@ struct ReceiveEcashView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var validatedToken: String?
     @State private var currentRequest: CashuRequest?
+    @State private var requestCreationFailure: String?
     @State private var showingScanner = false
 
     var body: some View {
         NavigationStack {
             ZStack {
-                if let request = currentRequest {
+                if let failure = requestCreationFailure {
+                    requestCreationFailureView(failure)
+                        .transition(.opacity)
+                } else if let request = currentRequest {
                     CashuRequestDetailView(request: request, onClose: { dismiss() })
                         .environmentObject(walletManager)
                         .transition(.opacity)
@@ -494,6 +517,24 @@ struct ReceiveEcashView: View {
                 }
             }
             .animation(.easeInOut(duration: 0.25), value: currentRequest?.id)
+            .animation(.easeInOut(duration: 0.25), value: requestCreationFailure != nil)
+        }
+    }
+
+    private func requestCreationFailureView(_ message: String) -> some View {
+        PaymentStatusView(
+            details: [],
+            phase: .failure(message: message),
+            failureTitle: "Couldn't Create Request",
+            onDone: { requestCreationFailure = nil },
+            onRetry: { requestCreationFailure = nil }
+        )
+        .navigationTitle("Receive Ecash")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .cancellationAction) {
+                SheetCloseButton()
+            }
         }
     }
 
@@ -641,6 +682,7 @@ struct ReceiveEcashView: View {
 
     private func createNewRequest() {
         HapticFeedback.selection()
+        requestCreationFailure = nil
         let readiness = CashuRequestNostrReadiness.current()
         guard let configuration = readiness.requestConfiguration else {
             errorMessage = readiness.recoveryMessage
@@ -669,7 +711,7 @@ struct ReceiveEcashView: View {
             currentRequest = request
         } catch {
             AppLogger.ui.error("createNewRequest failed: \(String(describing: error), privacy: .public)")
-            errorMessage = "Couldn't create the request. Please try again."
+            requestCreationFailure = error.userFacingWalletMessage
         }
     }
 

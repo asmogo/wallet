@@ -112,6 +112,8 @@ import com.cashu.me.ui.components.CashuTextField
 import com.cashu.me.ui.components.GhostButton
 import com.cashu.me.ui.components.InlineNotice
 import com.cashu.me.ui.components.NoticeSeverity
+import com.cashu.me.ui.components.PaymentStatusPhase
+import com.cashu.me.ui.components.PaymentStatusScreen
 import com.cashu.me.ui.components.MintPickerSheet
 import com.cashu.me.ui.components.MintSelectorRow
 import com.cashu.me.ui.components.NumberPadFooter
@@ -143,6 +145,8 @@ internal object LockEcashCopy {
 
 private sealed interface SendFace {
     data object Input : SendFace
+
+    data class Failure(val detail: String) : SendFace
 
     // Unit and amount are captured at generation time so the token face keeps
     // rendering correctly after the entry state resets.
@@ -304,6 +308,7 @@ fun SendEcashScreen(
             p2pkScannerVisible -> closeP2pkScanner()
             sending -> Unit
             face is SendFace.Generated -> face = SendFace.Input
+            face is SendFace.Failure -> face = SendFace.Input
             else -> onBack()
         }
     }
@@ -341,6 +346,7 @@ fun SendEcashScreen(
             title = when (face) {
                 SendFace.Input -> "Send Ecash"
                 is SendFace.Generated -> "Pending Ecash"
+                is SendFace.Failure -> "Send Ecash"
             },
             navigationIcon = Icons.AutoMirrored.Outlined.ArrowBack,
             navigationContentDescription = "Back",
@@ -348,6 +354,7 @@ fun SendEcashScreen(
                 when (face) {
                     SendFace.Input -> onBack()
                     is SendFace.Generated -> face = SendFace.Input
+                    is SendFace.Failure -> face = SendFace.Input
                 }
             },
             actions = {
@@ -381,7 +388,8 @@ fun SendEcashScreen(
                 .weight(1f)
                 .fillMaxWidth(),
             forward = { initial, target ->
-                initial is SendFace.Input && target is SendFace.Generated
+                initial is SendFace.Input &&
+                    (target is SendFace.Generated || target is SendFace.Failure)
             },
             label = "send-ecash-face",
         ) { current ->
@@ -461,7 +469,7 @@ fun SendEcashScreen(
                                 face = SendFace.Generated(result, mintUrl, effectiveUnit, amountValue)
                                 amount = ""
                             } catch (t: Throwable) {
-                                errorText = if (t.isInsufficientBalance && amountValue <= mintBalance) {
+                                val detail = if (t.isInsufficientBalance && amountValue <= mintBalance) {
                                     // The balance covers the amount, but the
                                     // swap that makes change for it carries a
                                     // fee the remainder can't absorb — the
@@ -472,6 +480,8 @@ fun SendEcashScreen(
                                 } else {
                                     t.userFacingWalletMessage
                                 }
+                                errorText = null
+                                face = SendFace.Failure(detail)
                             } finally {
                                 sending = false
                             }
@@ -507,6 +517,14 @@ fun SendEcashScreen(
                         null
                     },
                     onDone = onClose,
+                )
+
+                is SendFace.Failure -> PaymentStatusScreen(
+                    phase = PaymentStatusPhase.Failure,
+                    title = "Couldn't Create Ecash",
+                    detail = current.detail,
+                    doneLabel = "Try Again",
+                    onDone = { face = SendFace.Input },
                 )
             }
         }

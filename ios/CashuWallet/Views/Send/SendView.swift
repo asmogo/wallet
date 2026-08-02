@@ -13,6 +13,7 @@ struct SendView: View {
     @State private var tokenFee: UInt64 = 0
     @State private var isGenerating = false
     @State private var errorMessage: String?
+    @State private var tokenCreationFailure: String?
     @State private var errorSeverity: ErrorSeverity = .error
     @State private var errorShowsMintAction = false
     // Optional second line under the error notice (e.g. the change-fee hint);
@@ -53,7 +54,10 @@ struct SendView: View {
     var body: some View {
         NavigationStack {
             Group {
-                if let token = generatedToken {
+                if let failure = tokenCreationFailure {
+                    tokenCreationFailureView(failure)
+                        .transition(.opacity)
+                } else if let token = generatedToken {
                     if tokenClaimed {
                         // Recipient claimed → the same full-screen success the
                         // pay/receive flows use, replacing the QR entirely.
@@ -76,6 +80,7 @@ struct SendView: View {
             }
             .animation(.smooth(duration: 0.3), value: generatedToken != nil)
             .animation(.smooth(duration: 0.3), value: tokenClaimed)
+            .animation(.smooth(duration: 0.3), value: tokenCreationFailure != nil)
             .navigationBarTitleDisplayMode(.inline)
             .navigationTitle(generatedToken != nil ? "Pending Ecash" : "Send Ecash")
             // Match the Lightning Invoice screen: float the title + chrome
@@ -89,7 +94,7 @@ struct SendView: View {
                     SheetCloseButton()
                 }
 
-                if generatedToken == nil {
+                if generatedToken == nil && tokenCreationFailure == nil {
                     ToolbarItem(placement: .topBarTrailing) {
                         Button {
                             HapticFeedback.selection()
@@ -105,7 +110,8 @@ struct SendView: View {
 
                 // Unit selector — only when the active mint offers more than one
                 // unit. Declared after the lock so it sits to the lock's right.
-                if generatedToken == nil, let mint = unitContextMint, mint.supportsMultipleUnits {
+                if generatedToken == nil, tokenCreationFailure == nil,
+                   let mint = unitContextMint, mint.supportsMultipleUnits {
                     ToolbarItem(placement: .topBarTrailing) {
                         Button {
                             HapticFeedback.selection()
@@ -175,6 +181,16 @@ struct SendView: View {
     }
 
     // MARK: - Send Input View
+
+    private func tokenCreationFailureView(_ message: String) -> some View {
+        PaymentStatusView(
+            details: [],
+            phase: .failure(message: message),
+            failureTitle: "Couldn't Create Ecash",
+            onDone: { tokenCreationFailure = nil },
+            onRetry: { tokenCreationFailure = nil }
+        )
+    }
 
     private var sendInputView: some View {
         VStack(spacing: 0) {
@@ -866,6 +882,7 @@ struct SendView: View {
 
         isGenerating = true
         errorMessage = nil
+        tokenCreationFailure = nil
 
         Task { @MainActor in
             do {
@@ -889,19 +906,11 @@ struct SendView: View {
                     // change for it carries a fee the remainder can't absorb —
                     // the plain "Not enough balance." reads as a wallet bug when
                     // the user typed exactly what the screen says they hold.
-                    presentError(
-                        "Not enough balance to cover the mint fee.",
-                        severity: .caution,
-                        detail: "The mint charges a fee to make change for this amount. Try Send Max."
-                    )
+                    tokenCreationFailure = "Not enough balance to cover the mint fee. Try Send Max."
                 } else {
-                    presentError(
-                        walletMessage.text,
-                        severity: walletMessage.severity,
-                        showsMintAction: error.isInsufficientBalanceError
-                    )
+                    tokenCreationFailure = walletMessage.text
                 }
-                HapticFeedback.notification(.error)
+                errorMessage = nil
             }
             isGenerating = false
         }

@@ -1,6 +1,27 @@
 import SwiftUI
 import Cdk
 
+private struct ReceiveRequestFailure {
+    enum Retry {
+        case setReusableAmount(UInt64)
+        case amountlessOffer(forceNew: Bool, unit: String?)
+        case create(method: PaymentMethodKind, amountless: Bool, forceNew: Bool)
+
+        var method: PaymentMethodKind {
+            switch self {
+            case .setReusableAmount, .amountlessOffer:
+                return .bolt12
+            case .create(let method, _, _):
+                return method
+            }
+        }
+    }
+
+    let title: String
+    let message: String
+    let retry: Retry
+}
+
 struct ReceiveLightningView: View {
     @Environment(\.dismiss) private var dismiss
     @EnvironmentObject var walletManager: WalletManager
@@ -18,7 +39,7 @@ struct ReceiveLightningView: View {
     @State private var isMinting = false
     @State private var isCheckingPayment = false
     @State private var isPaid = false
-    @State private var errorMessage: String?
+    @State private var requestFailure: ReceiveRequestFailure?
     @State private var showMintPicker = false
     /// Reusable BOLT12 offer: drives the Amount-row pencil → amount picker sheet.
     @State private var showReusableAmountPicker = false
@@ -48,7 +69,10 @@ struct ReceiveLightningView: View {
     var body: some View {
         NavigationStack {
             Group {
-                if isPaid, let quote = mintQuote {
+                if let failure = requestFailure {
+                    requestFailureView(failure)
+                        .transition(.opacity)
+                } else if isPaid, let quote = mintQuote {
                     // Payment received → the same full-screen success the pay/send
                     // flows use, replacing the (now-useless) QR entirely.
                     receiveSuccessView(quote: quote)
@@ -74,6 +98,7 @@ struct ReceiveLightningView: View {
             }
             .animation(.smooth(duration: 0.3), value: mintQuote != nil)
             .animation(.smooth(duration: 0.3), value: isPaid)
+            .animation(.smooth(duration: 0.3), value: requestFailure != nil)
             .navigationBarTitleDisplayMode(.inline)
             .navigationTitle(screenTitle)
             // No nav bar chrome — the title floats over the black canvas. This
@@ -85,7 +110,7 @@ struct ReceiveLightningView: View {
                     SheetCloseButton()
                 }
 
-                if let quote = mintQuote, !isPaid {
+                if requestFailure == nil, let quote = mintQuote, !isPaid {
                     ToolbarItem(placement: .topBarTrailing) {
                         if quote.paymentMethod == .bolt12 || quote.paymentMethod == .onchain {
                             // Overflow menu keeps Share + New quieter than a
@@ -131,7 +156,7 @@ struct ReceiveLightningView: View {
                             .accessibilityLabel("Share request")
                         }
                     }
-                } else if shouldShowMethodPicker && !isCreatingRequest {
+                } else if requestFailure == nil && shouldShowMethodPicker && !isCreatingRequest {
                     // Liquid Glass method switcher. On iOS 26 the toolbar renders
                     // bar buttons as glass, so this reads as a sibling of the
                     // close button by construction. Replaces the old inline
@@ -155,7 +180,7 @@ struct ReceiveLightningView: View {
                 // Unit selector — only in the amount-entry state, for a mint that
                 // can mint more than one unit (on-chain is amountless, no unit).
                 // Declared after the method button so it sits to its right.
-                if mintQuote == nil, !isCreatingRequest, selectedMethod != .onchain,
+                if requestFailure == nil, mintQuote == nil, !isCreatingRequest, selectedMethod != .onchain,
                    let mint = walletManager.activeMint, mint.supportsMultipleMintUnits {
                     ToolbarItem(placement: .topBarTrailing) {
                         Button {
@@ -195,7 +220,7 @@ struct ReceiveLightningView: View {
                 syncSelectedMethodWithActiveMint()
             }
             .onChange(of: selectedMethod) {
-                errorMessage = nil
+                requestFailure = nil
                 onchainObservation = nil
                 // `isAmountless` is owned by the picked `ReceiveMethodOption` now
                 // (set in `applyMethodOption`); don't recompute it from the empty
@@ -250,15 +275,42 @@ struct ReceiveLightningView: View {
     }
 
     private var screenTitle: String {
-        guard let quote = mintQuote else { return "Receive" }
+        let method = requestFailure?.retry.method ?? mintQuote?.paymentMethod
+        guard let method else { return "Receive" }
 
-        switch quote.paymentMethod {
+        switch method {
         case .bolt11:
             return "Lightning Invoice"
         case .bolt12:
             return "Reusable Invoice"
         case .onchain:
             return "Bitcoin Address"
+        }
+    }
+
+    private func requestFailureTitle(for method: PaymentMethodKind) -> String {
+        method == .onchain ? "Couldn't Create Address" : "Couldn't Create Invoice"
+    }
+
+    private func requestFailureView(_ failure: ReceiveRequestFailure) -> some View {
+        PaymentStatusView(
+            details: [],
+            phase: .failure(message: failure.message),
+            failureTitle: failure.title,
+            onDone: { requestFailure = nil },
+            onRetry: { retryRequest(failure.retry) }
+        )
+    }
+
+    private func retryRequest(_ retry: ReceiveRequestFailure.Retry) {
+        requestFailure = nil
+        switch retry {
+        case .setReusableAmount(let amount):
+            setReusableOfferAmount(amount)
+        case .amountlessOffer(let forceNew, let unit):
+            loadOrCreateAmountlessOffer(forceNew: forceNew, unit: unit)
+        case .create(let method, let amountless, let forceNew):
+            createRequest(method: method, amountless: amountless, forceNew: forceNew)
         }
     }
 
@@ -303,7 +355,7 @@ struct ReceiveLightningView: View {
         selectedReceiveUnit = unit
         // The typed amount's meaning changes with the unit — clear it.
         amountString = ""
-        errorMessage = nil
+        requestFailure = nil
         HapticFeedback.selection()
     }
 
@@ -341,12 +393,6 @@ struct ReceiveLightningView: View {
             Spacer()
 
             amountHero
-
-            if let error = errorMessage {
-                InlineNotice(message: error, severity: .error)
-                    .padding(.top, 12)
-                    .padding(.horizontal)
-            }
 
             Spacer()
 
@@ -562,10 +608,6 @@ struct ReceiveLightningView: View {
                     }
 
                     statusBadge
-
-                    if let errorMessage {
-                        InlineNotice(message: errorMessage, severity: .error)
-                    }
 
                     VStack(spacing: 0) {
                         detailRow(
@@ -1105,7 +1147,7 @@ struct ReceiveLightningView: View {
         }
 
         isCreatingRequest = true
-        errorMessage = nil
+        requestFailure = nil
         isPaid = false
         isExpired = false
         copiedRequest = false
@@ -1117,7 +1159,11 @@ struct ReceiveLightningView: View {
             do {
                 mintQuote = try await walletManager.createMintQuote(amount: target, method: .bolt12)
             } catch {
-                errorMessage = "Failed. \(error.userFacingWalletMessage)"
+                requestFailure = ReceiveRequestFailure(
+                    title: requestFailureTitle(for: .bolt12),
+                    message: error.userFacingWalletMessage,
+                    retry: .setReusableAmount(target)
+                )
             }
             isCreatingRequest = false
         }
@@ -1127,7 +1173,7 @@ struct ReceiveLightningView: View {
     /// action deliberately bypasses that lookup and leaves the prior offer valid.
     private func loadOrCreateAmountlessOffer(forceNew: Bool = false, unit: String? = nil) {
         isCreatingRequest = true
-        errorMessage = nil
+        requestFailure = nil
         isAmountless = true
         isPaid = false
         isExpired = false
@@ -1154,7 +1200,11 @@ struct ReceiveLightningView: View {
                 quoteCreatedAt = Date()
                 mintQuote = quote
             } catch {
-                errorMessage = "Failed. \(error.userFacingWalletMessage)"
+                requestFailure = ReceiveRequestFailure(
+                    title: requestFailureTitle(for: .bolt12),
+                    message: error.userFacingWalletMessage,
+                    retry: .amountlessOffer(forceNew: forceNew, unit: unit)
+                )
             }
             isCreatingRequest = false
         }
@@ -1175,7 +1225,7 @@ struct ReceiveLightningView: View {
         }
 
         isCreatingRequest = true
-        errorMessage = nil
+        requestFailure = nil
         isPaid = false
         isExpired = false
         copiedRequest = false
@@ -1203,7 +1253,15 @@ struct ReceiveLightningView: View {
                 quoteCreatedAt = Date()
                 mintQuote = quote
             } catch {
-                errorMessage = "Failed. \(error.userFacingWalletMessage)"
+                requestFailure = ReceiveRequestFailure(
+                    title: requestFailureTitle(for: requestMethod),
+                    message: error.userFacingWalletMessage,
+                    retry: .create(
+                        method: requestMethod,
+                        amountless: amountless,
+                        forceNew: forceNew
+                    )
+                )
             }
             isCreatingRequest = false
         }
