@@ -59,6 +59,7 @@ fun CashuNavHost(
     contentPadding: PaddingValues,
     onScan: () -> Unit,
     onReceiveEcash: () -> Unit,
+    onAddMint: () -> Unit,
     onReceiveLightning: () -> Unit,
     onSend: () -> Unit,
     pendingMintScan: String?,
@@ -83,6 +84,7 @@ fun CashuNavHost(
             contentPadding = contentPadding,
             onScan = onScan,
             onReceiveEcash = onReceiveEcash,
+            onAddMint = onAddMint,
             onReceiveLightning = onReceiveLightning,
             onSend = onSend,
             pendingMintScan = pendingMintScan,
@@ -265,6 +267,7 @@ private fun NavGraphBuilder.tabDestinations(
     contentPadding: PaddingValues,
     onScan: () -> Unit,
     onReceiveEcash: () -> Unit,
+    onAddMint: () -> Unit,
     onReceiveLightning: () -> Unit,
     onSend: () -> Unit,
     pendingMintScan: String?,
@@ -288,6 +291,7 @@ private fun NavGraphBuilder.tabDestinations(
             },
             // Receive goes straight to the unified surface — no chooser (iOS
             // parity). Bitcoin is now a button inside that sheet, not a chooser row.
+            onAddMint = onAddMint,
             onReceive = onReceiveEcash,
             // Send goes straight to the unified surface — no chooser (iOS parity).
             onSend = onSend,

@@ -1207,8 +1207,6 @@ struct UnifiedSendView: View {
     let onClose: () -> Void
     /// CTA out of the zero-balance empty state — opens the Receive chooser.
     let onReceive: () -> Void
-    /// "Add custom mint URL" out of the no-mints empty state.
-    let onAddCustomMint: () -> Void
     /// Start the NFC tap-to-pay session (dismisses this sheet first).
     let onContactless: () -> Void
 
@@ -1319,6 +1317,8 @@ struct UnifiedSendView: View {
     @State private var showingScanner = false
     @State private var showingMintPicker = false
     @State private var addMintError: String?
+    /// Pushed connect-a-mint step, when the wallet has no mints yet.
+    @State private var connectMintRoute: ConnectMintRoute?
 
     /// Measured height of the compact input-step body (field + methods / empty
     /// states). Drives a content-fit detent so Scan/Ecash/Tap stay thumb-reachable
@@ -1359,7 +1359,8 @@ struct UnifiedSendView: View {
     /// Input step (with balance, or empty states) hugs content. Amount / confirm /
     /// status expand to `.large` so the keypad and pay scaffold have room.
     private var prefersCompactSheet: Bool {
-        statusPhase == nil && step == .input
+        // The pushed URL step hugs too; only discovery needs the full sheet.
+        statusPhase == nil && step == .input && connectMintRoute != .discover
     }
 
     private var compactDetentHeight: CGFloat {
@@ -1405,6 +1406,16 @@ struct UnifiedSendView: View {
             .animation(.smooth(duration: 0.3), value: locked != nil)
             .navigationTitle("Send")
             .navigationBarTitleDisplayMode(.inline)
+            .navigationDestination(item: $connectMintRoute) { route in
+                // Declared here rather than inside `noMintsState`: connecting a
+                // mint swaps that branch out of `inputContent`, and a destination
+                // declared inside it would be torn down mid-push.
+                connectMintDestination(
+                    route,
+                    onAdded: { connectMintRoute = nil },
+                    onHeightChange: { compactContentHeight = $0 }
+                )
+            }
             .sheet(isPresented: $showingScanner) {
                 ScannerWrapperView(onScanned: handleScannedDestination)
                     .environmentObject(walletManager)
@@ -1441,7 +1452,7 @@ struct UnifiedSendView: View {
         // input, `.large` + flat canvas for amount/confirm/status.
         .presentationDetents(prefersCompactSheet ? [.height(compactDetentHeight)] : [.large])
         .presentationDragIndicator(.visible)
-        .modifier(UnifiedSendSheetBackground(compact: prefersCompactSheet))
+        .canvasSheetBackground(whenFillingScreen: !prefersCompactSheet)
     }
 
     // MARK: Input step
@@ -2790,51 +2801,24 @@ struct UnifiedSendView: View {
 
     // MARK: Empty states (reproduced from the old send chooser)
 
+    /// Same surface the wallet-home "Add mint" CTA opens, in its Send dress:
+    /// the sheet is still titled "Send", so the headline carries why the flow
+    /// stalled.
     private var noMintsState: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 0) {
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("Connect a mint first")
-                        .font(.title3.weight(.medium))
-                    Text("Mints issue the ecash you send and receive. Add one to get started.")
-                        .font(.callout)
-                        .foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-                .padding(.horizontal, 20)
-                .padding(.bottom, 12)
-
-                SuggestedMintsSection(
-                    existingURLs: Set(walletManager.mints.map(\.url)),
-                    onAdd: addMint
-                )
-
-                if let addMintError {
-                    InlineNotice(message: addMintError, severity: .error)
-                        .padding(.horizontal, 20)
-                        .padding(.top, 8)
-                }
-
-                Button(action: onAddCustomMint) {
-                    HStack(spacing: 6) {
-                        Image(systemName: "plus")
-                        Text("Add custom mint URL")
-                    }
-                    .padding(.vertical, 12)
-                    .frame(maxWidth: .infinity)
-                }
-                .textLinkButton()
-                .padding(.top, 4)
-            }
-            .padding(.top, 8)
-            .padding(.bottom, 16)
-            .onGeometryChange(for: CGFloat.self) { proxy in
-                proxy.size.height
-            } action: { newHeight in
+        ConnectMintPicker(
+            context: .send,
+            route: $connectMintRoute,
+            onAdd: addMint,
+            existingURLs: Set(walletManager.mints.map(\.url)),
+            discoveryAvailable: settings.useWebsockets,
+            errorMessage: addMintError,
+            onHeightChange: { newHeight in
+                // Ignore re-measures from the off-screen picker while a step is
+                // pushed — the pushed view reports its own height.
+                guard connectMintRoute == nil else { return }
                 compactContentHeight = newHeight
             }
-        }
-        .scrollBounceBehavior(.basedOnSize)
+        )
     }
 
     private var noBalanceState: some View {
@@ -2869,19 +2853,6 @@ struct UnifiedSendView: View {
 
 /// Compact input keeps the system translucent sheet; amount/confirm/status pin
 /// the flat canvas so they read seamless once the detent expands to `.large`.
-private struct UnifiedSendSheetBackground: ViewModifier {
-    let compact: Bool
-
-    @ViewBuilder
-    func body(content: Content) -> some View {
-        if compact {
-            content
-        } else {
-            content.canvasSheetBackground()
-        }
-    }
-}
-
 struct MeltView: View {
     enum MeltMode: String, CaseIterable {
         case lightning

@@ -109,6 +109,18 @@ enum class ReceiveLightningBackAction {
 fun receiveLightningBackAction(displayingQuote: Boolean): ReceiveLightningBackAction =
     if (displayingQuote) ReceiveLightningBackAction.ReturnToInput else ReceiveLightningBackAction.Close
 
+enum class ConnectMintBackAction {
+    ReturnToPicker,
+    Close,
+}
+
+/**
+ * The connect-a-mint sheet pushes "Add custom mint URL" and "Discover mints" as
+ * in-sheet steps, so back unwinds to the picker before the host sheet sees it.
+ */
+fun connectMintBackAction(onPickerStep: Boolean): ConnectMintBackAction =
+    if (onPickerStep) ConnectMintBackAction.Close else ConnectMintBackAction.ReturnToPicker
+
 enum class SimpleBackAction {
     Close,
     CloseSearch,

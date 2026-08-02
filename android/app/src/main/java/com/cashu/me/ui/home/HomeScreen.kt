@@ -121,13 +121,14 @@ internal data class HomePaymentActionAvailability(
 
 internal fun homePaymentActionAvailability(
     isRuntimeReady: Boolean,
-    hasActiveMint: Boolean,
 ): HomePaymentActionAvailability {
     return HomePaymentActionAvailability(
         isPreparingWallet = !isRuntimeReady,
         // Unified Receive always has mint-independent ecash paths.
         receiveEnabled = isRuntimeReady,
-        sendEnabled = isRuntimeReady && hasActiveMint,
+        // iOS parity: Send is tappable without a mint too — the sheet answers with
+        // the connect-a-mint surface, which is more use than a dead button.
+        sendEnabled = isRuntimeReady,
     )
 }
 
@@ -138,6 +139,7 @@ fun HomeScreen(
     settingsManager: SettingsManager,
     priceService: PriceService,
     onOpenMints: () -> Unit,
+    onAddMint: () -> Unit,
     onOpenHistory: () -> Unit,
     onOpenTransaction: (WalletTransaction) -> Unit,
     onReceive: () -> Unit,
@@ -155,7 +157,6 @@ fun HomeScreen(
     var refreshing by remember { mutableStateOf(false) }
     val paymentActions = homePaymentActionAvailability(
         isRuntimeReady = walletState.isRuntimeReady,
-        hasActiveMint = walletState.activeMint != null,
     )
 
     val balanceDisplay = remember(walletState.balance, settings, priceState) {
@@ -232,13 +233,17 @@ fun HomeScreen(
         // Pinned top section (mint chip + balance + triptych), measured first.
         val pinned = subcompose(HomeSlot.Pinned) {
             PinnedTop(
-                mintChip = {
-                    MintChip(
-                        activeMint = walletState.activeMint,
-                        mints = walletState.mints,
-                        onSelect = { mint -> walletManager.launch { walletManager.setActiveMint(mint) } },
-                        onManage = onOpenMints,
-                    )
+                // No mint, no chip — a "No mint" pill is chrome that states the
+                // obvious under a zero balance. iOS emits nothing here either.
+                mintChip = walletState.activeMint?.let { active ->
+                    {
+                        MintChip(
+                            activeMint = active,
+                            mints = walletState.mints,
+                            onSelect = { mint -> walletManager.launch { walletManager.setActiveMint(mint) } },
+                            onManage = onOpenMints,
+                        )
+                    }
                 },
                 balance = {
                     HomeBalanceHero(
@@ -330,7 +335,7 @@ fun HomeScreen(
                             supporting = if (hasMints) "Your recent payments will show up here."
                             else "Mints custody your ecash. Add one to begin.",
                             actionLabel = if (!hasMints) "Add mint" else null,
-                            onAction = if (!hasMints) onOpenMints else null,
+                            onAction = if (!hasMints) onAddMint else null,
                             modifier = Modifier.height(emptyHeight),
                         )
                     }
@@ -403,7 +408,7 @@ private enum class HomeSlot { Pinned, Body }
 
 @Composable
 private fun PinnedTop(
-    mintChip: @Composable () -> Unit,
+    mintChip: (@Composable () -> Unit)?,
     balance: @Composable () -> Unit,
     triptych: @Composable () -> Unit,
     onOpenSettings: () -> Unit,
@@ -453,8 +458,13 @@ private fun PinnedTop(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(14.dp),
         ) {
-            Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-                mintChip()
+            // Conditional on the Box, not just its content: an empty composable is
+            // still a placed child, so gating inside MintChip would leave the 14dp
+            // gap hanging above the balance.
+            if (mintChip != null) {
+                Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+                    mintChip()
+                }
             }
             balance()
             triptych()

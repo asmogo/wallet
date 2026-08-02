@@ -67,6 +67,7 @@ import kotlinx.coroutines.launch
 import com.cashu.me.Core.AmountDisplayPrimary
 import com.cashu.me.Core.AmountFormatter
 import com.cashu.me.Core.CashuPaymentRequestRoute
+import com.cashu.me.Core.MintDiscoveryManager
 import com.cashu.me.Core.PaymentRequestDecodeResult
 import com.cashu.me.Core.PaymentRequestDecoder
 import com.cashu.me.Core.PriceService
@@ -104,6 +105,8 @@ import com.cashu.me.ui.components.MethodRowSpacing
 import com.cashu.me.ui.components.PrimaryButton
 import com.cashu.me.ui.components.QrCard
 import com.cashu.me.ui.components.SheetHeader
+import com.cashu.me.ui.mints.ConnectMintContext
+import com.cashu.me.ui.mints.ConnectMintSheetContent
 import com.cashu.me.ui.components.TwoFaceScreen
 import com.cashu.me.ui.theme.CashuTheme
 import com.cashu.me.ui.theme.withMonoDigits
@@ -141,15 +144,19 @@ fun UnifiedSendScreen(
     walletManager: WalletManager,
     settingsManager: SettingsManager,
     priceService: PriceService,
+    mintDiscoveryManager: MintDiscoveryManager,
     onClose: () -> Unit,
     onScan: () -> Unit,
     onContactless: () -> Unit,
     onSendEcash: () -> Unit,
     onOpenReceiveToken: (String) -> Unit,
-    onOpenMints: () -> Unit,
     onReceive: () -> Unit,
+    onScanMintUrl: () -> Unit,
+    allowCleartextLocalTestMints: Boolean = false,
     prefilledPayload: String? = null,
     onPrefilledConsumed: () -> Unit = {},
+    prefilledMintUrl: String? = null,
+    onPrefilledMintUrlConsumed: () -> Unit = {},
     onDismissLockChanged: (Boolean) -> Unit = {},
 ) {
     val walletState by walletManager.state.collectAsState()
@@ -508,7 +515,24 @@ fun UnifiedSendScreen(
                     rows = { SendPaymentDetailRows(current.details, formatter, settings.useBitcoinSymbol) },
                 )
             }
-            null -> {
+            null -> if (step == SendStep.Input && walletState.mints.isEmpty()) {
+                // Same surface the wallet-home "Add mint" CTA opens. It draws its
+                // own header so it can swap the title and reveal a back chevron
+                // when its URL / discovery steps are pushed — don't add one here.
+                // Adding a mint drops this face and the Send input takes over, so
+                // there is nothing to do on success.
+                ConnectMintSheetContent(
+                    walletManager = walletManager,
+                    settingsManager = settingsManager,
+                    mintDiscoveryManager = mintDiscoveryManager,
+                    context = ConnectMintContext.Send,
+                    allowCleartextLocalTestMints = allowCleartextLocalTestMints,
+                    prefilledMintUrl = prefilledMintUrl,
+                    onPrefilledMintUrlConsumed = onPrefilledMintUrlConsumed,
+                    onScanMintUrl = onScanMintUrl,
+                    onMintAdded = {},
+                )
+            } else {
                 if (step == SendStep.Input) {
                     FlowSheetTitle(
                         title = if (creqFromScan) "Pay Cashu Request" else "Send",
@@ -535,7 +559,6 @@ fun UnifiedSendScreen(
                 ) { current ->
                 when (current) {
                     SendStep.Input -> InputFace(
-                        hasMints = walletState.mints.isNotEmpty(),
                         hasBalance = walletState.hasAnyBalance,
                         destination = destination,
                         onDestinationChange = {
@@ -559,7 +582,6 @@ fun UnifiedSendScreen(
                         onScan = onScan,
                         onSendEcash = onSendEcash,
                         onContactless = onContactless,
-                        onOpenMints = onOpenMints,
                         onReceive = onReceive,
                     )
 
@@ -723,7 +745,6 @@ private val FeeDetailKeys = setOf(
 
 @Composable
 private fun InputFace(
-    hasMints: Boolean,
     hasBalance: Boolean,
     destination: String,
     onDestinationChange: (String) -> Unit,
@@ -735,14 +756,11 @@ private fun InputFace(
     onScan: () -> Unit,
     onSendEcash: () -> Unit,
     onContactless: () -> Unit,
-    onOpenMints: () -> Unit,
     onReceive: () -> Unit,
 ) {
+    // The no-mints case never reaches here — UnifiedSendScreen swaps the whole
+    // body (header included) for the connect-a-mint surface.
     when {
-        !hasMints -> {
-            NoMintsFace(onOpenMints = onOpenMints)
-            return
-        }
         !hasBalance -> {
             // Compact (no fillMaxHeight) so the sheet hugs this empty state.
             EmptyState(
@@ -836,32 +854,6 @@ private fun InputFace(
                 )
             }
         }
-    }
-}
-
-@Composable
-private fun NoMintsFace(onOpenMints: () -> Unit) {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = CashuTheme.spacing.section)
-            .padding(top = CashuTheme.spacing.default, bottom = CashuTheme.spacing.section)
-            .navigationBarsPadding(),
-        horizontalAlignment = Alignment.Start,
-    ) {
-        Text(
-            text = "Connect a mint first",
-            style = MaterialTheme.typography.titleMedium,
-            color = MaterialTheme.colorScheme.onSurface,
-        )
-        Spacer(Modifier.height(CashuTheme.spacing.snug))
-        Text(
-            text = "Mints issue the ecash you send and receive. Add one to get started.",
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-        Spacer(Modifier.height(CashuTheme.spacing.section))
-        GhostButton(text = "Add custom mint URL", onClick = onOpenMints)
     }
 }
 

@@ -80,6 +80,44 @@ class MainActivityJourneyTest {
     }
 
     @Test
+    fun sendWithoutMintOffersConnectMintAndUnwindsStepsWithBack() {
+        launch(FixtureMode.SeededWithoutMint)
+
+        robot.awaitTag(UiTestTags.WalletScreen)
+            // Send is tappable without a mint: the sheet answers with the
+            // connect-a-mint surface instead of the button sitting dead.
+            .tapTag(UiTestTags.WalletSend)
+            .awaitTag(UiTestTags.ConnectMintSheet)
+            .awaitText("Connect a mint first")
+            // "Add custom mint URL" pushes a step inside the same sheet…
+            .tapTag(UiTestTags.ConnectMintAddCustom)
+            .awaitTag(UiTestTags.AddMintUrl)
+            .assertTextDoesNotExist("Connect a mint first")
+            // …so back unwinds to the picker before the sheet sees it.
+            .pressSystemBack()
+            .awaitText("Connect a mint first")
+            .pressSystemBack()
+            .assertTagDoesNotExist(UiTestTags.ConnectMintSheet)
+            .awaitTag(UiTestTags.WalletScreen)
+    }
+
+    @Test
+    fun walletEmptyStateAddMintOpensTheSameSurfaceWithoutTheHeadline() {
+        launch(FixtureMode.SeededWithoutMint)
+
+        robot.awaitTag(UiTestTags.WalletScreen)
+            // No mint means no mint chip — iOS shows nothing here either.
+            .assertTextDoesNotExist("No mint")
+            .awaitText("Add a mint to get started")
+            .tapText("Add mint")
+            .awaitTag(UiTestTags.ConnectMintSheet)
+            .awaitText("Mints issue the ecash you send and receive. Add one to get started.")
+            // The CTA and the sheet title already say "Add Mint"; a third
+            // restatement is exactly the header stacking this redesign removed.
+            .assertTextDoesNotExist("Connect a mint first")
+    }
+
+    @Test
     fun openAndDismissReceiveWithSystemBack() {
         launch(FixtureMode.SeededWithMint)
 

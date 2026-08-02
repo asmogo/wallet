@@ -57,6 +57,8 @@ import com.cashu.me.Core.PaymentRequestDecoder
 import com.cashu.me.Core.TokenParser
 import com.cashu.me.Views.Components.ScannerView
 import com.cashu.me.Views.Send.ContactlessPaySheet
+import com.cashu.me.ui.mints.ConnectMintContext
+import com.cashu.me.ui.mints.ConnectMintSheetContent
 import com.cashu.me.ui.onboarding.OnboardingScreen
 import com.cashu.me.ui.navigation.Routes
 import com.cashu.me.ui.navigation.TopTab
@@ -270,6 +272,10 @@ private fun AuthenticatedShell(container: AppContainer) {
     var pendingReceiveScan by remember { mutableStateOf<String?>(null) }
     var pendingSendScan by remember { mutableStateOf<String?>(null) }
     var pendingMintScan by remember { mutableStateOf<String?>(null) }
+    // Kept apart from pendingMintScan so a scan started inside the connect-a-mint
+    // sheet can't also trip the Mints tab's add-mint reopen.
+    var pendingConnectMintScan by remember { mutableStateOf<String?>(null) }
+    var mintScanReturnFlow by remember { mutableStateOf<WalletFlow?>(null) }
     // Full-screen "Receive Ecash" page (iOS ReceiveTokenDetailView via
     // .fullScreenCover): every token that arrives from *outside* the paste
     // flow — scanner, cashu: deep link, token pasted into Send — lands here.
@@ -376,6 +382,7 @@ private fun AuthenticatedShell(container: AppContainer) {
             onReceiveEcash = { openPaymentFlow(WalletFlow.ReceiveEcash) },
             onReceiveLightning = { openPaymentFlow(WalletFlow.ReceiveLightning) },
             onSend = { openPaymentFlow(WalletFlow.Send) },
+            onAddMint = { openPaymentFlow(WalletFlow.ConnectMint) },
             pendingMintScan = pendingMintScan,
             onPendingMintScanConsumed = { pendingMintScan = null },
             // Pending "Receive later" tokens claim on the full-screen page.
@@ -389,7 +396,12 @@ private fun AuthenticatedShell(container: AppContainer) {
             exit = overlayExit,
         ) {
             ScannerView(
-                onClose = { scannerTarget = null },
+                onClose = {
+                    scannerTarget = null
+                    // Abandoned scan: drop the flow we would have replayed rather
+                    // than reopening the sheet on the next unrelated scan.
+                    mintScanReturnFlow = null
+                },
                 useDeterministicPermission =
                     container.runtimePolicy.useDeterministicCameraPermission,
                 onScanned = { payload ->
@@ -417,6 +429,13 @@ private fun AuthenticatedShell(container: AppContainer) {
                         onMint = {
                             pendingMintScan = it
                             navController.navigateToTab(TopTab.Mints)
+                        },
+                        // Scan launched from a connect-a-mint URL step: reopen the
+                        // flow that yielded the window, prefilled.
+                        onConnectMint = {
+                            pendingConnectMintScan = it
+                            activeFlow = mintScanReturnFlow ?: WalletFlow.ConnectMint
+                            mintScanReturnFlow = null
                         },
                     )
                 },
@@ -485,6 +504,10 @@ private fun AuthenticatedShell(container: AppContainer) {
                 openScanner = { scannerTarget = ScannerTarget.Auto },
                 openContactless = {
                     if (isRuntimeReadyRef) showContactless = true
+                },
+                openMintScanner = { returnTo ->
+                    mintScanReturnFlow = returnTo
+                    scannerTarget = ScannerTarget.ConnectMint
                 },
             )
         },
@@ -555,13 +578,16 @@ private fun AuthenticatedShell(container: AppContainer) {
                     close()
                     receiveTokenDetail = token
                 },
-                onOpenMints = {
-                    close()
-                    navController.navigateToTab(TopTab.Mints)
-                },
                 onReceive = { activeFlow = WalletFlow.ReceiveEcash },
                 prefilledPayload = pendingSendScan,
                 onPrefilledConsumed = { pendingSendScan = null },
+                // The no-mints face hosts its own add-mint URL step, which needs
+                // the camera — same sheet-yields-first handoff as the main scan.
+                mintDiscoveryManager = container.mintDiscoveryManager,
+                allowCleartextLocalTestMints = container.runtimePolicy.allowCleartextLocalTestMints,
+                prefilledMintUrl = pendingConnectMintScan,
+                onPrefilledMintUrlConsumed = { pendingConnectMintScan = null },
+                onScanMintUrl = { flowHandoff.requestMintScanner(WalletFlow.Send, close) },
                 onDismissLockChanged = { flowDismissLocked = it },
             )
 
@@ -572,6 +598,19 @@ private fun AuthenticatedShell(container: AppContainer) {
                 onBack = { activeFlow = WalletFlow.Send },
                 onClose = close,
                 onDismissLockChanged = { flowDismissLocked = it },
+            )
+
+            WalletFlow.ConnectMint -> ConnectMintSheetContent(
+                walletManager = container.walletManager,
+                settingsManager = container.settingsManager,
+                mintDiscoveryManager = container.mintDiscoveryManager,
+                context = ConnectMintContext.AddMint,
+                allowCleartextLocalTestMints = container.runtimePolicy.allowCleartextLocalTestMints,
+                prefilledMintUrl = pendingConnectMintScan,
+                onPrefilledMintUrlConsumed = { pendingConnectMintScan = null },
+                onScanMintUrl = { flowHandoff.requestMintScanner(WalletFlow.ConnectMint, close) },
+                // The CTA was singular ("Add mint") — one mint satisfies it.
+                onMintAdded = close,
             )
         }
     }
@@ -631,7 +670,7 @@ private fun LoadingScreen() {
     }
 }
 
-internal enum class ScannerTarget { Auto, Receive, Send, Mints }
+internal enum class ScannerTarget { Auto, Receive, Send, Mints, ConnectMint }
 
 private fun routeScannedPayload(
     target: ScannerTarget,
@@ -640,6 +679,7 @@ private fun routeScannedPayload(
     onReceiveDetail: (String) -> Unit,
     onSend: (String) -> Unit,
     onMint: (String) -> Unit,
+    onConnectMint: (String) -> Unit,
 ) {
     val trimmed = payload.trim()
     when (target) {
@@ -653,6 +693,10 @@ private fun routeScannedPayload(
         }
         ScannerTarget.Mints -> {
             onMint(trimmed)
+            return
+        }
+        ScannerTarget.ConnectMint -> {
+            onConnectMint(trimmed)
             return
         }
         ScannerTarget.Auto -> Unit

@@ -43,27 +43,29 @@ import com.cashu.me.ui.theme.CashuTheme
 import com.cashu.me.ui.testing.UiTestTags
 
 /**
- * Bottom sheet for pasting/typing a mint URL — mirrors iOS `AddMintSheet`.
- * Camera overlays sit under dialog windows, so [onScan] should dismiss this
- * sheet before opening the scanner; a successful scan reopens via
+ * URL entry for connecting a mint, without any sheet chrome of its own — the
+ * host supplies the title, padding and dismissal. Used standalone by
+ * [AddMintSheet] (Mints tab) and as the pushed step of
+ * [ConnectMintSheetContent].
+ *
+ * Camera overlays sit under dialog windows, so [onScan] must dismiss the host
+ * sheet before opening the scanner; a successful scan comes back through
  * [initialUrl].
  */
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun AddMintSheet(
+fun AddMintFormBody(
     walletManager: WalletManager,
+    onScan: () -> Unit,
+    onAdded: () -> Unit,
+    modifier: Modifier = Modifier,
     initialUrl: String = "",
     allowCleartextLocalTestMints: Boolean = false,
-    onScan: () -> Unit,
-    onDismiss: () -> Unit,
 ) {
-    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val scope = rememberCoroutineScope()
     val clipboard = LocalClipboardManager.current
     val haptics = LocalHapticFeedback.current
 
     var url by remember(initialUrl) { mutableStateOf(initialUrl) }
-    var nickname by remember { mutableStateOf("") }
     var error by remember { mutableStateOf<String?>(null) }
     var isAdding by remember { mutableStateOf(false) }
 
@@ -93,13 +95,87 @@ fun AddMintSheet(
                 .onSuccess {
                     haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                     url = ""
-                    nickname = ""
-                    onDismiss()
+                    onAdded()
                 }
                 .onFailure { error = it.userFacingWalletMessage }
             isAdding = false
         }
     }
+
+    Column(
+        modifier = modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(CashuTheme.spacing.snug),
+    ) {
+        CashuTextField(
+            value = url,
+            onValueChange = {
+                url = it
+                error = null
+            },
+            label = "Mint URL",
+            placeholder = "https://…",
+            singleLine = true,
+            isError = error != null,
+            modifier = Modifier
+                .fillMaxWidth()
+                .testTag(UiTestTags.AddMintUrl),
+            keyboardOptions = KeyboardOptions(
+                capitalization = KeyboardCapitalization.None,
+            ),
+            trailingIcon = {
+                IconButton(onClick = onScan) {
+                    Icon(
+                        imageVector = Icons.Outlined.QrCodeScanner,
+                        contentDescription = "Scan",
+                    )
+                }
+            },
+        )
+
+        Text(
+            text = "Enter the URL of a Cashu mint to connect to it. " +
+                "This wallet is not affiliated with any mint.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+
+        if (error != null) {
+            InlineNotice(text = error!!)
+        }
+
+        Spacer(modifier = Modifier.height(CashuTheme.spacing.tight))
+
+        PrimaryButton(
+            text = "Add mint",
+            onClick = ::addMint,
+            enabled = url.isNotBlank() && !isAdding,
+            loading = isAdding,
+            modifier = Modifier.testTag(UiTestTags.AddMintSubmit),
+        )
+        GhostButton(
+            text = "Paste URL from clipboard",
+            onClick = ::pasteFromClipboard,
+            enabled = !isAdding,
+            modifier = Modifier.fillMaxWidth(),
+        )
+    }
+}
+
+/**
+ * Bottom sheet for pasting/typing a mint URL — mirrors iOS `AddMintSheet`.
+ * The Mints tab entry point; the wallet-home and Send entry points go through
+ * [ConnectMintSheetContent] instead.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun AddMintSheet(
+    walletManager: WalletManager,
+    initialUrl: String = "",
+    allowCleartextLocalTestMints: Boolean = false,
+    onScan: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
@@ -116,65 +192,12 @@ fun AddMintSheet(
         ) {
             FlowSheetTitle(title = "Add Mint")
 
-            CashuTextField(
-                value = url,
-                onValueChange = {
-                    url = it
-                    error = null
-                },
-                label = "Mint URL",
-                placeholder = "https://…",
-                singleLine = true,
-                isError = error != null,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .testTag(UiTestTags.AddMintUrl),
-                keyboardOptions = KeyboardOptions(
-                    capitalization = KeyboardCapitalization.None,
-                ),
-                trailingIcon = {
-                    IconButton(onClick = onScan) {
-                        Icon(
-                            imageVector = Icons.Outlined.QrCodeScanner,
-                            contentDescription = "Scan",
-                        )
-                    }
-                },
-            )
-
-            CashuTextField(
-                value = nickname,
-                onValueChange = { nickname = it },
-                label = "Nickname (optional)",
-                singleLine = true,
-                modifier = Modifier.fillMaxWidth(),
-            )
-
-            Text(
-                text = "Enter the URL of a Cashu mint to connect to it. " +
-                    "This wallet is not affiliated with any mint.",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-
-            if (error != null) {
-                InlineNotice(text = error!!)
-            }
-
-            Spacer(modifier = Modifier.height(CashuTheme.spacing.tight))
-
-            PrimaryButton(
-                text = "Add mint",
-                onClick = ::addMint,
-                enabled = url.isNotBlank() && !isAdding,
-                loading = isAdding,
-                modifier = Modifier.testTag(UiTestTags.AddMintSubmit),
-            )
-            GhostButton(
-                text = "Paste URL from clipboard",
-                onClick = ::pasteFromClipboard,
-                enabled = !isAdding,
-                modifier = Modifier.fillMaxWidth(),
+            AddMintFormBody(
+                walletManager = walletManager,
+                initialUrl = initialUrl,
+                allowCleartextLocalTestMints = allowCleartextLocalTestMints,
+                onScan = onScan,
+                onAdded = onDismiss,
             )
         }
     }

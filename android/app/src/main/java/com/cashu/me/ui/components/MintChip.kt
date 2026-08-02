@@ -9,7 +9,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.outlined.AccountBalance
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
@@ -28,25 +27,27 @@ import com.cashu.me.Models.MintInfo
 import com.cashu.me.ui.theme.CapsuleShape
 import com.cashu.me.ui.theme.CashuTheme
 
+/**
+ * Active-mint switcher above the balance. Hosts only mount it once a mint exists
+ * (iOS gates on `activeMint != nil` and emits nothing otherwise), so there is no
+ * empty face — a "No mint" pill would be chrome restating a zero balance.
+ */
 @Composable
 fun MintChip(
-    activeMint: MintInfo?,
+    activeMint: MintInfo,
     mints: List<MintInfo>,
     onSelect: (MintInfo) -> Unit,
     onManage: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     var expanded by remember { mutableStateOf(false) }
-    val label = activeMint?.name ?: "No mint"
     // Box anchors the DropdownMenu to the chip; as a bare sibling its position
     // would be at the mercy of whatever parent layout hosts the chip.
     Box(modifier = modifier) {
         // Custom capsule (not AssistChip) so inner padding can be bumped 20%
         // over the stock M3 chip (32dp tall / 8dp side pad → 38.4 / 9.6).
         Surface(
-            onClick = {
-                if (mints.isEmpty()) onManage() else expanded = true
-            },
+            onClick = { expanded = true },
             shape = CapsuleShape,
             color = MaterialTheme.colorScheme.surfaceContainerLow,
             modifier = Modifier.defaultMinSize(minHeight = MintChipMinHeight),
@@ -56,17 +57,9 @@ fun MintChip(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(MintChipIconGap),
             ) {
-                if (activeMint != null) {
-                    MintAvatar(mint = activeMint, size = MintChipAvatarSize)
-                } else {
-                    Icon(
-                        imageVector = Icons.Outlined.AccountBalance,
-                        contentDescription = null,
-                        modifier = Modifier.size(MintChipAvatarSize),
-                    )
-                }
+                MintAvatar(mint = activeMint, size = MintChipAvatarSize)
                 Text(
-                    text = label,
+                    text = activeMint.name,
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurface,
                 )
@@ -80,7 +73,7 @@ fun MintChip(
             shape = MaterialTheme.shapes.large,
         ) {
             mints.forEach { mint ->
-                val isActive = mint.url == activeMint?.url
+                val isActive = mint.url == activeMint.url
                 DropdownMenuItem(
                     text = { Text(mint.name) },
                     onClick = {
@@ -98,15 +91,13 @@ fun MintChip(
                     } else null,
                 )
             }
-            if (mints.isNotEmpty()) {
-                DropdownMenuItem(
-                    text = { Text("Add Mint") },
-                    onClick = {
-                        expanded = false
-                        onManage()
-                    },
-                )
-            }
+            DropdownMenuItem(
+                text = { Text("Add Mint") },
+                onClick = {
+                    expanded = false
+                    onManage()
+                },
+            )
         }
     }
 }
