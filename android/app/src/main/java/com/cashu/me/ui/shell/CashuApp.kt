@@ -240,6 +240,7 @@ private fun CashuAppContent(container: AppContainer) {
                 AppGate.Onboarding -> OnboardingScreen(
                     walletManager = container.walletManager,
                     nostrMintBackupService = container.nostrMintBackupService,
+                    googleDriveBackupService = container.googleDriveBackupService,
                 )
                 AppGate.Shell -> AuthenticatedShell(container = container)
             }

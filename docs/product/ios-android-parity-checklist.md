@@ -21,7 +21,7 @@ Priorities describe user impact, not the kind of work:
 
 An item is complete only when the behavior is verified on both platforms, including relevant loading, empty, error, and assistive-technology states. Add automated coverage where the rule can regress below the UI; otherwise record reproducible manual evidence.
 
-Platform-specific capabilities remain intentionally outside parity, including iCloud backup, Android host-card-emulation for NFC receive, native biometric presentation, system back/swipe conventions, and platform-native sheet or navigation treatment.
+Platform-specific capabilities remain intentionally outside parity, including Android host-card-emulation for NFC receive, native biometric presentation, system back/swipe conventions, and platform-native sheet or navigation treatment. Cloud seed backup is paired across platforms by design rather than identical: iOS iCloud backup (`docs/ios/ICLOUD_RECOVERY.md`) ↔ Android Google Drive backup (`docs/android/GOOGLE_DRIVE_RECOVERY.md`), with the same payload semantics but platform-specific storage and trust models.
 
 ## Required parity
 

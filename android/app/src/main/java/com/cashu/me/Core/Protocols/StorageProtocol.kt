@@ -81,6 +81,12 @@ object StorageKeys {
     const val settingsNostrSignerType = "settings.nostrSignerType"
     const val settingsNostrMintBackupEnabled = "settings.nostrMintBackupEnabled"
     const val walletNostrMintBackupLastBackupDate = "wallet.nostrMintBackup.lastBackupDate"
+    const val settingsDriveBackupEnabled = "settings.driveBackupEnabled"
+    const val walletDriveBackupLastBackupDate = "wallet.driveBackup.lastBackupDate"
+    // Mirrors iOS `cashu.local.icloudRestoreIncomplete`: deliberately outside the
+    // wallet./settings. prefixes so no wallet-boundary sweep can erase the
+    // write barrier while a restore is in flight.
+    const val localDriveRestoreIncomplete = "local.driveRestoreIncomplete"
     const val settingsAmountDisplayPrimary = "settings.amountDisplayPrimary"
     const val settingsHomeBalanceUnit = "settings.homeBalanceUnit"
     const val settingsSentryEnabled = "settings.sentryEnabled"

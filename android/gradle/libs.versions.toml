@@ -22,6 +22,8 @@ zxing = "3.5.3"
 camerax = "1.5.0"
 mlkitBarcode = "17.3.0"
 okHttp = "4.12.0"
+playServicesAuth = "21.4.0"
+playServicesAuthBlockstore = "16.4.0"
 bcprov = "1.78.1"
 bcurKotlin = "1.0.5"
 junit = "4.13.2"
@@ -64,6 +66,9 @@ androidx-compose-material-icons-extended = { module = "androidx.compose.material
 androidx-datastore-preferences = { module = "androidx.datastore:datastore-preferences", version.ref = "datastore" }
 kotlinx-serialization-json = { module = "org.jetbrains.kotlinx:kotlinx-serialization-json", version.ref = "serializationJson" }
 kotlinx-coroutines-android = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-android", version.ref = "coroutines" }
+kotlinx-coroutines-play-services = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-play-services", version.ref = "coroutines" }
+play-services-auth = { module = "com.google.android.gms:play-services-auth", version.ref = "playServicesAuth" }
+play-services-auth-blockstore = { module = "com.google.android.gms:play-services-auth-blockstore", version.ref = "playServicesAuthBlockstore" }
 kotlinx-datetime = { module = "org.jetbrains.kotlinx:kotlinx-datetime", version.ref = "datetime" }
 zxing-core = { module = "com.google.zxing:core", version.ref = "zxing" }
 androidx-camera-camera2 = { module = "androidx.camera:camera-camera2", version.ref = "camerax" }

@@ -6,6 +6,7 @@ import java.security.MessageDigest
 import com.cashu.me.Core.AppLockManager
 import com.cashu.me.Core.CashuRequestListener
 import com.cashu.me.Core.CashuRequestStore
+import com.cashu.me.Core.GoogleDriveBackupService
 import com.cashu.me.Core.MintDiscoveryManager
 import com.cashu.me.Core.NPCService
 import com.cashu.me.Core.Navigation.NavigationManager
@@ -21,6 +22,7 @@ import com.cashu.me.Core.SentryService
 import com.cashu.me.Core.SettingsManager
 import com.cashu.me.Core.WalletManager
 import com.cashu.me.Core.Protocols.StorageKeys
+import com.cashu.me.Core.Protocols.loadMnemonic
 
 class AppContainer(
     context: Context,
@@ -54,6 +56,33 @@ class AppContainer(
     )
     val npcService = NPCService(appContext, settingsManager)
     val nostrMintBackupService = NostrMintBackupService(settingsManager, settingsStore, cdkGateway)
+    val googleDriveBackupService = GoogleDriveBackupService(
+        host = object : GoogleDriveBackupService.Host {
+            override val backupEnabled: Boolean
+                get() = settingsManager.state.value.driveBackupEnabled
+
+            override fun setBackupEnabled(value: Boolean) = settingsManager.setDriveBackupEnabled(value)
+
+            override var lastBackupEpochMillis: Long?
+                get() = settingsStore.driveBackupLastBackupDate
+                set(value) {
+                    settingsStore.driveBackupLastBackupDate = value
+                }
+
+            override var restoreIncomplete: Boolean
+                get() = settingsStore.driveRestoreIncomplete
+                set(value) {
+                    settingsStore.driveRestoreIncomplete = value
+                }
+
+            override fun loadMnemonic(): String? = secureStorage.loadMnemonic()
+
+            override fun loadMintUrls(): List<String> = walletStore.loadMints().map { it.url }
+        },
+        authClient = dependencies.driveAuthClient(appContext),
+        driveApi = dependencies.driveAppDataApi(),
+        blockStore = dependencies.blockStore(appContext),
+    )
     val walletManager = WalletManager(
         secureStorage = secureStorage,
         walletStore = walletStore,
@@ -63,6 +92,7 @@ class AppContainer(
         npcService = npcService,
         nwcManager = nwcManager,
         nostrMintBackupService = nostrMintBackupService,
+        googleDriveBackupService = googleDriveBackupService,
         databasePathManager = walletDatabasePathManager,
         gateway = cdkGateway,
         runStartupMaintenance = runtimePolicy.runStartupMaintenance,

@@ -7,6 +7,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
+import androidx.compose.material.icons.outlined.Cloud
 import androidx.compose.material.icons.outlined.CloudUpload
 import androidx.compose.material.icons.outlined.Restore
 import androidx.compose.material.icons.outlined.VpnKey
@@ -52,6 +53,7 @@ fun BackupRestoreScreen(
     appLockManager: AppLockManager,
     onClose: () -> Unit,
     onOpenRestore: () -> Unit,
+    onOpenDriveBackup: () -> Unit,
 ) {
     val scope = rememberCoroutineScope()
     val settings by settingsManager.state.collectAsState()
@@ -93,6 +95,16 @@ fun BackupRestoreScreen(
                 subtitle = "Restore a wallet and recover funds from mints.",
                 leadingIcon = Icons.Outlined.Restore,
                 onClick = onOpenRestore,
+            )
+            NavRow(
+                title = "Google Drive Backup",
+                subtitle = if (settings.driveBackupEnabled) {
+                    "On · Seed phrase and mint list synced to Google Drive."
+                } else {
+                    "Auto-backup your seed phrase and mints."
+                },
+                leadingIcon = Icons.Outlined.Cloud,
+                onClick = onOpenDriveBackup,
             )
 
             SectionHeader("Mint backup")
