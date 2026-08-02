@@ -105,21 +105,21 @@ fun PrivacyScreen(
             CanvasDivider(leadingInset = 16.dp)
             ToggleRow(
                 title = "Check sent token claims",
-                subtitle = "Detect when recipients redeem tokens you sent",
+                subtitle = "Asks the mint whether tokens you sent were claimed, while the app is open. Off, the wallet stays quiet and you check manually instead.",
                 checked = settings.checkSentTokens,
                 onCheckedChange = settingsManager::setCheckSentTokens,
             )
             CanvasDivider(leadingInset = 16.dp)
             ToggleRow(
                 title = "Check incoming invoices",
-                subtitle = "Poll mint quotes while screens are open",
+                subtitle = "Checks for incoming payments while the app is open, contacting the mint each time. Off, the wallet doesn't check on its own.",
                 checked = settings.checkIncomingInvoices,
                 onCheckedChange = settingsManager::setCheckIncomingInvoices,
             )
             CanvasDivider(leadingInset = 16.dp)
             ToggleRow(
                 title = "Periodic invoice checks",
-                subtitle = "Refresh quote status on a timer",
+                subtitle = "Every couple of minutes while the app is open, each check contacting the mint. Off, the wallet checks only once when it opens.",
                 checked = settings.periodicallyCheckIncomingInvoices,
                 onCheckedChange = settingsManager::setPeriodicallyCheckIncomingInvoices,
                 enabled = settings.checkIncomingInvoices,
@@ -143,7 +143,7 @@ fun PrivacyScreen(
             CanvasDivider(leadingInset = 16.dp)
             ToggleRow(
                 title = "Receive automatically",
-                subtitle = "Automatically receive payments from mints you already trust",
+                subtitle = "Payments from mints you already trust arrive without asking. Off, you confirm each payment before it's received.",
                 checked = settings.receivePaymentRequestsAutomatically,
                 onCheckedChange = settingsManager::setReceivePaymentRequestsAutomatically,
                 enabled = settings.enablePaymentRequests,
@@ -163,6 +163,13 @@ fun PrivacyScreen(
                 subtitle = "Opt-in. Screenshots and view hierarchy are not attached. Reports can include technical error details and recent wallet actions.",
                 checked = settings.sentryEnabled,
                 onCheckedChange = settingsManager::setSentryEnabled,
+            )
+
+            Text(
+                text = "Checks contact the mint over the network — more checks mean faster updates, fewer give the mint less to see.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(16.dp),
             )
 
         }
