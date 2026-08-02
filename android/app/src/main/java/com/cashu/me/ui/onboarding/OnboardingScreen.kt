@@ -84,6 +84,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import com.cashu.me.Core.GoogleDriveBackupService
 import com.cashu.me.Core.MnemonicInput
 import com.cashu.me.Core.NostrMintBackupService
 import com.cashu.me.Core.WalletManager
@@ -98,6 +99,7 @@ import com.cashu.me.ui.components.InlineNotice
 import com.cashu.me.ui.components.MintAvatar
 import com.cashu.me.ui.components.PrimaryButton
 import com.cashu.me.ui.components.SecondaryButton
+import com.cashu.me.ui.restore.DriveRestoreStep
 import com.cashu.me.ui.restore.RestoreMethodStep
 import com.cashu.me.ui.restore.RestoreMintsStep
 import com.cashu.me.ui.restore.RestorePresentation
@@ -130,6 +132,7 @@ private sealed interface OnboardingStep {
     data class ShowMnemonic(val mnemonic: String) : OnboardingStep
     data class FirstMint(val mnemonic: String) : OnboardingStep
     data object RestoreMethod : OnboardingStep
+    data object DriveRestore : OnboardingStep
     data object RestoreInput : OnboardingStep
     data class RestoreMints(val mnemonic: String) : OnboardingStep
     data class RestoreProgress(
@@ -189,11 +192,21 @@ private fun rememberAppeared(): Boolean {
 fun OnboardingScreen(
     walletManager: WalletManager,
     nostrMintBackupService: NostrMintBackupService,
+    googleDriveBackupService: GoogleDriveBackupService,
 ) {
     val scope = rememberCoroutineScope()
     val walletState by walletManager.state.collectAsState()
 
-    var step: OnboardingStep by remember { mutableStateOf(OnboardingStep.Welcome) }
+    // An interrupted Drive restore resumes at its step (iOS OnboardingView.onAppear).
+    var step: OnboardingStep by remember {
+        mutableStateOf(
+            if (googleDriveBackupService.restoreIncomplete) {
+                OnboardingStep.DriveRestore
+            } else {
+                OnboardingStep.Welcome
+            },
+        )
+    }
     var infoOpen by remember { mutableStateOf(false) }
     var creating by remember { mutableStateOf(false) }
     var retryingStartup by remember { mutableStateOf(false) }
@@ -321,6 +334,19 @@ fun OnboardingScreen(
                 onSeedPhrase = {
                     restoreError = null
                     step = OnboardingStep.RestoreInput
+                },
+                onGoogleDrive = {
+                    restoreError = null
+                    step = OnboardingStep.DriveRestore
+                },
+            )
+
+            OnboardingStep.DriveRestore -> DriveRestoreStep(
+                walletManager = walletManager,
+                googleDriveBackupService = googleDriveBackupService,
+                onBack = { step = OnboardingStep.RestoreMethod },
+                onDone = {
+                    scope.launch { runCatching { walletManager.completeRestore() } }
                 },
             )
 

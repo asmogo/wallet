@@ -971,13 +971,14 @@ private fun RestoreProgressRow(
 }
 
 // ---------------------------------------------------------------------------
-// Method chooser (onboarding only — Android has no iCloud twin)
+// Method chooser (onboarding only — iOS restoreMethod)
 // ---------------------------------------------------------------------------
 
 @Composable
 fun RestoreMethodStep(
     onBack: () -> Unit,
     onSeedPhrase: () -> Unit,
+    onGoogleDrive: (() -> Unit)? = null,
 ) {
     Column(modifier = Modifier.fillMaxSize()) {
         Spacer(Modifier.weight(1f))
@@ -1006,6 +1007,13 @@ fun RestoreMethodStep(
             verticalArrangement = Arrangement.spacedBy(CashuTheme.spacing.tight),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
+            if (onGoogleDrive != null) {
+                // iOS order: the cloud restore leads, seed phrase follows.
+                SecondaryButton(
+                    text = "Restore from Google Drive",
+                    onClick = onGoogleDrive,
+                )
+            }
             SecondaryButton(
                 text = "Use Seed Phrase",
                 onClick = onSeedPhrase,
