@@ -150,6 +150,8 @@
 		T2B000000000000E /* CrashReportSanitizerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = T1B000000000000E /* CrashReportSanitizerTests.swift */; };
 		T2B000000000000F /* QRContextAccessibilityTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = T1B000000000000F /* QRContextAccessibilityTests.swift */; };
 		T2B000000000000F /* HistorySearchTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = T1B000000000000F /* HistorySearchTests.swift */; };
+		T2B0000000000010 /* WalletSurfaceCoordinatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = T1B0000000000010 /* WalletSurfaceCoordinatorTests.swift */; };
+		T2B0000000000011 /* ScanRouterTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = T1B0000000000011 /* ScanRouterTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -311,6 +313,8 @@
 		AV00000000000011 /* AppVersion.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppVersion.swift; sourceTree = "<group>"; };
 		AV00000000000012 /* AppVersionTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = AppVersionTests.swift; path = CashuWalletTests/AppVersionTests.swift; sourceTree = "<group>"; };
 		T1B000000000000F /* HistorySearchTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = HistorySearchTests.swift; path = CashuWalletTests/HistorySearchTests.swift; sourceTree = "<group>"; };
+		T1B0000000000010 /* WalletSurfaceCoordinatorTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = WalletSurfaceCoordinatorTests.swift; path = CashuWalletTests/WalletSurfaceCoordinatorTests.swift; sourceTree = "<group>"; };
+		T1B0000000000011 /* ScanRouterTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = ScanRouterTests.swift; path = CashuWalletTests/ScanRouterTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -369,6 +373,8 @@
 				T1B000000000000F /* QRContextAccessibilityTests.swift */,
 				AV00000000000012 /* AppVersionTests.swift */,
 				T1B000000000000F /* HistorySearchTests.swift */,
+				T1B0000000000010 /* WalletSurfaceCoordinatorTests.swift */,
+				T1B0000000000011 /* ScanRouterTests.swift */,
 			);
 			name = CashuWalletTests;
 			sourceTree = "<group>";
@@ -921,6 +927,8 @@
 				T2B000000000000F /* QRContextAccessibilityTests.swift in Sources */,
 				AV00000000000002 /* AppVersionTests.swift in Sources */,
 				T2B000000000000F /* HistorySearchTests.swift in Sources */,
+				T2B0000000000010 /* WalletSurfaceCoordinatorTests.swift in Sources */,
+				T2B0000000000011 /* ScanRouterTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
