@@ -1442,7 +1442,7 @@ struct UnifiedSendView: View {
         // input, `.large` + flat canvas for amount/confirm/status.
         .presentationDetents(prefersCompactSheet ? [.height(compactDetentHeight)] : [.large])
         .presentationDragIndicator(.visible)
-        .modifier(UnifiedSendSheetBackground(compact: prefersCompactSheet))
+        .canvasSheetBackground(whenFillingScreen: !prefersCompactSheet)
     }
 
     // MARK: Input step
@@ -2843,19 +2843,6 @@ struct UnifiedSendView: View {
 
 /// Compact input keeps the system translucent sheet; amount/confirm/status pin
 /// the flat canvas so they read seamless once the detent expands to `.large`.
-private struct UnifiedSendSheetBackground: ViewModifier {
-    let compact: Bool
-
-    @ViewBuilder
-    func body(content: Content) -> some View {
-        if compact {
-            content
-        } else {
-            content.canvasSheetBackground()
-        }
-    }
-}
-
 struct MeltView: View {
     enum MeltMode: String, CaseIterable {
         case lightning

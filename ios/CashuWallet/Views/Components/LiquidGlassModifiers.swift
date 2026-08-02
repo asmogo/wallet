@@ -64,6 +64,17 @@ extension View {
         modifier(CanvasSheetBackground())
     }
 
+    /// Applies ``canvasSheetBackground()`` only to sheets that fill the screen.
+    ///
+    /// A full-height sheet replaces the background, so matching the canvas is
+    /// right. A sheet that hugs its content floats *over* the canvas and must
+    /// keep the system's elevated background to read as a separate layer —
+    /// forcing the canvas colour there resolves to the same black as the screen
+    /// behind it in dark mode, leaving only a rounded corner to separate them.
+    func canvasSheetBackground(whenFillingScreen fillsScreen: Bool) -> some View {
+        modifier(ConditionalCanvasSheetBackground(fillsScreen: fillsScreen))
+    }
+
     /// One-shot, opacity-only fade for a full screen's content on entry. Plays
     /// once when the modified view first appears — not on internal state swaps —
     /// with zero positional or scale movement (the presenting sheet/cover owns the
@@ -131,6 +142,19 @@ private struct ScreenEntryFade: ViewModifier {
 /// Pins a modal's presentation background to the *base*-elevation `systemBackground`.
 /// Inside a sheet the plain semantic resolves to the elevated gray, so we resolve it
 /// at base level (for the current color scheme) to match the home canvas exactly.
+private struct ConditionalCanvasSheetBackground: ViewModifier {
+    let fillsScreen: Bool
+
+    @ViewBuilder
+    func body(content: Content) -> some View {
+        if fillsScreen {
+            content.canvasSheetBackground()
+        } else {
+            content
+        }
+    }
+}
+
 private struct CanvasSheetBackground: ViewModifier {
     @Environment(\.colorScheme) private var colorScheme
 
