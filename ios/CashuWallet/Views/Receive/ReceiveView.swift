@@ -42,9 +42,11 @@ struct UnifiedReceiveView: View {
     /// sheet still presents itself; its close tears down to the wallet.
     private enum ReceiveRoute: Identifiable {
         case request(CashuRequest)
+        case requestFailure(String)
         var id: String {
             switch self {
             case .request(let request): return "request-\(request.id)"
+            case .requestFailure: return "request-failure"
             }
         }
     }
@@ -201,6 +203,23 @@ struct UnifiedReceiveView: View {
                 )
                 .environmentObject(walletManager)
             }
+        case .requestFailure(let message):
+            NavigationStack {
+                PaymentStatusView(
+                    details: [],
+                    phase: .failure(message: message),
+                    failureTitle: "Couldn't Create Request",
+                    onDone: { self.route = nil },
+                    onRetry: { self.route = nil }
+                )
+                .navigationTitle("Receive Ecash")
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbar {
+                    ToolbarItem(placement: .cancellationAction) {
+                        SheetCloseButton(action: { self.route = nil })
+                    }
+                }
+            }
         }
     }
 
@@ -294,7 +313,7 @@ struct UnifiedReceiveView: View {
             route = .request(request)
         } catch {
             AppLogger.ui.error("createNewRequest failed: \(String(describing: error), privacy: .public)")
-            inputHint = "Couldn't create the request. Please try again."
+            route = .requestFailure(error.userFacingWalletMessage)
         }
     }
 }

@@ -125,6 +125,30 @@ import com.cashu.me.ui.testing.UiTestTags
 private sealed interface ReceiveLnFace {
     data object Input : ReceiveLnFace
     data class Display(val quote: MintQuoteInfo) : ReceiveLnFace
+    data class Failure(
+        val title: String,
+        val detail: String,
+        val retry: Retry,
+    ) : ReceiveLnFace
+
+    data class Retry(
+        val method: PaymentMethodKind,
+        val amountless: Boolean,
+        val forceNewReusableOffer: Boolean,
+        val amountOverride: Long?,
+    )
+}
+
+private fun receiveRequestHeaderTitle(method: PaymentMethodKind): String = when (method) {
+    PaymentMethodKind.Bolt11 -> "Lightning Invoice"
+    PaymentMethodKind.Bolt12 -> "Reusable Invoice"
+    PaymentMethodKind.Onchain -> "Bitcoin Address"
+}
+
+private fun receiveRequestFailureTitle(method: PaymentMethodKind): String = when (method) {
+    PaymentMethodKind.Bolt11,
+    PaymentMethodKind.Bolt12 -> "Couldn't Create Invoice"
+    PaymentMethodKind.Onchain -> "Couldn't Create Address"
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -255,7 +279,16 @@ fun ReceiveLightningScreen(
                 }
                 face = ReceiveLnFace.Display(quote)
             } catch (t: Throwable) {
-                errorText = t.userFacingWalletMessage
+                face = ReceiveLnFace.Failure(
+                    title = receiveRequestFailureTitle(requestMethod),
+                    detail = t.userFacingWalletMessage,
+                    retry = ReceiveLnFace.Retry(
+                        method = requestMethod,
+                        amountless = amountless,
+                        forceNewReusableOffer = forceNewReusableOffer,
+                        amountOverride = amountOverride,
+                    ),
+                )
             } finally {
                 creating = false
             }
@@ -359,11 +392,12 @@ fun ReceiveLightningScreen(
         previousAmountEntryContext = amountEntryContext
     }
 
-    // Dismissal contract: system back = swipe = abandon to the wallet — the
+// Dismissal contract: system back = swipe = abandon to the wallet — the
     // sheet handles it at every face. Waiting for an invoice to be paid is a
     // freely-dismissible phase: the global pending-quote sweep and quote-keyed
     // monitors credit a later payment, surfaced via the home delta/History.
     // The header chevron owns the internal Display → Input step-back.
+    // Failure terminal uses the header close affordance (and Try Again).
 
     // Abandoned-quote watcher: every quote-keyed monitor re-keys to the
     // replacement after "Use new address", so this screen-scoped loop is what
@@ -428,25 +462,25 @@ fun ReceiveLightningScreen(
         SheetHeader(
             title = when (val current = face) {
                 ReceiveLnFace.Input -> "Receive"
-                is ReceiveLnFace.Display -> when (current.quote.paymentMethod) {
-                    PaymentMethodKind.Bolt11 -> "Lightning Invoice"
-                    PaymentMethodKind.Bolt12 -> "Reusable Invoice"
-                    PaymentMethodKind.Onchain -> "Bitcoin Address"
-                }
+                is ReceiveLnFace.Display -> receiveRequestHeaderTitle(current.quote.paymentMethod)
+                is ReceiveLnFace.Failure -> receiveRequestHeaderTitle(current.retry.method)
             },
             // Input: close X (same as Receive Ecash / Cashu Request). Display:
             // back chevron returns to the amount pad.
             navigationIcon = when (face) {
                 ReceiveLnFace.Input -> Icons.Outlined.Close
                 is ReceiveLnFace.Display -> Icons.AutoMirrored.Outlined.ArrowBack
+                is ReceiveLnFace.Failure -> Icons.Outlined.Close
             },
             navigationContentDescription = when (face) {
                 ReceiveLnFace.Input -> "Close"
                 is ReceiveLnFace.Display -> "Back"
+                is ReceiveLnFace.Failure -> "Close"
             },
             onNavigationClick = when (face) {
                 ReceiveLnFace.Input -> onClose
                 is ReceiveLnFace.Display -> { { face = ReceiveLnFace.Input } }
+                is ReceiveLnFace.Failure -> onClose
             },
             actions = {
                 val current = face
@@ -547,7 +581,9 @@ fun ReceiveLightningScreen(
                 .weight(1f)
                 .fillMaxWidth(),
             // Display → Display (fresh on-chain address) also slides forward.
-            forward = { _, target -> target is ReceiveLnFace.Display },
+            forward = { _, target ->
+                target is ReceiveLnFace.Display || target is ReceiveLnFace.Failure
+            },
             label = "receive-lightning-face",
         ) { current ->
             when (current) {
@@ -809,6 +845,23 @@ fun ReceiveLightningScreen(
                         onOpenExplorer = explorerUrl?.let { url -> { context.openInBrowser(url) } },
                     )
                 }
+
+                is ReceiveLnFace.Failure -> PaymentStatusScreen(
+                    phase = PaymentStatusPhase.Failure,
+                    title = current.title,
+                    detail = current.detail,
+                    doneLabel = "Try Again",
+                    onDone = {
+                        val retry = current.retry
+                        face = ReceiveLnFace.Input
+                        createMintRequest(
+                            requestMethod = retry.method,
+                            amountless = retry.amountless,
+                            forceNewReusableOffer = retry.forceNewReusableOffer,
+                            amountOverride = retry.amountOverride,
+                        )
+                    },
+                )
             }
         }
       }
