@@ -241,45 +241,42 @@ fun CashuRequestDetailScreen(
             val mintName = creditedMintUrl?.let { url ->
                 walletState.mints.firstOrNull { it.url == url }?.name ?: url
             }
-            CashuRequestSuccessTerminal(
-                amountLabel = amountLabel,
-                mintName = mintName,
-                onDone = {
-                    nfcReceiveCoordinator.deactivate()
-                    onClose()
+            Scaffold(
+                topBar = {
+                    CashuRequestDetailTopBar(
+                        title = request.displayTitle,
+                        onClose = onClose,
+                        onShare = {
+                            context.shareText(request.encoded, subject = request.displayTitle)
+                        },
+                    )
                 },
-            )
+            ) { padding ->
+                CashuRequestSuccessTerminal(
+                    amountLabel = amountLabel,
+                    mintName = mintName,
+                    onDone = {
+                        nfcReceiveCoordinator.deactivate()
+                        onClose()
+                    },
+                    modifier = Modifier.padding(padding),
+                )
+            }
         } else {
 
         Scaffold(
             topBar = {
-                CenterAlignedTopAppBar(
-                    title = {
-                        Text(
-                            request?.displayTitle ?: "Cashu Request",
-                            style = MaterialTheme.typography.titleMedium,
-                        )
-                    },
-                    navigationIcon = {
-                        IconButton(onClick = onClose) {
-                            ToolbarIcon(
-                                imageVector = Icons.Outlined.Close,
-                                contentDescription = "Close",
+                CashuRequestDetailTopBar(
+                    title = request?.displayTitle ?: "Cashu Request",
+                    onClose = onClose,
+                    onShare = request?.let { current ->
+                        {
+                            context.shareText(
+                                current.encoded,
+                                subject = current.displayTitle,
                             )
                         }
                     },
-                    actions = {
-                        if (request != null) {
-                            IconButton(onClick = {
-                                context.shareText(request.encoded, subject = request.displayTitle)
-                            }) {
-                                ToolbarIcon(Icons.Outlined.IosShare, contentDescription = "Share")
-                            }
-                        }
-                    },
-                    colors = TopAppBarDefaults.topAppBarColors(
-                        containerColor = MaterialTheme.colorScheme.background,
-                    ),
                 )
             },
         ) { padding ->
@@ -662,14 +659,51 @@ internal fun CashuRequestSuccessTerminal(
     amountLabel: String?,
     mintName: String?,
     onDone: () -> Unit,
+    modifier: Modifier = Modifier,
 ) {
     PaymentStatusScreen(
+        modifier = modifier,
         phase = PaymentStatusPhase.Success,
         title = "Payment Received!",
         onDone = onDone,
         rows = {
             CashuRequestReceiptRows(amountLabel = amountLabel, mintName = mintName)
         },
+    )
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun CashuRequestDetailTopBar(
+    title: String,
+    onClose: () -> Unit,
+    onShare: (() -> Unit)?,
+) {
+    CenterAlignedTopAppBar(
+        title = {
+            Text(
+                title,
+                style = MaterialTheme.typography.titleMedium,
+            )
+        },
+        navigationIcon = {
+            IconButton(onClick = onClose) {
+                ToolbarIcon(
+                    imageVector = Icons.Outlined.Close,
+                    contentDescription = "Close",
+                )
+            }
+        },
+        actions = {
+            if (onShare != null) {
+                IconButton(onClick = onShare) {
+                    ToolbarIcon(Icons.Outlined.IosShare, contentDescription = "Share")
+                }
+            }
+        },
+        colors = TopAppBarDefaults.topAppBarColors(
+            containerColor = MaterialTheme.colorScheme.background,
+        ),
     )
 }
 

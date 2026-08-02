@@ -478,7 +478,8 @@ fun UnifiedSendScreen(
             }
             ).testTag(UiTestTags.SendSheet),
     ) {
-        // Status terminal replaces the whole body (iOS PaymentStatusView slot).
+        // Status terminal replaces the form body but retains the sheet title,
+        // matching the toolbar-owned iOS PaymentStatusView slot.
         // One content key for every status value keeps a single
         // PaymentStatusScreen mounted across Sending → Sent/Failed, so the
         // spinner morphs into the check/X in place; the form ↔ terminal swap
@@ -497,13 +498,19 @@ fun UnifiedSendScreen(
             contentKey = { it != null },
         ) { current ->
             if (current != null) {
-                SendStatusTerminal(
-                    status = current,
-                    formatter = formatter,
-                    useBitcoinSymbol = settings.useBitcoinSymbol,
-                    onClose = onClose,
-                    onRetry = { status = null },
-                )
+                Column(modifier = Modifier.fillMaxSize()) {
+                    FlowSheetTitle(
+                        title = if (creqFromScan) "Pay Cashu Request" else "Send",
+                    )
+                    SendStatusTerminal(
+                        status = current,
+                        formatter = formatter,
+                        useBitcoinSymbol = settings.useBitcoinSymbol,
+                        onClose = onClose,
+                        onRetry = { status = null },
+                        modifier = Modifier.weight(1f),
+                    )
+                }
             } else if (step == SendStep.Input && walletState.mints.isEmpty()) {
                 // Same surface the wallet-home "Add mint" CTA opens. It draws its
                 // own header so it can swap the title and reveal a back chevron
@@ -694,6 +701,7 @@ private fun SendStatusTerminal(
     useBitcoinSymbol: Boolean,
     onClose: () -> Unit,
     onRetry: () -> Unit,
+    modifier: Modifier = Modifier,
 ) {
     // An async-accepted (NUT-05) melt — typical for on-chain — isn't settled
     // yet: the mint took the payment and pays out in the background, so say
@@ -704,6 +712,7 @@ private fun SendStatusTerminal(
     // anything else returns to the confirm step.
     val failure = (status as? SendStatus.Failed)?.message
     PaymentStatusScreen(
+        modifier = modifier,
         phase = when (status) {
             is SendStatus.Sending -> PaymentStatusPhase.Processing
             is SendStatus.Sent -> PaymentStatusPhase.Success

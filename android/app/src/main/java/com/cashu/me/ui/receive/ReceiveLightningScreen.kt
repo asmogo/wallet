@@ -175,8 +175,8 @@ fun ReceiveLightningScreen(
     var method by remember { mutableStateOf(PaymentMethodKind.Bolt11) }
     var creating by remember { mutableStateOf(false) }
     var errorText by remember { mutableStateOf<String?>(null) }
-    // When a payment lands the whole screen crossfades to the shared full-screen
-    // success terminal (iOS parity — no inline "Paid" row, no Done button).
+    // When a payment lands the body crossfades to the shared receipt while the
+    // sheet header stays mounted, matching iOS ReceiveLightningView.
     var successInfo by remember { mutableStateOf<ReceiveSuccessInfo?>(null) }
     // On-chain quotes abandoned via "Use new address": a payment may already be
     // racing toward the old address, so keep checking them for the life of the
@@ -394,7 +394,7 @@ fun ReceiveLightningScreen(
     }
 
     // System back unwinds Display → Input; from Input the sheet handles it.
-    // Suppressed once the success terminal is showing (it auto-dismisses).
+    // Suppressed once the success terminal is showing.
     BackHandler(
         enabled = (face is ReceiveLnFace.Display || face is ReceiveLnFace.Failure) &&
             successInfo == null,
@@ -444,6 +444,7 @@ fun ReceiveLightningScreen(
                     },
                     mintName = walletState.mints.firstOrNull { it.url == refreshed?.mintUrl }?.name
                         ?: walletState.activeMint?.name,
+                    method = refreshed?.paymentMethod ?: PaymentMethodKind.Onchain,
                 )
                 return@LaunchedEffect // terminal owns the sheet now
             }
@@ -451,11 +452,27 @@ fun ReceiveLightningScreen(
         }
     }
 
-    // The paid terminal replaces the whole sheet body (header + faces), fading
-    // in over the QR the way iOS swaps `body` to the success view.
+    // The paid terminal replaces the sheet body while retaining the same header
+    // and explicit Done action as iOS.
     Crossfade(targetState = successInfo, label = "receive-ln-terminal") { terminal ->
       if (terminal != null) {
-        ReceiveSuccessTerminal(info = terminal, onDone = onClose)
+        Column(
+            modifier = Modifier
+                .fillMaxHeight()
+                .testTag(UiTestTags.ReceiveLightningScreen),
+        ) {
+            SheetHeader(
+                title = receiveRequestHeaderTitle(terminal.method),
+                navigationIcon = Icons.Outlined.Close,
+                navigationContentDescription = "Close",
+                onNavigationClick = onClose,
+            )
+            ReceiveSuccessTerminal(
+                info = terminal,
+                onDone = onClose,
+                modifier = Modifier.weight(1f),
+            )
+        }
       } else {
         Column(
             modifier = Modifier
@@ -785,6 +802,7 @@ fun ReceiveLightningScreen(
                             successInfo = ReceiveSuccessInfo(
                                 amountLabel = amountLabel,
                                 mintName = activeMint?.name,
+                                method = liveQuote.paymentMethod,
                             )
                         }
                     }
@@ -1552,21 +1570,23 @@ private fun ExpiryCaption(expirySeconds: Long?) {
 private data class ReceiveSuccessInfo(
     val amountLabel: String?,
     val mintName: String?,
+    val method: PaymentMethodKind,
 )
 
 /** Full-screen shared success terminal for a paid receive (iOS
- *  `receiveSuccessView`). Auto-dismisses after a brief dwell — no Done button
- *  (Android carve-out; the mint runs on the wallet's app-lifetime scope). */
+ *  `receiveSuccessView`). The mint still runs on the wallet's app-lifetime
+ *  scope, while dismissal remains an explicit user action on both platforms. */
 @Composable
-private fun ReceiveSuccessTerminal(info: ReceiveSuccessInfo, onDone: () -> Unit) {
-    LaunchedEffect(Unit) {
-        delay(1800)
-        onDone()
-    }
+private fun ReceiveSuccessTerminal(
+    info: ReceiveSuccessInfo,
+    onDone: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
     PaymentStatusScreen(
         phase = PaymentStatusPhase.Success,
         title = "Payment Received!",
-        onDone = null,
+        onDone = onDone,
+        modifier = modifier,
         rows = {
             if (info.amountLabel != null) {
                 InspectorRow(
