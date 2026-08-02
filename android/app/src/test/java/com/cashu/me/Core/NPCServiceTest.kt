@@ -1,6 +1,7 @@
 package com.cashu.me.Core
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.cashudevkit.NpubCashQuote
@@ -91,5 +92,49 @@ class NPCServiceTest {
         )
 
         assertEquals(listOf("oldest", "newest"), quotes.map { it.id })
+    }
+
+    @Test
+    fun periodicInvoiceChecksRequireBothPreferences() {
+        assertTrue(
+            NPCService.shouldRunPeriodicInvoiceChecks(
+                isEnabled = true,
+                isConnected = true,
+                checkIncomingInvoices = true,
+                periodicallyCheckIncomingInvoices = true,
+            ),
+        )
+        assertFalse(
+            NPCService.shouldRunPeriodicInvoiceChecks(
+                isEnabled = true,
+                isConnected = true,
+                checkIncomingInvoices = false,
+                periodicallyCheckIncomingInvoices = true,
+            ),
+        )
+        assertFalse(
+            NPCService.shouldRunPeriodicInvoiceChecks(
+                isEnabled = true,
+                isConnected = true,
+                checkIncomingInvoices = true,
+                periodicallyCheckIncomingInvoices = false,
+            ),
+        )
+        assertFalse(
+            NPCService.shouldRunPeriodicInvoiceChecks(
+                isEnabled = false,
+                isConnected = true,
+                checkIncomingInvoices = true,
+                periodicallyCheckIncomingInvoices = true,
+            ),
+        )
+        assertFalse(
+            NPCService.shouldRunPeriodicInvoiceChecks(
+                isEnabled = true,
+                isConnected = false,
+                checkIncomingInvoices = true,
+                periodicallyCheckIncomingInvoices = true,
+            ),
+        )
     }
 }
