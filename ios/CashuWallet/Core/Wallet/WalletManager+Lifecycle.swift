@@ -50,6 +50,7 @@ extension WalletManager {
             try? keychainService.deleteMnemonic()
             try? keychainService.deleteNostrPrivateKey()
             setICloudRestoreIncomplete(false)
+            OnboardingCompletionState.clear()
             SettingsManager.shared.resetWalletScopedData()
         }
 
@@ -89,9 +90,16 @@ extension WalletManager {
             if let storedMnemonic {
                 mnemonic = storedMnemonic
                 loadCachedWalletState()
+                // Wallets installed before the completion marker existed are
+                // treated as fully onboarded; only installs from this version
+                // on can be incomplete.
+                if !OnboardingCompletionState.hasMarker() {
+                    OnboardingCompletionState.setCompleted(true)
+                }
                 needsOnboarding = ICloudRestorePolicy.needsOnboarding(
                     hasStoredMnemonic: true,
-                    restoreIncomplete: hasIncompleteICloudRestore
+                    restoreIncomplete: hasIncompleteICloudRestore,
+                    onboardingCompleted: OnboardingCompletionState.isCompleted()
                 )
                 isInitialized = true
                 publishedCachedWallet = true
@@ -119,9 +127,11 @@ extension WalletManager {
                 startDeferredStartupMaintenance()
                 SentryService.breadcrumb("Wallet loaded", category: "wallet.lifecycle")
             } else {
+                OnboardingCompletionState.clear()
                 needsOnboarding = ICloudRestorePolicy.needsOnboarding(
                     hasStoredMnemonic: false,
-                    restoreIncomplete: hasIncompleteICloudRestore
+                    restoreIncomplete: hasIncompleteICloudRestore,
+                    onboardingCompleted: false
                 )
                 isRuntimeReady = true
                 isInitialized = true
@@ -249,6 +259,7 @@ extension WalletManager {
 
     func completeOnboarding() {
         transactionService.loadCachedState()
+        OnboardingCompletionState.setCompleted(true)
         if hasIncompleteICloudRestore {
             // Choosing a different onboarding path after an interrupted iCloud
             // restore is also a valid completion. Release the write barrier only
@@ -277,6 +288,7 @@ extension WalletManager {
         resetRuntimeState()
         try keychainService.deleteMnemonic()
         try? keychainService.deleteNostrPrivateKey()
+        OnboardingCompletionState.clear()
         try removeWalletDatabaseFiles()
         walletStore.removeAllWalletData()
         SettingsManager.shared.resetWalletScopedData()
@@ -323,6 +335,9 @@ extension WalletManager {
             try initializeWalletForCreation(mnemonic: newMnemonic)
             try keychainService.saveMnemonic(newMnemonic)
             mnemonic = newMnemonic
+            // A freshly installed wallet has not finished onboarding; only
+            // completeOnboarding()/completeRestore() may flip this to done.
+            OnboardingCompletionState.setCompleted(false)
             SettingsManager.shared.resetWalletScopedData(resetRuntimeServices: false)
             try removeWalletFileBackups(fileBackups)
             if !IntegrationTestConfig.shouldUseDeterministicUIRuntime {

@@ -107,6 +107,8 @@ import com.cashu.me.ui.restore.RestoreProgressStep
 import com.cashu.me.ui.restore.RestoreSeedStep
 import com.cashu.me.ui.restore.restoreSeedInstallErrorMessage
 import com.cashu.me.ui.theme.CashuTheme
+import com.cashu.me.ui.mints.RecommendedMint
+import com.cashu.me.ui.mints.RecommendedMints
 import com.cashu.me.ui.theme.rememberReducedMotion
 import com.cashu.me.ui.testing.UiTestTags
 
@@ -117,15 +119,6 @@ import com.cashu.me.ui.testing.UiTestTags
 // seed-restore branch. Step changes are quiet 250ms crossfades; blocks
 // materialize with a 12dp rise staggered 70ms per index.
 // ---------------------------------------------------------------------------
-
-private data class RecommendedMint(val name: String, val url: String, val iconUrl: String)
-
-// Mirrors iOS RecommendedMint.suggested (ActivityOrbView.swift).
-private val RecommendedMints = listOf(
-    RecommendedMint("Minibits", "https://mint.minibits.cash/Bitcoin", "https://minibits.cash/icon-192.png"),
-    RecommendedMint("Chorus OFF Mint", "https://mint.chorus.community", "https://chorus.community/apple-touch-icon.png"),
-    RecommendedMint("Macadamia", "https://mint.macadamia.cash", "https://cypherbase.cc/images/logo_w256.png"),
-)
 
 private sealed interface OnboardingStep {
     data object Welcome : OnboardingStep
@@ -287,7 +280,10 @@ fun OnboardingScreen(
                         creating = true
                         createError = null
                         try {
-                            val mnemonic = walletManager.generateMnemonicForOnboarding()
+                            // Resume an interrupted onboarding with its original
+                            // seed — the user may have written those words down.
+                            val mnemonic = walletManager.persistedOnboardingMnemonic()
+                                ?: walletManager.generateMnemonicForOnboarding()
                             step = OnboardingStep.ShowMnemonic(mnemonic)
                         } catch (t: Throwable) {
                             createError = t.message ?: "Couldn't create a wallet."
@@ -592,11 +588,14 @@ private fun ShowMnemonicFace(
                 )
             }
         }
+        // The seed grid deliberately gets NO riseIn entrance: any motion on
+        // this block reads as a flicker on first paint, and recomposition
+        // mid-entrance restarts it. The step crossfade owns its appearance;
+        // the tap-to-reveal swap is untouched.
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(top = CashuTheme.spacing.section)
-                .riseIn(appeared, 1),
+                .padding(top = CashuTheme.spacing.section),
             verticalArrangement = Arrangement.spacedBy(CashuTheme.spacing.snug),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {

@@ -24,6 +24,7 @@
 		11000000000000CC /* MintDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 21000000000000CC /* MintDetailView.swift */; };
 		11000000000000CD /* MintDiscoverySheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 21000000000000CD /* MintDiscoverySheet.swift */; };
 		11000000000000CE /* AddMintSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 21000000000000CE /* AddMintSheet.swift */; };
+		1100000000000100 /* ConnectMintView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2100000000000100 /* ConnectMintView.swift */; };
 		11000000000000CF /* MintMethodIcons.swift in Sources */ = {isa = PBXBuildFile; fileRef = 21000000000000CF /* MintMethodIcons.swift */; };
 		13919761D160B56C1BD7FDB4 /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 460F5508C2B82DAECD0FEDDB /* Foundation.framework */; };
 		264054F18D12335595328FBC /* LiquidGlassModifiers.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3DC08FE85DFC643906176894 /* LiquidGlassModifiers.swift */; };
@@ -143,9 +144,11 @@
 		T2B000000000000A /* CurrencyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = T1B000000000000A /* CurrencyTests.swift */; };
 		T2B000000000000B /* ReceiveAutoPasteTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = T1B000000000000B /* ReceiveAutoPasteTests.swift */; };
 		T2B000000000000C /* HomeActionAccessibilityTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = T1B000000000000C /* HomeActionAccessibilityTests.swift */; };
+		T2B0000000000100 /* ConnectMintContextTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = T1B0000000000100 /* ConnectMintContextTests.swift */; };
 		T2B000000000000D /* CashuRequestRouteExplanationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = T1B000000000000D /* CashuRequestRouteExplanationTests.swift */; };
 		C0A100000000000000000002 /* CashuRequestPaymentObservationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0A100000000000000000001 /* CashuRequestPaymentObservationTests.swift */; };
 		T2B000000000000E /* CrashReportSanitizerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = T1B000000000000E /* CrashReportSanitizerTests.swift */; };
+		T2B000000000000F /* QRContextAccessibilityTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = T1B000000000000F /* QRContextAccessibilityTests.swift */; };
 		T2B000000000000F /* HistorySearchTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = T1B000000000000F /* HistorySearchTests.swift */; };
 /* End PBXBuildFile section */
 
@@ -185,6 +188,7 @@
 		21000000000000CC /* MintDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MintDetailView.swift; sourceTree = "<group>"; };
 		21000000000000CD /* MintDiscoverySheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MintDiscoverySheet.swift; sourceTree = "<group>"; };
 		21000000000000CE /* AddMintSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AddMintSheet.swift; sourceTree = "<group>"; };
+		2100000000000100 /* ConnectMintView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConnectMintView.swift; sourceTree = "<group>"; };
 		21000000000000CF /* MintMethodIcons.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MintMethodIcons.swift; sourceTree = "<group>"; };
 		24A09ED243324E11C828B365 /* CashuWalletTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = CashuWalletTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		3DC08FE85DFC643906176894 /* LiquidGlassModifiers.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = LiquidGlassModifiers.swift; sourceTree = "<group>"; };
@@ -299,9 +303,11 @@
 		T1B000000000000A /* CurrencyTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = CurrencyTests.swift; path = ../CI/IntegrationTests/Tests/CurrencyTests.swift; sourceTree = "<group>"; };
 		T1B000000000000B /* ReceiveAutoPasteTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = ReceiveAutoPasteTests.swift; path = CashuWalletTests/ReceiveAutoPasteTests.swift; sourceTree = "<group>"; };
 		T1B000000000000C /* HomeActionAccessibilityTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = HomeActionAccessibilityTests.swift; path = CashuWalletTests/HomeActionAccessibilityTests.swift; sourceTree = "<group>"; };
+		T1B0000000000100 /* ConnectMintContextTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = ConnectMintContextTests.swift; path = CashuWalletTests/ConnectMintContextTests.swift; sourceTree = "<group>"; };
 		T1B000000000000D /* CashuRequestRouteExplanationTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = CashuRequestRouteExplanationTests.swift; path = CashuWalletTests/CashuRequestRouteExplanationTests.swift; sourceTree = "<group>"; };
 		C0A100000000000000000001 /* CashuRequestPaymentObservationTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = CashuRequestPaymentObservationTests.swift; path = CashuWalletTests/CashuRequestPaymentObservationTests.swift; sourceTree = "<group>"; };
 		T1B000000000000E /* CrashReportSanitizerTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = CrashReportSanitizerTests.swift; path = CashuWalletTests/CrashReportSanitizerTests.swift; sourceTree = "<group>"; };
+		T1B000000000000F /* QRContextAccessibilityTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = QRContextAccessibilityTests.swift; path = CashuWalletTests/QRContextAccessibilityTests.swift; sourceTree = "<group>"; };
 		AV00000000000011 /* AppVersion.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppVersion.swift; sourceTree = "<group>"; };
 		AV00000000000012 /* AppVersionTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = AppVersionTests.swift; path = CashuWalletTests/AppVersionTests.swift; sourceTree = "<group>"; };
 		T1B000000000000F /* HistorySearchTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = HistorySearchTests.swift; path = CashuWalletTests/HistorySearchTests.swift; sourceTree = "<group>"; };
@@ -356,9 +362,11 @@
 				T1B000000000000A /* CurrencyTests.swift */,
 				T1B000000000000B /* ReceiveAutoPasteTests.swift */,
 				T1B000000000000C /* HomeActionAccessibilityTests.swift */,
+				T1B0000000000100 /* ConnectMintContextTests.swift */,
 				T1B000000000000D /* CashuRequestRouteExplanationTests.swift */,
 				C0A100000000000000000001 /* CashuRequestPaymentObservationTests.swift */,
 				T1B000000000000E /* CrashReportSanitizerTests.swift */,
+				T1B000000000000F /* QRContextAccessibilityTests.swift */,
 				AV00000000000012 /* AppVersionTests.swift */,
 				T1B000000000000F /* HistorySearchTests.swift */,
 			);
@@ -519,6 +527,7 @@
 				210000000000000C /* MintsListView.swift */,
 				21000000000000CC /* MintDetailView.swift */,
 				21000000000000CE /* AddMintSheet.swift */,
+				2100000000000100 /* ConnectMintView.swift */,
 				21000000000000CD /* MintDiscoverySheet.swift */,
 			);
 			path = Mints;
@@ -905,9 +914,11 @@
 				T2B000000000000A /* CurrencyTests.swift in Sources */,
 				T2B000000000000B /* ReceiveAutoPasteTests.swift in Sources */,
 				T2B000000000000C /* HomeActionAccessibilityTests.swift in Sources */,
+				T2B0000000000100 /* ConnectMintContextTests.swift in Sources */,
 				T2B000000000000D /* CashuRequestRouteExplanationTests.swift in Sources */,
 				C0A100000000000000000002 /* CashuRequestPaymentObservationTests.swift in Sources */,
 				T2B000000000000E /* CrashReportSanitizerTests.swift in Sources */,
+				T2B000000000000F /* QRContextAccessibilityTests.swift in Sources */,
 				AV00000000000002 /* AppVersionTests.swift in Sources */,
 				T2B000000000000F /* HistorySearchTests.swift in Sources */,
 			);
@@ -963,6 +974,7 @@
 				110000000000000C /* MintsListView.swift in Sources */,
 				11000000000000CC /* MintDetailView.swift in Sources */,
 				11000000000000CE /* AddMintSheet.swift in Sources */,
+				1100000000000100 /* ConnectMintView.swift in Sources */,
 				11000000000000CF /* MintMethodIcons.swift in Sources */,
 				11000000000000CD /* MintDiscoverySheet.swift in Sources */,
 				110000000000000D /* HistoryView.swift in Sources */,

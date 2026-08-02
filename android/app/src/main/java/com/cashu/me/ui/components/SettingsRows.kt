@@ -99,19 +99,30 @@ fun ToggleRow(
     enabled: Boolean = true,
     leadingIcon: ImageVector? = null,
 ) {
+    val contentAlpha = if (enabled) 1f else 0.38f
     ListItem(
         modifier = modifier.clickable(enabled = enabled) { onCheckedChange(!checked) },
         colors = ListItemDefaults.colors(containerColor = Color.Transparent),
-        headlineContent = { Text(text = title) },
+        headlineContent = {
+            Text(
+                text = title,
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = contentAlpha),
+            )
+        },
         supportingContent = subtitle?.let {
-            { Text(text = it) }
+            {
+                Text(
+                    text = it,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = contentAlpha),
+                )
+            }
         },
         leadingContent = leadingIcon?.let {
             {
                 Icon(
                     imageVector = it,
                     contentDescription = null,
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = contentAlpha),
                     modifier = Modifier.size(CashuTheme.spacing.section),
                 )
             }

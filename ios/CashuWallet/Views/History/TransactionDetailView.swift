@@ -277,7 +277,9 @@ struct TransactionDetailView: View {
                 showControls: false,
                 // Lightning invoices / Bitcoin addresses are standard QR formats;
                 // ecash tokens are long and benefit from UR-animated encoding.
-                staticOnly: transaction.kind != .ecash
+                staticOnly: transaction.kind != .ecash,
+                onCopy: { copyContent(content) },
+                onShare: { showShareSheet = true }
             )
             .frame(width: 280, height: 280)
             .padding(16)

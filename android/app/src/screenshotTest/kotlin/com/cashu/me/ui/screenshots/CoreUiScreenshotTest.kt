@@ -150,7 +150,7 @@ fun paymentSuccessScreenshot() {
     PreviewFrame(contentPadding = 0.dp) {
         PaymentStatusScreen(
             phase = PaymentStatusPhase.Success,
-            title = "Payment received",
+            title = "Payment Received!",
             detail = "2,500 sat",
             onDone = {},
         )

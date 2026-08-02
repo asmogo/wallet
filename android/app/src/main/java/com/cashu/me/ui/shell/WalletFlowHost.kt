@@ -34,6 +34,14 @@ sealed interface WalletFlow {
     data object ReceiveLightning : WalletFlow
     data object Send : WalletFlow
     data object SendEcash : WalletFlow
+
+    /**
+     * Connect-a-mint, opened from the wallet-home empty state. Hosted here rather
+     * than as a Home-local sheet so its URL step can hand off to the camera
+     * through [WalletFlowHandoffCoordinator] — overlays render under the sheet's
+     * dialog window, so the sheet has to close first.
+     */
+    data object ConnectMint : WalletFlow
 }
 
 /**
@@ -43,6 +51,7 @@ sealed interface WalletFlow {
  */
 internal class WalletFlowHandoffCoordinator {
     private var pending: Destination? = null
+    private var mintScanReturnFlow: WalletFlow? = null
 
     fun requestScanner(close: () -> Unit) {
         pending = Destination.Scanner
@@ -54,13 +63,27 @@ internal class WalletFlowHandoffCoordinator {
         close()
     }
 
+    /**
+     * Scan a mint URL from a flow's add-mint step. [returnTo] is replayed once the
+     * scan resolves, so the user lands back on the step they left rather than on
+     * whichever surface the payload would otherwise route to.
+     */
+    fun requestMintScanner(returnTo: WalletFlow, close: () -> Unit) {
+        pending = Destination.MintScanner
+        mintScanReturnFlow = returnTo
+        close()
+    }
+
     fun completeDismissal(
         openScanner: () -> Unit,
         openContactless: () -> Unit,
+        openMintScanner: (returnTo: WalletFlow) -> Unit,
     ) {
         when (pending.also { pending = null }) {
             Destination.Scanner -> openScanner()
             Destination.Contactless -> openContactless()
+            Destination.MintScanner ->
+                mintScanReturnFlow?.also { mintScanReturnFlow = null }?.let(openMintScanner)
             null -> Unit
         }
     }
@@ -68,6 +91,7 @@ internal class WalletFlowHandoffCoordinator {
     private enum class Destination {
         Scanner,
         Contactless,
+        MintScanner,
     }
 }
 

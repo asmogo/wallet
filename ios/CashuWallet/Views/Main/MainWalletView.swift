@@ -520,7 +520,7 @@ struct MainWalletView: View {
                         systemImage: "bitcoinsign.bank.building",
                         description: "Mints custody your ecash. Add one to begin.",
                         actionTitle: "Add mint",
-                        action: { activeSheet = .addMint }
+                        action: { activeSheet = .connectMint }
                     )
                 } else {
                     // Same shared component, size, and centered placement as the
@@ -729,7 +729,6 @@ struct MainWalletView: View {
                 initialDestination: sendPrefill,
                 onClose: { activeSheet = nil; sendPrefill = nil },
                 onReceive: { activeSheet = .receive },
-                onAddCustomMint: { activeSheet = .discoverMints },
                 onContactless: {
                     activeSheet = nil
                     contactlessCoordinator.start(
@@ -746,11 +745,11 @@ struct MainWalletView: View {
                 .canvasSheetBackground()
         case .flow(let flow):
             flowView(for: flow)
-        case .addMint:
-            AddMintSheet()
+        case .connectMint:
+            // Same surface the Send sheet shows when there are no mints — the
+            // detents and canvas background live inside it.
+            ConnectMintSheet()
                 .environmentObject(walletManager)
-                .presentationDetents([.medium, .large])
-                .presentationDragIndicator(.visible)
         case .discoverMints:
             MintDiscoverySheet { url in
                 Task { try? await walletManager.addMint(url: url) }
@@ -825,7 +824,7 @@ private enum WalletSheet: Identifiable {
     case send
     case scanner
     case flow(WalletFlow)
-    case addMint
+    case connectMint
     case discoverMints
 
     var id: String {
@@ -838,8 +837,8 @@ private enum WalletSheet: Identifiable {
             return "scanner"
         case .flow(let flow):
             return "flow-\(flow.id)"
-        case .addMint:
-            return "addMint"
+        case .connectMint:
+            return "connectMint"
         case .discoverMints:
             return "discoverMints"
         }

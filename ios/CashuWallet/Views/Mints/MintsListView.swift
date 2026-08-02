@@ -36,10 +36,9 @@ struct MintsListView: View {
             }
             .navigationTitle("Mints")
             .sheet(isPresented: $showAddMintSheet) {
+                // Detents live inside AddMintSheet so it hugs the form.
                 AddMintSheet()
                     .environmentObject(walletManager)
-                    .presentationDetents([.medium, .large])
-                    .presentationDragIndicator(.visible)
             }
             .sheet(isPresented: $showDiscoverySheet) {
                 MintDiscoverySheet { url in addMint(url: url) }

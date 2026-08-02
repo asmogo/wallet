@@ -296,7 +296,7 @@ internal fun NfcReceiveOverlayContent(
             PaymentStatusScreen(
                 phase = if (succeeded) PaymentStatusPhase.Success else PaymentStatusPhase.Processing,
                 title = if (succeeded) {
-                    "Payment received"
+                    "Payment Received!"
                 } else {
                     when (state.phase) {
                         NfcReceivePhase.Validating -> "Checking payment"

@@ -23,6 +23,10 @@ struct ReceiveLightningView: View {
     /// Reusable BOLT12 offer: drives the Amount-row pencil → amount picker sheet.
     @State private var showReusableAmountPicker = false
     @State private var copiedRequest = false
+    /// VoiceOver Share action for the QR cards: ShareLink can't be invoked
+    /// imperatively, so the accessibility action presents the share sheet.
+    @State private var showShareSheet = false
+    @State private var qrShareText = ""
     @State private var quoteStatusTask: Task<Void, Never>?
     @State private var expiryTimeRemaining: TimeInterval = 0
     @State private var expiryTimer: Timer?
@@ -512,7 +516,13 @@ struct ReceiveLightningView: View {
         VStack(spacing: 0) {
             ScrollView {
                 VStack(spacing: 24) {
-                    QRCodeView(content: quote.request, showControls: false, staticOnly: true)
+                    QRCodeView(
+                        content: quote.request,
+                        showControls: false,
+                        staticOnly: true,
+                        onCopy: { copyRequest(quote.request) },
+                        onShare: { shareQuoteRequest(quote.request) }
+                    )
                         .frame(width: 280, height: 280)
                         .padding(16)
                         .background(Color.white, in: RoundedRectangle(cornerRadius: 20))
@@ -530,6 +540,9 @@ struct ReceiveLightningView: View {
                                 Label("New reusable invoice", systemImage: "arrow.2.squarepath")
                             }
                             .disabled(isCreatingRequest)
+                        }
+                        .sheet(isPresented: $showShareSheet) {
+                            ShareSheet(items: [qrShareText])
                         }
 
                     if let amount = quote.amount, amount > 0 {
@@ -643,7 +656,13 @@ struct ReceiveLightningView: View {
         VStack(spacing: 0) {
             ScrollView {
                 VStack(spacing: 24) {
-                    QRCodeView(content: quote.request, showControls: false, staticOnly: true)
+                    QRCodeView(
+                        content: quote.request,
+                        showControls: false,
+                        staticOnly: true,
+                        onCopy: { copyRequest(quote.request) },
+                        onShare: { shareQuoteRequest(quote.request) }
+                    )
                         .frame(width: 280, height: 280)
                         .padding(16)
                         .background(Color.white, in: RoundedRectangle(cornerRadius: 20))
@@ -655,6 +674,9 @@ struct ReceiveLightningView: View {
                             ShareLink(item: quote.request) {
                                 Label("Share", systemImage: "square.and.arrow.up")
                             }
+                        }
+                        .sheet(isPresented: $showShareSheet) {
+                            ShareSheet(items: [qrShareText])
                         }
 
                     amountSummary(for: quote)
@@ -1185,6 +1207,11 @@ struct ReceiveLightningView: View {
             }
             isCreatingRequest = false
         }
+    }
+
+    private func shareQuoteRequest(_ request: String) {
+        qrShareText = request
+        showShareSheet = true
     }
 
     private func copyRequest(_ request: String) {

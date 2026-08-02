@@ -295,6 +295,15 @@ class SettingsManager(
         settingsStore.clearWalletScopedData()
     }
 
+    var onboardingCompleted: Boolean
+        get() = settingsStore.onboardingCompleted
+        set(value) {
+            settingsStore.onboardingCompleted = value
+        }
+
+    val hasOnboardingCompletionMarker: Boolean
+        get() = settingsStore.hasOnboardingCompletionMarker
+
     internal fun snapshotWalletScopedData(): SettingsWalletScopedSnapshot =
         SettingsWalletScopedSnapshot(
             preferences = settingsStore.snapshotWalletScopedData(),
