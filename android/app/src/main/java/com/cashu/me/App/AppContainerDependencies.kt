@@ -4,6 +4,12 @@ import android.content.Context
 import com.cashu.me.Core.CDK.CdkWalletGatewayImpl
 import com.cashu.me.Core.CDK.WalletGateway
 import com.cashu.me.Core.Platform.AndroidSecureStorage
+import com.cashu.me.Core.Platform.BlockStoreFacade
+import com.cashu.me.Core.Platform.DriveAppDataApi
+import com.cashu.me.Core.Platform.DriveAuthClient
+import com.cashu.me.Core.Platform.GoogleDriveAppDataApi
+import com.cashu.me.Core.Platform.PlayServicesBlockStore
+import com.cashu.me.Core.Platform.PlayServicesDriveAuth
 import com.cashu.me.Core.Protocols.SecureStorage
 import com.cashu.me.Core.SettingsStore
 import com.cashu.me.Core.WalletStore
@@ -51,4 +57,7 @@ data class AppContainerDependencies(
     val secureStorage: (Context) -> SecureStorage = { AndroidSecureStorage(it) },
     val walletStore: (Context) -> WalletStore = { WalletStore(it) },
     val settingsStore: (Context) -> SettingsStore = { SettingsStore(it) },
+    val driveAuthClient: (Context) -> DriveAuthClient = { PlayServicesDriveAuth(it) },
+    val driveAppDataApi: () -> DriveAppDataApi = { GoogleDriveAppDataApi() },
+    val blockStore: (Context) -> BlockStoreFacade = { PlayServicesBlockStore(it) },
 )

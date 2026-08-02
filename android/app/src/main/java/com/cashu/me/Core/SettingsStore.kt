@@ -119,6 +119,23 @@ class SettingsStore(
             store.putLong(StorageKeys.walletNostrMintBackupLastBackupDate, value)
         }
 
+    var driveBackupEnabled: Boolean
+        get() = store.boolean(StorageKeys.settingsDriveBackupEnabled, false)
+        set(value) = store.putBoolean(StorageKeys.settingsDriveBackupEnabled, value)
+
+    var driveBackupLastBackupDate: Long?
+        get() = store.long(StorageKeys.walletDriveBackupLastBackupDate, Long.MIN_VALUE)
+            .takeIf { it != Long.MIN_VALUE }
+        set(value) = if (value == null) {
+            store.remove(StorageKeys.walletDriveBackupLastBackupDate)
+        } else {
+            store.putLong(StorageKeys.walletDriveBackupLastBackupDate, value)
+        }
+
+    var driveRestoreIncomplete: Boolean
+        get() = store.boolean(StorageKeys.localDriveRestoreIncomplete, false)
+        set(value) = store.putBoolean(StorageKeys.localDriveRestoreIncomplete, value)
+
     var nwcEnabled: Boolean
         get() = store.boolean(StorageKeys.nwcEnabled, false)
         set(value) = store.putBoolean(StorageKeys.nwcEnabled, value)
@@ -221,6 +238,7 @@ class SettingsStore(
         StorageKeys.settingsNostrMintBackupEnabled,
         StorageKeys.cashuRequestsProcessedNip17Ids,
         StorageKeys.walletNostrMintBackupLastBackupDate,
+        StorageKeys.walletDriveBackupLastBackupDate,
         StorageKeys.npcEnabled,
         StorageKeys.npcAutomaticClaim,
         StorageKeys.npcSelectedMint,

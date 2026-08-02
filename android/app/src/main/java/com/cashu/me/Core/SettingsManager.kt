@@ -29,6 +29,7 @@ data class SettingsState(
     val nostrSignerType: String = "SEED",
     val nostrRelays: List<String> = emptyList(),
     val nostrMintBackupEnabled: Boolean = true,
+    val driveBackupEnabled: Boolean = false,
     val p2pkKeys: List<P2PKKeyInfo> = emptyList(),
 )
 
@@ -220,6 +221,10 @@ class SettingsManager(
         settingsStore.nostrMintBackupEnabled = value
     }
 
+    fun setDriveBackupEnabled(value: Boolean) = update {
+        settingsStore.driveBackupEnabled = value
+    }
+
     fun importP2PKPublicKey(publicKey: String, label: String = "P2PK key") {
         val normalized = normalizeP2PKForComparison(publicKey)
         val key = P2PKKeyInfo(
@@ -350,6 +355,7 @@ class SettingsManager(
         nostrSignerType = settingsStore.nostrSignerType,
         nostrRelays = settingsStore.nostrRelays,
         nostrMintBackupEnabled = settingsStore.nostrMintBackupEnabled,
+        driveBackupEnabled = settingsStore.driveBackupEnabled,
         p2pkKeys = settingsStore.p2pkKeys,
     )
 

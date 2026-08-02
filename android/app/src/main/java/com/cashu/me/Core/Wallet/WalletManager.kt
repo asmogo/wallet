@@ -56,6 +56,7 @@ class WalletManager(
     private val npcService: NPCService,
     private val nwcManager: NwcManager,
     private val nostrMintBackupService: NostrMintBackupService,
+    private val googleDriveBackupService: GoogleDriveBackupService,
     private val databasePathManager: WalletDatabasePathManager,
     private val gateway: CdkWalletGateway,
     private val runStartupMaintenance: Boolean = true,
@@ -125,7 +126,14 @@ class WalletManager(
                 // Publish the complete cached home model before opening SQLite,
                 // decrypting the seed, deriving keys, or starting background services.
                 // This is the same cache-first boundary used by iOS.
-                if (hasStoredWallet) {
+                // An interrupted Drive restore forces onboarding even though a
+                // (partial) wallet exists, so the restore resumes there (iOS
+                // ICloudRestorePolicy parity).
+                val needsOnboarding = DriveRestorePolicy.needsOnboarding(
+                    hasStoredMnemonic = hasStoredWallet,
+                    restoreIncomplete = googleDriveBackupService.restoreIncomplete,
+                )
+                if (!needsOnboarding) {
                     loadCachedState(needsOnboarding = false)
                 } else {
                     update {
@@ -311,6 +319,9 @@ class WalletManager(
             settingsManager.resetWalletScopedData()
             npcService.resetForWalletBoundary()
             nostrMintBackupService.resetForWalletBoundary()
+            // Local state only — the remote Drive/Block Store backup deliberately
+            // survives wallet deletion (iOS parity: deleteWallet preserves iCloud).
+            googleDriveBackupService.resetForWalletBoundary()
             cashuRequestListener?.resetForWalletBoundary(restart = false)
             MintLogoBitmapCache.clear()
             update {
@@ -345,6 +356,9 @@ class WalletManager(
             addedMintUrl = fetched.url
         }
 
+        if (externalServicesEnabled) {
+            scope.launch { googleDriveBackupService.backupIfEnabled() }
+        }
         addedMintUrl?.let { mintUrl ->
             scope.launch {
                 if (mutableState.value.mints.none { it.url == mintUrl }) return@launch
@@ -383,6 +397,7 @@ class WalletManager(
         }
         if (externalServicesEnabled) {
             scope.launch { nostrMintBackupService.backupCurrentMintsIfEnabled() }
+            scope.launch { googleDriveBackupService.backupIfEnabled() }
         }
     }
 
@@ -1207,6 +1222,10 @@ class WalletManager(
     }
 
     suspend fun completeOnboarding() {
+        // Completing onboarding by ANY path resolves an interrupted Drive
+        // restore — the user deliberately finished differently, so stop
+        // forcing the resume and lift the backup write barrier.
+        googleDriveBackupService.restoreIncomplete = false
         loadCachedState(needsOnboarding = false)
         refreshBalance()
         loadTransactions()
@@ -1220,7 +1239,42 @@ class WalletManager(
         // would replace the addressable backup event with an empty list.)
         if (externalServicesEnabled) {
             scope.launch { nostrMintBackupService.backupCurrentMintsIfEnabled() }
+            scope.launch { googleDriveBackupService.backupIfEnabled() }
         }
+    }
+
+    /**
+     * iOS `restoreFromICloudBackup()` twin: wipe-install the backed-up seed,
+     * then recover funds from every backed-up mint (NUT-09). All-or-nothing —
+     * any mint failure aborts with the incomplete marker still set, so backups
+     * stay deferred (write barrier) and onboarding resumes here on relaunch.
+     */
+    suspend fun restoreFromDriveBackup(
+        payload: DriveBackupPayload,
+        launchResolution: DriveConsentLauncher = { null },
+    ) {
+        googleDriveBackupService.restoreIncomplete = true
+        initializeRestoredWallet(payload.mnemonic)
+        var failed = 0
+        for (url in payload.mintUrls) {
+            try {
+                restoreFromMint(url)
+            } catch (error: CancellationException) {
+                throw error
+            } catch (error: Throwable) {
+                AppLogger.wallet.error("Drive restore failed for mint $url", error)
+                failed++
+            }
+        }
+        check(failed == 0) {
+            "Could not restore $failed of ${payload.mintUrls.size} mints. " +
+                "Your backup was preserved. Try again when all mints are reachable."
+        }
+        googleDriveBackupService.restoreIncomplete = false
+        // Re-arm backup for the restored wallet (iOS: iCloudBackupEnabled = true).
+        // A Block-Store-sourced restore may still need Drive consent, which the
+        // onboarding step's launcher provides.
+        googleDriveBackupService.setEnabled(true, launchResolution)
     }
 
     private suspend fun installCleanWallet(mnemonic: String, needsOnboarding: Boolean) {
@@ -1261,6 +1315,7 @@ class WalletManager(
             secureStorage.saveString(StorageKeys.secureWalletMnemonic, mnemonic)
             settingsManager.deleteWalletScopedSecrets(settingsSnapshot, deleteNostrPrivateKey = true)
             nostrMintBackupService.resetForWalletBoundary()
+            googleDriveBackupService.resetForWalletBoundary()
             databasePathManager.removeWalletFileBackups(backups)
             loadCachedState(needsOnboarding = needsOnboarding)
         }.onFailure { error ->
@@ -1270,6 +1325,7 @@ class WalletManager(
             settingsManager.restoreWalletScopedData(settingsSnapshot)
             nwcManager.restoreWalletScopedData(nwcSnapshot)
             nostrMintBackupService.reloadStoredState()
+            googleDriveBackupService.reloadStoredState()
             databasePathManager.removeWalletDatabaseFiles()
             databasePathManager.restoreWalletFileBackups(backups)
             if (previousMnemonic != null) {
@@ -1296,6 +1352,11 @@ class WalletManager(
             throw error
         }
         cashuRequestListener?.resetForWalletBoundary(restart = externalServicesEnabled && !needsOnboarding)
+        // iOS backs up on wallet install (create/restore). The write barrier
+        // defers this while a Drive restore is mid-flight.
+        if (externalServicesEnabled) {
+            scope.launch { googleDriveBackupService.backupIfEnabled() }
+        }
     }
 
     private fun loadCachedState(needsOnboarding: Boolean) {

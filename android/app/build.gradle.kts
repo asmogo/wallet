@@ -77,6 +77,11 @@ android {
     testOptions {
         execution = "ANDROIDX_TEST_ORCHESTRATOR"
         animationsDisabled = true
+        unitTests {
+            // Let JVM tests exercise code paths that log via android.util.Log
+            // (AppLogger) without "not mocked" crashes.
+            isReturnDefaultValues = true
+        }
         managedDevices {
             localDevices {
                 create("pixel2Api35") {
@@ -127,6 +132,9 @@ dependencies {
     implementation(libs.androidx.datastore.preferences)
     implementation(libs.kotlinx.serialization.json)
     implementation(libs.kotlinx.coroutines.android)
+    implementation(libs.kotlinx.coroutines.play.services)
+    implementation(libs.play.services.auth)
+    implementation(libs.play.services.auth.blockstore)
     implementation(libs.kotlinx.datetime)
     implementation(libs.zxing.core)
     implementation(libs.androidx.camera.camera2)
