@@ -1024,43 +1024,48 @@ private fun GeneratedFace(
     }
 
     // Claimed resolves to the shared full-screen terminal (iOS parity), with
-    // the same Amount/Fee/Mint facts shown while the token is pending.
-    if (claimState == ClaimState.Claimed) {
-        val receipt = buildSendEcashReceiptDetails(
-            amountLabel = amountPresentation.primary,
-            fee = result.fee,
-            unit = unit,
-            mintUrl = mintUrl,
-        )
-        com.cashu.me.ui.components.PaymentStatusScreen(
-            phase = com.cashu.me.ui.components.PaymentStatusPhase.Success,
-            title = "Claimed",
-            onDone = onDone,
-            rows = {
-                com.cashu.me.ui.components.InspectorRow(
-                    label = "Amount",
-                    value = amountPresentation.primary,
-                    leadingIcon = Icons.Outlined.Payments,
-                )
-                com.cashu.me.ui.components.CanvasDivider(leadingInset = 16.dp)
-                receipt.fee?.let { feeLabel ->
+    // the same Amount/Fee/Mint facts shown while the token is pending. The QR
+    // face fades into it instead of hard-cutting.
+    AnimatedContent(
+        targetState = claimState == ClaimState.Claimed,
+        transitionSpec = { fadeIn(tween(200)) togetherWith fadeOut(tween(150)) },
+        label = "send-ecash-claimed-terminal",
+    ) { claimed ->
+        if (claimed) {
+            val receipt = buildSendEcashReceiptDetails(
+                amountLabel = amountPresentation.primary,
+                fee = result.fee,
+                unit = unit,
+                mintUrl = mintUrl,
+            )
+            com.cashu.me.ui.components.PaymentStatusScreen(
+                phase = com.cashu.me.ui.components.PaymentStatusPhase.Success,
+                title = "Claimed",
+                onDone = onDone,
+                rows = {
                     com.cashu.me.ui.components.InspectorRow(
-                        label = "Fee",
-                        value = feeLabel,
-                        valueMonospaced = true,
-                        leadingIcon = Icons.Outlined.Receipt,
+                        label = "Amount",
+                        value = amountPresentation.primary,
+                        leadingIcon = Icons.Outlined.Payments,
                     )
                     com.cashu.me.ui.components.CanvasDivider(leadingInset = 16.dp)
-                }
-                com.cashu.me.ui.components.InspectorRow(
-                    label = "Mint",
-                    value = receipt.mint,
-                    leadingIcon = Icons.Outlined.AccountBalance,
-                )
-            },
-        )
-        return
-    }
+                    receipt.fee?.let { feeLabel ->
+                        com.cashu.me.ui.components.InspectorRow(
+                            label = "Fee",
+                            value = feeLabel,
+                            valueMonospaced = true,
+                            leadingIcon = Icons.Outlined.Receipt,
+                        )
+                        com.cashu.me.ui.components.CanvasDivider(leadingInset = 16.dp)
+                    }
+                    com.cashu.me.ui.components.InspectorRow(
+                        label = "Mint",
+                        value = receipt.mint,
+                        leadingIcon = Icons.Outlined.AccountBalance,
+                    )
+                },
+            )
+        } else {
 
     // Scroll region + pinned footer, mirroring iOS (ScrollView with the Copy
     // button outside it) and TransactionDetailScreen's Copy action.
@@ -1179,6 +1184,8 @@ private fun GeneratedFace(
             }
         }
         Spacer(Modifier.windowInsetsBottomHeight(WindowInsets.navigationBars))
+    }
+        }
     }
 }
 

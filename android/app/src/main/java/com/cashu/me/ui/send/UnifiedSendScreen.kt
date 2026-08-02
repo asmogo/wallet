@@ -4,12 +4,12 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -479,43 +479,32 @@ fun UnifiedSendScreen(
             ).testTag(UiTestTags.SendSheet),
     ) {
         // Status terminal replaces the whole body (iOS PaymentStatusView slot).
-        when (val current = status) {
-            is SendStatus.Sending -> Box(Modifier.weight(1f).fillMaxWidth()) {
-                PaymentStatusScreen(
-                    phase = PaymentStatusPhase.Processing,
-                    title = "Sending payment…",
-                    rows = { SendPaymentDetailRows(current.details, formatter, settings.useBitcoinSymbol) },
+        // One content key for every status value keeps a single
+        // PaymentStatusScreen mounted across Sending → Sent/Failed, so the
+        // spinner morphs into the check/X in place; the form ↔ terminal swap
+        // itself fades through instead of hard-cutting.
+        AnimatedContent(
+            targetState = status,
+            modifier = if (status == null && step == SendStep.Input) {
+                Modifier.fillMaxWidth()
+            } else {
+                Modifier
+                    .weight(1f)
+                    .fillMaxWidth()
+            },
+            transitionSpec = { fadeIn(tween(200)) togetherWith fadeOut(tween(150)) },
+            label = "unified-send-terminal",
+            contentKey = { it != null },
+        ) { current ->
+            if (current != null) {
+                SendStatusTerminal(
+                    status = current,
+                    formatter = formatter,
+                    useBitcoinSymbol = settings.useBitcoinSymbol,
+                    onClose = onClose,
+                    onRetry = { status = null },
                 )
-            }
-            is SendStatus.Sent -> Box(Modifier.weight(1f).fillMaxWidth()) {
-                // An async-accepted (NUT-05) melt — typical for on-chain — isn't
-                // settled yet: the mint took the payment and pays out in the
-                // background, so say "processing", not "sent" (iOS parity).
-                val settlementPending = current.result?.settlement == MeltSettlement.Pending
-                PaymentStatusScreen(
-                    phase = PaymentStatusPhase.Success,
-                    title = if (settlementPending) "Payment processing" else "Payment sent",
-                    onDone = onClose,
-                    rows = {
-                        SendPaymentDetailRows(current.details, formatter, settings.useBitcoinSymbol)
-                    },
-                )
-            }
-            is SendStatus.Failed -> Box(Modifier.weight(1f).fillMaxWidth()) {
-                PaymentStatusScreen(
-                    phase = PaymentStatusPhase.Failure,
-                    title = "Payment failed",
-                    detail = current.message.text,
-                    // A terminal outcome (already paid) can't be retried — offer
-                    // Done; anything else returns to the confirm step.
-                    doneLabel = if (current.message.isTerminal) "Done" else "Try again",
-                    onDone = {
-                        if (current.message.isTerminal) onClose() else status = null
-                    },
-                    rows = { SendPaymentDetailRows(current.details, formatter, settings.useBitcoinSymbol) },
-                )
-            }
-            null -> if (step == SendStep.Input && walletState.mints.isEmpty()) {
+            } else if (step == SendStep.Input && walletState.mints.isEmpty()) {
                 // Same surface the wallet-home "Add mint" CTA opens. It draws its
                 // own header so it can swap the title and reveal a back chevron
                 // when its URL / discovery steps are pushed — don't add one here.
@@ -547,12 +536,12 @@ fun UnifiedSendScreen(
                 }
                 TwoFaceScreen(
                     targetState = step,
+                    // The AnimatedContent above carries the Column weight; the
+                    // faces just fill it (Input stays wrap-height).
                     modifier = if (step == SendStep.Input) {
                         Modifier.fillMaxWidth()
                     } else {
-                        Modifier
-                            .weight(1f)
-                            .fillMaxWidth()
+                        Modifier.fillMaxSize()
                     },
                     forward = { initial, target -> target.ordinal >= initial.ordinal },
                     label = "unified-send-step",
@@ -690,6 +679,52 @@ fun UnifiedSendScreen(
             onDismiss = { topUpQuote = null },
         )
     }
+}
+
+/**
+ * One [PaymentStatusScreen] for every send status: staying mounted across
+ * Sending → Sent/Failed lets the spinner morph into the check/X in place and
+ * the title crossfade (iOS PaymentStatusView), instead of remounting a fresh
+ * terminal per outcome.
+ */
+@Composable
+private fun SendStatusTerminal(
+    status: SendStatus,
+    formatter: AmountFormatter,
+    useBitcoinSymbol: Boolean,
+    onClose: () -> Unit,
+    onRetry: () -> Unit,
+) {
+    // An async-accepted (NUT-05) melt — typical for on-chain — isn't settled
+    // yet: the mint took the payment and pays out in the background, so say
+    // "processing", not "sent" (iOS parity).
+    val settlementPending = (status as? SendStatus.Sent)
+        ?.result?.settlement == MeltSettlement.Pending
+    // A terminal outcome (already paid) can't be retried — offer Done;
+    // anything else returns to the confirm step.
+    val failure = (status as? SendStatus.Failed)?.message
+    PaymentStatusScreen(
+        phase = when (status) {
+            is SendStatus.Sending -> PaymentStatusPhase.Processing
+            is SendStatus.Sent -> PaymentStatusPhase.Success
+            is SendStatus.Failed -> PaymentStatusPhase.Failure
+        },
+        title = when (status) {
+            is SendStatus.Sending -> "Sending payment…"
+            is SendStatus.Sent -> if (settlementPending) "Payment processing" else "Payment sent"
+            is SendStatus.Failed -> "Payment failed"
+        },
+        detail = failure?.text,
+        doneLabel = if (failure != null && !failure.isTerminal) "Try again" else "Done",
+        onDone = when (status) {
+            is SendStatus.Sending -> null
+            is SendStatus.Sent -> onClose
+            is SendStatus.Failed -> {
+                { if (status.message.isTerminal) onClose() else onRetry() }
+            }
+        },
+        rows = { SendPaymentDetailRows(status.details, formatter, useBitcoinSymbol) },
+    )
 }
 
 @Composable
