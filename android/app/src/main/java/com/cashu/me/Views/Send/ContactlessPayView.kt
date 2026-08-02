@@ -9,6 +9,15 @@ import android.nfc.NfcAdapter
 import android.nfc.Tag
 import android.nfc.tech.Ndef
 import android.provider.Settings
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -50,6 +59,7 @@ import com.cashu.me.Core.Services.NFCPaymentService
 import com.cashu.me.Core.Services.NFCReaderDelegate
 import com.cashu.me.Core.WalletManager
 import com.cashu.me.ui.components.InlineNotice
+import com.cashu.me.ui.components.InlineNoticeHost
 import com.cashu.me.ui.components.NoticeSeverity
 import com.cashu.me.ui.components.PrimaryButton
 
@@ -221,25 +231,54 @@ internal fun ContactlessPayContent(
                     horizontalArrangement = Arrangement.Center,
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    if (isProcessing) {
+                    // The working indicator and the status line fade/swap
+                    // instead of popping per read-stage.
+                    AnimatedVisibility(
+                        visible = isProcessing,
+                        enter = fadeIn(tween(200)),
+                        exit = fadeOut(tween(150)),
+                    ) {
                         LoadingIndicator(modifier = Modifier.size(24.dp))
                     }
-                    Text(
-                        text = status,
-                        modifier = Modifier.padding(start = if (isProcessing) 8.dp else 0.dp),
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        textAlign = TextAlign.Center,
-                    )
+                    AnimatedContent(
+                        targetState = status,
+                        transitionSpec = { fadeIn(tween(200)) togetherWith fadeOut(tween(150)) },
+                        label = "contactless-status",
+                    ) { currentStatus ->
+                        Text(
+                            text = currentStatus,
+                            modifier = Modifier.padding(start = if (isProcessing) 8.dp else 0.dp),
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            textAlign = TextAlign.Center,
+                        )
+                    }
                 }
         }
 
-        if (paymentComplete) {
-            Text("Payment sent!", style = MaterialTheme.typography.titleMedium)
-            lastPaymentAmount?.let {
-                Text("$it sat", style = MaterialTheme.typography.headlineSmall)
+        // The success beat arrives with the same fade + scale-in the shared
+        // terminal glyph uses — a payment landing never pops in.
+        AnimatedVisibility(
+            visible = paymentComplete,
+            enter = fadeIn(tween(200)) + scaleIn(
+                animationSpec = spring(
+                    dampingRatio = 0.7f,
+                    stiffness = Spring.StiffnessMediumLow,
+                ),
+                initialScale = 0.9f,
+            ),
+            exit = fadeOut(tween(150)),
+        ) {
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(16.dp),
+            ) {
+                Text("Payment sent!", style = MaterialTheme.typography.titleMedium)
+                lastPaymentAmount?.let {
+                    Text("$it sat", style = MaterialTheme.typography.headlineSmall)
+                }
             }
         }
-        error?.let { InlineNotice(text = it, severity = NoticeSeverity.Error) }
+        InlineNoticeHost(text = error, severity = NoticeSeverity.Error)
 
         when (availability) {
             ContactlessAvailability.Disabled ->
