@@ -22,6 +22,7 @@ import androidx.compose.material.icons.outlined.Description
 import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material.icons.outlined.Payments
 import androidx.compose.material.icons.outlined.Public
+import androidx.compose.material.icons.outlined.Security
 import androidx.compose.material.icons.outlined.VisibilityOff
 import androidx.compose.material.icons.outlined.VpnKey
 import androidx.compose.material3.AlertDialog
@@ -60,8 +61,7 @@ import com.cashu.me.ui.testing.UiTestTags
 /**
  * Settings root — section order, rows, and copy mirror iOS SettingsView:
  * Display · Backup & Security · Payments · Integrations · Privacy · About ·
- * Danger, with the version footer. (App Lock joins Backup & Security when the
- * feature lands on Android.)
+ * Danger, with the version footer.
  */
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3ExpressiveApi::class)
 @Composable
@@ -71,6 +71,7 @@ fun SettingsScreen(
     priceService: PriceService,
     onClose: () -> Unit,
     onOpenBackupRestore: () -> Unit,
+    onOpenAppLock: () -> Unit,
     onOpenLightning: () -> Unit,
     onOpenLockedEcash: () -> Unit,
     onOpenNostr: () -> Unit,
@@ -139,6 +140,13 @@ fun SettingsScreen(
                     title = "Backup & Restore",
                     leadingIcon = Icons.Outlined.VpnKey,
                     onClick = onOpenBackupRestore,
+                )
+            }
+            item("app-lock") {
+                NavRow(
+                    title = "App Lock",
+                    leadingIcon = Icons.Outlined.Security,
+                    onClick = onOpenAppLock,
                 )
             }
 

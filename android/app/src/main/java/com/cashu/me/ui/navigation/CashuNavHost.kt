@@ -31,6 +31,7 @@ import com.cashu.me.ui.mints.MintDetailScreen
 import com.cashu.me.ui.mints.MintsScreen
 import com.cashu.me.ui.receive.CashuRequestDetailScreen
 import com.cashu.me.ui.settings.AdvancedKeysScreen
+import com.cashu.me.ui.settings.AppLockScreen
 import com.cashu.me.ui.settings.BackupRestoreScreen
 import com.cashu.me.ui.settings.RestoreWalletScreen
 import com.cashu.me.ui.settings.DeviceKeyDetailScreen
@@ -148,6 +149,7 @@ fun CashuNavHost(
                 priceService = container.priceService,
                 onClose = { navController.popBackStack() },
                 onOpenBackupRestore = { navController.navigate(Routes.SETTINGS_BACKUP_RESTORE) },
+                onOpenAppLock = { navController.navigate(Routes.SETTINGS_APP_LOCK) },
                 onOpenLightning = { navController.navigate(Routes.SETTINGS_LIGHTNING) },
                 onOpenLockedEcash = { navController.navigate(Routes.SETTINGS_P2PK) },
                 onOpenNostr = { navController.navigate(Routes.SETTINGS_NOSTR) },
@@ -171,6 +173,13 @@ fun CashuNavHost(
             RestoreWalletScreen(
                 walletManager = container.walletManager,
                 nostrMintBackupService = container.nostrMintBackupService,
+                onClose = { navController.popBackStack() },
+            )
+        }
+        composable(Routes.SETTINGS_APP_LOCK) {
+            AppLockScreen(
+                settingsManager = container.settingsManager,
+                appLockManager = container.appLockManager,
                 onClose = { navController.popBackStack() },
             )
         }
@@ -238,7 +247,6 @@ fun CashuNavHost(
         composable(Routes.SETTINGS_PRIVACY) {
             PrivacyScreen(
                 settingsManager = container.settingsManager,
-                appLockManager = container.appLockManager,
                 onClose = { navController.popBackStack() },
             )
         }
