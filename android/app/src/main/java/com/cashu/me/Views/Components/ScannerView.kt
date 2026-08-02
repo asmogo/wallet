@@ -93,12 +93,14 @@ data class ScannerQuickAction(
     val onClick: () -> Unit,
 )
 
+const val ScannerDefaultPrompt = "Scan Cashu Token, Payment Request, or Bitcoin Address"
+
 @Composable
 fun ScannerView(
     onClose: () -> Unit,
     onScanned: (String) -> Unit,
     useDeterministicPermission: Boolean = false,
-    promptText: String = "Scan Cashu Token, Payment Request, or Bitcoin Address",
+    promptText: String = ScannerDefaultPrompt,
     quickActions: List<ScannerQuickAction> = emptyList(),
 ) {
     val context = LocalContext.current

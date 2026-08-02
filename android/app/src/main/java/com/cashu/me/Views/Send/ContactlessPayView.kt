@@ -19,16 +19,12 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Nfc
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LoadingIndicator
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
-import androidx.compose.material3.SheetValue
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.rememberBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
@@ -57,57 +53,12 @@ import com.cashu.me.ui.components.InlineNotice
 import com.cashu.me.ui.components.PrimaryButton
 
 /**
- * Android has no system-owned NFC reader sheet, so reader mode is presented in
- * a native Material 3 modal bottom sheet. The host owns dismissal animation and
- * prevents accidental swipe/back dismissal while a tag is being read or written.
+ * Android has no system-owned NFC reader sheet, so reader mode renders as a
+ * face of the shell's single flow sheet ([com.cashu.me.ui.shell.WalletFlow]).
+ * The host blocks swipe/back dismissal while a tag is being read or written
+ * via [onDismissLockChanged]; a read Lightning request swaps the sheet content
+ * to the Send flow.
  */
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-fun ContactlessPaySheet(
-    walletManager: WalletManager,
-    onDismissed: () -> Unit,
-    onLightningRequest: (String) -> Unit,
-) {
-    val dismissLocked = remember { mutableStateOf(false) }
-    val confirmValueChange = remember {
-        { value: SheetValue -> value != SheetValue.Hidden || !dismissLocked.value }
-    }
-    val sheetState = rememberBottomSheetState(
-        initialValue = SheetValue.Hidden,
-        enabledValues = setOf(SheetValue.Hidden, SheetValue.Expanded),
-        confirmValueChange = confirmValueChange,
-    )
-    val scope = rememberCoroutineScope()
-    var closing by remember { mutableStateOf(false) }
-
-    fun hideThen(action: () -> Unit) {
-        if (closing) return
-        closing = true
-        // Deliberate navigation is allowed to end the session even if the tag
-        // callback has not yet delivered its final idle-state recomposition.
-        dismissLocked.value = false
-        scope.launch { sheetState.hide() }.invokeOnCompletion { action() }
-    }
-
-    ModalBottomSheet(
-        onDismissRequest = {
-            if (!dismissLocked.value && !closing) {
-                closing = true
-                onDismissed()
-            }
-        },
-        sheetState = sheetState,
-    ) {
-        ContactlessPayView(
-            walletManager = walletManager,
-            onLightningRequest = { invoice ->
-                hideThen { onLightningRequest(invoice) }
-            },
-            onDismissLockChanged = { dismissLocked.value = it },
-        )
-    }
-}
-
 @Composable
 fun ContactlessPayView(
     walletManager: WalletManager,

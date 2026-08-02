@@ -1,6 +1,5 @@
 package com.cashu.me.ui.receive
 
-import androidx.activity.compose.BackHandler
 import androidx.compose.animation.Crossfade
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -352,11 +351,11 @@ fun ReceiveLightningScreen(
         previousAmountEntryContext = amountEntryContext
     }
 
-    // System back unwinds Display → Input; from Input the sheet handles it.
-    // Suppressed once the success terminal is showing (it auto-dismisses).
-    BackHandler(enabled = face is ReceiveLnFace.Display && successInfo == null) {
-        face = ReceiveLnFace.Input
-    }
+    // Dismissal contract: system back = swipe = abandon to the wallet — the
+    // sheet handles it at every face. Waiting for an invoice to be paid is a
+    // freely-dismissible phase: the global pending-quote sweep and quote-keyed
+    // monitors credit a later payment, surfaced via the home delta/History.
+    // The header chevron owns the internal Display → Input step-back.
 
     // Abandoned-quote watcher: every quote-keyed monitor re-keys to the
     // replacement after "Use new address", so this screen-scoped loop is what
