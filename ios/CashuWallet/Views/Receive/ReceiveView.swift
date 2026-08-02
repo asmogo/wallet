@@ -25,6 +25,7 @@ struct UnifiedReceiveView: View {
 
     @EnvironmentObject var walletManager: WalletManager
     @ObservedObject private var settings = SettingsManager.shared
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     @State private var tokenInput = ""
     @State private var inputHint: String?
@@ -112,6 +113,11 @@ struct UnifiedReceiveView: View {
                     InlineNotice(message: inputHint, severity: .caution)
                         .padding(.horizontal, 20)
                         .padding(.top, 10)
+                        .transition(
+                            reduceMotion
+                                ? .opacity
+                                : .opacity.combined(with: .scale(scale: 0.95, anchor: .top))
+                        )
                 }
 
                 // A centered row of round Liquid Glass icon buttons — the primary
@@ -121,6 +127,7 @@ struct UnifiedReceiveView: View {
                     .padding(.top, 32)
             }
             .padding(.bottom, 24)
+            .animation(reduceMotion ? .easeInOut(duration: 0.2) : .snappy(duration: 0.25), value: inputHint != nil)
             .onGeometryChange(for: CGFloat.self) { proxy in
                 proxy.size.height
             } action: { newHeight in
