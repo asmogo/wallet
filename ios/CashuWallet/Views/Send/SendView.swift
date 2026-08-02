@@ -609,7 +609,12 @@ struct SendView: View {
                     // Cashu tokens often exceed a single QR's capacity so
                     // UR encoding stays on, but the SPEED/SIZE dev HUD is
                     // suppressed from production.
-                    QRCodeView(content: token, showControls: false)
+                    QRCodeView(
+                        content: token,
+                        showControls: false,
+                        onCopy: { copyToken(token) },
+                        onShare: { showShareSheet = true }
+                    )
                         .frame(width: 280, height: 280)
                         .padding(16)
                         .background(Color.white, in: RoundedRectangle(cornerRadius: 20))
