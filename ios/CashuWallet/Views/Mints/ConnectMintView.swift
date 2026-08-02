@@ -238,11 +238,12 @@ struct SuggestedMintsSection: View {
 @ViewBuilder
 func connectMintDestination(
     _ route: ConnectMintRoute,
-    onAdded: @escaping () -> Void
+    onAdded: @escaping () -> Void,
+    onHeightChange: @escaping (CGFloat) -> Void = { _ in }
 ) -> some View {
     switch route {
     case .addCustom:
-        AddMintFormView(onAdded: onAdded)
+        AddMintFormView(onAdded: onAdded, onHeightChange: onHeightChange)
     case .discover:
         MintDiscoveryList(addMint: { _ in onAdded() })
             .navigationTitle("Discover Mints")
@@ -277,7 +278,7 @@ struct ConnectMintSheet: View {
                 errorMessage: addMintError,
                 onHeightChange: { newHeight in
                     // Ignore re-measures from the off-screen picker while a step
-                    // is pushed, or the detent churns behind the pushed view.
+                    // is pushed — the pushed view reports its own height.
                     guard route == nil else { return }
                     contentHeight = newHeight
                 }
@@ -285,18 +286,25 @@ struct ConnectMintSheet: View {
             .navigationTitle(ConnectMintContext.addMint.navigationTitle)
             .navigationBarTitleDisplayMode(.inline)
             .navigationDestination(item: $route) { route in
-                connectMintDestination(route, onAdded: { dismiss() })
+                connectMintDestination(
+                    route,
+                    onAdded: { dismiss() },
+                    onHeightChange: { contentHeight = $0 }
+                )
             }
         }
-        // Hug the shortlist, then take the full sheet once a step is pushed —
-        // the same detent swap the Send sheet uses between its faces.
-        .presentationDetents(route == nil ? [.height(contentHeight + sheetChrome)] : [.large])
+        // Both the shortlist and the pushed URL step hug their content, matching
+        // Android. Only discovery fills the sheet — it hosts a scrolling list and
+        // needs bounded height.
+        .presentationDetents(
+            route == .discover ? [.large] : [.height(contentHeight + sheetChrome)]
+        )
         .presentationDragIndicator(.visible)
         // Hugging the shortlist, this floats over the canvas and keeps the
         // system's elevated background; only the pushed full-height steps adopt
         // the flat canvas. Every other partial-height sheet in the app does the
         // same — see `MintsListView`'s Add Mint and the Send sheet's compact face.
-        .canvasSheetBackground(whenFillingScreen: route != nil)
+        .canvasSheetBackground(whenFillingScreen: route == .discover)
     }
 
     private func addMint(_ url: String) {

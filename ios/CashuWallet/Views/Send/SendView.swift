@@ -1354,7 +1354,8 @@ struct UnifiedSendView: View {
     /// Input step (with balance, or empty states) hugs content. Amount / confirm /
     /// status expand to `.large` so the keypad and pay scaffold have room.
     private var prefersCompactSheet: Bool {
-        statusPhase == nil && step == .input && connectMintRoute == nil
+        // The pushed URL step hugs too; only discovery needs the full sheet.
+        statusPhase == nil && step == .input && connectMintRoute != .discover
     }
 
     private var compactDetentHeight: CGFloat {
@@ -1404,7 +1405,11 @@ struct UnifiedSendView: View {
                 // Declared here rather than inside `noMintsState`: connecting a
                 // mint swaps that branch out of `inputContent`, and a destination
                 // declared inside it would be torn down mid-push.
-                connectMintDestination(route, onAdded: { connectMintRoute = nil })
+                connectMintDestination(
+                    route,
+                    onAdded: { connectMintRoute = nil },
+                    onHeightChange: { compactContentHeight = $0 }
+                )
             }
             .sheet(isPresented: $showingScanner) {
                 ScannerWrapperView(onScanned: handleScannedDestination)
@@ -2804,7 +2809,7 @@ struct UnifiedSendView: View {
             errorMessage: addMintError,
             onHeightChange: { newHeight in
                 // Ignore re-measures from the off-screen picker while a step is
-                // pushed, or the compact detent churns behind the pushed view.
+                // pushed — the pushed view reports its own height.
                 guard connectMintRoute == nil else { return }
                 compactContentHeight = newHeight
             }
