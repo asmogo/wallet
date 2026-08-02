@@ -32,6 +32,7 @@ import com.cashu.me.ui.mints.MintsScreen
 import com.cashu.me.ui.receive.CashuRequestDetailScreen
 import com.cashu.me.ui.settings.AdvancedKeysScreen
 import com.cashu.me.ui.settings.BackupRestoreScreen
+import com.cashu.me.ui.settings.DriveBackupScreen
 import com.cashu.me.ui.settings.RestoreWalletScreen
 import com.cashu.me.ui.settings.DeviceKeyDetailScreen
 import com.cashu.me.ui.settings.LightningScreen
@@ -161,6 +162,15 @@ fun CashuNavHost(
                 appLockManager = container.appLockManager,
                 onClose = { navController.popBackStack() },
                 onOpenRestore = { navController.navigate(Routes.SETTINGS_RESTORE) },
+                onOpenDriveBackup = { navController.navigate(Routes.SETTINGS_DRIVE_BACKUP) },
+            )
+        }
+        composable(Routes.SETTINGS_DRIVE_BACKUP) {
+            DriveBackupScreen(
+                googleDriveBackupService = container.googleDriveBackupService,
+                settingsManager = container.settingsManager,
+                appLockManager = container.appLockManager,
+                onClose = { navController.popBackStack() },
             )
         }
         composable(Routes.SETTINGS_RESTORE) {
