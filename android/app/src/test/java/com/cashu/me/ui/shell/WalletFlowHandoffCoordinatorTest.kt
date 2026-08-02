@@ -5,72 +5,81 @@ import org.junit.Test
 
 class WalletFlowHandoffCoordinatorTest {
     @Test
-    fun scannerOpensOnlyAfterSheetDismissalCompletes() {
-        val events = mutableListOf<String>()
+    fun destinationDispatchesOnlyAfterSheetDismissalCompletes() {
+        val events = mutableListOf<Any>()
         val coordinator = WalletFlowHandoffCoordinator()
 
-        coordinator.requestScanner { events += "close-sheet" }
-
-        assertEquals(listOf("close-sheet"), events)
-
-        coordinator.completeDismissal(
-            openScanner = { events += "open-scanner" },
-            openContactless = { events += "open-contactless" },
-            openMintScanner = { events += "open-mint-scanner:$it" },
-        )
-
-        assertEquals(listOf("close-sheet", "open-scanner"), events)
-    }
-
-    @Test
-    fun completedHandoffIsConsumedExactlyOnce() {
-        val events = mutableListOf<String>()
-        val coordinator = WalletFlowHandoffCoordinator()
-
-        coordinator.requestContactless { events += "close-sheet" }
-        repeat(2) {
-            coordinator.completeDismissal(
-                openScanner = { events += "open-scanner" },
-                openContactless = { events += "open-contactless" },
-                openMintScanner = { events += "open-mint-scanner:$it" },
-            )
+        coordinator.request(FlowHandoffDestination.Scanner(ScannerTarget.Auto)) {
+            events += "close-sheet"
         }
 
-        assertEquals(listOf("close-sheet", "open-contactless"), events)
-    }
+        assertEquals(listOf<Any>("close-sheet"), events)
 
-    @Test
-    fun mintScanReplaysTheFlowThatYieldedTheWindow() {
-        val events = mutableListOf<String>()
-        val coordinator = WalletFlowHandoffCoordinator()
+        coordinator.completeDismissal { events += it }
 
-        coordinator.requestMintScanner(WalletFlow.Send) { events += "close-sheet" }
-        coordinator.completeDismissal(
-            openScanner = { events += "open-scanner" },
-            openContactless = { events += "open-contactless" },
-            openMintScanner = { events += "open-mint-scanner:$it" },
+        assertEquals(
+            listOf("close-sheet", FlowHandoffDestination.Scanner(ScannerTarget.Auto)),
+            events,
         )
-
-        assertEquals(listOf("close-sheet", "open-mint-scanner:${WalletFlow.Send}"), events)
     }
 
     @Test
-    fun mintScanReturnFlowIsNotReplayedTwice() {
-        val events = mutableListOf<String>()
+    fun completedHandoffIsConsumedExactlyOnceWithPayloadIntact() {
+        val dispatched = mutableListOf<FlowHandoffDestination>()
         val coordinator = WalletFlowHandoffCoordinator()
 
-        coordinator.requestMintScanner(WalletFlow.ConnectMint) { events += "close-sheet" }
+        coordinator.request(FlowHandoffDestination.ReceiveDetail("cashuAeyJ0b2tlbiI")) {}
         repeat(2) {
-            coordinator.completeDismissal(
-                openScanner = { events += "open-scanner" },
-                openContactless = { events += "open-contactless" },
-                openMintScanner = { events += "open-mint-scanner:$it" },
-            )
+            coordinator.completeDismissal { dispatched += it }
         }
 
         assertEquals(
-            listOf("close-sheet", "open-mint-scanner:${WalletFlow.ConnectMint}"),
-            events,
+            listOf<FlowHandoffDestination>(
+                FlowHandoffDestination.ReceiveDetail("cashuAeyJ0b2tlbiI"),
+            ),
+            dispatched,
         )
+    }
+
+    @Test
+    fun secondRequestBeforeDismissalReplacesTheFirst() {
+        val dispatched = mutableListOf<FlowHandoffDestination>()
+        val coordinator = WalletFlowHandoffCoordinator()
+
+        coordinator.request(FlowHandoffDestination.Scanner(ScannerTarget.Auto)) {}
+        coordinator.request(FlowHandoffDestination.Scanner(ScannerTarget.P2pkLock)) {}
+        coordinator.completeDismissal { dispatched += it }
+
+        assertEquals(
+            listOf<FlowHandoffDestination>(
+                FlowHandoffDestination.Scanner(ScannerTarget.P2pkLock),
+            ),
+            dispatched,
+        )
+    }
+
+    @Test
+    fun mintScannerCarriesTheFlowToReplayAfterTheScan() {
+        val dispatched = mutableListOf<FlowHandoffDestination>()
+        val coordinator = WalletFlowHandoffCoordinator()
+
+        coordinator.request(FlowHandoffDestination.MintScanner(returnTo = WalletFlow.Send)) {}
+        coordinator.completeDismissal { dispatched += it }
+
+        assertEquals(
+            listOf<FlowHandoffDestination>(
+                FlowHandoffDestination.MintScanner(returnTo = WalletFlow.Send),
+            ),
+            dispatched,
+        )
+    }
+
+    @Test
+    fun plainDismissalDispatchesNothing() {
+        val dispatched = mutableListOf<FlowHandoffDestination>()
+
+        WalletFlowHandoffCoordinator().completeDismissal { dispatched += it }
+
+        assertEquals(emptyList<FlowHandoffDestination>(), dispatched)
     }
 }

@@ -133,27 +133,21 @@ struct ScannerWrapperView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.openURL) private var openURL
     @Environment(\.scenePhase) private var scenePhase
-    @EnvironmentObject var walletManager: WalletManager
 
-    /// Optional callback. When provided, the scanner short-circuits its default
-    /// routing (Receive detail / fresh MeltView) and just returns the raw
-    /// scanned string so the caller can decide what to do.
-    var onScanned: ((String) -> Void)? = nil
+    /// Delivers an accepted payload to the caller. The scanner then dismisses
+    /// itself — it never presents the follow-up surface, so it can never be
+    /// left open underneath one.
+    var onScanned: (String) -> Void
 
     /// Optional override for the instruction shown under the viewfinder.
     var promptText: String? = nil
 
-    /// When true, only Cashu payment requests are accepted; anything else shows
-    /// an inline error and re-arms. Used by Send → Pay Cashu Request so the
-    /// labeled action stays honest. Routes the request through the scanner's own
-    /// `.fullScreenCover` (on top of the still-open scanner) rather than asking
-    /// the caller to dismiss-then-present — which yields a black screen.
-    var cashuRequestOnly: Bool = false
-
-    /// Invoked when an internally-routed pay flow completes, so a presenter can
-    /// fully tear down (e.g. SendView leaving the whole Send flow back to the
-    /// wallet). Nil for the home page, where dismissing the scanner suffices.
-    var onComplete: (() -> Void)? = nil
+    /// Optional gate run before a payload is delivered. `.accept` hands it to
+    /// `onScanned` and self-dismisses; `.reject` shows the message inline and
+    /// re-arms (junk QR stays scannable); `.notice` shows a neutral toast and
+    /// closes without delivering (any side effect, e.g. copying a mint URL,
+    /// belongs to the classifier). Nil accepts everything.
+    var classify: ((String) -> ScanIntake)? = nil
 
     /// Optional quick-fill chips rendered over the camera (e.g. "Paste",
     /// "Use my latest key"). Tapping one routes its `value` through the same
@@ -170,15 +164,6 @@ struct ScannerWrapperView: View {
 
     @StateObject private var scannerModel = ScannerViewModel()
     @State private var resolvedQuickFills: [ScannerQuickFill] = []
-    @State private var scannedToken: String?
-    @State private var scannedMeltRequest: String?
-    @State private var scannedCashuPaymentRequest: CashuPaymentRequestSummary?
-    @State private var scannedMeltMode: MeltView.MeltMode = .lightning
-    @State private var scannedMeltAutoQuote = false
-    @State private var scannedMeltRouteExplanation: CashuRequestRouteExplanation?
-    @State private var navigateToDetail = false
-    @State private var navigateToMelt = false
-    @State private var navigateToCashuPaymentRequest = false
     @State private var cameraAuthorizationState: CameraAuthorizationState = .checking
     @State private var cameraFailureMessage: String?
     
@@ -321,55 +306,6 @@ struct ScannerWrapperView: View {
                     refreshCameraAuthorization()
                 }
             }
-            .fullScreenCover(isPresented: $navigateToDetail, onDismiss: {
-                // Closed without completing the receive: re-arm the scanner
-                // so the next QR code is processed.
-                scannedToken = nil
-                scannerModel.reset()
-            }) {
-                if let token = scannedToken {
-                    // Full-screen page (not a sheet) so the confirm + success read
-                    // as a brand-new screen with no live camera showing behind.
-                    ReceiveTokenDetailView(tokenString: token, onComplete: {
-                        // Dismiss the entire scanner sheet
-                        dismiss()
-                    })
-                    .environmentObject(walletManager)
-                    .canvasSheetBackground()
-                }
-            }
-            .fullScreenCover(isPresented: $navigateToMelt) {
-                if let meltRequest = scannedMeltRequest {
-                    MeltView(
-                        initialRequest: meltRequest,
-                        initialMode: scannedMeltMode,
-                        autoQuoteOnAppear: scannedMeltAutoQuote,
-                        routeExplanation: scannedMeltRouteExplanation,
-                        onComplete: {
-                            dismiss()
-                        }
-                    )
-                    .environmentObject(walletManager)
-                    .canvasSheetBackground()
-                }
-            }
-            .fullScreenCover(isPresented: $navigateToCashuPaymentRequest) {
-                if let request = scannedCashuPaymentRequest {
-                    CashuPaymentRequestPayView(request: request, onComplete: {
-                        // Mutually exclusive so the Send path fires the same
-                        // number of dismissals as the home page: either the
-                        // presenter tears down the whole stack, or we just
-                        // dismiss the scanner sheet.
-                        if let onComplete {
-                            onComplete()
-                        } else {
-                            dismiss()
-                        }
-                    })
-                    .environmentObject(walletManager)
-                    .canvasSheetBackground()
-                }
-            }
         }
     }
 
@@ -442,125 +378,26 @@ struct ScannerWrapperView: View {
     private func processCompleteContent(_ content: String) {
         scannerModel.isScanning = false
 
-        // If the caller provided a direct callback (e.g. MeltView's inline
-        // scan icon), hand back the raw string and dismiss — no routing.
-        if let onScanned {
+        switch classify?(content) ?? .accept {
+        case .accept:
             let generator = UINotificationFeedbackGenerator()
             generator.notificationOccurred(.success)
             onScanned(content)
             dismiss()
-            return
-        }
-
-        // Restricted intake: the caller (Send → Pay Cashu Request) only accepts
-        // Cashu requests. Route a match through the scanner's own cover; reject
-        // anything else inline and re-arm so the labeled action stays honest.
-        if cashuRequestOnly {
-            if case .cashuPaymentRequest(let request) = PaymentRequestDecoder.decode(
-                content,
-                includeCashuPaymentRequests: true,
-                preferCashuPaymentRequests: true
-            ) {
-                let generator = UINotificationFeedbackGenerator()
-                generator.notificationOccurred(.success)
-                scannedCashuPaymentRequest = request
-                navigateToCashuPaymentRequest = true
-            } else {
-                scannerModel.errorMessage = "That's not a Cashu Request. Scan a Cashu Request code and try again."
-                HapticFeedback.notification(.error)
-                DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
-                    scannerModel.reset()
-                }
-            }
-            return
-        }
-
-        // Determine content type: Token (Receive), Cashu request (Pay), or
-        // external payment request (Pay/Melt).
-        if let token = TokenParser.normalizedToken(from: content) {
-            // Handle Ecash Token -> Show Detail View
-            let generator = UINotificationFeedbackGenerator()
-            generator.notificationOccurred(.success)
-            
-            scannedToken = token
-            navigateToDetail = true
-
-        } else if case .cashuPaymentRequest(let summary) = PaymentRequestDecoder.decode(
-            content,
-            includeCashuPaymentRequests: true,
-            preferCashuPaymentRequests: true
-        ) {
-            let generator = UINotificationFeedbackGenerator()
-            generator.notificationOccurred(.success)
-
-            // Prefer ecash when a held mint can pay; otherwise fall back to a
-            // bundled bolt11 (BIP-321) rather than dead-ending on an unheld mint.
-            switch walletManager.routeForCashuPaymentRequest(summary, rawContent: content) {
-            case .payWithEcash, .acquireThenPay:
-                scannedCashuPaymentRequest = summary
-                navigateToCashuPaymentRequest = true
-            case .payBolt11Fallback(let bolt11):
-                scannedMeltRequest = bolt11
-                scannedMeltMode = .lightning
-                scannedMeltAutoQuote = true
-                scannedMeltRouteExplanation = CashuRequestRouteExplanation(state: .lightningFallback)
-                navigateToMelt = true
-            }
-
-        } else {
-            let decodedPaymentRequest = PaymentRequestDecoder.decode(content)
-            switch decodedPaymentRequest {
-            case .bolt11, .bolt12, .onchain:
-                let generator = UINotificationFeedbackGenerator()
-                generator.notificationOccurred(.success)
-
-                if case .onchain = decodedPaymentRequest {
-                    scannedMeltRequest = PaymentRequestParser.normalizeBitcoinRequest(content)
-                    scannedMeltMode = .onchain
-                    scannedMeltAutoQuote = false
-                } else {
-                    scannedMeltRequest = PaymentRequestDecoder.encodedLightningRequest(from: content)
-                        ?? PaymentRequestParser.normalizeLightningRequest(content)
-                    scannedMeltMode = .lightning
-                    scannedMeltAutoQuote = true
-                }
-                scannedMeltRouteExplanation = nil
-                navigateToMelt = true
-
-            case .lightningAddress:
-                let generator = UINotificationFeedbackGenerator()
-                generator.notificationOccurred(.success)
-
-                scannedMeltRequest = content
-                scannedMeltMode = .lightning
-                scannedMeltAutoQuote = false
-                scannedMeltRouteExplanation = nil
-                navigateToMelt = true
-
-            case .cashuPaymentRequest, .unrecognized:
-                processUnsupportedContent(content)
-            }
-        }
-    }
-
-    private func processUnsupportedContent(_ content: String) {
-        if content.lowercased().hasPrefix("https://") && content.contains("mint") {
-            // Possibly a mint URL - copy for now, could add mint
-            UIPasteboard.general.string = content
-            let generator = UINotificationFeedbackGenerator()
-            generator.notificationOccurred(.success)
-
-            // A confirmation, not a failure — render it on a neutral toast.
-            scannerModel.noticeSeverity = .info
-            scannerModel.errorMessage = "Mint URL copied to clipboard"
-
-            DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
-                self.dismiss()
-            }
-        } else {
-            scannerModel.errorMessage = "This QR code isn't a payment code we recognize. Scan a Lightning invoice, ecash token, or Cashu Request."
+        case .reject(let message):
+            scannerModel.errorMessage = message
+            HapticFeedback.notification(.error)
             DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
                 scannerModel.reset()
+            }
+        case .notice(let message):
+            let generator = UINotificationFeedbackGenerator()
+            generator.notificationOccurred(.success)
+            // A confirmation, not a failure — render it on a neutral toast.
+            scannerModel.noticeSeverity = .info
+            scannerModel.errorMessage = message
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+                self.dismiss()
             }
         }
     }

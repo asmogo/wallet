@@ -96,7 +96,10 @@ final class ContactlessPaymentCoordinator {
             case .bolt11(let invoice):
                 session.alertMessage = "Lightning request found"
                 session.invalidate()
-                navigationManager.pendingMeltInvoice = invoice
+                // The Send sheet already closed when the NFC session started,
+                // so the pre-filled melt sheet presents as soon as the system
+                // NFC surface yields.
+                navigationManager.present(.sheet(.meltInvoice(invoice)))
             }
         } catch let error as NFCPaymentError {
             session.invalidate(errorMessage: error.localizedDescription)

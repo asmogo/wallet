@@ -93,7 +93,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import com.cashu.me.Views.Components.ScannerView
 import com.cashu.me.Views.Components.ScannerQuickAction
 import com.cashu.me.Core.AmountFormatter
 import com.cashu.me.Core.WalletHaptic
@@ -139,7 +138,21 @@ internal object LockEcashCopy {
     const val InvalidRecipientKey = "That's not a valid public key."
     const val RecipientEffect = "Only the recipient with this public key can claim it."
     const val RecipientKeyLabel = "Recipient public key (P2PK)"
+    const val ScanPrompt = "Scan a public key to lock to"
 }
+
+/**
+ * Entry state parked in the shell while this sheet yields to the full-screen
+ * P2PK key scanner, then restored when the flow reopens. Without it the typed
+ * amount evaporates on every "Lock ecash" scan.
+ */
+data class SendEcashDraft(
+    val amount: String,
+    val mintUrl: String?,
+    val unit: String?,
+    val p2pkOn: Boolean,
+    val p2pkInput: String,
+)
 
 private sealed interface SendFace {
     data object Input : SendFace
@@ -186,6 +199,10 @@ fun SendEcashScreen(
     priceService: com.cashu.me.Core.PriceService,
     onBack: () -> Unit,
     onClose: () -> Unit,
+    onScanP2pk: (SendEcashDraft) -> Unit = {},
+    initialDraft: SendEcashDraft? = null,
+    prefilledP2pkKey: String? = null,
+    onPrefilledP2pkConsumed: () -> Unit = {},
     onDismissLockChanged: (Boolean) -> Unit = {},
 ) {
     val walletState by walletManager.state.collectAsState()
@@ -197,18 +214,16 @@ fun SendEcashScreen(
     val haptics = rememberWalletHaptics()
 
     var face: SendFace by remember { mutableStateOf(SendFace.Input) }
-    var amount by remember { mutableStateOf("") }
+    var amount by remember { mutableStateOf(initialDraft?.amount ?: "") }
     var sending by remember { mutableStateOf(false) }
     var errorText by remember { mutableStateOf<String?>(null) }
     var pickerOpen by remember { mutableStateOf(false) }
-    var selectedMintUrl by remember { mutableStateOf<String?>(null) }
+    var selectedMintUrl by remember { mutableStateOf(initialDraft?.mintUrl) }
     var unitPickerOpen by remember { mutableStateOf(false) }
-    var selectedUnit by remember { mutableStateOf<String?>(null) }
+    var selectedUnit by remember { mutableStateOf(initialDraft?.unit) }
     var nonSatBalance by remember { mutableStateOf<Long?>(null) }
-    var p2pkOn by remember { mutableStateOf(false) }
-    var p2pkInput by remember { mutableStateOf("") }
-    var p2pkScannerVisible by remember { mutableStateOf(false) }
-    val clipboard = LocalClipboardManager.current
+    var p2pkOn by remember { mutableStateOf(initialDraft?.p2pkOn ?: false) }
+    var p2pkInput by remember { mutableStateOf(initialDraft?.p2pkInput ?: "") }
 
     val activeMintUrl = selectedMintUrl ?: walletState.activeMint?.url
     val activeMint = walletState.mints.firstOrNull { it.url == activeMintUrl } ?: walletState.activeMint
@@ -273,12 +288,6 @@ fun SendEcashScreen(
             primaryPublicKey = primaryP2pkPublicKey,
         )
     } == true
-    val validClipboardText = clipboard.getText()?.text?.takeIf {
-        validateP2PKRecipientKey(it).normalizedKey != null
-    }
-
-    fun closeP2pkScanner() { p2pkScannerVisible = false }
-
     fun selectP2pkRecipient(raw: String) {
         val validation = validateP2PKRecipientKey(raw)
         val normalized = validation.normalizedKey
@@ -291,46 +300,32 @@ fun SendEcashScreen(
             errorText = validation.errorMessage ?: LockEcashCopy.InvalidRecipientKey
             haptics.perform(WalletHaptic.Error)
         }
-        closeP2pkScanner()
     }
+
+    // The key scanned (or shortcut-picked) on the shell's full-screen scanner
+    // arrives here when the flow reopens — the single validation path judges
+    // it, so an invalid code surfaces as the usual inline error.
+    LaunchedEffect(prefilledP2pkKey) {
+        val key = prefilledP2pkKey?.takeIf { it.isNotBlank() } ?: return@LaunchedEffect
+        selectP2pkRecipient(key)
+        onPrefilledP2pkConsumed()
+    }
+
+    fun currentDraft() = SendEcashDraft(
+        amount = amount,
+        mintUrl = selectedMintUrl,
+        unit = selectedUnit,
+        p2pkOn = p2pkOn,
+        p2pkInput = p2pkInput,
+    )
 
     // Generation counts as money-in-motion: block sheet dismissal.
     LaunchedEffect(sending) { onDismissLockChanged(sending) }
 
-    // System back mirrors the header chevron: Generated → Input, Input → the
-    // Send surface. Swallow back while a token is being generated.
-    BackHandler(enabled = true) {
-        when {
-            p2pkScannerVisible -> closeP2pkScanner()
-            sending -> Unit
-            face is SendFace.Generated -> face = SendFace.Input
-            else -> onBack()
-        }
-    }
-
-    if (p2pkScannerVisible) {
-        val scannerQuickActions = buildList {
-            if (settings.showP2PKButtonInDrawer && primaryP2pkPublicKey != null) {
-                add(ScannerQuickAction("Lock to my key", Icons.Filled.Key) {
-                    haptics.perform(WalletHaptic.Selection)
-                    selectP2pkRecipient(primaryP2pkPublicKey)
-                })
-            }
-            if (validClipboardText != null) {
-                add(ScannerQuickAction("Paste key", Icons.Outlined.ContentPaste) {
-                    haptics.perform(WalletHaptic.Selection)
-                    selectP2pkRecipient(validClipboardText)
-                })
-            }
-        }
-        ScannerView(
-            onClose = ::closeP2pkScanner,
-            onScanned = ::selectP2pkRecipient,
-            promptText = "Scan a public key to lock to",
-            quickActions = scannerQuickActions,
-        )
-        return
-    }
+    // Dismissal contract: system back = swipe = abandon to the wallet, so the
+    // sheet handles it. The header chevron owns internal step-back (Generated →
+    // Input → Send). Swallow back only while a token is being generated.
+    BackHandler(enabled = sending) {}
 
     Column(
         modifier = Modifier
@@ -361,7 +356,7 @@ fun SendEcashScreen(
                 } else if (current is SendFace.Input) {
                     // iOS toolbar order: lock, then unit (unit sits to the lock's right).
                     LockEcashToolbarAction(
-                        onClick = { p2pkScannerVisible = true },
+                        onClick = { onScanP2pk(currentDraft()) },
                     )
                     if (activeMint?.supportsMultipleUnits == true) {
                         androidx.compose.material3.TextButton(onClick = { unitPickerOpen = true }) {
@@ -426,7 +421,7 @@ fun SendEcashScreen(
                     errorText = errorText,
                     confirmedP2pkPubkey = validatedP2pkPubkey,
                     p2pkRecipientIsPrimaryKey = p2pkRecipientIsPrimaryKey,
-                    onEditP2pkRecipient = { p2pkScannerVisible = true },
+                    onEditP2pkRecipient = { onScanP2pk(currentDraft()) },
                     onRemoveP2pkRecipient = {
                         p2pkInput = ""
                         p2pkOn = false
@@ -688,6 +683,43 @@ private fun InputFace(
             buttonLoading = sending,
             buttonModifier = Modifier.testTag(UiTestTags.SendEcashSubmit),
         )
+        }
+    }
+}
+
+/**
+ * Quick actions for the full-screen P2PK key scanner the shell opens on this
+ * sheet's behalf — the key shortcuts stay colocated with the flow. A selected
+ * key takes the same return path as a scanned one.
+ */
+@Composable
+internal fun rememberP2pkScannerQuickActions(
+    settingsManager: SettingsManager,
+    onSelectKey: (String) -> Unit,
+): List<ScannerQuickAction> {
+    val settings by settingsManager.state.collectAsState()
+    val clipboard = LocalClipboardManager.current
+    val haptics = rememberWalletHaptics()
+    val primaryPublicKey = settingsManager.primaryP2PKKeyInfo()?.publicKey
+    val validClipboardText = clipboard.getText()?.text?.takeIf {
+        validateP2PKRecipientKey(it).normalizedKey != null
+    }
+    return buildList {
+        if (settings.showP2PKButtonInDrawer && primaryPublicKey != null) {
+            add(
+                ScannerQuickAction("Lock to my key", Icons.Filled.Key) {
+                    haptics.perform(WalletHaptic.Selection)
+                    onSelectKey(primaryPublicKey)
+                },
+            )
+        }
+        if (validClipboardText != null) {
+            add(
+                ScannerQuickAction("Paste key", Icons.Outlined.ContentPaste) {
+                    haptics.perform(WalletHaptic.Selection)
+                    onSelectKey(validClipboardText)
+                },
+            )
         }
     }
 }

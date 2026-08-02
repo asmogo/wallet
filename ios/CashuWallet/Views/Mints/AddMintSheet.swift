@@ -106,7 +106,9 @@ struct AddMintFormView: View {
         }
         .navigationTitle("Add Mint")
         .navigationBarTitleDisplayMode(.inline)
-        .fullScreenCover(isPresented: $showingScanner) {
+        // Sheet, not fullScreenCover — the one presentation kind every
+        // value-returning scanner uses.
+        .sheet(isPresented: $showingScanner) {
             ScannerWrapperView(
                 onScanned: handleScannedMintUrl,
                 promptText: "Scan a mint URL"

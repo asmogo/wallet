@@ -17,56 +17,65 @@ class BackNavigationComposeTest {
     @get:Rule
     val compose = createAndroidComposeRule<ComponentActivity>()
 
+    /**
+     * Flow screens keep a single swallow handler, enabled only while money is
+     * moving: back must not reach the sheet's dismiss handling mid-payment,
+     * and must fall through to it (back = swipe = abandon to the wallet) at
+     * every other step.
+     */
     @Test
-    fun customBackHandlersDispatchPolicyOutcomes() {
-        val activeOutcome = mutableStateOf("unset")
-        var observedOutcome = "unset"
+    fun executingSwallowBlocksDismissalAndIdleFallsThrough() {
+        val executing = mutableStateOf(true)
+        var sheetDismissals = 0
+
+        compose.setCashuContent {
+            // Registered first → lower priority: stands in for the M3 sheet's
+            // own back-to-dismiss handling.
+            BackHandler(enabled = true) { sheetDismissals++ }
+            // The flow screens' pattern: BackHandler(enabled = executing) {}.
+            BackHandler(enabled = executing.value) {}
+            Text("Back contract harness")
+        }
+
+        compose.activityRule.scenario.onActivity {
+            it.onBackPressedDispatcher.onBackPressed()
+        }
+        compose.runOnIdle { assertEquals(0, sheetDismissals) }
+
+        compose.runOnIdle { executing.value = false }
+        compose.waitForIdle()
+        compose.activityRule.scenario.onActivity {
+            it.onBackPressedDispatcher.onBackPressed()
+        }
+        compose.runOnIdle { assertEquals(1, sheetDismissals) }
+    }
+
+    /** Shell back closes the topmost activity-window overlay first. */
+    @Test
+    fun shellBackDispatchesTopmostOverlay() {
+        val receiveDetailVisible = mutableStateOf(true)
+        var observed: ShellBackAction? = null
 
         compose.setCashuContent {
             BackHandler(enabled = true) {
-                observedOutcome = activeOutcome.value
+                observed = shellBackAction(
+                    receiveDetailVisible = receiveDetailVisible.value,
+                    scannerVisible = true,
+                )
             }
-            Text("Back policy harness")
+            Text("Shell back harness")
         }
 
-        val cases = listOf(
-            "shell:receive-detail" to shellBackAction(
-                receiveDetailVisible = true,
-                scannerVisible = true,
-            )!!.name,
-            "shell:scanner" to shellBackAction(
-                receiveDetailVisible = false,
-                scannerVisible = true,
-            )!!.name,
-            "onboarding:restore-progress-working" to onboardingBackAction(
-                OnboardingBackState.RestoreProgress,
-                canExitOnboarding = false,
-                restoreInProgress = true,
-            ).name,
-            "unified-send:confirm-from-amount" to unifiedSendBackAction(
-                sending = false,
-                statusVisible = false,
-                onConfirmStep = true,
-                cameFromAmount = true,
-                onInputStep = false,
-            ).name,
-            "send-ecash:generated" to sendEcashBackAction(sending = false, generated = true).name,
-            "receive-ecash:review" to receiveEcashBackAction(claiming = false, reviewing = true).name,
-            "receive-lightning:display" to receiveLightningBackAction(displayingQuote = true).name,
-            "history:search" to historyBackAction(searching = true)!!.name,
-            "direct:close" to directSurfaceBackAction().name,
-        )
-
-        cases.forEach { (name, expected) ->
-            observedOutcome = "unset"
-            compose.runOnIdle { activeOutcome.value = expected }
-            compose.waitForIdle()
-            compose.activityRule.scenario.onActivity {
-                it.onBackPressedDispatcher.onBackPressed()
-            }
-            compose.runOnIdle {
-                assertEquals(name, expected, observedOutcome)
-            }
+        compose.activityRule.scenario.onActivity {
+            it.onBackPressedDispatcher.onBackPressed()
         }
+        compose.runOnIdle { assertEquals(ShellBackAction.CloseReceiveDetail, observed) }
+
+        compose.runOnIdle { receiveDetailVisible.value = false }
+        compose.waitForIdle()
+        compose.activityRule.scenario.onActivity {
+            it.onBackPressedDispatcher.onBackPressed()
+        }
+        compose.runOnIdle { assertEquals(ShellBackAction.CloseScanner, observed) }
     }
 }

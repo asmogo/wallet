@@ -25,13 +25,8 @@ struct MainWalletView: View {
     @ObservedObject var priceService = PriceService.shared
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
-    @State private var activeSheet: WalletSheet?
-    /// A payable destination pasted/scanned into the Receive sheet is really a
-    /// Send — stashed here so the Send sheet opens pre-filled with it.
-    @State private var sendPrefill: String?
     @State private var receivedDelta: ReceivedDelta?
     @State private var deltaDismissTask: Task<Void, Never>?
-    @State private var receiveEcashDetent: PresentationDetent = .medium
     @State private var contactlessCoordinator = ContactlessPaymentCoordinator()
     @State private var selectedTransaction: WalletTransaction?
     @State private var topInsetHeight: CGFloat = 0
@@ -116,7 +111,7 @@ struct MainWalletView: View {
                 }
                 ToolbarItem(placement: .topBarTrailing) {
                     Button {
-                        activeSheet = .scanner
+                        navigationManager.activeWalletSheet = .scanner
                     } label: {
                         Image(systemName: "viewfinder")
                             .font(.body.weight(.semibold))
@@ -126,7 +121,13 @@ struct MainWalletView: View {
                     .accessibilityHint("Opens the QR scanner")
                 }
             }
-            .sheet(item: $activeSheet) { sheet in
+            // The one flow-sheet slot. `onDismiss` fires after the dismiss
+            // animation and promotes any surface parked by
+            // `NavigationManager.present` — sheets replace, never stack.
+            .sheet(
+                item: $navigationManager.activeWalletSheet,
+                onDismiss: { navigationManager.sheetDidDismiss() }
+            ) { sheet in
                 sheetView(for: sheet)
             }
             .sheet(item: $selectedTransaction) { transaction in
@@ -151,13 +152,6 @@ struct MainWalletView: View {
             showReceivedDelta(amount: amount, fee: fee, playHaptic: playHaptic)
         }
         .onDisappear { deltaDismissTask?.cancel() }
-        .onReceive(navigationManager.$pendingMeltInvoice.compactMap { $0 }) { invoice in
-            activeSheet = nil
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-                activeSheet = .flow(.sendLightningWithInvoice(invoice))
-                navigationManager.pendingMeltInvoice = nil
-            }
-        }
     }
 
     // MARK: - Fixed Top Section
@@ -394,7 +388,7 @@ struct MainWalletView: View {
                 Divider()
 
                 Button {
-                    activeSheet = .discoverMints
+                    navigationManager.activeWalletSheet = .discoverMints
                 } label: {
                     Label("Add Mint", systemImage: "plus")
                 }
@@ -455,26 +449,26 @@ struct MainWalletView: View {
                         "Receive",
                         identifier: "wallet-action-receive",
                         hint: HomeActionAccessibility.receiveHint
-                    ) { activeSheet = .receive }
+                    ) { navigationManager.activeWalletSheet = .receive }
 
                     actionButton(
                         "Send",
                         identifier: "wallet-action-send",
                         hint: HomeActionAccessibility.sendHint
-                    ) { activeSheet = .send }
+                    ) { navigationManager.activeWalletSheet = .send(prefill: nil) }
                 }
             }
             .disabled(!walletManager.isRuntimeReady)
         } else {
             HStack(spacing: 12) {
-                Button { activeSheet = .receive } label: {
+                Button { navigationManager.activeWalletSheet = .receive } label: {
                     Text("Receive")
                 }
                 .glassButton()
                 .accessibilityIdentifier("wallet-action-receive")
                 .accessibilityHint(HomeActionAccessibility.receiveHint)
 
-                Button { activeSheet = .send } label: {
+                Button { navigationManager.activeWalletSheet = .send(prefill: nil) } label: {
                     Text("Send")
                 }
                 .glassButton()
@@ -520,7 +514,7 @@ struct MainWalletView: View {
                         systemImage: "bitcoinsign.bank.building",
                         description: "Mints custody your ecash. Add one to begin.",
                         actionTitle: "Add mint",
-                        action: { activeSheet = .connectMint }
+                        action: { navigationManager.activeWalletSheet = .connectMint }
                     )
                 } else {
                     // Same shared component, size, and centered placement as the
@@ -715,36 +709,75 @@ struct MainWalletView: View {
             // with Scan · Ecash · Bitcoin. A pasted/scanned *payable* is really a
             // Send, so it hands the destination back to the Send flow via `onSend`.
             UnifiedReceiveView(
-                onClose: { activeSheet = nil },
+                onClose: { navigationManager.activeWalletSheet = nil },
                 onSend: { destination in
-                    sendPrefill = destination
-                    activeSheet = .send
+                    navigationManager.activeWalletSheet = .send(prefill: destination)
+                },
+                // A pasted/scanned token opens the full-screen claim page; the
+                // sheet closes first (parked handoff), so its X lands on the
+                // wallet — never back on this input sheet.
+                onOpenReceiveToken: { token in
+                    navigationManager.present(.cover(.receiveToken(token)))
+                },
+                onReceiveLightning: {
+                    navigationManager.activeWalletSheet = .receiveLightning
                 }
             )
             .environmentObject(walletManager)
-        case .send:
+        case .send(let prefill):
             // UnifiedSendView owns its presentation detents: content-fit on the
             // input step, `.large` + canvas once amount/confirm/status take over.
             UnifiedSendView(
-                initialDestination: sendPrefill,
-                onClose: { activeSheet = nil; sendPrefill = nil },
-                onReceive: { activeSheet = .receive },
+                initialDestination: prefill,
+                onClose: { navigationManager.activeWalletSheet = nil },
+                onReceive: { navigationManager.activeWalletSheet = .receive },
                 onContactless: {
-                    activeSheet = nil
+                    navigationManager.activeWalletSheet = nil
                     contactlessCoordinator.start(
                         walletManager: walletManager,
                         navigationManager: navigationManager
                     )
-                }
+                },
+                // A token pasted into Send is a receive: bounce it to the
+                // full-screen claim page, closing the Send sheet first.
+                onOpenReceiveToken: { token in
+                    navigationManager.present(.cover(.receiveToken(token)))
+                },
+                onSendEcash: { navigationManager.activeWalletSheet = .sendEcash }
             )
             .environmentObject(walletManager)
         case .scanner:
-            ScannerWrapperView()
+            // The scanner self-dismisses on a successful read and hands the
+            // payload back; the routed surface presents only after this sheet
+            // is gone — the scanner is never left open underneath.
+            ScannerWrapperView(
+                onScanned: { payload in
+                    navigationManager.routeScannedPayload(payload, walletManager: walletManager)
+                },
+                classify: { payload in
+                    navigationManager.classifyScannedPayload(payload, walletManager: walletManager)
+                }
+            )
+            .environmentObject(walletManager)
+            .presentationDetents([.large])
+            .canvasSheetBackground()
+        case .sendEcash:
+            // Swapped into the sheet from Send's method row. The chevron steps
+            // back to Send; X / swipe-down abandons to the wallet.
+            SendView(onBack: { navigationManager.activeWalletSheet = .send(prefill: nil) })
                 .environmentObject(walletManager)
                 .presentationDetents([.large])
                 .canvasSheetBackground()
-        case .flow(let flow):
-            flowView(for: flow)
+        case .receiveLightning:
+            ReceiveLightningView()
+                .environmentObject(walletManager)
+                .presentationDetents([.large])
+                .canvasSheetBackground()
+        case .meltInvoice(let invoice):
+            MeltViewWithInvoice(invoice: invoice)
+                .environmentObject(walletManager)
+                .presentationDetents([.large])
+                .canvasSheetBackground()
         case .connectMint:
             // Same surface the Send sheet shows when there are no mints — the
             // detents and canvas background live inside it.
@@ -756,91 +789,6 @@ struct MainWalletView: View {
             }
             .environmentObject(walletManager)
             .canvasSheetBackground()
-        }
-    }
-
-    @ViewBuilder
-    private func flowView(for flow: WalletFlow) -> some View {
-        switch flow {
-        case .receiveEcash:
-            ReceiveEcashView(sheetDetent: $receiveEcashDetent)
-                .environmentObject(walletManager)
-                .presentationDetents([.medium, .large], selection: $receiveEcashDetent)
-                .onAppear { receiveEcashDetent = .medium }
-        case .receiveLightning:
-            ReceiveLightningView()
-                .environmentObject(walletManager)
-                .presentationDetents([.large])
-                .canvasSheetBackground()
-        case .sendEcash:
-            SendView()
-                .environmentObject(walletManager)
-                .presentationDetents([.large])
-                .canvasSheetBackground()
-        case .sendLightning:
-            MeltView()
-                .environmentObject(walletManager)
-                .presentationDetents([.large])
-                .canvasSheetBackground()
-        case .sendLightningWithInvoice(let invoice):
-            MeltViewWithInvoice(invoice: invoice)
-                .environmentObject(walletManager)
-                .presentationDetents([.large])
-                .canvasSheetBackground()
-        case .contactlessPay:
-            EmptyView()
-        }
-    }
-}
-
-private enum WalletFlow: Identifiable {
-    case receiveEcash
-    case receiveLightning
-    case sendEcash
-    case sendLightning
-    case sendLightningWithInvoice(String)
-    case contactlessPay
-
-    var id: String {
-        switch self {
-        case .receiveEcash:
-            return "receiveEcash"
-        case .receiveLightning:
-            return "receiveLightning"
-        case .sendEcash:
-            return "sendEcash"
-        case .sendLightning:
-            return "sendLightning"
-        case .sendLightningWithInvoice(let invoice):
-            return "sendLightningWithInvoice-\(invoice.prefix(64))"
-        case .contactlessPay:
-            return "contactlessPay"
-        }
-    }
-}
-
-private enum WalletSheet: Identifiable {
-    case receive
-    case send
-    case scanner
-    case flow(WalletFlow)
-    case connectMint
-    case discoverMints
-
-    var id: String {
-        switch self {
-        case .receive:
-            return "receive"
-        case .send:
-            return "send"
-        case .scanner:
-            return "scanner"
-        case .flow(let flow):
-            return "flow-\(flow.id)"
-        case .connectMint:
-            return "connectMint"
-        case .discoverMints:
-            return "discoverMints"
         }
     }
 }

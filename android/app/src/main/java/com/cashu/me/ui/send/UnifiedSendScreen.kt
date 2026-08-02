@@ -460,11 +460,10 @@ fun UnifiedSendScreen(
     // not tear down the coroutine mid-payment.
     LaunchedEffect(status) { onDismissLockChanged(status is SendStatus.Sending) }
 
-    // System back mirrors the header chevron: unwind Confirm → Amount → Input;
-    // swallow back entirely while sending. From Input the sheet handles it.
-    BackHandler(enabled = status is SendStatus.Sending || (status == null && step != SendStep.Input)) {
-        if (status == null) goBack()
-    }
+    // Dismissal contract: system back = swipe = abandon to the wallet, so the
+    // sheet handles it. The header chevron owns internal step-back (Confirm →
+    // Amount → Input). Swallow back only while the melt is in flight.
+    BackHandler(enabled = status is SendStatus.Sending) {}
 
     // Compact while the input face is up so Scan/Ecash/Tap sit near the thumb;
     // amount/confirm/status need the full sheet for the keypad and pay scaffold.

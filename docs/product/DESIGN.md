@@ -636,31 +636,53 @@ section. Defined in `HistoryView.swift` → `cashuRequestRow(request:, staggerIn
 
 ### Sheets
 
-Sheets are the dominant modal pattern. Full-screen covers are reserved for the
-camera scanner only.
+Sheets are the dominant modal pattern. Full-screen covers are the full-screen
+*payment pages* — token claim, scan-routed melt / Cashu-request pay, held
+NUT-18 approval — screens that must read as brand-new with nothing visible
+beneath. The camera scanner itself is a `.sheet` everywhere.
+
+**Sheet-navigation contract** (mirrored on Android by `AuthenticatedShell`):
+
+- **One flow surface at a time.** `NavigationManager` owns a single home-sheet
+  slot (`WalletSheet`) and a single full-screen cover slot (`FlowCover`).
+  Story progression *replaces* — either an in-place `.sheet(item:)` content
+  swap (Send → Send Ecash, Receive → Bitcoin, Receive → Send payable) or a
+  parked handoff via `NavigationManager.present`, which closes the outgoing
+  surface and presents the next one from `onDismiss`. Surfaces never stack;
+  the scanner self-dismisses before its result presents.
+- **Dismissal abandons to the wallet.** Swipe-down or X from any flow surface
+  lands on the screen beneath (normally Home) — never on an earlier sheet.
+  In-sheet chevrons/pills own internal step-back.
+- **Dismissal locks only while money moves.** `interactiveDismissDisabled` +
+  a hidden/disabled close button during the irreversible execution window
+  (melt executing, token generating, claim processing); every waiting or
+  composing phase stays freely dismissible.
+- **Interrupts defer until idle.** Deep-linked tokens and held NUT-18
+  approvals queue in `NavigationManager` / `CashuRequestListener` and present
+  only when no flow surface is open, the runtime is ready, and the app is
+  unlocked. Nothing is dropped — skipped items re-present on the next idle
+  transition.
+
+Presentation styles:
 
 - **Default**: `.sheet(item:)` + `.presentationDetents([.large])` +
   `.presentationDragIndicator(.visible)`. Use for any flow that has its own
   internal navigation (Send, Receive, Mints).
 - **Adaptive**: `.presentationDetents([.medium, .large])`. Use for inspection-
-  style sheets (Settings → Backup, single-mint detail). `ReceiveEcashView`
-  opens at `.medium` and lets the user pull to `.large`; when the inner state
-  flips to a freshly-built Cashu Request, the parent programmatically promotes
-  the detent to `.large` (`sheetDetent?.wrappedValue = .large`) so the QR has
-  room to land — the *detent* moves to the *content*, not the other way around.
+  style sheets (Settings → Backup, single-mint detail).
+- **Content-fit**: the unified Send/Receive input faces measure their body and
+  drive `.presentationDetents([.height(measured)])` so Scan · Ecash · Tap stay
+  thumb-reachable; later steps expand to `.large`.
 - **Fixed height**: `.presentationDetents([.height(340)])` for compact
   confirmation surfaces (`AuthorizingOverlay`). Pair with
   `.presentationBackgroundInteraction(.disabled)` to lock the underlying canvas.
-  The Send/Receive chooser uses `.presentationDetents([.height(195)])`
-  (or `245` when NFC is available) — fitted exactly to the option list, never
-  taller. Variable-height chooser detents are intentional: an empty option
-  costs the user vertical space and adds no information.
 - **Sub-sheets on a sheet**: `CashuRequestDetailView` opens
   `CashuRequestMintPickerSheet` and `CashuRequestAmountPickerSheet` as nested
   sheets at `.presentationDetents([.medium])`. The parent stays put; the
-  sub-sheet is a transient editor and dismisses on selection. This pattern is
-  the right replacement for "Edit Cashu Request" being its own screen — the
-  attribute is small, the edit is one tap, the surrounding context never leaves.
+  sub-sheet is a transient editor and dismisses on selection. Transient
+  value-returning editors (mint/unit/amount pickers, in-flow scanners) are the
+  one sanctioned exception to "never stack" — they return to the step beneath,
+  they are not story progression.
 - **Confirmation dialogs**: `.confirmationDialog(...)` for destructive
   actions (remove mint, sign out). Never a custom alert sheet.
 - **Sheet background (carve-out, 2026-06-29)**: full-screen `.large` flows and
@@ -674,9 +696,9 @@ camera scanner only.
 
 The signature surface of the NUT-18 receive flow.
 `ios/CashuWallet/Views/Receive/CashuRequestDetailView.swift`. The view runs in two
-contexts: as the receive-flow face inside a `.medium`/`.large` sheet from
-`ReceiveEcashView`, or — from History — presented as its **own bottom
-`.sheet`** (wrapped in a `NavigationStack` at the call site for its toolbar).
+contexts: full-screen when `UnifiedReceiveView` mints a fresh request, or —
+from History — presented as its **own bottom `.sheet`** (each wrapped in a
+`NavigationStack` at the call site for its toolbar).
 **Detail surfaces are always bottom sheets, never pushed** — tapping any
 History item or completed Home transaction slides up the same way, so the two
 never diverge into a push vs. sheet split. The same content scales to both
@@ -887,13 +909,13 @@ code must be).
    (`.snappy(0.09)`), springs back to 1.0 on release (`.snappy(0.18)`).
    Color/opacity unchanged. Apply only where the glass surface doesn't
    already carry feedback; `glassButton()` ships its own pressed opacity drop.
-5. **Sheet cross-fade** — in-sheet flow swap, e.g. `ReceiveEcashView`
-   flipping between the paste-token form and the `CashuRequestDetailView`.
-   Each branch ships `.transition(.opacity)` and the container animates
-   `.easeInOut(duration: 0.25)` on the discriminator (`value: currentRequest?.id`).
-   Use this whenever a sheet has two faces of the same task; the alternative
-   (push navigation, modal stacking) breaks the "the sheet is the unit of
-   intent" principle in docs/product/PRODUCT.md.
+5. **Sheet cross-fade** — in-sheet flow swap, e.g. the home sheet's
+   `.sheet(item:)` content morphing between `WalletSheet` cases (Send → Send
+   Ecash, Receive → Bitcoin) or a flow flipping between two faces of one task.
+   Each branch ships `.transition(.opacity)` and the container animates on the
+   discriminator. Use this whenever a sheet has two faces of the same task;
+   the alternative (push navigation, modal stacking) breaks the "the sheet is
+   the unit of intent" principle in docs/product/PRODUCT.md.
 6. **Payment-received celebration** — `paymentJustReceived` lights up the
    Cashu Request status badge for 2.5s with `.spring(response: 0.5,
    dampingFraction: 0.7)`. The checkmark uses `.symbolEffect(.bounce, value:)`
