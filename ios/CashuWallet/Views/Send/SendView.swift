@@ -1272,6 +1272,7 @@ struct UnifiedSendView: View {
     @State private var errorSeverity: ErrorSeverity = .error
     @State private var errorShowsMintAction = false
     @State private var errorIsTerminal = false
+    @State private var meltRetryNeedsFreshQuote = false
     /// Persisted across confirmation → processing/success/failure so a
     /// rail-changing or recovery route cannot disappear as wallet state updates.
     @State private var activeRouteExplanation: CashuRequestRouteExplanation?
@@ -2103,9 +2104,13 @@ struct UnifiedSendView: View {
             failureCTA: meltSwitchMintCTA,
             onDone: onClose,
             onRetry: {
-                // Only a failed payment reaches this status screen. Return to its
-                // already-created quote so retry still requires an explicit Pay tap.
                 withAnimation(.smooth(duration: 0.3)) { step = .confirm }
+                if meltRetryNeedsFreshQuote {
+                    // CDK confirmed compensation, so the prior quote is no
+                    // longer reused. Fetching a new quote is part of retry.
+                    meltQuote = nil
+                    fetchMeltQuote()
+                }
             }
         )
     }
@@ -2159,6 +2164,7 @@ struct UnifiedSendView: View {
         guard let quote = meltQuote else { return }
         HapticFeedback.impact(.medium)
         errorMessage = nil
+        meltRetryNeedsFreshQuote = false
         withAnimation(.smooth(duration: 0.3)) { step = .sending }
         Task { @MainActor in
             do {
@@ -2169,6 +2175,7 @@ struct UnifiedSendView: View {
                 // Keep errorMessage set so the confirm screen's notice + switch-mint
                 // CTA reappear when the user taps Try Again.
                 presentError(from: error)
+                meltRetryNeedsFreshQuote = error.meltRetryRequiresFreshQuote
                 withAnimation(.smooth(duration: 0.3)) { step = .failed }
             }
         }
@@ -2900,6 +2907,7 @@ struct MeltView: View {
     /// Drives the full-screen processing → success → failure status screen.
     /// nil while the user is still on input/confirm.
     @State private var paymentPhase: PaymentStatusView.Phase?
+    @State private var meltRetryNeedsFreshQuote = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private func presentError(_ message: String, severity: ErrorSeverity = .error) {
@@ -3518,7 +3526,13 @@ struct MeltView: View {
             // yet: the mint took the payment and pays out in the background.
             successTitle: meltSettlementPending ? "Payment Processing" : "Payment Sent!",
             onDone: close,
-            onRetry: { withAnimation(.smooth(duration: 0.3)) { paymentPhase = nil } }
+            onRetry: {
+                withAnimation(.smooth(duration: 0.3)) { paymentPhase = nil }
+                if meltRetryNeedsFreshQuote {
+                    meltQuote = nil
+                    getQuote()
+                }
+            }
         )
     }
 
@@ -3748,6 +3762,7 @@ struct MeltView: View {
 
         isPaying = true
         errorMessage = nil
+        meltRetryNeedsFreshQuote = false
         HapticFeedback.impact(.medium)
         withAnimation(.smooth(duration: 0.3)) { paymentPhase = .processing }
 
@@ -3761,6 +3776,7 @@ struct MeltView: View {
                 // Keep errorMessage populated so the confirm screen's notice reappears
                 // if the user taps Try Again.
                 presentError(walletMessage.text, severity: walletMessage.severity)
+                meltRetryNeedsFreshQuote = error.meltRetryRequiresFreshQuote
                 withAnimation(.smooth(duration: 0.3)) {
                     paymentPhase = .failure(
                         message: walletMessage.text,

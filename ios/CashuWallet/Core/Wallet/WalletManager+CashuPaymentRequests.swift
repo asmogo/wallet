@@ -182,12 +182,32 @@ extension WalletManager {
             amount: amount,
             preferredMintURL: preferredMintURL
         )
-        let wallet = try await walletRepository.getWallet(mintUrl: MintUrl(url: selectedMint.url), unit: .sat)
-        let customAmount = request.amount() == nil ? Amount(value: amount) : nil
+        try await operationCoordinator.perform(
+            kind: .send,
+            resourceID: selectedMint.url,
+            protectsBackgroundExecution: true,
+            defaultFailureOutcome: .ambiguousFailure
+        ) {
+            do {
+                let wallet = try await walletRepository.getWallet(
+                    mintUrl: MintUrl(url: selectedMint.url),
+                    unit: .sat
+                )
+                let customAmount = request.amount() == nil ? Amount(value: amount) : nil
 
-        try await wallet.payRequest(paymentRequest: request, customAmount: customAmount)
-        await refreshBalance()
-        await loadTransactions()
+                try await wallet.payRequest(paymentRequest: request, customAmount: customAmount)
+                await self.refreshBalanceAssumingWalletOperationLease()
+                await self.loadTransactionsAssumingWalletOperationLease()
+            } catch {
+                await self.captureWalletFailureDiagnostics(kind: .send)
+                await self.recoverWalletStateAfterFailureAssumingWalletOperationLease(
+                    kind: .send,
+                    preferredMintURL: selectedMint.url
+                )
+                await self.captureWalletFailureDiagnostics(kind: .send)
+                throw error
+            }
+        }
     }
 
     // MARK: - Fee estimation (for the pay-request screen)
@@ -199,10 +219,16 @@ extension WalletManager {
     func mintInputFeePpk(mintURL: String) async -> UInt64? {
         guard let walletRepository else { return nil }
         do {
-            let wallet = try await walletRepository.getWallet(mintUrl: MintUrl(url: mintURL), unit: .sat)
-            let keysets = try await wallet.refreshKeysets()
-            let active = keysets.first(where: { $0.active }) ?? keysets.first
-            return active?.inputFeePpk
+            return try await operationCoordinator.perform(
+                kind: .feeEstimate,
+                resourceID: mintURL,
+                defaultFailureOutcome: .ambiguousFailure
+            ) {
+                let wallet = try await walletRepository.getWallet(mintUrl: MintUrl(url: mintURL), unit: .sat)
+                let keysets = try await wallet.refreshKeysets()
+                let active = keysets.first(where: { $0.active }) ?? keysets.first
+                return active?.inputFeePpk
+            }
         } catch {
             return nil
         }
@@ -220,23 +246,38 @@ extension WalletManager {
     func estimateCashuPaymentFee(amountSats: UInt64, mintURL: String) async -> UInt64? {
         guard let walletRepository, amountSats > 0 else { return nil }
         do {
-            let wallet = try await walletRepository.getWallet(mintUrl: MintUrl(url: mintURL), unit: .sat)
-            let options = SendOptions(
-                memo: nil,
-                conditions: nil,
-                amountSplitTarget: SplitTarget.none,
-                sendKind: SendKind.onlineExact,
-                includeFee: true,
-                useP2bk: false,
-                maxProofs: nil,
-                metadata: [:],
-                p2pkSigningKeys: [],
-                p2pkLockedProofSendMode: .swap
-            )
-            let prepared = try await wallet.prepareSend(amount: Amount(value: amountSats), options: options)
-            let fee = prepared.fee().value
-            try? await prepared.cancel()
-            return fee
+            return try await operationCoordinator.perform(
+                kind: .feeEstimate,
+                resourceID: mintURL
+            ) {
+                do {
+                    let wallet = try await walletRepository.getWallet(mintUrl: MintUrl(url: mintURL), unit: .sat)
+                    let options = SendOptions(
+                        memo: nil,
+                        conditions: nil,
+                        amountSplitTarget: SplitTarget.none,
+                        sendKind: SendKind.onlineExact,
+                        includeFee: true,
+                        useP2bk: false,
+                        maxProofs: nil,
+                        metadata: [:],
+                        p2pkSigningKeys: [],
+                        p2pkLockedProofSendMode: .swap
+                    )
+                    let prepared = try await wallet.prepareSend(amount: Amount(value: amountSats), options: options)
+                    let fee = prepared.fee().value
+                    try await prepared.cancel()
+                    return fee
+                } catch {
+                    await self.captureWalletFailureDiagnostics(kind: .feeEstimate)
+                    await self.recoverWalletStateAfterFailureAssumingWalletOperationLease(
+                        kind: .feeEstimate,
+                        preferredMintURL: mintURL
+                    )
+                    await self.captureWalletFailureDiagnostics(kind: .feeEstimate)
+                    throw error
+                }
+            }
         } catch {
             return nil
         }
@@ -337,7 +378,12 @@ extension WalletManager {
     ) async throws {
         // 1. Commit the mint to the wallet so the final pay can select it.
         onStage(.addingMint)
-        await mintService.ensureMintTracked(url: targetMintURL)
+        try await operationCoordinator.perform(
+            kind: .addMint,
+            resourceID: targetMintURL
+        ) {
+            await self.mintService.ensureMintTracked(url: targetMintURL)
+        }
 
         // 2. Cover the target's input fee (if any) so the minted proofs can still
         //    send exactly `amount`. Virtually all mints charge 0 → no buffer.

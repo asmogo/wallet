@@ -75,7 +75,9 @@ final class CashuRequestListener: ObservableObject {
         self.client = client
         await client.start()
         isRunning = true
-        AppLogger.wallet.notice("CashuRequestListener: started on \(relays.count) relays, pubkey=\(String(pubkeyHex.prefix(8)), privacy: .public), since=\(since)")
+        AppLogger.wallet.notice(
+            "CashuRequestListener: started relays=\(relays.count, privacy: .public) pubkey=\(WalletOperationCoordinator.privacySafeIdentifier(pubkeyHex), privacy: .public) since=\(since, privacy: .public)"
+        )
     }
 
     func stop() async {
@@ -104,7 +106,9 @@ final class CashuRequestListener: ObservableObject {
     private func handle(event: NostrIncomingEvent, recipientPrivateKey: Data) async {
         guard event.kind == 1059 else { return }
         guard !processedIds.contains(event.id) else { return }
-        AppLogger.wallet.notice("CashuRequestListener: gift wrap received id=\(String(event.id.prefix(8)), privacy: .public) createdAt=\(event.createdAt)")
+        AppLogger.wallet.notice(
+            "CashuRequestListener: gift wrap received event=\(WalletOperationCoordinator.privacySafeIdentifier(event.id), privacy: .public) created_at=\(event.createdAt, privacy: .public)"
+        )
 
         let rumor: NostrRumor
         do {
@@ -112,7 +116,9 @@ final class CashuRequestListener: ObservableObject {
         } catch {
             // Not encrypted for us (or an unrelated DM) — it can never succeed,
             // so mark it handled and stop reconsidering it.
-            AppLogger.wallet.notice("CashuRequestListener: NIP-17 unwrap failed for \(String(event.id.prefix(8)), privacy: .public): \(String(describing: error), privacy: .public)")
+            AppLogger.wallet.notice(
+                "CashuRequestListener: NIP-17 unwrap failed event=\(WalletOperationCoordinator.privacySafeIdentifier(event.id), privacy: .public) error_type=\(String(reflecting: type(of: error)), privacy: .public)"
+            )
             markProcessed(event.id)
             return
         }
@@ -190,16 +196,21 @@ final class CashuRequestListener: ObservableObject {
         do {
             // A gift wrap can arrive exactly as the app backgrounds; hold a background-task
             // assertion so this SQLite-writing redeem finishes before suspension.
-            let amount = try await withBackgroundWriteAssertion("cashu-request-claim") {
+            _ = try await withBackgroundWriteAssertion("cashu-request-claim") {
                 try await walletManager.receiveCashuRequestPayment(
                     tokenString: tokenString,
                     requestId: requestId
                 )
             }
-            AppLogger.wallet.notice("CashuRequestListener: claimed \(amount) sat for request \(requestId ?? "—", privacy: .public)")
+            let requestHash = requestId.map(WalletOperationCoordinator.privacySafeIdentifier) ?? "none"
+            AppLogger.wallet.notice(
+                "CashuRequestListener: claimed payment request=\(requestHash, privacy: .public)"
+            )
             return .claimed
         } catch {
-            AppLogger.wallet.error("CashuRequestListener: redeem failed (will retry): \(String(describing: error), privacy: .public)")
+            AppLogger.wallet.error(
+                "CashuRequestListener: redeem failed (will retry) error_type=\(String(reflecting: type(of: error)), privacy: .public)"
+            )
             return .transientFailure
         }
     }
@@ -254,7 +265,9 @@ final class CashuRequestListener: ObservableObject {
         )
         walletManager.savePendingReceiveToken(pending)
         heldForApproval = pending
-        AppLogger.wallet.notice("CashuRequestListener: payment from \(mintUrl, privacy: .public) held for approval (\(reason, privacy: .public))")
+        AppLogger.wallet.notice(
+            "CashuRequestListener: payment held for approval resource=\(WalletOperationCoordinator.privacySafeIdentifier(mintUrl), privacy: .public) reason=\(reason, privacy: .public)"
+        )
         Task { await walletManager.loadTransactions() }
         return .held
     }
@@ -268,7 +281,9 @@ final class CashuRequestListener: ObservableObject {
             try await walletManager.claimPendingReceiveToken(pending)
         }
         if heldForApproval?.tokenId == pending.tokenId { heldForApproval = nil }
-        AppLogger.wallet.notice("CashuRequestListener: user approved claim of \(amount) sat from \(pending.mintUrl, privacy: .public)")
+        AppLogger.wallet.notice(
+            "CashuRequestListener: user approved claim resource=\(WalletOperationCoordinator.privacySafeIdentifier(pending.mintUrl), privacy: .public)"
+        )
         await claimEligibleHeldPayments()
         return amount
     }
@@ -277,7 +292,9 @@ final class CashuRequestListener: ObservableObject {
     func declineHeldPayment(_ pending: PendingReceiveToken) {
         walletManager?.removePendingReceiveToken(tokenId: pending.tokenId)
         if heldForApproval?.tokenId == pending.tokenId { heldForApproval = nil }
-        AppLogger.wallet.notice("CashuRequestListener: user declined payment from \(pending.mintUrl, privacy: .public)")
+        AppLogger.wallet.notice(
+            "CashuRequestListener: user declined payment resource=\(WalletOperationCoordinator.privacySafeIdentifier(pending.mintUrl), privacy: .public)"
+        )
         Task { await walletManager?.loadTransactions() }
     }
 
@@ -300,13 +317,17 @@ final class CashuRequestListener: ObservableObject {
         }
         for pending in eligible {
             do {
-                let amount = try await withBackgroundWriteAssertion("cashu-request-claim") {
+                _ = try await withBackgroundWriteAssertion("cashu-request-claim") {
                     try await walletManager.claimPendingReceiveToken(pending)
                 }
                 if heldForApproval?.tokenId == pending.tokenId { heldForApproval = nil }
-                AppLogger.wallet.notice("CashuRequestListener: claimed held payment of \(amount) sat from \(pending.mintUrl, privacy: .public)")
+                AppLogger.wallet.notice(
+                    "CashuRequestListener: claimed held payment resource=\(WalletOperationCoordinator.privacySafeIdentifier(pending.mintUrl), privacy: .public)"
+                )
             } catch {
-                AppLogger.wallet.error("CashuRequestListener: held-payment claim failed (stays claimable in History): \(String(describing: error), privacy: .public)")
+                AppLogger.wallet.error(
+                    "CashuRequestListener: held-payment claim failed (stays claimable in History) error_type=\(String(reflecting: type(of: error)), privacy: .public)"
+                )
             }
         }
     }

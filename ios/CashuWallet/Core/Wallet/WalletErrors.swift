@@ -31,6 +31,15 @@ struct WalletMessage {
 enum WalletErrorMessage {
     /// Resolve an error to its user-facing message **and** severity.
     static func classified(for error: Error) -> WalletMessage {
+        if let meltRecoveryError = error as? MeltPaymentRecoveryError {
+            switch meltRecoveryError {
+            case .compensated:
+                return .error("The payment did not complete. Create a fresh quote and try again.")
+            case .unresolved:
+                return .caution("The payment outcome is still being checked. Do not retry it yet.").terminal()
+            }
+        }
+
         if let walletError = error as? WalletError {
             return classified(for: walletError)
         }
@@ -361,6 +370,42 @@ enum WalletErrorMessage {
     }
 }
 
+/// A melt failed after CDK may have reserved proofs or contacted the mint.
+/// Keeping this separate from transport errors prevents the UI from treating
+/// an unknown payment outcome as a safe retry.
+enum MeltPaymentRecoveryError: LocalizedError, WalletOperationOutcomeError {
+    case compensated(operationID: String)
+    case unresolved(quoteID: String, mintURL: String, operationID: String)
+
+    var operationID: String {
+        switch self {
+        case .compensated(let operationID): operationID
+        case .unresolved(_, _, let operationID): operationID
+        }
+    }
+
+    var retryRequiresFreshQuote: Bool {
+        if case .compensated = self { return true }
+        return false
+    }
+
+    var unresolvedQuote: (id: String, mintURL: String)? {
+        guard case .unresolved(let quoteID, let mintURL, _) = self else { return nil }
+        return (quoteID, mintURL)
+    }
+
+    var walletOperationFailureOutcome: WalletOperationCoordinator.FailureOutcome {
+        switch self {
+        case .compensated: .definiteFailure
+        case .unresolved: .ambiguousFailure
+        }
+    }
+
+    var errorDescription: String? {
+        WalletErrorMessage.message(for: self)
+    }
+}
+
 extension Error {
     /// Text-only user-facing message (defaults the UI to the `.error` tier).
     var userFacingWalletMessage: String {
@@ -379,6 +424,10 @@ extension Error {
             return true
         }
         return WalletErrorMessage.classified(for: self).text == "Not enough balance."
+    }
+
+    var meltRetryRequiresFreshQuote: Bool {
+        (self as? MeltPaymentRecoveryError)?.retryRequiresFreshQuote == true
     }
 }
 

@@ -66,12 +66,6 @@ class WalletManager: ObservableObject {
     /// Per-quote passive-check backoff (Android `MintQuoteCheckBackoff` parity).
     var mintQuoteCheckThrottle: [String: MintQuoteCheckBackoff.Entry] = [:]
 
-    /// In-process waiters for melts a mint accepted asynchronously (NUT-05),
-    /// keyed by quote ID. These die with the process; `walletStore`'s
-    /// pending-melt-quote record plus `syncPendingMeltQuotes()` are the
-    /// relaunch backstop.
-    var pendingMeltWaiters: [String: Task<Void, Never>] = [:]
-
     /// Foreground quote poll (started/stopped on scenePhase changes). Re-checks
     /// pending mint + melt quotes while the app is active so a payment lands
     /// without pull-to-refresh (Android parity).
@@ -79,6 +73,10 @@ class WalletManager: ObservableObject {
     let pendingQuotePollInterval: TimeInterval = 5
 
     // MARK: - Services
+
+    /// One exclusive CDK/database lane for this repository. Main-actor
+    /// isolation alone is reentrant across `await` and cannot provide this.
+    let operationCoordinator = WalletOperationCoordinator()
 
     let walletStore = WalletStore()
     var processedQuotes: Set<String>
@@ -173,19 +171,27 @@ class WalletManager: ObservableObject {
     /// Connect the NWC service to the live CDK wallet and this wallet's
     /// deterministic seed material. The providers deliberately capture the
     /// manager weakly so the singleton never retains a discarded wallet.
+    /// Wallet acquisition is coordinated here. CDK's long-lived `NwcService`
+    /// performs later wallet work internally and exposes no per-request hook,
+    /// so that activity cannot yet participate in this app-side execution lane.
     private func configureNWCManager() {
         NWCManager.shared.configure(
             walletProvider: { [weak self] mintURL in
                 guard let self, let walletRepository = self.walletRepository else {
                     throw WalletError.notInitialized
                 }
-                let mintURL = MintUrl(url: mintURL)
-                try? await walletRepository.createWallet(
-                    mintUrl: mintURL,
-                    unit: .sat,
-                    targetProofCount: nil
-                )
-                return try await walletRepository.getWallet(mintUrl: mintURL, unit: .sat)
+                return try await self.operationCoordinator.perform(
+                    kind: .mintInfo,
+                    resourceID: mintURL
+                ) {
+                    let parsedMintURL = MintUrl(url: mintURL)
+                    try? await walletRepository.createWallet(
+                        mintUrl: parsedMintURL,
+                        unit: .sat,
+                        targetProofCount: nil
+                    )
+                    return try await walletRepository.getWallet(mintUrl: parsedMintURL, unit: .sat)
+                }
             },
             seedProvider: { [weak self] in
                 guard let mnemonic = self?.mnemonic else { return nil }

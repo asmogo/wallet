@@ -10,32 +10,64 @@ extension WalletManager {
         targetMintURL: String? = nil,
         unit: String = "sat"
     ) async throws -> MintQuoteInfo {
-        let quote = try await lightningService.createMintQuote(
-            amount: amount,
-            method: method,
-            targetMintURL: targetMintURL,
-            unit: PaymentRequestDecoder.currencyUnit(from: unit)
-        )
-        await loadTransactions()
-        return quote
+        try await operationCoordinator.perform(
+            kind: .mintQuote,
+            resourceID: targetMintURL
+        ) {
+            let quote = try await self.lightningService.createMintQuote(
+                amount: amount,
+                method: method,
+                targetMintURL: targetMintURL,
+                unit: PaymentRequestDecoder.currencyUnit(from: unit)
+            )
+            await self.loadTransactionsAssumingWalletOperationLease()
+            return quote
+        }
     }
 
     func existingAmountlessOffer() async throws -> MintQuoteInfo? {
-        try await lightningService.existingAmountlessOffer()
+        try await operationCoordinator.perform(kind: .mintQuote) {
+            try await self.lightningService.existingAmountlessOffer()
+        }
     }
 
     func existingOnchainMintQuote() async throws -> MintQuoteInfo? {
-        try await lightningService.existingOnchainMintQuote()
+        try await operationCoordinator.perform(kind: .mintQuote) {
+            try await self.lightningService.existingOnchainMintQuote()
+        }
     }
 
     func checkMintQuote(quoteId: String) async throws -> MintQuoteInfo {
-        return try await lightningService.checkMintQuote(quoteId: quoteId)
+        return try await operationCoordinator.perform(
+            kind: .mintQuote,
+            resourceID: quoteId
+        ) {
+            try await self.lightningService.checkMintQuote(quoteId: quoteId)
+        }
     }
 
     func mintTokens(quoteId: String) async throws -> UInt64 {
-        let amount = try await lightningService.mintTokens(quoteId: quoteId)
-        await refreshBalance()
-        await loadTransactions()
+        let amount = try await operationCoordinator.perform(
+            kind: .mint,
+            resourceID: quoteId,
+            protectsBackgroundExecution: true,
+            defaultFailureOutcome: .ambiguousFailure
+        ) {
+            do {
+                let amount = try await self.lightningService.mintTokens(quoteId: quoteId)
+                await self.refreshBalanceAssumingWalletOperationLease()
+                await self.loadTransactionsAssumingWalletOperationLease()
+                return amount
+            } catch {
+                await self.captureWalletFailureDiagnostics(kind: .mint, quoteID: quoteId)
+                await self.recoverWalletStateAfterFailureAssumingWalletOperationLease(
+                    kind: .mint,
+                    preferredMintURL: nil
+                )
+                await self.captureWalletFailureDiagnostics(kind: .mint, quoteID: quoteId)
+                throw error
+            }
+        }
         SentryService.breadcrumb("Lightning invoice minted", category: "wallet.lightning")
         return amount
     }
@@ -54,7 +86,9 @@ extension WalletManager {
                 try? await Task.sleep(nanoseconds: 2_500_000_000)
             }
         }
-        AppLogger.wallet.error("claimPaidMintQuote: gave up minting \(quoteId, privacy: .public)")
+        AppLogger.wallet.error(
+            "claimPaidMintQuote: gave up minting resource=\(WalletOperationCoordinator.privacySafeIdentifier(quoteId), privacy: .public)"
+        )
         SentryService.breadcrumb("Lightning mint claim gave up after retries", category: "wallet.lightning")
     }
 
@@ -62,10 +96,15 @@ extension WalletManager {
         request: String,
         preferredMintURL: String? = nil
     ) async throws -> MeltQuoteInfo {
-        try await lightningService.createMeltQuote(
-            request: request,
-            preferredMintURL: preferredMintURL
-        )
+        try await operationCoordinator.perform(
+            kind: .meltQuote,
+            resourceID: preferredMintURL
+        ) {
+            try await self.lightningService.createMeltQuote(
+                request: request,
+                preferredMintURL: preferredMintURL
+            )
+        }
     }
 
     func createMeltQuote(
@@ -80,11 +119,16 @@ extension WalletManager {
         amount: UInt64,
         preferredMintURL: String? = nil
     ) async throws -> MeltQuoteInfo {
-        try await lightningService.createHumanReadableMeltQuote(
-            address: address,
-            amount: amount,
-            preferredMintURL: preferredMintURL
-        )
+        try await operationCoordinator.perform(
+            kind: .meltQuote,
+            resourceID: preferredMintURL
+        ) {
+            try await self.lightningService.createHumanReadableMeltQuote(
+                address: address,
+                amount: amount,
+                preferredMintURL: preferredMintURL
+            )
+        }
     }
 
     func createOnchainMeltQuote(
@@ -92,32 +136,68 @@ extension WalletManager {
         amount: UInt64,
         preferredMintURL: String? = nil
     ) async throws -> MeltQuoteInfo {
-        try await lightningService.createOnchainMeltQuote(
-            address: address,
-            amount: amount,
-            preferredMintURL: preferredMintURL
-        )
+        try await operationCoordinator.perform(
+            kind: .meltQuote,
+            resourceID: preferredMintURL
+        ) {
+            try await self.lightningService.createOnchainMeltQuote(
+                address: address,
+                amount: amount,
+                preferredMintURL: preferredMintURL
+            )
+        }
     }
 
     func subscribeToMintQuote(
         quoteId: String,
         paymentMethod: PaymentMethodKind
     ) async throws -> ActiveSubscription? {
-        return try await lightningService.subscribeToMintQuote(
-            quoteId: quoteId,
-            paymentMethod: paymentMethod
-        )
+        // Creating the subscription touches the wallet and is serialized. The
+        // caller's long-lived `recv()` only waits for notifications; any quote
+        // status or mint work it triggers re-enters through coordinated methods.
+        return try await operationCoordinator.perform(
+            kind: .mintQuote,
+            resourceID: quoteId
+        ) {
+            try await self.lightningService.subscribeToMintQuote(
+                quoteId: quoteId,
+                paymentMethod: paymentMethod
+            )
+        }
     }
 
     func meltTokens(quoteId: String, mintUrl: String? = nil) async throws -> MeltPaymentResult {
-        let confirmation = try await lightningService.meltTokens(quoteId: quoteId, mintUrl: mintUrl)
+        let confirmation: LightningService.MeltConfirmation
+        do {
+            confirmation = try await operationCoordinator.perform(
+                kind: .melt,
+                resourceID: quoteId,
+                protectsBackgroundExecution: true,
+                defaultFailureOutcome: .ambiguousFailure
+            ) {
+                do {
+                    return try await self.lightningService.meltTokens(quoteId: quoteId, mintUrl: mintUrl)
+                } catch {
+                    await self.captureWalletFailureDiagnostics(
+                        kind: .melt,
+                        operationID: (error as? MeltPaymentRecoveryError)?.operationID,
+                        quoteID: quoteId
+                    )
+                    throw error
+                }
+            }
+        } catch let recoveryError as MeltPaymentRecoveryError {
+            if let unresolved = recoveryError.unresolvedQuote {
+                rememberPendingMeltQuote(quoteId: unresolved.id, mintUrl: unresolved.mintURL)
+            }
+            throw recoveryError
+        }
         let result = confirmation.result
-        if let pendingMelt = confirmation.pendingMelt {
+        if result.settlement == .pending {
             // Mint accepted the payment for asynchronous NUT-05 settlement (the
-            // usual case for on-chain melts). Remember the quote so a relaunch can
-            // pick it back up, then wait for it in the background.
+            // usual case for on-chain melts). Remember the quote so serialized
+            // foreground/startup polling can reconcile it, including after relaunch.
             rememberPendingMeltQuote(quoteId: quoteId, mintUrl: result.mintUrl)
-            watchPendingMelt(pendingMelt, quoteId: quoteId)
             SentryService.breadcrumb("Melt accepted for async settlement", category: "wallet.lightning")
         } else {
             recordFinalizedMelt(quoteId: quoteId, preimage: result.preimage, feePaid: result.feePaid)

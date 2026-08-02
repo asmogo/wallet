@@ -86,39 +86,56 @@ extension WalletManager {
             // The NPC poller can fire as the app backgrounds; hold a background-task
             // assertion so this SQLite-writing mint finishes before suspension.
             try await withBackgroundWriteAssertion("npc-mint-claim") {
-                guard let walletRepository = walletRepository else {
-                    throw WalletError.notInitialized
+                try await self.operationCoordinator.perform(
+                    kind: .mint,
+                    priority: .maintenance,
+                    resourceID: mintQuote.id,
+                    defaultFailureOutcome: .ambiguousFailure
+                ) {
+                    do {
+                        guard let walletRepository = self.walletRepository else {
+                            throw WalletError.notInitialized
+                        }
+
+                        let mintUrl = mintQuote.mintUrl
+                        await self.mintService.ensureMintTracked(url: mintUrl.url)
+
+                        if let db = self.db {
+                            try await self.replaceStoredNPCMintQuote(mintQuote, in: db)
+                        }
+
+                        let wallet = try await walletRepository.getWallet(mintUrl: mintUrl, unit: .sat)
+
+                        let proofs = try await wallet.mintUnified(
+                            quoteId: mintQuote.id,
+                            amountSplitTarget: SplitTarget.none,
+                            spendingConditions: spendingConditions
+                        )
+                        let totalAmount = proofs.reduce(UInt64(0)) { $0 + $1.amount.value }
+
+                        self.markNPCQuoteProcessed(mintQuote.id)
+
+                        await self.refreshBalanceAssumingWalletOperationLease()
+                        await self.loadTransactionsAssumingWalletOperationLease()
+                        SentryService.breadcrumb("NPC quote minted", category: "wallet.npc")
+
+                        NotificationCenter.default.post(
+                            name: .cashuTokenReceived,
+                            object: nil,
+                            // Background receive: no receive sheet is up to confirm it, so
+                            // ask the home beat to fire the "sats landed" haptic.
+                            userInfo: ["amount": totalAmount, "source": "npub.cash", "homeHaptic": true]
+                        )
+                    } catch {
+                        await self.captureWalletFailureDiagnostics(kind: .mint, quoteID: mintQuote.id)
+                        await self.recoverWalletStateAfterFailureAssumingWalletOperationLease(
+                            kind: .mint,
+                            preferredMintURL: mintQuote.mintUrl.url
+                        )
+                        await self.captureWalletFailureDiagnostics(kind: .mint, quoteID: mintQuote.id)
+                        throw error
+                    }
                 }
-
-                let mintUrl = mintQuote.mintUrl
-                await mintService.ensureMintTracked(url: mintUrl.url)
-
-                if let db {
-                    try await replaceStoredNPCMintQuote(mintQuote, in: db)
-                }
-
-                let wallet = try await walletRepository.getWallet(mintUrl: mintUrl, unit: .sat)
-
-                let proofs = try await wallet.mintUnified(
-                    quoteId: mintQuote.id,
-                    amountSplitTarget: SplitTarget.none,
-                    spendingConditions: spendingConditions
-                )
-                let totalAmount = proofs.reduce(UInt64(0)) { $0 + $1.amount.value }
-
-                markNPCQuoteProcessed(mintQuote.id)
-
-                await refreshBalance()
-                await loadTransactions()
-                SentryService.breadcrumb("NPC quote minted", category: "wallet.npc")
-
-                NotificationCenter.default.post(
-                    name: .cashuTokenReceived,
-                    object: nil,
-                    // Background receive: no receive sheet is up to confirm it, so
-                    // ask the home beat to fire the "sats landed" haptic.
-                    userInfo: ["amount": totalAmount, "source": "npub.cash", "homeHaptic": true]
-                )
             }
         } catch {
             if isAlreadyIssuedMintError(error) {
@@ -126,7 +143,9 @@ extension WalletManager {
             } else {
                 SentryService.capture(error)
             }
-            AppLogger.wallet.error("Failed to mint NPC quote: \(error)")
+            AppLogger.wallet.error(
+                "NPC quote mint failed resource=\(WalletOperationCoordinator.privacySafeIdentifier(mintQuote.id), privacy: .public) error_type=\(String(reflecting: type(of: error)), privacy: .public)"
+            )
         }
     }
 

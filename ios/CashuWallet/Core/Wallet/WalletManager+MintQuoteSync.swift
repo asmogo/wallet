@@ -22,16 +22,25 @@ extension WalletManager {
     /// debounce only). Does not touch the global loading flag.
     @discardableResult
     func refreshPendingMintQuote(quoteId: String) async -> Bool {
-        let minted = await syncPendingMintQuote(
-            quoteId: quoteId,
-            allowPendingOnchainMintAttempt: true,
-            force: true
-        )
-        if minted {
-            await refreshBalance()
+        do {
+            return try await operationCoordinator.perform(
+                kind: .mintQuote,
+                resourceID: quoteId
+            ) {
+                let minted = await self.syncPendingMintQuote(
+                    quoteId: quoteId,
+                    allowPendingOnchainMintAttempt: true,
+                    force: true
+                )
+                if minted {
+                    await self.refreshBalanceAssumingWalletOperationLease()
+                }
+                await self.loadTransactionsAssumingWalletOperationLease()
+                return minted
+            }
+        } catch {
+            return false
         }
-        await loadTransactions()
-        return minted
     }
 
     // MARK: - Foreground polling
@@ -69,6 +78,27 @@ extension WalletManager {
     ///   pass. When `true` (pull-to-refresh), every quote is eligible subject
     ///   only to a short per-quote debounce.
     func syncPendingMintQuotes(force: Bool = false) async {
+        if force {
+            do {
+                try await operationCoordinator.perform(kind: .quotePoll) {
+                    await self.syncPendingMintQuotesAssumingWalletOperationLease(force: true)
+                }
+            } catch {
+                // Explicit refresh cancellation is expected when its view exits.
+            }
+            return
+        }
+
+        do {
+            try await operationCoordinator.performIfIdle(kind: .quotePoll) {
+                await self.syncPendingMintQuotesAssumingWalletOperationLease(force: false)
+            }
+        } catch {
+            // Passive maintenance is best effort and will run again next tick.
+        }
+    }
+
+    private func syncPendingMintQuotesAssumingWalletOperationLease(force: Bool) async {
         // Coarse in-flight guard: collapse overlapping triggers into one pass.
         guard !isSyncingMintQuotes else { return }
         isSyncingMintQuotes = true
@@ -76,7 +106,7 @@ extension WalletManager {
         defer { isSyncingMintQuotes = false }
 
         guard let db else {
-            await loadTransactions()
+            await loadTransactionsAssumingWalletOperationLease()
             return
         }
 
@@ -109,16 +139,24 @@ extension WalletManager {
                     force: force
                 )
                 mintedAny = mintedAny || minted
+
+                // A poll that was already running when the user acted yields
+                // after the current quote instead of scanning the whole queue.
+                if !force, await operationCoordinator.hasWaitingUserOperation() {
+                    break
+                }
             }
         } catch {
-            AppLogger.wallet.error("Failed to sync pending mint quotes: \(error)")
+            AppLogger.wallet.error(
+                "pending mint quote sync failed error_type=\(String(reflecting: type(of: error)), privacy: .public)"
+            )
         }
 
         if mintedAny {
-            await refreshBalance()
+            await refreshBalanceAssumingWalletOperationLease()
         }
 
-        await loadTransactions()
+        await loadTransactionsAssumingWalletOperationLease()
     }
 
     func reclaimPendingToken(pendingToken: PendingToken) async throws -> UInt64 {
@@ -131,6 +169,21 @@ extension WalletManager {
     // MARK: - Transaction History
 
     func loadTransactions(includeRemoteObservations: Bool = true) async {
+        do {
+            try await operationCoordinator.perform(kind: .history) {
+                await self.loadTransactionsAssumingWalletOperationLease(
+                    includeRemoteObservations: includeRemoteObservations
+                )
+            }
+        } catch {
+            // History refresh is best effort and may be cancelled with its view.
+        }
+    }
+
+    /// Internal form for workflows that already own the repository lease.
+    func loadTransactionsAssumingWalletOperationLease(
+        includeRemoteObservations: Bool = true
+    ) async {
         await transactionService.loadTransactions(includeRemoteObservations: includeRemoteObservations)
         reconcileQuoteIntents()
         objectWillChange.send()
@@ -224,7 +277,15 @@ extension WalletManager {
                     return false
                 }
 
-                AppLogger.wallet.error("Failed to mint pending quote \(quoteId): \(error)")
+                await captureWalletFailureDiagnostics(kind: .mint, quoteID: quoteId)
+                await recoverWalletStateAfterFailureAssumingWalletOperationLease(
+                    kind: .mint,
+                    preferredMintURL: nil
+                )
+                await captureWalletFailureDiagnostics(kind: .mint, quoteID: quoteId)
+                AppLogger.wallet.error(
+                    "pending quote mint failed resource=\(WalletOperationCoordinator.privacySafeIdentifier(quoteId), privacy: .public) error_type=\(String(reflecting: type(of: error)), privacy: .public)"
+                )
                 mintQuoteCheckThrottle[quoteId] = MintQuoteCheckBackoff.afterUnpaidOrError(
                     entry: prior,
                     now: now
@@ -239,7 +300,9 @@ extension WalletManager {
             if isMissingQuoteError(error) {
                 return false
             }
-            AppLogger.wallet.error("Failed to refresh pending quote \(quoteId): \(error)")
+            AppLogger.wallet.error(
+                "pending quote refresh failed resource=\(WalletOperationCoordinator.privacySafeIdentifier(quoteId), privacy: .public) error_type=\(String(reflecting: type(of: error)), privacy: .public)"
+            )
             return false
         }
     }

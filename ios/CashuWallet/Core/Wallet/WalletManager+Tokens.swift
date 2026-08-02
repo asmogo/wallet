@@ -11,14 +11,34 @@ extension WalletManager {
         mintUrl preferredMintURL: String? = nil,
         unit: String = "sat"
     ) async throws -> SendTokenResult {
-        let result = try await tokenService.sendTokens(
-            amount: amount,
-            memo: memo,
-            p2pkPubkey: p2pkPubkey,
-            mintUrl: preferredMintURL,
-            unit: PaymentRequestDecoder.currencyUnit(from: unit)
-        )
-        let tokenMintURL = preferredMintURL ?? activeMint?.url ?? ""
+        let currencyUnit = PaymentRequestDecoder.currencyUnit(from: unit)
+        let recoveryMintURL = preferredMintURL ?? activeMint?.url
+        let result = try await operationCoordinator.perform(
+            kind: .send,
+            resourceID: recoveryMintURL,
+            protectsBackgroundExecution: true,
+            defaultFailureOutcome: .ambiguousFailure
+        ) {
+            do {
+                return try await self.tokenService.sendTokens(
+                    amount: amount,
+                    memo: memo,
+                    p2pkPubkey: p2pkPubkey,
+                    mintUrl: preferredMintURL,
+                    unit: currencyUnit
+                )
+            } catch {
+                await self.captureWalletFailureDiagnostics(kind: .send)
+                await self.recoverWalletStateAfterFailureAssumingWalletOperationLease(
+                    kind: .send,
+                    preferredMintURL: recoveryMintURL,
+                    unit: currencyUnit
+                )
+                await self.captureWalletFailureDiagnostics(kind: .send)
+                throw error
+            }
+        }
+        let tokenMintURL = recoveryMintURL ?? ""
         
         // Save pending token for tracking
         let tokenId = UUID().uuidString
@@ -50,41 +70,80 @@ extension WalletManager {
         }
         guard let repo = walletRepository else { return nil }
         do {
-            let mintUrl = MintUrl(url: mintURL)
-            let currencyUnit = PaymentRequestDecoder.currencyUnit(from: unit)
-            try await repo.createWallet(mintUrl: mintUrl, unit: currencyUnit, targetProofCount: nil)
-            let wallet = try await repo.getWallet(mintUrl: mintUrl, unit: currencyUnit)
-            return try await wallet.totalBalance().value
+            return try await operationCoordinator.perform(
+                kind: .balance,
+                resourceID: mintURL
+            ) {
+                let mintUrl = MintUrl(url: mintURL)
+                let currencyUnit = PaymentRequestDecoder.currencyUnit(from: unit)
+                try await repo.createWallet(mintUrl: mintUrl, unit: currencyUnit, targetProofCount: nil)
+                let wallet = try await repo.getWallet(mintUrl: mintUrl, unit: currencyUnit)
+                return try await wallet.totalBalance().value
+            }
         } catch {
-            AppLogger.wallet.debug("unitBalance(\(unit)) failed: \(String(describing: error))")
+            AppLogger.wallet.debug(
+                "unit balance failed unit=\(unit, privacy: .public) error_type=\(String(reflecting: type(of: error)), privacy: .public)"
+            )
             return nil
         }
     }
 
     func receiveTokens(tokenString: String) async throws -> UInt64 {
-        // Receive first: tokenService creates the CDK wallet and consumes the
-        // keyset counter. Enriching the mint (createWallet/fetchMintInfo) before
-        // this desyncs the counter and makes the mint reject "duplicate outputs"
-        // on the first attempt. Track/enrich the mint only after a successful
-        // receive, so an unredeemed token never adds the mint either.
-        let beforeIds = await incomingTxIds(forTokenString: tokenString)
-        let amount = try await tokenService.receiveTokens(tokenString: tokenString)
+        let outcome = try await performTokenReceive(tokenString: tokenString)
 
-        // Persist the redeemed token, keyed to the CDK tx id this receive just
-        // created (found by the same before/after diff receiveCashuRequestPayment
-        // uses), so History can offer Copy-as-receipt on the settled row. The
-        // token's proofs are now spent — this is a record, not a reofferable
-        // payment code. Save before loadTransactions() so the new row picks it up.
-        if let newTxId = (await incomingTxIds(forTokenString: tokenString))
-            .subtracting(beforeIds).first {
-            transactionService.saveToken(txId: newTxId, token: tokenString)
+        if let transactionID = outcome.transactionID {
+            transactionService.saveToken(txId: transactionID, token: tokenString)
         }
 
-        try? await ensureMintTrackedForToken(tokenString)
         await refreshBalance()
         await loadTransactions()
         SentryService.breadcrumb("Token received", category: "wallet.token")
-        return amount
+        return outcome.amount
+    }
+
+    /// Holds one repository lease across transaction attribution, redemption,
+    /// and post-receive mint setup. This is the critical receive workflow used
+    /// both by the review screen and automatic Cashu Request claims.
+    private func performTokenReceive(
+        tokenString: String
+    ) async throws -> (amount: UInt64, transactionID: String?) {
+        let recoveryContext: (mintURL: String, unit: Cdk.CurrencyUnit)? = {
+            guard let token = try? tokenService.decodeToken(tokenString: tokenString),
+                  let mintURL = try? token.mintUrl().url else { return nil }
+            return (mintURL, token.unit() ?? .sat)
+        }()
+
+        return try await operationCoordinator.perform(
+            kind: .receive,
+            resourceID: recoveryContext?.mintURL,
+            protectsBackgroundExecution: true,
+            defaultFailureOutcome: .ambiguousFailure
+        ) {
+            do {
+                // Receive first: tokenService creates the CDK wallet and consumes the
+                // keyset counter. Enriching the mint (createWallet/fetchMintInfo) before
+                // this desyncs the counter and makes the mint reject "duplicate outputs"
+                // on the first attempt. Track/enrich the mint only after a successful
+                // receive, so an unredeemed token never adds the mint either.
+                let beforeIds = await self.incomingTxIds(forTokenString: tokenString)
+                let amount = try await self.tokenService.receiveTokens(tokenString: tokenString)
+                let newTransactionID = (await self.incomingTxIds(forTokenString: tokenString))
+                    .subtracting(beforeIds)
+                    .first
+
+                try? await self.ensureMintTrackedForToken(tokenString)
+                return (amount, newTransactionID)
+            } catch {
+                await self.captureWalletFailureDiagnostics(kind: .receive)
+                await self.recoverWalletStateAfterFailureAssumingWalletOperationLease(
+                    kind: .receive,
+                    preferredMintURL: recoveryContext?.mintURL,
+                    unit: recoveryContext?.unit ?? .sat
+                )
+                await self.captureWalletFailureDiagnostics(kind: .receive)
+                throw error
+            }
+        }
     }
 
     /// Auto-claim a token that arrived via a NUT-18 Cashu Request, optionally attributing
@@ -94,27 +153,31 @@ extension WalletManager {
     /// the duplicate "Received ecash" row.
     @discardableResult
     func receiveCashuRequestPayment(tokenString: String, requestId: String?) async throws -> UInt64 {
-        let beforeIds = await incomingTxIds(forTokenString: tokenString)
-        let amount = try await receiveTokens(tokenString: tokenString)
-        let afterIds = await incomingTxIds(forTokenString: tokenString)
-        let newTxId = afterIds.subtracting(beforeIds).first
+        let outcome = try await performTokenReceive(tokenString: tokenString)
+        if let transactionID = outcome.transactionID {
+            transactionService.saveToken(txId: transactionID, token: tokenString)
+        }
 
-        if let requestId, let txId = newTxId {
+        if let requestId, let txId = outcome.transactionID {
             CashuRequestStore.shared.attachPayment(
                 requestId: requestId,
                 transactionId: txId,
-                amount: amount
+                amount: outcome.amount
             )
         }
 
-        var userInfo: [String: Any] = ["amount": amount, "source": "cashu-request"]
+        await refreshBalance()
+        await loadTransactions()
+        SentryService.breadcrumb("Token received", category: "wallet.token")
+
+        var userInfo: [String: Any] = ["amount": outcome.amount, "source": "cashu-request"]
         if let requestId { userInfo["requestId"] = requestId }
         NotificationCenter.default.post(
             name: .cashuTokenReceived,
             object: nil,
             userInfo: userInfo
         )
-        return amount
+        return outcome.amount
     }
 
     /// Lists incoming transaction ids for the mint encoded in a token string.
@@ -132,7 +195,9 @@ extension WalletManager {
             let txs = try await wallet.listTransactions(direction: .incoming)
             return Set(txs.map { $0.id.hex })
         } catch {
-            AppLogger.wallet.debug("incomingTxIds lookup failed: \(String(describing: error))")
+            AppLogger.wallet.debug(
+                "incoming transaction attribution failed error_type=\(String(reflecting: type(of: error)), privacy: .public)"
+            )
             return []
         }
     }
@@ -146,7 +211,12 @@ extension WalletManager {
         // visible mint list (hiding the "new mint" badge on a later scan) and
         // disturbs the keyset counter before the receive. tokenService creates
         // the throwaway CDK wallet entry it needs for the calculation itself.
-        return try await tokenService.calculateReceiveFee(tokenString: tokenString)
+        return try await operationCoordinator.perform(
+            kind: .receiveFee,
+            priority: .maintenance
+        ) {
+            try await self.tokenService.calculateReceiveFee(tokenString: tokenString)
+        }
     }
 
     // MARK: - Pending Token Operations (Delegate to TransactionService)
@@ -209,11 +279,22 @@ extension WalletManager {
     func checkTokenSpendable(token: String, mintUrl: String? = nil) async -> Bool {
         let resolvedMintUrl = mintUrl ?? activeMint?.url ?? ""
         guard !resolvedMintUrl.isEmpty else { return false }
-        return await tokenService.checkTokenSpendable(token: token, mintUrl: resolvedMintUrl)
+        do {
+            return try await operationCoordinator.perform(
+                kind: .tokenStatus,
+                resourceID: resolvedMintUrl
+            ) {
+                await self.tokenService.checkTokenSpendable(token: token, mintUrl: resolvedMintUrl)
+            }
+        } catch {
+            return false
+        }
     }
 
     func checkTokenSpent(token: String, mintUrl: String) async throws -> Bool {
-        try await tokenService.checkTokenSpent(token: token, mintUrl: mintUrl)
+        try await operationCoordinator.perform(kind: .tokenStatus, resourceID: mintUrl) {
+            try await self.tokenService.checkTokenSpent(token: token, mintUrl: mintUrl)
+        }
     }
 
     @discardableResult
@@ -234,21 +315,37 @@ extension WalletManager {
         // Avoid a second all-mint transaction pass on the common empty queue.
         guard !pendingTokens.isEmpty else { return }
 
-        for token in pendingTokens {
-            do {
-                let isSpent = try await tokenService.checkTokenSpent(
-                    token: token.token,
-                    mintUrl: token.mintUrl
-                )
-                if isSpent {
-                    transactionService.markTokenAsClaimed(token: token.token)
+        do {
+            try await operationCoordinator.performIfIdle(kind: .pendingTokenCheck) {
+                for token in self.pendingTokens {
+                    do {
+                        let isSpent = try await self.tokenService.checkTokenSpent(
+                            token: token.token,
+                            mintUrl: token.mintUrl
+                        )
+                        if isSpent {
+                            self.transactionService.markTokenAsClaimed(token: token.token)
+                        }
+                    } catch is CancellationError {
+                        return
+                    } catch {
+                        AppLogger.wallet.error(
+                            "pending token status check failed error_type=\(String(reflecting: type(of: error)), privacy: .public)"
+                        )
+                    }
+
+                    if await self.operationCoordinator.hasWaitingUserOperation() {
+                        break
+                    }
                 }
-            } catch is CancellationError {
-                return
-            } catch {
-                AppLogger.wallet.error("Pending token status check failed: \(error)")
+                await self.loadTransactionsAssumingWalletOperationLease()
             }
+        } catch is CancellationError {
+            return
+        } catch {
+            AppLogger.wallet.error(
+                "pending token maintenance failed error_type=\(String(reflecting: type(of: error)), privacy: .public)"
+            )
         }
-        await loadTransactions()
     }
 }
