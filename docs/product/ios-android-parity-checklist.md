@@ -142,11 +142,11 @@ Platform-specific capabilities remain intentionally outside parity, including iC
 
 ### Settings — information architecture, display, and destructive actions
 
-- [ ] **[P2 · iOS → Android] Make App Lock discoverable in a security-oriented Settings location.** Android currently places the toggle under Privacy even though it controls local device access. **Done when:** App Lock is discoverable under a clear security or backup-and-security destination while privacy/background networking controls remain conceptually separate. The exact iOS hierarchy is not required.
+- [x] **[P2 · iOS → Android] Make App Lock discoverable in a security-oriented Settings location.** Android currently places the toggle under Privacy even though it controls local device access. **Done when:** App Lock is discoverable under a clear security or backup-and-security destination while privacy/background networking controls remain conceptually separate. The exact iOS hierarchy is not required.
 
 - [x] **[P0 · iOS → Android] Authenticate before enabling App Lock.** iOS verifies device-owner authentication and reverts with an error if enabling fails; Android directly persists the toggle. **Done when:** Android cannot enable App Lock until a device-owner challenge succeeds, and cancellation or failure leaves it disabled.
 
-- [ ] **[P1 · iOS → Android] Explain unavailable App Lock and preserve access.** iOS detects the absence of a device passcode, gives setup guidance, and explains that seed reveal always authenticates; Android exposes no equivalent guidance. Android’s manager currently fails open, so this is not an established lockout bug. **Done when:** Android reports capability state, points to device security setup, states the seed-reveal guarantee, and never presents an unavailable lock as active.
+- [x] **[P1 · iOS → Android] Explain unavailable App Lock and preserve access.** iOS detects the absence of a device passcode, gives setup guidance, and explains that seed reveal always authenticates; Android exposes no equivalent guidance. Android’s manager currently fails open, so this is not an established lockout bug. **Done when:** Android reports capability state, points to device security setup, states the seed-reveal guarantee, and never presents an unavailable lock as active.
 
 - [ ] **[P1 · iOS → Android] Show wallet-deletion failures.** iOS catches deletion errors and displays a banner; Android starts deletion without dedicated error feedback. **Done when:** Android reports failure and leaves the existing wallet state intact and understandable.
 
@@ -158,11 +158,11 @@ Platform-specific capabilities remain intentionally outside parity, including iC
 
 ### Settings — privacy and background behavior
 
-- [ ] **[P1 · iOS → Android] Disable periodic invoice checks when incoming checks are off.** Android leaves the child control interactive even though the runtime requires incoming checks before periodic work runs. **Done when:** Android disables the child visually and semantically, preserves its saved preference for later re-enable, and keeps the effective runtime rule as the logical combination of both settings.
+- [x] **[P1 · iOS → Android] Disable periodic invoice checks when incoming checks are off.** Android leaves the child control interactive even though the runtime requires incoming checks before periodic work runs. **Done when:** Android disables the child visually and semantically, preserves its saved preference for later re-enable, and keeps the effective runtime rule as the logical combination of both settings.
 
-- [ ] **[P1 · Android → iOS] Keep WebSockets independent of invoice/token polling.** Android correctly notes that WebSockets also power Nostr discovery; iOS disables the toggle when both incoming-invoice and sent-token checks are off. **Done when:** iOS users can enable discovery and live Nostr features independently.
+- [x] **[P1 · Android → iOS] Keep WebSockets independent of invoice/token polling.** Android correctly notes that WebSockets also power Nostr discovery; iOS disables the toggle when both incoming-invoice and sent-token checks are off. **Done when:** iOS users can enable discovery and live Nostr features independently.
 
-- [ ] **[P2 · Converge] Align privacy-setting concepts and consequences.** Labels differ for sent-ecash checks, periodic invoice checks, and automatic receive. **Done when:** both platforms use equivalent plain-language concepts and explain timing, network activity, and consequences. Native label length and sentence structure may differ.
+- [x] **[P2 · Converge] Align privacy-setting concepts and consequences.** Labels differ for sent-ecash checks, periodic invoice checks, and automatic receive. **Done when:** both platforms use equivalent plain-language concepts and explain timing, network activity, and consequences. Native label length and sentence structure may differ.
 
 ### Settings — Lightning address
 

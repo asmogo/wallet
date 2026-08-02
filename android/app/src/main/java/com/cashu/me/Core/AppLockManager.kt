@@ -173,6 +173,11 @@ class AppLockManager(
                 }
         }
 
+    /** Whether biometrics specifically (not just a device credential) can authenticate. */
+    fun hasEnrolledBiometrics(): Boolean =
+        BiometricManager.from(appContext)
+            .canAuthenticate(BiometricManager.Authenticators.BIOMETRIC_WEAK) == BiometricManager.BIOMETRIC_SUCCESS
+
     private fun canAuthenticate(): Boolean =
         BiometricManager.from(appContext).canAuthenticate(authenticators) == BiometricManager.BIOMETRIC_SUCCESS
 

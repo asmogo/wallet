@@ -12,7 +12,7 @@ class AppLockEnablementTest {
         val events = mutableListOf<String>()
         var enabled = false
 
-        enableAppLockAfterAuthentication(
+        val authenticated = enableAppLockAfterAuthentication(
             authenticate = {
                 events += "authenticated"
                 true
@@ -23,6 +23,7 @@ class AppLockEnablementTest {
             },
         )
 
+        assertTrue(authenticated)
         assertTrue(enabled)
         assertEquals(listOf("authenticated", "persisted"), events)
     }
@@ -31,11 +32,12 @@ class AppLockEnablementTest {
     fun cancelledOrFailedAuthenticationLeavesAppLockDisabled() = runBlocking {
         var enabled = false
 
-        enableAppLockAfterAuthentication(
+        val authenticated = enableAppLockAfterAuthentication(
             authenticate = { false },
             setEnabled = { enabled = it },
         )
 
+        assertFalse(authenticated)
         assertFalse(enabled)
     }
 }
