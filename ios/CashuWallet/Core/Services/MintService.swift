@@ -140,7 +140,9 @@ class MintService: ObservableObject {
                 let mintUrl = MintUrl(url: mint.url)
                 try await repo.createWallet(mintUrl: mintUrl, unit: .sat, targetProofCount: nil)
             } catch {
-                AppLogger.wallet.error("Failed to add mint \(mint.url): \(error)")
+                AppLogger.wallet.error(
+                    "add mint failed resource=\(WalletOperationCoordinator.privacySafeIdentifier(mint.url), privacy: .public) error_type=\(String(reflecting: type(of: error)), privacy: .public)"
+                )
             }
         }
     }
@@ -162,7 +164,9 @@ class MintService: ObservableObject {
                     updated = true
                 }
             } catch {
-                AppLogger.wallet.error("Failed to refresh mint info for \(self.mints[i].url): \(error)")
+                AppLogger.wallet.error(
+                    "mint info refresh failed resource=\(WalletOperationCoordinator.privacySafeIdentifier(self.mints[i].url), privacy: .public) error_type=\(String(reflecting: type(of: error)), privacy: .public)"
+                )
             }
         }
 
@@ -264,7 +268,9 @@ class MintService: ObservableObject {
                 activeMint = enriched
             }
         } catch {
-            AppLogger.wallet.error("Failed to enrich token-discovered mint \(normalizedUrl): \(error)")
+            AppLogger.wallet.error(
+                "Failed to enrich token-discovered mint resource=\(WalletOperationCoordinator.privacySafeIdentifier(normalizedUrl), privacy: .public) error_type=\(String(reflecting: type(of: error)), privacy: .public)"
+            )
             if existingIndex == nil {
                 appendPlaceholderMint(url: normalizedUrl, name: name)
             }

@@ -206,36 +206,43 @@ extension WalletManager {
         let normalizedUrl = url.trimmingCharacters(in: .whitespacesAndNewlines)
             .trimmingCharacters(in: CharacterSet(charactersIn: "/"))
 
-        let mintUrl = MintUrl(url: normalizedUrl)
+        return try await operationCoordinator.perform(
+            kind: .restore,
+            priority: .recovery,
+            resourceID: normalizedUrl,
+            protectsBackgroundExecution: true
+        ) {
+            let mintUrl = MintUrl(url: normalizedUrl)
 
-        // Create wallet for this mint
-        try await walletRepository.createWallet(mintUrl: mintUrl, unit: .sat, targetProofCount: nil)
+            // Create wallet for this mint
+            try await walletRepository.createWallet(mintUrl: mintUrl, unit: .sat, targetProofCount: nil)
 
-        // Get the wallet instance
-        let wallet = try await walletRepository.getWallet(mintUrl: mintUrl, unit: .sat)
+            // Get the wallet instance
+            let wallet = try await walletRepository.getWallet(mintUrl: mintUrl, unit: .sat)
 
-        // Fetch mint info for display name
-        let info = try? await wallet.fetchMintInfo()
-        let mintName = info?.name ?? "Unknown Mint"
+            // Fetch mint info for display name
+            let info = try? await wallet.fetchMintInfo()
+            let mintName = info?.name ?? "Unknown Mint"
 
-        // Perform NUT-09 restore - this derives proofs from the seed and checks their state with the mint
-        let restored = try await wallet.restore()
+            // Perform NUT-09 restore - this derives proofs from the seed and checks their state with the mint
+            let restored = try await wallet.restore()
 
-        // Ensure mint is in our saved list
-        await mintService.ensureMintTracked(url: normalizedUrl, name: mintName)
+            // Ensure mint is in our saved list
+            await self.mintService.ensureMintTracked(url: normalizedUrl, name: mintName)
 
-        // Refresh balance after restore
-        await refreshBalance()
+            // Refresh balance while this restore still owns the repository.
+            await self.refreshBalanceAssumingWalletOperationLease()
 
-        SentryService.breadcrumb("Wallet restore from mint completed", category: "wallet.lifecycle")
-        return RestoreMintResult(
-            mintUrl: normalizedUrl,
-            mintName: mintName,
-            iconUrl: info?.iconUrl,
-            spent: restored.spent.value,
-            unspent: restored.unspent.value,
-            pending: restored.pending.value
-        )
+            SentryService.breadcrumb("Wallet restore from mint completed", category: "wallet.lifecycle")
+            return RestoreMintResult(
+                mintUrl: normalizedUrl,
+                mintName: mintName,
+                iconUrl: info?.iconUrl,
+                spent: restored.spent.value,
+                unspent: restored.unspent.value,
+                pending: restored.pending.value
+            )
+        }
     }
 
     /// Restore wallet from mnemonic - Phase 3: Complete restore and dismiss onboarding
@@ -863,6 +870,12 @@ extension WalletManager {
             }
             guard !Task.isCancelled else { return }
 
+            // These passive passes acquire only if the recovery lane is now
+            // idle; they never queue stale polling behind a user payment.
+            await self.syncPendingMeltQuotes()
+            await self.syncPendingMintQuotes()
+            guard !Task.isCancelled else { return }
+
             await NWCManager.shared.startIfEnabled()
             self.startupMaintenanceTask = nil
         }
@@ -871,6 +884,20 @@ extension WalletManager {
     /// Returns true when saga recovery changed local wallet state and balances
     /// should be read again.
     private func performBestEffortWalletStartupMaintenance() async -> Bool {
+        do {
+            return try await operationCoordinator.perform(
+                kind: .recovery,
+                priority: .recovery,
+                protectsBackgroundExecution: true
+            ) {
+                await self.performBestEffortWalletStartupMaintenanceAssumingLease()
+            }
+        } catch {
+            return false
+        }
+    }
+
+    private func performBestEffortWalletStartupMaintenanceAssumingLease() async -> Bool {
         guard let walletRepository else { return false }
         let mintUrls = trackedMintUrlsForWalletAccess()
         guard !mintUrls.isEmpty else { return false }
@@ -903,7 +930,7 @@ extension WalletManager {
                 }
             } catch {
                 AppLogger.wallet.error(
-                    "Wallet startup maintenance failed for mint \(mintUrlString, privacy: .public): \(String(describing: error), privacy: .public)"
+                    "wallet startup maintenance failed resource=\(WalletOperationCoordinator.privacySafeIdentifier(mintUrlString), privacy: .public) error_type=\(String(reflecting: type(of: error)), privacy: .public)"
                 )
             }
         }
@@ -912,29 +939,25 @@ extension WalletManager {
             walletStore.saveMintKeysetRefreshTimestamps(keysetRefreshTimestamps)
         }
 
-        // Saga recovery above only single-polls async-accepted (NUT-05) melts and
-        // skips them while still pending; re-arm their completion tracking here.
-        // The mint-quote pass settles anything paid while the app was gone
-        // (Android startup parity) instead of waiting for the first poll tick.
-        if !Task.isCancelled {
-            await syncPendingMeltQuotes()
-            await syncPendingMintQuotes()
-        }
         return recoveredWalletState
     }
 
     private func recoverIncompleteSagasIfNeeded(wallet: Wallet, mintUrl: String) async -> Bool {
         do {
+            let beforeSagaCount = (try? await db?.getIncompleteSagas().count) ?? -1
+            let beforeReservedBalance = (try? await wallet.totalReservedBalance().value) ?? UInt64.max
             let report = try await wallet.recoverIncompleteSagas()
+            let afterSagaCount = (try? await db?.getIncompleteSagas().count) ?? -1
+            let afterReservedBalance = (try? await wallet.totalReservedBalance().value) ?? UInt64.max
             if report.recovered > 0 || report.compensated > 0 || report.skipped > 0 || report.failed > 0 {
                 AppLogger.wallet.info(
-                    "Recovered wallet sagas for mint \(mintUrl, privacy: .public): recovered=\(report.recovered, privacy: .public) compensated=\(report.compensated, privacy: .public) skipped=\(report.skipped, privacy: .public) failed=\(report.failed, privacy: .public)"
+                    "wallet recovery resource=\(WalletOperationCoordinator.privacySafeIdentifier(mintUrl), privacy: .public) recovered=\(report.recovered, privacy: .public) compensated=\(report.compensated, privacy: .public) skipped=\(report.skipped, privacy: .public) failed=\(report.failed, privacy: .public) sagas_before=\(beforeSagaCount, privacy: .public) sagas_after=\(afterSagaCount, privacy: .public) reserved_before=\(beforeReservedBalance, privacy: .public) reserved_after=\(afterReservedBalance, privacy: .public)"
                 )
             }
             return report.recovered > 0 || report.compensated > 0
         } catch {
             AppLogger.wallet.error(
-                "Failed to recover wallet sagas for mint \(mintUrl, privacy: .public): \(String(describing: error), privacy: .public)"
+                "wallet recovery failed resource=\(WalletOperationCoordinator.privacySafeIdentifier(mintUrl), privacy: .public) error_type=\(String(reflecting: type(of: error)), privacy: .public)"
             )
             return false
         }
@@ -953,12 +976,12 @@ extension WalletManager {
         do {
             let keysets = try await wallet.refreshKeysets()
             AppLogger.wallet.info(
-                "Refreshed \(keysets.count, privacy: .public) keysets for mint \(mintUrl, privacy: .public)"
+                "refreshed keysets count=\(keysets.count, privacy: .public) resource=\(WalletOperationCoordinator.privacySafeIdentifier(mintUrl), privacy: .public)"
             )
             return true
         } catch {
             AppLogger.wallet.error(
-                "Failed to refresh keysets for mint \(mintUrl, privacy: .public): \(String(describing: error), privacy: .public)"
+                "keyset refresh failed resource=\(WalletOperationCoordinator.privacySafeIdentifier(mintUrl), privacy: .public) error_type=\(String(reflecting: type(of: error)), privacy: .public)"
             )
             return false
         }

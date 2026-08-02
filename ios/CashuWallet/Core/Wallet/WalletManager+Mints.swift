@@ -5,7 +5,12 @@ extension WalletManager {
     // MARK: - Mint Operations (Delegate to MintService)
 
     func addMint(url: String) async throws {
-        let mint = try await mintService.addMint(url: url)
+        let mint = try await operationCoordinator.perform(
+            kind: .addMint,
+            resourceID: url
+        ) {
+            try await self.mintService.addMint(url: url)
+        }
         performICloudBackup()
         Task { await NostrMintBackupService.shared.backupCurrentMintsIfEnabled() }
         restoreAddedMintInBackground(url: mint.url)
@@ -25,11 +30,18 @@ extension WalletManager {
             }
 
             do {
-                let wallet = try await walletRepository.getWallet(
-                    mintUrl: MintUrl(url: url),
-                    unit: .sat
-                )
-                _ = try await wallet.restore()
+                try await self.operationCoordinator.perform(
+                    kind: .restore,
+                    priority: .maintenance,
+                    resourceID: url,
+                    protectsBackgroundExecution: true
+                ) {
+                    let wallet = try await walletRepository.getWallet(
+                        mintUrl: MintUrl(url: url),
+                        unit: .sat
+                    )
+                    _ = try await wallet.restore()
+                }
 
                 guard self.mintService.isMintTracked(url: url) else { return }
 
@@ -37,13 +49,25 @@ extension WalletManager {
                 await self.loadTransactions()
                 SentryService.breadcrumb("Mint restore completed", category: "wallet.mint")
             } catch {
-                AppLogger.wallet.error("Background restore failed for mint \(url): \(error)")
+                AppLogger.wallet.error(
+                    "background restore failed resource=\(WalletOperationCoordinator.privacySafeIdentifier(url), privacy: .public) error_type=\(String(reflecting: type(of: error)), privacy: .public)"
+                )
             }
         }
     }
 
     func removeMint(at offsets: IndexSet) async {
-        await mintService.removeMint(at: offsets)
+        do {
+            try await operationCoordinator.perform(kind: .addMint) {
+                await self.mintService.removeMint(at: offsets)
+            }
+        } catch is CancellationError {
+            return
+        } catch {
+            AppLogger.wallet.error(
+                "remove mint failed error_type=\(String(reflecting: type(of: error)), privacy: .public)"
+            )
+        }
         await refreshBalance()
         performICloudBackup()
         Task { await NostrMintBackupService.shared.backupCurrentMintsIfEnabled() }
@@ -51,7 +75,12 @@ extension WalletManager {
     }
 
     func setActiveMint(_ mint: MintInfo) async throws {
-        try await mintService.setActiveMint(mint)
+        try await operationCoordinator.perform(
+            kind: .mintInfo,
+            resourceID: mint.url
+        ) {
+            try await self.mintService.setActiveMint(mint)
+        }
         await refreshBalance()
     }
 
@@ -62,7 +91,13 @@ extension WalletManager {
 
 
     func refreshMintInfo() async {
-        await mintService.refreshMintInfo()
+        do {
+            try await operationCoordinator.perform(kind: .mintInfo) {
+                await self.mintService.refreshMintInfo()
+            }
+        } catch {
+            // Cancellation is expected when the owning view disappears.
+        }
     }
 
     /// Fetch full mint info from the mint's API via CashuDevKit
@@ -70,9 +105,11 @@ extension WalletManager {
         guard let walletRepository = walletRepository else {
             throw WalletError.notInitialized
         }
-        let mintUrlObj = MintUrl(url: mintUrl)
-        let wallet = try await walletRepository.getWallet(mintUrl: mintUrlObj, unit: .sat)
-        return try await wallet.fetchMintInfo()
+        return try await operationCoordinator.perform(kind: .mintInfo, resourceID: mintUrl) {
+            let mintUrlObj = MintUrl(url: mintUrl)
+            let wallet = try await walletRepository.getWallet(mintUrl: mintUrlObj, unit: .sat)
+            return try await wallet.fetchMintInfo()
+        }
     }
 
     /// Best-effort preview of a mint's identity (name, icon, payment methods),
@@ -87,21 +124,28 @@ extension WalletManager {
         let normalized = normalizePreviewMintUrl(url)
         let mintUrl = MintUrl(url: normalized)
         do {
-            if await !walletRepository.hasMint(mintUrl: mintUrl) {
-                try await walletRepository.createWallet(mintUrl: mintUrl, unit: .sat, targetProofCount: nil)
+            return try await operationCoordinator.perform(
+                kind: .mintInfo,
+                resourceID: normalized
+            ) {
+                if await !walletRepository.hasMint(mintUrl: mintUrl) {
+                    try await walletRepository.createWallet(mintUrl: mintUrl, unit: .sat, targetProofCount: nil)
+                }
+                let wallet = try await walletRepository.getWallet(mintUrl: mintUrl, unit: .sat)
+                guard let info = try await wallet.fetchMintInfo() else {
+                    return nil
+                }
+                let mintMethods = info.nuts.nut04.methods.compactMap { PaymentMethodKind.from($0.method) }
+                let meltMethods = info.nuts.nut05.methods.compactMap { PaymentMethodKind.from($0.method) }
+                let methods = PaymentMethodKind.allCases.filter {
+                    mintMethods.contains($0) || meltMethods.contains($0)
+                }
+                return MintPreviewInfo(name: info.name, iconUrl: info.iconUrl, methods: methods)
             }
-            let wallet = try await walletRepository.getWallet(mintUrl: mintUrl, unit: .sat)
-            guard let info = try await wallet.fetchMintInfo() else {
-                return nil
-            }
-            let mintMethods = info.nuts.nut04.methods.compactMap { PaymentMethodKind.from($0.method) }
-            let meltMethods = info.nuts.nut05.methods.compactMap { PaymentMethodKind.from($0.method) }
-            let methods = PaymentMethodKind.allCases.filter {
-                mintMethods.contains($0) || meltMethods.contains($0)
-            }
-            return MintPreviewInfo(name: info.name, iconUrl: info.iconUrl, methods: methods)
         } catch {
-            AppLogger.wallet.error("Failed to fetch CDK mint preview for \(normalized): \(error)")
+            AppLogger.wallet.error(
+                "mint preview failed resource=\(WalletOperationCoordinator.privacySafeIdentifier(normalized), privacy: .public) error_type=\(String(reflecting: type(of: error)), privacy: .public)"
+            )
             return nil
         }
     }
@@ -116,6 +160,19 @@ extension WalletManager {
 
     // MARK: - Balance Operations
     func refreshBalance() async {
+        do {
+            try await operationCoordinator.perform(kind: .balance) {
+                await self.refreshBalanceAssumingWalletOperationLease()
+            }
+        } catch {
+            // Balance refresh is best effort. The coordinator already records
+            // cancellation and timing without exposing wallet identifiers.
+        }
+    }
+
+    /// Internal form for a higher-level workflow that already owns the shared
+    /// repository lease. Never call this from an uncoordinated task.
+    func refreshBalanceAssumingWalletOperationLease() async {
         guard let walletRepository = walletRepository else { return }
         let mintUrls = trackedMintUrlsForWalletAccess()
         
@@ -142,7 +199,9 @@ extension WalletManager {
                 unitTotals["sat", default: 0] += walletBalance.value
             } catch {
                 balancesByMintURL[mintUrlString] = 0
-                AppLogger.wallet.error("Failed to refresh balance for mint \(mintUrlString): \(error)")
+                AppLogger.wallet.error(
+                    "balance refresh failed resource=\(WalletOperationCoordinator.privacySafeIdentifier(mintUrlString), privacy: .public) error_type=\(String(reflecting: type(of: error)), privacy: .public)"
+                )
             }
 
             // Add this mint's non-sat unit balances. Only the units it advertises

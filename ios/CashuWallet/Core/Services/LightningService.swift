@@ -259,7 +259,7 @@ class LightningService: ObservableObject {
                     }
                 } catch {
                     AppLogger.wallet.error(
-                        "Failed to release stored mint quote reservation \(operationId, privacy: .public): \(String(describing: error), privacy: .public)"
+                        "stored mint quote release failed operation=\(WalletOperationCoordinator.privacySafeIdentifier(operationId), privacy: .public) error_type=\(String(reflecting: type(of: error)), privacy: .public)"
                     )
                 }
             }
@@ -327,6 +327,9 @@ class LightningService: ObservableObject {
             do {
                 let mintUrl = MintUrl(url: mint.url)
                 let wallet = try await repo.getWallet(mintUrl: mintUrl, unit: .sat)
+                AppLogger.wallet.info(
+                    "wallet-op native-call kind=meltQuote resource=\(WalletOperationCoordinator.privacySafeIdentifier(mint.url), privacy: .public) method=\(paymentMethod.rawValue, privacy: .public)"
+                )
                 let quote = try await wallet.meltQuote(
                     method: paymentMethod.cdkMethod,
                     request: normalizedRequest,
@@ -343,7 +346,9 @@ class LightningService: ObservableObject {
                 return meltQuoteInfo(from: quote, paymentMethod: paymentMethod, fallbackMintUrl: mint.url)
             } catch {
                 lastError = error
-                AppLogger.wallet.error("Failed to create \(paymentMethod.rawValue) melt quote with mint \(mint.url): \(error)")
+                AppLogger.wallet.error(
+                    "melt quote failed resource=\(WalletOperationCoordinator.privacySafeIdentifier(mint.url), privacy: .public) method=\(paymentMethod.rawValue, privacy: .public) error_type=\(String(reflecting: type(of: error)), privacy: .public)"
+                )
             }
         }
 
@@ -407,7 +412,9 @@ class LightningService: ObservableObject {
                     repo: repo
                 )
             } catch {
-                AppLogger.wallet.error("BIP-353 fallback failed for \(address): \(error)")
+                AppLogger.wallet.error(
+                    "BIP-353 fallback failed error_type=\(String(reflecting: type(of: error)), privacy: .public)"
+                )
                 throw resolverError
             }
         }
@@ -434,6 +441,9 @@ class LightningService: ObservableObject {
             do {
                 let mintUrl = MintUrl(url: mint.url)
                 let wallet = try await repo.getWallet(mintUrl: mintUrl, unit: .sat)
+                AppLogger.wallet.info(
+                    "wallet-op native-call kind=meltQuote resource=\(WalletOperationCoordinator.privacySafeIdentifier(mint.url), privacy: .public) method=bolt11"
+                )
                 let quote = try await wallet.meltQuote(
                     method: PaymentMethodKind.bolt11.cdkMethod,
                     request: invoice,
@@ -450,7 +460,9 @@ class LightningService: ObservableObject {
                 return meltQuoteInfo(from: quote, paymentMethod: .bolt11, fallbackMintUrl: mint.url)
             } catch {
                 lastError = error
-                AppLogger.wallet.error("Failed to create Lightning address melt quote with mint \(mint.url): \(error)")
+                AppLogger.wallet.error(
+                    "Lightning address melt quote failed resource=\(WalletOperationCoordinator.privacySafeIdentifier(mint.url), privacy: .public) error_type=\(String(reflecting: type(of: error)), privacy: .public)"
+                )
             }
         }
 
@@ -483,6 +495,9 @@ class LightningService: ObservableObject {
             do {
                 let mintUrl = MintUrl(url: mint.url)
                 let wallet = try await repo.getWallet(mintUrl: mintUrl, unit: .sat)
+                AppLogger.wallet.info(
+                    "wallet-op native-call kind=meltQuote resource=\(WalletOperationCoordinator.privacySafeIdentifier(mint.url), privacy: .public) method=bolt12"
+                )
                 let quote = try await wallet.meltHumanReadable(
                     address: address,
                     amountMsat: Amount(value: amount * 1000),
@@ -499,7 +514,9 @@ class LightningService: ObservableObject {
                 return meltQuoteInfo(from: quote, paymentMethod: paymentMethod, fallbackMintUrl: mint.url)
             } catch {
                 lastError = error
-                AppLogger.wallet.error("Failed to create BIP-353 melt quote with mint \(mint.url): \(error)")
+                AppLogger.wallet.error(
+                    "BIP-353 melt quote failed resource=\(WalletOperationCoordinator.privacySafeIdentifier(mint.url), privacy: .public) error_type=\(String(reflecting: type(of: error)), privacy: .public)"
+                )
             }
         }
 
@@ -537,6 +554,9 @@ class LightningService: ObservableObject {
             do {
                 let mintUrl = MintUrl(url: mint.url)
                 let wallet = try await repo.getWallet(mintUrl: mintUrl, unit: .sat)
+                AppLogger.wallet.info(
+                    "wallet-op native-call kind=meltQuote resource=\(WalletOperationCoordinator.privacySafeIdentifier(mint.url), privacy: .public) method=onchain"
+                )
                 let quoteOptions = try await wallet.quoteOnchainMeltOptions(
                     address: normalizedAddress,
                     amount: Amount(value: amount),
@@ -558,7 +578,9 @@ class LightningService: ObservableObject {
                 return meltQuoteInfo(from: quote, paymentMethod: .onchain, fallbackMintUrl: mint.url)
             } catch {
                 lastError = error
-                AppLogger.wallet.error("Failed to create on-chain melt quote with mint \(mint.url): \(error)")
+                AppLogger.wallet.error(
+                    "on-chain melt quote failed resource=\(WalletOperationCoordinator.privacySafeIdentifier(mint.url), privacy: .public) error_type=\(String(reflecting: type(of: error)), privacy: .public)"
+                )
             }
         }
 
@@ -679,19 +701,15 @@ class LightningService: ObservableObject {
         return normalized
     }
     
-    /// Outcome of a melt confirmation. `pendingMelt` is non-nil when the mint
-    /// accepted the payment for asynchronous NUT-05 processing; the caller owns
-    /// waiting on it and finishing the bookkeeping once it settles.
+    /// Outcome of a melt confirmation. Pending results are persisted and
+    /// reconciled by the manager's serialized foreground poll.
     struct MeltConfirmation {
         let result: MeltPaymentResult
-        let pendingMelt: PendingMelt?
     }
 
     /// Pay a Lightning invoice or on-chain address (melt tokens)
     /// - Parameter quoteId: The quote ID to melt
-    /// - Returns: Melt confirmation. Settled immediately for synchronous mints;
-    ///   carries a `PendingMelt` handle when the mint processes asynchronously
-    ///   (NUT-05 `Prefer: respond-async`), which on-chain melts typically do.
+    /// - Returns: Melt confirmation, including whether settlement is pending.
     func meltTokens(quoteId: String, mintUrl preferredMintUrl: String? = nil) async throws -> MeltConfirmation {
         guard let repo = walletRepository() else {
             throw WalletError.notInitialized
@@ -707,33 +725,238 @@ class LightningService: ObservableObject {
         let mintUrl = MintUrl(url: mintURLString)
         let wallet = try await repo.getWallet(mintUrl: mintUrl, unit: .sat)
 
-        let preparedMelt = try await wallet.prepareMelt(quoteId: quoteId)
-        switch try await preparedMelt.confirmPreferAsync() {
-        case .paid(let finalized):
+        let preparedMelt: PreparedMelt
+        do {
+            preparedMelt = try await wallet.prepareMelt(quoteId: quoteId)
+        } catch {
+            // Preparation can reserve proofs before its native future reports an
+            // error. If CDK persisted an operation, resolve it exactly like an
+            // interrupted confirmation instead of treating the quote as reusable.
+            guard let database = walletDatabase() else {
+                throw MeltPaymentRecoveryError.unresolved(
+                    quoteID: quoteId,
+                    mintURL: mintURLString,
+                    operationID: "unknown"
+                )
+            }
+            var reservedOperationID: String?
+            do {
+                let reservedQuote = try await database.getMeltQuote(quoteId: quoteId)
+                reservedOperationID = reservedQuote?.usedByOperation
+            } catch {
+                // A failed read cannot establish that prepareMelt left no
+                // reservation. Keep the outcome ambiguous and block a
+                // potentially duplicate retry until status can be checked.
+                throw MeltPaymentRecoveryError.unresolved(
+                    quoteID: quoteId,
+                    mintURL: mintURLString,
+                    operationID: "unknown"
+                )
+            }
+            guard let operationID = reservedOperationID else {
+                throw error
+            }
+            return try await resolveMeltAfterAmbiguousFailure(
+                wallet: wallet,
+                quoteId: quoteId,
+                mintURLString: mintURLString,
+                operationID: operationID,
+                fallbackQuote: storedMeltQuote
+            )
+        }
+
+        let operationID = preparedMelt.operationId()
+        AppLogger.wallet.info(
+            "wallet-op melt prepared operation=\(WalletOperationCoordinator.privacySafeIdentifier(operationID), privacy: .public) quote=\(WalletOperationCoordinator.privacySafeIdentifier(quoteId), privacy: .public)"
+        )
+
+        do {
+            AppLogger.wallet.info(
+                "wallet-op native-call kind=melt phase=confirm operation=\(WalletOperationCoordinator.privacySafeIdentifier(operationID), privacy: .public) quote=\(WalletOperationCoordinator.privacySafeIdentifier(quoteId), privacy: .public)"
+            )
+            switch try await preparedMelt.confirmPreferAsync() {
+            case .paid(let finalized):
+                return MeltConfirmation(
+                    result: MeltPaymentResult(
+                        preimage: finalized.preimage,
+                        amount: finalized.amount.value,
+                        feePaid: finalized.feePaid.value,
+                        mintUrl: mintURLString,
+                        settlement: .settled
+                    )
+                )
+            case .pending:
+                // Do not run `pendingMelt.wait()` after leaving the repository
+                // lane. That native future can live for minutes and may update
+                // the same store beside an interactive operation. Dropping the
+                // handle is intentional: the manager persists the quote and its
+                // coordinated foreground poll drives terminal reconciliation.
+                // Amount and fee aren't final until the payment settles; report the
+                // quote's numbers (fee = reserve upper bound) so the UI has facts to show.
+                return MeltConfirmation(
+                    result: MeltPaymentResult(
+                        preimage: nil,
+                        amount: storedMeltQuote?.amount.value ?? 0,
+                        feePaid: storedMeltQuote?.feeReserve.value ?? 0,
+                        mintUrl: mintURLString,
+                        settlement: .pending
+                    )
+                )
+            }
+        } catch {
+            AppLogger.wallet.warning(
+                "wallet-op melt confirmation returned error operation=\(WalletOperationCoordinator.privacySafeIdentifier(operationID), privacy: .public) quote=\(WalletOperationCoordinator.privacySafeIdentifier(quoteId), privacy: .public) error_type=\(String(reflecting: type(of: error)), privacy: .public)"
+            )
+            return try await resolveMeltAfterAmbiguousFailure(
+                wallet: wallet,
+                quoteId: quoteId,
+                mintURLString: mintURLString,
+                operationID: operationID,
+                fallbackQuote: storedMeltQuote
+            )
+        }
+    }
+
+    /// Resolve a post-reservation error through the mint/CDK recovery path. A
+    /// paid or pending response becomes a normal result; a compensated response
+    /// explicitly requires a fresh quote; an unknowable result is persisted by
+    /// the manager and blocks immediate retry.
+    private func resolveMeltAfterAmbiguousFailure(
+        wallet: Wallet,
+        quoteId: String,
+        mintURLString: String,
+        operationID: String,
+        fallbackQuote: MeltQuote?
+    ) async throws -> MeltConfirmation {
+        let database = walletDatabase()
+        await logMeltReservationState(
+            wallet: wallet,
+            database: database,
+            quoteId: quoteId,
+            operationID: operationID,
+            stage: "before-resolution"
+        )
+
+        var checkedQuote: MeltQuote?
+        do {
+            checkedQuote = try await wallet.checkMeltQuoteStatus(quoteId: quoteId)
+        } catch {
+            // This is CDK's status-aware saga recovery, not an unconditional
+            // reservation release. It may safely leave a still-pending saga in
+            // place when the mint cannot establish a terminal outcome.
+            let report = try? await wallet.recoverIncompleteSagas()
+            AppLogger.wallet.info(
+                "wallet-op melt recovery operation=\(WalletOperationCoordinator.privacySafeIdentifier(operationID), privacy: .public) recovered=\(report?.recovered ?? 0, privacy: .public) compensated=\(report?.compensated ?? 0, privacy: .public) skipped=\(report?.skipped ?? 0, privacy: .public) failed=\(report?.failed ?? 0, privacy: .public)"
+            )
+            checkedQuote = try? await wallet.checkMeltQuoteStatus(quoteId: quoteId)
+        }
+
+        await logMeltReservationState(
+            wallet: wallet,
+            database: database,
+            quoteId: quoteId,
+            operationID: operationID,
+            stage: "after-resolution"
+        )
+
+        guard let checkedQuote else {
+            throw MeltPaymentRecoveryError.unresolved(
+                quoteID: quoteId,
+                mintURL: mintURLString,
+                operationID: operationID
+            )
+        }
+
+        switch checkedQuote.state {
+        case .paid, .issued:
+            let transaction = try? await wallet.listTransactions(direction: .outgoing)
+                .last(where: { $0.quoteId == quoteId })
             return MeltConfirmation(
                 result: MeltPaymentResult(
-                    preimage: finalized.preimage,
-                    amount: finalized.amount.value,
-                    feePaid: finalized.feePaid.value,
+                    preimage: transaction?.paymentProof ?? checkedQuote.paymentProof,
+                    amount: transaction?.amount.value
+                        ?? (checkedQuote.amount.value > 0 ? checkedQuote.amount.value : fallbackQuote?.amount.value ?? 0),
+                    feePaid: transaction?.fee.value
+                        ?? (checkedQuote.feeReserve.value > 0 ? checkedQuote.feeReserve.value : fallbackQuote?.feeReserve.value ?? 0),
                     mintUrl: mintURLString,
                     settlement: .settled
-                ),
-                pendingMelt: nil
+                )
             )
-        case .pending(let pendingMelt):
-            // Amount and fee aren't final until the payment settles; report the
-            // quote's numbers (fee = reserve upper bound) so the UI has facts to show.
+        case .pending:
             return MeltConfirmation(
                 result: MeltPaymentResult(
                     preimage: nil,
-                    amount: storedMeltQuote?.amount.value ?? 0,
-                    feePaid: storedMeltQuote?.feeReserve.value ?? 0,
+                    amount: checkedQuote.amount.value > 0
+                        ? checkedQuote.amount.value
+                        : fallbackQuote?.amount.value ?? 0,
+                    feePaid: checkedQuote.feeReserve.value > 0
+                        ? checkedQuote.feeReserve.value
+                        : fallbackQuote?.feeReserve.value ?? 0,
                     mintUrl: mintURLString,
                     settlement: .pending
-                ),
-                pendingMelt: pendingMelt
+                )
             )
+        case .unpaid:
+            guard let database else {
+                throw MeltPaymentRecoveryError.unresolved(
+                    quoteID: quoteId,
+                    mintURL: mintURLString,
+                    operationID: operationID
+                )
+            }
+
+            do {
+                let storedQuote = try await database.getMeltQuote(quoteId: quoteId)
+                let saga = try await database.getSaga(id: operationID)
+                let reservedProofs = try await database.getReservedProofs(operationId: operationID)
+                guard saga == nil,
+                      storedQuote?.usedByOperation == nil,
+                      reservedProofs.isEmpty else {
+                    throw MeltPaymentRecoveryError.unresolved(
+                        quoteID: quoteId,
+                        mintURL: mintURLString,
+                        operationID: operationID
+                    )
+                }
+            } catch let recoveryError as MeltPaymentRecoveryError {
+                throw recoveryError
+            } catch {
+                // "Unpaid" only becomes definitely retryable after local
+                // saga and quote-reservation reads both succeed and show that
+                // compensation completed. An I/O error is not that evidence.
+                throw MeltPaymentRecoveryError.unresolved(
+                    quoteID: quoteId,
+                    mintURL: mintURLString,
+                    operationID: operationID
+                )
+            }
+            throw MeltPaymentRecoveryError.compensated(operationID: operationID)
         }
+    }
+
+    private func logMeltReservationState(
+        wallet: Wallet,
+        database: WalletSqliteDatabase?,
+        quoteId: String,
+        operationID: String,
+        stage: String
+    ) async {
+        var incompleteSagaCount = -1
+        var sagaExists = false
+        var reservedProofCount = -1
+        var quoteReserved = false
+        if let database {
+            incompleteSagaCount = (try? await database.getIncompleteSagas().count) ?? -1
+            sagaExists = ((try? await database.getSaga(id: operationID)) ?? nil) != nil
+            reservedProofCount = (try? await database.getReservedProofs(operationId: operationID).count) ?? -1
+            quoteReserved = (try? await database.getMeltQuote(quoteId: quoteId))?.usedByOperation != nil
+        }
+        let reservedBalance = (try? await wallet.totalReservedBalance().value) ?? UInt64.max
+        let pendingSendCount = (try? await wallet.getPendingSends().count) ?? -1
+
+        AppLogger.wallet.info(
+            "wallet-op melt state stage=\(stage, privacy: .public) operation=\(WalletOperationCoordinator.privacySafeIdentifier(operationID), privacy: .public) incomplete_sagas=\(incompleteSagaCount, privacy: .public) saga_exists=\(sagaExists, privacy: .public) quote_reserved=\(quoteReserved, privacy: .public) reserved_proofs=\(reservedProofCount, privacy: .public) reserved_balance=\(reservedBalance, privacy: .public) pending_sends=\(pendingSendCount, privacy: .public)"
+        )
     }
 
     private func mintQuoteInfo(
@@ -844,7 +1067,7 @@ class LightningService: ObservableObject {
             try await replaceStoredMintQuote(quoteToPersist, in: walletDatabase)
         } catch {
             AppLogger.wallet.error(
-                "Failed to persist mint quote \(quote.id, privacy: .public): \(String(describing: error), privacy: .public)"
+                "mint quote persistence failed resource=\(WalletOperationCoordinator.privacySafeIdentifier(quote.id), privacy: .public) error_type=\(String(reflecting: type(of: error)), privacy: .public)"
             )
         }
     }
@@ -926,7 +1149,7 @@ class LightningService: ObservableObject {
             return mintQuoteClearingReservation(quote)
         } catch {
             AppLogger.wallet.error(
-                "Failed to inspect mint quote reservation \(operationId, privacy: .public) for quote \(quote.id, privacy: .public): \(String(describing: error), privacy: .public)"
+                "mint quote reservation inspection failed operation=\(WalletOperationCoordinator.privacySafeIdentifier(operationId), privacy: .public) quote=\(WalletOperationCoordinator.privacySafeIdentifier(quote.id), privacy: .public) error_type=\(String(reflecting: type(of: error)), privacy: .public)"
             )
             return quote
         }

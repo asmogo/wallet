@@ -219,3 +219,322 @@ final class TokenServiceTests: XCTestCase {
             StubError(description: "Could not connect to the server.")))
     }
 }
+
+@MainActor
+final class WalletOperationCoordinatorTests: XCTestCase {
+    private enum TestFailure: Error { case expected }
+
+    func testReceiveFeeAndRedemptionNeverOverlap() async throws {
+        let coordinator = WalletOperationCoordinator(watchdogThreshold: 0)
+        let probe = ConcurrencyProbe()
+
+        let tasks = (0..<12).map { index in
+            Task {
+                try await coordinator.perform(kind: index.isMultiple(of: 2) ? .receiveFee : .receive) {
+                    await probe.enter()
+                    try await Task.sleep(nanoseconds: 5_000_000)
+                    await probe.leave()
+                }
+            }
+        }
+
+        for task in tasks {
+            try await task.value
+        }
+
+        let maximumConcurrentCount = await probe.maximumConcurrentCount()
+        XCTAssertEqual(maximumConcurrentCount, 1)
+    }
+
+    func testCriticalOperationKindsShareOneExecutionLane() async throws {
+        let coordinator = WalletOperationCoordinator(watchdogThreshold: 0)
+        let probe = ConcurrencyProbe()
+        let kinds: [WalletOperationCoordinator.Kind] = [
+            .send, .receive, .melt, .mint, .restore, .balance, .history, .recovery,
+        ]
+
+        let tasks = kinds.map { kind in
+            Task {
+                try await coordinator.perform(kind: kind) {
+                    await probe.enter()
+                    try await Task.sleep(nanoseconds: 5_000_000)
+                    await probe.leave()
+                }
+            }
+        }
+
+        for task in tasks {
+            try await task.value
+        }
+
+        let maximumConcurrentCount = await probe.maximumConcurrentCount()
+        XCTAssertEqual(maximumConcurrentCount, 1)
+    }
+
+    func testThrownOperationReleasesPermit() async throws {
+        let coordinator = WalletOperationCoordinator(watchdogThreshold: 0)
+
+        do {
+            _ = try await coordinator.perform(kind: .receive) {
+                throw TestFailure.expected
+            }
+            XCTFail("Expected the first operation to throw")
+        } catch TestFailure.expected {
+            // Expected.
+        }
+
+        let value = try await coordinator.perform(kind: .send) { 42 }
+        XCTAssertEqual(value, 42)
+    }
+
+    func testCancellationWhileWaitingRemovesWaiter() async throws {
+        let coordinator = WalletOperationCoordinator(watchdogThreshold: 0)
+        let gate = AsyncTestGate()
+
+        let active = Task {
+            try await coordinator.perform(kind: .receive) {
+                await gate.wait()
+            }
+        }
+        let receiveBecameActive = await eventually { await coordinator.snapshot().activeKind == .receive }
+        XCTAssertTrue(receiveBecameActive)
+
+        let waiting = Task {
+            try await coordinator.perform(kind: .send) { 1 }
+        }
+        let waiterWasQueued = await eventually { await coordinator.snapshot().waitingCount == 1 }
+        XCTAssertTrue(waiterWasQueued)
+
+        waiting.cancel()
+        do {
+            _ = try await waiting.value
+            XCTFail("Expected the waiting operation to be cancelled")
+        } catch is CancellationError {
+            // Expected.
+        }
+        let waiterWasRemoved = await eventually { await coordinator.snapshot().waitingCount == 0 }
+        XCTAssertTrue(waiterWasRemoved)
+
+        await gate.open()
+        try await active.value
+    }
+
+    func testCancellationDoesNotUnlockExecutingNativeWork() async throws {
+        let coordinator = WalletOperationCoordinator(watchdogThreshold: 0)
+        let nativeGate = AsyncTestGate()
+        let secondStarted = BooleanProbe()
+
+        let first = Task {
+            try await coordinator.perform(kind: .melt) {
+                // CheckedContinuation intentionally ignores Swift cancellation,
+                // matching the iOS UniFFI bridge described by the regression.
+                await nativeGate.wait()
+                return 1
+            }
+        }
+        let meltBecameActive = await eventually { await coordinator.snapshot().activeKind == .melt }
+        XCTAssertTrue(meltBecameActive)
+        first.cancel()
+
+        let second = Task {
+            try await coordinator.perform(kind: .receive) {
+                await secondStarted.setTrue()
+                return 2
+            }
+        }
+
+        let secondWasQueued = await eventually { await coordinator.snapshot().waitingCount == 1 }
+        XCTAssertTrue(secondWasQueued)
+        let didStartBeforeNativeReturn = await secondStarted.value()
+        XCTAssertFalse(didStartBeforeNativeReturn)
+
+        await nativeGate.open()
+        let firstValue = try await first.value
+        let secondValue = try await second.value
+        XCTAssertEqual(firstValue, 1)
+        XCTAssertEqual(secondValue, 2)
+        let didStartAfterNativeReturn = await secondStarted.value()
+        XCTAssertTrue(didStartAfterNativeReturn)
+    }
+
+    func testPassiveMaintenanceSkipsWhileUserOperationIsActive() async throws {
+        let coordinator = WalletOperationCoordinator(watchdogThreshold: 0)
+        let gate = AsyncTestGate()
+
+        let active = Task {
+            try await coordinator.perform(kind: .send) {
+                await gate.wait()
+            }
+        }
+        let sendBecameActive = await eventually { await coordinator.snapshot().activeKind == .send }
+        XCTAssertTrue(sendBecameActive)
+
+        let performed = try await coordinator.performIfIdle(kind: .quotePoll) {
+            XCTFail("Passive operation should have been skipped")
+        }
+        XCTAssertFalse(performed)
+
+        await gate.open()
+        try await active.value
+    }
+
+    func testUserOperationRunsBeforeQueuedMaintenance() async throws {
+        let coordinator = WalletOperationCoordinator(watchdogThreshold: 0)
+        let gate = AsyncTestGate()
+        let order = StringRecorder()
+
+        let active = Task {
+            try await coordinator.perform(kind: .restore) {
+                await gate.wait()
+            }
+        }
+        let restoreBecameActive = await eventually { await coordinator.snapshot().activeKind == .restore }
+        XCTAssertTrue(restoreBecameActive)
+
+        let maintenance = Task {
+            try await coordinator.perform(kind: .history, priority: .maintenance) {
+                await order.append("maintenance")
+            }
+        }
+        let user = Task {
+            try await coordinator.perform(kind: .receive) {
+                await order.append("user")
+            }
+        }
+        let bothWereQueued = await eventually { await coordinator.snapshot().waitingCount == 2 }
+        XCTAssertTrue(bothWereQueued)
+
+        await gate.open()
+        try await active.value
+        try await user.value
+        try await maintenance.value
+
+        let recordedOrder = await order.values()
+        XCTAssertEqual(recordedOrder, ["user", "maintenance"])
+    }
+
+    func testMeltWorkflowCannotBeInterleavedByPollingOrHistory() async throws {
+        let coordinator = WalletOperationCoordinator(watchdogThreshold: 0)
+        let nativeGate = AsyncTestGate()
+        let order = StringRecorder()
+
+        let melt = Task {
+            try await coordinator.perform(kind: .melt) {
+                await order.append("prepare")
+                await nativeGate.wait()
+                await order.append("confirm")
+            }
+        }
+        let meltBecameActive = await eventually { await coordinator.snapshot().activeKind == .melt }
+        XCTAssertTrue(meltBecameActive)
+
+        let pollRan = try await coordinator.performIfIdle(kind: .quotePoll) {
+            await order.append("poll")
+        }
+        XCTAssertFalse(pollRan)
+
+        let history = Task {
+            try await coordinator.perform(kind: .history) {
+                await order.append("history")
+            }
+        }
+        let historyWasQueued = await eventually { await coordinator.snapshot().waitingCount == 1 }
+        XCTAssertTrue(historyWasQueued)
+
+        await nativeGate.open()
+        try await melt.value
+        try await history.value
+
+        let recordedOrder = await order.values()
+        XCTAssertEqual(recordedOrder, ["prepare", "confirm", "history"])
+    }
+
+    func testCompensatedMeltRequiresFreshQuoteAndAllowsRetry() {
+        let error = MeltPaymentRecoveryError.compensated(operationID: "operation")
+        let message = error.walletMessage
+
+        XCTAssertTrue(error.retryRequiresFreshQuote)
+        if case .retryable = message.recoverability {
+            // Expected.
+        } else {
+            XCTFail("A compensated payment should permit a fresh-quote retry")
+        }
+    }
+
+    func testUnresolvedMeltBlocksRetryAndKeepsQuoteForReconciliation() {
+        let error = MeltPaymentRecoveryError.unresolved(
+            quoteID: "quote",
+            mintURL: "https://mint.invalid",
+            operationID: "operation"
+        )
+        let message = error.walletMessage
+
+        XCTAssertFalse(error.retryRequiresFreshQuote)
+        XCTAssertEqual(error.unresolvedQuote?.id, "quote")
+        if case .terminal = message.recoverability {
+            // Expected: terminal means no immediate retry CTA, not that the
+            // payment is known to have failed.
+        } else {
+            XCTFail("An unknown payment outcome must block immediate retry")
+        }
+        XCTAssertEqual(error.walletOperationFailureOutcome, .ambiguousFailure)
+    }
+
+    private func eventually(
+        attempts: Int = 200,
+        condition: () async -> Bool
+    ) async -> Bool {
+        for _ in 0..<attempts {
+            if await condition() { return true }
+            try? await Task.sleep(nanoseconds: 2_000_000)
+        }
+        return false
+    }
+}
+
+private actor AsyncTestGate {
+    private var isOpen = false
+    private var waiters: [CheckedContinuation<Void, Never>] = []
+
+    func wait() async {
+        guard !isOpen else { return }
+        await withCheckedContinuation { continuation in
+            waiters.append(continuation)
+        }
+    }
+
+    func open() {
+        isOpen = true
+        let pending = waiters
+        waiters.removeAll()
+        pending.forEach { $0.resume() }
+    }
+}
+
+private actor ConcurrencyProbe {
+    private var activeCount = 0
+    private var maximumCount = 0
+
+    func enter() {
+        activeCount += 1
+        maximumCount = max(maximumCount, activeCount)
+    }
+
+    func leave() {
+        activeCount -= 1
+    }
+
+    func maximumConcurrentCount() -> Int { maximumCount }
+}
+
+private actor BooleanProbe {
+    private var storedValue = false
+    func setTrue() { storedValue = true }
+    func value() -> Bool { storedValue }
+}
+
+private actor StringRecorder {
+    private var storedValues: [String] = []
+    func append(_ value: String) { storedValues.append(value) }
+    func values() -> [String] { storedValues }
+}

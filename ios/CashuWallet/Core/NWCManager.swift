@@ -171,7 +171,9 @@ final class NWCManager: ObservableObject {
             isRunning = false
             service = nil
             errorMessage = error.userFacingWalletMessage
-            AppLogger.wallet.error("Failed to start NWC service: \(String(describing: error))")
+            AppLogger.wallet.error(
+                "NWC service start failed error_type=\(String(reflecting: type(of: error)), privacy: .public)"
+            )
         }
     }
 
@@ -225,7 +227,9 @@ final class NWCManager: ObservableObject {
             do {
                 try await service.stop()
             } catch {
-                AppLogger.wallet.error("Failed to stop NWC service: \(String(describing: error))")
+                AppLogger.wallet.error(
+                    "NWC service stop failed error_type=\(String(reflecting: type(of: error)), privacy: .public)"
+                )
             }
         }
         service = nil

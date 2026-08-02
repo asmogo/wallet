@@ -93,6 +93,7 @@
 		D200000000000109 /* WalletErrors.swift in Sources */ = {isa = PBXBuildFile; fileRef = D100000000000109 /* WalletErrors.swift */; };
 		D20000000000010A /* WalletManager+PendingMelts.swift in Sources */ = {isa = PBXBuildFile; fileRef = D10000000000010A /* WalletManager+PendingMelts.swift */; };
 		D20000000000010C /* PendingTokenClaim.swift in Sources */ = {isa = PBXBuildFile; fileRef = D10000000000010C /* PendingTokenClaim.swift */; };
+		D20000000000010D /* WalletOperationCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = D10000000000010D /* WalletOperationCoordinator.swift */; };
 		D200000000000201 /* PaymentMethodKind.swift in Sources */ = {isa = PBXBuildFile; fileRef = D100000000000201 /* PaymentMethodKind.swift */; };
 		D200000000000202 /* PaymentRequestParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = D100000000000202 /* PaymentRequestParser.swift */; };
 		D200000000000203 /* OnchainExplorer.swift in Sources */ = {isa = PBXBuildFile; fileRef = D100000000000203 /* OnchainExplorer.swift */; };
@@ -250,6 +251,7 @@
 		D100000000000109 /* WalletErrors.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WalletErrors.swift; sourceTree = "<group>"; };
 		D10000000000010A /* WalletManager+PendingMelts.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "WalletManager+PendingMelts.swift"; sourceTree = "<group>"; };
 		D10000000000010C /* PendingTokenClaim.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PendingTokenClaim.swift; sourceTree = "<group>"; };
+		D10000000000010D /* WalletOperationCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WalletOperationCoordinator.swift; sourceTree = "<group>"; };
 		D100000000000201 /* PaymentMethodKind.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PaymentMethodKind.swift; sourceTree = "<group>"; };
 		D100000000000202 /* PaymentRequestParser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PaymentRequestParser.swift; sourceTree = "<group>"; };
 		D100000000000203 /* OnchainExplorer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnchainExplorer.swift; sourceTree = "<group>"; };
@@ -649,6 +651,7 @@
 				D100000000000108 /* WalletManager+Backup.swift */,
 				D100000000000109 /* WalletErrors.swift */,
 				D10000000000010C /* PendingTokenClaim.swift */,
+				D10000000000010D /* WalletOperationCoordinator.swift */,
 			);
 			path = Wallet;
 			sourceTree = "<group>";
@@ -938,6 +941,7 @@
 				D200000000000108 /* WalletManager+Backup.swift in Sources */,
 				D200000000000109 /* WalletErrors.swift in Sources */,
 				D20000000000010C /* PendingTokenClaim.swift in Sources */,
+				D20000000000010D /* WalletOperationCoordinator.swift in Sources */,
 				D200000000000201 /* PaymentMethodKind.swift in Sources */,
 				D200000000000202 /* PaymentRequestParser.swift in Sources */,
 				D200000000000203 /* OnchainExplorer.swift in Sources */,

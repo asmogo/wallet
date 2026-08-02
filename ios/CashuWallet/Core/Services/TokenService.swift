@@ -191,6 +191,9 @@ class TokenService: ObservableObject {
         for attempt in 0..<maxAttempts {
             let wallet = try await repo.getWallet(mintUrl: tokenMintUrl, unit: tokenUnit)
             do {
+                AppLogger.wallet.info(
+                    "wallet-op native-call kind=receive resource=\(WalletOperationCoordinator.privacySafeIdentifier(tokenMintUrl.url), privacy: .public) attempt=\(attempt + 1, privacy: .public)"
+                )
                 let amount = try await wallet.receive(token: token, options: receiveOptions)
                 if let matchingLocalP2PKKey {
                     SettingsManager.shared.markP2PKKeyUsed(publicKey: matchingLocalP2PKKey.publicKey)
@@ -288,7 +291,9 @@ class TokenService: ObservableObject {
             }
             return (totalPpk + 999) / 1000
         } catch {
-            print("Failed to get keyset fee for calculation: \(error)")
+            AppLogger.wallet.debug(
+                "receive fee lookup failed error_type=\(String(reflecting: type(of: error)), privacy: .public)"
+            )
             return 0
         }
     }
@@ -327,7 +332,9 @@ class TokenService: ObservableObject {
         do {
             return try await checkTokenSpent(token: token, mintUrl: mintUrl)
         } catch {
-            AppLogger.wallet.error("Error checking token spent status: \(error)")
+            AppLogger.wallet.error(
+                "token spent status failed error_type=\(String(reflecting: type(of: error)), privacy: .public)"
+            )
             return false
         }
     }
