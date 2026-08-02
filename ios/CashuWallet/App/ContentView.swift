@@ -5,8 +5,10 @@ struct ContentView: View {
     @EnvironmentObject var walletManager: WalletManager
     @EnvironmentObject var navigationManager: NavigationManager
     @ObservedObject private var cashuRequestListener = CashuRequestListener.shared
-    /// Payment currently on the approval screen (fullScreenCover item).
-    @State private var claimApproval: PendingReceiveToken?
+    @ObservedObject private var appLock = AppLockManager.shared
+    /// The flow cover on screen as of the last change, so a held-approval
+    /// page closed without a decision can drop the prompt.
+    @State private var lastPresentedCover: FlowCover?
 
     var body: some View {
         // ZStack (not Group) so the outgoing and incoming roots overlap and truly
@@ -28,64 +30,99 @@ struct ContentView: View {
             }
         }
         .animation(.easeInOut(duration: 0.35), value: walletManager.needsOnboarding)
-        .onChange(of: navigationManager.pendingDeepLinkToken) {
-            navigationManager.presentPendingReceiveTokenIfReady(
-                isRuntimeReady: walletManager.isRuntimeReady
+        // The one full-screen flow-page slot: token claims (scan, deep link,
+        // paste-into-flow), scan-routed pay screens, held NUT-18 approvals.
+        // `onDismiss` promotes any surface parked by `NavigationManager.present`.
+        .fullScreenCover(
+            item: $navigationManager.activeFlowCover,
+            onDismiss: { navigationManager.coverDidDismiss() }
+        ) { cover in
+            coverView(for: cover)
+        }
+        .onChange(of: navigationManager.activeFlowCover?.id) { presentedCoverChanged() }
+        .onChange(of: navigationManager.heldDeepLinkTokens) { presentInterruptsIfIdle() }
+        .onChange(of: navigationManager.isFlowSurfaceOpen) { presentInterruptsIfIdle() }
+        .onChange(of: walletManager.isRuntimeReady, initial: true) { presentInterruptsIfIdle() }
+        .onChange(of: cashuRequestListener.heldForApproval) { presentInterruptsIfIdle() }
+        .onChange(of: appLock.isLocked) { presentInterruptsIfIdle() }
+        .onAppear { presentInterruptsIfIdle() }
+    }
+
+    @ViewBuilder
+    private func coverView(for cover: FlowCover) -> some View {
+        switch cover {
+        case .receiveToken(let token):
+            // Full-screen page (not a sheet) so the confirm + success read as
+            // a brand-new screen with nothing visible behind.
+            ReceiveTokenDetailView(
+                tokenString: token,
+                onComplete: { navigationManager.activeFlowCover = nil }
             )
-        }
-        .onChange(of: walletManager.isRuntimeReady, initial: true) { _, isRuntimeReady in
-            navigationManager.presentPendingReceiveTokenIfReady(isRuntimeReady: isRuntimeReady)
-        }
-        .fullScreenCover(isPresented: $navigationManager.showReceiveTokenSheet) {
-            if let token = navigationManager.pendingDeepLinkToken {
-                ReceiveTokenDetailView(
-                    tokenString: token,
-                    onComplete: {
-                        navigationManager.showReceiveTokenSheet = false
-                        navigationManager.pendingDeepLinkToken = nil
-                    }
-                )
-                .environmentObject(walletManager)
-            }
-        }
-        // Incoming NUT-18 payment that needs an explicit user decision (mint
-        // not tracked yet, or auto-claim disabled) — presented on the standard
-        // receive screen, whose built-in "New mint" caution notice covers the
-        // trust warning when it applies. The prompt is one-shot: closing it
-        // without deciding keeps the payment claimable from its History row.
-        .fullScreenCover(item: $claimApproval) { pending in
+            .environmentObject(walletManager)
+            .canvasSheetBackground()
+        case .heldApproval(let pending):
+            // Incoming NUT-18 payment that needs an explicit user decision (mint
+            // not tracked yet, or auto-claim disabled) — presented on the standard
+            // receive screen, whose built-in "New mint" caution notice covers the
+            // trust warning when it applies. The prompt is one-shot: closing it
+            // without deciding keeps the payment claimable from its History row.
             ReceiveTokenDetailView(
                 tokenString: pending.token,
-                onComplete: { claimApproval = nil },
+                onComplete: { navigationManager.activeFlowCover = nil },
                 claim: { try await cashuRequestListener.claimHeldPayment(pending) },
                 secondaryActionTitle: "Decline",
                 onSecondaryAction: {
                     cashuRequestListener.declineHeldPayment(pending)
-                    claimApproval = nil
+                    navigationManager.activeFlowCover = nil
                 }
             )
             .environmentObject(walletManager)
-        }
-        .onChange(of: cashuRequestListener.heldForApproval) { _, held in
-            presentHeldPaymentIfIdle(held)
-        }
-        .onChange(of: claimApproval) { _, current in
-            // Screen closed without a decision ("not now"): drop the prompt.
-            // The payment stays in the pending-receive store and History.
-            if current == nil { cashuRequestListener.dismissHeldPayment() }
-        }
-        .onAppear {
-            presentHeldPaymentIfIdle(cashuRequestListener.heldForApproval)
+            .canvasSheetBackground()
+        case .melt(let request, let mode, let autoQuote, let explanation):
+            MeltView(
+                initialRequest: request,
+                initialMode: mode,
+                autoQuoteOnAppear: autoQuote,
+                routeExplanation: explanation,
+                onComplete: { navigationManager.activeFlowCover = nil }
+            )
+            .environmentObject(walletManager)
+            .canvasSheetBackground()
+        case .cashuRequestPay(let summary):
+            CashuPaymentRequestPayView(
+                request: summary,
+                onComplete: { navigationManager.activeFlowCover = nil }
+            )
+            .environmentObject(walletManager)
+            .canvasSheetBackground()
         }
     }
 
-    /// Present the just-arrived held payment. Skips while another approval (or
-    /// onboarding) is on screen — skipped payments remain in History.
-    private func presentHeldPaymentIfIdle(_ held: PendingReceiveToken?) {
-        guard claimApproval == nil,
+    private func presentedCoverChanged() {
+        let current = navigationManager.activeFlowCover
+        if case .heldApproval = lastPresentedCover, current == nil {
+            // Screen closed without a decision ("not now"): drop the prompt.
+            // The payment stays in the pending-receive store and History.
+            cashuRequestListener.dismissHeldPayment()
+        }
+        lastPresentedCover = current
+    }
+
+    /// Present the next queued unprompted surface (deep-linked token, incoming
+    /// NUT-18 approval) once every flow surface is idle — the iOS mirror of
+    /// Android's shell idle gate. Nothing is dropped: skipped items re-present
+    /// on the next idle transition, and a NUT-18 payment additionally stays
+    /// claimable from History.
+    private func presentInterruptsIfIdle() {
+        guard walletManager.isRuntimeReady,
               !walletManager.needsOnboarding,
-              let held else { return }
-        claimApproval = held
+              !appLock.isLocked,
+              !navigationManager.isFlowSurfaceOpen else { return }
+        if let token = navigationManager.consumeHeldDeepLinkToken() {
+            navigationManager.present(.cover(.receiveToken(token)))
+        } else if let held = cashuRequestListener.heldForApproval {
+            navigationManager.present(.cover(.heldApproval(held)))
+        }
     }
 }
 
