@@ -989,7 +989,7 @@ extension WalletManager {
         }
 
         do {
-            let keysets = try await wallet.refreshKeysets()
+            let keysets = try await wallet.keysets(policy: .refresh)
             AppLogger.wallet.info(
                 "refreshed keysets count=\(keysets.count, privacy: .public) resource=\(WalletOperationCoordinator.privacySafeIdentifier(mintUrl), privacy: .public)"
             )

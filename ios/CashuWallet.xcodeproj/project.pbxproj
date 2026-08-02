@@ -44,7 +44,7 @@
 		6A8EC94C2F25A0000058C21B /* NostrService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6A8EC94D2F25A0000058C21B /* NostrService.swift */; };
 		6A8EC94E2F25A0000058C21B /* NPCService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6A8EC94F2F25A0000058C21B /* NPCService.swift */; };
 		6A8EC95B2F26983E0058C21B /* P256K in Frameworks */ = {isa = PBXBuildFile; productRef = 6A8EC95A2F26983E0058C21B /* P256K */; };
-		720E47A62FEC721E00E02CD0 /* Cdk in Frameworks */ = {isa = PBXBuildFile; productRef = 720E47A52FEC721E00E02CD0 /* Cdk */; };
+		72187F60301FD71400F0344B /* Cdk in Frameworks */ = {isa = PBXBuildFile; productRef = 72187F5F301FD71400F0344B /* Cdk */; };
 		72AF0EF32FEF2165001AD6AC /* Sentry in Frameworks */ = {isa = PBXBuildFile; productRef = AACC000000000002 /* Sentry */; };
 		72AF0EF52FEF2300001AD6AC /* SentryService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 72AF0EF42FEF2300001AD6AC /* SentryService.swift */; };
 		927178DF5291C6C3273CCA86 /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 460F5508C2B82DAECD0FEDDB /* Foundation.framework */; };
@@ -66,12 +66,14 @@
 		AB0000000000000C /* NostrMintBackupService.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC0000000000000C /* NostrMintBackupService.swift */; };
 		AB00000000000050 /* TransactionAmountColumn.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB00000000000052 /* TransactionAmountColumn.swift */; };
 		AB00000000000051 /* CashuRequestAmountColumn.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB00000000000053 /* CashuRequestAmountColumn.swift */; };
+		AV00000000000001 /* AppVersion.swift in Sources */ = {isa = PBXBuildFile; fileRef = AV00000000000011 /* AppVersion.swift */; };
+		AV00000000000002 /* AppVersionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AV00000000000012 /* AppVersionTests.swift */; };
 		BB00000000000001 /* MintService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000011 /* MintService.swift */; };
 		BB00000000000002 /* TransactionService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000012 /* TransactionService.swift */; };
 		BB00000000000003 /* TokenService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000013 /* TokenService.swift */; };
 		BB00000000000004 /* LightningService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000014 /* LightningService.swift */; };
-		BE86C0C8B9BAF95539080EF9 /* Cdk in Frameworks */ = {isa = PBXBuildFile; productRef = E118F77A2062DDD58C0A6DA3 /* Cdk */; };
 		BF36C01CE0AB810E1B462448 /* IntegrationTestBase.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1CF8C0C2E1379BCD23CF8C6 /* IntegrationTestBase.swift */; };
+		C0A100000000000000000002 /* CashuRequestPaymentObservationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0A100000000000000000001 /* CashuRequestPaymentObservationTests.swift */; };
 		CC00000000000001 /* ThemeSettingsSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC00000000000011 /* ThemeSettingsSection.swift */; };
 		CC00000000000002 /* BackupSettingsSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC00000000000012 /* BackupSettingsSection.swift */; };
 		CC00000000000004 /* P2PKSettingsSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC00000000000014 /* P2PKSettingsSection.swift */; };
@@ -89,10 +91,10 @@
 		D200000000000105 /* WalletManager+CashuPaymentRequests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D100000000000105 /* WalletManager+CashuPaymentRequests.swift */; };
 		D200000000000106 /* WalletManager+Tokens.swift in Sources */ = {isa = PBXBuildFile; fileRef = D100000000000106 /* WalletManager+Tokens.swift */; };
 		D200000000000107 /* WalletManager+MintQuoteSync.swift in Sources */ = {isa = PBXBuildFile; fileRef = D100000000000107 /* WalletManager+MintQuoteSync.swift */; };
-		D20000000000010B /* MintQuoteCheckBackoff.swift in Sources */ = {isa = PBXBuildFile; fileRef = D10000000000010B /* MintQuoteCheckBackoff.swift */; };
 		D200000000000108 /* WalletManager+Backup.swift in Sources */ = {isa = PBXBuildFile; fileRef = D100000000000108 /* WalletManager+Backup.swift */; };
 		D200000000000109 /* WalletErrors.swift in Sources */ = {isa = PBXBuildFile; fileRef = D100000000000109 /* WalletErrors.swift */; };
 		D20000000000010A /* WalletManager+PendingMelts.swift in Sources */ = {isa = PBXBuildFile; fileRef = D10000000000010A /* WalletManager+PendingMelts.swift */; };
+		D20000000000010B /* MintQuoteCheckBackoff.swift in Sources */ = {isa = PBXBuildFile; fileRef = D10000000000010B /* MintQuoteCheckBackoff.swift */; };
 		D20000000000010C /* PendingTokenClaim.swift in Sources */ = {isa = PBXBuildFile; fileRef = D10000000000010C /* PendingTokenClaim.swift */; };
 		D20000000000010D /* WalletOperationCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = D10000000000010D /* WalletOperationCoordinator.swift */; };
 		D200000000000201 /* PaymentMethodKind.swift in Sources */ = {isa = PBXBuildFile; fileRef = D100000000000201 /* PaymentMethodKind.swift */; };
@@ -103,11 +105,11 @@
 		D200000000000206 /* QuoteModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = D100000000000206 /* QuoteModels.swift */; };
 		D200000000000207 /* QuoteStates.swift in Sources */ = {isa = PBXBuildFile; fileRef = D100000000000207 /* QuoteStates.swift */; };
 		D200000000000208 /* WalletTransaction.swift in Sources */ = {isa = PBXBuildFile; fileRef = D100000000000208 /* WalletTransaction.swift */; };
-		D200000000000213 /* WalletTransactionDetailLookup.swift in Sources */ = {isa = PBXBuildFile; fileRef = D100000000000213 /* WalletTransactionDetailLookup.swift */; };
 		D200000000000209 /* TokenTransferModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = D100000000000209 /* TokenTransferModels.swift */; };
 		D200000000000210 /* RestoreMintResult.swift in Sources */ = {isa = PBXBuildFile; fileRef = D100000000000210 /* RestoreMintResult.swift */; };
 		D200000000000211 /* TokenInfo.swift in Sources */ = {isa = PBXBuildFile; fileRef = D100000000000211 /* TokenInfo.swift */; };
 		D200000000000212 /* Data+Hashing.swift in Sources */ = {isa = PBXBuildFile; fileRef = D100000000000212 /* Data+Hashing.swift */; };
+		D200000000000213 /* WalletTransactionDetailLookup.swift in Sources */ = {isa = PBXBuildFile; fileRef = D100000000000213 /* WalletTransactionDetailLookup.swift */; };
 		DD00000000000001 /* AppLogger.swift in Sources */ = {isa = PBXBuildFile; fileRef = DD00000000000011 /* AppLogger.swift */; };
 		DD00000000000002 /* BIP39WordList.swift in Sources */ = {isa = PBXBuildFile; fileRef = DD00000000000012 /* BIP39WordList.swift */; };
 		DD00000000000003 /* HapticFeedback.swift in Sources */ = {isa = PBXBuildFile; fileRef = DD00000000000013 /* HapticFeedback.swift */; };
@@ -116,8 +118,6 @@
 		EE00000000000003 /* SettingsStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = EE00000000000013 /* SettingsStore.swift */; };
 		EE00000000000004 /* TokenParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = EE00000000000014 /* TokenParser.swift */; };
 		EE00000000000005 /* AmountFormatter.swift in Sources */ = {isa = PBXBuildFile; fileRef = EE00000000000015 /* AmountFormatter.swift */; };
-		AV00000000000001 /* AppVersion.swift in Sources */ = {isa = PBXBuildFile; fileRef = AV00000000000011 /* AppVersion.swift */; };
-		AV00000000000002 /* AppVersionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AV00000000000012 /* AppVersionTests.swift */; };
 		EE00000000000006 /* LightningRequestParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = EE00000000000016 /* LightningRequestParser.swift */; };
 		F100000000000001 /* NDEFTextRecordCoder.swift in Sources */ = {isa = PBXBuildFile; fileRef = F200000000000001 /* NDEFTextRecordCoder.swift */; };
 		F100000000000002 /* NFCReaderDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = F200000000000002 /* NFCReaderDelegate.swift */; };
@@ -147,10 +147,9 @@
 		T2B000000000000C /* HomeActionAccessibilityTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = T1B000000000000C /* HomeActionAccessibilityTests.swift */; };
 		T2B0000000000100 /* ConnectMintContextTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = T1B0000000000100 /* ConnectMintContextTests.swift */; };
 		T2B000000000000D /* CashuRequestRouteExplanationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = T1B000000000000D /* CashuRequestRouteExplanationTests.swift */; };
-		C0A100000000000000000002 /* CashuRequestPaymentObservationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0A100000000000000000001 /* CashuRequestPaymentObservationTests.swift */; };
 		T2B000000000000E /* CrashReportSanitizerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = T1B000000000000E /* CrashReportSanitizerTests.swift */; };
-		T2B000000000000F /* QRContextAccessibilityTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = T1B000000000000F /* QRContextAccessibilityTests.swift */; };
 		T2B000000000000F /* HistorySearchTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = T1B000000000000F /* HistorySearchTests.swift */; };
+		T2B0000000000012 /* QRContextAccessibilityTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = T1B0000000000012 /* QRContextAccessibilityTests.swift */; };
 		T2B0000000000010 /* WalletSurfaceCoordinatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = T1B0000000000010 /* WalletSurfaceCoordinatorTests.swift */; };
 		T2B0000000000011 /* ScanRouterTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = T1B0000000000011 /* ScanRouterTests.swift */; };
 /* End PBXBuildFile section */
@@ -230,10 +229,13 @@
 		AC0000000000000A /* CashuRequestMintPickerSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CashuRequestMintPickerSheet.swift; sourceTree = "<group>"; };
 		AC0000000000000B /* CashuRequestAmountPickerSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CashuRequestAmountPickerSheet.swift; sourceTree = "<group>"; };
 		AC0000000000000C /* NostrMintBackupService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NostrMintBackupService.swift; sourceTree = "<group>"; };
+		AV00000000000011 /* AppVersion.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppVersion.swift; sourceTree = "<group>"; };
+		AV00000000000012 /* AppVersionTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = AppVersionTests.swift; path = CashuWalletTests/AppVersionTests.swift; sourceTree = "<group>"; };
 		BB00000000000011 /* MintService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MintService.swift; sourceTree = "<group>"; };
 		BB00000000000012 /* TransactionService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TransactionService.swift; sourceTree = "<group>"; };
 		BB00000000000013 /* TokenService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TokenService.swift; sourceTree = "<group>"; };
 		BB00000000000014 /* LightningService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LightningService.swift; sourceTree = "<group>"; };
+		C0A100000000000000000001 /* CashuRequestPaymentObservationTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = CashuRequestPaymentObservationTests.swift; path = CashuWalletTests/CashuRequestPaymentObservationTests.swift; sourceTree = "<group>"; };
 		CC00000000000011 /* ThemeSettingsSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ThemeSettingsSection.swift; sourceTree = "<group>"; };
 		CC00000000000012 /* BackupSettingsSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BackupSettingsSection.swift; sourceTree = "<group>"; };
 		CC00000000000014 /* P2PKSettingsSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = P2PKSettingsSection.swift; sourceTree = "<group>"; };
@@ -251,10 +253,10 @@
 		D100000000000105 /* WalletManager+CashuPaymentRequests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "WalletManager+CashuPaymentRequests.swift"; sourceTree = "<group>"; };
 		D100000000000106 /* WalletManager+Tokens.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "WalletManager+Tokens.swift"; sourceTree = "<group>"; };
 		D100000000000107 /* WalletManager+MintQuoteSync.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "WalletManager+MintQuoteSync.swift"; sourceTree = "<group>"; };
-		D10000000000010B /* MintQuoteCheckBackoff.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "MintQuoteCheckBackoff.swift"; sourceTree = "<group>"; };
 		D100000000000108 /* WalletManager+Backup.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "WalletManager+Backup.swift"; sourceTree = "<group>"; };
 		D100000000000109 /* WalletErrors.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WalletErrors.swift; sourceTree = "<group>"; };
 		D10000000000010A /* WalletManager+PendingMelts.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "WalletManager+PendingMelts.swift"; sourceTree = "<group>"; };
+		D10000000000010B /* MintQuoteCheckBackoff.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MintQuoteCheckBackoff.swift; sourceTree = "<group>"; };
 		D10000000000010C /* PendingTokenClaim.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PendingTokenClaim.swift; sourceTree = "<group>"; };
 		D10000000000010D /* WalletOperationCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WalletOperationCoordinator.swift; sourceTree = "<group>"; };
 		D100000000000201 /* PaymentMethodKind.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PaymentMethodKind.swift; sourceTree = "<group>"; };
@@ -265,11 +267,11 @@
 		D100000000000206 /* QuoteModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QuoteModels.swift; sourceTree = "<group>"; };
 		D100000000000207 /* QuoteStates.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QuoteStates.swift; sourceTree = "<group>"; };
 		D100000000000208 /* WalletTransaction.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WalletTransaction.swift; sourceTree = "<group>"; };
-		D100000000000213 /* WalletTransactionDetailLookup.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WalletTransactionDetailLookup.swift; sourceTree = "<group>"; };
 		D100000000000209 /* TokenTransferModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TokenTransferModels.swift; sourceTree = "<group>"; };
 		D100000000000210 /* RestoreMintResult.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RestoreMintResult.swift; sourceTree = "<group>"; };
 		D100000000000211 /* TokenInfo.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TokenInfo.swift; sourceTree = "<group>"; };
 		D100000000000212 /* Data+Hashing.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Data+Hashing.swift"; sourceTree = "<group>"; };
+		D100000000000213 /* WalletTransactionDetailLookup.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WalletTransactionDetailLookup.swift; sourceTree = "<group>"; };
 		DD00000000000011 /* AppLogger.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppLogger.swift; sourceTree = "<group>"; };
 		DD00000000000012 /* BIP39WordList.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BIP39WordList.swift; sourceTree = "<group>"; };
 		DD00000000000013 /* HapticFeedback.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HapticFeedback.swift; sourceTree = "<group>"; };
@@ -309,12 +311,9 @@
 		T1B000000000000C /* HomeActionAccessibilityTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = HomeActionAccessibilityTests.swift; path = CashuWalletTests/HomeActionAccessibilityTests.swift; sourceTree = "<group>"; };
 		T1B0000000000100 /* ConnectMintContextTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = ConnectMintContextTests.swift; path = CashuWalletTests/ConnectMintContextTests.swift; sourceTree = "<group>"; };
 		T1B000000000000D /* CashuRequestRouteExplanationTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = CashuRequestRouteExplanationTests.swift; path = CashuWalletTests/CashuRequestRouteExplanationTests.swift; sourceTree = "<group>"; };
-		C0A100000000000000000001 /* CashuRequestPaymentObservationTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = CashuRequestPaymentObservationTests.swift; path = CashuWalletTests/CashuRequestPaymentObservationTests.swift; sourceTree = "<group>"; };
 		T1B000000000000E /* CrashReportSanitizerTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = CrashReportSanitizerTests.swift; path = CashuWalletTests/CrashReportSanitizerTests.swift; sourceTree = "<group>"; };
-		T1B000000000000F /* QRContextAccessibilityTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = QRContextAccessibilityTests.swift; path = CashuWalletTests/QRContextAccessibilityTests.swift; sourceTree = "<group>"; };
-		AV00000000000011 /* AppVersion.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppVersion.swift; sourceTree = "<group>"; };
-		AV00000000000012 /* AppVersionTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = AppVersionTests.swift; path = CashuWalletTests/AppVersionTests.swift; sourceTree = "<group>"; };
 		T1B000000000000F /* HistorySearchTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = HistorySearchTests.swift; path = CashuWalletTests/HistorySearchTests.swift; sourceTree = "<group>"; };
+		T1B0000000000012 /* QRContextAccessibilityTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = QRContextAccessibilityTests.swift; path = CashuWalletTests/QRContextAccessibilityTests.swift; sourceTree = "<group>"; };
 		T1B0000000000010 /* WalletSurfaceCoordinatorTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = WalletSurfaceCoordinatorTests.swift; path = CashuWalletTests/WalletSurfaceCoordinatorTests.swift; sourceTree = "<group>"; };
 		T1B0000000000011 /* ScanRouterTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = ScanRouterTests.swift; path = CashuWalletTests/ScanRouterTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
@@ -325,7 +324,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				72AF0EF32FEF2165001AD6AC /* Sentry in Frameworks */,
-				720E47A62FEC721E00E02CD0 /* Cdk in Frameworks */,
+				72187F60301FD71400F0344B /* Cdk in Frameworks */,
 				6A8EC93F2F256F350058C21B /* URKit in Frameworks */,
 				6A8EC95B2F26983E0058C21B /* P256K in Frameworks */,
 			);
@@ -336,7 +335,6 @@
 			buildActionMask = 2147483647;
 			files = (
 				13919761D160B56C1BD7FDB4 /* Foundation.framework in Frameworks */,
-				BE86C0C8B9BAF95539080EF9 /* Cdk in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -372,9 +370,9 @@
 				T1B000000000000D /* CashuRequestRouteExplanationTests.swift */,
 				C0A100000000000000000001 /* CashuRequestPaymentObservationTests.swift */,
 				T1B000000000000E /* CrashReportSanitizerTests.swift */,
-				T1B000000000000F /* QRContextAccessibilityTests.swift */,
 				AV00000000000012 /* AppVersionTests.swift */,
 				T1B000000000000F /* HistorySearchTests.swift */,
+				T1B0000000000012 /* QRContextAccessibilityTests.swift */,
 				T1B0000000000010 /* WalletSurfaceCoordinatorTests.swift */,
 				T1B0000000000011 /* ScanRouterTests.swift */,
 			);
@@ -769,8 +767,8 @@
 			packageProductDependencies = (
 				6A8EC93E2F256F350058C21B /* URKit */,
 				6A8EC95A2F26983E0058C21B /* P256K */,
-				720E47A52FEC721E00E02CD0 /* Cdk */,
 				AACC000000000002 /* Sentry */,
+				72187F5F301FD71400F0344B /* Cdk */,
 			);
 			productName = CashuWallet;
 			productReference = 0100000000000001 /* CashuWallet.app */;
@@ -791,7 +789,6 @@
 			);
 			name = CashuWalletTests;
 			packageProductDependencies = (
-				E118F77A2062DDD58C0A6DA3 /* Cdk */,
 			);
 			productName = CashuWalletTests;
 			productReference = 24A09ED243324E11C828B365 /* CashuWalletTests.xctest */;
@@ -847,8 +844,8 @@
 			packageReferences = (
 				6A8EC93D2F256F350058C21B /* XCRemoteSwiftPackageReference "URKit" */,
 				7200000000000002 /* XCRemoteSwiftPackageReference "swift-secp256k1" */,
-				720E47A42FEC721E00E02CD0 /* XCRemoteSwiftPackageReference "cdk-swift" */,
 				AACC000000000001 /* XCRemoteSwiftPackageReference "sentry-cocoa" */,
+				72187F5E301FD6B000F0344B /* XCRemoteSwiftPackageReference "cdk-swift" */,
 			);
 			productRefGroup = 4100000000000002 /* Products */;
 			projectDirPath = "";
@@ -927,9 +924,9 @@
 				T2B000000000000D /* CashuRequestRouteExplanationTests.swift in Sources */,
 				C0A100000000000000000002 /* CashuRequestPaymentObservationTests.swift in Sources */,
 				T2B000000000000E /* CrashReportSanitizerTests.swift in Sources */,
-				T2B000000000000F /* QRContextAccessibilityTests.swift in Sources */,
-				AV00000000000002 /* AppVersionTests.swift in Sources */,
 				T2B000000000000F /* HistorySearchTests.swift in Sources */,
+				AV00000000000002 /* AppVersionTests.swift in Sources */,
+				T2B0000000000012 /* QRContextAccessibilityTests.swift in Sources */,
 				T2B0000000000010 /* WalletSurfaceCoordinatorTests.swift in Sources */,
 				T2B0000000000011 /* ScanRouterTests.swift in Sources */,
 			);
@@ -1401,12 +1398,12 @@
 				minimumVersion = 0.18.0;
 			};
 		};
-		720E47A42FEC721E00E02CD0 /* XCRemoteSwiftPackageReference "cdk-swift" */ = {
+		72187F5E301FD6B000F0344B /* XCRemoteSwiftPackageReference "cdk-swift" */ = {
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/cashubtc/cdk-swift";
 			requirement = {
-				kind = exactVersion;
-				version = "0.17.3-rc.0";
+				branch = "v0.17.0-nightly.20260802.g795aec2";
+				kind = branch;
 			};
 		};
 		AACC000000000001 /* XCRemoteSwiftPackageReference "sentry-cocoa" */ = {
@@ -1430,20 +1427,15 @@
 			package = 7200000000000002 /* XCRemoteSwiftPackageReference "swift-secp256k1" */;
 			productName = P256K;
 		};
-		720E47A52FEC721E00E02CD0 /* Cdk */ = {
+		72187F5F301FD71400F0344B /* Cdk */ = {
 			isa = XCSwiftPackageProductDependency;
-			package = 720E47A42FEC721E00E02CD0 /* XCRemoteSwiftPackageReference "cdk-swift" */;
+			package = 72187F5E301FD6B000F0344B /* XCRemoteSwiftPackageReference "cdk-swift" */;
 			productName = Cdk;
 		};
 		AACC000000000002 /* Sentry */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = AACC000000000001 /* XCRemoteSwiftPackageReference "sentry-cocoa" */;
 			productName = Sentry;
-		};
-		E118F77A2062DDD58C0A6DA3 /* Cdk */ = {
-			isa = XCSwiftPackageProductDependency;
-			package = 720E47A42FEC721E00E02CD0 /* XCRemoteSwiftPackageReference "cdk-swift" */;
-			productName = Cdk;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};
