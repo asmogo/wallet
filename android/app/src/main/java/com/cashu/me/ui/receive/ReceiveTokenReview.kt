@@ -265,7 +265,9 @@ internal fun TokenInspectorRows(
             label = "Fee",
             value = when {
                 fee == null -> ""
-                fee == 0L -> "Free"
+                // Prospective charge (docs/product/copy-guidance.md): a
+                // charge-absence phrase, never a bare "0 sat".
+                fee == 0L -> "No fee"
                 isSatToken -> "$fee sat"
                 else -> CurrencyAmount(fee, tokenCurrency).formatted()
             },

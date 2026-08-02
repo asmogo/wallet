@@ -19,9 +19,12 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.outlined.AddCircle
+import androidx.compose.material.icons.outlined.SearchOff
 import androidx.compose.material.icons.outlined.SignalCellularConnectedNoInternet0Bar
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
@@ -30,6 +33,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.LoadingIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -47,7 +51,9 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
+import com.cashu.me.Core.AppLogger
 import com.cashu.me.Core.MintDiscoveryManager
 import com.cashu.me.Core.SettingsManager
 import com.cashu.me.Core.WalletManager
@@ -112,6 +118,24 @@ fun MintDiscoveryContent(
         onDispose { mintDiscoveryManager.clearDiscoveredMints() }
     }
 
+    var refreshing by remember { mutableStateOf(false) }
+    val refreshDiscovery = {
+        if (!refreshing) {
+            refreshing = true
+            scope.launch {
+                try {
+                    mintDiscoveryManager.discoverMints()
+                } catch (error: CancellationException) {
+                    throw error
+                } catch (error: Throwable) {
+                    AppLogger.wallet.error("Mint discovery refresh failed", error)
+                } finally {
+                    refreshing = false
+                }
+            }
+        }
+    }
+
     Column(modifier = Modifier.fillMaxSize()) {
         CashuSearchBar(
             value = query,
@@ -134,15 +158,41 @@ fun MintDiscoveryContent(
             return@Column
         }
 
+        PullToRefreshBox(
+            isRefreshing = refreshing,
+            onRefresh = refreshDiscovery,
+            modifier = Modifier.fillMaxSize(),
+        ) {
         when {
             filtered.isEmpty() && !discoveryState.isDiscovering -> {
-                EmptyState(
-                    icon = Icons.Outlined.SignalCellularConnectedNoInternet0Bar,
-                    title = if (query.isBlank()) "Listening on Nostr…" else "No matches",
-                    supporting = if (query.isBlank())
-                        "Mints announced on Nostr show up here as they arrive."
-                    else null,
-                )
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .verticalScroll(rememberScrollState()),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    when {
+                        query.isNotBlank() -> EmptyState(
+                            icon = Icons.Outlined.SignalCellularConnectedNoInternet0Bar,
+                            title = "No matches",
+                            fillHeight = false,
+                        )
+                        discoveryState.hasCompletedDiscovery -> EmptyState(
+                            icon = Icons.Outlined.SearchOff,
+                            title = "No mints found",
+                            supporting = "Mints announced on Nostr show up here as they arrive. Pull down to refresh or tap Retry.",
+                            actionLabel = "Retry",
+                            onAction = refreshDiscovery,
+                            fillHeight = false,
+                        )
+                        else -> EmptyState(
+                            icon = Icons.Outlined.SignalCellularConnectedNoInternet0Bar,
+                            title = "Listening on Nostr…",
+                            supporting = "Mints announced on Nostr show up here as they arrive.",
+                            fillHeight = false,
+                        )
+                    }
+                }
             }
             else -> {
                 LazyColumn(
@@ -193,6 +243,7 @@ fun MintDiscoveryContent(
                     }
                 }
             }
+        }
         }
     }
 }

@@ -20,11 +20,16 @@ struct PrivacySettingsSection: View {
                     .padding(.horizontal, 4)
                     .padding(.vertical, 14)
 
-                Toggle("Use WebSockets", isOn: $settings.useWebsockets)
-                    .padding(.horizontal, 4)
-                    .padding(.vertical, 14)
-                    .disabled(!settings.checkIncomingInvoices && !settings.checkSentTokens)
-                    .opacity((settings.checkIncomingInvoices || settings.checkSentTokens) ? 1 : 0.5)
+                Toggle(isOn: $settings.useWebsockets) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Use WebSockets")
+                        Text("Required for Nostr discovery and live invoice updates.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                .padding(.horizontal, 4)
+                .padding(.vertical, 14)
 
                 Toggle("Paste ecash automatically", isOn: $settings.autoPasteEcashReceive)
                     .padding(.horizontal, 4)

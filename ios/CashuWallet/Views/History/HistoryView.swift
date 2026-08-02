@@ -432,19 +432,15 @@ struct HistoryView: View {
     }
 
     private func matchesSearch(_ item: HistoryItem) -> Bool {
-        let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        guard !query.isEmpty else { return true }
         switch item {
         case .transaction(let tx):
-            if rowTitle(for: tx).lowercased().contains(query) { return true }
-            if "\(tx.amount)".contains(query) { return true }
-            return false
+            return HistorySearch.matches(query: searchText, transaction: tx)
         case .request(let req):
-            if req.displayTitle.lowercased().contains(query) { return true }
-            if let amount = req.amount, "\(amount)".contains(query) { return true }
-            let received = totalReceived(for: req)
-            if received > 0, "\(received)".contains(query) { return true }
-            return false
+            return HistorySearch.matches(
+                query: searchText,
+                request: req,
+                receivedTotal: totalReceived(for: req)
+            )
         }
     }
 
@@ -657,6 +653,35 @@ struct HistoryView: View {
         return (sameYear ? Self.sameYearDateFormatter : Self.otherYearDateFormatter).string(from: date)
     }
 
+}
+
+/// History search matching, extracted from HistoryView so it is unit-testable.
+/// Title and memo match case-insensitively; amounts match as substrings of the
+/// raw value (Android `unifiedFiltered` parity — memos included for both
+/// transactions and Cashu Requests).
+enum HistorySearch {
+    static func matches(query: String, transaction: WalletTransaction) -> Bool {
+        let query = normalized(query)
+        guard !query.isEmpty else { return true }
+        if transaction.displayTitle.lowercased().contains(query) { return true }
+        if "\(transaction.amount)".contains(query) { return true }
+        if let memo = transaction.memo, memo.lowercased().contains(query) { return true }
+        return false
+    }
+
+    static func matches(query: String, request: CashuRequest, receivedTotal: UInt64) -> Bool {
+        let query = normalized(query)
+        guard !query.isEmpty else { return true }
+        if request.displayTitle.lowercased().contains(query) { return true }
+        if let amount = request.amount, "\(amount)".contains(query) { return true }
+        if receivedTotal > 0, "\(receivedTotal)".contains(query) { return true }
+        if let memo = request.memo, memo.lowercased().contains(query) { return true }
+        return false
+    }
+
+    private static func normalized(_ query: String) -> String {
+        query.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+    }
 }
 
 /// Mounts system `.searchable` only while History search is active. Keeping it

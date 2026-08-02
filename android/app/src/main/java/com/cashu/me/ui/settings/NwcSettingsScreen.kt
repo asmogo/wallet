@@ -250,7 +250,7 @@ fun NwcSettingsScreen(
             title = { Text("Reset connection") },
             text = {
                 Text(
-                    "This creates a new connection code. Apps paired with the current code will stop working.",
+                    "This creates a new connection code. Apps paired with the current code will stop working until you share the new code with them.",
                 )
             },
             confirmButton = {

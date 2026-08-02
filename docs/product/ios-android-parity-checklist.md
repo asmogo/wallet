@@ -102,7 +102,7 @@ Platform-specific capabilities remain intentionally outside parity, including iC
 
 ### History and transaction details
 
-- [ ] **[P1 · Android → iOS] Search transaction and request memos.** Android includes memos in History search; iOS searches titles and numeric amounts only. **Done when:** iOS matches memo text case-insensitively for both item types.
+- [x] **[P1 · Android → iOS] Search transaction and request memos.** Android includes memos in History search; iOS searches titles and numeric amounts only. **Done when:** iOS matches memo text case-insensitively for both item types.
 
 - [ ] **[P2 · iOS → Android] Search a Cashu Request’s Total received amount.** iOS includes the aggregate received value in search; Android only searches the requested amount. **Done when:** Android matches both configured and received totals using the same normalized amount formats as other History search.
 
@@ -116,11 +116,11 @@ Platform-specific capabilities remain intentionally outside parity, including iC
 
 ### Mints list, add, and discovery
 
-- [ ] **[P1 · iOS → Android] Add an explicit mint-discovery Retry or Refresh action.** iOS can restart discovery and reload missing previews; Android has no refresh gesture or retry action. **Done when:** Android users can restart discovery without closing the sheet, using a native button or gesture that is visible or accessibly discoverable.
+- [x] **[P1 · iOS → Android] Add an explicit mint-discovery Retry or Refresh action.** iOS can restart discovery and reload missing previews; Android has no refresh gesture or retry action. **Done when:** Android users can restart discovery without closing the sheet, using a native button or gesture that is visible or accessibly discoverable.
 
-- [ ] **[P2 · Converge] Unify discovery-disabled recovery copy.** iOS says WebSockets are required and points to Settings; Android more usefully names Settings → Privacy. **Done when:** both explain why discovery is off and give the exact setting path.
+- [x] **[P2 · Converge] Unify discovery-disabled recovery copy.** iOS says WebSockets are required and points to Settings; Android more usefully names Settings → Privacy. **Done when:** both explain why discovery is off and give the exact setting path.
 
-- [ ] **[P2 · iOS → Android] Make the discovery empty state reflect an exhausted result.** Android distinguishes active discovery (“Discovering mints…”) and a filtered-zero result (“No matches”), but after discovery completes with zero results it keeps showing “Listening on Nostr…”, mislabeling an exhausted discovery as ongoing; iOS shows a terminal “No Mints Found” with pull-to-retry. **Done when:** Android identifies the exhausted state, safely repeats the query when applicable, and names the Retry or Refresh action that is actually available.
+- [x] **[P2 · iOS → Android] Make the discovery empty state reflect an exhausted result.** Android distinguishes active discovery (“Discovering mints…”) and a filtered-zero result (“No matches”), but after discovery completes with zero results it keeps showing “Listening on Nostr…”, mislabeling an exhausted discovery as ongoing; iOS shows a terminal “No Mints Found” with pull-to-retry. **Done when:** Android identifies the exhausted state, safely repeats the query when applicable, and names the Retry or Refresh action that is actually available.
 
 ### Mint details
 

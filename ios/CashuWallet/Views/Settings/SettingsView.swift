@@ -82,7 +82,7 @@ struct SettingsView: View {
                     .buttonStyle(.plain)
                 }
 
-                Text("Cashu Wallet · 1.0.0")
+                Text(versionFooter)
                     .font(.caption2)
                     .foregroundStyle(.tertiary)
                     .frame(maxWidth: .infinity)
@@ -127,6 +127,15 @@ struct SettingsView: View {
     }
 
     // MARK: - Section + Row Helpers
+
+    /// Footer mirrors Android's "Cashu Wallet · <VERSION_NAME>", sourced from bundle
+    /// metadata so a version bump never leaves Settings showing a stale literal.
+    private var versionFooter: String {
+        if let version = AppVersion.displayString() {
+            return "Cashu Wallet · \(version)"
+        }
+        return "Cashu Wallet"
+    }
 
     @ViewBuilder
     private func sectionGroup<Content: View>(
