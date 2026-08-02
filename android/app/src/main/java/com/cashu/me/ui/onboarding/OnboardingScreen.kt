@@ -287,7 +287,10 @@ fun OnboardingScreen(
                         creating = true
                         createError = null
                         try {
-                            val mnemonic = walletManager.generateMnemonicForOnboarding()
+                            // Resume an interrupted onboarding with its original
+                            // seed — the user may have written those words down.
+                            val mnemonic = walletManager.persistedOnboardingMnemonic()
+                                ?: walletManager.generateMnemonicForOnboarding()
                             step = OnboardingStep.ShowMnemonic(mnemonic)
                         } catch (t: Throwable) {
                             createError = t.message ?: "Couldn't create a wallet."
@@ -592,11 +595,14 @@ private fun ShowMnemonicFace(
                 )
             }
         }
+        // The seed grid deliberately gets NO riseIn entrance: any motion on
+        // this block reads as a flicker on first paint, and recomposition
+        // mid-entrance restarts it. The step crossfade owns its appearance;
+        // the tap-to-reveal swap is untouched.
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(top = CashuTheme.spacing.section)
-                .riseIn(appeared, 1),
+                .padding(top = CashuTheme.spacing.section),
             verticalArrangement = Arrangement.spacedBy(CashuTheme.spacing.snug),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {

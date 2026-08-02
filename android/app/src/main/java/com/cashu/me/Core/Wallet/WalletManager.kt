@@ -126,7 +126,14 @@ class WalletManager(
                 // decrypting the seed, deriving keys, or starting background services.
                 // This is the same cache-first boundary used by iOS.
                 if (hasStoredWallet) {
-                    loadCachedState(needsOnboarding = false)
+                    // Wallets installed before the completion marker existed
+                    // are treated as fully onboarded; only installs from this
+                    // version on can be incomplete (e.g. process death before
+                    // the first-mint step was passed).
+                    if (!settingsManager.hasOnboardingCompletionMarker) {
+                        settingsManager.onboardingCompleted = true
+                    }
+                    loadCachedState(needsOnboarding = !settingsManager.onboardingCompleted)
                 } else {
                     update {
                         copy(
@@ -265,7 +272,28 @@ class WalletManager(
             "Seed phrase must be ${MnemonicInput.supportedWordCountLabel} words."
         }
         require(gateway.validateMnemonic(normalized)) { "Invalid seed phrase." }
+        // Onboarding resumed after process death: the same seed is already
+        // installed — reinstalling would wipe its partially added mints.
+        if (mutableState.value.isRuntimeReady &&
+            secureStorage.loadString(StorageKeys.secureWalletMnemonic) == normalized
+        ) {
+            return
+        }
         withLoading { installCleanWallet(normalized, needsOnboarding = true) }
+    }
+
+    /**
+     * Seed persisted by an onboarding run that never completed (process death
+     * before the first-mint step was passed). A resumed onboarding must re-show
+     * these same words — the user may have written them down already — instead
+     * of silently regenerating a new seed.
+     */
+    suspend fun persistedOnboardingMnemonic(): String? = withContext(Dispatchers.IO) {
+        if (settingsManager.onboardingCompleted) {
+            null
+        } else {
+            secureStorage.loadString(StorageKeys.secureWalletMnemonic)
+        }
     }
 
     /**
@@ -1210,6 +1238,7 @@ class WalletManager(
     }
 
     suspend fun completeOnboarding() {
+        settingsManager.onboardingCompleted = true
         loadCachedState(needsOnboarding = false)
         refreshBalance()
         loadTransactions()
@@ -1266,6 +1295,10 @@ class WalletManager(
             nostrMintBackupService.resetForWalletBoundary()
             databasePathManager.removeWalletFileBackups(backups)
             loadCachedState(needsOnboarding = needsOnboarding)
+            // A wallet installed during first-launch onboarding is incomplete
+            // until completeOnboarding(); installs from Settings skip
+            // onboarding entirely and are complete immediately.
+            settingsManager.onboardingCompleted = !needsOnboarding
         }.onFailure { error ->
             gateway.closeWalletRepository()
             walletStore.restoreWalletScopedData(walletSnapshot)

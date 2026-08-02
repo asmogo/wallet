@@ -286,16 +286,48 @@ final class WalletStoreTests: XCTestCase {
     func testIncompleteICloudRestoreRequiresOnboardingWithStoredSeed() {
         XCTAssertTrue(ICloudRestorePolicy.needsOnboarding(
             hasStoredMnemonic: true,
-            restoreIncomplete: true
+            restoreIncomplete: true,
+            onboardingCompleted: true
         ))
         XCTAssertFalse(ICloudRestorePolicy.needsOnboarding(
             hasStoredMnemonic: true,
-            restoreIncomplete: false
+            restoreIncomplete: false,
+            onboardingCompleted: true
         ))
         XCTAssertTrue(ICloudRestorePolicy.needsOnboarding(
             hasStoredMnemonic: false,
-            restoreIncomplete: false
+            restoreIncomplete: false,
+            onboardingCompleted: false
         ))
+    }
+
+    func testIncompleteOnboardingRequiresOnboardingWithStoredSeed() {
+        // Killed mid-onboarding: seed persisted, completion marker false.
+        XCTAssertTrue(ICloudRestorePolicy.needsOnboarding(
+            hasStoredMnemonic: true,
+            restoreIncomplete: false,
+            onboardingCompleted: false
+        ))
+    }
+
+    func testOnboardingCompletionMarkerRoundTrips() {
+        let suiteName = "OnboardingCompletionStateTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+
+        XCTAssertFalse(OnboardingCompletionState.hasMarker(defaults: defaults))
+        XCTAssertFalse(OnboardingCompletionState.isCompleted(defaults: defaults))
+
+        OnboardingCompletionState.setCompleted(false, defaults: defaults)
+        XCTAssertTrue(OnboardingCompletionState.hasMarker(defaults: defaults))
+        XCTAssertFalse(OnboardingCompletionState.isCompleted(defaults: defaults))
+
+        OnboardingCompletionState.setCompleted(true, defaults: defaults)
+        XCTAssertTrue(OnboardingCompletionState.hasMarker(defaults: defaults))
+        XCTAssertTrue(OnboardingCompletionState.isCompleted(defaults: defaults))
+
+        OnboardingCompletionState.clear(defaults: defaults)
+        XCTAssertFalse(OnboardingCompletionState.hasMarker(defaults: defaults))
     }
 
     func testIncompleteICloudRestoreOverridesPublishedCacheAfterRuntimeFailure() {

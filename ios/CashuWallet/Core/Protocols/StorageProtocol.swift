@@ -102,6 +102,11 @@ enum StorageKeys {
     static let processedNPCQuotes = "wallet.processedNPCQuotes"
     static let nostrMintBackupLastBackupDate = "wallet.nostrMintBackup.lastBackupDate"
 
+    // Onboarding completion marker. Written `false` when a wallet is installed
+    // and `true` only when onboarding is fully passed; absent on installs that
+    // predate the marker (treated as completed at launch).
+    static let onboardingCompleted = "cashu.local.onboardingCompleted"
+
     // Cashu Requests (receive intents shown in History). Key names predate the
     // `wallet.` prefix convention and must stay stable for existing installs,
     // so they are wallet-scoped via `walletDataKeys` membership instead.
@@ -249,6 +254,7 @@ enum StorageKeys {
 
     static var walletBoundaryKeys: [String] {
         walletDataKeys + walletDataLegacyKeys + walletScopedSettingsKeys + walletScopedSettingsLegacyKeys
+            + [onboardingCompleted]
     }
     
     // Keychain (Secure Storage)
