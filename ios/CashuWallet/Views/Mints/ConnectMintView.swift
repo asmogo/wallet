@@ -66,60 +66,53 @@ struct ConnectMintPicker: View {
     var onHeightChange: (CGFloat) -> Void = { _ in }
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 0) {
-                if context.showsHeadline {
-                    Text(ConnectMintContext.headline)
-                        .font(.title3.weight(.medium))
-                        .padding(.bottom, ConnectMintMetrics.headlineToSubtitle)
-                }
+        VStack(alignment: .leading, spacing: 0) {
+            if context.showsHeadline {
+                Text(ConnectMintContext.headline)
+                    .font(.title3.weight(.medium))
+                    .padding(.bottom, ConnectMintMetrics.headlineToSubtitle)
+            }
 
-                Text(ConnectMintContext.subtitle)
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
+            Text(ConnectMintContext.subtitle)
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
 
-                SuggestedMintsSection(existingURLs: existingURLs, onAdd: onAdd)
+            SuggestedMintsSection(existingURLs: existingURLs, onAdd: onAdd)
 
-                if let errorMessage {
-                    InlineNotice(message: errorMessage, severity: .error)
-                        .padding(.top, ConnectMintMetrics.footerSpacing)
-                }
+            if let errorMessage {
+                InlineNotice(message: errorMessage, severity: .error)
+                    .padding(.top, ConnectMintMetrics.footerSpacing)
+            }
 
-                // Spacing lives in each label's vertical padding so the links keep
-                // 44pt hit targets; stacking them with plain spacing would leave
-                // ~20pt-tall taps.
-                VStack(spacing: 0) {
+            // Spacing lives in each label's vertical padding so the links keep
+            // 44pt hit targets; stacking them with plain spacing would leave
+            // ~20pt-tall taps.
+            VStack(spacing: 0) {
+                footerLink(
+                    title: "Add custom mint URL",
+                    systemImage: "plus",
+                    route: .addCustom
+                )
+                // Discovery rides Nostr relays over WebSockets. With the
+                // setting off it can only show a "turn this on" dead end, so
+                // it isn't offered at all.
+                if discoveryAvailable {
                     footerLink(
-                        title: "Add custom mint URL",
-                        systemImage: "plus",
-                        route: .addCustom
+                        title: "Discover mints",
+                        systemImage: "magnifyingglass",
+                        route: .discover
                     )
-                    // Discovery rides Nostr relays over WebSockets. With the
-                    // setting off it can only show a "turn this on" dead end, so
-                    // it isn't offered at all.
-                    if discoveryAvailable {
-                        footerLink(
-                            title: "Discover mints",
-                            systemImage: "magnifyingglass",
-                            route: .discover
-                        )
-                    }
                 }
-                // The first link carries 12pt of its own padding; net gap is the
-                // designed 20pt.
-                .padding(.top, ConnectMintMetrics.rowsToFooter - ConnectMintMetrics.footerSpacing)
             }
-            .padding(.horizontal, ConnectMintMetrics.gutter)
-            .padding(.top, 8)
-            .padding(.bottom, 16)
-            .onGeometryChange(for: CGFloat.self) { proxy in
-                proxy.size.height
-            } action: { newHeight in
-                onHeightChange(newHeight)
-            }
+            // The first link carries 12pt of its own padding; net gap is the
+            // designed 20pt.
+            .padding(.top, ConnectMintMetrics.rowsToFooter - ConnectMintMetrics.footerSpacing)
         }
-        .scrollBounceBehavior(.basedOnSize)
+        .padding(.horizontal, ConnectMintMetrics.gutter)
+        .padding(.top, 8)
+        .padding(.bottom, 16)
+        .contentFitMeasured { onHeightChange($0) }
     }
 
     @ViewBuilder
@@ -261,11 +254,8 @@ struct ConnectMintSheet: View {
     @ObservedObject private var settings = SettingsManager.shared
 
     @State private var route: ConnectMintRoute?
-    @State private var contentHeight: CGFloat = 220
+    @State private var contentHeight: CGFloat = 0
     @State private var addMintError: String?
-
-    /// Matches the Send sheet's compact-detent chrome allowance.
-    private let sheetChrome: CGFloat = 108
 
     var body: some View {
         NavigationStack {
@@ -296,9 +286,7 @@ struct ConnectMintSheet: View {
         // Both the shortlist and the pushed URL step hug their content, matching
         // Android. Only discovery fills the sheet — it hosts a scrolling list and
         // needs bounded height.
-        .presentationDetents(
-            route == .discover ? [.large] : [.height(contentHeight + sheetChrome)]
-        )
+        .contentFitDetent(contentHeight, enabled: route != .discover)
         .presentationDragIndicator(.visible)
         // Hugging the shortlist, this floats over the canvas and keeps the
         // system's elevated background; only the pushed full-height steps adopt
