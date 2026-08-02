@@ -114,6 +114,8 @@
 		EE00000000000003 /* SettingsStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = EE00000000000013 /* SettingsStore.swift */; };
 		EE00000000000004 /* TokenParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = EE00000000000014 /* TokenParser.swift */; };
 		EE00000000000005 /* AmountFormatter.swift in Sources */ = {isa = PBXBuildFile; fileRef = EE00000000000015 /* AmountFormatter.swift */; };
+		AV00000000000001 /* AppVersion.swift in Sources */ = {isa = PBXBuildFile; fileRef = AV00000000000011 /* AppVersion.swift */; };
+		AV00000000000002 /* AppVersionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AV00000000000012 /* AppVersionTests.swift */; };
 		EE00000000000006 /* LightningRequestParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = EE00000000000016 /* LightningRequestParser.swift */; };
 		F100000000000001 /* NDEFTextRecordCoder.swift in Sources */ = {isa = PBXBuildFile; fileRef = F200000000000001 /* NDEFTextRecordCoder.swift */; };
 		F100000000000002 /* NFCReaderDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = F200000000000002 /* NFCReaderDelegate.swift */; };
@@ -300,6 +302,8 @@
 		T1B000000000000D /* CashuRequestRouteExplanationTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = CashuRequestRouteExplanationTests.swift; path = CashuWalletTests/CashuRequestRouteExplanationTests.swift; sourceTree = "<group>"; };
 		C0A100000000000000000001 /* CashuRequestPaymentObservationTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = CashuRequestPaymentObservationTests.swift; path = CashuWalletTests/CashuRequestPaymentObservationTests.swift; sourceTree = "<group>"; };
 		T1B000000000000E /* CrashReportSanitizerTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = CrashReportSanitizerTests.swift; path = CashuWalletTests/CrashReportSanitizerTests.swift; sourceTree = "<group>"; };
+		AV00000000000011 /* AppVersion.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppVersion.swift; sourceTree = "<group>"; };
+		AV00000000000012 /* AppVersionTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = AppVersionTests.swift; path = CashuWalletTests/AppVersionTests.swift; sourceTree = "<group>"; };
 		T1B000000000000F /* HistorySearchTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = HistorySearchTests.swift; path = CashuWalletTests/HistorySearchTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
@@ -355,6 +359,7 @@
 				T1B000000000000D /* CashuRequestRouteExplanationTests.swift */,
 				C0A100000000000000000001 /* CashuRequestPaymentObservationTests.swift */,
 				T1B000000000000E /* CrashReportSanitizerTests.swift */,
+				AV00000000000012 /* AppVersionTests.swift */,
 				T1B000000000000F /* HistorySearchTests.swift */,
 			);
 			name = CashuWalletTests;
@@ -422,6 +427,7 @@
 				2100000000000005 /* KeychainService.swift */,
 				EE00000000000014 /* TokenParser.swift */,
 				EE00000000000015 /* AmountFormatter.swift */,
+				AV00000000000011 /* AppVersion.swift */,
 				EE00000000000016 /* LightningRequestParser.swift */,
 				EE00000000000013 /* SettingsStore.swift */,
 				EE00000000000012 /* WalletStore.swift */,
@@ -902,6 +908,7 @@
 				T2B000000000000D /* CashuRequestRouteExplanationTests.swift in Sources */,
 				C0A100000000000000000002 /* CashuRequestPaymentObservationTests.swift in Sources */,
 				T2B000000000000E /* CrashReportSanitizerTests.swift in Sources */,
+				AV00000000000002 /* AppVersionTests.swift in Sources */,
 				T2B000000000000F /* HistorySearchTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -994,6 +1001,7 @@
 				DD00000000000004 /* ErrorBannerView.swift in Sources */,
 				EE00000000000004 /* TokenParser.swift in Sources */,
 				EE00000000000005 /* AmountFormatter.swift in Sources */,
+				AV00000000000001 /* AppVersion.swift in Sources */,
 				EE00000000000006 /* LightningRequestParser.swift in Sources */,
 				EE00000000000003 /* SettingsStore.swift in Sources */,
 				EE00000000000002 /* WalletStore.swift in Sources */,
