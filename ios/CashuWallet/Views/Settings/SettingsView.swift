@@ -1666,47 +1666,65 @@ struct MintPickerSheet: View {
 struct ImportNsecSheet: View {
     @Binding var nsecText: String
     let replacementWarning: String
-    let onImport: () -> Void
+    /// Returns nil on success, or a message to render here. Reporting back keeps
+    /// a decode failure visible instead of leaving it on the screen behind us.
+    let onImport: () -> String?
 
     @Environment(\.dismiss) private var dismiss
     @State private var errorMessage: String?
     @State private var showReplacementConfirm = false
 
+    private var canImport: Bool {
+        !nsecText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
     var body: some View {
         NavigationStack {
-            Form {
-                Section {
-                    TextField("nsec1...", text: $nsecText)
-                        .font(.system(.body, design: .monospaced))
-                        .textInputAutocapitalization(.never)
-                        .autocorrectionDisabled()
-                } footer: {
-                    Text("Enter your nsec (Nostr private key) to use it for your Lightning address.")
-                }
+            ScrollView {
+                LazyVStack(spacing: 0) {
+                    SettingsSectionGroup("Nostr private key") {
+                        HStack(spacing: 10) {
+                            TextField("nsec1…", text: $nsecText)
+                                .font(.system(.body, design: .monospaced))
+                                .textInputAutocapitalization(.never)
+                                .autocorrectionDisabled()
+                                .onSubmit(review)
 
-                Section {
-                    Button("Paste from Clipboard") {
-                        if let text = UIPasteboard.general.string {
-                            nsecText = text.trimmingCharacters(in: .whitespacesAndNewlines)
+                            Button(action: pasteFromClipboard) {
+                                Image(systemName: "doc.on.clipboard")
+                                    .font(.title3)
+                                    .foregroundStyle(Color.primary)
+                            }
+                            .buttonStyle(.plain)
+                            .accessibilityLabel("Paste from clipboard")
                         }
+                        .padding(14)
+                        .liquidGlass(in: RoundedRectangle(cornerRadius: 14))
                     }
-                }
 
-                if let error = errorMessage {
-                    Section {
-                        InlineNotice(message: error, severity: .error)
+                    if let errorMessage {
+                        InlineNotice(message: errorMessage, severity: .error)
+                            .padding(.horizontal, 6)
+                            .padding(.top, 4)
+                            .transition(.opacity)
                     }
-                }
 
-                Section {
-                    Button("Review Import") {
-                        if validateNsec() { showReplacementConfirm = true }
+                    SettingsSectionFooter {
+                        Text("Enter your nsec (Nostr private key) to use it for your Lightning address.")
                     }
-                    .disabled(nsecText.isEmpty)
+
+                    Button("Review Import", action: review)
+                        .glassButton()
+                        .disabled(!canImport)
+                        .padding(.top, 8)
                 }
+                .padding(.horizontal)
+                .padding(.bottom, 32)
             }
+            .animation(.easeInOut(duration: 0.2), value: errorMessage)
             .navigationTitle("Import Key")
             .navigationBarTitleDisplayMode(.inline)
+            .toolbarBackground(.hidden, for: .navigationBar)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") { dismiss() }
@@ -1715,10 +1733,22 @@ struct ImportNsecSheet: View {
         }
         .alert("Replace Nostr Key?", isPresented: $showReplacementConfirm) {
             Button("Cancel", role: .cancel) {}
-            Button("Import", role: .destructive) { onImport() }
+            Button("Import", role: .destructive) { errorMessage = onImport() }
         } message: {
             Text(replacementWarning)
         }
+    }
+
+    private func pasteFromClipboard() {
+        if let text = UIPasteboard.general.string {
+            nsecText = text.trimmingCharacters(in: .whitespacesAndNewlines)
+            errorMessage = nil
+        }
+    }
+
+    private func review() {
+        guard canImport else { return }
+        if validateNsec() { showReplacementConfirm = true }
     }
 
     private func validateNsec() -> Bool {

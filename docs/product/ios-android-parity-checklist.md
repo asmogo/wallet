@@ -178,7 +178,7 @@ Platform-specific capabilities remain intentionally outside parity, including iC
 
 ### Settings — Nostr identity and relays
 
-- [ ] **[P2 · iOS → Android] Add the Nostr feature introduction.** iOS explains that Nostr powers the Lightning address, npub.cash requests, encrypted backups, and Wallet Connect; Android starts with signer controls. **Done when:** Android provides equivalent user context before technical key management.
+- [x] **[P2 · iOS → Android] Add the Nostr feature introduction.** iOS explains that Nostr powers the Lightning address, npub.cash requests, encrypted backups, and Wallet Connect; Android starts with signer controls. **Done when:** Android provides equivalent user context before technical key management.
 
 - [x] **[P0 · iOS → Android] Do not silently fail signer changes or key generation/reset.** iOS catches and renders errors; Android wraps several operations in `runCatching` and discards failures. **Done when:** every Android identity mutation has progress where needed, visible user-facing failure feedback, and unchanged state on failure.
 
@@ -186,13 +186,31 @@ Platform-specific capabilities remain intentionally outside parity, including iC
 
 - [x] **[P1 · iOS → Android] Warn next to private-key reveal and copy.** Android already authenticates reveal/copy but shows masked/reveal/copy controls without nearby consequence text. **Done when:** Android explains that the nsec controls the user’s Nostr identity and Lightning address and must not be shared, before or alongside the authenticated actions.
 
-- [ ] **[P1 · Converge] Explain the consequences of nsec import.** Both platforms validate imports and report errors, but neither confirms replacement: iOS shows only a Lightning-address footer with no confirmation step; Android shows a bare text field. **Done when:** both state that importing replaces the current custom identity and affects the Lightning address and Nostr apps/messages before confirmation, while keeping validation errors user-facing.
+- [x] **[P1 · Converge] Explain the consequences of nsec import.** Both platforms validate imports and report errors, but neither confirms replacement: iOS shows only a Lightning-address footer with no confirmation step; Android shows a bare text field. **Done when:** both state that importing replaces the current custom identity and affects the Lightning address and Nostr apps/messages before confirmation, while keeping validation errors user-facing.
 
 - [x] **[P0 · Converge] Make every identity-replacement warning complete.** Current generate/reset warnings split consequences between platforms, while import and signer-change paths do not consistently confirm replacement. **Done when:** generate, import, reset, and signer-change paths warn as applicable that the Lightning address changes, Nostr apps/messages use a different identity, and the old key is replaced before destructive confirmation.
 
 - [x] **[P2 · iOS → Android] Give key generation native destructive semantics.** Android’s Generate action is visually neutral even though it replaces an identity; iOS uses a destructive confirmation role. **Done when:** Android uses the platform’s destructive semantic role and accessible announcement for the replacement action. It need not copy iOS styling.
 
 - [x] **[P2 · iOS → Android] Add the relay-purpose explanation.** iOS explains that relays synchronize npub.cash-compatible data and backups; Android lists relays without that context. **Done when:** Android explains why changing the relay list affects wallet features.
+
+- [x] **[P1 · Android] Rebuild the Nostr screen on the shared settings recipe.** Android led with a segmented signer picker, two raw `npub`/`hex` inspector rows, an on-screen masked nsec, and five stacked full-width buttons; every sibling settings screen already used `SectionHeader` + `KeyCard` + plain rows + footer. **Done when:** the Nostr screen reads as a sibling of Locked Ecash and of iOS's Nostr screen while staying Material 3.
+
+- [x] **[P0 · Android] Validate relay input instead of failing silently.** `SettingsManager.addRelay` accepted anything and no-opped on invalid or duplicate values, so the Add-relay dialog's error branch was unreachable — typing a bad URL closed the dialog and did nothing. **Done when:** Android requires a `ws://`/`wss://` scheme, rejects duplicates case-insensitively, and shows iOS's wording for both.
+
+- [x] **[P1 · Android] Let a removed relay stay removed.** `SettingsStore.nostrRelays` fell back to the defaults whenever the stored list was empty, so removing the last relay silently restored all three. **Done when:** defaults seed only when the key has never been written, an emptied list persists, and the screen explains which features are off until a relay is added.
+
+- [x] **[P2 · Android] Give the Nostr surface one destructive vocabulary.** Generate used `DestructiveTextButton`, Reset used raw error-coloured text, and Switch was styled neutrally, while the on-screen Generate trigger was the neutral primary CTA. **Done when:** every identity-replacement confirmation uses the same destructive control and the triggers are plain rows.
+
+- [x] **[P2 · Android] Stop announcing copy affordances as "Edit".** `InspectorRow(editable = true)` drew a pencil labelled "Edit npub" for tap-to-copy on the Nostr screen and "Edit Mint" for a picker on Wallet Connect. **Done when:** copy targets read as copy and pickers read as navigation.
+
+- [x] **[Android · Divergence] Confirm before discarding a custom relay list.** *Reset to default relays* asks for confirmation when the current list holds a relay the defaults don't; single-relay removal stays instant. iOS confirms neither. Deliberate: reset is the only relay action that can destroy several custom entries at once.
+
+- [x] **[P2 · iOS] Remove the unreachable "Switch Nostr Key?" confirmation.** `switchSignerType(to:)` always short-circuited to the generate or reset alert, so `pendingSignerType` was never set and the alert was dead code. **Done when:** iOS drops the alert and its warning string; Android keeps its equivalent, where a partially-restored state can still reach the switch path.
+
+- [x] **[P1 · iOS] Make a failed nsec import visible.** `importNsec()` only closed the sheet on success and wrote the error to state rendered *behind* the still-open sheet, so a bech32 decode failure looked like nothing happened. **Done when:** the import sheet renders its own failure.
+
+- [x] **[P2 · iOS] Move the import sheet onto the single-canvas recipe.** `ImportNsecSheet` was the last `Form`-based screen in an otherwise single-canvas Nostr flow. **Done when:** it uses the same section groups, glass field, and footer as the relay and P2PK import surfaces.
 
 ### Settings — Wallet Connect and locked-ecash keys
 
@@ -238,9 +256,9 @@ These items may improve efficiency or discoverability but are not required for f
 
 - [ ] **[Optional · Android → iOS] Add a persistent visible Copy Lightning address action.** iOS already provides QR, Share, and context-menu access. **Done when:** discoverability evidence supports another control and the added action copies the full address with accessible confirmation.
 
-- [ ] **[Optional · Android → iOS] Expose the Nostr public-key hex in an advanced view.** **Done when:** the full value is copyable without displacing npub as the primary identity or cluttering the normal surface.
+- [x] **[Optional · Android → iOS] Expose the Nostr public-key hex in an advanced view.** **Done when:** the full value is copyable without displacing npub as the primary identity or cluttering the normal surface.
 
-- [ ] **[Optional · iOS → Android] Add Copy to relay rows.** Native text selection or another existing route may already be sufficient. **Done when:** the action copies the full relay URL and acknowledges success accessibly.
+- [x] **[Optional · iOS → Android] Add Copy to relay rows.** Native text selection or another existing route may already be sufficient. **Done when:** the action copies the full relay URL and acknowledges success accessibly.
 
 ## Related non-parity follow-ups
 

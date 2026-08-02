@@ -5,32 +5,24 @@ import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.spring
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
-import androidx.compose.material.icons.outlined.Check
-import androidx.compose.material.icons.outlined.Close
+import androidx.compose.material.icons.outlined.AddCircleOutline
 import androidx.compose.material.icons.outlined.Bolt
-import androidx.compose.material.icons.outlined.ContentCopy
-import androidx.compose.material.icons.outlined.Visibility
-import androidx.compose.material.icons.outlined.VisibilityOff
+import androidx.compose.material.icons.outlined.FileDownload
+import androidx.compose.material.icons.outlined.RestartAlt
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.SegmentedButton
-import androidx.compose.material3.SegmentedButtonDefaults
-import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -43,52 +35,39 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.text.AnnotatedString
-import androidx.compose.ui.text.font.FontFamily
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import com.cashu.me.Core.AppLockManager
-import com.cashu.me.Core.NostrService
-import com.cashu.me.Core.NostrSignerSelectionAction
-import com.cashu.me.Core.NostrSignerType
-import com.cashu.me.Core.NwcManager
-import com.cashu.me.Core.SettingsManager
-import com.cashu.me.Core.nostrSignerSelectionAction
-import com.cashu.me.ui.components.CanvasDivider
-import com.cashu.me.ui.components.CashuTextField
-import com.cashu.me.ui.components.DestructiveTextButton
-import com.cashu.me.ui.components.GhostButton
-import com.cashu.me.ui.components.IconSwap
-import com.cashu.me.ui.components.InlineNotice
-import com.cashu.me.ui.components.InspectorRow
-import com.cashu.me.ui.components.NavRow
-import com.cashu.me.ui.components.NoticeSeverity
-import com.cashu.me.ui.components.PrimaryButton
-import com.cashu.me.ui.components.SectionHeader
-import com.cashu.me.ui.components.ToolbarIcon
-import com.cashu.me.ui.security.rememberWalletAuthenticationLauncher
-import com.cashu.me.ui.theme.CashuTheme
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import com.cashu.me.Core.AppLockManager
+import com.cashu.me.Core.NostrService
+import com.cashu.me.Core.NostrSignerSelectionAction
+import com.cashu.me.Core.NostrSignerType
+import com.cashu.me.Core.NwcManager
+import com.cashu.me.Core.RelayAddResult
+import com.cashu.me.Core.SettingsManager
+import com.cashu.me.Core.nostrSignerSelectionAction
+import com.cashu.me.ui.components.CanvasDivider
+import com.cashu.me.ui.components.CashuTextField
+import com.cashu.me.ui.components.DestructiveTextButton
+import com.cashu.me.ui.components.InlineNotice
+import com.cashu.me.ui.components.NavRow
+import com.cashu.me.ui.components.NoticeSeverity
+import com.cashu.me.ui.components.SectionHeader
+import com.cashu.me.ui.components.SettingsFooterText
+import com.cashu.me.ui.components.ToolbarIcon
+import com.cashu.me.ui.theme.CashuTheme
 
-private const val NsecCopiedFeedbackMillis = 2_000L
+private const val RelayCopiedFeedbackMillis = 2_000L
+
+/** Shown inside the reveal sheet, at the moment the key is about to be exposed. */
 internal const val NostrPrivateKeyWarningText =
     "Your nsec controls your Nostr identity and Lightning address. Never share it."
-
-@Composable
-internal fun NostrPrivateKeyWarning(modifier: Modifier = Modifier) {
-    InlineNotice(
-        text = NostrPrivateKeyWarningText,
-        modifier = modifier,
-        severity = NoticeSeverity.Warning,
-    )
-}
 
 internal enum class NostrIdentityMutation(
     val progressMessage: String,
@@ -120,30 +99,39 @@ fun NostrScreen(
     val settings by settingsManager.state.collectAsState()
     val nwcState by nwcManager.state.collectAsState()
     val clipboard = LocalClipboardManager.current
-    val authenticate = rememberWalletAuthenticationLauncher(appLockManager)
     val scope = rememberCoroutineScope()
-    // Keep the authenticated value tied to this key. Replacing/importing/resetting
-    // the Nostr key creates fresh hidden state, even if the previous key was visible.
-    var revealedNsec by remember(nostrState.nsec) { mutableStateOf<String?>(null) }
-    var nsecCopied by remember { mutableStateOf(false) }
-    LaunchedEffect(nsecCopied) {
-        if (nsecCopied) {
-            delay(NsecCopiedFeedbackMillis)
-            nsecCopied = false
-        }
-    }
+    var showNsecReveal by remember { mutableStateOf(false) }
     var showImport by remember { mutableStateOf(false) }
     var importInput by remember { mutableStateOf("") }
     var pendingImportNsec by remember { mutableStateOf<String?>(null) }
     var showImportConfirm by remember { mutableStateOf(false) }
     var importError by remember { mutableStateOf<String?>(null) }
-    var addRelayOpen by remember { mutableStateOf(false) }
+    var relayInput by remember { mutableStateOf("") }
     var addRelayError by remember { mutableStateOf<String?>(null) }
+    var copiedRelay by remember { mutableStateOf<String?>(null) }
+    var showRelayResetConfirm by remember { mutableStateOf(false) }
     var showMissingCustomKeyChoice by remember { mutableStateOf(false) }
     var showGenerateConfirm by remember { mutableStateOf(false) }
     var showResetConfirm by remember { mutableStateOf(false) }
     var identityMutation by remember { mutableStateOf<NostrIdentityMutation?>(null) }
     var identityMutationError by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(copiedRelay) {
+        if (copiedRelay != null) {
+            delay(RelayCopiedFeedbackMillis)
+            copiedRelay = null
+        }
+    }
+
+    fun submitRelay() {
+        when (val result = settingsManager.addRelay(relayInput)) {
+            null -> Unit
+            is RelayAddResult.Added -> {
+                relayInput = ""
+                addRelayError = null
+            }
+            is RelayAddResult.Rejected -> addRelayError = result.message
+        }
+    }
 
     fun performIdentityMutation(
         mutation: NostrIdentityMutation,
@@ -189,263 +177,172 @@ fun NostrScreen(
                 .fillMaxSize()
                 .padding(padding)
                 .verticalScroll(rememberScrollState()),
-            verticalArrangement = Arrangement.spacedBy(CashuTheme.spacing.snug),
         ) {
-            SectionHeader("Signer")
-            Column(modifier = Modifier.fillMaxWidth().padding(horizontal = CashuTheme.spacing.comfortable)) {
-                SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
-                    NostrSignerType.entries.forEachIndexed { index, kind ->
-                        SegmentedButton(
-                            shape = SegmentedButtonDefaults.itemShape(
-                                index = index,
-                                count = NostrSignerType.entries.size,
-                            ),
-                            selected = kind == nostrState.signerType,
-                            enabled = identityMutation == null,
-                            onClick = {
-                                when (
-                                    nostrSignerSelectionAction(
-                                        current = nostrState.signerType,
-                                        requested = kind,
-                                        hasCustomKey = nostrService.hasCustomPrivateKey(),
-                                    )
-                                ) {
-                                    NostrSignerSelectionAction.NoChange -> Unit
-                                    NostrSignerSelectionAction.ChooseCustomKey -> {
-                                        showMissingCustomKeyChoice = true
-                                    }
-                                    NostrSignerSelectionAction.Switch -> {
-                                        if (kind == NostrSignerType.Seed) {
-                                            showResetConfirm = true
-                                        } else {
-                                            pendingSignerType = kind
-                                        }
-                                    }
-                                }
-                            },
-                        ) { Text(kind.displayName) }
-                    }
-                }
-                Spacer(Modifier.height(CashuTheme.spacing.snug))
-                Text(
-                    text = when (nostrState.signerType) {
-                        NostrSignerType.Seed -> "Keys are derived from your wallet seed."
-                        NostrSignerType.PrivateKey -> "Custom key stored in secure storage."
-                    },
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
+            Text(
+                text = "Nostr powers your Lightning address, npub.cash requests, " +
+                    "encrypted backups, and Wallet Connect.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(
+                    horizontal = CashuTheme.spacing.comfortable,
+                    vertical = CashuTheme.spacing.snug,
+                ),
+            )
+            Spacer(Modifier.height(CashuTheme.spacing.default))
 
-            SectionHeader("Public identity")
-            InspectorRow(
-                label = "npub",
-                value = nostrState.npub.ifBlank { "—" },
-                valueMonospaced = true,
-                onClick = { clipboard.setText(AnnotatedString(nostrState.npub)) },
-                editable = nostrState.npub.isNotBlank(),
-            )
-            CanvasDivider(leadingInset = 16.dp)
-            InspectorRow(
-                label = "hex",
-                value = nostrState.publicKeyHex.ifBlank { "—" },
-                valueMonospaced = true,
-                onClick = { clipboard.setText(AnnotatedString(nostrState.publicKeyHex)) },
-                editable = nostrState.publicKeyHex.isNotBlank(),
-            )
-
-            SectionHeader("Private key")
-            NostrPrivateKeyWarning(
-                modifier = Modifier.padding(horizontal = CashuTheme.spacing.comfortable),
-            )
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(
-                        horizontal = CashuTheme.spacing.comfortable,
-                        vertical = CashuTheme.spacing.snug,
-                    ),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(CashuTheme.spacing.snug),
-            ) {
-                Text(
-                    text = revealedNsec?.ifBlank { "—" } ?: "•".repeat(12),
-                    style = MaterialTheme.typography.bodyMedium.copy(fontFamily = FontFamily.Monospace),
-                    color = MaterialTheme.colorScheme.onSurface,
-                    modifier = Modifier.weight(1f),
-                    maxLines = 1,
-                    overflow = TextOverflow.MiddleEllipsis,
-                )
-                IconButton(
-                    onClick = {
-                        if (revealedNsec != null) {
-                            revealedNsec = null
-                        } else {
-                            authenticate("Reveal your Nostr private key") {
-                                revealedNsec = nostrState.nsec
+            NostrKeySection(
+                npub = nostrState.npub,
+                publicKeyHex = nostrState.publicKeyHex,
+                isReady = nostrState.isInitialized && nostrState.npub.isNotBlank(),
+                signerType = nostrState.signerType,
+                isMutating = identityMutation != null,
+                progressMessage = identityMutation?.progressMessage,
+                errorMessage = identityMutationError,
+                onRevealNsec = { showNsecReveal = true },
+                onSelectSigner = { kind ->
+                    when (
+                        nostrSignerSelectionAction(
+                            current = nostrState.signerType,
+                            requested = kind,
+                            hasCustomKey = nostrService.hasCustomPrivateKey(),
+                        )
+                    ) {
+                        NostrSignerSelectionAction.NoChange -> Unit
+                        NostrSignerSelectionAction.ChooseCustomKey ->
+                            showMissingCustomKeyChoice = true
+                        NostrSignerSelectionAction.Switch ->
+                            if (kind == NostrSignerType.Seed) {
+                                showResetConfirm = true
+                            } else {
+                                pendingSignerType = kind
                             }
-                        }
-                    },
-                ) {
-                    Icon(
-                        imageVector = if (revealedNsec != null) Icons.Outlined.VisibilityOff
-                        else Icons.Outlined.Visibility,
-                        contentDescription = if (revealedNsec != null) "Hide" else "Reveal",
-                    )
-                }
-                IconButton(
-                    onClick = {
-                        authenticate("Copy your Nostr private key") {
-                            clipboard.setText(AnnotatedString(nostrState.nsec))
-                            nsecCopied = true
-                        }
-                    },
-                    enabled = nostrState.nsec.isNotBlank(),
-                ) {
-                    IconSwap(
-                        icon = if (nsecCopied) Icons.Outlined.Check else Icons.Outlined.ContentCopy,
-                        contentDescription = "Copy nsec",
-                        tint = if (nsecCopied) CashuTheme.colors.received else MaterialTheme.colorScheme.onSurface,
-                        modifier = Modifier.size(CashuTheme.spacing.comfortable),
-                    )
-                }
-            }
-            Column(
-                modifier = Modifier.fillMaxWidth().padding(horizontal = CashuTheme.spacing.comfortable),
-                verticalArrangement = Arrangement.spacedBy(CashuTheme.spacing.snug),
-            ) {
-                PrimaryButton(
-                    text = "Generate new key",
-                    onClick = { showGenerateConfirm = true },
-                    enabled = identityMutation == null,
-                    loading = identityMutation == NostrIdentityMutation.GenerateKey,
-                )
-                GhostButton(
-                    text = "Import nsec…",
-                    onClick = { showImport = true },
-                    modifier = Modifier.fillMaxWidth(),
-                    enabled = identityMutation == null,
-                )
-                GhostButton(
-                    text = "Reset to wallet seed",
-                    onClick = { showResetConfirm = true },
-                    modifier = Modifier.fillMaxWidth(),
-                    enabled = nostrState.signerType != NostrSignerType.Seed && identityMutation == null,
-                )
-                identityMutation?.let {
-                    InlineNotice(
-                        text = it.progressMessage,
-                        severity = NoticeSeverity.Info,
-                    )
-                }
-                identityMutationError?.let { InlineNotice(text = it) }
-            }
+                    }
+                },
+                onGenerateKey = { showGenerateConfirm = true },
+                onImportKey = { showImport = true },
+                onResetToSeed = { showResetConfirm = true },
+            )
 
             SectionHeader("Relays")
-            if (settings.nostrRelays.isEmpty()) {
-                Text(
-                    text = "Using defaults (relay.damus.io, nos.lol, primal.net, 8333.space).",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+            NostrRelayInputRow(
+                value = relayInput,
+                onValueChange = { relayInput = it; addRelayError = null },
+                onSubmit = { submitRelay() },
+                isError = addRelayError != null,
+                modifier = Modifier.padding(horizontal = CashuTheme.spacing.comfortable),
+            )
+            addRelayError?.let {
+                InlineNotice(
+                    text = it,
                     modifier = Modifier.padding(
                         horizontal = CashuTheme.spacing.comfortable,
                         vertical = CashuTheme.spacing.snug,
                     ),
                 )
-            } else {
-                // Relay add/remove animates the list resize (iOS
-                // .animation(value: settings.nostrRelays) parity).
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .animateContentSize(spring(stiffness = Spring.StiffnessMediumLow)),
-                ) {
+            }
+            Spacer(Modifier.height(CashuTheme.spacing.snug))
+            // Relay add/remove animates the list resize (iOS
+            // .animation(value: settings.nostrRelays) parity).
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .animateContentSize(spring(stiffness = Spring.StiffnessMediumLow)),
+            ) {
+                if (settings.nostrRelays.isEmpty()) {
+                    InlineNotice(
+                        text = "No relays configured. Your Lightning address, encrypted " +
+                            "backups, and payment requests stay off until you add one.",
+                        severity = NoticeSeverity.Warning,
+                        modifier = Modifier.padding(
+                            horizontal = CashuTheme.spacing.comfortable,
+                            vertical = CashuTheme.spacing.snug,
+                        ),
+                    )
+                } else {
                     settings.nostrRelays.forEachIndexed { index, relay ->
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(
-                                    horizontal = CashuTheme.spacing.comfortable,
-                                    vertical = CashuTheme.spacing.default,
-                                ),
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            Text(
-                                text = relay,
-                                style = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace),
-                                color = MaterialTheme.colorScheme.onSurface,
-                                modifier = Modifier.weight(1f),
-                                maxLines = 1,
-                                overflow = TextOverflow.MiddleEllipsis,
-                            )
-                            IconButton(onClick = { settingsManager.removeRelay(relay) }) {
-                                Icon(
-                                    imageVector = Icons.Outlined.Close,
-                                    contentDescription = "Remove relay",
-                                    modifier = Modifier.size(CashuTheme.spacing.loose),
-                                )
-                            }
-                        }
-                        if (index != settings.nostrRelays.lastIndex) CanvasDivider(leadingInset = 16.dp)
+                        if (index > 0) CanvasDivider(leadingInset = 56.dp)
+                        NostrRelayRow(
+                            relay = relay,
+                            copied = copiedRelay == relay,
+                            onCopy = {
+                                clipboard.setText(AnnotatedString(relay))
+                                copiedRelay = relay
+                            },
+                            onRemove = { settingsManager.removeRelay(relay) },
+                        )
                     }
                 }
             }
-            FooterText(
+            SettingsFooterText(
                 "Relays sync your Nostr data for compatible features like npub.cash and backups.",
             )
-            Column(
-                modifier = Modifier.fillMaxWidth().padding(horizontal = CashuTheme.spacing.comfortable),
-                verticalArrangement = Arrangement.spacedBy(CashuTheme.spacing.snug),
-            ) {
-                PrimaryButton(
-                    text = "Add relay…",
-                    onClick = { addRelayOpen = true },
-                )
-                GhostButton(
-                    text = "Reset to defaults",
-                    onClick = { settingsManager.resetNostrRelaysToDefault() },
-                    modifier = Modifier.fillMaxWidth(),
-                )
-            }
+            NavRow(
+                title = "Reset to default relays",
+                leadingIcon = Icons.Outlined.RestartAlt,
+                showChevron = false,
+                onClick = {
+                    addRelayError = null
+                    if (shouldConfirmRelayReset(
+                            settings.nostrRelays,
+                            SettingsManager.defaultNostrRelays,
+                        )
+                    ) {
+                        showRelayResetConfirm = true
+                    } else {
+                        settingsManager.resetNostrRelaysToDefault()
+                    }
+                },
+            )
 
             SectionHeader("Apps")
             NavRow(
                 title = "Wallet Connect",
-                subtitle = "Let a Nostr app use this wallet",
                 leadingIcon = Icons.Outlined.Bolt,
                 trailingValue = if (nwcState.isEnabled) "On" else "Off",
                 onClick = onOpenWalletConnect,
+            )
+            SettingsFooterText(
+                "Let a Nostr app create invoices and pay Lightning invoices from this wallet.",
             )
             Spacer(Modifier.height(CashuTheme.spacing.section))
         }
     }
 
     if (showMissingCustomKeyChoice) {
+        // Three actions don't fit M3's two button slots, so the two choices live
+        // in the body as rows and Cancel keeps the one button.
         AlertDialog(
             onDismissRequest = { showMissingCustomKeyChoice = false },
             title = { Text("Choose a custom key") },
             text = {
-                Text(
-                    "Generate a new Nostr identity or import an existing nsec before switching to Custom Key.",
-                    style = MaterialTheme.typography.bodyMedium,
-                )
+                Column {
+                    Text(
+                        "Switching to Custom Key needs a key to switch to.",
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                    Spacer(Modifier.height(CashuTheme.spacing.snug))
+                    NavRow(
+                        title = "Generate a new key",
+                        leadingIcon = Icons.Outlined.AddCircleOutline,
+                        showChevron = false,
+                        onClick = {
+                            showMissingCustomKeyChoice = false
+                            showGenerateConfirm = true
+                        },
+                    )
+                    NavRow(
+                        title = "Import an existing nsec",
+                        leadingIcon = Icons.Outlined.FileDownload,
+                        showChevron = false,
+                        onClick = {
+                            showMissingCustomKeyChoice = false
+                            showImport = true
+                        },
+                    )
+                }
             },
             confirmButton = {
-                TextButton(onClick = {
-                    showMissingCustomKeyChoice = false
-                    showGenerateConfirm = true
-                }) { Text("Generate") }
-            },
-            dismissButton = {
-                Row {
-                    TextButton(onClick = { showMissingCustomKeyChoice = false }) {
-                        Text("Cancel")
-                    }
-                    TextButton(onClick = {
-                        showMissingCustomKeyChoice = false
-                        showImport = true
-                    }) { Text("Import") }
-                }
+                TextButton(onClick = { showMissingCustomKeyChoice = false }) { Text("Cancel") }
             },
         )
     }
@@ -569,15 +466,13 @@ fun NostrScreen(
                 )
             },
             confirmButton = {
-                TextButton(onClick = {
+                DestructiveTextButton(text = "Reset", onClick = {
                     showResetConfirm = false
                     performIdentityMutation(
                         mutation = NostrIdentityMutation.ResetKey,
                         operation = { nostrService.resetToSeedKey() },
                     )
-                }) {
-                    Text("Reset", color = MaterialTheme.colorScheme.error)
-                }
+                })
             },
             dismissButton = {
                 TextButton(onClick = { showResetConfirm = false }) { Text("Cancel") }
@@ -596,13 +491,13 @@ fun NostrScreen(
                 )
             },
             confirmButton = {
-                TextButton(onClick = {
+                DestructiveTextButton(text = "Switch", onClick = {
                     pendingSignerType = null
                     performIdentityMutation(
                         mutation = NostrIdentityMutation.SwitchSigner,
                         operation = { nostrService.switchSignerType(signerType) },
                     )
-                }) { Text("Switch") }
+                })
             },
             dismissButton = {
                 TextButton(onClick = { pendingSignerType = null }) { Text("Cancel") }
@@ -610,35 +505,38 @@ fun NostrScreen(
         )
     }
 
-    if (addRelayOpen) {
-        var input by remember { mutableStateOf("wss://") }
+    if (showRelayResetConfirm) {
         AlertDialog(
-            onDismissRequest = { addRelayOpen = false; addRelayError = null },
-            title = { Text("Add relay") },
+            onDismissRequest = { showRelayResetConfirm = false },
+            title = { Text("Reset to default relays") },
             text = {
-                Column(verticalArrangement = Arrangement.spacedBy(CashuTheme.spacing.snug)) {
-                    CashuTextField(
-                        value = input,
-                        onValueChange = { input = it; addRelayError = null },
-                        label = "wss:// URL",
-                        modifier = Modifier.fillMaxWidth(),
-                        singleLine = true,
-                    )
-                    if (addRelayError != null) {
-                        InlineNotice(text = addRelayError!!)
-                    }
-                }
+                Text(
+                    "This replaces your relay list with " +
+                        SettingsManager.defaultNostrRelays.joinToString(", ") + ".",
+                    style = MaterialTheme.typography.bodyMedium,
+                )
             },
             confirmButton = {
-                TextButton(onClick = {
-                    runCatching { settingsManager.addRelay(input.trim()) }
-                        .onSuccess { addRelayOpen = false; addRelayError = null }
-                        .onFailure { addRelayError = it.message ?: "Invalid relay URL." }
-                }) { Text("Add") }
+                DestructiveTextButton(text = "Reset", onClick = {
+                    showRelayResetConfirm = false
+                    settingsManager.resetNostrRelaysToDefault()
+                })
             },
             dismissButton = {
-                TextButton(onClick = { addRelayOpen = false; addRelayError = null }) { Text("Cancel") }
+                TextButton(onClick = { showRelayResetConfirm = false }) { Text("Cancel") }
             },
+        )
+    }
+
+    if (showNsecReveal) {
+        PrivateKeyRevealSheet(
+            title = "Nostr private key",
+            // Read through the service so a generate/import while the sheet is
+            // open cannot hand back the key it replaced.
+            loadNsec = { nostrService.state.value.nsec.takeIf(String::isNotBlank) },
+            appLockManager = appLockManager,
+            warning = NostrPrivateKeyWarningText,
+            onDismiss = { showNsecReveal = false },
         )
     }
 }
