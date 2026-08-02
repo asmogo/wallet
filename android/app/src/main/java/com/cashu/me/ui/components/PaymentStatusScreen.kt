@@ -9,6 +9,7 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
 import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -24,10 +25,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Cancel
-import androidx.compose.material.icons.filled.CheckCircle
-import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -38,13 +35,17 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.LocalInspectionMode
 import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -179,8 +180,8 @@ fun PaymentStatusScreen(
                                 )
                                 PaymentStatusPhase.Success -> {
                                     val bounce = rememberBounceScale(trigger = current, bounceOnEntry = true)
-                                    Icon(
-                                        imageVector = Icons.Filled.CheckCircle,
+                                    StatusCircleGlyph(
+                                        success = true,
                                         contentDescription = "Success",
                                         tint = CashuTheme.colors.received,
                                         modifier = Modifier
@@ -192,8 +193,8 @@ fun PaymentStatusScreen(
                                             .materializeBlur(),
                                     )
                                 }
-                                PaymentStatusPhase.Failure -> Icon(
-                                    imageVector = Icons.Filled.Cancel,
+                                PaymentStatusPhase.Failure -> StatusCircleGlyph(
+                                    success = false,
                                     contentDescription = "Failed",
                                     tint = failureTint,
                                     modifier = Modifier.size(StatusGlyphSize),
@@ -256,6 +257,60 @@ fun PaymentStatusScreen(
                     .padding(bottom = CashuTheme.spacing.comfortable)
                     .graphicsLayer { alpha = if (hasAction) terminalAlpha else 0f }
                     .then(if (hasAction) Modifier else Modifier.clearAndSetSemantics {}),
+            )
+        }
+    }
+}
+
+/**
+ * SF Symbols-style filled status glyph. Compose's Material check/cancel vectors
+ * use square stroke ends, while iOS `checkmark.circle.fill` and
+ * `xmark.circle.fill` use rounded caps. Drawing the two strokes explicitly keeps
+ * Android's silhouette, line weight, and negative space aligned with iOS.
+ */
+@Composable
+private fun StatusCircleGlyph(
+    success: Boolean,
+    contentDescription: String,
+    tint: Color,
+    modifier: Modifier = Modifier,
+) {
+    Canvas(
+        modifier = modifier.semantics {
+            this.contentDescription = contentDescription
+        },
+    ) {
+        drawCircle(color = tint)
+        val strokeWidth = 6.dp.toPx()
+        if (success) {
+            drawLine(
+                color = Color.White,
+                start = Offset(size.width * 0.29f, size.height * 0.52f),
+                end = Offset(size.width * 0.44f, size.height * 0.67f),
+                strokeWidth = strokeWidth,
+                cap = StrokeCap.Round,
+            )
+            drawLine(
+                color = Color.White,
+                start = Offset(size.width * 0.44f, size.height * 0.67f),
+                end = Offset(size.width * 0.72f, size.height * 0.34f),
+                strokeWidth = strokeWidth,
+                cap = StrokeCap.Round,
+            )
+        } else {
+            drawLine(
+                color = Color.White,
+                start = Offset(size.width * 0.34f, size.height * 0.34f),
+                end = Offset(size.width * 0.66f, size.height * 0.66f),
+                strokeWidth = strokeWidth,
+                cap = StrokeCap.Round,
+            )
+            drawLine(
+                color = Color.White,
+                start = Offset(size.width * 0.66f, size.height * 0.34f),
+                end = Offset(size.width * 0.34f, size.height * 0.66f),
+                strokeWidth = strokeWidth,
+                cap = StrokeCap.Round,
             )
         }
     }
