@@ -1,9 +1,11 @@
 import SwiftUI
 
-struct MintDiscoverySheet: View {
+/// The Nostr-relay discovery list, without chrome of its own — hosts supply the
+/// navigation container and title. Presented standalone by `MintDiscoverySheet`
+/// and pushed in place by the connect-a-mint picker.
+struct MintDiscoveryList: View {
     let addMint: (String) -> Void
 
-    @Environment(\.dismiss) private var dismiss
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @EnvironmentObject private var walletManager: WalletManager
     @ObservedObject private var discoveryManager = MintDiscoveryManager.shared
@@ -15,22 +17,14 @@ struct MintDiscoverySheet: View {
     @State private var loadingPreviewURLs: Set<String> = []
 
     var body: some View {
-        NavigationStack {
-            content
-                .navigationTitle("Discover Mints")
-                .navigationBarTitleDisplayMode(.inline)
-                .toolbar {
-                    ToolbarItem(placement: .topBarTrailing) {
-                        Button("Done") { dismiss() }
-                            .fontWeight(.semibold)
-                    }
-                }
-        }
-        .onDisappear {
-            previews = [:]
-            loadingPreviewURLs = []
-            discoveryManager.clearDiscoveredMints()
-        }
+        content
+            // Lives here rather than on the host so a pushed instance releases
+            // its relay results too.
+            .onDisappear {
+                previews = [:]
+                loadingPreviewURLs = []
+                discoveryManager.clearDiscoveredMints()
+            }
     }
 
     @ViewBuilder
@@ -264,6 +258,27 @@ private struct MintIdentityPreview {
     let name: String?
     let iconUrl: String?
     let methods: [PaymentMethodKind]
+}
+
+/// Standalone presentation from the Mints list and the mint-chip menu.
+struct MintDiscoverySheet: View {
+    let addMint: (String) -> Void
+
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        NavigationStack {
+            MintDiscoveryList(addMint: addMint)
+                .navigationTitle("Discover Mints")
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbar {
+                    ToolbarItem(placement: .topBarTrailing) {
+                        Button("Done") { dismiss() }
+                            .fontWeight(.semibold)
+                    }
+                }
+        }
+    }
 }
 
 #Preview {

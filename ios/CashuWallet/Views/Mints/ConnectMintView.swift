@@ -1,0 +1,319 @@
+import SwiftUI
+
+// MARK: - Context
+
+/// Where the connect-a-mint surface was opened from. Only the header differs:
+/// from Send the sheet is still titled "Send" and needs an in-body headline
+/// explaining why the flow stalled, while the wallet-home CTA already said
+/// "Add mint" — repeating it as a headline stacks a third level of title before
+/// the user reaches anything tappable.
+enum ConnectMintContext {
+    case send
+    case addMint
+
+    var navigationTitle: String {
+        switch self {
+        case .send: "Send"
+        case .addMint: "Add Mint"
+        }
+    }
+
+    var showsHeadline: Bool { self == .send }
+
+    static let headline = "Connect a mint first"
+    static let subtitle = "Mints issue the ecash you send and receive. Add one to get started."
+}
+
+/// The in-sheet steps pushed from the picker.
+enum ConnectMintRoute: Hashable {
+    case addCustom
+    case discover
+}
+
+// MARK: - Layout constants
+
+private enum ConnectMintMetrics {
+    /// One gutter for every element on the picker — headline, section header,
+    /// rows and footer links share a left edge.
+    static let gutter: CGFloat = 20
+    static let avatar: CGFloat = 36
+    static let avatarGap: CGFloat = 12
+    /// Hairlines align to the text column, not the middle of the avatar.
+    static var dividerInset: CGFloat { avatar + avatarGap }
+    static let headlineToSubtitle: CGFloat = 6
+    /// Opens a new group; at the old 12 the header glued to the paragraph.
+    static let subtitleToSection: CGFloat = 24
+    static let sectionToRows: CGFloat = 8
+    static let rowVertical: CGFloat = 12
+    static let rowsToFooter: CGFloat = 20
+    static let footerSpacing: CGFloat = 12
+}
+
+// MARK: - Picker
+
+/// Recognition over recall: a curated shortlist to tap instead of a URL to
+/// remember. Body only — the host owns the `NavigationStack`, the title and the
+/// presentation detents.
+struct ConnectMintPicker: View {
+    let context: ConnectMintContext
+    @Binding var route: ConnectMintRoute?
+    let onAdd: (String) -> Void
+    /// URLs the wallet already has — filtered out of the shortlist.
+    var existingURLs: Set<String> = []
+    /// Whether Nostr discovery can run at all (WebSockets setting).
+    var discoveryAvailable: Bool = false
+    var errorMessage: String?
+    var onHeightChange: (CGFloat) -> Void = { _ in }
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 0) {
+                if context.showsHeadline {
+                    Text(ConnectMintContext.headline)
+                        .font(.title3.weight(.medium))
+                        .padding(.bottom, ConnectMintMetrics.headlineToSubtitle)
+                }
+
+                Text(ConnectMintContext.subtitle)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                SuggestedMintsSection(existingURLs: existingURLs, onAdd: onAdd)
+
+                if let errorMessage {
+                    InlineNotice(message: errorMessage, severity: .error)
+                        .padding(.top, ConnectMintMetrics.footerSpacing)
+                }
+
+                // Spacing lives in each label's vertical padding so the links keep
+                // 44pt hit targets; stacking them with plain spacing would leave
+                // ~20pt-tall taps.
+                VStack(spacing: 0) {
+                    footerLink(
+                        title: "Add custom mint URL",
+                        systemImage: "plus",
+                        route: .addCustom
+                    )
+                    // Discovery rides Nostr relays over WebSockets. With the
+                    // setting off it can only show a "turn this on" dead end, so
+                    // it isn't offered at all.
+                    if discoveryAvailable {
+                        footerLink(
+                            title: "Discover mints",
+                            systemImage: "magnifyingglass",
+                            route: .discover
+                        )
+                    }
+                }
+                // The first link carries 12pt of its own padding; net gap is the
+                // designed 20pt.
+                .padding(.top, ConnectMintMetrics.rowsToFooter - ConnectMintMetrics.footerSpacing)
+            }
+            .padding(.horizontal, ConnectMintMetrics.gutter)
+            .padding(.top, 8)
+            .padding(.bottom, 16)
+            .onGeometryChange(for: CGFloat.self) { proxy in
+                proxy.size.height
+            } action: { newHeight in
+                onHeightChange(newHeight)
+            }
+        }
+        .scrollBounceBehavior(.basedOnSize)
+    }
+
+    @ViewBuilder
+    private func footerLink(
+        title: String,
+        systemImage: String,
+        route target: ConnectMintRoute
+    ) -> some View {
+        Button {
+            route = target
+        } label: {
+            HStack(spacing: 6) {
+                Image(systemName: systemImage)
+                Text(title)
+            }
+            .padding(.vertical, ConnectMintMetrics.footerSpacing)
+            .frame(maxWidth: .infinity)
+            .contentShape(Rectangle())
+        }
+        .textLinkButton()
+    }
+}
+
+// MARK: - Suggested mints
+
+/// Quick-add rows for known public mints, filtered against what the wallet
+/// already has. Rows sit on the bare canvas with hairline dividers.
+struct SuggestedMintsSection: View {
+    /// URLs already added — filtered out of the suggestions.
+    let existingURLs: Set<String>
+    let onAdd: (String) -> Void
+
+    /// 0.06em on a 12pt caption, per DESIGN.md §3. `@ScaledMetric` so it tracks
+    /// Dynamic Type — an absolute value would not.
+    @ScaledMetric(relativeTo: .caption) private var sectionTracking: CGFloat = 0.72
+
+    private var available: [RecommendedMint] {
+        RecommendedMint.suggested.filter { !existingURLs.contains($0.url) }
+    }
+
+    var body: some View {
+        if !available.isEmpty {
+            VStack(alignment: .leading, spacing: 0) {
+                Text("Suggested mints")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                    .textCase(.uppercase)
+                    .tracking(sectionTracking)
+                    .padding(.bottom, ConnectMintMetrics.sectionToRows)
+
+                ForEach(Array(available.enumerated()), id: \.element.id) { index, mint in
+                    mintButton(mint)
+                    if index < available.count - 1 {
+                        CanvasDivider(inset: ConnectMintMetrics.dividerInset)
+                    }
+                }
+            }
+            .padding(.top, ConnectMintMetrics.subtitleToSection)
+        }
+    }
+
+    @ViewBuilder
+    private func mintButton(_ mint: RecommendedMint) -> some View {
+        Button {
+            onAdd(mint.url)
+            HapticFeedback.selection()
+        } label: {
+            row(for: mint)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Add \(mint.name)")
+        .accessibilityHint("Connects \(displayHost(mint.url)) to your wallet")
+    }
+
+    private func row(for mint: RecommendedMint) -> some View {
+        HStack(spacing: ConnectMintMetrics.avatarGap) {
+            MintAvatarView(iconUrl: mint.iconUrl, name: mint.name, size: ConnectMintMetrics.avatar)
+
+            // Title and the subtitle above it share a size and separate by weight
+            // and colour — that is what keeps this sheet to four type sizes.
+            VStack(alignment: .leading, spacing: 2) {
+                Text(mint.name)
+                    .font(.subheadline.weight(.semibold))
+                Text(displayHost(mint.url))
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
+
+            Spacer()
+
+            // The whole row is the target; the glyph is an indicator, not a
+            // nested control, and must not compete with the headline's weight.
+            Image(systemName: "plus.circle.fill")
+                .font(.body)
+                .foregroundStyle(.secondary)
+                .accessibilityHidden(true)
+        }
+        .padding(.vertical, ConnectMintMetrics.rowVertical)
+        .contentShape(Rectangle())
+    }
+
+    private func displayHost(_ url: String) -> String {
+        var host = url
+            .replacingOccurrences(of: "https://", with: "")
+            .replacingOccurrences(of: "http://", with: "")
+        if host.hasSuffix("/") { host = String(host.dropLast()) }
+        return host
+    }
+}
+
+// MARK: - Pushed steps
+
+/// Shared destination builder so the Send sheet and the standalone sheet push
+/// identical steps.
+@ViewBuilder
+func connectMintDestination(
+    _ route: ConnectMintRoute,
+    onAdded: @escaping () -> Void
+) -> some View {
+    switch route {
+    case .addCustom:
+        AddMintFormView(onAdded: onAdded)
+    case .discover:
+        MintDiscoveryList(addMint: { _ in onAdded() })
+            .navigationTitle("Discover Mints")
+            .navigationBarTitleDisplayMode(.inline)
+    }
+}
+
+// MARK: - Standalone sheet
+
+/// The wallet-home "Add mint" entry point. The Send flow renders
+/// `ConnectMintPicker` inside its own sheet instead of presenting this.
+struct ConnectMintSheet: View {
+    @Environment(\.dismiss) private var dismiss
+    @EnvironmentObject private var walletManager: WalletManager
+    @ObservedObject private var settings = SettingsManager.shared
+
+    @State private var route: ConnectMintRoute?
+    @State private var contentHeight: CGFloat = 220
+    @State private var addMintError: String?
+
+    /// Matches the Send sheet's compact-detent chrome allowance.
+    private let sheetChrome: CGFloat = 108
+
+    var body: some View {
+        NavigationStack {
+            ConnectMintPicker(
+                context: .addMint,
+                route: $route,
+                onAdd: addMint,
+                existingURLs: Set(walletManager.mints.map(\.url)),
+                discoveryAvailable: settings.useWebsockets,
+                errorMessage: addMintError,
+                onHeightChange: { newHeight in
+                    // Ignore re-measures from the off-screen picker while a step
+                    // is pushed, or the detent churns behind the pushed view.
+                    guard route == nil else { return }
+                    contentHeight = newHeight
+                }
+            )
+            .navigationTitle(ConnectMintContext.addMint.navigationTitle)
+            .navigationBarTitleDisplayMode(.inline)
+            .navigationDestination(item: $route) { route in
+                connectMintDestination(route, onAdded: { dismiss() })
+            }
+        }
+        // Hug the shortlist, then take the full sheet once a step is pushed —
+        // the same detent swap the Send sheet uses between its faces.
+        .presentationDetents(route == nil ? [.height(contentHeight + sheetChrome)] : [.large])
+        .presentationDragIndicator(.visible)
+        .canvasSheetBackground()
+    }
+
+    private func addMint(_ url: String) {
+        addMintError = nil
+        Task { @MainActor in
+            do {
+                try await walletManager.addMint(url: url)
+                dismiss()
+            } catch {
+                addMintError = "Couldn't connect to that mint. Try another."
+            }
+        }
+    }
+}
+
+#Preview("Connect a mint — from Send") {
+    ConnectMintPicker(context: .send, route: .constant(nil), onAdd: { _ in }, discoveryAvailable: true)
+        .environmentObject(WalletManager())
+}
+
+#Preview("Connect a mint — from Add mint") {
+    ConnectMintPicker(context: .addMint, route: .constant(nil), onAdd: { _ in }, discoveryAvailable: true)
+        .environmentObject(WalletManager())
+}

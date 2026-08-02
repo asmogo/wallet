@@ -70,6 +70,9 @@ class BackNavigationPolicyTest {
 
         assertEquals(ReceiveLightningBackAction.ReturnToInput, receiveLightningBackAction(displayingQuote = true))
         assertEquals(ReceiveLightningBackAction.Close, receiveLightningBackAction(displayingQuote = false))
+
+        assertEquals(ConnectMintBackAction.ReturnToPicker, connectMintBackAction(onPickerStep = false))
+        assertEquals(ConnectMintBackAction.Close, connectMintBackAction(onPickerStep = true))
     }
 
     @Test

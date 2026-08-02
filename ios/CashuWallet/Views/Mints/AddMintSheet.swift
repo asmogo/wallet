@@ -1,93 +1,97 @@
 import SwiftUI
 import UIKit
 
-struct AddMintSheet: View {
-    @Environment(\.dismiss) private var dismiss
+/// URL entry for connecting a mint, without a `NavigationStack` of its own — the
+/// host supplies one. Used standalone by `AddMintSheet` (Mints list) and as the
+/// pushed step of `ConnectMintPicker`.
+struct AddMintFormView: View {
+    /// Called after the mint is connected. Standalone hosts dismiss; the
+    /// connect-a-mint picker pops back or closes depending on where it was opened.
+    var onAdded: () -> Void
+
     @EnvironmentObject private var walletManager: WalletManager
 
     @State private var mintUrl = ""
-    @State private var nickname = ""
     @State private var isAdding = false
     @State private var errorMessage: String?
     @State private var showingScanner = false
     @FocusState private var urlFieldFocused: Bool
 
+    init(initialUrl: String = "", onAdded: @escaping () -> Void) {
+        self.onAdded = onAdded
+        _mintUrl = State(initialValue: initialUrl)
+    }
+
     var body: some View {
-        NavigationStack {
-            List {
-                Section {
-                    HStack(spacing: 10) {
-                        TextField("Mint URL (https://…)", text: $mintUrl)
-                            .textInputAutocapitalization(.never)
-                            .autocorrectionDisabled()
-                            .keyboardType(.URL)
-                            .textContentType(.URL)
-                            .focused($urlFieldFocused)
-                            .submitLabel(.go)
-                            .onSubmit(addMint)
-                            .onChange(of: mintUrl) {
-                                if errorMessage != nil { errorMessage = nil }
-                            }
-                            .accessibilityIdentifier("mints-add-url-field")
-
-                        Button(action: openScanner) {
-                            Image(systemName: "viewfinder")
-                                .font(.body.weight(.semibold))
-                                .foregroundStyle(.secondary)
-                        }
-                        .buttonStyle(.borderless)
-                        .disabled(isAdding)
-                        .accessibilityLabel("Scan QR Code")
-                        .accessibilityHint("Opens the camera to scan a mint URL")
-                        .accessibilityIdentifier("mints-add-scan-button")
-                    }
-
-                    TextField("Nickname (optional)", text: $nickname)
-                        .textInputAutocapitalization(.words)
+        List {
+            Section {
+                HStack(spacing: 10) {
+                    TextField("Mint URL (https://…)", text: $mintUrl)
+                        .textInputAutocapitalization(.never)
                         .autocorrectionDisabled()
-                } footer: {
-                    Text("Enter the URL of a Cashu mint to connect to it. This wallet is not affiliated with any mint.")
-                }
-            }
-            .scrollDismissesKeyboard(.interactively)
-            .safeAreaInset(edge: .bottom) {
-                VStack(spacing: 12) {
-                    if let errorMessage {
-                        InlineNotice(message: errorMessage, severity: .error)
-                    }
+                        .keyboardType(.URL)
+                        .textContentType(.URL)
+                        .focused($urlFieldFocused)
+                        .submitLabel(.go)
+                        .onSubmit(addMint)
+                        .onChange(of: mintUrl) {
+                            if errorMessage != nil { errorMessage = nil }
+                        }
+                        .accessibilityIdentifier("mints-add-url-field")
 
-                    Button(action: addMint) {
-                        Group {
-                            if isAdding {
-                                ProgressView().tint(.primary)
-                            } else {
-                                Text("Add Mint")
-                            }
+                    Button(action: openScanner) {
+                        Image(systemName: "viewfinder")
+                            .font(.body.weight(.semibold))
+                            .foregroundStyle(.secondary)
+                    }
+                    .buttonStyle(.borderless)
+                    .disabled(isAdding)
+                    .accessibilityLabel("Scan QR Code")
+                    .accessibilityHint("Opens the camera to scan a mint URL")
+                    .accessibilityIdentifier("mints-add-scan-button")
+                }
+            } footer: {
+                Text("Enter the URL of a Cashu mint to connect to it. This wallet is not affiliated with any mint.")
+            }
+        }
+        .scrollDismissesKeyboard(.interactively)
+        .safeAreaInset(edge: .bottom) {
+            VStack(spacing: 12) {
+                if let errorMessage {
+                    InlineNotice(message: errorMessage, severity: .error)
+                }
+
+                Button(action: addMint) {
+                    Group {
+                        if isAdding {
+                            ProgressView().tint(.primary)
+                        } else {
+                            Text("Add Mint")
                         }
                     }
-                    .glassButton()
-                    .disabled(!canSubmit)
-                    .accessibilityIdentifier("mints-add-submit-button")
-
-                    Button("Paste URL from Clipboard", action: pasteFromClipboard)
-                        .textLinkButton()
-                        .frame(maxWidth: .infinity)
-                        .disabled(isAdding)
                 }
-                .padding(.horizontal)
-                .padding(.top, 8)
-                .padding(.bottom, 8)
+                .glassButton()
+                .disabled(!canSubmit)
+                .accessibilityIdentifier("mints-add-submit-button")
+
+                Button("Paste URL from Clipboard", action: pasteFromClipboard)
+                    .textLinkButton()
+                    .frame(maxWidth: .infinity)
+                    .disabled(isAdding)
             }
-            .navigationTitle("Add Mint")
-            .navigationBarTitleDisplayMode(.inline)
-            .fullScreenCover(isPresented: $showingScanner) {
-                ScannerWrapperView(
-                    onScanned: handleScannedMintUrl,
-                    promptText: "Scan a mint URL"
-                )
-                .environmentObject(walletManager)
-                .canvasSheetBackground()
-            }
+            .padding(.horizontal)
+            .padding(.top, 8)
+            .padding(.bottom, 8)
+        }
+        .navigationTitle("Add Mint")
+        .navigationBarTitleDisplayMode(.inline)
+        .fullScreenCover(isPresented: $showingScanner) {
+            ScannerWrapperView(
+                onScanned: handleScannedMintUrl,
+                promptText: "Scan a mint URL"
+            )
+            .environmentObject(walletManager)
+            .canvasSheetBackground()
         }
     }
 
@@ -121,8 +125,7 @@ struct AddMintSheet: View {
                 try await walletManager.addMint(url: urlToAdd)
                 HapticFeedback.selection()
                 mintUrl = ""
-                nickname = ""
-                dismiss()
+                onAdded()
             } catch {
                 errorMessage = error.userFacingWalletMessage
             }
@@ -161,6 +164,18 @@ struct AddMintSheet: View {
             }
         }
         return nil
+    }
+}
+
+/// The Mints-list entry point. The wallet-home and Send entry points go through
+/// `ConnectMintSheet` / `ConnectMintPicker` instead.
+struct AddMintSheet: View {
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        NavigationStack {
+            AddMintFormView(onAdded: { dismiss() })
+        }
     }
 }
 

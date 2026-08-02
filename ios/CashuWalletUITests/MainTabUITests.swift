@@ -6,7 +6,7 @@ final class MainTabUITests: UITestBase {
 
     // MARK: - Tests
 
-    func testWalletNoMintEmptyStateLinksToMintSetup() throws {
+    func testWalletNoMintEmptyStateOpensConnectMintPicker() throws {
         waitForMainTab()
 
         XCTAssertTrue(
@@ -22,8 +22,53 @@ final class MainTabUITests: UITestBase {
             "The Wallet empty-state CTA should open mint setup directly"
         )
         XCTAssertTrue(
+            app.staticTexts["SUGGESTED MINTS"].waitForExistence(timeout: 5),
+            "Mint setup should lead with the curated shortlist, not a URL field"
+        )
+        // The CTA and the sheet title already say "Add Mint"; a third restatement
+        // is exactly the header stacking this surface removed.
+        XCTAssertFalse(
+            app.staticTexts["Connect a mint first"].exists,
+            "The headline is for the Send context, where the title says 'Send'"
+        )
+
+        tapWhenReady(app.buttons["Add custom mint URL"])
+
+        XCTAssertTrue(
             app.textFields["mints-add-url-field"].waitForExistence(timeout: 5),
-            "Mint setup should expose the mint URL field"
+            "Custom URL entry should push into the same sheet"
+        )
+    }
+
+    func testSendWithoutMintOffersConnectMintAndUnwindsWithBack() throws {
+        waitForMainTab()
+
+        // Send is tappable with no mints: the sheet answers with the
+        // connect-a-mint surface rather than the button sitting dead.
+        tapWhenReady(app.buttons["Send"])
+
+        XCTAssertTrue(
+            app.navigationBars["Send"].waitForExistence(timeout: 5),
+            "The Send sheet keeps its own title"
+        )
+        XCTAssertTrue(
+            app.staticTexts["Connect a mint first"].waitForExistence(timeout: 5),
+            "The Send context explains why the flow stalled"
+        )
+
+        tapWhenReady(app.buttons["Add custom mint URL"])
+
+        XCTAssertTrue(
+            app.navigationBars["Add Mint"].waitForExistence(timeout: 5),
+            "Custom URL entry pushes inside the Send sheet"
+        )
+        XCTAssertTrue(app.textFields["mints-add-url-field"].waitForExistence(timeout: 5))
+
+        app.navigationBars["Add Mint"].buttons.element(boundBy: 0).tap()
+
+        XCTAssertTrue(
+            app.staticTexts["Connect a mint first"].waitForExistence(timeout: 5),
+            "Back should return to the picker, not dismiss the sheet"
         )
     }
 

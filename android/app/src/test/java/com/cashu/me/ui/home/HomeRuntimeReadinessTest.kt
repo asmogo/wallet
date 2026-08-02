@@ -7,10 +7,7 @@ import org.junit.Test
 class HomeRuntimeReadinessTest {
     @Test
     fun paymentActionsStayDisabledWhileRuntimeIsPreparing() {
-        val availability = homePaymentActionAvailability(
-            isRuntimeReady = false,
-            hasActiveMint = true,
-        )
+        val availability = homePaymentActionAvailability(isRuntimeReady = false)
 
         assertTrue(availability.isPreparingWallet)
         assertFalse(availability.receiveEnabled)
@@ -19,10 +16,7 @@ class HomeRuntimeReadinessTest {
 
     @Test
     fun paymentActionsUseExistingPrerequisitesAfterRuntimeIsReady() {
-        val availability = homePaymentActionAvailability(
-            isRuntimeReady = true,
-            hasActiveMint = true,
-        )
+        val availability = homePaymentActionAvailability(isRuntimeReady = true)
 
         assertFalse(availability.isPreparingWallet)
         assertTrue(availability.receiveEnabled)
@@ -30,14 +24,13 @@ class HomeRuntimeReadinessTest {
     }
 
     @Test
-    fun receiveStaysAvailableWithoutMintOnceRuntimeIsReady() {
-        val availability = homePaymentActionAvailability(
-            isRuntimeReady = true,
-            hasActiveMint = false,
-        )
+    fun bothActionsStayAvailableWithoutMintOnceRuntimeIsReady() {
+        // Readiness is the only gate: with no mint, Send opens the connect-a-mint
+        // surface rather than sitting disabled (iOS parity).
+        val availability = homePaymentActionAvailability(isRuntimeReady = true)
 
         assertFalse(availability.isPreparingWallet)
         assertTrue(availability.receiveEnabled)
-        assertFalse(availability.sendEnabled)
+        assertTrue(availability.sendEnabled)
     }
 }

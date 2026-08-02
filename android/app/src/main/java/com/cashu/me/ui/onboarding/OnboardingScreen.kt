@@ -107,6 +107,8 @@ import com.cashu.me.ui.restore.RestoreProgressStep
 import com.cashu.me.ui.restore.RestoreSeedStep
 import com.cashu.me.ui.restore.restoreSeedInstallErrorMessage
 import com.cashu.me.ui.theme.CashuTheme
+import com.cashu.me.ui.mints.RecommendedMint
+import com.cashu.me.ui.mints.RecommendedMints
 import com.cashu.me.ui.theme.rememberReducedMotion
 import com.cashu.me.ui.testing.UiTestTags
 
@@ -117,15 +119,6 @@ import com.cashu.me.ui.testing.UiTestTags
 // seed-restore branch. Step changes are quiet 250ms crossfades; blocks
 // materialize with a 12dp rise staggered 70ms per index.
 // ---------------------------------------------------------------------------
-
-private data class RecommendedMint(val name: String, val url: String, val iconUrl: String)
-
-// Mirrors iOS RecommendedMint.suggested (ActivityOrbView.swift).
-private val RecommendedMints = listOf(
-    RecommendedMint("Minibits", "https://mint.minibits.cash/Bitcoin", "https://minibits.cash/icon-192.png"),
-    RecommendedMint("Chorus OFF Mint", "https://mint.chorus.community", "https://chorus.community/apple-touch-icon.png"),
-    RecommendedMint("Macadamia", "https://mint.macadamia.cash", "https://cypherbase.cc/images/logo_w256.png"),
-)
 
 private sealed interface OnboardingStep {
     data object Welcome : OnboardingStep
