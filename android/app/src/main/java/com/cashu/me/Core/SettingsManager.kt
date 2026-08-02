@@ -86,7 +86,7 @@ internal object LegacySettingsSecretMigrator {
 class SettingsManager(
     private val settingsStore: SettingsStore,
     private val secureStorage: SecureStorage,
-) {
+) : MintDiscoverySettings {
     private val secureRandom = SecureRandom()
 
     companion object {
@@ -131,6 +131,9 @@ class SettingsManager(
 
     private val mutableState = MutableStateFlow(loadState())
     val state: StateFlow<SettingsState> = mutableState.asStateFlow()
+
+    override val useWebsockets: Boolean get() = state.value.useWebsockets
+    override val nostrRelays: List<String> get() = state.value.nostrRelays
 
     // Wired by AppContainer (same pattern as NPCService.quoteClaimHandler).
     var sentryService: SentryService? = null

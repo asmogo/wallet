@@ -39,7 +39,7 @@ struct MintDiscoverySheet: View {
             NativeEmptyState(
                 title: "WebSockets Required",
                 systemImage: "antenna.radiowaves.left.and.right.slash",
-                description: "Enable WebSocket connections in Settings to discover mints over Nostr."
+                description: "Discovery uses Nostr relays over WebSockets. Enable them in Settings → Privacy."
             )
         } else {
             List {

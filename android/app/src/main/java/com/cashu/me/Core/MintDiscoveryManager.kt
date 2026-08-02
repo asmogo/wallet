@@ -37,10 +37,16 @@ import com.cashu.me.Models.MintInfo
 data class MintDiscoveryState(
     val discoveredMints: List<MintInfo> = emptyList(),
     val isDiscovering: Boolean = false,
+    val hasCompletedDiscovery: Boolean = false,
 )
 
+interface MintDiscoverySettings {
+    val useWebsockets: Boolean
+    val nostrRelays: List<String>
+}
+
 class MintDiscoveryManager(
-    private val settingsManager: SettingsManager,
+    private val settings: MintDiscoverySettings,
     private val gateway: CdkWalletGateway,
     private val client: OkHttpClient = OkHttpClient.Builder()
         .connectTimeout(10, TimeUnit.SECONDS)
@@ -57,7 +63,7 @@ class MintDiscoveryManager(
 
     suspend fun discoverMints(): List<MintInfo> {
         if (mutableState.value.isDiscovering) return mutableState.value.discoveredMints
-        if (!settingsManager.state.value.useWebsockets) return emptyList()
+        if (!settings.useWebsockets) return emptyList()
 
         val generation = discoveryGeneration.incrementAndGet()
         pendingValidations.clear()
@@ -76,7 +82,10 @@ class MintDiscoveryManager(
             if (discoveryGeneration.get() == generation) {
                 relayDiscoveryActive.set(false)
                 mutableState.update {
-                    it.copy(isDiscovering = pendingValidations.any { pending -> pending.generation == generation })
+                    it.copy(
+                        isDiscovering = pendingValidations.any { pending -> pending.generation == generation },
+                        hasCompletedDiscovery = true,
+                    )
                 }
             }
         }
@@ -177,7 +186,7 @@ class MintDiscoveryManager(
     }
 
     private fun configuredRelays(): List<String> {
-        val configured = settingsManager.state.value.nostrRelays
+        val configured = settings.nostrRelays
             .map { it.trim() }
             .filter { relay ->
                 relay.startsWith("wss://", ignoreCase = true) || relay.startsWith("ws://", ignoreCase = true)

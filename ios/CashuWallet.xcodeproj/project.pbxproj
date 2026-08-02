@@ -146,6 +146,7 @@
 		T2B000000000000D /* CashuRequestRouteExplanationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = T1B000000000000D /* CashuRequestRouteExplanationTests.swift */; };
 		C0A100000000000000000002 /* CashuRequestPaymentObservationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0A100000000000000000001 /* CashuRequestPaymentObservationTests.swift */; };
 		T2B000000000000E /* CrashReportSanitizerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = T1B000000000000E /* CrashReportSanitizerTests.swift */; };
+		T2B000000000000F /* HistorySearchTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = T1B000000000000F /* HistorySearchTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -303,6 +304,7 @@
 		T1B000000000000E /* CrashReportSanitizerTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = CrashReportSanitizerTests.swift; path = CashuWalletTests/CrashReportSanitizerTests.swift; sourceTree = "<group>"; };
 		AV00000000000011 /* AppVersion.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppVersion.swift; sourceTree = "<group>"; };
 		AV00000000000012 /* AppVersionTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = AppVersionTests.swift; path = CashuWalletTests/AppVersionTests.swift; sourceTree = "<group>"; };
+		T1B000000000000F /* HistorySearchTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = HistorySearchTests.swift; path = CashuWalletTests/HistorySearchTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -358,6 +360,7 @@
 				C0A100000000000000000001 /* CashuRequestPaymentObservationTests.swift */,
 				T1B000000000000E /* CrashReportSanitizerTests.swift */,
 				AV00000000000012 /* AppVersionTests.swift */,
+				T1B000000000000F /* HistorySearchTests.swift */,
 			);
 			name = CashuWalletTests;
 			sourceTree = "<group>";
@@ -906,6 +909,7 @@
 				C0A100000000000000000002 /* CashuRequestPaymentObservationTests.swift in Sources */,
 				T2B000000000000E /* CrashReportSanitizerTests.swift in Sources */,
 				AV00000000000002 /* AppVersionTests.swift in Sources */,
+				T2B000000000000F /* HistorySearchTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

@@ -37,6 +37,7 @@ import com.cashu.me.Core.PriceService
 import com.cashu.me.Core.SettingsManager
 import com.cashu.me.ui.components.CanvasDivider
 import com.cashu.me.ui.components.FlowSheetTitle
+import com.cashu.me.ui.components.formatRelativeRecency
 import com.cashu.me.ui.theme.CashuTheme
 import com.cashu.me.ui.theme.withMonoDigits
 
@@ -46,7 +47,7 @@ private val ProgressSize = 16.dp
 /**
  * The Settings → Currency sheet (iOS CurrencyPickerSheet): "Off / Sats only"
  * first, then one row per supported fiat currency, with a BTC-price footer
- * (value + refresh) shown while fiat display is on.
+ * (value + relative "updated" timestamp + refresh) shown while fiat display is on.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -134,6 +135,15 @@ fun CurrencyPickerSheet(
                             style = MaterialTheme.typography.bodyLarge.withMonoDigits(),
                             color = MaterialTheme.colorScheme.onSurface,
                         )
+                    }
+                    val lastUpdated = price.lastUpdatedEpochMillis
+                    if (lastUpdated != null && price.btcPrice > 0) {
+                        Text(
+                            text = "Updated ${formatRelativeRecency(lastUpdated)}",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        Spacer(Modifier.size(CashuTheme.spacing.comfortable))
                     }
                     if (price.isFetching) {
                         LoadingIndicator(
