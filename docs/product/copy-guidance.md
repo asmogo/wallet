@@ -52,3 +52,50 @@ Context: a Lightning quote reserve ("Max fee", "Network fee" shown with an
 "Up to …" value). The label carries the estimate meaning, so the value stays
 numeric ("N sat" / "Up to N sat") even when the reserve is zero. This class
 is not a zero-fee statement and does not use the classes above.
+
+## Success language by context
+
+The words shown when money moves depend on the surface, not on the payment rail.
+Three contexts, three meanings:
+
+### 1. Terminal success screen (celebratory)
+
+The full-screen end state of an in-flight receive flow — Lightning receive
+(one-shot invoice, reusable offer, or on-chain deposit), ecash token claim,
+Cashu Request payment, and NFC receive (Android-only surface).
+
+- **Meaning:** a celebration that funds just landed in the wallet. The user was
+  waiting for this exact payment and watched the flow complete.
+- **Contract:** both platforms say **"Payment Received!"** (celebratory
+  exclamation). The rail is irrelevant — the detail rows (Amount, Mint) already
+  carry the specifics.
+- **Reference:** iOS `PaymentStatusView` call sites in `ReceiveLightningView`,
+  `ReceiveTokenDetailView`, and `CashuRequestDetailView` all pass
+  `successTitle: "Payment Received!"`; Android `PaymentStatusScreen` terminals in
+  `ReceiveLightningScreen`, `ReceiveTokenReview`, `CashuRequestDetailScreen`,
+  and `NfcReceiveUi` use the same title.
+
+### 2. History row / transaction detail title (factual record)
+
+The permanent ledger entry after settlement, seen long after the moment of
+receipt.
+
+- **Meaning:** a neutral, factual record of what happened — kind first, verb
+  second, no exclamation. This is bookkeeping, not celebration.
+- **Contract:** kind-first titles identical on both platforms — "Ecash
+  received", "Lightning received", "Bitcoin received" (and the outgoing
+  counterparts). Single source of truth per platform (iOS
+  `WalletTransaction.displayTitle`, Android `TransactionDisplay.title`) so a
+  row and the detail it opens read identically.
+
+### 3. Transient live confirmation (brief signal)
+
+Short-lived inline feedback while a flow is still on screen or a receipt
+arrives passively: the paid badge under a QR, a scanner toast, the NFC
+indicator line, a home balance delta, a "N payments received" counter.
+
+- **Meaning:** "a payment just arrived" — enough to confirm the event at a
+  glance; the terminal screen or History row is the durable record.
+- **Contract:** must name the receipt (e.g. "Payment Received!", "Received
+  21 sat", "Payment received — paying request…"). Celebration vs. neutral tone,
+  capitalization, and punctuation are platform-native and may vary by surface.

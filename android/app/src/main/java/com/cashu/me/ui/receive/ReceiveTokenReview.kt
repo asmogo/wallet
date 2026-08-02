@@ -343,7 +343,7 @@ internal fun TokenClaimTerminal(
         phase = phase,
         title = when (status) {
             TokenClaimStatus.Claiming -> "Claiming…"
-            is TokenClaimStatus.Claimed -> "Payment received"
+            is TokenClaimStatus.Claimed -> "Payment Received!"
             is TokenClaimStatus.Failed -> "Couldn't receive"
         },
         detail = (status as? TokenClaimStatus.Failed)?.message?.text,

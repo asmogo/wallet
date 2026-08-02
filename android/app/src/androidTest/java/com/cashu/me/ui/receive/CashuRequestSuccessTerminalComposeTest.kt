@@ -30,7 +30,7 @@ class CashuRequestSuccessTerminalComposeTest {
         }
 
         compose.onNodeWithContentDescription("Success").assertIsDisplayed()
-        compose.onNodeWithText("Payment received").assertIsDisplayed()
+        compose.onNodeWithText("Payment Received!").assertIsDisplayed()
         compose.onNodeWithText("Amount").assertIsDisplayed()
         compose.onNodeWithText("19 sat").assertIsDisplayed()
         compose.onNodeWithText("Mint").assertIsDisplayed()
