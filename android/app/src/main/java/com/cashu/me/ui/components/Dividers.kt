@@ -28,15 +28,3 @@ fun CanvasDivider(
         modifier = modifier.padding(start = leadingInset, end = trailingInset),
     )
 }
-
-/**
- * Tighter divider used inside inspector groups (Cashu Request, Transaction Detail).
- */
-@Composable
-fun InspectorDivider(modifier: Modifier = Modifier) {
-    HorizontalDivider(
-        thickness = HairlineThickness,
-        color = CashuTheme.colors.canvasDivider,
-        modifier = modifier.padding(horizontal = CashuTheme.spacing.snug),
-    )
-}

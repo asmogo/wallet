@@ -39,7 +39,6 @@ struct NostrKeysSettingsSection: View {
 
             SettingsSectionGroup("Key source") {
                 ForEach(Array(NostrSignerType.allCases.enumerated()), id: \.element) { index, type in
-                    if index > 0 { CanvasDivider() }
                     keySourceRow(type)
                 }
             }
@@ -50,15 +49,12 @@ struct NostrKeysSettingsSection: View {
                 }
                 .buttonStyle(.plain)
 
-                CanvasDivider()
-
                 Button(action: { nostrKeyError = nil; importNsecText = ""; showImportNsec = true }) {
                     settingsActionRow("Import key", systemImage: "square.and.arrow.down")
                 }
                 .buttonStyle(.plain)
 
                 if nostrService.signerType == .privateKey {
-                    CanvasDivider()
                     Button(action: { HapticFeedback.selection(); showResetKeyConfirm = true }) {
                         settingsActionRow("Reset to wallet seed", systemImage: "arrow.counterclockwise")
                     }
@@ -255,7 +251,7 @@ struct NostrKeysSettingsSection: View {
 // MARK: - Nostr Relays Section
 
 /// The Nostr relay list, on the same single-canvas recipe: a glass input field
-/// (matching `ImportP2PKSheet`) over a divider-separated list of relay rows.
+/// (matching `ImportP2PKSheet`) over a list of relay rows.
 /// Self-contained — owns its own input/error state.
 struct NostrRelaysSettingsSection: View {
     @ObservedObject var settings = SettingsManager.shared
@@ -293,7 +289,6 @@ struct NostrRelaysSettingsSection: View {
                 if !settings.nostrRelays.isEmpty {
                     Color.clear.frame(height: 10)
                     ForEach(Array(settings.nostrRelays.enumerated()), id: \.element) { index, relay in
-                        if index > 0 { CanvasDivider() }
                         relayRow(relay)
                     }
                 }
@@ -421,8 +416,6 @@ struct NostrMintBackupSettingsSection: View {
                 }
                 .padding(.horizontal, 4)
                 .padding(.vertical, 14)
-
-                CanvasDivider()
 
                 Button(action: backupNow) {
                     HStack(spacing: 14) {

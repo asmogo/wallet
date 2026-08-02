@@ -790,9 +790,6 @@ struct RestoreWalletView: View {
             VStack(spacing: 0) {
                 ForEach(Array(mintsToRestore.enumerated()), id: \.element) { index, url in
                     stagedMintRow(url: url)
-                    if index < mintsToRestore.count - 1 {
-                        CanvasDivider()
-                    }
                 }
             }
             .padding(.horizontal)
@@ -899,9 +896,6 @@ struct RestoreWalletView: View {
                         ForEach(restoringMints, id: \.self) { url in
                             restoreProgressRow(url: url, phase: restorePhases[url] ?? .pending)
                                 .id(url)
-                            if url != restoringMints.last {
-                                CanvasDivider()
-                            }
                         }
                     }
                     .padding(.horizontal)

@@ -103,7 +103,6 @@ struct PaymentStatusView: View {
                 VStack(spacing: 0) {
                     ForEach(Array(details.enumerated()), id: \.element.id) { index, row in
                         detailRow(row)
-                        if index < details.count - 1 { divider }
                     }
                 }
                 .padding(.horizontal)
@@ -200,14 +199,6 @@ struct PaymentStatusView: View {
         .padding(.horizontal, 4)
         .padding(.vertical, 14)
         .accessibilityElement(children: .combine)
-    }
-
-    /// Hairline separator matching the pay screens' detail rows (no boxed background).
-    private var divider: some View {
-        Rectangle()
-            .fill(Color(.separator))
-            .frame(height: 0.5)
-            .padding(.horizontal, 4)
     }
 
     private func handlePhase(_ newPhase: Phase) {

@@ -295,7 +295,6 @@ struct KeyCard: View {
             .accessibilityLabel("Copy this key")
 
             if !actions.isEmpty {
-                CanvasDivider(inset: 0)
                 HStack(spacing: 0) {
                     ForEach(actions) { action in
                         Button(action: { HapticFeedback.selection(); action.perform() }) {
@@ -341,8 +340,6 @@ private struct AdvancedKeysView: View {
                     }
                     .buttonStyle(.plain)
 
-                    CanvasDivider()
-
                     Button(action: { actionError = nil; importText = ""; showImport = true }) {
                         actionRow("Import a key", systemImage: "square.and.arrow.down")
                     }
@@ -363,7 +360,6 @@ private struct AdvancedKeysView: View {
                 } else {
                     SettingsSectionGroup("Device keys") {
                         ForEach(Array(settings.p2pkKeys.enumerated()), id: \.element.id) { index, key in
-                            if index > 0 { CanvasDivider() }
                             keyRow(key)
                         }
                     }

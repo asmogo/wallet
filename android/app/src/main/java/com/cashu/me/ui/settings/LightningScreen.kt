@@ -50,7 +50,6 @@ import com.cashu.me.Core.NPCService
 import com.cashu.me.Core.NPCState
 import com.cashu.me.Core.WalletManager
 import com.cashu.me.Core.WalletState
-import com.cashu.me.ui.components.CanvasDivider
 import com.cashu.me.ui.components.GhostButton
 import com.cashu.me.ui.components.InlineNotice
 import com.cashu.me.ui.components.InspectorRow
@@ -139,7 +138,6 @@ fun LightningScreen(
                         statusColor = npcStatusColor(npcState),
                         onShowQr = { addressQrOpen = true },
                     )
-                    CanvasDivider(leadingInset = 16.dp)
                     Column(
                         modifier = Modifier.fillMaxWidth().padding(
                             horizontal = CashuTheme.spacing.comfortable,
@@ -186,7 +184,6 @@ fun LightningScreen(
                 checked = npcState.isEnabled,
                 onCheckedChange = { npcService.setEnabled(it) },
             )
-            CanvasDivider(leadingInset = 16.dp)
             ToggleRow(
                 title = LightningAddressSettingsCopy.AutomaticClaimTitle,
                 subtitle = LightningAddressSettingsCopy.AutomaticClaimSubtitle,

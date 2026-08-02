@@ -21,7 +21,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.unit.dp
 import com.cashu.me.Core.SettingsManager
-import com.cashu.me.ui.components.CanvasDivider
 import com.cashu.me.ui.components.ToggleRow
 import com.cashu.me.ui.components.ToolbarIcon
 import com.cashu.me.ui.theme.CashuTheme
@@ -60,7 +59,6 @@ fun PrivacyScreen(
                 checked = settings.checkIncomingInvoices,
                 onCheckedChange = settingsManager::setCheckIncomingInvoices,
             )
-            CanvasDivider(leadingInset = 16.dp)
             ToggleRow(
                 title = "Check all invoices",
                 checked = settings.periodicallyCheckIncomingInvoices,
@@ -68,33 +66,28 @@ fun PrivacyScreen(
                 enabled = settings.checkIncomingInvoices,
                 modifier = Modifier.alpha(if (settings.checkIncomingInvoices) 1f else 0.5f),
             )
-            CanvasDivider(leadingInset = 16.dp)
             ToggleRow(
                 title = "Check sent ecash",
                 checked = settings.checkSentTokens,
                 onCheckedChange = settingsManager::setCheckSentTokens,
             )
-            CanvasDivider(leadingInset = 16.dp)
             ToggleRow(
                 title = "Use WebSockets",
                 subtitle = "Required for Nostr discovery and live invoice updates.",
                 checked = settings.useWebsockets,
                 onCheckedChange = settingsManager::setUseWebsockets,
             )
-            CanvasDivider(leadingInset = 16.dp)
             ToggleRow(
                 title = "Paste ecash automatically",
                 checked = settings.autoPasteEcashReceive,
                 onCheckedChange = settingsManager::setAutoPasteEcashReceive,
             )
-            CanvasDivider(leadingInset = 16.dp)
             ToggleRow(
                 title = "Listen for payment requests",
                 subtitle = "Receives ecash sent to your Nostr key while the app is open.",
                 checked = settings.enablePaymentRequests,
                 onCheckedChange = settingsManager::setEnablePaymentRequests,
             )
-            CanvasDivider(leadingInset = 16.dp)
             ToggleRow(
                 title = "Claim received ecash automatically",
                 subtitle = "Off asks you to confirm each incoming payment before it's claimed.",
@@ -103,7 +96,6 @@ fun PrivacyScreen(
                 enabled = settings.enablePaymentRequests,
                 modifier = Modifier.alpha(if (settings.enablePaymentRequests) 1f else 0.5f),
             )
-            CanvasDivider(leadingInset = 16.dp)
             ToggleRow(
                 title = "Send crash reports",
                 subtitle = "Opt-in. Screenshots and view hierarchy are not attached. " +

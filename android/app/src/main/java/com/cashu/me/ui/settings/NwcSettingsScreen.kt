@@ -57,7 +57,6 @@ import com.cashu.me.Core.NwcManager
 import com.cashu.me.Core.NwcState
 import com.cashu.me.Core.SettingsManager
 import com.cashu.me.Core.WalletManager
-import com.cashu.me.ui.components.CanvasDivider
 import com.cashu.me.ui.components.CashuTextField
 import com.cashu.me.ui.components.InlineNotice
 import com.cashu.me.ui.components.InspectorRow
@@ -183,7 +182,6 @@ fun NwcSettingsScreen(
                     editable = walletState.mints.isNotEmpty(),
                     onClick = { mintPickerOpen = walletState.mints.isNotEmpty() },
                 )
-                CanvasDivider(leadingInset = CashuTheme.spacing.comfortable)
                 InspectorRow(
                     label = "Payment limit",
                     value = nwcState.budgetSats?.let {

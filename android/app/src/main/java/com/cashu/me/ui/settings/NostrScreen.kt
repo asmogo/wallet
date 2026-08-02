@@ -57,7 +57,6 @@ import com.cashu.me.Core.NostrSignerType
 import com.cashu.me.Core.NwcManager
 import com.cashu.me.Core.SettingsManager
 import com.cashu.me.Core.nostrSignerSelectionAction
-import com.cashu.me.ui.components.CanvasDivider
 import com.cashu.me.ui.components.CashuTextField
 import com.cashu.me.ui.components.DestructiveTextButton
 import com.cashu.me.ui.components.GhostButton
@@ -245,7 +244,6 @@ fun NostrScreen(
                 onClick = { clipboard.setText(AnnotatedString(nostrState.npub)) },
                 editable = nostrState.npub.isNotBlank(),
             )
-            CanvasDivider(leadingInset = 16.dp)
             InspectorRow(
                 label = "hex",
                 value = nostrState.publicKeyHex.ifBlank { "—" },
@@ -386,7 +384,6 @@ fun NostrScreen(
                                 )
                             }
                         }
-                        if (index != settings.nostrRelays.lastIndex) CanvasDivider(leadingInset = 16.dp)
                     }
                 }
             }

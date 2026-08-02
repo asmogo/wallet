@@ -59,7 +59,6 @@ import com.cashu.me.Core.SettingsManager
 import com.cashu.me.Core.WalletManager
 import com.cashu.me.Core.shortenMintUrl
 import com.cashu.me.Models.MintInfo
-import com.cashu.me.ui.components.CanvasDivider
 import com.cashu.me.ui.components.CashuSearchBar
 import com.cashu.me.ui.components.EmptyState
 import com.cashu.me.ui.components.MintAvatar
@@ -217,7 +216,6 @@ fun MintDiscoveryContent(
                                     isBusy = walletState.isLoading,
                                     onAdd = {},
                                 )
-                                if (mint != addedMints.last()) CanvasDivider(leadingInset = 72.dp)
                             }
                         }
                     }
@@ -237,7 +235,6 @@ fun MintDiscoveryContent(
                                         scope.launch { runCatching { walletManager.addMint(mint.url) } }
                                     },
                                 )
-                                if (mint != discoverableMints.last()) CanvasDivider(leadingInset = 72.dp)
                             }
                         }
                     }

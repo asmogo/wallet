@@ -86,7 +86,6 @@ import com.cashu.me.Models.MintQuoteInfo
 import com.cashu.me.R
 import com.cashu.me.ui.components.AmountEntryHero
 import com.cashu.me.ui.components.AmountText
-import com.cashu.me.ui.components.CanvasDivider
 import com.cashu.me.ui.components.CashuTextField
 import com.cashu.me.ui.components.EmptyState
 import com.cashu.me.ui.components.EmptyStateSize
@@ -698,7 +697,6 @@ internal fun SendPaymentDetailRows(
     useBitcoinSymbol: Boolean,
 ) {
     details.rows.forEachIndexed { index, row ->
-        if (index > 0) CanvasDivider(leadingInset = 16.dp)
         val loading = row.value == SendPaymentDetailValue.Pending
         val value = when (val detailValue = row.value) {
             SendPaymentDetailValue.Pending -> ""
@@ -1029,7 +1027,6 @@ private fun ConfirmFace(
                         ),
                         valueMonospaced = true,
                     )
-                    CanvasDivider(leadingInset = 16.dp)
                 }
                 // Fee/total land as a skeleton fill-in while the melt quote is
                 // in flight (iOS .redacted confirm rows) — no "…" flash.
@@ -1040,7 +1037,6 @@ private fun ConfirmFace(
                     valueMonospaced = true,
                     loading = quoteLoading,
                 )
-                CanvasDivider(leadingInset = 16.dp)
                 InspectorRow(
                     label = "Total",
                     value = quote?.let { "${it.totalAmount} sat" }.orEmpty(),
@@ -1054,7 +1050,6 @@ private fun ConfirmFace(
                     valueMonospaced = true,
                 )
                 if (mint != null) {
-                    CanvasDivider(leadingInset = 16.dp)
                     InspectorRow(
                         label = "Mint",
                         value = mint.name,
@@ -1062,10 +1057,8 @@ private fun ConfirmFace(
                     )
                 }
                 if (!creqDescription.isNullOrBlank()) {
-                    CanvasDivider(leadingInset = 16.dp)
                     InspectorRow(label = "Memo", value = creqDescription)
                 }
-                CanvasDivider(leadingInset = 16.dp)
                 val feePresentation = cashuRequestFeeEstimate.presentation { fee ->
                     formatter.formatWalletSats(fee, useBitcoinSymbol)
                 }
@@ -1077,19 +1070,15 @@ private fun ConfirmFace(
                 )
                 when (val route = cashuRoute) {
                     is CashuPaymentRequestRoute.PayWithEcash -> {
-                        CanvasDivider(leadingInset = 16.dp)
                         InspectorRow(label = "Route", value = "Pay from ${route.mint.name}")
                     }
                     is CashuPaymentRequestRoute.PayBolt11Fallback -> {
-                        CanvasDivider(leadingInset = 16.dp)
                         InspectorRow(label = "Route", value = "Use Lightning fallback")
                     }
                     is CashuPaymentRequestRoute.AddMintToPay -> {
-                        CanvasDivider(leadingInset = 16.dp)
                         InspectorRow(label = "Route", value = "Add requested mint")
                     }
                     is CashuPaymentRequestRoute.NeedsExternalTopUp -> {
-                        CanvasDivider(leadingInset = 16.dp)
                         InspectorRow(label = "Route", value = "Top up target mint")
                     }
                     CashuPaymentRequestRoute.MissingAmount,

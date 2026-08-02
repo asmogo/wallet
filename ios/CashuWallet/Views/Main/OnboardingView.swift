@@ -824,9 +824,6 @@ struct OnboardingView: View {
 
                     ForEach(Array(allRows.enumerated()), id: \.element) { index, url in
                         firstMintRow(url: url)
-                        if index < allRows.count - 1 {
-                            CanvasDivider()
-                        }
                     }
                 }
                 .padding(.horizontal, 28)
@@ -1251,9 +1248,6 @@ struct OnboardingView: View {
                         VStack(spacing: 0) {
                             ForEach(Array(mintsToRestore.enumerated()), id: \.element) { index, url in
                                 stagedMintRow(url: url)
-                                if index < mintsToRestore.count - 1 {
-                                    CanvasDivider()
-                                }
                             }
                         }
                         .padding(.horizontal)
@@ -1430,9 +1424,6 @@ struct OnboardingView: View {
                         ForEach(restoringMints, id: \.self) { url in
                             restoreProgressRow(url: url, phase: restorePhases[url] ?? .pending)
                                 .id(url)
-                            if url != restoringMints.last {
-                                CanvasDivider()
-                            }
                         }
                     }
                     .padding(.horizontal)

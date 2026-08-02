@@ -92,7 +92,6 @@ import com.cashu.me.Core.WalletManager
 import com.cashu.me.Core.WalletStartupFailure
 import com.cashu.me.Core.mintUrlCandidates
 import com.cashu.me.Models.MintInfo
-import com.cashu.me.ui.components.CanvasDivider
 import com.cashu.me.ui.components.CashuTextField
 import com.cashu.me.ui.components.GhostButton
 import com.cashu.me.ui.components.IconSwap
@@ -906,7 +905,6 @@ private fun FirstMintFace(
                     Triple(customPreviews[it]?.name ?: shortenMintUrl(it), it, customPreviews[it]?.iconUrl)
                 }
             rows.forEachIndexed { index, (name, url, iconUrl) ->
-                if (index > 0) CanvasDivider()
                 MintSelectRow(
                     name = name,
                     url = url,
