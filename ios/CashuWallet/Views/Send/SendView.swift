@@ -1430,16 +1430,6 @@ struct UnifiedSendView: View {
                     onHeightChange: { compactContentHeight = $0 }
                 )
             }
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    // Explicit "back to wallet" affordance (sibling-surface
-                    // parity); hidden during the irreversible execution window,
-                    // when dismissal is locked entirely.
-                    if step != .sending {
-                        SheetCloseButton { onClose() }
-                    }
-                }
-            }
             .sheet(isPresented: $showingScanner) {
                 ScannerWrapperView(onScanned: handleScannedDestination)
                     .environmentObject(walletManager)

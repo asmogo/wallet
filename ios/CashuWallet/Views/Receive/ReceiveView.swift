@@ -64,13 +64,6 @@ struct UnifiedReceiveView: View {
                 .frame(maxWidth: .infinity, alignment: .top)
                 .navigationTitle("Receive")
                 .navigationBarTitleDisplayMode(.inline)
-                .toolbar {
-                    ToolbarItem(placement: .cancellationAction) {
-                        // Explicit "back to wallet" affordance (sibling-surface
-                        // parity with the other flow sheets).
-                        SheetCloseButton { onClose() }
-                    }
-                }
                 .sheet(isPresented: $showingScanner) {
                     ScannerWrapperView(onScanned: handleScanned)
                         .environmentObject(walletManager)
