@@ -97,7 +97,9 @@ struct PaymentStatusView: View {
                 }
             }
         } details: {
-            if !details.isEmpty {
+            // Payment facts are terminal-only: processing shows just the spinner
+            // and title, matching the claiming screen.
+            if !details.isEmpty, phase != .processing {
                 VStack(spacing: 0) {
                     ForEach(Array(details.enumerated()), id: \.element.id) { index, row in
                         detailRow(row)
