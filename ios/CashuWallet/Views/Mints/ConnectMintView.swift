@@ -38,8 +38,6 @@ private enum ConnectMintMetrics {
     static let gutter: CGFloat = 20
     static let avatar: CGFloat = 36
     static let avatarGap: CGFloat = 12
-    /// Hairlines align to the text column, not the middle of the avatar.
-    static var dividerInset: CGFloat { avatar + avatarGap }
     static let headlineToSubtitle: CGFloat = 6
     /// Opens a new group; at the old 12 the header glued to the paragraph.
     static let subtitleToSection: CGFloat = 24
@@ -139,7 +137,7 @@ struct ConnectMintPicker: View {
 // MARK: - Suggested mints
 
 /// Quick-add rows for known public mints, filtered against what the wallet
-/// already has. Rows sit on the bare canvas with hairline dividers.
+/// already has. Rows sit on the bare canvas.
 struct SuggestedMintsSection: View {
     /// URLs already added — filtered out of the suggestions.
     let existingURLs: Set<String>
@@ -165,9 +163,6 @@ struct SuggestedMintsSection: View {
 
                 ForEach(Array(available.enumerated()), id: \.element.id) { index, mint in
                     mintButton(mint)
-                    if index < available.count - 1 {
-                        CanvasDivider(inset: ConnectMintMetrics.dividerInset)
-                    }
                 }
             }
             .padding(.top, ConnectMintMetrics.subtitleToSection)
@@ -238,7 +233,7 @@ func connectMintDestination(
     case .addCustom:
         AddMintFormView(onAdded: onAdded, onHeightChange: onHeightChange)
     case .discover:
-        MintDiscoveryList(addMint: { _ in onAdded() })
+        MintDiscoveryList(onMintAdded: onAdded)
             .navigationTitle("Discover Mints")
             .navigationBarTitleDisplayMode(.inline)
     }

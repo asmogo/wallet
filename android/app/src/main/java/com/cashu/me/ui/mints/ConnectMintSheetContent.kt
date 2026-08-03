@@ -45,7 +45,6 @@ import com.cashu.me.Core.Wallet.userFacingWalletMessage
 import com.cashu.me.Core.WalletManager
 import com.cashu.me.Core.shortenMintUrl
 import com.cashu.me.Models.MintInfo
-import com.cashu.me.ui.components.CanvasDivider
 import com.cashu.me.ui.components.GhostButton
 import com.cashu.me.ui.components.InlineNotice
 import com.cashu.me.ui.components.MintAvatar
@@ -89,7 +88,6 @@ private enum class ConnectMintStep { Picker, AddCustom, Discover }
 
 // Avatar (36) + row gap (12): hairlines start at the text column, not mid-avatar.
 private val SuggestedRowAvatarSize = 36.dp
-private val SuggestedRowDividerInset = 48.dp
 private val SuggestedRowAddGlyphSize = 24.dp
 private val SuggestedRowTextGap = 2.dp
 
@@ -224,6 +222,7 @@ fun ConnectMintSheetContent(
                     walletManager = walletManager,
                     settingsManager = settingsManager,
                     mintDiscoveryManager = mintDiscoveryManager,
+                    onMintAdded = onMintAdded,
                 )
             }
         }
@@ -284,9 +283,6 @@ internal fun SuggestedMintsFace(
                     enabled = enabled,
                     onClick = { onAdd(mint.url) },
                 )
-                if (index < suggested.lastIndex) {
-                    CanvasDivider(leadingInset = SuggestedRowDividerInset, trailingInset = 0.dp)
-                }
             }
         }
 
