@@ -102,7 +102,7 @@ Rendered evidence lives in the two catalogs added with this audit — see
 | V5 | `InlineNotice` + bespoke `AnimatedVisibility` | as V2 | as V2 | as V2 | conditional | **BottomCenter** | `SendEcashScreen.kt:643` |
 | V6 | `InlineNotice` + `AnimatedContent` | as V2 | as V2 | as V2 | — | Top | `ReceiveEcashScreen.kt:255` |
 | **V7** | **bare error `Text`** | none | none | `bodySmall`/`error` | none | start | `SendEcashScreen.kt:957`, `ScannerView.kt:337` |
-| **V8** | **error `Text` as row subtitle** | none | none | `labelSmall`/`error` | none | start | `RestoreWalletFlow.kt:891` |
+| **V8** | **error `Text` as row subtitle** | none | none | `labelSmall`/`error` | none | start | `RestoreWalletFlow.kt:896` |
 | **V9** | **icon+text warning row** | none | `Filled.Warning` 12/14dp | `labelMedium`/`bodySmall` in `pending` | none | **CenterVertically** | `OnboardingScreen.kt:574`, `P2PKComponents.kt:195` |
 | **V10** | **centered warning hero** | none | `Filled.Warning` 28/32dp | `titleMedium`/`onSurface` | `bodyMedium` | **Center** | `BackupScreen.kt:95`, `P2PKComponents.kt:477` |
 | V11 | row-embedded status colour | none | `Outlined.WarningAmber` / `Outlined.Timer` / none | inherits row | none | row | `ReceiveTokenReview.kt:309`, `MintDetailScreen.kt:243` |
@@ -180,6 +180,23 @@ constrain any unification:
 ---
 
 ## 5. Recommended unified spec
+
+> **Superseded by [`inline-error-fixes.md`](inline-error-fixes.md).** The table
+> below was written assuming the fix was to make both platforms look the same.
+> That target was rejected: `DESIGN.md:158` commits the app to native materials
+> and the native semantic palette on each platform, and pixel-matching error UI
+> fights that on both sides — it means overriding Material 3's text-field
+> conventions on Android *and* keeping non-Apple tinted boxes on iOS.
+>
+> The settled direction is **converge on semantics, diverge on expression**:
+> share the severity vocabulary, the copy, the channel-selection rule and the
+> accessibility guarantee; let M3 and the HIG render them their own way. Items
+> 1, 3, 7, 8, 9, 10 and 11 below survive largely intact in the new spec. Items 2
+> (one shared glyph table) and 5 (one shared alignment) are **reversed** — those
+> are exactly the places the platforms should differ. Item 4 is reframed: `tinted`
+> is deleted rather than aligned.
+>
+> Kept here as the record of what was considered.
 
 One recommendation per item, with the churn it costs.
 

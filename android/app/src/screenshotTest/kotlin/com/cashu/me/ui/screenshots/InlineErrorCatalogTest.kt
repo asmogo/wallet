@@ -142,7 +142,7 @@ private fun HandRolledVariants() {
         )
     }
 
-    CatalogSection("V8 — error Text as row subtitle (RestoreWalletFlow.kt:891)") {
+    CatalogSection("V8 — error Text as row subtitle (RestoreWalletFlow.kt:896)") {
         Column {
             Text(
                 text = "Testnut",
