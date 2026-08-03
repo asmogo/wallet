@@ -261,7 +261,7 @@ Footer below all groups: app name + version, `bodySmall`, centered, `onSurfaceVa
 | **BackupScreen** | Seed display (12 words, numbered 2-column grid, long-press to copy phrase). `FilledTonalButton("Copy phrase")`, `FilledTonalButton("Verify phrase")` (toggles to the verify quiz inline), `TextButton("Restore from seed")`. |
 | **LightningScreen** | Lightning address row (configured value or "Set up Lightning address" CTA). Tap → push setup sub-screen with username `OutlinedTextField` + domain dropdown + save. |
 | **P2PKScreen** | List of pubkeys (monospaced, middle-truncated, copy + delete trailing icons). `FilledTonalButton("Generate key")`, `FilledTonalButton("Import key")`. |
-| **NostrScreen** | Nsec masked display + reveal `IconButton(Icons.Outlined.Visibility)`. Import nsec button (opens dialog). Relay list with add/remove. |
+| **NostrScreen** | Intro prose, then `KeyCard` for the active key (tap-to-copy npub, long-press for npub/hex, "Reveal nsec" → `PrivateKeyRevealSheet`). `SelectionRow` pair for key source, plain action rows for generate / import / reset. Relays: inline `wss://` field with submit, rows with copy + destructive remove, confirmed reset. Wallet Connect `NavRow`. |
 | **NWCScreen** | Connection list. Each row: connection nickname, copy connection string, revoke action. "Generate connection string" `FilledTonalButton`. |
 | **PrivacyScreen** | M3 `Switch` rows: "Show balance on lock screen", "Hide transaction amounts", etc. |
 | **AppearanceScreen** | Theme `SegmentedButtonRow` (Light / Dark / System). `Switch` rows: "Show fiat balance", "Use ₿ symbol". |

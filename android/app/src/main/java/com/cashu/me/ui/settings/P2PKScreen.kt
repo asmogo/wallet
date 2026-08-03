@@ -35,6 +35,7 @@ import com.cashu.me.Core.NostrService
 import com.cashu.me.Core.SettingsManager
 import com.cashu.me.ui.components.NavRow
 import com.cashu.me.ui.components.SectionHeader
+import com.cashu.me.ui.components.SettingsFooterText
 import com.cashu.me.ui.components.ToggleRow
 import com.cashu.me.ui.components.ToolbarIcon
 import com.cashu.me.ui.theme.CashuTheme
@@ -132,7 +133,7 @@ fun P2PKScreen(
                     modifier = Modifier.padding(horizontal = CashuTheme.spacing.comfortable),
                 )
             }
-            FooterText(
+            SettingsFooterText(
                 "Show your QR or share this key, and anyone can send you locked ecash. " +
                     "The key comes from your seed phrase, so only you can claim it.",
             )
@@ -180,20 +181,4 @@ internal fun advancedKeysSubtitle(count: Int): String = when (count) {
     0 -> "Add a key that lives only on this device"
     1 -> "1 device key"
     else -> "$count device keys"
-}
-
-/** iOS SettingsSectionFooter: quiet explanatory prose under a section. */
-@Composable
-internal fun FooterText(text: String) {
-    Text(
-        text = text,
-        style = MaterialTheme.typography.bodySmall,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(
-                horizontal = CashuTheme.spacing.comfortable,
-                vertical = CashuTheme.spacing.default,
-            ),
-    )
 }

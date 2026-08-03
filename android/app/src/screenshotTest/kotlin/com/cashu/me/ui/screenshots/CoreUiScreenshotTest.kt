@@ -26,6 +26,7 @@ import com.cashu.me.Models.TransactionKind
 import com.cashu.me.Models.TransactionStatus
 import com.cashu.me.Models.TransactionType
 import com.cashu.me.Models.WalletTransaction
+import com.cashu.me.Core.NostrSignerType
 import com.cashu.me.Views.Send.ContactlessAvailability
 import com.cashu.me.Views.Send.ContactlessPayContent
 import com.cashu.me.ui.components.AmountEntryHero
@@ -38,6 +39,7 @@ import com.cashu.me.ui.components.QrCard
 import com.cashu.me.ui.components.ToggleRow
 import com.cashu.me.ui.components.TransactionRow
 import com.cashu.me.ui.components.TransactionRowModel
+import com.cashu.me.ui.settings.NostrKeySection
 import com.cashu.me.ui.theme.CashuTheme
 
 @PreviewTest
@@ -125,6 +127,30 @@ fun mixedTransactionStatesScreenshot() {
                     timestamp = "Today, 11:40",
                 ),
                 onClick = {},
+            )
+        }
+    }
+}
+
+@PreviewTest
+@Preview(name = "nostr-key-section", widthDp = 390, heightDp = 620, showBackground = true)
+@Composable
+fun nostrKeySectionScreenshot() {
+    PreviewFrame(contentPadding = 0.dp) {
+        Column {
+            NostrKeySection(
+                npub = "npub1e26a9azcspw39xdeterministicpreview407nd3zxxtj3gpqevzh9l",
+                publicKeyHex = "cab5d2f458805d129af2deterministicpreviewb455fe9b622319728a02",
+                isReady = true,
+                signerType = NostrSignerType.Seed,
+                isMutating = false,
+                progressMessage = null,
+                errorMessage = null,
+                onRevealNsec = {},
+                onSelectSigner = {},
+                onGenerateKey = {},
+                onImportKey = {},
+                onResetToSeed = {},
             )
         }
     }

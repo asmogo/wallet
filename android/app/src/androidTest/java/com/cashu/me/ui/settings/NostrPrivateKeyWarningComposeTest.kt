@@ -11,16 +11,33 @@ import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 
+/**
+ * The nsec warning now travels with the reveal sheet instead of standing
+ * permanently on the Nostr screen, so it lands at the moment the key is about to
+ * be exposed. It still has to reach assistive technology as a single node.
+ */
 @RunWith(AndroidJUnit4::class)
 class NostrPrivateKeyWarningComposeTest {
     @get:Rule
     val compose = createComposeRule()
 
+    private fun setRevealContent() {
+        compose.setCashuContent {
+            PrivateKeyRevealContent(
+                title = "Nostr private key",
+                warning = NostrPrivateKeyWarningText,
+                revealedNsec = null,
+                copied = false,
+                onToggleReveal = {},
+                onCopy = {},
+                onDone = {},
+            )
+        }
+    }
+
     @Test
     fun warningExplainsIdentityAndLightningAddressRiskAccessibly() {
-        compose.setCashuContent {
-            NostrPrivateKeyWarning()
-        }
+        setRevealContent()
 
         val warning = compose.onNodeWithText(NostrPrivateKeyWarningText)
             .assertIsDisplayed()
@@ -30,5 +47,12 @@ class NostrPrivateKeyWarningComposeTest {
             listOf(NostrPrivateKeyWarningText),
             warning.config[SemanticsProperties.Text].map { it.text },
         )
+    }
+
+    @Test
+    fun revealSheetNamesWhichKeyItIsAboutToShow() {
+        setRevealContent()
+
+        compose.onNodeWithText("NOSTR PRIVATE KEY").assertIsDisplayed()
     }
 }

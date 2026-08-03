@@ -12,9 +12,13 @@ import org.bouncycastle.math.ec.ECPoint
 import com.cashu.me.Core.Protocols.SecureStorage
 import com.cashu.me.Core.Protocols.StorageKeys
 
-enum class NostrSignerType(val rawValue: String, val displayName: String) {
-    Seed("SEED", "Wallet Seed"),
-    PrivateKey("PRIVATEKEY", "Custom Key");
+enum class NostrSignerType(
+    val rawValue: String,
+    val displayName: String,
+    val description: String,
+) {
+    Seed("SEED", "Wallet Seed", "Derived from your wallet's seed phrase"),
+    PrivateKey("PRIVATEKEY", "Custom Key", "Use a custom Nostr private key");
 
     companion object {
         fun fromRaw(value: String?): NostrSignerType = entries.firstOrNull { it.rawValue == value } ?: Seed
