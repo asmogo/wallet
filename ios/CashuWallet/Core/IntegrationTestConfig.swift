@@ -68,6 +68,23 @@ struct IntegrationTestConfig {
     static var seedMintURL: String? {
         ProcessInfo.processInfo.environment["UITEST_SEED_MINT_URL"] ?? nutshellMintURL
     }
+
+    /// Replaces the app root with the debug component catalog. Used to capture
+    /// every inline-error variant for cross-platform comparison; the catalog
+    /// itself is `#if DEBUG`, so this never resolves in Release.
+    ///
+    /// The value names the page — `matrix` (the shared contract) or `variants`
+    /// (the hand-rolled facsimiles) — matching the two Android catalog previews
+    /// so the platforms pair up one screenshot at a time. Anything else falls
+    /// back to `matrix`.
+    static var componentCatalogPage: String? {
+        ProcessInfo.processInfo.environment["SHOW_COMPONENT_CATALOG"]
+            .flatMap { $0.isEmpty ? nil : $0 }
+    }
+
+    static var shouldShowComponentCatalog: Bool {
+        componentCatalogPage != nil
+    }
 }
 
 extension IntegrationTestConfig {

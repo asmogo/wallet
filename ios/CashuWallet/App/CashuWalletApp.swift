@@ -49,6 +49,24 @@ struct CashuWalletApp: App {
 
     var body: some Scene {
         WindowGroup {
+            #if DEBUG
+            if IntegrationTestConfig.shouldShowComponentCatalog {
+                ComponentCatalogView(
+                    page: .init(rawValue: IntegrationTestConfig.componentCatalogPage)
+                )
+            } else {
+                root
+            }
+            #else
+            root
+            #endif
+        }
+    }
+
+    /// The real app root. Extracted so the debug catalog can stand in for it
+    /// without branching inside `some Scene`, where the opaque type won't unify.
+    @ViewBuilder
+    private var root: some View {
             ZStack {
                 ContentView()
                     .environmentObject(walletManager)
@@ -123,6 +141,5 @@ struct CashuWalletApp: App {
                     break
                 }
             }
-        }
     }
 }
