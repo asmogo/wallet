@@ -36,6 +36,7 @@ import com.cashu.me.Core.SettingsManager
 import com.cashu.me.ui.components.CashuTextField
 import com.cashu.me.ui.components.DestructiveTextButton
 import com.cashu.me.ui.components.SectionHeader
+import com.cashu.me.ui.components.SettingsFooterText
 import com.cashu.me.ui.components.ToolbarIcon
 import com.cashu.me.ui.theme.CashuTheme
 
@@ -126,7 +127,7 @@ fun DeviceKeyDetailScreen(
                 onClick = { showRemoveConfirm = true },
                 modifier = Modifier.padding(horizontal = CashuTheme.spacing.comfortable),
             )
-            FooterText(
+            SettingsFooterText(
                 "Ecash locked to this key can only be claimed with it. Removing it can't be " +
                     "undone — back it up first if you might still receive to it.",
             )

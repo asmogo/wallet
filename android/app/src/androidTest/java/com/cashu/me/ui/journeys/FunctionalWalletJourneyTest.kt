@@ -91,8 +91,6 @@ class FunctionalWalletJourneyTest {
         )
 
         robot.pressSystemBack()
-            .pressSystemBack()
-            .pressSystemBack()
             .awaitTag(UiTestTags.WalletScreen)
             .tapText("History")
             .awaitTag(UiTestTags.HistoryScreen)

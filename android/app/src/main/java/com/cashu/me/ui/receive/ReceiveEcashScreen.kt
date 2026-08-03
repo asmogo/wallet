@@ -3,8 +3,10 @@ package com.cashu.me.ui.receive
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.spring
+import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -54,6 +56,7 @@ import com.cashu.me.ui.components.NoticeSeverity
 import com.cashu.me.ui.send.SendDestinationResolution
 import com.cashu.me.ui.send.resolveSendDestination
 import com.cashu.me.ui.theme.CashuTheme
+import com.cashu.me.ui.theme.rememberReducedMotion
 import com.cashu.me.ui.testing.UiTestTags
 
 private const val TYPE_DEBOUNCE_MS = 400L
@@ -247,9 +250,34 @@ fun ReceiveEcashScreen(
                     }
                 } else null,
             )
-            if (inputHint != null) {
-                Spacer(Modifier.height(CashuTheme.spacing.default))
-                InlineNotice(text = inputHint!!, severity = NoticeSeverity.Warning)
+            val reduceMotion = rememberReducedMotion()
+            AnimatedContent(
+                targetState = inputHint,
+                transitionSpec = {
+                    if (reduceMotion) {
+                        fadeIn(spring(stiffness = Spring.StiffnessMedium)) togetherWith
+                            fadeOut(spring(stiffness = Spring.StiffnessMedium))
+                    } else {
+                        (fadeIn(spring(stiffness = Spring.StiffnessMedium)) +
+                            expandVertically(
+                                animationSpec = spring(stiffness = Spring.StiffnessMedium),
+                                expandFrom = Alignment.Top,
+                            )) togetherWith
+                            (fadeOut(spring(stiffness = Spring.StiffnessMedium)) +
+                                shrinkVertically(
+                                    animationSpec = spring(stiffness = Spring.StiffnessMedium),
+                                    shrinkTowards = Alignment.Top,
+                                ))
+                    }
+                },
+                label = "receive-input-hint",
+            ) { hint ->
+                if (hint != null) {
+                    Column {
+                        Spacer(Modifier.height(CashuTheme.spacing.default))
+                        InlineNotice(text = hint, severity = NoticeSeverity.Warning)
+                    }
+                }
             }
             Spacer(Modifier.height(CashuTheme.spacing.page + CashuTheme.spacing.micro))
             // Ways to receive: Scan · Ecash · Bitcoin, round 72dp buttons.

@@ -68,7 +68,6 @@ import com.cashu.me.Core.WalletManager
 import com.cashu.me.Models.CashuRequestPayment
 import com.cashu.me.ui.components.AmountEntryHero
 import com.cashu.me.ui.components.AmountText
-import com.cashu.me.ui.components.CanvasDivider
 import com.cashu.me.ui.components.DetailActionFooter
 import com.cashu.me.ui.components.GhostButton
 import com.cashu.me.ui.components.InlineNotice
@@ -366,7 +365,6 @@ fun CashuRequestDetailScreen(
                         editable = requestEditable,
                         onClick = { mintPickerOpen = true },
                     )
-                    CanvasDivider(leadingInset = 16.dp)
                     InspectorRow(
                         label = "Amount",
                         value = request.amount?.let {
@@ -377,7 +375,6 @@ fun CashuRequestDetailScreen(
                         editable = requestEditable,
                         onClick = { amountPickerOpen = true },
                     )
-                    CanvasDivider(leadingInset = 16.dp)
                     InspectorRow(
                         label = "Unit",
                         value = request.unit.uppercase(),
@@ -385,14 +382,12 @@ fun CashuRequestDetailScreen(
                         editable = requestEditable && requestMint?.supportsMultipleMintUnits == true,
                         onClick = { unitPickerOpen = true },
                     )
-                    CanvasDivider(leadingInset = 16.dp)
                     InspectorRow(
                         label = "Created",
                         value = formatDate(request.createdAtEpochMillis),
                         leadingIcon = Icons.Outlined.CalendarToday,
                     )
                     if (request.totalReceived > 0L) {
-                        CanvasDivider(leadingInset = 16.dp)
                         InspectorRow(
                             label = "Total received",
                             value = formatRequestAmount(request.totalReceived),
@@ -649,7 +644,6 @@ internal fun ColumnScope.CashuRequestReceiptRows(
         )
     }
     if (mintName != null) {
-        if (amountLabel != null) CanvasDivider(leadingInset = 16.dp)
         InspectorRow(
             label = "Mint",
             value = mintName,

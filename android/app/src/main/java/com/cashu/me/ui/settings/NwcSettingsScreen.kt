@@ -55,14 +55,13 @@ import com.cashu.me.Core.NwcManager
 import com.cashu.me.Core.NwcState
 import com.cashu.me.Core.SettingsManager
 import com.cashu.me.Core.WalletManager
-import com.cashu.me.ui.components.CanvasDivider
 import com.cashu.me.ui.components.CashuTextField
 import com.cashu.me.ui.components.InlineNotice
-import com.cashu.me.ui.components.InspectorRow
 import com.cashu.me.ui.components.MintPickerSheet
 import com.cashu.me.ui.components.NavRow
 import com.cashu.me.ui.components.PrimaryButton
 import com.cashu.me.ui.components.SectionHeader
+import com.cashu.me.ui.components.SettingsFooterText
 import com.cashu.me.ui.components.ToggleRow
 import com.cashu.me.ui.components.ToolbarIcon
 import com.cashu.me.ui.theme.CashuTheme
@@ -122,7 +121,6 @@ fun NwcSettingsScreen(
                 ),
             )
 
-            SectionHeader("Service")
             ToggleRow(
                 title = "Enable Wallet Connect",
                 subtitle = nwcStatusText(nwcState),
@@ -139,7 +137,7 @@ fun NwcSettingsScreen(
             )
 
             when {
-                walletState.mints.isEmpty() -> SupportingText("Add a mint first to use Wallet Connect.")
+                walletState.mints.isEmpty() -> SettingsFooterText("Add a mint first to use Wallet Connect.")
                 nwcState.errorMessage != null -> InlineNotice(
                     text = nwcState.errorMessage!!,
                     modifier = Modifier.padding(
@@ -147,7 +145,7 @@ fun NwcSettingsScreen(
                         vertical = CashuTheme.spacing.snug,
                     ),
                 )
-                !nwcState.isEnabled -> SupportingText(
+                !nwcState.isEnabled -> SettingsFooterText(
                     "Enabling creates a private connection code you can scan or paste into a Nostr app.",
                 )
             }
@@ -167,7 +165,7 @@ fun NwcSettingsScreen(
                         }
                     },
                 )
-                SupportingText(
+                SettingsFooterText(
                     "Keep this code private. Anyone with it can spend within your payment limit.",
                 )
 
@@ -177,27 +175,24 @@ fun NwcSettingsScreen(
                     ?.name
                     ?: nwcState.selectedMintUrl
                     ?: "Select a mint"
-                InspectorRow(
-                    label = "Mint",
-                    value = selectedMintName,
-                    editable = walletState.mints.isNotEmpty(),
+                NavRow(
+                    title = "Mint",
+                    subtitle = selectedMintName,
+                    enabled = walletState.mints.isNotEmpty(),
                     onClick = { mintPickerOpen = walletState.mints.isNotEmpty() },
                 )
-                CanvasDivider(leadingInset = CashuTheme.spacing.comfortable)
-                InspectorRow(
-                    label = "Payment limit",
-                    value = nwcState.budgetSats?.let {
+                NavRow(
+                    title = "Payment limit",
+                    subtitle = nwcState.budgetSats?.let {
                         "${amountFormatter.formatWalletSats(it, settings.useBitcoinSymbol)} per payment"
                     } ?: "No limit",
-                    editable = true,
                     onClick = { budgetSheetOpen = true },
                 )
-                SupportingText("Payments are sent as ecash from this mint over your Nostr relays.")
+                SettingsFooterText("Payments are sent as ecash from this mint over your Nostr relays.")
 
-                SectionHeader("Connection management")
+                Spacer(Modifier.height(CashuTheme.spacing.default))
                 NavRow(
                     title = "Reset connection",
-                    subtitle = "Create a new code and disconnect paired apps",
                     leadingIcon = Icons.Outlined.RestartAlt,
                     onClick = { resetConfirmationOpen = true },
                     enabled = !nwcState.isBusy,
@@ -361,19 +356,6 @@ private fun NwcBudgetSheet(
             Spacer(Modifier.height(CashuTheme.spacing.comfortable))
         }
     }
-}
-
-@Composable
-private fun SupportingText(text: String) {
-    Text(
-        text = text,
-        style = MaterialTheme.typography.bodySmall,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-        modifier = Modifier.padding(
-            horizontal = CashuTheme.spacing.comfortable,
-            vertical = CashuTheme.spacing.snug,
-        ),
-    )
 }
 
 private fun nwcStatusText(state: NwcState): String = when {

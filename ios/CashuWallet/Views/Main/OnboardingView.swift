@@ -38,9 +38,8 @@ struct OnboardingView: View {
     // First-mint state (create path)
     @State private var showConceptSheet = false
     /// Measured height of `conceptSheet`, so the sheet hugs its content instead
-    /// of sitting at a fixed `.medium` detent. Seeded with a plausible value so
-    /// the first layout pass is close; corrected on measure.
-    @State private var conceptSheetHeight: CGFloat = 360
+    /// of sitting at a fixed `.medium` detent.
+    @State private var conceptSheetHeight: CGFloat = 0
     @State private var selectedMintUrls: Set<String> = []
     @State private var customMintUrls: [String] = []
     @State private var showCustomMintInput = false
@@ -311,14 +310,11 @@ struct OnboardingView: View {
         // (~107pt on iPhone 17e, ~134pt on iPhone 11) rather than a designed
         // value. Measuring keeps the copy-to-button gap a constant 20pt and
         // matches Android, whose sheet already hugs its content.
-        .onGeometryChange(for: CGFloat.self) { proxy in
-            proxy.size.height
-        } action: { height in
-            conceptSheetHeight = height
-        }
-        // `.large` stays available so very large accessibility text can still
-        // expand past the measured height rather than clip.
-        .presentationDetents([.height(conceptSheetHeight), .large])
+        .contentFitMeasured { conceptSheetHeight = $0 }
+        // No `NavigationStack` here, so the detent must not reserve nav-bar
+        // chrome. Very large accessibility text scrolls inside the clamped
+        // sheet — the same contract as every other content-fit sheet.
+        .contentFitDetent(conceptSheetHeight, estimate: 360, navigationBar: false)
         .presentationDragIndicator(.visible)
     }
 
@@ -824,9 +820,6 @@ struct OnboardingView: View {
 
                     ForEach(Array(allRows.enumerated()), id: \.element) { index, url in
                         firstMintRow(url: url)
-                        if index < allRows.count - 1 {
-                            CanvasDivider()
-                        }
                     }
                 }
                 .padding(.horizontal, 28)
@@ -1251,9 +1244,6 @@ struct OnboardingView: View {
                         VStack(spacing: 0) {
                             ForEach(Array(mintsToRestore.enumerated()), id: \.element) { index, url in
                                 stagedMintRow(url: url)
-                                if index < mintsToRestore.count - 1 {
-                                    CanvasDivider()
-                                }
                             }
                         }
                         .padding(.horizontal)
@@ -1430,9 +1420,6 @@ struct OnboardingView: View {
                         ForEach(restoringMints, id: \.self) { url in
                             restoreProgressRow(url: url, phase: restorePhases[url] ?? .pending)
                                 .id(url)
-                            if url != restoringMints.last {
-                                CanvasDivider()
-                            }
                         }
                     }
                     .padding(.horizontal)

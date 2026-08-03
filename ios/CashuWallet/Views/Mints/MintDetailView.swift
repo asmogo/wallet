@@ -61,10 +61,8 @@ struct MintDetailView: View {
                     balanceRow
                     // Per-unit balances for a multi-unit mint (e.g. a minted €5).
                     ForEach(nonSatUnits, id: \.self) { unit in
-                        CanvasDivider()
                         unitBalanceRow(unit)
                     }
-                    CanvasDivider()
                     connectionRow
                 }
                 .padding(.bottom, 24)
@@ -391,7 +389,6 @@ struct MintDetailView: View {
                         paymentDirectionRow(icon: "arrow.down", label: "Receive", methods: receiveMethods)
                     }
                     if !sendMethods.isEmpty {
-                        if !receiveMethods.isEmpty { CanvasDivider() }
                         paymentDirectionRow(icon: "arrow.up", label: "Send", methods: sendMethods)
                     }
                 }
@@ -428,9 +425,6 @@ struct MintDetailView: View {
                         } else {
                             contactRow(method: contact.method, info: contact.info, tappable: false)
                                 .textSelection(.enabled)
-                        }
-                        if index < contacts.count - 1 {
-                            CanvasDivider()
                         }
                     }
                 }
@@ -470,13 +464,11 @@ struct MintDetailView: View {
                                   value: "\(version.name) \(version.version)")
                     }
                     if showUnits {
-                        if version != nil { CanvasDivider() }
                         detailRow(icon: "ruler",
                                   label: mint.units.count > 1 ? "Units" : "Unit",
                                   value: mint.units.joined(separator: ", ").uppercased())
                     }
                     if let tosUrl {
-                        if version != nil || showUnits { CanvasDivider() }
                         Link(destination: tosUrl) {
                             HStack {
                                 Label("Terms of Service", systemImage: "doc.text")

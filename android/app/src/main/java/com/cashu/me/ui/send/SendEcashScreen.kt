@@ -1057,7 +1057,6 @@ private fun GeneratedFace(
                     value = amountPresentation.primary,
                     leadingIcon = Icons.Outlined.Payments,
                 )
-                com.cashu.me.ui.components.CanvasDivider(leadingInset = 16.dp)
                 receipt.fee?.let { feeLabel ->
                     com.cashu.me.ui.components.InspectorRow(
                         label = "Fee",
@@ -1065,7 +1064,6 @@ private fun GeneratedFace(
                         valueMonospaced = true,
                         leadingIcon = Icons.Outlined.Receipt,
                     )
-                    com.cashu.me.ui.components.CanvasDivider(leadingInset = 16.dp)
                 }
                 com.cashu.me.ui.components.InspectorRow(
                     label = "Mint",
@@ -1126,21 +1124,18 @@ private fun GeneratedFace(
                         value = feeLabel,
                         valueMonospaced = true,
                     )
-                    com.cashu.me.ui.components.CanvasDivider(leadingInset = 16.dp)
                 }
                 com.cashu.me.ui.components.InspectorRow(
                     label = "Unit",
                     value = unit.uppercase(),
                 )
                 if (fiatLabel != null) {
-                    com.cashu.me.ui.components.CanvasDivider(leadingInset = 16.dp)
                     com.cashu.me.ui.components.InspectorRow(
                         label = "Fiat",
                         value = fiatLabel,
                         valueMonospaced = true,
                     )
                 }
-                com.cashu.me.ui.components.CanvasDivider(leadingInset = 16.dp)
                 com.cashu.me.ui.components.InspectorRow(
                     label = "Mint",
                     value = com.cashu.me.Core.shortenMintUrl(mintUrl),

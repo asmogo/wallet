@@ -36,8 +36,8 @@ object CashuMotion {
      * Outgoing empties in [TabFadeOutMs]; incoming settles over [TabFadeInMs]
      * after that delay, scaling from [TabFadeInitialScale].
      */
-    const val TabFadeOutMs = 80
-    const val TabFadeInMs = 500
+    const val TabFadeOutMs = 40
+    const val TabFadeInMs = 250
     const val TabFadeInitialScale = 0.992f
 
     /**

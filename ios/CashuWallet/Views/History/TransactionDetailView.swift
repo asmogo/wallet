@@ -149,8 +149,8 @@ struct TransactionDetailView: View {
                         }
                         .padding(.top, heroSlotIsEmpty ? 32 : 0)
 
-                        // Detail rows on canvas with hairline dividers, led by
-                        // Status + Date. Type is omitted — the nav title names it.
+                        // Detail rows on canvas, led by Status + Date. Type is
+                        // omitted — the nav title names it.
                         VStack(spacing: 0) {
                             ForEach(Array(detailRows.enumerated()), id: \.offset) { index, row in
                                 if let copyValue = row.copyValue {
@@ -158,10 +158,8 @@ struct TransactionDetailView: View {
                                 } else {
                                     detailRow(icon: row.icon, label: row.label, value: row.value)
                                 }
-                                if index < detailRows.count - 1 { canvasDivider }
                             }
                             if let explorerURL = onchainExplorerURL {
-                                canvasDivider
                                 explorerLinkRow(label: "View in block explorer", url: explorerURL)
                             }
                         }
@@ -476,13 +474,6 @@ struct TransactionDetailView: View {
         .buttonStyle(.plain)
         .simultaneousGesture(TapGesture().onEnded { HapticFeedback.selection() })
         .accessibilityHint("Opens the block explorer in your browser")
-    }
-
-    private var canvasDivider: some View {
-        Rectangle()
-            .fill(Color(.separator))
-            .frame(height: 0.5)
-            .padding(.leading, 28)
     }
 
     // MARK: - Helpers

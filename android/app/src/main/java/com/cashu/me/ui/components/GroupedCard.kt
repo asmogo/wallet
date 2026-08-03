@@ -1,17 +1,9 @@
 package com.cashu.me.ui.components
 
-import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.shape.CornerBasedShape
 import androidx.compose.foundation.shape.CornerSize
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.runtime.Composable
-import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Shape
-import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import com.cashu.me.ui.theme.CashuTheme
 
 /**
  * Corner treatment for one row inside a "grouped card" (the KeyCard-style
@@ -37,28 +29,5 @@ fun groupItemShape(index: Int, count: Int, base: CornerBasedShape): Shape {
         index == 0 -> base.copy(bottomStart = square, bottomEnd = square)
         index == count - 1 -> base.copy(topStart = square, topEnd = square)
         else -> base.copy(square)
-    }
-}
-
-/**
- * A [CanvasDivider] used *between two rows of the same grouped card* — backed
- * by an opaque `surfaceContainerHigh` strip (matching the rows' own fill) so
- * the hairline reads as a groove inside one continuous card, instead of a
- * sliver of screen background bleeding through at the row's left/right
- * insets. A plain [CanvasDivider] has no background of its own — fine between
- * flat rows painted the same color as the screen, but visibly wrong once the
- * rows on either side paint `surfaceContainerHigh` instead.
- */
-@Composable
-fun GroupedCardDivider(
-    leadingInset: Dp,
-    trailingInset: Dp = CashuTheme.spacing.comfortable,
-) {
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .background(MaterialTheme.colorScheme.surfaceContainerHigh),
-    ) {
-        CanvasDivider(leadingInset = leadingInset, trailingInset = trailingInset)
     }
 }

@@ -213,14 +213,11 @@ struct ReceiveTokenDetailView: View {
                             value: receiveFee == 0 ? "No fee" : formatFee(receiveFee)
                         )
                     }
-                    canvasDivider
                     detailRow(icon: "bitcoinsign.bank.building", label: "Mint", value: shortMintUrl(mintUrl))
                     if let memo = reviewPresentation.memo {
-                        canvasDivider
                         memoRow(memo)
                     }
                     if !p2pkPubkeys.isEmpty {
-                        canvasDivider
                         lockedToRow
                     }
                 }
@@ -389,15 +386,6 @@ struct ReceiveTokenDetailView: View {
         .accessibilityLabel(memo.accessibilityLabel)
         .accessibilityValue(memo.accessibilityValue)
         .accessibilityIdentifier(memo.accessibilityIdentifier)
-    }
-
-    /// Hairline separator on the flat canvas — matches the pay/receive detail
-    /// surfaces (no boxed background).
-    private var canvasDivider: some View {
-        Rectangle()
-            .fill(Color(.separator))
-            .frame(height: 0.5)
-            .padding(.leading, 28)
     }
 
     func shortMintUrl(_ url: String) -> String {

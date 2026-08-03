@@ -81,7 +81,6 @@ import com.cashu.me.Core.WalletManager
 import com.cashu.me.Core.shortenMintUrl
 import com.cashu.me.Models.MintInfo
 import com.cashu.me.Models.NutSupport
-import com.cashu.me.ui.components.CanvasDivider
 import com.cashu.me.ui.components.DestructiveTextButton
 import com.cashu.me.ui.components.GhostButton
 import com.cashu.me.ui.components.IconSwap
@@ -228,7 +227,6 @@ fun MintDetailScreen(
                     valueMonospaced = true,
                 )
                 nonSatUnits.forEach { unit ->
-                    CanvasDivider(leadingInset = 16.dp)
                     InspectorRow(
                         label = "Balance (${unit.uppercase()})",
                         value = unitBalances[unit]?.let {
@@ -238,7 +236,6 @@ fun MintDetailScreen(
                         valueMonospaced = true,
                     )
                 }
-                CanvasDivider(leadingInset = 16.dp)
                 InspectorRow(
                     label = "Connection",
                     value = connection.label,
@@ -385,7 +382,6 @@ fun MintDetailScreen(
                         )
                     }
                     if (sendMethods.isNotEmpty()) {
-                        if (receiveMethods.isNotEmpty()) CanvasDivider(leadingInset = 16.dp)
                         InspectorRow(
                             label = "Send",
                             value = sendMethods.joinToString(" · ") { it.displayName },
@@ -414,7 +410,6 @@ fun MintDetailScreen(
                             onClick = link?.let { target -> { context.openInBrowser(target) } },
                             valueColor = if (link != null) MaterialTheme.colorScheme.primary else null,
                         )
-                        if (index < contactRows.lastIndex) CanvasDivider(leadingInset = 16.dp)
                     }
                 }
             }
@@ -432,7 +427,6 @@ fun MintDetailScreen(
                         value = "${software.name} ${software.version}",
                         leadingIcon = Icons.Outlined.Inventory2,
                     )
-                    CanvasDivider(leadingInset = 16.dp)
                 }
                 InspectorRow(
                     label = "Units",
@@ -440,7 +434,6 @@ fun MintDetailScreen(
                     leadingIcon = Icons.Outlined.Straighten,
                 )
                 if (tosUrl != null) {
-                    CanvasDivider(leadingInset = 16.dp)
                     InspectorRow(
                         label = "Terms of Service",
                         value = externalUrlHost(tosUrl) ?: tosUrl,

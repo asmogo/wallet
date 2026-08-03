@@ -88,7 +88,6 @@ import com.cashu.me.Models.PaymentMethodKind
 import com.cashu.me.ui.components.AmountEntryHero
 import com.cashu.me.ui.components.AmountFlipDisplay
 import com.cashu.me.ui.components.AmountText
-import com.cashu.me.ui.components.CanvasDivider
 import com.cashu.me.ui.components.ExplorerLinkRow
 import com.cashu.me.ui.components.FlowSheetTitle
 import com.cashu.me.ui.components.IconSwap
@@ -1134,7 +1133,6 @@ private fun DisplayFace(
                             value = mintName,
                             leadingIcon = Icons.Outlined.AccountBalance,
                         )
-                        CanvasDivider(leadingInset = 16.dp)
                     }
                     InspectorRow(
                         label = "Amount",
@@ -1145,7 +1143,6 @@ private fun DisplayFace(
                         onClick = onEditReusableAmount,
                     )
                     if (createdAtEpochMillis != null) {
-                        CanvasDivider(leadingInset = 16.dp)
                         InspectorRow(
                             label = "Created",
                             value = formatReusableCreatedAt(createdAtEpochMillis),
@@ -1153,7 +1150,6 @@ private fun DisplayFace(
                         )
                     }
                     if (receivedAmountLabel != null) {
-                        CanvasDivider(leadingInset = 16.dp)
                         InspectorRow(
                             label = "Total received",
                             value = receivedAmountLabel,
@@ -1172,9 +1168,6 @@ private fun DisplayFace(
                         )
                     }
                     if (onOpenExplorer != null) {
-                        if (mintName != null) {
-                            CanvasDivider(leadingInset = 16.dp)
-                        }
                         ExplorerLinkRow(label = explorerLabel, onClick = onOpenExplorer)
                     }
                 }
@@ -1495,7 +1488,6 @@ private fun ReceiveSuccessTerminal(info: ReceiveSuccessInfo, onDone: () -> Unit)
                 )
             }
             if (info.mintName != null) {
-                if (info.amountLabel != null) CanvasDivider(leadingInset = 16.dp)
                 InspectorRow(
                     label = "Mint",
                     value = info.mintName,

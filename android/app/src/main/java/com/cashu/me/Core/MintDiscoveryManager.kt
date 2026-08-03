@@ -188,9 +188,7 @@ class MintDiscoveryManager(
     private fun configuredRelays(): List<String> {
         val configured = settings.nostrRelays
             .map { it.trim() }
-            .filter { relay ->
-                relay.startsWith("wss://", ignoreCase = true) || relay.startsWith("ws://", ignoreCase = true)
-            }
+            .filter(::isSupportedRelayScheme)
         return configured.ifEmpty { DEFAULT_RELAYS }
     }
 

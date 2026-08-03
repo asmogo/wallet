@@ -24,7 +24,6 @@ import com.cashu.me.Core.Wallet.walletMessage
 import com.cashu.me.Core.WalletManager
 import com.cashu.me.Models.PendingReceiveToken
 import com.cashu.me.Models.TokenInfo
-import com.cashu.me.ui.components.CanvasDivider
 import com.cashu.me.ui.components.InspectorRow
 import com.cashu.me.ui.components.PaymentStatusPhase
 import com.cashu.me.ui.components.PaymentStatusScreen
@@ -167,7 +166,18 @@ internal suspend fun tokenReviewDetails(
 internal sealed interface TokenClaimStatus {
     data object Claiming : TokenClaimStatus
     data class Claimed(val amount: Long, val fee: Long, val unit: String, val mint: String) : TokenClaimStatus
-    data class Failed(val message: WalletMessage) : TokenClaimStatus
+
+    /** Carries the review preview so the failure screen shows the same
+     * Amount/Fee/Mint rows as success (iOS passes successRows for every
+     * phase). Amount is the net estimate (token value − previewed fee),
+     * matching iOS `claimedAmount ?? netReceiveAmount`. */
+    data class Failed(
+        val message: WalletMessage,
+        val amount: Long,
+        val fee: Long,
+        val unit: String,
+        val mint: String,
+    ) : TokenClaimStatus
 }
 
 /**
@@ -229,7 +239,15 @@ internal suspend fun claimToken(
         // receipt from gross − credited so both amount and fee describe the
         // same settlement.
         onSuccess = { credited -> settledTokenClaim(review, credited) },
-        onFailure = { TokenClaimStatus.Failed(it.walletMessage) },
+        onFailure = {
+            TokenClaimStatus.Failed(
+                message = it.walletMessage,
+                amount = (review.info.amount.coerceAtLeast(0L) - review.fee).coerceAtLeast(0L),
+                fee = review.fee,
+                unit = review.info.unit,
+                mint = review.info.mint,
+            )
+        },
     )
 }
 
@@ -274,7 +292,6 @@ internal fun TokenInspectorRows(
             leadingIcon = Icons.Outlined.Receipt,
             loading = fee == null,
         )
-        CanvasDivider(leadingInset = 16.dp)
         InspectorRow(
             label = "Mint",
             value = info.mint,
@@ -282,7 +299,6 @@ internal fun TokenInspectorRows(
         )
         lockPresentation?.let { lock ->
             lock.targetLabels.forEachIndexed { index, target ->
-                CanvasDivider(leadingInset = 16.dp)
                 InspectorRow(
                     label = if (index == 0) "Locked to" else "Also locked to",
                     value = target,
@@ -290,7 +306,6 @@ internal fun TokenInspectorRows(
                     valueMonospaced = true,
                 )
             }
-            CanvasDivider(leadingInset = 16.dp)
             val statusColor = if (lock.claimable) {
                 CashuTheme.colors.received
             } else {
@@ -309,7 +324,6 @@ internal fun TokenInspectorRows(
             )
         }
         if (info.memo != null) {
-            CanvasDivider(leadingInset = 16.dp)
             InspectorRow(
                 label = "Memo",
                 value = info.memo,
@@ -339,12 +353,20 @@ internal fun TokenClaimTerminal(
         is TokenClaimStatus.Claimed -> PaymentStatusPhase.Success
         is TokenClaimStatus.Failed -> PaymentStatusPhase.Failure
     }
+    // Amount/Fee/Mint rows render for success and failure alike (iOS passes
+    // successRows for every phase). On failure they're the review preview:
+    // net estimate and prospective fee; a zero fee omits the row.
+    val rowData: ClaimRows? = when (status) {
+        TokenClaimStatus.Claiming -> null
+        is TokenClaimStatus.Claimed -> ClaimRows(status.amount, status.fee, status.unit, status.mint)
+        is TokenClaimStatus.Failed -> ClaimRows(status.amount, status.fee, status.unit, status.mint)
+    }
     PaymentStatusScreen(
         phase = phase,
         title = when (status) {
             TokenClaimStatus.Claiming -> "Claiming…"
             is TokenClaimStatus.Claimed -> "Payment Received!"
-            is TokenClaimStatus.Failed -> "Couldn't receive"
+            is TokenClaimStatus.Failed -> "Couldn't Receive"
         },
         detail = (status as? TokenClaimStatus.Failed)?.message?.text,
         // Terminal outcomes (already redeemed) can't be retried — offer Done;
@@ -361,10 +383,10 @@ internal fun TokenClaimTerminal(
                 { if (status.message.isTerminal) onDone() else onRetry() }
             }
         },
-        rows = (status as? TokenClaimStatus.Claimed)?.let { claimed ->
+        rows = rowData?.let { data ->
             {
-                val isSat = claimed.unit.equals("sat", ignoreCase = true)
-                val currency = CurrencyRegistry.currencyForMintUnit(claimed.unit)
+                val isSat = data.unit.equals("sat", ignoreCase = true)
+                val currency = CurrencyRegistry.currencyForMintUnit(data.unit)
                 fun formatted(value: Long): String = if (isSat) {
                     formatter.formatWalletSats(value, useBitcoinSymbol)
                 } else {
@@ -372,24 +394,26 @@ internal fun TokenClaimTerminal(
                 }
                 InspectorRow(
                     label = "Amount",
-                    value = formatted(claimed.amount),
+                    value = formatted(data.amount),
                     leadingIcon = Icons.Outlined.Payments,
                 )
-                if (claimed.fee > 0L) {
-                    CanvasDivider(leadingInset = 16.dp)
+                if (data.fee > 0L) {
                     InspectorRow(
                         label = "Fee",
-                        value = formatted(claimed.fee),
+                        value = formatted(data.fee),
                         leadingIcon = Icons.Outlined.Receipt,
                     )
                 }
-                CanvasDivider(leadingInset = 16.dp)
-                InspectorRow(
-                    label = "Mint",
-                    value = claimed.mint,
-                    leadingIcon = Icons.Outlined.AccountBalance,
-                )
+                if (data.mint.isNotEmpty()) {
+                    InspectorRow(
+                        label = "Mint",
+                        value = data.mint,
+                        leadingIcon = Icons.Outlined.AccountBalance,
+                    )
+                }
             }
         },
     )
 }
+
+private data class ClaimRows(val amount: Long, val fee: Long, val unit: String, val mint: String)

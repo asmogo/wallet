@@ -58,7 +58,6 @@ struct NWCSettingsView: View {
 
                     SettingsSectionGroup("Spending") {
                         mintRow
-                        CanvasDivider()
                         budgetRow
                     }
                     SettingsSectionFooter {

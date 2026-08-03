@@ -723,15 +723,14 @@ struct SendView: View {
                         }
                     }
 
-                    // Detail rows on canvas with hairline dividers — same
-                    // pattern as the Lightning Invoice screen.
+                    // Detail rows on canvas — same pattern as the Lightning
+                    // Invoice screen.
                     VStack(spacing: 0) {
                         // Sender's send fee — zero unless the send needed a
                         // change swap. The receiver's redeem fee is shown on
                         // their side, so a "0 sat" row here only misleads.
                         if tokenFee > 0 {
                             detailRow(icon: "arrow.up.arrow.down", label: "Fee", value: generatedFeeText)
-                            canvasDivider
                         }
                         detailRow(icon: "banknote", label: "Unit", value: generatedTokenUnit.uppercased())
                         // Fiat conversion is only meaningful for sats, only when
@@ -739,11 +738,9 @@ struct SendView: View {
                         // worth at least a cent — matches Android's gating.
                         if generatedIsSat, settings.showFiatBalance,
                            let fiatValue = priceService.formatSatsAsFiat(generatedAmount) {
-                            canvasDivider
                             detailRow(icon: "banknote", label: "Fiat", value: fiatValue)
                         }
                         if let mintURL = generatedTokenMintURL {
-                            canvasDivider
                             detailRow(icon: "bitcoinsign.bank.building", label: "Mint",
                                       value: extractMintHost(mintURL))
                         }
@@ -840,13 +837,6 @@ struct SendView: View {
         .font(.subheadline)
         .padding(.horizontal, 4)
         .padding(.vertical, 14)
-    }
-
-    private var canvasDivider: some View {
-        Rectangle()
-            .fill(Color(.separator))
-            .frame(height: 0.5)
-            .padding(.leading, 28)
     }
 
     private func formatBalance(_ sats: UInt64) -> String {
@@ -1353,12 +1343,6 @@ struct UnifiedSendView: View {
     /// instead of sitting at the bottom of a `.large` sheet.
     @State private var compactContentHeight: CGFloat = 0
 
-    /// Fixed sheet chrome around measured content: drag indicator + inline nav
-    /// bar + a little extra so the sheet sits just above the elements.
-    private static let compactSheetChrome: CGFloat = 108
-    /// First-frame estimate before geometry lands so the sheet doesn't open tiny.
-    private static let compactBodyEstimate: CGFloat = 220
-
     enum Step: Equatable { case input, amount, confirm, sending, sent, failed }
 
     enum LockedDestination: Equatable {
@@ -1376,11 +1360,6 @@ struct UnifiedSendView: View {
     private var prefersCompactSheet: Bool {
         // The pushed URL step hugs too; only discovery needs the full sheet.
         statusPhase == nil && step == .input && connectMintRoute != .discover
-    }
-
-    private var compactDetentHeight: CGFloat {
-        let body = compactContentHeight > 0 ? compactContentHeight : Self.compactBodyEstimate
-        return body + Self.compactSheetChrome
     }
 
     var body: some View {
@@ -1464,7 +1443,7 @@ struct UnifiedSendView: View {
         }
         // Own the sheet chrome so the detent can follow the step: compact for
         // input, `.large` + flat canvas for amount/confirm/status.
-        .presentationDetents(prefersCompactSheet ? [.height(compactDetentHeight)] : [.large])
+        .contentFitDetent(compactContentHeight, enabled: prefersCompactSheet)
         .presentationDragIndicator(.visible)
         // A stray swipe must not tear down the flow while the melt is executing.
         .interactiveDismissDisabled(step == .sending)
@@ -1485,32 +1464,25 @@ struct UnifiedSendView: View {
     }
 
     private var inputForm: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 0) {
-                destinationField
-                    .padding(.horizontal)
-                    .padding(.top, 12)
+        VStack(alignment: .leading, spacing: 0) {
+            destinationField
+                .padding(.horizontal)
+                .padding(.top, 12)
 
-                if let inputHint {
-                    InlineNotice(message: inputHint, severity: .caution)
-                        .padding(.horizontal, 20)
-                        .padding(.top, 10)
-                }
+            if let inputHint {
+                InlineNotice(message: inputHint, severity: .caution)
+                    .padding(.horizontal, 20)
+                    .padding(.top, 10)
+            }
 
-                // A centered row of round Liquid Glass icon buttons — the primary
-                // "ways to send" (Scan · Ecash · Tap), one-word label under each.
-                sendMethodRow
-                    .padding(.horizontal)
-                    .padding(.top, 32)
-            }
-            .padding(.bottom, 24)
-            .onGeometryChange(for: CGFloat.self) { proxy in
-                proxy.size.height
-            } action: { newHeight in
-                compactContentHeight = newHeight
-            }
+            // A centered row of round Liquid Glass icon buttons — the primary
+            // "ways to send" (Scan · Ecash · Tap), one-word label under each.
+            sendMethodRow
+                .padding(.horizontal)
+                .padding(.top, 32)
         }
-        .scrollBounceBehavior(.basedOnSize)
+        .padding(.bottom, 24)
+        .contentFitMeasured { compactContentHeight = $0 }
         .scrollDismissesKeyboard(.interactively)
     }
 
@@ -1935,11 +1907,9 @@ struct UnifiedSendView: View {
         return VStack(spacing: 0) {
             if isOnchain, case let .melt(request, _, _) = locked {
                 creqDetailRow(icon: "arrow.up.right", label: "To", value: request)
-                creqDivider
             }
             if let explanation = activeRouteExplanation {
                 CashuRequestRouteExplanationRow(explanation: explanation)
-                creqDivider
             }
             creqDetailRow(
                 icon: "arrow.up.arrow.down",
@@ -1947,7 +1917,6 @@ struct UnifiedSendView: View {
                 value: AmountFormatter.sats(quote?.feeReserve ?? 0, useBitcoinSymbol: settings.useBitcoinSymbol)
             )
             .redacted(reason: isLoading ? .placeholder : [])
-            creqDivider
             creqDetailRow(
                 icon: "creditcard",
                 label: "Total",
@@ -2644,15 +2613,12 @@ struct UnifiedSendView: View {
             VStack(spacing: 0) {
                 if creqTopMint(creq) == nil {
                     creqMintRow(creq)
-                    creqDivider
                 }
                 if let explanation = creqRouteExplanation {
                     CashuRequestRouteExplanationRow(explanation: explanation)
-                    creqDivider
                 }
                 if let memo = creqMemo(creq) {
                     creqDetailRow(icon: "quote.bubble", label: "Memo", value: memo)
-                    creqDivider
                 }
                 creqFeesRow
             }
@@ -2776,13 +2742,6 @@ struct UnifiedSendView: View {
         .accessibilityElement(children: .combine)
     }
 
-    private var creqDivider: some View {
-        Rectangle()
-            .fill(Color(.separator))
-            .frame(height: 0.5)
-            .padding(.horizontal, 4)
-    }
-
     // MARK: Input actions
 
     private func openScanner() {
@@ -2839,11 +2798,7 @@ struct UnifiedSendView: View {
             actionTitle: "Receive",
             action: onReceive
         )
-        .onGeometryChange(for: CGFloat.self) { proxy in
-            proxy.size.height
-        } action: { newHeight in
-            compactContentHeight = newHeight
-        }
+        .contentFitMeasured { compactContentHeight = $0 }
     }
 
     private func addMint(_ url: String) {
@@ -3395,26 +3350,21 @@ struct MeltView: View {
             VStack(spacing: 0) {
                 meltDetailRow(icon: "bolt", label: "Method", value: methodName)
                 if let routeExplanation {
-                    meltDivider
                     CashuRequestRouteExplanationRow(explanation: routeExplanation)
                 }
-                meltDivider
                 if quote?.paymentMethod == .onchain {
                     meltDetailRow(
                         icon: "arrow.up.right",
                         label: "To",
                         value: PaymentRequestParser.normalizeBitcoinRequest(requestInput)
                     )
-                    meltDivider
                 }
                 meltDetailRow(icon: "bitcoinsign", label: "Amount", value: "\(displayAmount) sat")
-                meltDivider
                 meltDetailRow(icon: "arrow.up.arrow.down", label: "Max fee", value: "\(quote?.feeReserve ?? 0) sat")
                     .redacted(reason: isLoading ? .placeholder : [])
                 // Reserve the Required-balance row while loading (we don't yet know the fee)
                 // so the common fee-bearing case doesn't shift when the quote lands.
                 if isLoading || (quote?.feeReserve ?? 0) > 0 {
-                    meltDivider
                     meltDetailRow(icon: "creditcard", label: "Required balance", value: "\(quote?.totalAmount ?? 0) sat")
                         .redacted(reason: isLoading ? .placeholder : [])
                 }
@@ -3478,15 +3428,6 @@ struct MeltView: View {
         .padding(.horizontal, 4)
         .padding(.vertical, 14)
         .accessibilityElement(children: .combine)
-    }
-
-    /// Hairline row separator matching CashuPaymentRequestPayView's `canvasDivider`
-    /// so the two pay screens read as one system (no boxed background).
-    private var meltDivider: some View {
-        Rectangle()
-            .fill(Color(.separator))
-            .frame(height: 0.5)
-            .padding(.horizontal, 4)
     }
 
     /// Full-screen processing → success → failure status, preserving the payment

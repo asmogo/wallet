@@ -1,8 +1,10 @@
 package com.cashu.me.ui.settings
 
 import android.content.ClipData
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -27,6 +29,8 @@ import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material.icons.outlined.LockOpen
 import androidx.compose.material.icons.outlined.Visibility
 import androidx.compose.material.icons.outlined.VisibilityOff
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
@@ -46,16 +50,21 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.ClipEntry
 import androidx.compose.ui.platform.LocalClipboard
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import com.cashu.me.Core.AppLockManager
 import com.cashu.me.Core.Bech32
-import com.cashu.me.ui.components.CanvasDivider
 import com.cashu.me.ui.components.IconSwap
 import com.cashu.me.ui.components.PrimaryButton
 import com.cashu.me.ui.components.QrCard
@@ -64,8 +73,6 @@ import com.cashu.me.ui.security.rememberWalletAuthenticationLauncher
 import com.cashu.me.ui.theme.CashuTheme
 import com.cashu.me.ui.theme.asOverline
 import com.cashu.me.ui.theme.withSlashedZero
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
 
 // iOS KeyCard geometry: 34pt glyph circle, rounded-14 card.
 private val KeyGlyphSize = 36.dp
@@ -120,11 +127,21 @@ data class KeyCardAction(
 )
 
 /**
+ * An extra copy target offered on long-press, for values that shouldn't take a
+ * row of their own (the Nostr key's hex encoding next to its npub).
+ */
+data class KeyCardCopyOption(
+    val title: String,
+    val value: String,
+)
+
+/**
  * The canonical card for a single key, used for both the primary key (on the
  * hub) and a device-only key (on its detail screen) so they read as one family:
  * a key glyph, a name, a backup-status line, the tap-to-copy pubkey, and up to
  * two action buttons. Mirrors iOS KeyCard (liquid glass → M3 surface container).
  */
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun KeyCard(
     title: String,
@@ -132,9 +149,12 @@ fun KeyCard(
     status: KeyCardStatus,
     actions: List<KeyCardAction>,
     modifier: Modifier = Modifier,
+    copyOptions: List<KeyCardCopyOption> = emptyList(),
 ) {
     val clipboard = LocalClipboardManager.current
+    val haptics = LocalHapticFeedback.current
     var copied by remember { mutableStateOf(false) }
+    var menuOpen by remember { mutableStateOf(false) }
     LaunchedEffect(copied) {
         if (copied) {
             delay(CopiedFeedbackMillis)
@@ -199,35 +219,79 @@ fun KeyCard(
             }
         }
 
-        // Tap-to-copy pubkey with a 2s checkmark beat (iOS parity).
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clickable {
-                    clipboard.setText(AnnotatedString(P2PKKeyDisplay.canonical(pubkey)))
-                    copied = true
-                },
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(CashuTheme.spacing.snug),
-        ) {
-            Text(
-                text = P2PKKeyDisplay.shortLabel(pubkey),
-                style = MaterialTheme.typography.bodyMedium.copy(fontFamily = CashuTheme.fonts.mono).withSlashedZero(),
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = 1,
-                overflow = TextOverflow.MiddleEllipsis,
-            )
-            IconSwap(
-                icon = if (copied) Icons.Outlined.Check else Icons.Outlined.ContentCopy,
-                contentDescription = "Copy this key",
-                tint = if (copied) CashuTheme.colors.received
-                else MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.size(CashuTheme.spacing.comfortable),
-            )
+        // Tap-to-copy pubkey with a 2s checkmark beat (iOS parity). When the caller
+        // supplies alternate encodings, long-press offers them without spending a row.
+        Box {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .then(
+                        if (copyOptions.isEmpty()) {
+                            Modifier.clickable {
+                                clipboard.setText(AnnotatedString(P2PKKeyDisplay.canonical(pubkey)))
+                                copied = true
+                            }
+                        } else {
+                            Modifier
+                                .semantics {
+                                    contentDescription =
+                                        "$title. Long press for more copy options."
+                                }
+                                .combinedClickable(
+                                    onClick = {
+                                        clipboard.setText(
+                                            AnnotatedString(P2PKKeyDisplay.canonical(pubkey)),
+                                        )
+                                        copied = true
+                                    },
+                                    onLongClick = {
+                                        haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                                        menuOpen = true
+                                    },
+                                    onLongClickLabel = "Show copy options",
+                                )
+                        },
+                    ),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(CashuTheme.spacing.snug),
+            ) {
+                Text(
+                    text = P2PKKeyDisplay.shortLabel(pubkey),
+                    style = MaterialTheme.typography.bodyMedium.copy(fontFamily = CashuTheme.fonts.mono).withSlashedZero(),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.MiddleEllipsis,
+                )
+                IconSwap(
+                    icon = if (copied) Icons.Outlined.Check else Icons.Outlined.ContentCopy,
+                    contentDescription = "Copy this key",
+                    tint = if (copied) CashuTheme.colors.received
+                    else MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(CashuTheme.spacing.comfortable),
+                )
+            }
+            DropdownMenu(
+                expanded = menuOpen,
+                onDismissRequest = { menuOpen = false },
+                shape = MaterialTheme.shapes.large,
+            ) {
+                copyOptions.forEach { option ->
+                    DropdownMenuItem(
+                        text = { Text(option.title) },
+                        leadingIcon = {
+                            Icon(Icons.Outlined.ContentCopy, contentDescription = null)
+                        },
+                        onClick = {
+                            menuOpen = false
+                            clipboard.setText(AnnotatedString(option.value))
+                            copied = true
+                        },
+                    )
+                }
+            }
         }
 
         if (actions.isNotEmpty()) {
-            CanvasDivider(leadingInset = 0.dp, trailingInset = 0.dp)
             Row(modifier = Modifier.fillMaxWidth()) {
                 actions.forEach { action ->
                     Column(
@@ -365,97 +429,128 @@ fun PrivateKeyRevealSheet(
         }
     }
     ModalBottomSheet(onDismissRequest = onDismiss) {
+        PrivateKeyRevealContent(
+            title = title,
+            warning = warning,
+            revealedNsec = revealedNsec,
+            copied = copied,
+            onToggleReveal = {
+                if (revealedNsec != null) {
+                    revealedNsec = null
+                } else {
+                    authenticate("Reveal this private key") { revealedNsec = loadNsec() }
+                }
+            },
+            onCopy = {
+                authenticate("Copy this private key") {
+                    loadNsec()?.let { nsec ->
+                        clipboard.setText(AnnotatedString(nsec))
+                        copied = true
+                    }
+                }
+            },
+            onDone = onDismiss,
+        )
+    }
+}
+
+/**
+ * The reveal sheet's body, without auth or sheet chrome, so it can be rendered
+ * in isolation by tests and previews.
+ */
+@Composable
+internal fun PrivateKeyRevealContent(
+    title: String,
+    warning: String,
+    revealedNsec: String?,
+    copied: Boolean,
+    onToggleReveal: () -> Unit,
+    onCopy: () -> Unit,
+    onDone: () -> Unit,
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = CashuTheme.spacing.comfortable)
+            .navigationBarsPadding(),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Icon(
+            imageVector = Icons.Filled.Warning,
+            contentDescription = null,
+            tint = CashuTheme.colors.pending,
+            modifier = Modifier.size(CashuTheme.spacing.page),
+        )
+        Spacer(Modifier.height(CashuTheme.spacing.snug))
+        // Names which key is on screen — the app holds a Nostr key, a primary
+        // P2PK key, and any number of device keys.
+        Text(
+            text = title.uppercase(),
+            style = MaterialTheme.typography.labelMedium.asOverline(),
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Spacer(Modifier.height(CashuTheme.spacing.micro))
+        Text(
+            text = "Keep this key secret",
+            style = MaterialTheme.typography.titleMedium,
+            color = MaterialTheme.colorScheme.onSurface,
+        )
+        Spacer(Modifier.height(CashuTheme.spacing.snug))
+        Text(
+            text = warning,
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Spacer(Modifier.height(CashuTheme.spacing.section))
+
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = CashuTheme.spacing.comfortable)
-                .navigationBarsPadding(),
-            horizontalAlignment = Alignment.CenterHorizontally,
+                .background(MaterialTheme.colorScheme.surfaceContainerHigh, MaterialTheme.shapes.small)
+                .padding(CashuTheme.spacing.default),
+            verticalArrangement = Arrangement.spacedBy(CashuTheme.spacing.snug),
         ) {
-            Icon(
-                imageVector = Icons.Filled.Warning,
-                contentDescription = null,
-                tint = CashuTheme.colors.pending,
-                modifier = Modifier.size(CashuTheme.spacing.page),
-            )
-            Spacer(Modifier.height(CashuTheme.spacing.default))
             Text(
-                text = "Keep this key secret",
-                style = MaterialTheme.typography.titleMedium,
-                color = MaterialTheme.colorScheme.onSurface,
-            )
-            Spacer(Modifier.height(CashuTheme.spacing.snug))
-            Text(
-                text = warning,
-                style = MaterialTheme.typography.bodyMedium,
+                text = "Private key (nsec)",
+                style = MaterialTheme.typography.labelMedium.asOverline(),
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
-            Spacer(Modifier.height(CashuTheme.spacing.section))
-
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .background(MaterialTheme.colorScheme.surfaceContainerHigh, MaterialTheme.shapes.small)
-                    .padding(CashuTheme.spacing.default),
-                verticalArrangement = Arrangement.spacedBy(CashuTheme.spacing.snug),
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(CashuTheme.spacing.snug),
             ) {
                 Text(
-                    text = "Private key (nsec)",
-                    style = MaterialTheme.typography.labelMedium.asOverline(),
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    text = revealedNsec ?: "\u2022".repeat(HiddenKeyDots),
+                    style = MaterialTheme.typography.bodyMedium.copy(fontFamily = CashuTheme.fonts.mono).withSlashedZero(),
+                    color = if (revealedNsec != null) MaterialTheme.colorScheme.onSurface
+                    else MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 3,
+                    modifier = Modifier.weight(1f),
                 )
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(CashuTheme.spacing.snug),
-                ) {
-                    Text(
-                        text = revealedNsec ?: "•".repeat(HiddenKeyDots),
-                        style = MaterialTheme.typography.bodyMedium.copy(fontFamily = CashuTheme.fonts.mono).withSlashedZero(),
-                        color = if (revealedNsec != null) MaterialTheme.colorScheme.onSurface
-                        else MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 3,
-                        modifier = Modifier.weight(1f),
-                    )
-                    Column(verticalArrangement = Arrangement.spacedBy(CashuTheme.spacing.micro)) {
-                        IconButton(onClick = {
-                            if (revealedNsec != null) {
-                                revealedNsec = null
-                            } else {
-                                authenticate("Reveal this private key") {
-                                    revealedNsec = loadNsec()
-                                }
-                            }
-                        }) {
-                            IconSwap(
-                                icon = if (revealedNsec != null) Icons.Outlined.VisibilityOff
-                                else Icons.Outlined.Visibility,
-                                contentDescription = if (revealedNsec != null) "Hide key" else "Reveal key",
-                            )
-                        }
-                        IconButton(onClick = {
-                            authenticate("Copy this private key") {
-                                loadNsec()?.let { nsec ->
-                                    clipboard.setText(AnnotatedString(nsec))
-                                    copied = true
-                                }
-                            }
-                        }) {
-                            IconSwap(
-                                icon = if (copied) Icons.Outlined.Check
-                                else Icons.Outlined.ContentCopy,
-                                contentDescription = "Copy key",
-                                tint = if (copied) CashuTheme.colors.received
-                                else MaterialTheme.colorScheme.onSurface,
-                            )
-                        }
+                Column(verticalArrangement = Arrangement.spacedBy(CashuTheme.spacing.micro)) {
+                    IconButton(onClick = onToggleReveal) {
+                        IconSwap(
+                            icon = if (revealedNsec != null) Icons.Outlined.VisibilityOff
+                            else Icons.Outlined.Visibility,
+                            contentDescription = if (revealedNsec != null) "Hide key" else "Reveal key",
+                        )
+                    }
+                    IconButton(onClick = onCopy) {
+                        IconSwap(
+                            icon = if (copied) Icons.Outlined.Check
+                            else Icons.Outlined.ContentCopy,
+                            contentDescription = "Copy key",
+                            tint = if (copied) CashuTheme.colors.received
+                            else MaterialTheme.colorScheme.onSurface,
+                        )
                     }
                 }
             }
-
-            Spacer(Modifier.height(CashuTheme.spacing.section))
-            PrimaryButton(text = "Done", onClick = onDismiss)
-            Spacer(Modifier.height(CashuTheme.spacing.comfortable))
         }
+
+        Spacer(Modifier.height(CashuTheme.spacing.section))
+        PrimaryButton(text = "Done", onClick = onDone)
+        Spacer(Modifier.height(CashuTheme.spacing.comfortable))
     }
 }
 
