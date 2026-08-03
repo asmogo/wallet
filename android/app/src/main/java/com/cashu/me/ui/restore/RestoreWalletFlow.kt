@@ -44,7 +44,6 @@ import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
@@ -55,8 +54,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.cashu.me.Core.Bip39WordList
 import com.cashu.me.Core.NostrMintBackupService
-import com.cashu.me.Core.WalletManager
 import com.cashu.me.Core.Wallet.userFacingWalletMessage
+import com.cashu.me.Core.WalletManager
 import com.cashu.me.Core.mintUrlCandidates
 import com.cashu.me.Models.MintInfo
 import com.cashu.me.Models.RestoreMintResult
@@ -72,6 +71,7 @@ import com.cashu.me.ui.components.SecondaryButton
 import com.cashu.me.ui.theme.CapsuleShape
 import com.cashu.me.ui.theme.CashuTheme
 import com.cashu.me.ui.theme.withMonoDigits
+import com.cashu.me.ui.theme.withSlashedZero
 import kotlinx.coroutines.launch
 
 // iOS restore twin: OnboardingView seed branch + Settings RestoreWalletView.
@@ -101,11 +101,7 @@ internal fun restoreMintFailurePhase(error: Throwable): RestoreMintPhase.Failed 
 
 @Composable
 fun restoreOnboardingTitleStyle(): TextStyle =
-    MaterialTheme.typography.displaySmall.copy(
-        fontWeight = FontWeight.ExtraBold,
-        letterSpacing = (-0.5).sp,
-        lineHeight = 40.sp,
-    )
+    CashuTheme.type.title
 
 // Single-line onboarding titles render at full display size and step down only
 // when the line would overflow (narrow devices / large font scales).
@@ -230,7 +226,7 @@ fun RestoreSeedStep(
                     },
                     modifier = Modifier.fillMaxSize(),
                     placeholder = "word1 word2 word3 …",
-                    textStyle = MaterialTheme.typography.bodyMedium.copy(fontFamily = FontFamily.Monospace),
+                    textStyle = MaterialTheme.typography.bodyMedium.copy(fontFamily = CashuTheme.fonts.mono).withSlashedZero(),
                     isError = errorText != null || (wordCount >= 12 && invalidCount > 0),
                     keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.None),
                 )

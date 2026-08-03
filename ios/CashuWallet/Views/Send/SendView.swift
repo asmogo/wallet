@@ -656,7 +656,7 @@ struct SendView: View {
                         CurrencyAmountDisplay(
                             sats: generatedAmount,
                             primary: $settings.amountDisplayPrimary,
-                            primarySize: 32
+                            role: .amountCompact
                         )
                     } else {
                         Text(CurrencyAmount(value: generatedAmount, currency: generatedUnitCurrency).formatted())
@@ -3363,7 +3363,7 @@ struct MeltView: View {
         CurrencyAmountDisplay(
             sats: amountSats,
             primary: $settings.amountDisplayPrimary,
-            primarySize: 48,
+            role: .amountConfirm,
             entryRaw: amountString
         )
         .accessibilityElement(children: .combine)

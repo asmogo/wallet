@@ -16,7 +16,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.text.TextAutoSize
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.SwapVert
 import androidx.compose.material3.Icon
@@ -34,20 +33,17 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.cashu.me.Core.AmountDisplayPrimary
 import com.cashu.me.Core.AmountDisplayText
 import com.cashu.me.Core.AmountFormatter
 import com.cashu.me.Core.displayText
+import com.cashu.me.ui.theme.AmountScale
 import com.cashu.me.ui.theme.CashuTheme
 import com.cashu.me.ui.theme.withMonoDigits
 
 private val FlipPillIconSize = 14.dp
-private val EntryHeroFontSize = 64.sp
-private val EntryHeroMinFontSize = 26.sp
 
 /**
  * Hero amount with a tappable unit-flip pill beneath it — the Compose port of
@@ -98,46 +94,21 @@ fun AmountFlipDisplay(
             useBitcoinSymbol = useBitcoinSymbol,
         )
     }
-    val entryHeroStyle = primaryTextStyle ?: if (entryRaw != null) {
-        MaterialTheme.typography.displayMedium.copy(
-            fontWeight = FontWeight.SemiBold,
-            fontSize = EntryHeroFontSize,
-            textAlign = TextAlign.Center,
-        )
-    } else {
-        null
-    }
     Column(
         modifier = modifier,
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(CashuTheme.spacing.snug),
     ) {
         val primaryStyle =
-            (entryHeroStyle ?: MaterialTheme.typography.displayMedium).withMonoDigits()
+            (primaryTextStyle ?: MaterialTheme.typography.displayMedium).withMonoDigits()
         if (entryRaw != null) {
             // Entry mode: the parent re-expresses [entryRaw] on flip, so animate
             // the resulting string directly. Re-deriving the same raw under the
             // opposite unit would briefly mint-unit-misread fiat digits as sats.
-            AmountText(
-                text = display.primary,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .then(
-                        if (primaryAccessibilityPrefix != null) {
-                            Modifier.semantics {
-                                contentDescription =
-                                    "$primaryAccessibilityPrefix: ${display.primary}"
-                            }
-                        } else {
-                            Modifier
-                        },
-                    ),
-                style = primaryStyle,
-                maxLines = 1,
-                autoSize = TextAutoSize.StepBased(
-                    minFontSize = EntryHeroMinFontSize,
-                    maxFontSize = EntryHeroFontSize,
-                ),
+            AmountHero(
+                parts = display.primaryParts,
+                scale = AmountScale.Hero,
+                accessibilityPrefix = primaryAccessibilityPrefix,
             )
         } else {
             // Display mode: amountSats is unit-agnostic, so cross-fade units

@@ -194,7 +194,7 @@ struct CashuRequestDetailView: View {
                             CurrencyAmountDisplay(
                                 sats: amount,
                                 primary: $settings.amountDisplayPrimary,
-                                primarySize: 32
+                                role: .amountCompact
                             )
                         } else {
                             // Non-sat unit: render in its own currency, no sats flip.

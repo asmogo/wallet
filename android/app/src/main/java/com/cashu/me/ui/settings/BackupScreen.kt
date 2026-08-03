@@ -32,17 +32,17 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.text.AnnotatedString
-import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import kotlinx.coroutines.delay
 import com.cashu.me.Core.AppLockManager
 import com.cashu.me.Core.WalletManager
 import com.cashu.me.ui.components.IconSwap
 import com.cashu.me.ui.components.SheetHeader
 import com.cashu.me.ui.security.rememberWalletAuthenticationLauncher
 import com.cashu.me.ui.theme.CashuTheme
+import com.cashu.me.ui.theme.withSlashedZero
+import kotlinx.coroutines.delay
 
 /**
  * Settings → Backup & Restore → "Backup seed phrase" (iOS `BackupView`): a quiet
@@ -133,7 +133,7 @@ fun BackupSeedSheet(
                 ) {
                     Text(
                         text = if (revealed) revealedText else hiddenText,
-                        style = MaterialTheme.typography.bodyMedium.copy(fontFamily = FontFamily.Monospace),
+                        style = MaterialTheme.typography.bodyMedium.copy(fontFamily = CashuTheme.fonts.mono).withSlashedZero(),
                         color = if (revealed) MaterialTheme.colorScheme.onSurface
                         else MaterialTheme.colorScheme.onSurfaceVariant,
                         maxLines = 4,

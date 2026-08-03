@@ -109,7 +109,7 @@ struct CashuRequestAmountPickerSheet: View {
             CurrencyAmountDisplay(
                 sats: amountBaseUnits,
                 primary: $settings.amountDisplayPrimary,
-                primarySize: 56,
+                role: .amountHero,
                 entryRaw: amountString
             )
             .accessibilityLabel("Request amount: \(amountString.isEmpty ? "0" : amountString) sats")

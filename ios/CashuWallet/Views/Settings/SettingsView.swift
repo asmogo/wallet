@@ -144,10 +144,8 @@ struct SettingsView: View {
     ) -> some View {
         VStack(alignment: .leading, spacing: 0) {
             Text(title)
-                .font(.caption.weight(.semibold))
+                .cashuText(.overline)
                 .foregroundStyle(.secondary)
-                .textCase(.uppercase)
-                .tracking(1.2)
                 .padding(.horizontal, 4)
                 .padding(.top, 16)
                 .padding(.bottom, 8)

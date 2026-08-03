@@ -48,10 +48,8 @@ import androidx.compose.ui.platform.ClipEntry
 import androidx.compose.ui.platform.LocalClipboard
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
-import kotlinx.coroutines.launch
 import com.cashu.me.Core.AmountFormatter
 import com.cashu.me.Core.NwcManager
 import com.cashu.me.Core.NwcState
@@ -68,6 +66,8 @@ import com.cashu.me.ui.components.SectionHeader
 import com.cashu.me.ui.components.ToggleRow
 import com.cashu.me.ui.components.ToolbarIcon
 import com.cashu.me.ui.theme.CashuTheme
+import com.cashu.me.ui.theme.withSlashedZero
+import kotlinx.coroutines.launch
 
 /** Settings and pairing surface for CDK's NIP-47 wallet service. */
 @OptIn(ExperimentalMaterial3Api::class)
@@ -301,7 +301,7 @@ private fun NwcConnectionRow(
         )
         Text(
             text = uri,
-            style = MaterialTheme.typography.bodyMedium.copy(fontFamily = FontFamily.Monospace),
+            style = MaterialTheme.typography.bodyMedium.copy(fontFamily = CashuTheme.fonts.mono).withSlashedZero(),
             color = MaterialTheme.colorScheme.onSurface,
             modifier = Modifier.weight(1f),
             maxLines = 1,

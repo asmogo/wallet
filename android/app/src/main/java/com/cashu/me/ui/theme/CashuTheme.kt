@@ -19,6 +19,10 @@ object CashuTheme {
         @Composable get() = LocalCashuSpacing.current
     val iconSizes: CashuIconSizes
         @Composable get() = LocalCashuIconSizes.current
+    val type: CashuTypeRoles
+        @Composable get() = LocalCashuTypeRoles.current
+    val fonts: CashuFonts
+        @Composable get() = LocalCashuFonts.current
 }
 
 /**
@@ -54,16 +58,20 @@ fun CashuTheme(
         }
     }
 
+    val fonts = CashuFonts.Geist
+
     CompositionLocalProvider(
         LocalCashuColors provides cashuColors,
         LocalCashuSpacing provides CashuSpacing(),
         LocalCashuIconSizes provides CashuIconSizes(),
+        LocalCashuFonts provides fonts,
+        LocalCashuTypeRoles provides cashuTypeRoles(fonts),
     ) {
         MaterialExpressiveTheme(
             colorScheme = colorScheme,
             motionScheme = MotionScheme.expressive(),
             shapes = CashuShapes,
-            typography = CashuTypography,
+            typography = cashuTypography(fonts),
             content = content,
         )
     }

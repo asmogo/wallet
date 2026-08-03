@@ -550,7 +550,7 @@ struct ReceiveLightningView: View {
                             CurrencyAmountDisplay(
                                 sats: amount,
                                 primary: $settings.amountDisplayPrimary,
-                                primarySize: 32
+                                role: .amountCompact
                             )
                             .accessibilityLabel("Offer amount: \(amount) sats")
                         } else {
@@ -752,7 +752,7 @@ struct ReceiveLightningView: View {
                     CurrencyAmountDisplay(
                         sats: amount,
                         primary: $settings.amountDisplayPrimary,
-                        primarySize: 32
+                        role: .amountCompact
                     )
                     .accessibilityLabel("Request amount: \(amount) sats")
                 } else {

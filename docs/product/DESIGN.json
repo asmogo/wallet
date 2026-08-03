@@ -1,6 +1,6 @@
 {
   "schemaVersion": 2,
-  "generatedAt": "2026-05-17T00:00:00Z",
+  "generatedAt": "2026-08-03T00:00:00Z",
   "title": "Design System: Cashu Wallet",
   "extensions": {
     "colorMeta": {
@@ -8,105 +8,321 @@
         "role": "primary",
         "displayName": "System Ink",
         "canonical": "#000000 (light) / #FFFFFF (dark)",
-        "tonalRamp": ["#000000", "#1C1C1E", "#2C2C2E", "#3A3A3C", "#48484A", "#636366", "#8E8E93", "#FFFFFF"]
+        "tonalRamp": [
+          "#000000",
+          "#1C1C1E",
+          "#2C2C2E",
+          "#3A3A3C",
+          "#48484A",
+          "#636366",
+          "#8E8E93",
+          "#FFFFFF"
+        ]
       },
       "primary-text": {
         "role": "neutral",
         "displayName": "Label",
         "canonical": "Color.primary (auto-adapts black <-> white)",
-        "tonalRamp": ["#000000", "#1C1C1E", "#2C2C2E", "#3A3A3C", "#48484A", "#636366", "#AEAEB2", "#FFFFFF"]
+        "tonalRamp": [
+          "#000000",
+          "#1C1C1E",
+          "#2C2C2E",
+          "#3A3A3C",
+          "#48484A",
+          "#636366",
+          "#AEAEB2",
+          "#FFFFFF"
+        ]
       },
       "secondary-text": {
         "role": "neutral",
         "displayName": "Secondary Label",
         "canonical": "Color.secondary @ 60% (iOS systemGray equivalent)",
-        "tonalRamp": ["#1C1C1E", "#2C2C2E", "#48484A", "#636366", "#8E8E93", "#AEAEB2", "#C7C7CC", "#E5E5EA"]
+        "tonalRamp": [
+          "#1C1C1E",
+          "#2C2C2E",
+          "#48484A",
+          "#636366",
+          "#8E8E93",
+          "#AEAEB2",
+          "#C7C7CC",
+          "#E5E5EA"
+        ]
       },
       "separator-hair": {
         "role": "neutral",
         "displayName": "Hairline",
         "canonical": "Color(.separator) (~29% on light, ~60% on dark)",
-        "tonalRamp": ["#1C1C1E", "#3A3A3C", "#48484A", "#636366", "#8E8E93", "#C7C7CC", "#D1D1D6", "#E5E5EA"]
+        "tonalRamp": [
+          "#1C1C1E",
+          "#3A3A3C",
+          "#48484A",
+          "#636366",
+          "#8E8E93",
+          "#C7C7CC",
+          "#D1D1D6",
+          "#E5E5EA"
+        ]
       },
       "surface": {
         "role": "neutral",
         "displayName": "Surface",
         "canonical": "Color(.systemBackground) (auto-adapts white <-> black)",
-        "tonalRamp": ["#000000", "#1C1C1E", "#2C2C2E", "#3A3A3C", "#48484A", "#F2F2F7", "#F9F9FB", "#FFFFFF"]
+        "tonalRamp": [
+          "#000000",
+          "#1C1C1E",
+          "#2C2C2E",
+          "#3A3A3C",
+          "#48484A",
+          "#F2F2F7",
+          "#F9F9FB",
+          "#FFFFFF"
+        ]
       },
       "state-confirmed": {
         "role": "secondary",
         "displayName": "Confirmed Green",
         "canonical": "Color.green (iOS systemGreen: #34C759 light / #30D158 dark)",
-        "tonalRamp": ["#0F3D1B", "#175B27", "#1E7A33", "#249740", "#2CB54C", "#34C759", "#5BD476", "#A7E8B6"]
+        "tonalRamp": [
+          "#0F3D1B",
+          "#175B27",
+          "#1E7A33",
+          "#249740",
+          "#2CB54C",
+          "#34C759",
+          "#5BD476",
+          "#A7E8B6"
+        ]
       },
       "state-pending": {
         "role": "tertiary",
         "displayName": "Pending Orange",
         "canonical": "Color.orange (iOS systemOrange: #FF9500 light / #FF9F0A dark)",
-        "tonalRamp": ["#3D2400", "#5B3600", "#7A4800", "#975A00", "#B56C00", "#FF9500", "#FFB04B", "#FFD9A0"]
+        "tonalRamp": [
+          "#3D2400",
+          "#5B3600",
+          "#7A4800",
+          "#975A00",
+          "#B56C00",
+          "#FF9500",
+          "#FFB04B",
+          "#FFD9A0"
+        ]
       },
       "state-error": {
         "role": "tertiary",
         "displayName": "Error Red",
         "canonical": "Color.red (iOS systemRed: #FF3B30 light / #FF453A dark)",
-        "tonalRamp": ["#3D0B07", "#5B100B", "#7A1610", "#971B14", "#B52119", "#FF3B30", "#FF6F66", "#FFB4AD"]
+        "tonalRamp": [
+          "#3D0B07",
+          "#5B100B",
+          "#7A1610",
+          "#971B14",
+          "#B52119",
+          "#FF3B30",
+          "#FF6F66",
+          "#FFB4AD"
+        ]
       },
       "selection-tint": {
         "role": "neutral",
         "displayName": "Selection Tint",
         "canonical": "Color.primary @ 12%",
-        "tonalRamp": ["#0000000A", "#00000014", "#0000001F", "#00000029", "#00000033", "#0000003D", "#00000052", "#00000066"]
+        "tonalRamp": [
+          "#0000000A",
+          "#00000014",
+          "#0000001F",
+          "#00000029",
+          "#00000033",
+          "#0000003D",
+          "#00000052",
+          "#00000066"
+        ]
       },
       "pending-tint": {
         "role": "tertiary",
         "displayName": "Pending Tint",
         "canonical": "Color.orange @ 10%",
-        "tonalRamp": ["#FF95000A", "#FF950014", "#FF95001A", "#FF950026", "#FF950033", "#FF950040", "#FF95004D", "#FF950066"]
+        "tonalRamp": [
+          "#FF95000A",
+          "#FF950014",
+          "#FF95001A",
+          "#FF950026",
+          "#FF950033",
+          "#FF950040",
+          "#FF95004D",
+          "#FF950066"
+        ]
       },
       "error-tint": {
         "role": "tertiary",
         "displayName": "Error Tint",
         "canonical": "Color.red @ 18%",
-        "tonalRamp": ["#FF3B300A", "#FF3B3014", "#FF3B302E", "#FF3B3040", "#FF3B3052", "#FF3B3066", "#FF3B3080", "#FF3B309A"]
+        "tonalRamp": [
+          "#FF3B300A",
+          "#FF3B3014",
+          "#FF3B302E",
+          "#FF3B3040",
+          "#FF3B3052",
+          "#FF3B3066",
+          "#FF3B3080",
+          "#FF3B309A"
+        ]
       }
     },
     "typographyMeta": {
-      "balance": {
-        "displayName": "Balance",
-        "purpose": "The wallet's primary balance and the recovered-amount counter. SF Pro Bold at iOS .largeTitle with tabular figures and .contentTransition(.numericText())."
+      "amountHero": {
+        "displayName": "Amount Hero",
+        "purpose": "The wallet balance and the live amount-entry hero — one role, because they are the same object. Tabular figures plus a digit transition, always together.",
+        "api": ".cashuAmount(.amountHero, value:)",
+        "sizePt": 52,
+        "sizeSp": 52,
+        "anchor": ".largeTitle",
+        "trackingEm": -0.015,
+        "numeric": true,
+        "capPt": 70
+      },
+      "amountConfirm": {
+        "displayName": "Amount Confirm",
+        "purpose": "Transaction detail and confirmation amounts.",
+        "api": ".cashuAmount(.amountConfirm, value:)",
+        "sizePt": 40,
+        "sizeSp": 40,
+        "anchor": ".title",
+        "trackingEm": -0.01,
+        "numeric": true,
+        "capPt": 56
+      },
+      "amountCompact": {
+        "displayName": "Amount Compact",
+        "purpose": "Lightning, Cashu Request and QR-adjacent amounts.",
+        "api": ".cashuAmount(.amountCompact, value:)",
+        "sizePt": 28,
+        "sizeSp": 28,
+        "anchor": ".title2",
+        "trackingEm": -0.005,
+        "numeric": true,
+        "capPt": 40
+      },
+      "amountRow": {
+        "displayName": "Amount Row",
+        "purpose": "Money in list rows, fee lines and sub-balances.",
+        "api": ".cashuAmount(.amountRow, value:)",
+        "sizePt": 17,
+        "sizeSp": 16,
+        "anchor": ".body",
+        "trackingEm": 0.0,
+        "numeric": true
+      },
+      "numberPadKey": {
+        "displayName": "Number Pad Key",
+        "purpose": "Keypad digits. Tabular so a key label does not shift width between digits.",
+        "api": ".cashuAmount(.numberPadKey, value:)",
+        "sizePt": 28,
+        "sizeSp": 24,
+        "anchor": ".title",
+        "trackingEm": 0.0,
+        "numeric": true
       },
       "title": {
         "displayName": "Title",
-        "purpose": "Onboarding hero headings only."
+        "purpose": "Onboarding hero headings and modal titles.",
+        "api": ".cashuText(.title)",
+        "sizePt": 28,
+        "sizeSp": 36,
+        "anchor": ".title",
+        "trackingEm": 0.0,
+        "numeric": false
       },
       "title3": {
         "displayName": "Title 3",
-        "purpose": "In-flow section heads, in-body modal headings, transaction-type label. Navigation-bar titles (incl. sheet/flow screens) use the native inline title (.navigationTitle, ~17pt), not Title3."
+        "purpose": "In-flow section heads and in-body modal headings.",
+        "api": ".cashuText(.title3)",
+        "sizePt": 20,
+        "sizeSp": 22,
+        "anchor": ".title3",
+        "trackingEm": 0.0,
+        "numeric": false
+      },
+      "bodyEmphasis": {
+        "displayName": "Body Emphasis",
+        "purpose": "Primary button labels and list-row titles.",
+        "api": ".cashuText(.bodyEmphasis)",
+        "sizePt": 17,
+        "sizeSp": 16,
+        "anchor": ".body",
+        "trackingEm": 0.0,
+        "numeric": false
       },
       "body": {
         "displayName": "Body",
-        "purpose": "Default prose, settings rows, detail values."
+        "purpose": "Prose, settings rows, detail values.",
+        "api": ".cashuText(.body)",
+        "sizePt": 17,
+        "sizeSp": 16,
+        "anchor": ".body",
+        "trackingEm": 0.0,
+        "numeric": false
       },
-      "body-emphasis": {
-        "displayName": "Body Emphasis",
-        "purpose": "Primary and secondary button labels, history row title."
+      "textLink": {
+        "displayName": "Text Link",
+        "purpose": "Borderless tertiary actions.",
+        "api": ".cashuText(.textLink)",
+        "sizePt": 15,
+        "sizeSp": 14,
+        "anchor": ".subheadline",
+        "trackingEm": 0.0,
+        "numeric": false
       },
-      "callout": {
-        "displayName": "Callout",
-        "purpose": "Supporting descriptive text under hero headings."
+      "metadata": {
+        "displayName": "Metadata",
+        "purpose": "Timestamps and secondary row text. One step above the 12pt floor: metadata is already demoted by secondary ink, and stacking both pushes it under the legibility line.",
+        "api": ".cashuText(.metadata)",
+        "sizePt": 13,
+        "sizeSp": 14,
+        "anchor": ".footnote",
+        "trackingEm": 0.0,
+        "numeric": false
       },
       "caption": {
         "displayName": "Caption",
-        "purpose": "Timestamps, pending badges, unit toggle, hint text."
+        "purpose": "Incidental chrome only.",
+        "api": ".cashuText(.caption)",
+        "sizePt": 12,
+        "sizeSp": 12,
+        "anchor": ".caption",
+        "trackingEm": 0.0,
+        "numeric": false
       },
-      "caption-emphasis": {
-        "displayName": "Caption Emphasis",
-        "purpose": "Uppercase section headers in History (TODAY, YESTERDAY, THIS WEEK)."
+      "overline": {
+        "displayName": "Overline",
+        "purpose": "Uppercase section headers. The only uppercase in the system; casing lives in the role.",
+        "api": ".cashuText(.overline)",
+        "sizePt": 12,
+        "sizeSp": 12,
+        "anchor": ".caption",
+        "trackingEm": 0.06,
+        "numeric": false
       },
-      "mono-caption": {
+      "monoBody": {
+        "displayName": "Mono Body",
+        "purpose": "Mnemonics, npubs, token ids, Lightning addresses.",
+        "api": ".cashuText(.monoBody)",
+        "sizePt": 15,
+        "sizeSp": 14,
+        "anchor": ".subheadline",
+        "trackingEm": 0.0,
+        "numeric": false
+      },
+      "monoCaption": {
         "displayName": "Mono Caption",
-        "purpose": "Truncated Lightning addresses, token IDs, hex/base58 fragments."
+        "purpose": "Truncated hex where a proportional face would mush.",
+        "api": ".cashuText(.monoCaption)",
+        "sizePt": 11,
+        "sizeSp": 12,
+        "anchor": ".caption2",
+        "trackingEm": 0.0,
+        "numeric": false
       }
     },
     "shadows": [],
@@ -163,7 +379,88 @@
         "value": "430px",
         "purpose": "iPhone Pro Max / Plus width."
       }
-    ]
+    ],
+    "families": {
+      "ios": {
+        "sans": "SF Pro (system)",
+        "mono": "SF Mono (system)",
+        "bundled": false,
+        "note": "SF Symbols are metrically bound to SF Pro, and system-presented surfaces cannot be restyled, so a bundled face would leave the app permanently mixed-face."
+      },
+      "android": {
+        "sans": "Geist",
+        "mono": "Geist Mono",
+        "bundled": true,
+        "license": "SIL OFL 1.1",
+        "axes": [
+          "wght"
+        ],
+        "source": "vercel/geist-font GitHub release",
+        "note": "Not the Google Fonts build, which strips the OpenType table and would silently disable tabular figures."
+      }
+    },
+    "platformParity": {
+      "amountHero": {
+        "iosPt": 52,
+        "androidSp": 52
+      },
+      "amountConfirm": {
+        "iosPt": 40,
+        "androidSp": 40
+      },
+      "amountCompact": {
+        "iosPt": 28,
+        "androidSp": 28
+      },
+      "amountRow": {
+        "iosPt": 17,
+        "androidSp": 16
+      },
+      "numberPadKey": {
+        "iosPt": 28,
+        "androidSp": 24
+      },
+      "title": {
+        "iosPt": 28,
+        "androidSp": 36
+      },
+      "title3": {
+        "iosPt": 20,
+        "androidSp": 22
+      },
+      "bodyEmphasis": {
+        "iosPt": 17,
+        "androidSp": 16
+      },
+      "body": {
+        "iosPt": 17,
+        "androidSp": 16
+      },
+      "textLink": {
+        "iosPt": 15,
+        "androidSp": 14
+      },
+      "metadata": {
+        "iosPt": 13,
+        "androidSp": 14
+      },
+      "caption": {
+        "iosPt": 12,
+        "androidSp": 12
+      },
+      "overline": {
+        "iosPt": 12,
+        "androidSp": 12
+      },
+      "monoBody": {
+        "iosPt": 15,
+        "androidSp": 14
+      },
+      "monoCaption": {
+        "iosPt": 11,
+        "androidSp": 12
+      }
+    }
   },
   "components": [
     {

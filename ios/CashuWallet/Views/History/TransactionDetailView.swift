@@ -142,7 +142,7 @@ struct TransactionDetailView: View {
                                 CurrencyAmountDisplay(
                                     sats: transaction.amount,
                                     primary: $settings.amountDisplayPrimary,
-                                    primarySize: showsQR ? 32 : 48
+                                    role: showsQR ? .amountCompact : .amountConfirm
                                 )
                                 .accessibilityLabel("Amount: \(transaction.amount) sats")
                             }

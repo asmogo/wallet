@@ -83,7 +83,7 @@ import com.cashu.me.Core.recentCompletedTransactions
 import com.cashu.me.Core.rememberWalletHaptics
 import com.cashu.me.Models.WalletTransaction
 import com.cashu.me.ui.components.BalanceDisplay
-import com.cashu.me.ui.components.BalanceHeroHeight
+import com.cashu.me.ui.components.balanceHeroHeight
 import com.cashu.me.ui.components.EmptyState
 import com.cashu.me.ui.components.GhostButton
 import com.cashu.me.ui.components.MintChip
@@ -517,7 +517,7 @@ private fun HomeBalanceHero(
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(BalanceHeroHeight),
+                .height(balanceHeroHeight()),
             contentAlignment = Alignment.Center,
         ) {
             if (showsPager) {

@@ -76,6 +76,7 @@ fun SettingsScreen(
     onOpenLockedEcash: () -> Unit,
     onOpenNostr: () -> Unit,
     onOpenPrivacy: () -> Unit,
+    onOpenLicenses: () -> Unit,
     contentPadding: PaddingValues,
 ) {
     val context = LocalContext.current
@@ -199,6 +200,14 @@ fun SettingsScreen(
                     leadingIcon = Icons.Outlined.Description,
                     trailingIcon = Icons.Outlined.ArrowOutward,
                     onClick = { context.openExternal("https://github.com/cashubtc/nuts") },
+                )
+            }
+
+            item("licenses") {
+                NavRow(
+                    title = "Licenses",
+                    leadingIcon = Icons.Outlined.Description,
+                    onClick = onOpenLicenses,
                 )
             }
 

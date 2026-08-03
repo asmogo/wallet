@@ -77,7 +77,9 @@ struct NumberPadAmountInput: View {
         } else {
             Button(action: { append(key) }) {
                 Text(key)
-                    .font(.title.weight(.regular))
+                    // Tabular, so a key's label doesn't shift width between
+                    // digits — and the same family as the number it produces.
+                    .cashuText(.numberPadKey)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .contentShape(Rectangle())
             }
