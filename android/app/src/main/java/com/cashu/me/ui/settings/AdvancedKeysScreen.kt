@@ -193,8 +193,8 @@ internal fun ImportP2PKDialog(
                     modifier = Modifier.fillMaxWidth(),
                     singleLine = true,
                     isError = inputError != null,
+                    supportingText = inputError,
                 )
-                inputError?.let { InlineNotice(text = it) }
             }
         },
         confirmButton = {

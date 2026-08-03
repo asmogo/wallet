@@ -209,6 +209,7 @@ internal fun NostrRelayInputRow(
     onSubmit: () -> Unit,
     isError: Boolean,
     modifier: Modifier = Modifier,
+    errorText: String? = null,
 ) {
     val canSubmit = value.isNotBlank()
     CashuTextField(
@@ -218,6 +219,7 @@ internal fun NostrRelayInputRow(
         placeholder = "wss://relay.example.com",
         singleLine = true,
         isError = isError,
+        supportingText = errorText,
         textStyle = MaterialTheme.typography.bodyMedium.copy(fontFamily = CashuTheme.fonts.mono).withSlashedZero(),
         keyboardOptions = KeyboardOptions(
             capitalization = KeyboardCapitalization.None,

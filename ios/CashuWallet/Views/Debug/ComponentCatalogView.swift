@@ -51,7 +51,7 @@ struct ComponentCatalogView: View {
 
     private var noticeMatrix: some View {
         Group {
-            section("InlineNotice — untinted (iOS default)") {
+            section("InlineNotice — the inline channel (never boxed)") {
                 InlineNotice(message: "Couldn't reach the mint.", severity: .error)
                 InlineNotice(
                     message: insufficient,
@@ -62,39 +62,22 @@ struct ComponentCatalogView: View {
                     message: "This request asks for a mint you have not added yet.",
                     severity: .info
                 )
-                // iOS has no .success case; Android's NoticeSeverity does.
+                InlineNotice(message: "Backed up to your relays.", severity: .success)
             }
 
-            section("InlineNotice — tinted (Android default)") {
-                InlineNotice(message: "Couldn't reach the mint.", severity: .error, tinted: true)
-                InlineNotice(
-                    message: insufficient,
-                    severity: .caution,
-                    detail: insufficientDetail,
-                    tinted: true
-                )
-                InlineNotice(
-                    message: "This request asks for a mint you have not added yet.",
-                    severity: .info,
-                    tinted: true
-                )
-            }
-
-            section("InlineNotice — titled (no Android equivalent)") {
+            section("Titled variant") {
                 InlineNotice(
                     message: "You haven't used testnut.cashu.space before. Receiving adds it to your wallet.",
                     title: "New mint",
-                    severity: .caution,
-                    tinted: true
+                    severity: .caution
                 )
             }
         }
     }
 
     private var bannerSection: some View {
-        section("ErrorBannerView — the second iOS surface (Android has none)") {
+        section("ErrorBannerView — the floating channel, on .regularMaterial") {
             ErrorBannerView(message: "Couldn't reach the mint.", severity: .error)
-            ErrorBannerView(message: insufficient, severity: .caution)
             ErrorBannerView(message: "Backup failed.", severity: .error, retry: {})
         }
     }
@@ -103,67 +86,54 @@ struct ComponentCatalogView: View {
 
     private var handRolledVariants: some View {
         Group {
-            section("H1 — sendInputNotice, a clone of InlineNotice (SendView.swift:294)") {
-                // .top/8 instead of .firstTextBaseline/6, and no VoiceOver
-                // "Caution. " prefix, which the real InlineNotice supplies.
-                HStack(alignment: .top, spacing: 8) {
-                    Image(systemName: ErrorSeverity.caution.icon)
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(ErrorSeverity.caution.foreground)
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(insufficient)
-                            .font(.caption)
-                            .foregroundStyle(ErrorSeverity.caution.foreground)
-                        Text(insufficientDetail)
-                            .font(.caption2)
-                            .foregroundStyle(.secondary)
-                    }
-                    Spacer(minLength: 0)
-                }
-                .padding(10)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .background(
-                    ErrorSeverity.caution.tint,
-                    in: RoundedRectangle(cornerRadius: 12, style: .continuous)
+            section("H1 — FIXED: SendView now uses the shared component (SendView.swift:294)") {
+                // Was a hand-rolled copy with .top/8 spacing that silently
+                // dropped the VoiceOver "Caution. " prefix.
+                InlineNotice(
+                    message: insufficient,
+                    severity: .caution,
+                    detail: insufficientDetail
                 )
             }
 
-            section("H2 — bare red caption row (SendView.swift:3289)") {
-                // Color.red, not Color(.systemRed); and the *caution* glyph,
-                // unfilled, paired with error red.
+            section("H2 — FIXED: semantic red + the severity's own glyph (SendView.swift:3263)") {
+                // Was Color.red paired with the unfilled *caution* circle.
                 HStack(spacing: 6) {
-                    Image(systemName: "exclamationmark.circle")
+                    Image(systemName: ErrorSeverity.error.icon)
                         .font(.caption.weight(.semibold))
                     Text("Unrecognized — try a Lightning address, invoice, or Cashu Request")
                         .font(.caption)
                 }
-                .foregroundStyle(Color.red)
+                .foregroundStyle(ErrorSeverity.error.foreground)
             }
 
-            section("H4 — solid-red scanner block (ScannerWrapperView.swift:275)") {
-                // No icon, no severity tint, default body font, radius 10 not 12.
-                Text("No valid mint URL found in QR code.")
-                    .foregroundStyle(.primary)
-                    .padding()
-                    .background(Color.red)
-                    .clipShape(.rect(cornerRadius: 10))
+            section("H4 — FIXED: scanner overlay on material (ScannerWrapperView.swift:275)") {
+                // Was a solid Color.red slab, no icon, radius 10.
+                HStack(alignment: .firstTextBaseline, spacing: 8) {
+                    Image(systemName: ErrorSeverity.error.icon)
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(ErrorSeverity.error.foreground)
+                    Text("No valid mint URL found in QR code.")
+                        .font(.subheadline)
+                        .foregroundStyle(.primary)
+                }
+                .padding(12)
+                .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
             }
 
-            section("H6 — no severity signal at all (AmountEntryView.swift:157)") {
-                // Same string as the canonical notice, rendered as plain
-                // secondary text. Dead code — no production call site.
-                Text(insufficient)
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-            }
-
-            section("Reference — the shared component the above should have used") {
-                InlineNotice(
-                    message: insufficient,
-                    severity: .caution,
-                    detail: insufficientDetail,
-                    tinted: true
-                )
+            section("Severity glyphs — Apple's convention, deliberately not Material's") {
+                ForEach(["error", "caution", "info", "success"], id: \.self) { name in
+                    let sev: ErrorSeverity = name == "error" ? .error
+                        : name == "caution" ? .caution
+                        : name == "info" ? .info : .success
+                    HStack(spacing: 8) {
+                        Image(systemName: sev.icon)
+                            .foregroundStyle(sev.foreground)
+                        Text("\(name) — \(sev.icon)")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
             }
         }
     }

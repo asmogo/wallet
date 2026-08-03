@@ -340,7 +340,7 @@ fun CashuRequestDetailScreen(
                     InlineNotice(
                         text = deliveryNotice.title,
                         detail = deliveryNotice.message,
-                        severity = NoticeSeverity.Warning,
+                        severity = NoticeSeverity.Caution,
                     )
                 } else {
                     StatusBlock(

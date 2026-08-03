@@ -689,7 +689,7 @@ struct ReceiveLightningView: View {
                             Text("Expires in \(formatTimeRemaining(expiryTimeRemaining))")
                                 .font(.footnote)
                         }
-                        .foregroundStyle(expiryTimeRemaining < 60 ? Color.red : Color.primary.opacity(0.5))
+                        .foregroundStyle(expiryTimeRemaining < 60 ? ErrorSeverity.error.foreground : Color.primary.opacity(0.5))
                     }
 
                     if walletManager.activeMint != nil || blockExplorerURL(for: quote) != nil {

@@ -30,12 +30,13 @@ import com.cashu.me.ui.theme.CashuTheme
 // Inline-error parity audit. Two catalogs:
 //
 //   inline-notice-matrix   — the shared InlineNotice contract, every severity.
-//   inline-error-variants  — facsimiles of the hand-rolled inline errors that
-//                            bypass it. The originals are private composables
-//                            inside screens and cannot be called from here, so
-//                            each is REPRODUCED from its source and labelled
-//                            with that source. They are evidence of the styling
-//                            divergence, not the live composables.
+//   inline-error-variants  — the hand-rolled inline errors, as they render
+//                            after being routed through the component. Each is
+//                            labelled with the source it came from. Sections
+//                            marked FIXED render the real post-migration code;
+//                            the rest are still reproductions, because the
+//                            originals are private composables that cannot be
+//                            called from a preview.
 //
 // See docs/product/inline-error-audit.md.
 
@@ -43,7 +44,7 @@ private const val INSUFFICIENT = "Insufficient balance"
 private const val INSUFFICIENT_DETAIL = "You have 21,000 sat in Testnut mint."
 
 @PreviewTest
-@Preview(name = "inline-notice-matrix", widthDp = 390, heightDp = 520, showBackground = true)
+@Preview(name = "inline-notice-matrix", widthDp = 390, heightDp = 640, showBackground = true)
 @Composable
 fun inlineNoticeMatrixLightScreenshot() {
     CatalogFrame { NoticeMatrix() }
@@ -53,7 +54,7 @@ fun inlineNoticeMatrixLightScreenshot() {
 @Preview(
     name = "inline-notice-matrix-dark",
     widthDp = 390,
-    heightDp = 520,
+    heightDp = 640,
     uiMode = Configuration.UI_MODE_NIGHT_YES,
 )
 @Composable
@@ -62,7 +63,7 @@ fun inlineNoticeMatrixDarkScreenshot() {
 }
 
 @PreviewTest
-@Preview(name = "inline-error-variants", widthDp = 390, heightDp = 580, showBackground = true)
+@Preview(name = "inline-error-variants", widthDp = 390, heightDp = 640, showBackground = true)
 @Composable
 fun inlineErrorVariantsLightScreenshot() {
     CatalogFrame { HandRolledVariants() }
@@ -72,7 +73,7 @@ fun inlineErrorVariantsLightScreenshot() {
 @Preview(
     name = "inline-error-variants-dark",
     widthDp = 390,
-    heightDp = 580,
+    heightDp = 640,
     uiMode = Configuration.UI_MODE_NIGHT_YES,
 )
 @Composable
@@ -80,14 +81,14 @@ fun inlineErrorVariantsDarkScreenshot() {
     CatalogFrame(darkTheme = true) { HandRolledVariants() }
 }
 
-/** Every severity the shared component supports, tinted and untinted. */
+/** Every severity the in-context channel supports. */
 @Composable
 private fun NoticeMatrix() {
-    CatalogSection("InlineNotice — tinted (Android default)") {
+    CatalogSection("InlineNotice — the in-context channel, M3 role pairs") {
         InlineNotice(text = "Couldn't reach the mint.", severity = NoticeSeverity.Error)
         InlineNotice(
             text = INSUFFICIENT,
-            severity = NoticeSeverity.Warning,
+            severity = NoticeSeverity.Caution,
             detail = INSUFFICIENT_DETAIL,
         )
         InlineNotice(
@@ -97,17 +98,14 @@ private fun NoticeMatrix() {
         InlineNotice(text = "Backed up to your relays.", severity = NoticeSeverity.Success)
     }
 
-    CatalogSection("InlineNotice — untinted (iOS default)") {
-        InlineNotice(
-            text = "Couldn't reach the mint.",
-            severity = NoticeSeverity.Error,
-            tinted = false,
-        )
-        InlineNotice(
-            text = INSUFFICIENT,
-            severity = NoticeSeverity.Warning,
-            detail = INSUFFICIENT_DETAIL,
-            tinted = false,
+    CatalogSection("Field-attached errors now leave via M3 supporting text") {
+        CashuTextField(
+            value = "notaurl",
+            onValueChange = {},
+            label = "Mint URL",
+            isError = true,
+            supportingText = "That doesn't look like a mint URL.",
+            modifier = Modifier.fillMaxWidth(),
         )
     }
 
@@ -115,30 +113,26 @@ private fun NoticeMatrix() {
         // SendEcashScreen.kt:656 passes detail; UnifiedSendScreen.kt:935 does not.
         InlineNotice(
             text = INSUFFICIENT,
-            severity = NoticeSeverity.Warning,
+            severity = NoticeSeverity.Caution,
             detail = INSUFFICIENT_DETAIL,
         )
-        InlineNotice(text = INSUFFICIENT, severity = NoticeSeverity.Warning)
+        InlineNotice(text = INSUFFICIENT, severity = NoticeSeverity.Caution)
     }
 }
 
 /** Reproductions of the inline errors that never reach InlineNotice. */
 @Composable
 private fun HandRolledVariants() {
-    CatalogSection("V7 — bare error Text (SendEcashScreen.kt:957)") {
-        // Rendered directly beneath a field that is already isError, so one
-        // error paints error@0.12 (field) under error@1.0 (text).
+    CatalogSection("V7 — FIXED: one signal, M3 supporting text (SendEcashScreen.kt:954)") {
+        // Was: a field tinted error@0.12 with bare bodySmall red text below it,
+        // two reds for one error. Now the field owns the whole thing.
         CashuTextField(
             value = "npub1nots0avalidkey",
             onValueChange = {},
             label = "Recipient public key",
             isError = true,
+            supportingText = "That's not a valid public key.",
             modifier = Modifier.fillMaxWidth(),
-        )
-        Text(
-            text = "That's not a valid public key.",
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.error,
         )
     }
 

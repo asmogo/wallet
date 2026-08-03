@@ -942,6 +942,10 @@ private fun FirstMintFace(
                     textStyle = MaterialTheme.typography.bodyMedium.copy(fontFamily = CashuTheme.fonts.mono).withSlashedZero(),
                     singleLine = true,
                     isError = customDraft.error != null,
+                    // Input validation belongs to the field. The connect failure
+                    // below is a different thing: by then the mint is staged, so
+                    // the message is about the staged row, not the text.
+                    supportingText = customDraft.error,
                     keyboardOptions = KeyboardOptions(
                         capitalization = KeyboardCapitalization.None,
                         keyboardType = KeyboardType.Uri,
@@ -963,7 +967,7 @@ private fun FirstMintFace(
                     },
                 )
             }
-            val notice = customDraft.error ?: errorText
+            val notice = errorText
             if (notice != null) {
                 Spacer(Modifier.height(CashuTheme.spacing.snug))
                 InlineNotice(text = notice)

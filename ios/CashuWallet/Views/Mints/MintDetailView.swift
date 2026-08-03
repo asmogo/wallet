@@ -242,7 +242,7 @@ struct MintDetailView: View {
             case .online:
                 Text("Online").foregroundStyle(.primary)
             case .offline:
-                Text("Offline").foregroundStyle(.red)
+                Text("Offline").foregroundStyle(ErrorSeverity.error.foreground)
             }
         }
         .font(.body)

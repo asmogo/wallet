@@ -174,15 +174,13 @@ struct TransactionDetailView: View {
                                 InlineNotice(
                                     message: "This token has not been claimed yet.",
                                     title: "Status checked",
-                                    severity: .info,
-                                    tinted: true
+                                    severity: .info
                                 )
                             case .failed(let message):
                                 InlineNotice(
                                     message: message.text,
                                     title: "Couldn't check status",
-                                    severity: message.severity,
-                                    tinted: true
+                                    severity: message.severity
                                 )
                             case .claimed, nil:
                                 EmptyView()

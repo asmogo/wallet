@@ -10,6 +10,8 @@ import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.semantics.error
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.input.VisualTransformation
 
@@ -46,7 +48,14 @@ fun CashuTextField(
     TextField(
         value = value,
         onValueChange = onValueChange,
-        modifier = modifier,
+        // TalkBack announces the field as invalid and reads the reason. Owned
+        // here so every field-attached error gets it without the call site
+        // remembering to ask.
+        modifier = if (isError && supportingText != null) {
+            modifier.semantics { error(supportingText) }
+        } else {
+            modifier
+        },
         enabled = enabled,
         readOnly = readOnly,
         textStyle = textStyle,
@@ -76,9 +85,11 @@ fun CashuTextField(
             focusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
             unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
             disabledContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
-            // With the indicator gone, error state reads through a tinted
-            // container (the InlineNotice error tint) + red label/supporting text.
-            errorContainerColor = MaterialTheme.colorScheme.error.copy(alpha = 0.12f),
+            // With the indicator gone, error state reads through the Material
+            // error container + red label/supporting text. Use the role rather
+            // than deriving an alpha, so this cannot drift from the notice tint
+            // the way the old error.copy(alpha = 0.12f) did.
+            errorContainerColor = MaterialTheme.colorScheme.errorContainer,
             focusedIndicatorColor = Color.Transparent,
             unfocusedIndicatorColor = Color.Transparent,
             disabledIndicatorColor = Color.Transparent,

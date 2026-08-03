@@ -318,8 +318,7 @@ struct CashuRequestDetailView: View {
             InlineNotice(
                 message: notice.message,
                 title: notice.title,
-                severity: .caution,
-                tinted: true
+                severity: .caution
             )
             .transition(reduceMotion ? .opacity : .opacity.combined(with: .scale(scale: 0.98)))
         } else {

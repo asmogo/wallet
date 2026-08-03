@@ -227,8 +227,7 @@ struct ReceiveTokenDetailView: View {
                     InlineNotice(
                         message: "You haven't used \(shortMintUrl(mintUrl)) before. Receiving adds it to your wallet — only continue if you trust it.",
                         title: "New mint",
-                        severity: .caution,
-                        tinted: true
+                        severity: .caution
                     )
                     .padding(.horizontal)
                 }

@@ -275,16 +275,23 @@ struct ScannerWrapperView: View {
                 if let error = scannerModel.errorMessage {
                     VStack {
                         Spacer()
-                        Text(error)
-                            .foregroundStyle(.primary)
-                            .padding()
-                            .background(
-                                scannerModel.noticeSeverity == .error
-                                    ? AnyShapeStyle(Color.red)
-                                    : AnyShapeStyle(.regularMaterial)
-                            )
-                            .clipShape(.rect(cornerRadius: 10))
-                            .padding(.bottom, 100)
+                        // Floats over the camera preview, so it takes the same
+                        // material as the bottom banner rather than the solid
+                        // red slab it used to be. Colour stays on the glyph.
+                        HStack(alignment: .firstTextBaseline, spacing: 8) {
+                            Image(systemName: scannerModel.noticeSeverity.icon)
+                                .font(.subheadline.weight(.semibold))
+                                .foregroundStyle(scannerModel.noticeSeverity.foreground)
+                                .accessibilityHidden(true)
+                            Text(error)
+                                .font(.subheadline)
+                                .foregroundStyle(.primary)
+                        }
+                        .padding(12)
+                        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                        .accessibilityElement(children: .combine)
+                        .accessibilityLabel(scannerModel.noticeSeverity.announcementPrefix + error)
+                        .padding(.bottom, 100)
                     }
                 }
             }
