@@ -270,6 +270,10 @@ These are important, but they belong in dedicated security/privacy, design-syste
 
 - [ ] **[P2 · Style/tooling] Define and lint one in-progress ellipsis rule per platform.** **Done when:** each platform’s copy/style system has a documented, automatically checked typography rule; cross-platform glyph identity is not required.
 
+- [ ] **[P1 · Design system] Unify the inline-error surface across platforms.** The two apps render in-context errors through components that disagree on severity count (Android 4, iOS 3), `error` glyph (outlined circle vs filled triangle), `tinted` default (true vs false), and row alignment — and iOS ships a second surface, `ErrorBannerView`, with no Android counterpart. 12 Android and 8 iOS visual variants in total. **Done when:** one severity vocabulary and one glyph table are shared, iOS collapses to a single notice surface, and the hand-rolled variants named in `inline-error-audit.md` §4 route through the component. See [inline-error-audit.md](inline-error-audit.md).
+
+- [ ] **[P2 · Design system] Retire the hand-rolled inline errors.** Highest priority: `SendView.swift:294` (`sendInputNotice`, a clone of the shared component that drops the VoiceOver severity prefix), the two scanner overlays, and `SendEcashScreen.kt:957` (bare red text under an already-`isError` field). **Done when:** no screen renders raw error-coloured text, which is the contract `InlineNotice`'s own KDoc already claims.
+
 ## Completed and verified in the baseline
 
 - [x] **[P1 · iOS → Android] Surface wallet startup failures on onboarding.** Android presents initialization failures with user-facing recovery.

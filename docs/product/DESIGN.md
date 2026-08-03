@@ -1039,7 +1039,17 @@ contexts.
   avoid a double-buzz. Defined in `MainWalletView` (`balanceStatusLine` /
   `receivedDeltaBeat`). *Amended 2026-07-05: de-greened — the green `✓` celebration
   was retired as corny; the balance roll now carries the moment.*
-- **`ErrorBannerView`**: inline red banner for in-context errors.
+- **`ErrorBannerView`**: inline red banner for in-context errors. Screen-level
+  async/system failures, `.footnote`, bordered. Prefer the `.errorBanner(_:)`
+  modifier to pin it to the bottom safe area.
+- **`InlineNotice`**: the control-tied notice for preconditions and validation —
+  the thing that sits under a field or amount and says why you can't proceed.
+  `.caption`, no border, optional `title`/`detail`/`tinted`. Shares
+  `ErrorSeverity` with the banner. This is the surface most error copy uses
+  (~38 call sites) and it was previously undocumented here.
+  > These two disagree on body size and border, and are used interchangeably for
+  > the same kinds of failure. See `inline-error-audit.md` for the divergence
+  > inventory and the proposed collapse into one surface.
 
 ### Signature: ActivityOrb
 
