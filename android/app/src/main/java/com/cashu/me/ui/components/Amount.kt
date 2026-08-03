@@ -77,8 +77,21 @@ fun AmountText(
         return
     }
     AnimatedContent(
-        // Keyed on the plain value: styling changes must not trigger a fade.
-        targetState = text,
+        // Each state carries the styled string it was composed with, and
+        // `contentKey` keys the transition on the plain value alone — so a
+        // styling change still does not trigger a fade.
+        //
+        // Reading `annotated` from the enclosing scope instead was a flicker on
+        // every keypress. AnimatedContent keeps the outgoing content composed
+        // while it fades and re-invokes this lambda for it, passing the *old*
+        // value while `text` and `annotated` have already advanced — so an
+        // `targetText == text` test fails for the outgoing number every time and
+        // drops it to an unstyled string. The unit snapped from half-size,
+        // one-weight-down, secondary ink up to full size and full ink at the
+        // instant it began to disappear, and the wider unstyled string could
+        // take a different autosize step on the way out.
+        targetState = text to (annotated ?: AnnotatedString(text)),
+        contentKey = { it.first },
         transitionSpec = {
             fadeIn(spring(stiffness = Spring.StiffnessMedium))
                 .togetherWith(fadeOut(spring(stiffness = Spring.StiffnessMedium)))
@@ -86,9 +99,9 @@ fun AmountText(
         modifier = modifier,
         contentAlignment = contentAlignment,
         label = "amount-text",
-    ) { targetText ->
+    ) { (_, styled) ->
         Text(
-            text = if (targetText == text && annotated != null) annotated else AnnotatedString(targetText),
+            text = styled,
             style = finalStyle,
             modifier = textModifier,
             maxLines = maxLines,
