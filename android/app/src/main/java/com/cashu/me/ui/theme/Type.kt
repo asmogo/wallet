@@ -287,11 +287,3 @@ fun cashuTypeRoles(fonts: CashuFonts = CashuFonts.Geist): CashuTypeRoles {
 }
 
 val LocalCashuTypeRoles = staticCompositionLocalOf { cashuTypeRoles() }
-
-@Deprecated(
-    "Freezes tracking at 1.2sp (0.1em at 12sp), so it is wrong at every other " +
-        "size and double the documented 0.06em. Use CashuTheme.type.overline.",
-    ReplaceWith("this"),
-)
-fun TextStyle.asOverline(): TextStyle =
-    copy(letterSpacing = 1.2.sp, fontWeight = FontWeight.SemiBold)

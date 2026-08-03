@@ -69,6 +69,7 @@
 		AB00000000000051 /* CashuRequestAmountColumn.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB00000000000053 /* CashuRequestAmountColumn.swift */; };
 		AV00000000000001 /* AppVersion.swift in Sources */ = {isa = PBXBuildFile; fileRef = AV00000000000011 /* AppVersion.swift */; };
 		AV00000000000002 /* AppVersionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AV00000000000012 /* AppVersionTests.swift */; };
+		TG00000000000002 /* TypographyGuardTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = TG00000000000012 /* TypographyGuardTests.swift */; };
 		B1790D26812303E8F31BC782 /* AmountLockup.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4F131731BE27EACCD69C8AFA /* AmountLockup.swift */; };
 		BB00000000000001 /* MintService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000011 /* MintService.swift */; };
 		BB00000000000002 /* TransactionService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000012 /* TransactionService.swift */; };
@@ -235,6 +236,7 @@
 		AC0000000000000C /* NostrMintBackupService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NostrMintBackupService.swift; sourceTree = "<group>"; };
 		AV00000000000011 /* AppVersion.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppVersion.swift; sourceTree = "<group>"; };
 		AV00000000000012 /* AppVersionTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = AppVersionTests.swift; path = CashuWalletTests/AppVersionTests.swift; sourceTree = "<group>"; };
+		TG00000000000012 /* TypographyGuardTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = TypographyGuardTests.swift; path = CashuWalletTests/TypographyGuardTests.swift; sourceTree = "<group>"; };
 		BB00000000000011 /* MintService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MintService.swift; sourceTree = "<group>"; };
 		BB00000000000012 /* TransactionService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TransactionService.swift; sourceTree = "<group>"; };
 		BB00000000000013 /* TokenService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TokenService.swift; sourceTree = "<group>"; };
@@ -378,6 +380,7 @@
 				T1B000000000000E /* CrashReportSanitizerTests.swift */,
 				T1B000000000000F /* HistorySearchTests.swift */,
 				AV00000000000012 /* AppVersionTests.swift */,
+				TG00000000000012 /* TypographyGuardTests.swift */,
 				T1B000000000000F /* HistorySearchTests.swift */,
 				T1B0000000000010 /* WalletSurfaceCoordinatorTests.swift */,
 				T1B0000000000011 /* ScanRouterTests.swift */,
@@ -945,6 +948,7 @@
 				T2B000000000000E /* CrashReportSanitizerTests.swift in Sources */,
 				T2B000000000000F /* HistorySearchTests.swift in Sources */,
 				AV00000000000002 /* AppVersionTests.swift in Sources */,
+				TG00000000000002 /* TypographyGuardTests.swift in Sources */,
 				T2B000000000000F /* HistorySearchTests.swift in Sources */,
 				T2B0000000000010 /* WalletSurfaceCoordinatorTests.swift in Sources */,
 				T2B0000000000011 /* ScanRouterTests.swift in Sources */,

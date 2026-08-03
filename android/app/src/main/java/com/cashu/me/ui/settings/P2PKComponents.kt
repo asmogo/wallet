@@ -71,7 +71,6 @@ import com.cashu.me.ui.components.QrCard
 import com.cashu.me.ui.components.shareText
 import com.cashu.me.ui.security.rememberWalletAuthenticationLauncher
 import com.cashu.me.ui.theme.CashuTheme
-import com.cashu.me.ui.theme.asOverline
 import com.cashu.me.ui.theme.withSlashedZero
 
 // iOS KeyCard geometry: 34pt glyph circle, rounded-14 card.
@@ -486,7 +485,7 @@ internal fun PrivateKeyRevealContent(
         // P2PK key, and any number of device keys.
         Text(
             text = title.uppercase(),
-            style = MaterialTheme.typography.labelMedium.asOverline(),
+            style = CashuTheme.type.overline,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         Spacer(Modifier.height(CashuTheme.spacing.micro))
@@ -512,7 +511,7 @@ internal fun PrivateKeyRevealContent(
         ) {
             Text(
                 text = "Private key (nsec)",
-                style = MaterialTheme.typography.labelMedium.asOverline(),
+                style = CashuTheme.type.overline,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             Row(

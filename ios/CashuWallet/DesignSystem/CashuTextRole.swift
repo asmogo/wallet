@@ -121,13 +121,26 @@ extension CashuTextRole {
         minimumScaleFactor: 0.5
     )
 
+    /// No autoscale, deliberately — the one rung of the ladder that sets it to 1.
+    ///
+    /// `minimumScaleFactor` collides with `.numericText`: mid-transition the
+    /// numeric renderer reports a tiny intermediate width, and the scale factor
+    /// then shrinks even short amounts toward its floor. The two amount columns
+    /// found this independently and each dropped autoscale in a comment rather
+    /// than in the type system, which is precisely the drift this layer exists
+    /// to end. Row amounts use compact grouped formatting and always fit, so
+    /// autoscale buys nothing here and costs a visible mis-scale.
+    ///
+    /// The hero rungs keep theirs: a typed amount is genuinely unbounded, and on
+    /// the focal element of the screen a clipped number is worse than a
+    /// momentary mis-scale.
     static let amountRow = CashuTextRole(
         size: .style(.body),
         weight: .medium,
         trackingKey: \.amountRow,
         isNumeric: true,
         lineLimit: 1,
-        minimumScaleFactor: 0.7
+        minimumScaleFactor: 1
     )
 
     /// Keypad digits — same family and the same tabular treatment as the number

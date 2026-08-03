@@ -226,15 +226,13 @@ struct SendView: View {
                             isDimmed: isInsufficientBalance
                         )
                     } else {
-                        Text(sendUnitEntryDisplay)
-                            .font(.system(size: 64, weight: .semibold, design: .rounded))
-                            .monospacedDigit()
-                            .foregroundStyle(isInsufficientBalance ? .secondary : .primary)
-                            .minimumScaleFactor(0.4)
-                            .lineLimit(1)
-                            .contentTransition(.numericText(value: Double(amountBaseUnits)))
-                            .animation(.snappy, value: amountBaseUnits)
-                            .animation(.snappy, value: isInsufficientBalance)
+                        AmountLockup(
+                            parts: AmountParts.parse(sendUnitEntryDisplay),
+                            role: .amountHero,
+                            value: Double(amountBaseUnits),
+                            isDimmed: isInsufficientBalance
+                        )
+                        .animation(.snappy, value: isInsufficientBalance)
                     }
                 }
 
@@ -659,11 +657,13 @@ struct SendView: View {
                             role: .amountCompact
                         )
                     } else {
-                        Text(CurrencyAmount(value: generatedAmount, currency: generatedUnitCurrency).formatted())
-                            .font(.system(size: 32, weight: .semibold, design: .rounded))
-                            .monospacedDigit()
-                            .minimumScaleFactor(0.4)
-                            .lineLimit(1)
+                        AmountLockup(
+                            parts: AmountParts.parse(
+                                CurrencyAmount(value: generatedAmount, currency: generatedUnitCurrency).formatted()
+                            ),
+                            role: .amountCompact,
+                            value: Double(generatedAmount)
+                        )
                     }
 
                     // Status — inline badge transition, then dismiss + toast.

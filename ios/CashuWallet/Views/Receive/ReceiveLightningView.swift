@@ -396,14 +396,12 @@ struct ReceiveLightningView: View {
                 .accessibilityLabel("Request amount: \(amountString.isEmpty ? "0" : amountString) sats")
             } else {
                 // Non-sat mint unit: show it directly, no BTC-price flip.
-                Text(receiveUnitEntryDisplay)
-                    .font(.system(size: 64, weight: .semibold, design: .rounded))
-                    .monospacedDigit()
-                    .minimumScaleFactor(0.4)
-                    .lineLimit(1)
-                    .contentTransition(.numericText(value: Double(amountBaseUnits)))
-                    .animation(.snappy, value: amountBaseUnits)
-                    .accessibilityLabel("Request amount: \(amountString.isEmpty ? "0" : amountString) \(effectiveUnit)")
+                AmountLockup(
+                    parts: AmountParts.parse(receiveUnitEntryDisplay),
+                    role: .amountHero,
+                    value: Double(amountBaseUnits),
+                    accessibilityPrefix: "Request amount"
+                )
             }
         }
         .animation(.snappy, value: selectedMethod)
@@ -554,10 +552,12 @@ struct ReceiveLightningView: View {
                             )
                             .accessibilityLabel("Offer amount: \(amount) sats")
                         } else {
-                            Text(formatQuoteAmount(amount, unit: quote.unit))
-                                .font(.system(size: 32, weight: .semibold, design: .rounded))
-                                .monospacedDigit()
-                                .accessibilityLabel("Offer amount: \(amount) \(quote.unit)")
+                            AmountLockup(
+                                parts: AmountParts.parse(formatQuoteAmount(amount, unit: quote.unit)),
+                                role: .amountCompact,
+                                value: Double(amount),
+                                accessibilityPrefix: "Offer amount"
+                            )
                         }
                     }
 
@@ -737,10 +737,14 @@ struct ReceiveLightningView: View {
                 if quote.paymentMethod == .onchain {
                     // Onchain: amount surfaces once the sender has paid (amountPaid).
                     // Always shown in sats — no fiat toggle.
-                    Text(AmountFormatter.sats(amount, useBitcoinSymbol: settings.useBitcoinSymbol))
-                        .font(.system(size: 32, weight: .semibold, design: .rounded))
-                        .monospacedDigit()
-                        .accessibilityLabel("Amount received: \(amount) sats")
+                    AmountLockup(
+                        parts: AmountFormatter.satsParts(
+                            amount, useBitcoinSymbol: settings.useBitcoinSymbol
+                        ),
+                        role: .amountCompact,
+                        value: Double(amount),
+                        accessibilityPrefix: "Amount received"
+                    )
                 } else if quote.unit.lowercased() == "sat" {
                     // Smaller than the QR — the QR is the focal element on this
                     // screen; the amount confirms it.
@@ -752,10 +756,12 @@ struct ReceiveLightningView: View {
                     .accessibilityLabel("Request amount: \(amount) sats")
                 } else {
                     // Non-sat mint unit: show it directly, no BTC-price flip.
-                    Text(formatQuoteAmount(amount, unit: quote.unit))
-                        .font(.system(size: 32, weight: .semibold, design: .rounded))
-                        .monospacedDigit()
-                        .accessibilityLabel("Request amount: \(amount) \(quote.unit)")
+                    AmountLockup(
+                        parts: AmountParts.parse(formatQuoteAmount(amount, unit: quote.unit)),
+                        role: .amountCompact,
+                        value: Double(amount),
+                        accessibilityPrefix: "Request amount"
+                    )
                 }
             } else {
                 // "New address" lives in the toolbar overflow menu (BOLT12
