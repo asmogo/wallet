@@ -1353,12 +1353,6 @@ struct UnifiedSendView: View {
     /// instead of sitting at the bottom of a `.large` sheet.
     @State private var compactContentHeight: CGFloat = 0
 
-    /// Fixed sheet chrome around measured content: drag indicator + inline nav
-    /// bar + a little extra so the sheet sits just above the elements.
-    private static let compactSheetChrome: CGFloat = 108
-    /// First-frame estimate before geometry lands so the sheet doesn't open tiny.
-    private static let compactBodyEstimate: CGFloat = 220
-
     enum Step: Equatable { case input, amount, confirm, sending, sent, failed }
 
     enum LockedDestination: Equatable {
@@ -1376,11 +1370,6 @@ struct UnifiedSendView: View {
     private var prefersCompactSheet: Bool {
         // The pushed URL step hugs too; only discovery needs the full sheet.
         statusPhase == nil && step == .input && connectMintRoute != .discover
-    }
-
-    private var compactDetentHeight: CGFloat {
-        let body = compactContentHeight > 0 ? compactContentHeight : Self.compactBodyEstimate
-        return body + Self.compactSheetChrome
     }
 
     var body: some View {
@@ -1464,7 +1453,7 @@ struct UnifiedSendView: View {
         }
         // Own the sheet chrome so the detent can follow the step: compact for
         // input, `.large` + flat canvas for amount/confirm/status.
-        .presentationDetents(prefersCompactSheet ? [.height(compactDetentHeight)] : [.large])
+        .contentFitDetent(compactContentHeight, enabled: prefersCompactSheet)
         .presentationDragIndicator(.visible)
         // A stray swipe must not tear down the flow while the melt is executing.
         .interactiveDismissDisabled(step == .sending)
@@ -1485,32 +1474,25 @@ struct UnifiedSendView: View {
     }
 
     private var inputForm: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 0) {
-                destinationField
-                    .padding(.horizontal)
-                    .padding(.top, 12)
+        VStack(alignment: .leading, spacing: 0) {
+            destinationField
+                .padding(.horizontal)
+                .padding(.top, 12)
 
-                if let inputHint {
-                    InlineNotice(message: inputHint, severity: .caution)
-                        .padding(.horizontal, 20)
-                        .padding(.top, 10)
-                }
+            if let inputHint {
+                InlineNotice(message: inputHint, severity: .caution)
+                    .padding(.horizontal, 20)
+                    .padding(.top, 10)
+            }
 
-                // A centered row of round Liquid Glass icon buttons — the primary
-                // "ways to send" (Scan · Ecash · Tap), one-word label under each.
-                sendMethodRow
-                    .padding(.horizontal)
-                    .padding(.top, 32)
-            }
-            .padding(.bottom, 24)
-            .onGeometryChange(for: CGFloat.self) { proxy in
-                proxy.size.height
-            } action: { newHeight in
-                compactContentHeight = newHeight
-            }
+            // A centered row of round Liquid Glass icon buttons — the primary
+            // "ways to send" (Scan · Ecash · Tap), one-word label under each.
+            sendMethodRow
+                .padding(.horizontal)
+                .padding(.top, 32)
         }
-        .scrollBounceBehavior(.basedOnSize)
+        .padding(.bottom, 24)
+        .contentFitMeasured { compactContentHeight = $0 }
         .scrollDismissesKeyboard(.interactively)
     }
 
@@ -2839,11 +2821,7 @@ struct UnifiedSendView: View {
             actionTitle: "Receive",
             action: onReceive
         )
-        .onGeometryChange(for: CGFloat.self) { proxy in
-            proxy.size.height
-        } action: { newHeight in
-            compactContentHeight = newHeight
-        }
+        .contentFitMeasured { compactContentHeight = $0 }
     }
 
     private func addMint(_ url: String) {

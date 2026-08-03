@@ -38,11 +38,6 @@ struct UnifiedReceiveView: View {
     /// `UnifiedSendView`'s compact input step.
     @State private var compactContentHeight: CGFloat = 0
 
-    /// Fixed sheet chrome around measured content: drag indicator + inline nav
-    /// bar + a little extra. Mirrors `UnifiedSendView`.
-    private static let compactSheetChrome: CGFloat = 108
-    private static let compactBodyEstimate: CGFloat = 220
-
     /// The freshly-minted Cashu Request detail — the one destination this
     /// sheet still presents itself; its close tears down to the wallet.
     private enum ReceiveRoute: Identifiable {
@@ -52,11 +47,6 @@ struct UnifiedReceiveView: View {
             case .request(let request): return "request-\(request.id)"
             }
         }
-    }
-
-    private var compactDetentHeight: CGFloat {
-        let body = compactContentHeight > 0 ? compactContentHeight : Self.compactBodyEstimate
-        return body + Self.compactSheetChrome
     }
 
     var body: some View {
@@ -82,7 +72,7 @@ struct UnifiedReceiveView: View {
                 }
                 .onDisappear { autoRouteTask?.cancel() }
         }
-        .presentationDetents([.height(compactDetentHeight)])
+        .contentFitDetent(compactContentHeight)
         .presentationDragIndicator(.visible)
     }
 
@@ -103,38 +93,33 @@ struct UnifiedReceiveView: View {
     // MARK: Input step
 
     private var inputForm: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 0) {
-                destinationField
-                    .padding(.horizontal)
-                    .padding(.top, 12)
+        VStack(alignment: .leading, spacing: 0) {
+            destinationField
+                .padding(.horizontal)
+                .padding(.top, 12)
 
-                if let inputHint {
-                    InlineNotice(message: inputHint, severity: .caution)
-                        .padding(.horizontal, 20)
-                        .padding(.top, 10)
-                        .transition(
-                            reduceMotion
-                                ? .opacity
-                                : .opacity.combined(with: .scale(scale: 0.95, anchor: .top))
-                        )
-                }
+            if let inputHint {
+                InlineNotice(message: inputHint, severity: .caution)
+                    .padding(.horizontal, 20)
+                    .padding(.top, 10)
+                    .transition(
+                        reduceMotion
+                            ? .opacity
+                            : .opacity.combined(with: .scale(scale: 0.95, anchor: .top))
+                    )
+            }
 
-                // A centered row of round Liquid Glass icon buttons — the primary
-                // "ways to receive" (Scan · Ecash · Bitcoin), one-word label under each.
-                receiveMethodRow
-                    .padding(.horizontal)
-                    .padding(.top, 32)
-            }
-            .padding(.bottom, 24)
-            .animation(reduceMotion ? .easeInOut(duration: 0.2) : .snappy(duration: 0.25), value: inputHint != nil)
-            .onGeometryChange(for: CGFloat.self) { proxy in
-                proxy.size.height
-            } action: { newHeight in
-                compactContentHeight = newHeight
-            }
+            // A centered row of round Liquid Glass icon buttons — the primary
+            // "ways to receive" (Scan · Ecash · Bitcoin), one-word label under each.
+            receiveMethodRow
+                .padding(.horizontal)
+                .padding(.top, 32)
         }
-        .scrollBounceBehavior(.basedOnSize)
+        .padding(.bottom, 24)
+        // Animate on the measured body, inside the content-fit ScrollView, so the
+        // hint's entrance and the detent's resize run as one motion.
+        .animation(reduceMotion ? .easeInOut(duration: 0.2) : .snappy(duration: 0.25), value: inputHint != nil)
+        .contentFitMeasured { compactContentHeight = $0 }
         .scrollDismissesKeyboard(.interactively)
     }
 
