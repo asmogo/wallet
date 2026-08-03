@@ -40,9 +40,7 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.dp
 import com.cashu.me.Core.NostrSignerType
-import com.cashu.me.ui.components.CanvasDivider
 import com.cashu.me.ui.components.CashuTextField
 import com.cashu.me.ui.components.IconSwap
 import com.cashu.me.ui.components.InlineNotice
@@ -52,9 +50,6 @@ import com.cashu.me.ui.components.SectionHeader
 import com.cashu.me.ui.components.SelectionRow
 import com.cashu.me.ui.components.SettingsFooterText
 import com.cashu.me.ui.theme.CashuTheme
-
-/** Dividers between icon-led rows start at the text column, as elsewhere in settings. */
-private val IconRowDividerInset = 56.dp
 
 /**
  * Resetting only warrants a confirmation when it would discard a relay the
@@ -110,8 +105,7 @@ internal fun NostrKeySection(
 
     SectionHeader("Key source")
     Column(modifier = Modifier.selectableGroup()) {
-        NostrSignerType.entries.forEachIndexed { index, type ->
-            if (index > 0) CanvasDivider(leadingInset = CashuTheme.spacing.comfortable)
+        NostrSignerType.entries.forEach { type ->
             SelectionRow(
                 title = type.displayName,
                 description = type.description,
@@ -133,7 +127,6 @@ internal fun NostrKeySection(
             enabled = !isMutating,
             onClick = onGenerateKey,
         )
-        CanvasDivider(leadingInset = IconRowDividerInset)
         NavRow(
             title = "Import key",
             leadingIcon = Icons.Outlined.FileDownload,
@@ -143,7 +136,6 @@ internal fun NostrKeySection(
         )
         // iOS only offers the way back when there is a custom key to leave.
         if (signerType == NostrSignerType.PrivateKey) {
-            CanvasDivider(leadingInset = IconRowDividerInset)
             NavRow(
                 title = "Reset to wallet seed",
                 leadingIcon = Icons.Outlined.RestartAlt,

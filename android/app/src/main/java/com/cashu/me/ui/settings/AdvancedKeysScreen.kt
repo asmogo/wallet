@@ -37,7 +37,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.cashu.me.Core.SettingsManager
 import com.cashu.me.Models.P2PKKeyInfo
-import com.cashu.me.ui.components.CanvasDivider
 import com.cashu.me.ui.components.CashuTextField
 import com.cashu.me.ui.components.InlineNotice
 import com.cashu.me.ui.components.NavRow
@@ -94,7 +93,6 @@ fun AdvancedKeysScreen(
                     }
                 },
             )
-            CanvasDivider()
             NavRow(
                 title = "Import a key",
                 leadingIcon = Icons.Outlined.FileDownload,
@@ -131,7 +129,6 @@ fun AdvancedKeysScreen(
                         .animateContentSize(spring(stiffness = Spring.StiffnessMediumLow)),
                 ) {
                     settings.p2pkKeys.forEachIndexed { index, key ->
-                        if (index > 0) CanvasDivider(leadingInset = 56.dp)
                         DeviceKeyRow(key = key, onClick = { onOpenKey(key.id) })
                     }
                 }

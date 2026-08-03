@@ -734,11 +734,9 @@ struct CashuPaymentRequestPayView: View {
             VStack(spacing: 0) {
                 if let routeExplanation {
                     CashuRequestRouteExplanationRow(explanation: routeExplanation)
-                    canvasDivider
                 }
                 if let memo {
                     detailRow(icon: "quote.bubble", label: "Memo", value: memo)
-                    canvasDivider
                 }
                 feesRow
             }
@@ -894,13 +892,6 @@ struct CashuPaymentRequestPayView: View {
         .padding(.horizontal, 4)
         .padding(.vertical, 14)
         .accessibilityElement(children: .combine)
-    }
-
-    private var canvasDivider: some View {
-        Rectangle()
-            .fill(Color(.separator))
-            .frame(height: 0.5)
-            .padding(.horizontal, 4)
     }
 
     /// Host of a mint URL for display when we hold no `MintInfo` for it

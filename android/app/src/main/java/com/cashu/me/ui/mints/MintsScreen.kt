@@ -69,7 +69,6 @@ import com.cashu.me.Core.WalletManager
 import com.cashu.me.Core.normalizeUserMintUrl
 import com.cashu.me.Core.shortenMintUrl
 import com.cashu.me.Models.MintInfo
-import com.cashu.me.ui.components.GroupedCardDivider
 import com.cashu.me.ui.components.MintAvatar
 import com.cashu.me.ui.components.TabTopBar
 import com.cashu.me.ui.components.groupItemShape
@@ -159,7 +158,6 @@ fun MintsScreen(
                             },
                             onRequestRemove = { pendingRemoval = mint },
                         )
-                        if (index < mintCount - 1) GroupedCardDivider(leadingInset = 64.dp)
                     }
                 }
 
@@ -186,10 +184,6 @@ fun MintsScreen(
                     },
                     modifier = Modifier.semantics { contentDescription = "Add mint" },
                 )
-            }
-
-            item("add-discover-divider") {
-                GroupedCardDivider(leadingInset = 56.dp)
             }
 
             item("discover-row") {

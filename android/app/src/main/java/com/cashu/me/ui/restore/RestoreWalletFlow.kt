@@ -60,7 +60,6 @@ import com.cashu.me.Core.Wallet.userFacingWalletMessage
 import com.cashu.me.Core.mintUrlCandidates
 import com.cashu.me.Models.MintInfo
 import com.cashu.me.Models.RestoreMintResult
-import com.cashu.me.ui.components.CanvasDivider
 import com.cashu.me.ui.components.CashuTextField
 import com.cashu.me.ui.components.GhostButton
 import com.cashu.me.ui.components.IconSwap
@@ -564,9 +563,6 @@ fun RestoreMintsStep(
                                 previews.remove(url)
                             },
                         )
-                        if (index < staged.lastIndex) {
-                            CanvasDivider()
-                        }
                     }
                 }
             }
@@ -836,9 +832,6 @@ fun RestoreProgressStep(
                     preview = stagedPreviews[url],
                     onRetry = { scope.launch { restoreMint(url) } },
                 )
-                if (index < mintUrls.lastIndex) {
-                    CanvasDivider()
-                }
             }
         }
 

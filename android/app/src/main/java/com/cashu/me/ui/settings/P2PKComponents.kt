@@ -66,7 +66,6 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import com.cashu.me.Core.AppLockManager
 import com.cashu.me.Core.Bech32
-import com.cashu.me.ui.components.CanvasDivider
 import com.cashu.me.ui.components.IconSwap
 import com.cashu.me.ui.components.PrimaryButton
 import com.cashu.me.ui.components.QrCard
@@ -293,7 +292,6 @@ fun KeyCard(
         }
 
         if (actions.isNotEmpty()) {
-            CanvasDivider(leadingInset = 0.dp, trailingInset = 0.dp)
             Row(modifier = Modifier.fillMaxWidth()) {
                 actions.forEach { action ->
                     Column(

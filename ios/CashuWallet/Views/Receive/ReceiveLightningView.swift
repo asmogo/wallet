@@ -573,7 +573,6 @@ struct ReceiveLightningView: View {
                             label: "Mint",
                             value: reusableMintDisplayValue
                         )
-                        canvasDivider
                         editableRow(
                             icon: "bitcoinsign",
                             label: "Amount",
@@ -581,7 +580,6 @@ struct ReceiveLightningView: View {
                             action: { showReusableAmountPicker = true }
                         )
                         if let created = quote.createdAt {
-                            canvasDivider
                             detailRow(
                                 icon: "calendar",
                                 label: "Created",
@@ -704,9 +702,6 @@ struct ReceiveLightningView: View {
                                 )
                             }
                             if let explorerURL = blockExplorerURL(for: quote) {
-                                if walletManager.activeMint != nil {
-                                    canvasDivider
-                                }
                                 explorerLinkRow(label: blockExplorerLabel(for: quote), url: explorerURL)
                             }
                         }
@@ -839,13 +834,6 @@ struct ReceiveLightningView: View {
         .buttonStyle(.plain)
         .simultaneousGesture(TapGesture().onEnded { HapticFeedback.selection() })
         .accessibilityHint("Opens the block explorer in your browser")
-    }
-
-    private var canvasDivider: some View {
-        Rectangle()
-            .fill(Color(.separator))
-            .frame(height: 0.5)
-            .padding(.leading, 28)
     }
 
     // MARK: - Status Badge
