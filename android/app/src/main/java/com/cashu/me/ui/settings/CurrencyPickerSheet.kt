@@ -35,7 +35,6 @@ import java.util.Currency
 import java.util.Locale
 import com.cashu.me.Core.PriceService
 import com.cashu.me.Core.SettingsManager
-import com.cashu.me.ui.components.CanvasDivider
 import com.cashu.me.ui.components.FlowSheetTitle
 import com.cashu.me.ui.components.formatRelativeRecency
 import com.cashu.me.ui.theme.CashuTheme
@@ -110,7 +109,6 @@ fun CurrencyPickerSheet(
                 }
             }
             if (fiatOn) {
-                CanvasDivider()
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     modifier = Modifier

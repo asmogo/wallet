@@ -227,7 +227,6 @@ struct CashuRequestDetailView: View {
                                 value: mintDisplayValue(for: request),
                                 action: { showMintPicker = true }
                             )
-                            canvasDivider
                             editableRow(
                                 icon: "bitcoinsign",
                                 label: "Amount",
@@ -240,14 +239,12 @@ struct CashuRequestDetailView: View {
                                 label: "Mint",
                                 value: mintDisplayValue(for: request)
                             )
-                            canvasDivider
                             detailRow(
                                 icon: "bitcoinsign",
                                 label: "Amount",
                                 value: amountDisplayValue(for: request)
                             )
                         }
-                        canvasDivider
                         if unitEditable(for: request) {
                             editableRow(
                                 icon: "creditcard",
@@ -258,7 +255,6 @@ struct CashuRequestDetailView: View {
                         } else {
                             detailRow(icon: "creditcard", label: "Unit", value: request.unit.uppercased())
                         }
-                        canvasDivider
                         detailRow(
                             icon: "calendar",
                             label: "Created",
@@ -372,13 +368,6 @@ struct CashuRequestDetailView: View {
         }
         .buttonStyle(.plain)
         .accessibilityHint("Edits the \(label.lowercased())")
-    }
-
-    private var canvasDivider: some View {
-        Rectangle()
-            .fill(Color.primary.opacity(0.08))
-            .frame(height: 0.5)
-            .padding(.horizontal, 8)
     }
 
     // MARK: - Value formatters

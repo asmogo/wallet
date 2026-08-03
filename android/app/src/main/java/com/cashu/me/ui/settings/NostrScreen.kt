@@ -52,7 +52,6 @@ import com.cashu.me.Core.NwcManager
 import com.cashu.me.Core.RelayAddResult
 import com.cashu.me.Core.SettingsManager
 import com.cashu.me.Core.nostrSignerSelectionAction
-import com.cashu.me.ui.components.CanvasDivider
 import com.cashu.me.ui.components.CashuTextField
 import com.cashu.me.ui.components.DestructiveTextButton
 import com.cashu.me.ui.components.InlineNotice
@@ -259,8 +258,7 @@ fun NostrScreen(
                         ),
                     )
                 } else {
-                    settings.nostrRelays.forEachIndexed { index, relay ->
-                        if (index > 0) CanvasDivider(leadingInset = 56.dp)
+                    settings.nostrRelays.forEach { relay ->
                         NostrRelayRow(
                             relay = relay,
                             copied = copiedRelay == relay,

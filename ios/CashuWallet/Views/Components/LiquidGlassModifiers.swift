@@ -320,22 +320,6 @@ enum ContentFitSheetMetrics {
     }
 }
 
-// MARK: - Canvas Divider
-
-/// Hairline divider used between rows on the single-canvas screens
-/// (Lightning Invoice, Pending Ecash, Settings groups, History rows, etc.).
-/// Sits directly on the canvas with a subtle inset to the label baseline.
-struct CanvasDivider: View {
-    var inset: CGFloat = 28
-
-    var body: some View {
-        Rectangle()
-            .fill(Color(.separator))
-            .frame(height: 0.5)
-            .padding(.leading, inset)
-    }
-}
-
 // MARK: - Settings Row Icon
 
 /// Leading glyph for settings rows: a plain monochrome SF Symbol (no tile or

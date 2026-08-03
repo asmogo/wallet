@@ -66,7 +66,6 @@ import com.cashu.me.Models.TransactionStatus
 import com.cashu.me.Models.TransactionType
 import com.cashu.me.Models.WalletTransaction
 import com.cashu.me.ui.components.AmountText
-import com.cashu.me.ui.components.CanvasDivider
 import com.cashu.me.ui.components.DetailActionFooter
 import com.cashu.me.ui.components.EmptyState
 import com.cashu.me.ui.components.ExplorerLinkRow
@@ -280,12 +279,10 @@ fun TransactionDetailScreen(
                             },
                             trailingIconTint = if (fieldCopied) CashuTheme.colors.received else null,
                         )
-                        if (index != fields.lastIndex) CanvasDivider(leadingInset = 16.dp)
                     }
                     // Explorer link joins the detail rows (iOS parity), not the
                     // pinned footer — it's reference material, not an action.
                     if (explorerUrl != null) {
-                        if (fields.isNotEmpty()) CanvasDivider(leadingInset = 16.dp)
                         ExplorerLinkRow(onClick = { context.openInBrowser(explorerUrl) })
                     }
                 }
