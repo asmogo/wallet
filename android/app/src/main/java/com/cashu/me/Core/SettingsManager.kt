@@ -9,6 +9,44 @@ import com.cashu.me.Core.Protocols.SecureStorage
 import com.cashu.me.Core.Protocols.StorageKeys
 import com.cashu.me.Models.P2PKKeyInfo
 
+/** Why [SettingsManager.addRelay] accepted or rejected a relay URL. */
+sealed interface RelayAddResult {
+    /** Accepted; [relay] is the trimmed value that was stored. */
+    data class Added(val relay: String) : RelayAddResult
+
+    /** Rejected; [message] is user-facing. */
+    data class Rejected(val message: String) : RelayAddResult
+
+    companion object {
+        const val InvalidScheme = "Relay URL must start with ws:// or wss://"
+        const val Duplicate = "Relay already added"
+    }
+}
+
+/** Nostr speaks over WebSockets only; anything else can never connect. */
+fun isSupportedRelayScheme(relay: String): Boolean {
+    val trimmed = relay.trim()
+    return trimmed.startsWith("wss://", ignoreCase = true) ||
+        trimmed.startsWith("ws://", ignoreCase = true)
+}
+
+/**
+ * Decides whether a typed relay can join [existing]. Free-standing so it is
+ * unit-testable without a `Context` — mirrors iOS `NostrRelaysSettingsSection.addRelay`
+ * plus `SettingsManager.addNostrRelay`'s case-insensitive duplicate rule.
+ *
+ * Returns null for blank input, which the submit control already disables.
+ */
+fun validateNostrRelay(candidate: String, existing: List<String>): RelayAddResult? {
+    val trimmed = candidate.trim()
+    if (trimmed.isEmpty()) return null
+    if (!isSupportedRelayScheme(trimmed)) return RelayAddResult.Rejected(RelayAddResult.InvalidScheme)
+    if (existing.any { it.equals(trimmed, ignoreCase = true) }) {
+        return RelayAddResult.Rejected(RelayAddResult.Duplicate)
+    }
+    return RelayAddResult.Added(trimmed)
+}
+
 data class SettingsState(
     val useBitcoinSymbol: Boolean = true,
     val showFiatBalance: Boolean = false,
@@ -90,6 +128,9 @@ class SettingsManager(
     private val secureRandom = SecureRandom()
 
     companion object {
+        /** The relay list a fresh install starts with, and what "reset" restores. */
+        val defaultNostrRelays: List<String> get() = SettingsStore.defaultNostrRelays
+
         val supportedFiatCurrencies = listOf(
             "USD", "EUR", "AUD", "BRL", "CAD", "CHF", "CNY", "CZK", "DKK", "GBP",
             "HKD", "HUF", "ILS", "INR", "JPY", "KRW", "MXN", "NZD", "NOK", "PLN",
@@ -204,11 +245,16 @@ class SettingsManager(
     }
     fun setHomeBalanceUnit(unit: String) = update { settingsStore.homeBalanceUnit = unit }
 
-    fun addRelay(relay: String) = update {
-        val normalized = relay.trim()
-        if (normalized.isNotEmpty() && normalized !in settingsStore.nostrRelays) {
-            settingsStore.nostrRelays = settingsStore.nostrRelays + normalized
+    /**
+     * Adds a relay, reporting why it was rejected instead of silently no-opping.
+     * Null means the input was blank and nothing happened.
+     */
+    fun addRelay(relay: String): RelayAddResult? {
+        val result = validateNostrRelay(relay, settingsStore.nostrRelays)
+        if (result is RelayAddResult.Added) {
+            update { settingsStore.nostrRelays = settingsStore.nostrRelays + result.relay }
         }
+        return result
     }
 
     fun removeRelay(relay: String) = update {

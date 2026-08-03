@@ -4,10 +4,6 @@ private enum NostrIdentityReplacementWarning {
     static let generate = "This replaces your current Nostr key with a newly generated key. Your Lightning address will change, Nostr apps and messages will use a different identity, and your old key will be replaced."
     static let importKey = "This replaces your current Nostr key with the imported key. Your Lightning address will change, Nostr apps and messages will use a different identity, and your old key will be replaced."
     static let reset = "This switches to the Nostr key derived from your wallet seed. Your Lightning address will change, Nostr apps and messages will use a different identity, and your old custom key will be deleted and replaced."
-
-    static func switchSigner(to type: NostrSignerType) -> String {
-        "This switches your Nostr key source to \(type.displayName). Your Lightning address will change, Nostr apps and messages will use a different identity, and your old key will be replaced."
-    }
 }
 
 // MARK: - Nostr Keys Section
@@ -23,7 +19,6 @@ struct NostrKeysSettingsSection: View {
     @State private var importNsecText = ""
     @State private var showGenerateKeyConfirm = false
     @State private var showResetKeyConfirm = false
-    @State private var pendingSignerType: NostrSignerType?
     @State private var nostrKeyError: String?
     @State private var showNsecReveal = false
     @State private var copiedValue: String?
@@ -87,17 +82,6 @@ struct NostrKeysSettingsSection: View {
             }
         } message: {
             Text(NostrIdentityReplacementWarning.reset)
-        }
-        .alert("Switch Nostr Key?", isPresented: Binding(
-            get: { pendingSignerType != nil },
-            set: { if !$0 { pendingSignerType = nil } }
-        )) {
-            Button("Cancel", role: .cancel) { pendingSignerType = nil }
-            Button("Switch", role: .destructive) { confirmSignerTypeChange() }
-        } message: {
-            if let pendingSignerType {
-                Text(NostrIdentityReplacementWarning.switchSigner(to: pendingSignerType))
-            }
         }
         .sheet(isPresented: $showImportNsec) {
             ImportNsecSheet(
@@ -197,19 +181,20 @@ struct NostrKeysSettingsSection: View {
         }
     }
 
-    private func importNsec() {
+    /// Returns nil on success, or a message for the sheet to render. Reporting
+    /// back to the sheet keeps a decode failure visible — writing it to
+    /// `nostrKeyError` put the message on the screen *behind* the open sheet.
+    private func importNsec() -> String? {
         nostrKeyError = nil
         let nsec = importNsecText.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !nsec.isEmpty else {
-            nostrKeyError = "Please enter an nsec"
-            return
-        }
+        guard !nsec.isEmpty else { return "Please enter an nsec" }
         do {
             try nostrService.importNsec(nsec)
             importNsecText = ""
             showImportNsec = false
+            return nil
         } catch {
-            nostrKeyError = error.localizedDescription
+            return error.localizedDescription
         }
     }
 
@@ -234,12 +219,6 @@ struct NostrKeysSettingsSection: View {
             showResetKeyConfirm = true
             return
         }
-        pendingSignerType = type
-    }
-
-    private func confirmSignerTypeChange() {
-        guard let type = pendingSignerType else { return }
-        pendingSignerType = nil
         do {
             try nostrService.switchSignerType(to: type)
         } catch {

@@ -109,8 +109,19 @@ class SettingsStore(
         get() = store.string(StorageKeys.settingsNostrSignerType) ?: "SEED"
         set(value) = store.putString(StorageKeys.settingsNostrSignerType, value)
 
+    /**
+     * The configured relay list. Defaults are seeded only when the key has never
+     * been written — an explicitly emptied list persists as `[]` and stays empty,
+     * so removing your last relay actually sticks. Every consumer already reports
+     * "no relays configured" rather than failing silently.
+     */
     var nostrRelays: List<String>
-        get() = loadList(StorageKeys.settingsNostrRelays, String.serializer()).ifEmpty { defaultNostrRelays }
+        get() {
+            val raw = store.string(StorageKeys.settingsNostrRelays) ?: return defaultNostrRelays
+            return runCatching {
+                json.decodeFromString(ListSerializer(String.serializer()), raw)
+            }.getOrDefault(defaultNostrRelays)
+        }
         set(value) = saveList(StorageKeys.settingsNostrRelays, String.serializer(), value)
 
     var nostrMintBackupEnabled: Boolean

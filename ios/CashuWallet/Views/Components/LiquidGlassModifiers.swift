@@ -83,6 +83,59 @@ extension View {
         modifier(ScreenEntryFade())
     }
 
+    /// Measures a content-fit sheet's body for
+    /// ``contentFitDetent(_:enabled:estimate:navigationBar:)``. Apply to the body
+    /// itself — inside the `NavigationStack`, for the sheets that host one.
+    ///
+    /// The `ScrollView` is load-bearing, not decoration. A detent derived from a
+    /// measurement taken inside that same sheet is a feedback loop — measured
+    /// height → detent → sheet height → the height proposed back to the content.
+    /// Since the chrome allowance is close to the real chrome, the loop is
+    /// *neutrally stable*: it settles wherever the first layout pass left it,
+    /// which during the presentation transition is roughly full-screen, and then
+    /// never recovers. A `ScrollView` proposes `nil` height to its content, so
+    /// the measured view always reports its **ideal** size no matter how tall the
+    /// sheet currently is — which breaks the loop.
+    ///
+    /// Never hang `.onGeometryChange` off a bare view to drive a detent.
+    func contentFitMeasured(_ onHeight: @escaping (CGFloat) -> Void) -> some View {
+        ScrollView {
+            self.onGeometryChange(for: CGFloat.self) { proxy in
+                proxy.size.height
+            } action: { newHeight in
+                onHeight(newHeight)
+            }
+        }
+        .scrollBounceBehavior(.basedOnSize)
+    }
+
+    /// Sizes a sheet to the height reported by ``contentFitMeasured(_:)``.
+    /// Apply on the sheet root, *outside* any `NavigationStack` — detents can't
+    /// be set from within the navigation content, which is why this is a pair.
+    ///
+    /// - Parameters:
+    ///   - contentHeight: the measured body height; `0` until geometry lands.
+    ///   - enabled: `false` falls through to `.large`, for steps that need the
+    ///     full sheet (Send's keypad/confirm, mint discovery's scrolling list).
+    ///   - estimate: first-frame stand-in before the measurement arrives, so the
+    ///     sheet doesn't open tiny and then jump.
+    ///   - navigationBar: whether the sheet hosts a `NavigationStack` with an
+    ///     inline title. Pass `false` for a bare sheet, or its detent carries
+    ///     44pt of chrome for a navigation bar that isn't there.
+    func contentFitDetent(
+        _ contentHeight: CGFloat,
+        enabled: Bool = true,
+        estimate: CGFloat = ContentFitSheetMetrics.bodyEstimate,
+        navigationBar: Bool = true
+    ) -> some View {
+        modifier(ContentFitDetent(
+            contentHeight: contentHeight,
+            enabled: enabled,
+            estimate: estimate,
+            navigationBar: navigationBar
+        ))
+    }
+
 }
 
 // MARK: - Sheet Close Button
@@ -168,6 +221,102 @@ private struct CanvasSheetBackground: ViewModifier {
             ))
             .ignoresSafeArea()
         }
+    }
+}
+
+// MARK: - Content-Fit Sheet Detent
+
+/// Pins the sheet to the newest computed height.
+///
+/// Handing `presentationDetents` a fresh single-element set is not enough. The
+/// body's height can be reported more than once as layout settles — a transient
+/// value, then the real one, milliseconds apart. UIKit resolves the new set but
+/// keeps the sheet on whichever detent it had already selected, so a transient
+/// measurement wins and the final one is silently ignored. Measured on an
+/// iPhone 17 Pro: 0 → 469 → 241pt in 70ms, leaving the sheet stuck at the 547pt
+/// detent instead of settling on 319pt.
+///
+/// Binding the selection alongside the set removes the race — the sheet is told
+/// which detent to be on, not merely which are available.
+private struct ContentFitDetent: ViewModifier {
+    let contentHeight: CGFloat
+    let enabled: Bool
+    let estimate: CGFloat
+    let navigationBar: Bool
+
+    @State private var selection: PresentationDetent = .large
+
+    private var detent: PresentationDetent {
+        guard enabled else { return .large }
+        return .height(ContentFitSheetMetrics.detentHeight(
+            for: contentHeight,
+            estimate: estimate,
+            hasNavigationBar: navigationBar
+        ))
+    }
+
+    func body(content: Content) -> some View {
+        content
+            .presentationDetents([detent], selection: $selection)
+            .onAppear { selection = detent }
+            .onChange(of: detent) { _, newDetent in selection = newDetent }
+    }
+}
+
+// MARK: - Content-Fit Sheet Metrics
+
+/// The one place the content-fit sheet arithmetic lives. Every partial-height
+/// sheet in the app — Send's compact input, Receive, Add Mint, connect-a-mint,
+/// onboarding's "What is ecash?" — hugs its content through
+/// ``View/contentFitMeasured(_:)`` +
+/// ``View/contentFitDetent(_:enabled:estimate:navigationBar:)``.
+@MainActor
+enum ContentFitSheetMetrics {
+    /// Inline navigation bar — the only chrome that actually consumes layout
+    /// height above the body.
+    ///
+    /// Notably absent: the drag indicator. `presentationDragIndicator` draws the
+    /// grabber as an *overlay* over the content's own top padding, so reserving
+    /// height for it doesn't move the content down — it just lands as dead space
+    /// at the bottom of the sheet. Same for any "breathing room" fudge: each
+    /// sheet's body already carries its own bottom padding, and the home
+    /// indicator gets the safe-area inset below that.
+    static let navigationBar: CGFloat = 44
+
+    /// Chrome above the measured body. The bottom safe area is *not* folded in
+    /// here — it's 34pt on Face ID devices and 0 on home-button ones, so it's
+    /// resolved per device in ``detentHeight(for:estimate:hasNavigationBar:)``.
+    static func chrome(hasNavigationBar: Bool) -> CGFloat {
+        hasNavigationBar ? navigationBar : 0
+    }
+
+    /// First-frame stand-in before the geometry measurement lands.
+    static let bodyEstimate: CGFloat = 220
+
+    /// Ceiling as a fraction of the screen. Past this the body scrolls inside
+    /// the sheet rather than the sheet growing — at accessibility text sizes an
+    /// unclamped detent would silently pin the sheet to full height.
+    static let maxScreenFraction: CGFloat = 0.9
+
+    static func detentHeight(
+        for contentHeight: CGFloat,
+        estimate: CGFloat = bodyEstimate,
+        hasNavigationBar: Bool = true
+    ) -> CGFloat {
+        let body = contentHeight > 0 ? contentHeight : estimate
+        let window = activeWindow
+        let wanted = body + chrome(hasNavigationBar: hasNavigationBar) + (window?.safeAreaInsets.bottom ?? 0)
+        // Read the ceiling from the *screen*, never from the sheet's own
+        // geometry — the latter would reintroduce the feedback loop this whole
+        // mechanism exists to avoid.
+        guard let screenHeight = window?.screen.bounds.height, screenHeight > 0 else { return wanted }
+        return min(wanted, screenHeight * maxScreenFraction)
+    }
+
+    private static var activeWindow: UIWindow? {
+        let scenes = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }
+        let scene = scenes.first { $0.activationState == .foregroundActive } ?? scenes.first
+        return scene?.keyWindow ?? scene?.windows.first
     }
 }
 

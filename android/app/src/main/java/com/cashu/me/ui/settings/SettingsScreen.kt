@@ -170,6 +170,7 @@ fun SettingsScreen(
             item("nostr") {
                 NavRow(
                     title = "Nostr",
+                    subtitle = "Your key, relays, and connected apps",
                     leadingIcon = Icons.Outlined.AccountCircle,
                     onClick = onOpenNostr,
                 )

@@ -41,6 +41,7 @@ import com.cashu.me.ui.components.CashuTextField
 import com.cashu.me.ui.components.InlineNotice
 import com.cashu.me.ui.components.NavRow
 import com.cashu.me.ui.components.SectionHeader
+import com.cashu.me.ui.components.SettingsFooterText
 import com.cashu.me.ui.components.ToolbarIcon
 import com.cashu.me.ui.theme.CashuTheme
 
@@ -113,7 +114,7 @@ fun AdvancedKeysScreen(
             }
 
             if (settings.p2pkKeys.isEmpty()) {
-                FooterText(
+                SettingsFooterText(
                     "Device-only keys are stored on this device, not in your seed backup. " +
                         "If you lose this device, ecash locked to them is gone — keep amounts small.",
                 )
@@ -131,7 +132,7 @@ fun AdvancedKeysScreen(
                         DeviceKeyRow(key = key, onClick = { onOpenKey(key.id) })
                     }
                 }
-                FooterText(
+                SettingsFooterText(
                     "These keys aren't in your seed backup. Back up each one, or keep amounts small.",
                 )
             }

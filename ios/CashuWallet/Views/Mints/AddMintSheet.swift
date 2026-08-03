@@ -99,11 +99,7 @@ struct AddMintFormView: View {
         .padding(.horizontal, 20)
         .padding(.top, 8)
         .padding(.bottom, 16)
-        .onGeometryChange(for: CGFloat.self) { proxy in
-            proxy.size.height
-        } action: { newHeight in
-            onHeightChange(newHeight)
-        }
+        .contentFitMeasured { onHeightChange($0) }
         .navigationTitle("Add Mint")
         .navigationBarTitleDisplayMode(.inline)
         // Sheet, not fullScreenCover — the one presentation kind every
@@ -195,10 +191,7 @@ struct AddMintFormView: View {
 struct AddMintSheet: View {
     @Environment(\.dismiss) private var dismiss
 
-    @State private var contentHeight: CGFloat = 260
-
-    /// Matches the connect-a-mint sheet's chrome allowance.
-    private let sheetChrome: CGFloat = 108
+    @State private var contentHeight: CGFloat = 0
 
     var body: some View {
         NavigationStack {
@@ -208,7 +201,7 @@ struct AddMintSheet: View {
             )
         }
         // Hugs the form, like every other content-fit sheet in the app.
-        .presentationDetents([.height(contentHeight + sheetChrome)])
+        .contentFitDetent(contentHeight, estimate: 260)
         .presentationDragIndicator(.visible)
     }
 }
