@@ -107,18 +107,10 @@ struct ComponentCatalogView: View {
                 .foregroundStyle(ErrorSeverity.error.foreground)
             }
 
-            section("H4 — FIXED: scanner overlay on material (ScannerWrapperView.swift:275)") {
-                // Was a solid Color.red slab, no icon, radius 10.
-                HStack(alignment: .firstTextBaseline, spacing: 8) {
-                    Image(systemName: ErrorSeverity.error.icon)
-                        .font(.subheadline.weight(.semibold))
-                        .foregroundStyle(ErrorSeverity.error.foreground)
-                    Text("No valid mint URL found in QR code.")
-                        .font(.subheadline)
-                        .foregroundStyle(.primary)
-                }
-                .padding(12)
-                .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+            section("H4 — FIXED: scanner overlay is the shared banner (ScannerWrapperView.swift:275)") {
+                // Was a solid Color.red slab, no icon, radius 10. Then briefly a
+                // hand-rolled copy of ErrorBannerView's body; now the component.
+                ErrorBannerView(message: "No valid mint URL found in QR code.", severity: .error)
             }
 
             section("Severity glyphs — Apple's convention, deliberately not Material's") {

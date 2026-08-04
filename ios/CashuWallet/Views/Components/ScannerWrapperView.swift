@@ -275,22 +275,17 @@ struct ScannerWrapperView: View {
                 if let error = scannerModel.errorMessage {
                     VStack {
                         Spacer()
-                        // Floats over the camera preview, so it takes the same
-                        // material as the bottom banner rather than the solid
-                        // red slab it used to be. Colour stays on the glyph.
-                        HStack(alignment: .firstTextBaseline, spacing: 8) {
-                            Image(systemName: scannerModel.noticeSeverity.icon)
-                                .font(.subheadline.weight(.semibold))
-                                .foregroundStyle(scannerModel.noticeSeverity.foreground)
-                                .accessibilityHidden(true)
-                            Text(error)
-                                .font(.subheadline)
-                                .foregroundStyle(.primary)
-                        }
-                        .padding(12)
-                        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-                        .accessibilityElement(children: .combine)
-                        .accessibilityLabel(scannerModel.noticeSeverity.announcementPrefix + error)
+                        // Floats over the camera preview, so it is the floating
+                        // channel's own component. This screen used to hand-roll
+                        // the banner's exact body — material, glyph, combined
+                        // accessibility element — which is how it drifted to a
+                        // solid red slab in the first place. Position it; don't
+                        // restyle it.
+                        ErrorBannerView(
+                            message: error,
+                            severity: scannerModel.noticeSeverity
+                        )
+                        .padding(.horizontal)
                         .padding(.bottom, 100)
                     }
                 }

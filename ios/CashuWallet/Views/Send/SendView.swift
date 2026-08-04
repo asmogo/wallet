@@ -3267,6 +3267,13 @@ struct MeltView: View {
             }
             // Semantic red, and the severity's own glyph — this used to pair the
             // *caution* circle with error red and bypass the token entirely.
+            //
+            // Deliberately NOT routed through InlineNotice, unlike every other
+            // site in this audit. This is a two-state decode *status* row, and
+            // its non-error state is a quiet secondary checkmark. InlineNotice's
+            // `.success` severity would render that green — turning a passive
+            // "yes, that parses" acknowledgement into a celebration. The row
+            // borrows the severity tokens without adopting the channel.
             .foregroundStyle(result == .unrecognized ? ErrorSeverity.error.foreground : Color.secondary)
             .transition(.opacity)
             .accessibilityLabel(liveDecodeText(for: result))

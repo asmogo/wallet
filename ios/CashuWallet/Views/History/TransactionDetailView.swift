@@ -295,15 +295,18 @@ struct TransactionDetailView: View {
             // Static glyph — no `.symbolEffect(.bounce)`. This is historical review
             // (a detail screen re-opened often), not the live payment-received moment
             // that owns the bounce (DESIGN.md §6). The status already happened.
+            // Status hero, not an inline notice — but it speaks the same
+            // severity vocabulary, so it takes the same tokens rather than
+            // raw .green/.red.
             Image(systemName: "checkmark.circle.fill")
                 .font(.system(size: 64))
-                .foregroundStyle(.green)
+                .foregroundStyle(ErrorSeverity.success.foreground)
                 .padding(.top, 24)
                 .accessibilityLabel("Completed")
         } else if transaction.status == .failed {
             Image(systemName: "xmark.circle.fill")
                 .font(.system(size: 64))
-                .foregroundStyle(.red)
+                .foregroundStyle(ErrorSeverity.error.foreground)
                 .padding(.top, 24)
                 .accessibilityLabel("Failed")
         }

@@ -874,7 +874,9 @@ struct ReceiveLightningView: View {
                     Text("Expired")
                 }
                 .font(.subheadline.weight(.medium))
-                .foregroundStyle(.red)
+                // Same severity token as the countdown above it, which already
+                // moved off Color.red — the two states of one clock.
+                .foregroundStyle(ErrorSeverity.error.foreground)
                 .transition(.opacity)
             } else if mintQuote?.state == .paid || mintQuote?.state == .issued {
                 HStack(spacing: 6) {

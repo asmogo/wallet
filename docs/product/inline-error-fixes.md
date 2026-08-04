@@ -253,6 +253,17 @@ ContentUnavailableView {
 caution — `.orange` at `ErrorBannerView.swift:28` should become `Color(.systemOrange)`
 for the same reason.
 
+Two further status sites surfaced while migrating and are routed the same way:
+the `"Expired"` badge in `ReceiveLightningView.swift` (the other half of the
+clock whose countdown already moved) and the completed/failed status heroes in
+`TransactionDetailView.swift`. The latter also moves `.green` onto
+`ErrorSeverity.success.foreground` — these are not inline notices, but they speak
+the same severity vocabulary, so they take the same tokens.
+
+The remaining bare `.red` uses are all destructive *actions* — Remove Mint,
+Remove Key, Delete Wallet, the relay trash button, Reset connection. Those are
+correct per HIG and stay.
+
 ### 4c. Glyph discipline
 
 Filled SF Symbols only. Three sites use unfilled variants — `SendView.swift:3289`
@@ -271,6 +282,19 @@ this is in the audit PR**; each phase is its own PR.
 | 1 | Components only — `InlineNotice.kt`, `CashuTextField.kt`, `ErrorBannerView.swift`. Catalogs re-recorded, so the whole visual delta is two screenshots per side. | 3 files |
 | 2 | Field-attached errors → `supportingText` (Android, table in §3c) / caption (iOS) | ~8 + ~10 sites |
 | 3 | Hand-rolled variants retired — Android V7–V10, iOS H1/H2/H4. **Start with `SendView.swift:294`**: it is the reference standard *and* the one dropping accessibility. | ~17 sites |
+
+**Phase 3 rule: reach for the component, not its appearance.** Both scanner
+overlays initially got *restyled* rather than *replaced* — iOS grew a hand-rolled
+copy of `ErrorBannerView`'s exact body (same material, radius, glyph font and
+combined accessibility element) and Android kept a bare themed `Text` on the
+camera surface. Both now call the shared component and only position it. If a
+migration ends with you reproducing a component's body, the migration is not done.
+
+One documented exception: `SendView.liveDecodeFeedback` stays a bespoke row. It
+is a two-state decode *status*, and its non-error state is a quiet secondary
+checkmark; `InlineNotice(severity: .success)` would render that green and turn an
+acknowledgement into a celebration. It borrows the severity tokens without
+adopting the channel, and says so in a comment at the call site.
 | 4 | Transient errors → `Snackbar` / banner | ~6 sites |
 | 5 | Screen-level → `ContentUnavailableView` | ~4 iOS sites |
 | 6 | Copy fixes — duplicate "sat-denominated" strings, missing `detail` at `UnifiedSendScreen.kt:935`, the five `localizedDescription` leaks | 8 strings |
