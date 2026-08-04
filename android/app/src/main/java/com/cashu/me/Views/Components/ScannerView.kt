@@ -341,9 +341,11 @@ private fun ScannerStatusOverlay(
             // floating on an unthemed camera surface, where the tonal container
             // is the only thing giving it a readable background. iOS's scanner
             // overlay makes the matching move to its own shared banner.
+            // Caution, not Error: a QR that isn't a mint URL didn't break
+            // anything. Point the camera somewhere else.
             InlineNotice(
                 text = it,
-                severity = NoticeSeverity.Error,
+                severity = NoticeSeverity.Caution,
                 modifier = Modifier.fillMaxWidth(),
             )
         }

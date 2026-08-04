@@ -215,10 +215,21 @@ private fun HandRolledVariants() {
         }
     }
 
-    CatalogSection("Reference — the shared component the above should have used") {
+    CatalogSection("Severity is about cost to the user, not how we found out") {
+        // Error is reserved for "the action failed". The recipient-key message
+        // above never renders like this — it ships as supportingText on the
+        // field. Validation and unmet preconditions are not the Error tier.
         InlineNotice(
-            text = "That's not a valid public key.",
+            text = "Couldn't reach the mint.",
             severity = NoticeSeverity.Error,
+        )
+        InlineNotice(
+            text = "No valid mint URL found in QR code.",
+            severity = NoticeSeverity.Caution,
+        )
+        InlineNotice(
+            text = "NFC is not available on this device.",
+            severity = NoticeSeverity.Info,
         )
     }
 }

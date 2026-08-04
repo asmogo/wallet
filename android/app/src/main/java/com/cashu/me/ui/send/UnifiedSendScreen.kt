@@ -1096,7 +1096,9 @@ private fun ConfirmFace(
         }
         if (quoteError != null) {
             Spacer(Modifier.height(CashuTheme.spacing.default))
-            InlineNotice(text = quoteError)
+            // Caution: the quote didn't arrive, but nothing was spent and
+            // "Try again" is right there.
+            InlineNotice(text = quoteError, severity = NoticeSeverity.Caution)
             GhostButton(text = "Try again", onClick = onRetryQuote)
         }
         when (cashuRoute) {
@@ -1148,11 +1150,11 @@ private fun ConfirmFace(
         }
         if (topUpError != null) {
             Spacer(Modifier.height(CashuTheme.spacing.default))
-            InlineNotice(text = topUpError)
+            InlineNotice(text = topUpError, severity = NoticeSeverity.Error)
         }
         if (confirmError != null) {
             Spacer(Modifier.height(CashuTheme.spacing.default))
-            InlineNotice(text = confirmError)
+            InlineNotice(text = confirmError, severity = NoticeSeverity.Error)
         }
         Spacer(Modifier.weight(1f))
         PrimaryButton(

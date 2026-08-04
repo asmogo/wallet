@@ -12,7 +12,9 @@ class ScannerViewModel: ObservableObject {
     /// Severity of `errorMessage`. `.error` paints the alarm-red toast; `.info`
     /// renders a neutral material so a success confirmation (e.g. "copied") isn't
     /// styled as a failure.
-    @Published var noticeSeverity: ErrorSeverity = .error
+    // Caution, not error: a QR that isn't what we wanted didn't break
+    // anything. Genuine failures raise this explicitly.
+    @Published var noticeSeverity: ErrorSeverity = .caution
 
     #if canImport(URKit)
     private var decoder = URDecoder()
@@ -25,7 +27,7 @@ class ScannerViewModel: ObservableObject {
         scanProgress = 0
         isScanning = true
         errorMessage = nil
-        noticeSeverity = .error
+        noticeSeverity = .caution
     }
     
     func processFragment(_ fragment: String) -> String? {

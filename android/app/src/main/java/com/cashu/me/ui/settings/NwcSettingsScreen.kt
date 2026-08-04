@@ -59,6 +59,7 @@ import com.cashu.me.ui.components.CashuTextField
 import com.cashu.me.ui.components.InlineNotice
 import com.cashu.me.ui.components.MintPickerSheet
 import com.cashu.me.ui.components.NavRow
+import com.cashu.me.ui.components.NoticeSeverity
 import com.cashu.me.ui.components.PrimaryButton
 import com.cashu.me.ui.components.SectionHeader
 import com.cashu.me.ui.components.SettingsFooterText
@@ -144,6 +145,7 @@ fun NwcSettingsScreen(
                         horizontal = CashuTheme.spacing.comfortable,
                         vertical = CashuTheme.spacing.snug,
                     ),
+                    severity = NoticeSeverity.Error,
                 )
                 !nwcState.isEnabled -> SettingsFooterText(
                     "Enabling creates a private connection code you can scan or paste into a Nostr app.",

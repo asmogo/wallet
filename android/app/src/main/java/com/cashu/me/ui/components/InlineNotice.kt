@@ -44,6 +44,11 @@ private val NoticeCorner = RoundedCornerShape(12.dp)
  * - [Info]    a neutral precondition, not a failure.
  * - [Success] confirmation.
  *
+ * Deliberately has **no default**. It used to default to [Error], so a call site
+ * that simply didn't think about severity rendered the loudest tier in the
+ * system — and 24 of them did. Severity is a claim about what the message
+ * costs the user, not about how the code found out, so it has to be made.
+ *
  * `Caution` rather than "warning": orange also means *pending* in this app, and
  * "warning" invites the warning-triangle glyph Material reserves for something
  * else. The names match iOS so one vocabulary describes both apps — the glyphs
@@ -73,7 +78,7 @@ enum class NoticeSeverity { Error, Caution, Info, Success }
 fun InlineNotice(
     text: String,
     modifier: Modifier = Modifier,
-    severity: NoticeSeverity = NoticeSeverity.Error,
+    severity: NoticeSeverity,
     detail: String? = null,
 ) {
     val (icon, content, container) = noticeColors(severity)
@@ -126,7 +131,7 @@ fun InlineNotice(
 fun InlineNoticeHost(
     text: String?,
     modifier: Modifier = Modifier,
-    severity: NoticeSeverity = NoticeSeverity.Error,
+    severity: NoticeSeverity,
     detail: String? = null,
 ) {
     // Keep the last non-null text so the exit fade shows content, not a blank.

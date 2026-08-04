@@ -95,6 +95,7 @@ import com.cashu.me.ui.components.InlineNotice
 import com.cashu.me.ui.components.InspectorRow
 import com.cashu.me.ui.components.MintAvatar
 import com.cashu.me.ui.components.MintPickerSheet
+import com.cashu.me.ui.components.NoticeSeverity
 import com.cashu.me.ui.components.NumberPadFooter
 import com.cashu.me.ui.components.PaymentStatusPhase
 import com.cashu.me.ui.components.PaymentStatusScreen
@@ -988,7 +989,7 @@ private fun InputFace(
         }
         if (errorText != null) {
             Spacer(Modifier.height(CashuTheme.spacing.default))
-            InlineNotice(text = errorText)
+            InlineNotice(text = errorText, severity = NoticeSeverity.Error)
         }
         Spacer(Modifier.weight(1f))
         NumberPadFooter(
@@ -1120,7 +1121,7 @@ private fun DisplayFace(
             } else {
                 WaitingForPaymentRow(text = pendingStatusText)
             }
-            errorText?.let { InlineNotice(text = it) }
+            errorText?.let { InlineNotice(text = it, severity = NoticeSeverity.Error) }
             if (!isReusable) {
                 ExpiryCaption(expirySeconds = quote.expiryEpochSeconds)
             }

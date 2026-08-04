@@ -157,7 +157,7 @@ internal fun NostrKeySection(
             verticalArrangement = Arrangement.spacedBy(CashuTheme.spacing.snug),
         ) {
             progressMessage?.let { InlineNotice(text = it, severity = NoticeSeverity.Info) }
-            errorMessage?.let { InlineNotice(text = it) }
+            errorMessage?.let { InlineNotice(text = it, severity = NoticeSeverity.Error) }
         }
     }
 }

@@ -32,6 +32,7 @@ import com.cashu.me.Core.SettingsManager
 import com.cashu.me.Core.WalletManager
 import com.cashu.me.ui.components.InlineNoticeHost
 import com.cashu.me.ui.components.NavRow
+import com.cashu.me.ui.components.NoticeSeverity
 import com.cashu.me.ui.components.SectionHeader
 import com.cashu.me.ui.components.ToggleRow
 import com.cashu.me.ui.components.formatRelativeTimestamp
@@ -122,6 +123,7 @@ fun BackupRestoreScreen(
                     horizontal = CashuTheme.spacing.comfortable,
                     vertical = CashuTheme.spacing.tight,
                 ),
+                severity = NoticeSeverity.Error,
             )
             Text(
                 text = mintBackupFooter(

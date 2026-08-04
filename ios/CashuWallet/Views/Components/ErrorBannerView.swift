@@ -68,7 +68,7 @@ struct InlineNotice: View {
     /// Optional bold leading line (e.g. "New mint"). When present the `message`
     /// drops to a secondary explanatory body.
     var title: String? = nil
-    var severity: ErrorSeverity = .error
+    var severity: ErrorSeverity
     /// Optional second line, always secondary — for amounts / supporting detail.
     var detail: String? = nil
     /// Hide the leading glyph, for footers that read as plain text.
@@ -150,7 +150,7 @@ extension View {
 /// vocabulary in DESIGN.md. Colour stays on the icon.
 struct ErrorBannerView: View {
     let message: String
-    var severity: ErrorSeverity = .error
+    var severity: ErrorSeverity
     var retry: (() -> Void)? = nil
     var onDismiss: (() -> Void)? = nil
 

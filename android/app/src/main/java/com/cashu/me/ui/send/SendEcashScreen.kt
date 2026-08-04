@@ -669,6 +669,7 @@ private fun InputFace(
                     InlineNotice(
                         text = errorText,
                         modifier = Modifier.padding(bottom = CashuTheme.spacing.snug),
+                        severity = NoticeSeverity.Error,
                     )
                 }
             }
@@ -1106,6 +1107,7 @@ private fun GeneratedFace(
                         modifier = Modifier.semantics {
                             liveRegion = LiveRegionMode.Polite
                         },
+                        severity = NoticeSeverity.Caution,
                     )
                     PendingTokenClaimCheckResult.Claimed, null -> Unit
                 }

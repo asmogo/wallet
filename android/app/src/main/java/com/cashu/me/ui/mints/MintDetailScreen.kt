@@ -87,6 +87,7 @@ import com.cashu.me.ui.components.IconSwap
 import com.cashu.me.ui.components.InlineNotice
 import com.cashu.me.ui.components.InspectorRow
 import com.cashu.me.ui.components.MintAvatar
+import com.cashu.me.ui.components.NoticeSeverity
 import com.cashu.me.ui.components.PrimaryButton
 import com.cashu.me.ui.components.SectionHeader
 import com.cashu.me.ui.components.SpinnerRing
@@ -200,6 +201,7 @@ fun MintDetailScreen(
                     InlineNotice(
                         text = infoError.orEmpty(),
                         detail = "Showing saved information.",
+                        severity = NoticeSeverity.Caution,
                     )
                     GhostButton(
                         text = "Retry",
@@ -463,7 +465,7 @@ fun MintDetailScreen(
                 // When it's the default, the button disappears and the header
                 // shows a "Default mint" pill instead (iOS parity).
                 if (setDefaultError != null) {
-                    InlineNotice(text = setDefaultError.orEmpty())
+                    InlineNotice(text = setDefaultError.orEmpty(), severity = NoticeSeverity.Error)
                 }
                 if (!isActive) {
                     // iOS parity: progress disables the action while in flight

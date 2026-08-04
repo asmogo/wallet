@@ -279,7 +279,7 @@ fun RestoreSeedStep(
                 }
             }
             if (errorText != null) {
-                InlineNotice(text = errorText)
+                InlineNotice(text = errorText, severity = NoticeSeverity.Error)
             }
         }
 

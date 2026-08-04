@@ -397,7 +397,7 @@ fun CashuRequestDetailScreen(
                     }
                 }
 
-                InlineNoticeHost(text = regenerateError, modifier = Modifier.fillMaxWidth())
+                InlineNoticeHost(text = regenerateError, modifier = Modifier.fillMaxWidth(), severity = NoticeSeverity.Error)
 
                 Spacer(Modifier.height(CashuTheme.spacing.snug))
             }

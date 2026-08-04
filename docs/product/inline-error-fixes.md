@@ -72,6 +72,33 @@ elsewhere in the app, and "warning" invites the warning-triangle glyph that
 Material reserves for something else. `ErrorBannerView.swift:8-11` already
 documents this reasoning — Android just never adopted the name.
 
+**Severity has no default, on either platform.** Android's `InlineNotice` used
+to declare `severity: NoticeSeverity = NoticeSeverity.Error`, so 24 of 44 call
+sites rendered the loudest tier in the system by simply not mentioning it. The
+loudest tier is the worst possible default: being wrong about it is expensive in
+exactly the direction that erodes trust in the signal. It is now a required
+parameter, and every call site states its tier. (iOS never actually tripped on
+this — all 45 of its call sites already passed one — but the default is gone
+there too, so the contract matches.)
+
+**Pick the tier by what the message costs the user, not by how the code found
+out.** An exception was caught, a parse returned nil, a request 404'd — those are
+all "how we found out", and they all *feel* like errors from inside the function.
+Ask instead: did something the user cares about actually break?
+
+| Situation | Tier | Why |
+|---|---|---|
+| Scanned QR isn't a mint URL | `caution` | Nothing broke. Point the camera elsewhere. |
+| Typed key is malformed | field `supportingText` | Validation belongs on the control, not in a notice. |
+| NFC missing on this device | `info` | A hardware fact, not a failure. |
+| NFC turned off | `caution` | Fixable precondition; the fix button is right there. |
+| Status check didn't complete | `caution` | The token is untouched; only our knowledge of it is stale. |
+| Quote/mint-info fetch failed, retry offered | `caution` | Degraded, recoverable, nothing spent. |
+| Send, melt, restore, backup, connect failed | `error` | An action the user took did not happen. |
+
+The test that catches most mistakes: **if the user's next move is "try that
+again" or "turn that on", it is not an `error`.**
+
 ### 1b. The placement decision rule
 
 **This is the core of the document.** One question decides the channel; only the
