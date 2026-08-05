@@ -27,9 +27,9 @@ struct OnboardingWelcomeStage: View {
     @State private var tokenized = false
 
     // The note is a ~1.6:1 banknote outline; the token keeps its height as
-    // diameter. Companions echo MintAvatarView's 36 pt circle geometry.
+    // diameter (geometry lives in NoteToTokenShape). Companions echo
+    // MintAvatarView's 36 pt circle geometry.
     private let noteSize = CGSize(width: 180, height: 112)
-    private let tokenDiameter: CGFloat = 112
     private let companionDiameter: CGFloat = 36
     private let strokeWidth: CGFloat = 1.5
 
@@ -43,12 +43,13 @@ struct OnboardingWelcomeStage: View {
             companion(offset: CGSize(width: -86, height: 46), visible: morphed)
             companion(offset: CGSize(width: 88, height: -52), visible: morphed)
 
-            RoundedRectangle(cornerRadius: morphed ? tokenDiameter / 2 : 14)
-                .strokeBorder(.secondary, lineWidth: strokeWidth)
-                .frame(
-                    width: morphed ? tokenDiameter : noteSize.width,
-                    height: morphed ? tokenDiameter : noteSize.height
-                )
+            // Draw-only morph: the shape interpolates inside a fixed frame, so
+            // the loop costs a path redraw, never layout (transform/opacity/
+            // draw are the only per-frame work — the animate-skill property
+            // rule, and the cold-launch guarantee the brief demands).
+            NoteToTokenShape(fraction: morphed ? 1 : 0)
+                .stroke(.secondary, lineWidth: strokeWidth)
+                .frame(width: noteSize.width, height: noteSize.height)
         }
         .opacity(variant == .quiet ? 0.5 : 1)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -68,6 +69,33 @@ struct OnboardingWelcomeStage: View {
             .scaleEffect(visible ? 1 : 0.92)
             .opacity(visible ? 1 : 0)
             .offset(offset)
+    }
+}
+
+/// Interpolates a 180×112 banknote outline (r 14) into a Ø112 token circle,
+/// centered in whatever rect it's given. `animatableData` is the morph
+/// fraction, so `withAnimation` drives a pure path interpolation.
+private struct NoteToTokenShape: Shape {
+    var fraction: CGFloat
+
+    var animatableData: CGFloat {
+        get { fraction }
+        set { fraction = newValue }
+    }
+
+    func path(in rect: CGRect) -> Path {
+        let noteSize = CGSize(width: 180, height: 112)
+        let tokenDiameter: CGFloat = 112
+        let width = noteSize.width + (tokenDiameter - noteSize.width) * fraction
+        let height = noteSize.height + (tokenDiameter - noteSize.height) * fraction
+        let corner = 14 + (tokenDiameter / 2 - 14) * fraction
+        let frame = CGRect(
+            x: rect.midX - width / 2,
+            y: rect.midY - height / 2,
+            width: width,
+            height: height
+        )
+        return Path(roundedRect: frame, cornerRadius: corner, style: .continuous)
     }
 }
 
