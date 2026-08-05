@@ -250,8 +250,6 @@ struct OnboardingView: View {
 
         case .showMnemonic:
             return OnboardingChassisModel(
-                headline: "Your Seed Phrase.",
-                subhead: "Write these 12 words down in order. This is the only way to recover your wallet.",
                 primary: OnboardingChassisAction(
                     label: "I've Saved My Seed Phrase",
                     isDisabled: !seedAcknowledged,
@@ -265,8 +263,6 @@ struct OnboardingView: View {
 
         case .firstMint:
             return OnboardingChassisModel(
-                headline: "Pick your first mint.",
-                subhead: "Mints issue your ecash and redeem it for Bitcoin. Add more anytime in Settings.",
                 primary: OnboardingChassisAction(
                     label: "Continue",
                     isLoading: isAddingFirstMints,
@@ -284,8 +280,6 @@ struct OnboardingView: View {
 
         case .restoreMethod:
             return OnboardingChassisModel(
-                headline: "Restore Wallet",
-                subhead: "Choose how to recover your wallet.",
                 primary: OnboardingChassisAction(
                     label: "Restore from iCloud",
                     action: {
@@ -301,55 +295,33 @@ struct OnboardingView: View {
                         HapticFeedback.selection()
                         advance(to: .restoreInput)
                     }
-                ),
-                tertiary: OnboardingChassisAction(
-                    label: "Back",
-                    action: { retreat(to: .welcome) }
                 )
             )
 
         case .restoreInput:
             return OnboardingChassisModel(
-                headline: "Restore Wallet.",
-                subhead: "Enter your 12 words in order.",
                 primary: OnboardingChassisAction(
                     label: "Next",
                     isLoading: isRestoring,
                     isDisabled: restoreWordCount != 12 || isRestoring,
                     action: initializeAndProceed
-                ),
-                tertiary: OnboardingChassisAction(
-                    label: "Back",
-                    action: { retreat(to: .welcome) }
                 )
             )
 
         case .restoreMints:
             return OnboardingChassisModel(
-                headline: "Recover Funds.",
-                subhead: "Add the mints you used before to recover funds from this seed.",
                 primary: OnboardingChassisAction(
                     label: mintsToRestore.isEmpty
                         ? "Restore"
                         : "Restore from \(mintsToRestore.count) Mint\(mintsToRestore.count == 1 ? "" : "s")",
                     isDisabled: mintsToRestore.isEmpty,
                     action: startRestoreFlow
-                ),
-                tertiary: OnboardingChassisAction(
-                    label: "Back",
-                    action: {
-                        mintsToRestore.removeAll()
-                        restoreMintError = nil
-                        retreat(to: .restoreInput)
-                    }
                 )
             )
 
         case .restoreProgress:
             // Forward-only — Continue enables once every mint has settled.
             return OnboardingChassisModel(
-                headline: "Recover Funds.",
-                subhead: restoreSubhead,
                 primary: OnboardingChassisAction(
                     label: "Continue",
                     isDisabled: !restoreAllSettled,
@@ -361,35 +333,17 @@ struct OnboardingView: View {
             switch iCloudRestorePhase {
             case .preview:
                 return OnboardingChassisModel(
-                    // Header reflects detection state — no longer a hardcoded
-                    // "Wallet found" that contradicts a "no backup" body.
-                    headline: iCloudPreviewTitle,
                     primary: OnboardingChassisAction(
                         label: "Restore Wallet",
                         isDisabled: isDetectingICloudBackup || detectedICloudBackup == nil,
                         action: runICloudRestore
-                    ),
-                    tertiary: OnboardingChassisAction(
-                        label: "Back",
-                        action: { retreat(to: .restoreMethod) }
                     )
                 )
             case .restoring:
-                // The one step with no actions at all: the hidden slot
-                // templates keep the chassis geometry byte-identical while
-                // the stage's spinner carries the moment.
-                let mintCount = detectedICloudBackup?.mintURLs.count ?? 0
-                return OnboardingChassisModel(
-                    headline: "Restoring Wallet",
-                    subhead: "Recovering your funds from \(mintCount) mint\(mintCount == 1 ? "" : "s")…"
-                )
+                // No actions while restoring — the stage's spinner carries it.
+                return OnboardingChassisModel()
             case .success:
-                let count = detectedICloudBackup?.mintURLs.count ?? 0
                 return OnboardingChassisModel(
-                    headline: "Wallet Restored",
-                    subhead: walletManager.balance > 0 && count > 0
-                        ? "across \(count) mint\(count == 1 ? "" : "s")"
-                        : "Your funds are ready.",
                     primary: OnboardingChassisAction(
                         label: "Open Wallet",
                         isDisabled: isCompleting,
@@ -507,11 +461,27 @@ struct OnboardingView: View {
     // MARK: - Restore Method Stage
 
     private var restoreMethodStage: some View {
-        // The restrained, static variant of the welcome piece — a quiet mark.
-        OnboardingWelcomeStage(variant: .quiet)
-            .onAppear {
-                triggerEntrance { restoreMethodAppeared = true }
+        VStack(spacing: 0) {
+            OnboardingBackButton { retreat(to: .welcome) }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, 28)
+                .padding(.top, 8)
+
+            stagger(appeared: restoreMethodAppeared, index: 0) {
+                OnboardingStepHeader(
+                    title: "Restore Wallet",
+                    subhead: "Choose how to recover your wallet."
+                )
             }
+            .padding(.top, 12)
+
+            // The restrained, static variant of the welcome piece — a quiet mark.
+            OnboardingWelcomeStage(variant: .quiet)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+        .onAppear {
+            triggerEntrance { restoreMethodAppeared = true }
+        }
     }
 
     // MARK: - iCloud Restore Stage
@@ -569,14 +539,22 @@ struct OnboardingView: View {
 
     private var iCloudPreviewStage: some View {
         VStack(spacing: 0) {
-            Spacer()
+            OnboardingBackButton { retreat(to: .restoreMethod) }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, 28)
+                .padding(.top, 8)
 
             stagger(appeared: iCloudPreviewAppeared, index: 0) {
                 VStack(alignment: .leading, spacing: 14) {
+                    // Header reflects detection state — no longer a hardcoded
+                    // "Wallet found" that contradicts a "no backup" body.
+                    OnboardingStepHeader(title: iCloudPreviewTitle)
+
                     Image(systemName: iCloudPreviewIcon)
                         .font(.largeTitle)
                         .foregroundStyle(.secondary)
-                        .padding(.bottom, 4)
+                        .padding(.horizontal, 28)
+                        .padding(.top, 10)
                         .contentTransition(.symbolEffect(.replace))
 
                     Group {
@@ -600,10 +578,11 @@ struct OnboardingView: View {
                     }
                     .font(.callout)
                     .foregroundStyle(.secondary)
+                    .padding(.horizontal, 28)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.horizontal, 28)
             }
+            .padding(.top, 12)
 
             Spacer()
 
@@ -622,7 +601,14 @@ struct OnboardingView: View {
     }
 
     private var iCloudRestoringStage: some View {
-        VStack {
+        let mintCount = detectedICloudBackup?.mintURLs.count ?? 0
+        return VStack(spacing: 0) {
+            OnboardingStepHeader(
+                title: "Restoring Wallet",
+                subhead: "Recovering your funds from \(mintCount) mint\(mintCount == 1 ? "" : "s")…"
+            )
+            .padding(.top, 8)
+
             Spacer()
             ProgressView()
                 .scaleEffect(1.5)
@@ -635,7 +621,17 @@ struct OnboardingView: View {
         // A centered terminal "done" moment: the recovered balance is the hero,
         // rendered identically to the wallet's balance so it appears to stay put
         // through the crossfade into the wallet. Everything else recedes on exit.
-        VStack(spacing: 16) {
+        let count = detectedICloudBackup?.mintURLs.count ?? 0
+        return VStack(spacing: 16) {
+            OnboardingStepHeader(
+                title: "Wallet Restored",
+                subhead: walletManager.balance > 0 && count > 0
+                    ? "across \(count) mint\(count == 1 ? "" : "s")"
+                    : "Your funds are ready."
+            )
+            .padding(.top, 8)
+            .opacity(isCompleting ? 0 : 1)
+
             Spacer()
 
             Image(systemName: "checkmark.circle.fill")
@@ -705,14 +701,28 @@ struct OnboardingView: View {
     // MARK: - Show Mnemonic Stage
 
     private var showMnemonicStage: some View {
-        VStack(spacing: 12) {
-            Spacer(minLength: 0)
-
-            Label("Never share these words with anyone", systemImage: "exclamationmark.triangle.fill")
-                .font(.caption.weight(.medium))
-                .foregroundStyle(.orange)
+        VStack(spacing: 0) {
+            OnboardingBackButton { retreat(to: .welcome) }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.horizontal, 28)
+                .padding(.top, 8)
+
+            stagger(appeared: mnemonicAppeared, index: 0) {
+                VStack(alignment: .leading, spacing: 8) {
+                    OnboardingStepHeader(
+                        title: "Your Seed Phrase.",
+                        subhead: "Write these 12 words down in order. This is the only way to recover your wallet."
+                    )
+
+                    Label("Never share these words with anyone", systemImage: "exclamationmark.triangle.fill")
+                        .font(.caption.weight(.medium))
+                        .foregroundStyle(.orange)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.horizontal, 28)
+                        .padding(.top, 2)
+                }
+            }
+            .padding(.top, 12)
 
             // The seed grid deliberately gets NO stagger entrance: any offset/
             // blur ramp on this block reads as a flicker on first paint, and
@@ -756,13 +766,17 @@ struct OnboardingView: View {
             .contentShape(Rectangle())
             .onTapGesture(perform: revealSeed)
             .padding(.horizontal, 28)
-            .padding(.top, 4)
+            .padding(.top, 24)
 
             Button(action: copyMnemonic) {
                 Text(seedCopied ? "Copied" : "Copy")
                     .contentTransition(.opacity)
             }
             .textLinkButton()
+            .frame(maxWidth: .infinity)
+            // Air between the grid and the link — flush against the words it
+            // read as part of the grid.
+            .padding(.top, 20)
 
             Spacer(minLength: 0)
         }
@@ -814,6 +828,24 @@ struct OnboardingView: View {
     // MARK: - First Mint Stage
 
     private var firstMintStage: some View {
+        VStack(spacing: 16) {
+            stagger(appeared: firstMintAppeared, index: 0) {
+                OnboardingStepHeader(
+                    title: "Pick your first mint.",
+                    subhead: "Mints issue your ecash and redeem it for Bitcoin. Add more anytime in Settings."
+                )
+            }
+            .padding(.top, 8)
+
+            firstMintList
+        }
+        .animation(.snappy, value: firstMintError)
+        .onAppear {
+            triggerEntrance { firstMintAppeared = true }
+        }
+    }
+
+    private var firstMintList: some View {
         ScrollView {
             VStack(spacing: 0) {
                 let allRows: [String] = recommendedMints.map(\.url) + customMintUrls
@@ -863,11 +895,6 @@ struct OnboardingView: View {
                 }
                 .padding(.top, 8)
             }
-        }
-        .padding(.top, 8)
-        .animation(.snappy, value: firstMintError)
-        .onAppear {
-            triggerEntrance { firstMintAppeared = true }
         }
     }
 
@@ -1036,6 +1063,17 @@ struct OnboardingView: View {
 
         // Mnemonic input — same pattern as Receive Ecash paste screen
         return VStack(spacing: 16) {
+            OnboardingBackButton { retreat(to: .welcome) }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, 28)
+
+            stagger(appeared: restoreInputAppeared, index: 0) {
+                OnboardingStepHeader(
+                    title: "Restore Wallet.",
+                    subhead: "Enter your 12 words in order."
+                )
+            }
+
             ZStack(alignment: .bottomTrailing) {
                 ZStack(alignment: .topLeading) {
                     TextEditor(text: $restoreMnemonic)
@@ -1112,6 +1150,36 @@ struct OnboardingView: View {
     // MARK: - Restore Mints Stage
 
     private var restoreMintsStage: some View {
+        VStack(spacing: 16) {
+            OnboardingBackButton {
+                mintsToRestore.removeAll()
+                restoreMintError = nil
+                retreat(to: .restoreInput)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, 28)
+            .padding(.top, 8)
+
+            stagger(appeared: restoreMintsAppeared, index: 0) {
+                OnboardingStepHeader(
+                    title: "Recover Funds.",
+                    subhead: "Add the mints you used before to recover funds from this seed."
+                )
+            }
+
+            restoreMintsList
+        }
+        .animation(.snappy, value: restoreMintError)
+        .animation(.snappy, value: mintsToRestore.isEmpty)
+        .onAppear {
+            // Land calm — don't pop the keyboard on arrival (it can carry over
+            // from the seed screen's crossfade).
+            mintFieldFocused = false
+            triggerEntrance { restoreMintsAppeared = true }
+        }
+    }
+
+    private var restoreMintsList: some View {
         // Scrollable body — input + the staged mints the user has added.
         ScrollView {
             VStack(spacing: 20) {
@@ -1182,14 +1250,6 @@ struct OnboardingView: View {
                 if mintFieldFocused { mintFieldFocused = false }
             }
         )
-        .animation(.snappy, value: restoreMintError)
-        .animation(.snappy, value: mintsToRestore.isEmpty)
-        .onAppear {
-            // Land calm — don't pop the keyboard on arrival (it can carry over
-            // from the seed screen's crossfade).
-            mintFieldFocused = false
-            triggerEntrance { restoreMintsAppeared = true }
-        }
     }
 
     /// Inline Liquid-Glass capsule chip (Add / Paste) for the restore flow.
@@ -1274,6 +1334,15 @@ struct OnboardingView: View {
 
     private var restoreProgressStage: some View {
         VStack(spacing: 0) {
+            stagger(appeared: restoreProgressAppeared, index: 0) {
+                OnboardingStepHeader(
+                    title: "Recover Funds.",
+                    subhead: restoreSubhead
+                )
+            }
+            .padding(.top, 8)
+            .padding(.bottom, 12)
+
             // The recovered total is a money value — it keeps its monospaced
             // digits and numeric content transition (Numbers Are Sacred).
             if restoreTotalRecovered > 0 {

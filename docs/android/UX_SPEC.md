@@ -65,29 +65,32 @@ Contactless).
 + `OnboardingChassis.kt` + `ui/restore/RestoreWalletFlow.kt`.)*
 
 One host (`OnboardingScreen`) built on the restyle's chassis grammar
-(docs/product/onboarding-restyle-brief.md §3): a **fixed bottom action
-chassis** — headline, subhead, then primary / secondary / tertiary action
-slots, the primary at an identical position on every step — under a flexible
-**stage** that owns all vertical slack. Steps swap with a quiet materialize
-(fade + 0.96→1 scale on expressive springs, blur-resolve on API 31+); the
-chassis never animates, only its text cross-fades in place. No horizontal
-push (binding cross-platform decision), no page indicator (the flow branches,
-so dots would imply a linear path that doesn't exist), no bottom nav, no
-`TopAppBar`. System back mirrors the on-screen Back affordances and only
-those.
+(docs/product/onboarding-restyle-brief.md §3, revised by design review
+2026-08-05): the **welcome step** carries its headline and subhead in the
+bottom action block above its CTAs; **every other step** titles itself at the
+top (`OnboardingStepHeader` — title + supporting copy, with an M3
+`ArrowBack` icon button above it wherever a retreat exists) and pins its
+actions to the bottom edge (`OnboardingChassis` — no reserved slots, a lone
+primary hugs the bottom). The stage between owns all vertical slack. Steps
+swap with a quiet materialize (fade + 0.96→1 scale on expressive springs,
+blur-resolve on API 31+); the chassis never animates, only its content
+cross-fades in place. No horizontal push (binding cross-platform decision),
+no page indicator (the flow branches, so dots would imply a linear path that
+doesn't exist), no bottom nav, no `TopAppBar`. System back mirrors the
+on-screen back buttons and only those.
 
 Flow: `Welcome → ShowMnemonic → FirstMint → done`, or
 `Welcome → RestoreMethod → RestoreInput → RestoreMints → RestoreProgress → done`.
 
-| Step | Stage | Chassis (headline · primary / secondary / tertiary) |
-|------|-------|------------------------------------------------------|
-| **Welcome** | The "note becomes cash" ink piece (`WelcomeStagePiece`); startup-failure recovery + create errors pin above the chassis | "Private cash. In your pocket." · `PrimaryButton` "Create Wallet" (filled-tonal) / `SecondaryButton` "Restore Wallet" / `GhostButton` "What is ecash?" (opens the concept sheet) |
-| **ShowMnemonic** | Warning line, 12-word 3-column grid — masked (`"••••••"` + blur on API 31+, real words never composed) until tap-to-reveal — and a Copy ghost | "Your Seed Phrase." · acknowledge row in the accessory slot gates "I've Saved My Seed Phrase" |
-| **FirstMint** | Multi-select recommended-mint rows, "Add custom mint URL" expands a `CashuTextField`, inline notices | "Pick your first mint." · "Continue" (disabled with no selection and empty input) / — / "Skip for now" |
-| **RestoreMethod** | Quiet variant of the welcome piece | "Restore Wallet" · "Use Seed Phrase" (Secondary styling — Android has no iCloud twin, iOS's chooser has two options) / — / "Back" |
-| **RestoreInput** | Monospaced seed editor with paste/clear corner control, live word counter | "Restore Wallet." · "Next" (disabled until 12 words) / — / "Back" (returns to Welcome, matching iOS) |
-| **RestoreMints** | URL field, Add / Paste / Nostr capsule chips, staged mint rows | "Recover Funds." · "Restore from N mints" (disabled until ≥1 staged) / — / "Back" (clears staged list) |
-| **RestoreProgress** | Recovered-sats total (mono digits, no roll) + live per-mint rows with expressive loaders and Retry | "Recover Funds." · "Continue" (forward-only, disabled until every mint settles) |
+| Step | Top + stage | Bottom actions |
+|------|-------------|----------------|
+| **Welcome** | The "note becomes cash" ink piece (`WelcomeStagePiece`); startup-failure recovery + create errors pin above the actions | "Private cash. In your pocket." + subhead · `PrimaryButton` "Create Wallet" (filled-tonal) / `SecondaryButton` "Restore Wallet" / `GhostButton` "What is ecash?" (opens the concept sheet) |
+| **ShowMnemonic** | Back → Welcome; "Your Seed Phrase." header + warning line; 12-word 3-column grid — masked (`"••••••"` + blur on API 31+, real words never composed) until tap-to-reveal — and a Copy ghost with clear separation | acknowledge row in the accessory slot gates "I've Saved My Seed Phrase" |
+| **FirstMint** | "Pick your first mint." header; multi-select recommended-mint rows, "Add custom mint URL" expands a `CashuTextField`, inline notices | "Continue" (disabled with no selection and empty input) / "Skip for now" |
+| **RestoreMethod** | Back → Welcome; "Restore Wallet" header; quiet variant of the welcome piece | "Use Seed Phrase" (Secondary styling — Android has no iCloud twin, iOS's chooser has two options) |
+| **RestoreInput** | Back → Welcome (matching iOS); "Restore Wallet." header; monospaced seed editor with paste/clear corner control, live word counter | "Next" (disabled until 12 words) |
+| **RestoreMints** | Back → RestoreInput (clears staged list); "Recover Funds." header; URL field, Add / Paste / Nostr capsule chips, staged mint rows | "Restore from N mints" (disabled until ≥1 staged) |
+| **RestoreProgress** | "Recover Funds." header (no back — forward-only); recovered-sats total (mono digits, no roll) + live per-mint rows with expressive loaders and Retry | "Continue" (disabled until every mint settles) |
 
 Information sheet "What is ecash?" — a `ModalBottomSheet` (hidden/expanded
 detents only) with three bearer-cash beats and a "Got it" button.

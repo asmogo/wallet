@@ -323,8 +323,6 @@ fun OnboardingScreen(
         )
 
         is OnboardingStep.ShowMnemonic -> OnboardingChassisModel(
-            headline = "Your Seed Phrase.",
-            subhead = "Write these 12 words down in order. This is the only way to recover your wallet.",
             primary = ChassisAction(
                 label = "I've Saved My Seed Phrase",
                 onClick = { step = OnboardingStep.FirstMint(current.mnemonic) },
@@ -334,8 +332,6 @@ fun OnboardingScreen(
         )
 
         is OnboardingStep.FirstMint -> OnboardingChassisModel(
-            headline = "Pick your first mint.",
-            subhead = "Mints issue your ecash and redeem it for Bitcoin. Add more anytime in Settings.",
             primary = ChassisAction(
                 label = "Continue",
                 onClick = { handleFirstMintContinue(current.mnemonic) },
@@ -353,8 +349,6 @@ fun OnboardingScreen(
         )
 
         OnboardingStep.RestoreMethod -> OnboardingChassisModel(
-            headline = "Restore Wallet",
-            subhead = "Choose how to recover your wallet.",
             // Android has no iCloud twin, so the chooser's single real option
             // keeps its existing Secondary styling in the primary slot.
             primary = ChassisAction(
@@ -366,18 +360,11 @@ fun OnboardingScreen(
                 },
                 style = ChassisButtonStyle.Secondary,
             ),
-            tertiary = ChassisAction(
-                label = "Back",
-                onClick = { step = OnboardingStep.Welcome },
-                style = ChassisButtonStyle.Ghost,
-            ),
         )
 
         OnboardingStep.RestoreInput -> {
             val wordCount = restoreSeedInput.trim().split(Regex("\\s+")).count { it.isNotBlank() }
             OnboardingChassisModel(
-                headline = "Restore Wallet.",
-                subhead = "Enter your 12 words in order.",
                 primary = ChassisAction(
                     label = "Next",
                     onClick = {
@@ -401,19 +388,10 @@ fun OnboardingScreen(
                     enabled = wordCount == 12 && !restoring,
                     loading = restoring,
                 ),
-                // iOS retreats to welcome (skips the method chooser on the way back).
-                tertiary = ChassisAction(
-                    label = "Back",
-                    onClick = { step = OnboardingStep.Welcome },
-                    style = ChassisButtonStyle.Ghost,
-                    enabled = !restoring,
-                ),
             )
         }
 
         is OnboardingStep.RestoreMints -> OnboardingChassisModel(
-            headline = "Recover Funds.",
-            subhead = "Add the mints you used before to recover funds from this seed.",
             primary = ChassisAction(
                 label = if (restoreMintsStaging.staged.isEmpty()) {
                     "Restore"
@@ -429,19 +407,9 @@ fun OnboardingScreen(
                 },
                 enabled = restoreMintsStaging.staged.isNotEmpty(),
             ),
-            tertiary = ChassisAction(
-                label = "Back",
-                onClick = {
-                    restoreMintsStaging.reset()
-                    step = OnboardingStep.RestoreInput
-                },
-                style = ChassisButtonStyle.Ghost,
-            ),
         )
 
         is OnboardingStep.RestoreProgress -> OnboardingChassisModel(
-            headline = "Recover Funds.",
-            subhead = progressState?.subhead,
             // Forward-only — Continue enables once every mint has settled.
             primary = ChassisAction(
                 label = "Continue",
@@ -460,18 +428,20 @@ fun OnboardingScreen(
         )
     }
 
-    // System back mirrors the on-screen Back affordances, and only those: the
-    // method chooser and seed entry retreat to welcome (seed entry deliberately
-    // skips the chooser, like its Back link), mint staging retreats to seed
-    // entry clearing the staged list exactly as its Back button does. Steps
-    // without a Back affordance — welcome, the seed reveal, first mint, and the
+    // System back mirrors the on-screen back buttons, and only those: seed
+    // reveal, the method chooser, and seed entry retreat to welcome (seed
+    // entry deliberately skips the chooser, like iOS), mint staging retreats
+    // to seed entry clearing the staged list exactly as its back button does.
+    // Steps with no back affordance — welcome, first mint, and the
     // forward-only restore progress — keep the platform default (exit).
     BackHandler(
-        enabled = step is OnboardingStep.RestoreMethod ||
+        enabled = step is OnboardingStep.ShowMnemonic ||
+            step is OnboardingStep.RestoreMethod ||
             step is OnboardingStep.RestoreInput ||
             step is OnboardingStep.RestoreMints,
     ) {
         when (step) {
+            is OnboardingStep.ShowMnemonic -> step = OnboardingStep.Welcome
             OnboardingStep.RestoreMethod -> step = OnboardingStep.Welcome
             OnboardingStep.RestoreInput -> if (!restoring) step = OnboardingStep.Welcome
             is OnboardingStep.RestoreMints -> {
@@ -560,6 +530,7 @@ fun OnboardingScreen(
 
                     is OnboardingStep.ShowMnemonic -> ShowMnemonicStageContent(
                         mnemonic = current.mnemonic,
+                        onBack = { step = OnboardingStep.Welcome },
                     )
 
                     is OnboardingStep.FirstMint -> FirstMintStageContent(
@@ -569,42 +540,100 @@ fun OnboardingScreen(
                         errorText = firstMintError,
                     )
 
-                    // The restrained, static variant of the welcome piece.
-                    OnboardingStep.RestoreMethod -> WelcomeStagePiece(
-                        Modifier.fillMaxSize(),
-                        quiet = true,
-                    )
+                    OnboardingStep.RestoreMethod -> Column(Modifier.fillMaxSize()) {
+                        OnboardingBackButton(
+                            onBack = { step = OnboardingStep.Welcome },
+                            modifier = Modifier.padding(
+                                start = CashuTheme.spacing.comfortable,
+                                top = CashuTheme.spacing.snug,
+                            ),
+                        )
+                        OnboardingStepHeader(
+                            title = "Restore Wallet",
+                            subhead = "Choose how to recover your wallet.",
+                            modifier = Modifier.padding(top = CashuTheme.spacing.default),
+                        )
+                        // The restrained, static variant of the welcome piece.
+                        WelcomeStagePiece(
+                            Modifier
+                                .weight(1f)
+                                .fillMaxWidth(),
+                            quiet = true,
+                        )
+                    }
 
-                    OnboardingStep.RestoreInput -> RestoreSeedStageContent(
-                        input = restoreSeedInput,
-                        onInputChange = {
-                            restoreSeedInput = it
-                            restoreError = null
-                        },
-                        wordCount = restoreSeedInput.trim().split(Regex("\\s+")).count { it.isNotBlank() },
-                        invalidCount = Bip39WordList.invalidWordIndices(restoreSeedInput).size,
-                        errorText = restoreError,
-                        modifier = Modifier.fillMaxSize(),
-                    )
+                    OnboardingStep.RestoreInput -> Column(Modifier.fillMaxSize()) {
+                        OnboardingBackButton(
+                            onBack = { step = OnboardingStep.Welcome },
+                            modifier = Modifier.padding(
+                                start = CashuTheme.spacing.comfortable,
+                                top = CashuTheme.spacing.snug,
+                            ),
+                        )
+                        OnboardingStepHeader(
+                            title = "Restore Wallet.",
+                            subhead = "Enter your 12 words in order.",
+                            modifier = Modifier.padding(top = CashuTheme.spacing.default),
+                        )
+                        RestoreSeedStageContent(
+                            input = restoreSeedInput,
+                            onInputChange = {
+                                restoreSeedInput = it
+                                restoreError = null
+                            },
+                            wordCount = restoreSeedInput.trim().split(Regex("\\s+")).count { it.isNotBlank() },
+                            invalidCount = Bip39WordList.invalidWordIndices(restoreSeedInput).size,
+                            errorText = restoreError,
+                            modifier = Modifier
+                                .weight(1f)
+                                .fillMaxWidth(),
+                        )
+                    }
 
-                    is OnboardingStep.RestoreMints -> RestoreMintsStageContent(
-                        input = restoreMintsStaging.input,
-                        staged = restoreMintsStaging.staged,
-                        previews = restoreMintsStaging.previews,
-                        notice = restoreMintsStaging.notice,
-                        noticeSeverity = restoreMintsStaging.noticeSeverity,
-                        searching = nostrBackupState.isSearching,
-                        onInputChange = restoreMintsStaging::updateInput,
-                        onAdd = restoreMintsStaging::addInput,
-                        onPaste = restoreMintsStaging::pasteFromClipboard,
-                        onNostr = restoreMintsStaging::searchNostrBackup,
-                        onRemove = restoreMintsStaging::remove,
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .padding(top = CashuTheme.spacing.snug),
-                    )
+                    is OnboardingStep.RestoreMints -> Column(Modifier.fillMaxSize()) {
+                        OnboardingBackButton(
+                            onBack = {
+                                restoreMintsStaging.reset()
+                                step = OnboardingStep.RestoreInput
+                            },
+                            modifier = Modifier.padding(
+                                start = CashuTheme.spacing.comfortable,
+                                top = CashuTheme.spacing.snug,
+                            ),
+                        )
+                        OnboardingStepHeader(
+                            title = "Recover Funds.",
+                            subhead = "Add the mints you used before to recover funds from this seed.",
+                            modifier = Modifier.padding(top = CashuTheme.spacing.default),
+                        )
+                        RestoreMintsStageContent(
+                            input = restoreMintsStaging.input,
+                            staged = restoreMintsStaging.staged,
+                            previews = restoreMintsStaging.previews,
+                            notice = restoreMintsStaging.notice,
+                            noticeSeverity = restoreMintsStaging.noticeSeverity,
+                            searching = nostrBackupState.isSearching,
+                            onInputChange = restoreMintsStaging::updateInput,
+                            onAdd = restoreMintsStaging::addInput,
+                            onPaste = restoreMintsStaging::pasteFromClipboard,
+                            onNostr = restoreMintsStaging::searchNostrBackup,
+                            onRemove = restoreMintsStaging::remove,
+                            modifier = Modifier
+                                .weight(1f)
+                                .fillMaxWidth()
+                                .padding(top = CashuTheme.spacing.comfortable),
+                        )
+                    }
 
                     is OnboardingStep.RestoreProgress -> Column(Modifier.fillMaxSize()) {
+                        OnboardingStepHeader(
+                            title = "Recover Funds.",
+                            subhead = progressState?.subhead,
+                            modifier = Modifier.padding(
+                                top = CashuTheme.spacing.snug,
+                                bottom = CashuTheme.spacing.default,
+                            ),
+                        )
                         if (progressState != null && progressState.totalRecovered > 0L) {
                             // Money value — monospaced digits + no roll (Numbers
                             // Are Sacred), exactly as the shared component
@@ -823,10 +852,12 @@ internal fun SeedAcknowledgeRow(
     }
 }
 
-/** The seed stage: warning, redacted grid with tap-to-reveal, and Copy. */
+/** The seed stage: back, header + warning at the top, redacted grid with
+ * tap-to-reveal, and Copy. */
 @Composable
 internal fun ShowMnemonicStageContent(
     mnemonic: String,
+    onBack: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val clipboard = LocalClipboardManager.current
@@ -847,25 +878,41 @@ internal fun ShowMnemonicStageContent(
         modifier = modifier.fillMaxSize(),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        Spacer(Modifier.weight(1f))
-        Row(
+        OnboardingBackButton(
+            onBack = onBack,
+            modifier = Modifier
+                .align(Alignment.Start)
+                .padding(start = CashuTheme.spacing.comfortable, top = CashuTheme.spacing.snug),
+        )
+        Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = HeaderPadding),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(CashuTheme.spacing.tight),
+                .padding(top = CashuTheme.spacing.default),
+            verticalArrangement = Arrangement.spacedBy(CashuTheme.spacing.snug),
         ) {
-            Icon(
-                imageVector = Icons.Filled.Warning,
-                contentDescription = null,
-                tint = CashuTheme.colors.pending,
-                modifier = Modifier.size(WarningIconSize),
+            OnboardingStepHeader(
+                title = "Your Seed Phrase.",
+                subhead = "Write these 12 words down in order. This is the only way to recover your wallet.",
             )
-            Text(
-                text = "Never share these words with anyone",
-                style = MaterialTheme.typography.labelMedium,
-                color = CashuTheme.colors.pending,
-            )
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = HeaderPadding),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(CashuTheme.spacing.tight),
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.Warning,
+                    contentDescription = null,
+                    tint = CashuTheme.colors.pending,
+                    modifier = Modifier.size(WarningIconSize),
+                )
+                Text(
+                    text = "Never share these words with anyone",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = CashuTheme.colors.pending,
+                )
+            }
         }
         // The seed grid deliberately gets NO entrance motion: any motion on
         // this block reads as a flicker on first paint, and recomposition
@@ -874,7 +921,9 @@ internal fun ShowMnemonicStageContent(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(top = CashuTheme.spacing.comfortable),
+                .padding(top = CashuTheme.spacing.section),
+            // default + snug = 20dp between grid and Copy — flush against the
+            // words the link read as part of the grid (design review).
             verticalArrangement = Arrangement.spacedBy(CashuTheme.spacing.snug),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
@@ -896,6 +945,7 @@ internal fun ShowMnemonicStageContent(
                         copied = false
                     }
                 },
+                modifier = Modifier.padding(top = CashuTheme.spacing.default),
             )
         }
         Spacer(Modifier.weight(1f))
@@ -1059,12 +1109,37 @@ internal fun FirstMintStageContent(
     errorText: String?,
     modifier: Modifier = Modifier,
 ) {
+    Column(modifier = modifier.fillMaxSize()) {
+        OnboardingStepHeader(
+            title = "Pick your first mint.",
+            subhead = "Mints issue your ecash and redeem it for Bitcoin. Add more anytime in Settings.",
+            modifier = Modifier.padding(top = CashuTheme.spacing.snug),
+        )
+        FirstMintList(
+            state = state,
+            busy = busy,
+            addingMintUrl = addingMintUrl,
+            errorText = errorText,
+            modifier = Modifier
+                .weight(1f)
+                .fillMaxWidth(),
+        )
+    }
+}
+
+@Composable
+private fun FirstMintList(
+    state: FirstMintSelectionState,
+    busy: Boolean,
+    addingMintUrl: String?,
+    errorText: String?,
+    modifier: Modifier = Modifier,
+) {
     val haptics = LocalHapticFeedback.current
     val clipboard = LocalClipboardManager.current
 
     Column(
         modifier = modifier
-            .fillMaxSize()
             .verticalScroll(rememberScrollState())
             .padding(horizontal = HeaderPadding)
             .padding(top = CashuTheme.spacing.snug),

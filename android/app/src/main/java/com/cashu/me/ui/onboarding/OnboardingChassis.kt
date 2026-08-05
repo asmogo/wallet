@@ -18,7 +18,11 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.text.TextAutoSize
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.ButtonColors
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -29,12 +33,11 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.cashu.me.ui.components.GhostButton
@@ -96,10 +99,15 @@ class ChassisAction(
     val colors: ButtonColors? = null,
 )
 
-/** Per-step content for the fixed bottom chassis. */
+/** Per-step content for the bottom action chassis.
+ *
+ * [headline]/[subhead] are the *welcome* treatment only (design review
+ * 2026-08-05): every other step titles itself at the top of its stage with
+ * [OnboardingStepHeader] and leaves these null, so its actions hug the
+ * bottom. */
 @Immutable
 class OnboardingChassisModel(
-    val headline: String,
+    val headline: String? = null,
     val subhead: String? = null,
     val primary: ChassisAction? = null,
     val secondary: ChassisAction? = null,
@@ -135,13 +143,17 @@ fun OnboardingChassis(
                 transitionSpec = { chassisTextTransform(reducedMotion, riseOffsetPx) },
                 label = "chassis-headline",
             ) { headline ->
-                Text(
-                    text = headline,
-                    style = onboardingTitleStyle(),
-                    color = MaterialTheme.colorScheme.onSurface,
-                    maxLines = if (headline.contains('\n')) Int.MAX_VALUE else 1,
-                    autoSize = if (headline.contains('\n')) null else HeadlineAutoSize,
-                )
+                if (headline != null) {
+                    Text(
+                        text = headline,
+                        style = onboardingTitleStyle(),
+                        color = MaterialTheme.colorScheme.onSurface,
+                        maxLines = if (headline.contains('\n')) Int.MAX_VALUE else 1,
+                        autoSize = if (headline.contains('\n')) null else HeadlineAutoSize,
+                    )
+                } else {
+                    Box(Modifier.fillMaxWidth())
+                }
             }
             AnimatedContent(
                 targetState = model.subhead,
@@ -175,14 +187,22 @@ fun OnboardingChassis(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = CtaPadding)
-                .padding(top = CashuTheme.spacing.section)
+                .padding(
+                    top = if (model.headline != null) {
+                        CashuTheme.spacing.section
+                    } else {
+                        CashuTheme.spacing.comfortable
+                    },
+                )
                 .padding(bottom = BottomPadding),
-            verticalArrangement = Arrangement.spacedBy(CashuTheme.spacing.snug),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            ChassisSlot(model.primary, templateStyle = ChassisButtonStyle.Primary)
-            ChassisSlot(model.secondary, templateStyle = ChassisButtonStyle.Secondary)
-            ChassisSlot(model.tertiary, templateStyle = ChassisButtonStyle.Ghost)
+            // Per-slot top padding lives inside each slot's visible branch, so
+            // absent actions contribute zero height and the stack hugs the
+            // bottom (design review 2026-08-05 — no reserved slots).
+            ChassisSlot(model.primary, topPadding = 0.dp)
+            ChassisSlot(model.secondary, topPadding = CashuTheme.spacing.snug)
+            ChassisSlot(model.tertiary, topPadding = CashuTheme.spacing.snug)
         }
     }
 }
@@ -233,7 +253,7 @@ private fun <T> AnimatedContentTransitionScope<T>.chassisTextTransform(
     }
 
 @Composable
-private fun ChassisSlot(action: ChassisAction?, templateStyle: ChassisButtonStyle) {
+private fun ChassisSlot(action: ChassisAction?, topPadding: Dp) {
     // Occupancy and style changes cross-fade the whole slot in place; label
     // changes within the same style flow through the button's own label
     // cross-fade. Fades only — vestibular-safe without a reduce-motion branch.
@@ -247,7 +267,7 @@ private fun ChassisSlot(action: ChassisAction?, templateStyle: ChassisButtonStyl
     ) { style ->
         // Snapshot the action that was live when this content entered, so an
         // emptying or restyled slot fades out showing its own outgoing button
-        // rather than snapping to the template or the new label.
+        // rather than snapping empty or to the new label.
         var snapshot by remember { mutableStateOf(action?.takeIf { it.style == style }) }
         if (action != null && action.style == style && action !== snapshot) snapshot = action
         val shown = if (style != null) snapshot else null
@@ -259,51 +279,78 @@ private fun ChassisSlot(action: ChassisAction?, templateStyle: ChassisButtonStyl
             val live = action?.style == style
             val onClick = if (live) shown.onClick else fun() {}
             val tagModifier = shown.testTag?.let { Modifier.testTag(it) } ?: Modifier
-            when (style) {
-                ChassisButtonStyle.Primary -> PrimaryButton(
-                    text = shown.label,
-                    onClick = onClick,
-                    modifier = tagModifier,
-                    enabled = shown.enabled,
-                    loading = shown.loading,
-                    colors = shown.colors,
-                )
-                ChassisButtonStyle.Secondary -> SecondaryButton(
-                    text = shown.label,
-                    onClick = onClick,
-                    modifier = tagModifier,
-                    enabled = shown.enabled,
-                )
-                ChassisButtonStyle.Ghost -> GhostButton(
-                    text = shown.label,
-                    onClick = onClick,
-                    modifier = tagModifier,
-                    enabled = shown.enabled,
-                    animatedLabel = true,
-                )
-            }
-        } else {
-            // Reserved slot: a hidden template keeps the slot's height (and
-            // therefore the primary CTA's Y) constant across steps, tracking
-            // font scale instead of hardcoding a height. Cleared semantics
-            // keep it out of TalkBack and the test tree.
-            val hiddenModifier = Modifier
-                .alpha(0f)
-                .clearAndSetSemantics { }
-            when (templateStyle) {
-                ChassisButtonStyle.Primary, ChassisButtonStyle.Secondary -> PrimaryButton(
-                    text = "Template",
-                    onClick = {},
-                    modifier = hiddenModifier,
-                    enabled = false,
-                )
-                ChassisButtonStyle.Ghost -> GhostButton(
-                    text = "Template",
-                    onClick = {},
-                    modifier = hiddenModifier,
-                    enabled = false,
-                )
+            Box(Modifier.padding(top = topPadding)) {
+                when (style) {
+                    ChassisButtonStyle.Primary -> PrimaryButton(
+                        text = shown.label,
+                        onClick = onClick,
+                        modifier = tagModifier,
+                        enabled = shown.enabled,
+                        loading = shown.loading,
+                        colors = shown.colors,
+                    )
+                    ChassisButtonStyle.Secondary -> SecondaryButton(
+                        text = shown.label,
+                        onClick = onClick,
+                        modifier = tagModifier,
+                        enabled = shown.enabled,
+                    )
+                    ChassisButtonStyle.Ghost -> GhostButton(
+                        text = shown.label,
+                        onClick = onClick,
+                        modifier = tagModifier,
+                        enabled = shown.enabled,
+                        animatedLabel = true,
+                    )
+                }
             }
         }
+    }
+}
+
+// MARK: step chrome ---------------------------------------------------------
+
+/** Top-of-step title + supporting copy — every step except welcome, which
+ * keeps its text in the bottom action block (design review 2026-08-05). */
+@Composable
+fun OnboardingStepHeader(
+    title: String,
+    subhead: String? = null,
+    modifier: Modifier = Modifier,
+) {
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(horizontal = HeaderPadding),
+        verticalArrangement = Arrangement.spacedBy(CashuTheme.spacing.snug),
+    ) {
+        Text(
+            text = title,
+            style = onboardingTitleStyle(),
+            color = MaterialTheme.colorScheme.onSurface,
+            maxLines = if (title.contains('\n')) Int.MAX_VALUE else 1,
+            autoSize = if (title.contains('\n')) null else HeadlineAutoSize,
+        )
+        if (subhead != null) {
+            Text(
+                text = subhead,
+                style = MaterialTheme.typography.bodyLarge,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+    }
+}
+
+/** M3 back affordance for onboarding — a plain icon button, no top app bar. */
+@Composable
+fun OnboardingBackButton(
+    onBack: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    IconButton(onClick = onBack, modifier = modifier) {
+        Icon(
+            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+            contentDescription = "Back",
+        )
     }
 }

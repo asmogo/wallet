@@ -376,9 +376,9 @@ because every layout uses `.frame(maxWidth: .infinity)` rather than fixed widths
   the wallet balance and the recovered-amount counter. Tabular figures, animated
   digit-by-digit on change. The single most important typographic moment in the
   app. `MainWalletView.swift:93`, `AnimatedBalanceView.swift`.
-- **Onboarding Hero** (`.largeTitle.weight(.heavy)` + `.tracking(-0.5)`): the
-  onboarding chassis headline — one treatment for every step, rendered by
-  `OnboardingChassis.swift`.
+- **Onboarding Hero** (`.largeTitle.weight(.heavy)` + `.tracking(-0.5)`): one
+  treatment for every step's title — the welcome chassis text block and every
+  other step's top `OnboardingStepHeader`, both in `OnboardingChassis.swift`.
 - **Title** (`.title.weight(.heavy)` / `.weight(.semibold)`): the "What is
   ecash?" concept-sheet heading. `OnboardingView.swift` (`conceptSheet`).
 - **Title3** (`.title3.weight(.medium)`): in-flow section heads such as the
@@ -992,7 +992,7 @@ docs/android/DESIGN-ANDROID.md rather than copying the tween values:
 | Element | Out | In |
 | --- | --- | --- |
 | Stage swap | blur 0→6, opacity 1→0, ~180 ms ease-out | scale 0.96→1, blur 6→0, opacity 0→1, ~280 ms `.smooth`; overlaps the tail of *out* by ~80 ms |
-| Chassis headline / subhead | opacity 1→0, ~140 ms | y +10→0, blur 3→0, ~260 ms `.smooth` |
+| Welcome chassis text (in-place swap) | opacity 1→0, ~140 ms | y +10→0, blur 3→0, ~260 ms `.smooth` |
 | Element cascade inside a stage | — | 70 ms stride, reusing `stagger` (iOS) / `Modifier.riseIn` (Android) |
 | Chassis container | never animates | never animates |
 | CTA label change | in-place cross-fade | in-place cross-fade |
@@ -1000,10 +1000,14 @@ docs/android/DESIGN-ANDROID.md rather than copying the tween values:
 | Welcome piece | one autoreversing note ↔ token morph, ~3.2 s each way, self-playing; Reduce Motion holds the composed end state | — |
 
 Exits stay subtler than entrances throughout (the carve-out above). The
-chassis-and-stage layout grammar itself is documented in the restyle brief §3;
-the indicator slot is resolved as "no indicator" (the flow branches into paths
-of different lengths, so page dots would imply a linear path that does not
-exist).
+layout grammar (revised by design review 2026-08-05): welcome keeps its
+headline/subhead in the bottom action block; every other step titles itself
+at the top (`OnboardingStepHeader`, riding the stage swap) with its actions
+anchored to the bottom edge and a circular Liquid Glass back button
+(`OnboardingBackButton`, `.quaternary` pre-26) wherever a retreat exists.
+The indicator slot is resolved as "no indicator" (the flow branches into
+paths of different lengths, so page dots would imply a linear path that does
+not exist).
 
 ## 7. Do's and Don'ts
 

@@ -18,8 +18,10 @@ import com.cashu.me.ui.onboarding.ChassisAction
 import com.cashu.me.ui.onboarding.ChassisButtonStyle
 import com.cashu.me.ui.onboarding.FirstMintSelectionState
 import com.cashu.me.ui.onboarding.FirstMintStageContent
+import com.cashu.me.ui.onboarding.OnboardingBackButton
 import com.cashu.me.ui.onboarding.OnboardingChassisModel
 import com.cashu.me.ui.onboarding.OnboardingScaffold
+import com.cashu.me.ui.onboarding.OnboardingStepHeader
 import com.cashu.me.ui.onboarding.SeedAcknowledgeRow
 import com.cashu.me.ui.onboarding.SeedPhraseReveal
 import com.cashu.me.ui.onboarding.ShowMnemonicStageContent
@@ -134,7 +136,10 @@ fun onboardingSeedHiddenScreenshot() {
             chassis = seedChassis(acknowledged = false),
             accessory = { SeedAcknowledgeRow(acknowledged = false, onToggle = {}) },
         ) {
-            ShowMnemonicStageContent(mnemonic = FixtureWords.joinToString(" "))
+            ShowMnemonicStageContent(
+                mnemonic = FixtureWords.joinToString(" "),
+                onBack = {},
+            )
         }
     }
 }
@@ -149,13 +154,18 @@ fun onboardingSeedRevealedScreenshot() {
             accessory = { SeedAcknowledgeRow(acknowledged = true, onToggle = {}) },
         ) {
             Column(Modifier.fillMaxSize()) {
+                OnboardingStepHeader(
+                    title = "Your Seed Phrase.",
+                    subhead = "Write these 12 words down in order. This is the only way to recover your wallet.",
+                    modifier = Modifier.padding(top = 16.dp),
+                )
                 SeedPhraseReveal(
                     words = FixtureWords,
                     revealed = true,
                     onReveal = {},
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 28.dp, vertical = 48.dp),
+                        .padding(horizontal = 28.dp, vertical = 32.dp),
                 )
             }
         }
@@ -172,8 +182,6 @@ fun onboardingFirstMintScreenshot() {
         }
         OnboardingScaffold(
             chassis = OnboardingChassisModel(
-                headline = "Pick your first mint.",
-                subhead = "Mints issue your ecash and redeem it for Bitcoin. Add more anytime in Settings.",
                 primary = ChassisAction("Continue", onClick = {}),
                 tertiary = ChassisAction("Skip for now", onClick = {}, style = ChassisButtonStyle.Ghost),
             ),
@@ -195,13 +203,23 @@ fun onboardingRestoreMethodScreenshot() {
     OnboardingFrame {
         OnboardingScaffold(
             chassis = OnboardingChassisModel(
-                headline = "Restore Wallet",
-                subhead = "Choose how to recover your wallet.",
                 primary = ChassisAction("Use Seed Phrase", onClick = {}, style = ChassisButtonStyle.Secondary),
-                tertiary = ChassisAction("Back", onClick = {}, style = ChassisButtonStyle.Ghost),
             ),
         ) {
-            WelcomeStagePiece(Modifier.fillMaxSize(), quiet = true)
+            Column(Modifier.fillMaxSize()) {
+                OnboardingBackButton(onBack = {}, modifier = Modifier.padding(start = 16.dp, top = 8.dp))
+                OnboardingStepHeader(
+                    title = "Restore Wallet",
+                    subhead = "Choose how to recover your wallet.",
+                    modifier = Modifier.padding(top = 12.dp),
+                )
+                WelcomeStagePiece(
+                    Modifier
+                        .weight(1f)
+                        .fillMaxWidth(),
+                    quiet = true,
+                )
+            }
         }
     }
 }
@@ -214,20 +232,27 @@ fun onboardingRestoreInputScreenshot() {
         val partial = FixtureWords.take(6).joinToString(" ")
         OnboardingScaffold(
             chassis = OnboardingChassisModel(
-                headline = "Restore Wallet.",
-                subhead = "Enter your 12 words in order.",
                 primary = ChassisAction("Next", onClick = {}, enabled = false),
-                tertiary = ChassisAction("Back", onClick = {}, style = ChassisButtonStyle.Ghost),
             ),
         ) {
-            RestoreSeedStageContent(
-                input = partial,
-                onInputChange = {},
-                wordCount = 6,
-                invalidCount = 0,
-                errorText = null,
-                modifier = Modifier.fillMaxSize(),
-            )
+            Column(Modifier.fillMaxSize()) {
+                OnboardingBackButton(onBack = {}, modifier = Modifier.padding(start = 16.dp, top = 8.dp))
+                OnboardingStepHeader(
+                    title = "Restore Wallet.",
+                    subhead = "Enter your 12 words in order.",
+                    modifier = Modifier.padding(top = 12.dp),
+                )
+                RestoreSeedStageContent(
+                    input = partial,
+                    onInputChange = {},
+                    wordCount = 6,
+                    invalidCount = 0,
+                    errorText = null,
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxWidth(),
+                )
+            }
         }
     }
 }
@@ -240,13 +265,17 @@ fun onboardingRestoreMintsScreenshot() {
         val staged = listOf("https://mint.example.com", "https://cash.example.org")
         OnboardingScaffold(
             chassis = OnboardingChassisModel(
-                headline = "Recover Funds.",
-                subhead = "Add the mints you used before to recover funds from this seed.",
                 primary = ChassisAction("Restore from 2 mints", onClick = {}),
-                tertiary = ChassisAction("Back", onClick = {}, style = ChassisButtonStyle.Ghost),
             ),
         ) {
-            RestoreMintsStageContent(
+            Column(Modifier.fillMaxSize()) {
+                OnboardingBackButton(onBack = {}, modifier = Modifier.padding(start = 16.dp, top = 8.dp))
+                OnboardingStepHeader(
+                    title = "Recover Funds.",
+                    subhead = "Add the mints you used before to recover funds from this seed.",
+                    modifier = Modifier.padding(top = 12.dp),
+                )
+                RestoreMintsStageContent(
                 input = "",
                 staged = staged,
                 previews = emptyMap(),
@@ -257,9 +286,13 @@ fun onboardingRestoreMintsScreenshot() {
                 onAdd = {},
                 onPaste = {},
                 onNostr = {},
-                onRemove = {},
-                modifier = Modifier.fillMaxSize(),
-            )
+                    onRemove = {},
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxWidth()
+                        .padding(top = 16.dp),
+                )
+            }
         }
     }
 }
@@ -289,12 +322,15 @@ fun onboardingRestoreProgressScreenshot() {
         )
         OnboardingScaffold(
             chassis = OnboardingChassisModel(
-                headline = "Recover Funds.",
-                subhead = "Recovering funds from your mints…",
                 primary = ChassisAction("Continue", onClick = {}, enabled = false),
             ),
         ) {
             Column(Modifier.fillMaxSize()) {
+                OnboardingStepHeader(
+                    title = "Recover Funds.",
+                    subhead = "Recovering funds from your mints…",
+                    modifier = Modifier.padding(top = 8.dp, bottom = 12.dp),
+                )
                 RestoreRecoveredTotal(
                     totalRecovered = 2_100,
                     modifier = Modifier.padding(horizontal = 28.dp, vertical = 8.dp),
@@ -312,8 +348,6 @@ fun onboardingRestoreProgressScreenshot() {
 }
 
 private fun seedChassis(acknowledged: Boolean): OnboardingChassisModel = OnboardingChassisModel(
-    headline = "Your Seed Phrase.",
-    subhead = "Write these 12 words down in order. This is the only way to recover your wallet.",
     primary = ChassisAction(
         label = "I've Saved My Seed Phrase",
         onClick = {},

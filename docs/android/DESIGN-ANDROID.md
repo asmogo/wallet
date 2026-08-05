@@ -95,11 +95,12 @@ like a port, make the Android-native choice instead.
   recovered-sats total keeps mono digits, no roll) and every onboarding
   animation is `rememberReducedMotion()`-gated to opacity-or-nothing.
 - **Onboarding system back (2026-08-05):** `OnboardingScreen` registers a
-  `BackHandler` mirroring the on-screen Back affordances exactly (method
-  chooser → welcome, seed entry → welcome, mint staging → seed entry with the
-  staged list cleared). Steps with no Back affordance keep the platform
-  default. Closes the gap where system back exited the app from every
-  onboarding step.
+  `BackHandler` mirroring the on-screen back buttons exactly (seed reveal →
+  welcome, method chooser → welcome, seed entry → welcome, mint staging →
+  seed entry with the staged list cleared). Retreat-capable steps show an M3
+  `ArrowBack` icon button (`OnboardingBackButton`) above their header; steps
+  with no back affordance keep the platform default. Closes the gap where
+  system back exited the app from every onboarding step.
 
 ### Components — expressive first
 - Loaders are the expressive `LoadingIndicator` / `LinearWavyProgressIndicator`

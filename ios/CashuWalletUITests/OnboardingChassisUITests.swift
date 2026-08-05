@@ -1,61 +1,57 @@
 import XCTest
 
-/// Brief §3: the primary CTA's frame is identical on every onboarding step —
-/// the single measurable success criterion of the chassis redesign. This walks
-/// both branches reachable in UI tests (create + seed restore) and diffs the
-/// primary button's frame at each step. The iCloud phases are unreachable here
-/// (no iCloud in the simulator test environment); the visual-review capture
-/// matrix covers them.
+/// Design review 2026-08-05: every onboarding step's actions hug the bottom of
+/// the screen (no reserved slots), titles sit at the top on non-welcome steps,
+/// and retreat-capable steps expose a glass back button. This walks both
+/// branches, asserts the bottom-most action lands in the bottom band of the
+/// window on every step, and exercises the new back navigation.
 final class OnboardingChassisUITests: UITestBase {
 
-    func testPrimaryCtaFrameConstantAcrossSteps() throws {
-        var frames: [String: CGRect] = [:]
+    func testCtasAnchoredToBottomAndBackNavigation() throws {
+        let window = app.windows.firstMatch
+        XCTAssertTrue(window.waitForExistence(timeout: 30))
+        let bottomBand = window.frame.height * 0.82
 
-        // Welcome
+        func assertBottomAnchored(_ element: XCUIElement, _ step: String) {
+            XCTAssertTrue(element.waitForExistence(timeout: 10), "\(step): element should exist")
+            XCTAssertGreaterThan(
+                element.frame.maxY, bottomBand,
+                "\(step): bottom-most action should sit in the bottom band, got \(element.frame)"
+            )
+        }
+
+        // Welcome — tertiary link is the bottom-most action.
         let create = app.buttons["onboarding-create-wallet"]
         XCTAssertTrue(create.waitForExistence(timeout: 30), "Welcome step should appear")
-        frames["welcome"] = create.frame
+        assertBottomAnchored(app.buttons["What is ecash?"], "welcome")
 
-        // Restore branch: method chooser, then seed input. The primaries there
-        // carry no accessibility identifiers, so match by label; disabled
-        // buttons still expose frames.
+        // Restore branch: method chooser, then seed input, then back out via
+        // the new glass back buttons.
         app.buttons["Restore Wallet"].tap()
-        let restoreICloud = app.buttons["Restore from iCloud"]
-        XCTAssertTrue(restoreICloud.waitForExistence(timeout: 10), "Restore method step should appear")
-        frames["restoreMethod"] = restoreICloud.frame
+        assertBottomAnchored(app.buttons["Use Seed Phrase"], "restoreMethod")
 
         app.buttons["Use Seed Phrase"].tap()
-        let next = app.buttons["Next"]
-        XCTAssertTrue(next.waitForExistence(timeout: 10), "Restore input step should appear")
-        frames["restoreInput"] = next.frame
+        assertBottomAnchored(app.buttons["Next"], "restoreInput")
 
-        // Back to welcome (restoreInput's Back deliberately returns to welcome).
-        app.buttons["Back"].tap()
-        XCTAssertTrue(create.waitForExistence(timeout: 10), "Back should return to welcome")
+        tapWhenReady(app.buttons["onboarding-back"], timeout: 10)
+        XCTAssertTrue(create.waitForExistence(timeout: 10), "restoreInput back should return to welcome")
 
-        // Create branch: seed step, then first mint.
+        // Create branch: seed step (back button returns to welcome), then on
+        // through acknowledge to the first-mint step.
         tapWhenReady(create, timeout: 30)
         let saved = app.buttons["onboarding-saved-seed"]
         XCTAssertTrue(saved.waitForExistence(timeout: 15), "Seed step should appear")
-        frames["showMnemonic"] = saved.frame
+        assertBottomAnchored(saved, "showMnemonic")
 
+        tapWhenReady(app.buttons["onboarding-back"], timeout: 10)
+        XCTAssertTrue(create.waitForExistence(timeout: 10), "seed back should return to welcome")
+
+        tapWhenReady(create, timeout: 30)
+        XCTAssertTrue(saved.waitForExistence(timeout: 15), "Seed step should reappear")
         tapWhenReady(app.buttons["onboarding-ack-seed"], timeout: 15)
         tapWhenReady(saved, timeout: 5)
 
-        let cont = app.buttons["onboarding-continue"]
-        XCTAssertTrue(cont.waitForExistence(timeout: 10), "First-mint step should appear")
-        frames["firstMint"] = cont.frame
-
-        guard let reference = frames["welcome"] else {
-            return XCTFail("Missing welcome reference frame")
-        }
-        for (step, frame) in frames.sorted(by: { $0.key < $1.key }) {
-            XCTAssertEqual(frame.minY, reference.minY, accuracy: 1.0,
-                           "Primary CTA drifted vertically on \(step): \(frame) vs welcome \(reference)")
-            XCTAssertEqual(frame.minX, reference.minX, accuracy: 1.0,
-                           "Primary CTA drifted horizontally on \(step): \(frame) vs welcome \(reference)")
-            XCTAssertEqual(frame.height, reference.height, accuracy: 1.0,
-                           "Primary CTA height changed on \(step): \(frame) vs welcome \(reference)")
-        }
+        XCTAssertTrue(app.buttons["onboarding-continue"].waitForExistence(timeout: 10))
+        assertBottomAnchored(app.buttons["onboarding-skip-mint"], "firstMint")
     }
 }

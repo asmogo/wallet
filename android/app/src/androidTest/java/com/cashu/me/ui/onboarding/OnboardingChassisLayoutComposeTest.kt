@@ -19,11 +19,9 @@ import org.junit.Test
 import org.junit.runner.RunWith
 
 /**
- * Brief §3: the primary CTA's position is identical on every onboarding step —
- * the measurable success criterion of the chassis redesign. Two scaffolds in
- * identical frames, one with all three slots filled and one with only a
- * primary, must place the primary at exactly the same offset: the hidden slot
- * templates below the primary reserve its position.
+ * Design review 2026-08-05: chassis actions hug the bottom edge — no reserved
+ * slots. Whatever the slot configuration, the bottom-most action's bottom edge
+ * sits exactly the chassis bottom padding (24dp) above the scaffold's bottom.
  */
 @RunWith(AndroidJUnit4::class)
 class OnboardingChassisLayoutComposeTest {
@@ -31,7 +29,7 @@ class OnboardingChassisLayoutComposeTest {
     val compose = createComposeRule()
 
     @Test
-    fun primaryCtaPositionIdenticalAcrossSlotConfigurations() {
+    fun ctasAnchorToBottomAcrossSlotConfigurations() {
         compose.setCashuContent {
             // Scrollable so both frames keep their full 500dp height — in a
             // plain Column the second frame would be coerced to the screen
@@ -45,8 +43,6 @@ class OnboardingChassisLayoutComposeTest {
                 ) {
                     OnboardingScaffold(
                         chassis = OnboardingChassisModel(
-                            headline = "Full slots",
-                            subhead = "Subhead",
                             primary = ChassisAction("Primary", onClick = {}, testTag = "primary-full"),
                             secondary = ChassisAction(
                                 "Secondary",
@@ -54,9 +50,10 @@ class OnboardingChassisLayoutComposeTest {
                                 style = ChassisButtonStyle.Secondary,
                             ),
                             tertiary = ChassisAction(
-                                "Back",
+                                "Skip",
                                 onClick = {},
                                 style = ChassisButtonStyle.Ghost,
+                                testTag = "tertiary-full",
                             ),
                         ),
                     ) {}
@@ -69,8 +66,6 @@ class OnboardingChassisLayoutComposeTest {
                 ) {
                     OnboardingScaffold(
                         chassis = OnboardingChassisModel(
-                            headline = "Primary only",
-                            subhead = "Subhead",
                             primary = ChassisAction("Primary", onClick = {}, testTag = "primary-only"),
                         ),
                     ) {}
@@ -78,31 +73,30 @@ class OnboardingChassisLayoutComposeTest {
             }
         }
 
-        val fullFrame = compose.onNodeWithTag("frame-full").fetchSemanticsNode()
-        val fullPrimary = compose.onNodeWithTag("primary-full").fetchSemanticsNode()
-        val onlyFrame = compose.onNodeWithTag("frame-primary-only").fetchSemanticsNode()
-        val onlyPrimary = compose.onNodeWithTag("primary-only").fetchSemanticsNode()
+        val bottomPaddingPx = with(compose.density) { 24.dp.toPx() }
+        // A TextButton's 40dp layout box centers inside the 48dp minimum touch
+        // target, leaving up to 4dp of invisible target below the visual button.
+        val touchTargetSlackPx = with(compose.density) { 4.dp.toPx() }
 
-        val fullOffsetY = fullPrimary.positionInRoot.y - fullFrame.positionInRoot.y
-        val onlyOffsetY = onlyPrimary.positionInRoot.y - onlyFrame.positionInRoot.y
+        fun bottomGap(frameTag: String, ctaTag: String): Float {
+            val frame = compose.onNodeWithTag(frameTag).fetchSemanticsNode()
+            val cta = compose.onNodeWithTag(ctaTag).fetchSemanticsNode()
+            val frameBottom = frame.positionInRoot.y + frame.size.height
+            val ctaBottom = cta.positionInRoot.y + cta.size.height
+            return frameBottom - ctaBottom
+        }
 
         assertEquals(
-            "Primary CTA drifted vertically between slot configurations",
-            fullOffsetY,
-            onlyOffsetY,
-            1.5f,
+            "Tertiary should hug the bottom when all slots are filled",
+            bottomPaddingPx,
+            bottomGap("frame-full", "tertiary-full"),
+            touchTargetSlackPx + 2f,
         )
         assertEquals(
-            "Primary CTA height changed between slot configurations",
-            fullPrimary.size.height.toFloat(),
-            onlyPrimary.size.height.toFloat(),
-            1.5f,
-        )
-        assertEquals(
-            "Primary CTA left edge drifted between slot configurations",
-            fullPrimary.positionInRoot.x,
-            onlyPrimary.positionInRoot.x,
-            1.5f,
+            "A lone primary should hug the bottom itself — no reserved slots below it",
+            bottomPaddingPx,
+            bottomGap("frame-primary-only", "primary-only"),
+            2f,
         )
     }
 }
