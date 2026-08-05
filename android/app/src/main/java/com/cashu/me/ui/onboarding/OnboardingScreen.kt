@@ -5,6 +5,7 @@ import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -95,6 +96,7 @@ import com.cashu.me.ui.components.IconSwap
 import com.cashu.me.ui.components.InlineNotice
 import com.cashu.me.ui.components.MintAvatar
 import com.cashu.me.ui.components.PrimaryButton
+import com.cashu.me.ui.components.materializeBlur
 import com.cashu.me.ui.restore.RestoreMintsStageContent
 import com.cashu.me.ui.restore.RestoreProgressRows
 import com.cashu.me.ui.restore.RestoreRecoveredTotal
@@ -103,6 +105,7 @@ import com.cashu.me.ui.restore.rememberRestoreMintsStagingState
 import com.cashu.me.ui.restore.rememberRestoreProgressState
 import com.cashu.me.ui.restore.restoreSeedInstallErrorMessage
 import com.cashu.me.ui.theme.CashuTheme
+import com.cashu.me.ui.theme.rememberReducedMotion
 import com.cashu.me.ui.mints.RecommendedMints
 import com.cashu.me.ui.testing.UiTestTags
 
@@ -280,6 +283,14 @@ fun OnboardingScreen(
     val progressState = progressStep?.let {
         rememberRestoreProgressState(walletManager, it.mintUrls)
     }
+
+    // Stage-swap motion (onboarding-restyle-brief §5, expressed per the
+    // Android charter as M3 Expressive motion-scheme springs, captured here
+    // because transitionSpec lambdas are not composable).
+    val reducedMotion = rememberReducedMotion()
+    val stageEnterSpec = MaterialTheme.motionScheme.defaultEffectsSpec<Float>()
+    val stageScaleSpec = MaterialTheme.motionScheme.defaultSpatialSpec<Float>()
+    val stageExitSpec = MaterialTheme.motionScheme.fastEffectsSpec<Float>()
 
     val chassis: OnboardingChassisModel = when (val current = step) {
         OnboardingStep.Welcome -> welcomeChassis(
@@ -499,92 +510,120 @@ fun OnboardingScreen(
         AnimatedContent(
             targetState = step,
             modifier = Modifier.fillMaxSize(),
-            // Quiet crossfade — a horizontal push between steps was rejected as
-            // jarring (2026-06-26 iOS decision, binding product behavior).
-            transitionSpec = { fadeIn(tween(250)).togetherWith(fadeOut(tween(250))) },
+            // Quiet materialize — no lateral push between steps (2026-06-26
+            // iOS decision, binding product behavior). The incoming stage
+            // scales 0.96 → 1 on the expressive spatial spring while fading in
+            // and resolving from blur (the materializeBlur below); the outgoing
+            // stage just fades on the fast spec — exits subtler than entrances.
+            // Reduce Motion keeps a plain crossfade.
+            transitionSpec = {
+                if (reducedMotion) {
+                    fadeIn(tween(250)).togetherWith(fadeOut(tween(180)))
+                } else {
+                    (
+                        fadeIn(stageEnterSpec) +
+                            scaleIn(animationSpec = stageScaleSpec, initialScale = 0.96f)
+                        )
+                        .togetherWith(fadeOut(stageExitSpec))
+                }
+            },
             label = "onboarding-step",
         ) { current ->
-            when (current) {
-                OnboardingStep.Welcome -> WelcomeStageContent(
-                    startupFailure = walletState.startupFailure,
-                    retryingStartup = retryingStartup,
-                    errorText = createError,
-                    onRetryStartup = {
-                        scope.launch {
-                            retryingStartup = true
-                            try {
-                                walletManager.initialize()
-                            } finally {
-                                retryingStartup = false
+            // Incoming stages resolve from a 4dp blur (API 31+ and
+            // reduce-motion gated inside materializeBlur). Skipped on the
+            // initial composition so a cold launch's first frame renders sharp.
+            val enteredViaTransition = remember { transition.currentState != transition.targetState }
+            val stageModifier = if (enteredViaTransition) {
+                Modifier
+                    .fillMaxSize()
+                    .materializeBlur()
+            } else {
+                Modifier.fillMaxSize()
+            }
+            Box(stageModifier) {
+                when (current) {
+                    OnboardingStep.Welcome -> WelcomeStageContent(
+                        startupFailure = walletState.startupFailure,
+                        retryingStartup = retryingStartup,
+                        errorText = createError,
+                        onRetryStartup = {
+                            scope.launch {
+                                retryingStartup = true
+                                try {
+                                    walletManager.initialize()
+                                } finally {
+                                    retryingStartup = false
+                                }
                             }
+                        },
+                    )
+
+                    is OnboardingStep.ShowMnemonic -> ShowMnemonicStageContent(
+                        mnemonic = current.mnemonic,
+                    )
+
+                    is OnboardingStep.FirstMint -> FirstMintStageContent(
+                        state = firstMint,
+                        busy = finishing,
+                        addingMintUrl = addingMintUrl,
+                        errorText = firstMintError,
+                    )
+
+                    // Quiet stage — stage 3 of the restyle adds the restrained
+                    // variant of the welcome piece here.
+                    OnboardingStep.RestoreMethod -> Box(Modifier.fillMaxSize())
+
+                    OnboardingStep.RestoreInput -> RestoreSeedStageContent(
+                        input = restoreSeedInput,
+                        onInputChange = {
+                            restoreSeedInput = it
+                            restoreError = null
+                        },
+                        wordCount = restoreSeedInput.trim().split(Regex("\\s+")).count { it.isNotBlank() },
+                        invalidCount = Bip39WordList.invalidWordIndices(restoreSeedInput).size,
+                        errorText = restoreError,
+                        modifier = Modifier.fillMaxSize(),
+                    )
+
+                    is OnboardingStep.RestoreMints -> RestoreMintsStageContent(
+                        input = restoreMintsStaging.input,
+                        staged = restoreMintsStaging.staged,
+                        previews = restoreMintsStaging.previews,
+                        notice = restoreMintsStaging.notice,
+                        noticeSeverity = restoreMintsStaging.noticeSeverity,
+                        searching = nostrBackupState.isSearching,
+                        onInputChange = restoreMintsStaging::updateInput,
+                        onAdd = restoreMintsStaging::addInput,
+                        onPaste = restoreMintsStaging::pasteFromClipboard,
+                        onNostr = restoreMintsStaging::searchNostrBackup,
+                        onRemove = restoreMintsStaging::remove,
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(top = CashuTheme.spacing.snug),
+                    )
+
+                    is OnboardingStep.RestoreProgress -> Column(Modifier.fillMaxSize()) {
+                        if (progressState != null && progressState.totalRecovered > 0L) {
+                            // Money value — monospaced digits + no roll (Numbers
+                            // Are Sacred), exactly as the shared component
+                            // renders it.
+                            RestoreRecoveredTotal(
+                                totalRecovered = progressState.totalRecovered,
+                                modifier = Modifier
+                                    .padding(horizontal = HeaderPadding)
+                                    .padding(top = CashuTheme.spacing.snug, bottom = CashuTheme.spacing.default),
+                            )
                         }
-                    },
-                )
-
-                is OnboardingStep.ShowMnemonic -> ShowMnemonicStageContent(
-                    mnemonic = current.mnemonic,
-                )
-
-                is OnboardingStep.FirstMint -> FirstMintStageContent(
-                    state = firstMint,
-                    busy = finishing,
-                    addingMintUrl = addingMintUrl,
-                    errorText = firstMintError,
-                )
-
-                // Quiet stage — stage 3 of the restyle adds the restrained
-                // variant of the welcome piece here.
-                OnboardingStep.RestoreMethod -> Box(Modifier.fillMaxSize())
-
-                OnboardingStep.RestoreInput -> RestoreSeedStageContent(
-                    input = restoreSeedInput,
-                    onInputChange = {
-                        restoreSeedInput = it
-                        restoreError = null
-                    },
-                    wordCount = restoreSeedInput.trim().split(Regex("\\s+")).count { it.isNotBlank() },
-                    invalidCount = Bip39WordList.invalidWordIndices(restoreSeedInput).size,
-                    errorText = restoreError,
-                    modifier = Modifier.fillMaxSize(),
-                )
-
-                is OnboardingStep.RestoreMints -> RestoreMintsStageContent(
-                    input = restoreMintsStaging.input,
-                    staged = restoreMintsStaging.staged,
-                    previews = restoreMintsStaging.previews,
-                    notice = restoreMintsStaging.notice,
-                    noticeSeverity = restoreMintsStaging.noticeSeverity,
-                    searching = nostrBackupState.isSearching,
-                    onInputChange = restoreMintsStaging::updateInput,
-                    onAdd = restoreMintsStaging::addInput,
-                    onPaste = restoreMintsStaging::pasteFromClipboard,
-                    onNostr = restoreMintsStaging::searchNostrBackup,
-                    onRemove = restoreMintsStaging::remove,
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(top = CashuTheme.spacing.snug),
-                )
-
-                is OnboardingStep.RestoreProgress -> Column(Modifier.fillMaxSize()) {
-                    if (progressState != null && progressState.totalRecovered > 0L) {
-                        // Money value — monospaced digits + no roll (Numbers Are
-                        // Sacred), exactly as the shared component renders it.
-                        RestoreRecoveredTotal(
-                            totalRecovered = progressState.totalRecovered,
+                        RestoreProgressRows(
+                            mintUrls = current.mintUrls,
+                            phases = progressState?.phases ?: emptyMap(),
+                            previews = current.mintPreviews,
+                            onRetry = { url -> progressState?.retry(url) },
                             modifier = Modifier
-                                .padding(horizontal = HeaderPadding)
-                                .padding(top = CashuTheme.spacing.snug, bottom = CashuTheme.spacing.default),
+                                .weight(1f)
+                                .fillMaxWidth(),
                         )
                     }
-                    RestoreProgressRows(
-                        mintUrls = current.mintUrls,
-                        phases = progressState?.phases ?: emptyMap(),
-                        previews = current.mintPreviews,
-                        onRetry = { url -> progressState?.retry(url) },
-                        modifier = Modifier
-                            .weight(1f)
-                            .fillMaxWidth(),
-                    )
                 }
             }
         }

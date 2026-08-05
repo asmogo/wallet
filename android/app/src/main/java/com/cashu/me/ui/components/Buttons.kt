@@ -214,6 +214,7 @@ fun GhostButton(
     trailingIcon: ImageVector? = null,
     textStyle: TextStyle = MaterialTheme.typography.labelLarge,
     contentColor: Color = Color.Unspecified,
+    animatedLabel: Boolean = false,
 ) {
     val interactionSource = remember { MutableInteractionSource() }
     val alpha = rememberPressAlpha(interactionSource)
@@ -236,7 +237,22 @@ fun GhostButton(
             )
             Spacer(Modifier.width(CashuTheme.spacing.tight))
         }
-        Text(text = text, style = textStyle)
+        if (animatedLabel) {
+            // Opt-in in-place label cross-fade (the onboarding chassis'
+            // tertiary slot swaps "What is ecash?" ↔ "Back" ↔ "Skip for now").
+            AnimatedContent(
+                targetState = text,
+                transitionSpec = {
+                    fadeIn(spring(stiffness = Spring.StiffnessMedium))
+                        .togetherWith(fadeOut(spring(stiffness = Spring.StiffnessMedium)))
+                },
+                label = "ghost-button-text",
+            ) { current ->
+                Text(text = current, style = textStyle)
+            }
+        } else {
+            Text(text = text, style = textStyle)
+        }
         if (trailingIcon != null) {
             Spacer(Modifier.width(CashuTheme.spacing.micro))
             Icon(

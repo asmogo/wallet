@@ -4,6 +4,8 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.test.junit4.v2.createComposeRule
@@ -31,7 +33,10 @@ class OnboardingChassisLayoutComposeTest {
     @Test
     fun primaryCtaPositionIdenticalAcrossSlotConfigurations() {
         compose.setCashuContent {
-            Column {
+            // Scrollable so both frames keep their full 500dp height — in a
+            // plain Column the second frame would be coerced to the screen
+            // remainder and the comparison would measure different frames.
+            Column(Modifier.verticalScroll(rememberScrollState())) {
                 Box(
                     Modifier
                         .testTag("frame-full")

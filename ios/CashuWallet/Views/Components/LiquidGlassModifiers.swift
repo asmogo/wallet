@@ -466,3 +466,32 @@ struct TextLinkButtonStyle: ButtonStyle {
             .animation(.snappy(duration: 0.18), value: configuration.isPressed)
     }
 }
+
+// MARK: - Materialize transition (DESIGN.md §6 carve-out)
+
+extension AnyTransition {
+    /// Blur-to-sharp "materialize": content resolves from blur → sharp as it
+    /// enters, riding whatever curve the caller animates with. It makes an
+    /// element come *into focus* rather than merely scaling in. DESIGN.md §6
+    /// carve-out — confirmation glyphs plus the onboarding stage and headline
+    /// swaps (pre-wallet exemption), never money values; callers gate it
+    /// behind `!reduceMotion` (this composes only onto non-reduce-motion
+    /// branches).
+    static var materializeBlur: AnyTransition { materializeBlur(radius: 4) }
+
+    /// Parameterized variant: onboarding's stage swap enters at radius 6 and
+    /// its chassis headline at 3 (onboarding-restyle-brief §5).
+    static func materializeBlur(radius: CGFloat) -> AnyTransition {
+        .modifier(
+            active: BlurMaterializeModifier(radius: radius),
+            identity: BlurMaterializeModifier(radius: 0)
+        )
+    }
+}
+
+private struct BlurMaterializeModifier: ViewModifier {
+    let radius: CGFloat
+    func body(content: Content) -> some View {
+        content.blur(radius: radius)
+    }
+}

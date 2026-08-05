@@ -126,16 +126,12 @@ struct OnboardingView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .safeAreaInset(edge: .bottom) {
+            // The chassis container never animates (brief §3) — only its text
+            // and labels cross-fade in place, choreographed inside
+            // OnboardingChassisView with value-scoped animations.
             OnboardingChassisView(model: chassisModel) {
                 chassisAccessory
             }
-            // The chassis container never animates (brief §3). The step
-            // change's ambient `withAnimation` would otherwise animate chassis
-            // text reflow and slot swaps; this shield keeps chassis updates
-            // instant. Value-scoped animations inside the chassis (press
-            // feedback, enable/disable fades, the acknowledge checkbox, the
-            // staged exit) still run — inner `.animation(_:value:)` wins.
-            .transaction { $0.animation = nil }
         }
         .sheet(isPresented: $showConceptSheet) {
             conceptSheet
@@ -149,10 +145,23 @@ struct OnboardingView: View {
         }
     }
 
-    // Quiet crossfade between steps — no lateral slide. A horizontal push read
-    // as jarring here; the per-element stagger inside each step supplies enough
-    // sense of arrival. Fits the "System Utility" restraint.
-    private var stepTransition: AnyTransition { .opacity }
+    // Quiet materialize between steps — no lateral slide. A horizontal push
+    // read as jarring here; the incoming stage scales 0.96 → 1 while resolving
+    // from blur (onboarding-restyle-brief §5), the outgoing stage just blurs
+    // and fades (exits subtler than entrances). The entrance overlaps the tail
+    // of the exit by ~80 ms. Reduce Motion is a plain crossfade.
+    private var stepTransition: AnyTransition {
+        guard !reduceMotion else { return .opacity }
+        return .asymmetric(
+            insertion: AnyTransition.scale(scale: 0.96)
+                .combined(with: .materializeBlur(radius: 6))
+                .combined(with: .opacity)
+                .animation(.smooth(duration: 0.28).delay(0.10)),
+            removal: AnyTransition.materializeBlur(radius: 6)
+                .combined(with: .opacity)
+                .animation(.easeOut(duration: 0.18))
+        )
+    }
 
     private func advance(to step: OnboardingStep) {
         resetAppeared(for: step)

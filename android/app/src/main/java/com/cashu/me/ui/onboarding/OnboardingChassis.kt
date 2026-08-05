@@ -1,5 +1,16 @@
 package com.cashu.me.ui.onboarding
 
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.AnimatedContentTransitionScope
+import androidx.compose.animation.ContentTransform
+import androidx.compose.animation.SizeTransform
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -12,9 +23,14 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.text.TextStyle
@@ -25,6 +41,7 @@ import com.cashu.me.ui.components.GhostButton
 import com.cashu.me.ui.components.PrimaryButton
 import com.cashu.me.ui.components.SecondaryButton
 import com.cashu.me.ui.theme.CashuTheme
+import com.cashu.me.ui.theme.rememberReducedMotion
 
 // ---------------------------------------------------------------------------
 // The fixed bottom action chassis shared by every onboarding step
@@ -101,25 +118,45 @@ fun OnboardingChassis(
         // a linear path that doesn't exist. The stage carries the sense of
         // place; the slot stays here for the record.
 
+        // In-place text swaps: the incoming line rises 10dp on a spring while
+        // fading in; the outgoing line just fades — exits subtler than
+        // entrances. Reduce Motion is opacity both ways. The container itself
+        // never moves.
+        val reducedMotion = rememberReducedMotion()
+        val riseOffsetPx = with(LocalDensity.current) { 10.dp.roundToPx() }
         Column(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = HeaderPadding),
             verticalArrangement = Arrangement.spacedBy(CashuTheme.spacing.snug),
         ) {
-            Text(
-                text = model.headline,
-                style = onboardingTitleStyle(),
-                color = MaterialTheme.colorScheme.onSurface,
-                maxLines = if (model.headline.contains('\n')) Int.MAX_VALUE else 1,
-                autoSize = if (model.headline.contains('\n')) null else HeadlineAutoSize,
-            )
-            if (model.subhead != null) {
+            AnimatedContent(
+                targetState = model.headline,
+                transitionSpec = { chassisTextTransform(reducedMotion, riseOffsetPx) },
+                label = "chassis-headline",
+            ) { headline ->
                 Text(
-                    text = model.subhead,
-                    style = MaterialTheme.typography.bodyLarge,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    text = headline,
+                    style = onboardingTitleStyle(),
+                    color = MaterialTheme.colorScheme.onSurface,
+                    maxLines = if (headline.contains('\n')) Int.MAX_VALUE else 1,
+                    autoSize = if (headline.contains('\n')) null else HeadlineAutoSize,
                 )
+            }
+            AnimatedContent(
+                targetState = model.subhead,
+                transitionSpec = { chassisTextTransform(reducedMotion, riseOffsetPx) },
+                label = "chassis-subhead",
+            ) { subhead ->
+                if (subhead != null) {
+                    Text(
+                        text = subhead,
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                } else {
+                    Box(Modifier.fillMaxWidth())
+                }
             }
         }
 
@@ -174,53 +211,96 @@ fun OnboardingScaffold(
     }
 }
 
+/** Rise-and-fade in, fade out — the chassis' in-place text swap. */
+private fun <T> AnimatedContentTransitionScope<T>.chassisTextTransform(
+    reducedMotion: Boolean,
+    riseOffsetPx: Int,
+): ContentTransform =
+    if (reducedMotion) {
+        fadeIn(tween(200))
+            .togetherWith(fadeOut(tween(140)))
+            .using(SizeTransform(clip = false))
+    } else {
+        (
+            fadeIn(spring(stiffness = Spring.StiffnessMedium)) +
+                slideInVertically(
+                    animationSpec = spring(stiffness = Spring.StiffnessMediumLow),
+                    initialOffsetY = { riseOffsetPx },
+                )
+            )
+            .togetherWith(fadeOut(spring(stiffness = Spring.StiffnessMedium)))
+            .using(SizeTransform(clip = false))
+    }
+
 @Composable
 private fun ChassisSlot(action: ChassisAction?, templateStyle: ChassisButtonStyle) {
-    if (action != null) {
-        val tagModifier = action.testTag?.let { Modifier.testTag(it) } ?: Modifier
-        when (action.style) {
-            ChassisButtonStyle.Primary -> PrimaryButton(
-                text = action.label,
-                onClick = action.onClick,
-                modifier = tagModifier,
-                enabled = action.enabled,
-                loading = action.loading,
-                colors = action.colors,
-            )
-            ChassisButtonStyle.Secondary -> SecondaryButton(
-                text = action.label,
-                onClick = action.onClick,
-                modifier = tagModifier,
-                enabled = action.enabled,
-            )
-            ChassisButtonStyle.Ghost -> GhostButton(
-                text = action.label,
-                onClick = action.onClick,
-                modifier = tagModifier,
-                enabled = action.enabled,
-            )
-        }
-    } else {
-        // Reserved slot: a hidden template keeps the slot's height (and
-        // therefore the primary CTA's Y) constant across steps, tracking
-        // font scale instead of hardcoding a height. Cleared semantics keep
-        // it out of TalkBack and the test tree.
-        val hiddenModifier = Modifier
-            .alpha(0f)
-            .clearAndSetSemantics { }
-        when (templateStyle) {
-            ChassisButtonStyle.Primary, ChassisButtonStyle.Secondary -> PrimaryButton(
-                text = "Template",
-                onClick = {},
-                modifier = hiddenModifier,
-                enabled = false,
-            )
-            ChassisButtonStyle.Ghost -> GhostButton(
-                text = "Template",
-                onClick = {},
-                modifier = hiddenModifier,
-                enabled = false,
-            )
+    // Occupancy and style changes cross-fade the whole slot in place; label
+    // changes within the same style flow through the button's own label
+    // cross-fade. Fades only — vestibular-safe without a reduce-motion branch.
+    AnimatedContent(
+        targetState = action?.style,
+        transitionSpec = {
+            fadeIn(spring(stiffness = Spring.StiffnessMedium))
+                .togetherWith(fadeOut(spring(stiffness = Spring.StiffnessMedium)))
+        },
+        label = "chassis-slot",
+    ) { style ->
+        // Snapshot the action that was live when this content entered, so an
+        // emptying or restyled slot fades out showing its own outgoing button
+        // rather than snapping to the template or the new label.
+        var snapshot by remember { mutableStateOf(action?.takeIf { it.style == style }) }
+        if (action != null && action.style == style && action !== snapshot) snapshot = action
+        val shown = if (style != null) snapshot else null
+        if (style != null && shown != null) {
+            // While this content is exiting, `action` no longer matches —
+            // disable the outgoing snapshot so a tap can't fire a stale step.
+            val live = action?.style == style
+            val tagModifier = shown.testTag?.let { Modifier.testTag(it) } ?: Modifier
+            when (style) {
+                ChassisButtonStyle.Primary -> PrimaryButton(
+                    text = shown.label,
+                    onClick = shown.onClick,
+                    modifier = tagModifier,
+                    enabled = shown.enabled && live,
+                    loading = shown.loading,
+                    colors = shown.colors,
+                )
+                ChassisButtonStyle.Secondary -> SecondaryButton(
+                    text = shown.label,
+                    onClick = shown.onClick,
+                    modifier = tagModifier,
+                    enabled = shown.enabled && live,
+                )
+                ChassisButtonStyle.Ghost -> GhostButton(
+                    text = shown.label,
+                    onClick = shown.onClick,
+                    modifier = tagModifier,
+                    enabled = shown.enabled && live,
+                    animatedLabel = true,
+                )
+            }
+        } else {
+            // Reserved slot: a hidden template keeps the slot's height (and
+            // therefore the primary CTA's Y) constant across steps, tracking
+            // font scale instead of hardcoding a height. Cleared semantics
+            // keep it out of TalkBack and the test tree.
+            val hiddenModifier = Modifier
+                .alpha(0f)
+                .clearAndSetSemantics { }
+            when (templateStyle) {
+                ChassisButtonStyle.Primary, ChassisButtonStyle.Secondary -> PrimaryButton(
+                    text = "Template",
+                    onClick = {},
+                    modifier = hiddenModifier,
+                    enabled = false,
+                )
+                ChassisButtonStyle.Ghost -> GhostButton(
+                    text = "Template",
+                    onClick = {},
+                    modifier = hiddenModifier,
+                    enabled = false,
+                )
+            }
         }
     }
 }

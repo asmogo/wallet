@@ -315,26 +315,6 @@ struct PayFlowScaffold<TopAccessory: View, Hero: View, Details: View, Footer: Vi
     }
 }
 
-// MARK: - Materialize transition (DESIGN.md §6 carve-out)
-
-fileprivate extension AnyTransition {
-    /// Blur-to-sharp "materialize" for confirmation glyphs: the glyph resolves from
-    /// blur radius 4 → 0 as it enters, riding whatever curve the caller animates with
-    /// (here the `.smooth(duration: 0.3)` on `phaseKey`). It makes a success check
-    /// come *into focus* rather than merely scaling in. DESIGN.md §6 carve-out —
-    /// confirmation glyphs only, never money values; callers gate it behind
-    /// `!reduceMotion` (this composes only onto the non-reduce-motion branch).
-    static var materializeBlur: AnyTransition {
-        .modifier(
-            active: BlurMaterializeModifier(radius: 4),
-            identity: BlurMaterializeModifier(radius: 0)
-        )
-    }
-}
-
-private struct BlurMaterializeModifier: ViewModifier {
-    let radius: CGFloat
-    func body(content: Content) -> some View {
-        content.blur(radius: radius)
-    }
-}
+// The materialize transition this overlay's confirmation glyph rides
+// (`AnyTransition.materializeBlur`) lives in LiquidGlassModifiers.swift —
+// promoted there so the onboarding stage swaps can share it.

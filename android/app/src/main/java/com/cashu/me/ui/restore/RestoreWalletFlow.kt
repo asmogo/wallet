@@ -22,9 +22,9 @@ import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.CellTower
 import androidx.compose.material.icons.outlined.ContentPaste
 import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LoadingIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -1081,9 +1081,11 @@ private fun RestoreProgressRow(
 
         when (phase) {
             RestoreMintPhase.Pending, RestoreMintPhase.Restoring -> {
-                CircularProgressIndicator(
+                // Expressive loader per DESIGN-ANDROID.md §1 — the classic
+                // circular spinner is reserved for nothing.
+                LoadingIndicator(
                     modifier = Modifier.size(ProgressSpinnerSize),
-                    strokeWidth = 2.dp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
             is RestoreMintPhase.Recovered -> {

@@ -39,11 +39,17 @@ struct OnboardingChassisModel {
 /// an absent action renders a hidden template button, so slot height tracks
 /// Dynamic Type instead of a hardcoded constant. Content ABOVE the primary
 /// (headline, subhead, accessory) grows upward into the stage and can never
-/// move the button. The container itself never animates on step change; only
-/// its text and labels swap, in place.
+/// move the button.
+///
+/// The container itself never animates on step change. Its text swaps in
+/// place: headlines rise 10 pt while resolving from blur 3 → 0 (~260 ms
+/// `.smooth`), the outgoing line just fades (~140 ms) — exits subtler than
+/// entrances. CTA labels cross-fade in place. Reduce Motion drops the rise
+/// and blur, keeping opacity only.
 struct OnboardingChassisView<Accessory: View>: View {
     let model: OnboardingChassisModel
     @ViewBuilder var accessory: Accessory
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -52,25 +58,36 @@ struct OnboardingChassisView<Accessory: View>: View {
             // imply a linear path that doesn't exist. The stage carries the
             // sense of place; the slot stays here for the record.
 
-            Text(model.headline)
-                .font(.largeTitle.weight(.heavy))
-                .tracking(-0.5)
-                .foregroundStyle(.primary)
-                .fixedSize(horizontal: false, vertical: true)
-                .padding(.horizontal, 28)
-
-            if let subhead = model.subhead {
-                Text(subhead)
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
+            ZStack(alignment: .topLeading) {
+                Text(model.headline)
+                    .font(.largeTitle.weight(.heavy))
+                    .tracking(-0.5)
+                    .foregroundStyle(.primary)
                     .fixedSize(horizontal: false, vertical: true)
-                    .padding(.top, 8)
-                    .padding(.horizontal, 28)
+                    .id(model.headline)
+                    .transition(textSwapTransition)
             }
+            .animation(.smooth(duration: 0.26), value: model.headline)
+            .padding(.horizontal, 28)
+
+            ZStack(alignment: .topLeading) {
+                if let subhead = model.subhead {
+                    Text(subhead)
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .padding(.top, 8)
+                        .id(subhead)
+                        .transition(textSwapTransition)
+                }
+            }
+            .animation(.smooth(duration: 0.26), value: model.subhead)
+            .padding(.horizontal, 28)
 
             accessory
                 .padding(.top, 16)
                 .padding(.horizontal, 28)
+                .transition(.opacity)
 
             capsuleSlot(model.primary)
                 .padding(.top, 24)
@@ -83,12 +100,25 @@ struct OnboardingChassisView<Accessory: View>: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .opacity(model.contentOpacity)
-        // The staged exit is deliberate motion, not container motion — keep it
-        // animated even while the host shields step-change reflow.
+        // The staged exit is deliberate motion, not container motion.
         .animation(.easeOut(duration: 0.22), value: model.contentOpacity)
         .padding(.top, 8)
         .padding(.bottom, 12)
         .background(.background)
+    }
+
+    /// In-place text swap: enter with a 10 pt rise resolving from blur 3 → 0,
+    /// leave with opacity alone (DESIGN.md's subtler-exits carve-out). Reduce
+    /// Motion is opacity both ways.
+    private var textSwapTransition: AnyTransition {
+        guard !reduceMotion else { return .opacity }
+        return .asymmetric(
+            insertion: AnyTransition.offset(y: 10)
+                .combined(with: .materializeBlur(radius: 3))
+                .combined(with: .opacity)
+                .animation(.smooth(duration: 0.26)),
+            removal: AnyTransition.opacity.animation(.easeOut(duration: 0.14))
+        )
     }
 
     // MARK: Slots
@@ -103,14 +133,17 @@ struct OnboardingChassisView<Accessory: View>: View {
                             ProgressView().tint(.primary)
                         } else {
                             Text(action.label)
+                                .contentTransition(.opacity)
                         }
                     }
                 }
                 .glassButton()
                 .disabled(action.isDisabled)
-                // Enable/disable is state feedback, not container motion —
-                // it stays animated under the host's step-change shield.
+                // State feedback, not container motion — label swaps and the
+                // enable/disable fade happen in place.
                 .animation(.easeOut(duration: 0.2), value: action.isDisabled)
+                .animation(.easeInOut(duration: 0.2), value: action.label)
+                .animation(.easeInOut(duration: 0.2), value: action.isLoading)
                 .accessibilityIdentifier(action.accessibilityIdentifier ?? "")
             } else {
                 // Reserved slot: a hidden template keeps the slot's height (and
@@ -133,9 +166,11 @@ struct OnboardingChassisView<Accessory: View>: View {
             if let action {
                 Button(action: action.action) {
                     Text(action.label)
+                        .contentTransition(.opacity)
                 }
                 .textLinkButton()
                 .disabled(action.isDisabled)
+                .animation(.easeInOut(duration: 0.2), value: action.label)
                 .accessibilityIdentifier(action.accessibilityIdentifier ?? "")
             } else {
                 Button(action: {}) { Text(verbatim: "Template") }

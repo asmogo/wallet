@@ -4,13 +4,20 @@ import android.database.ContentObserver
 import android.os.Handler
 import android.os.Looper
 import android.provider.Settings
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.unit.dp
 
 /**
  * Choreography constants shared across the app's motion system. Curve *feel*
@@ -59,6 +66,39 @@ object CashuMotion {
  * developer/accessibility setting mid-session is respected without recreating
  * the composition.
  */
+/**
+ * iOS onboarding entrance-stagger twin: content blocks rise 12dp into place,
+ * 400ms, [CashuMotion.StaggerStepMs] per index. No opacity — the step
+ * crossfade owns the fade, and doubling it flickers (binding onboarding
+ * decision); no blur — `Modifier.blur` is API 31+ and the rise carries the
+ * effect alone. Reduce-motion renders the resting state.
+ *
+ * Promoted from OnboardingScreen.kt so every onboarding stage (including the
+ * restore branch) can share one cascade primitive.
+ */
+@Composable
+fun Modifier.riseIn(appeared: Boolean, index: Int): Modifier {
+    if (rememberReducedMotion()) return this
+    val rise by animateDpAsState(
+        targetValue = if (appeared) 0.dp else 12.dp,
+        animationSpec = tween(
+            durationMillis = 400,
+            delayMillis = index * CashuMotion.StaggerStepMs,
+            easing = FastOutSlowInEasing,
+        ),
+        label = "rise-in-$index",
+    )
+    return this.graphicsLayer { translationY = rise.toPx() }
+}
+
+/** One-shot entrance trigger for [riseIn] call sites. */
+@Composable
+fun rememberAppeared(): Boolean {
+    var appeared by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) { appeared = true }
+    return appeared
+}
+
 @Composable
 fun rememberReducedMotion(): Boolean {
     val context = LocalContext.current
