@@ -52,9 +52,18 @@ like a port, make the Android-native choice instead.
   `CircularProgressIndicator`), `IconSwap` (glyph replacement ≙ iOS
   `.symbolEffect(.replace)`), `rememberBounceScale` (one-shot bounce ≙
   `.symbolEffect(.bounce)`), `Modifier.materializeBlur()` (blur-to-sharp
-  success materialize, API 31+ only), `SkeletonValue` (redacted-style
+  success materialize, API 31+ only), `AnimatedVisibilityScope.morphBlur()`
+  (cross-fade mask — see below), `SkeletonValue` (redacted-style
   fill-in for pending quote values, no shimmer). Reuse these instead of
   re-deriving per screen.
+- **Cross-fade masking** (`morphBlur`, `Materialize.kt`, added 2026-08-06): a
+  small blur riding **both** halves of an `AnimatedContent` swap, so the eye
+  reads one object transforming instead of two overlapping. `materializeBlur`
+  cannot do this — it is a one-shot `LaunchedEffect` and so can only blur the
+  incoming child — hence the sibling. Used on `PrimaryButton` / `GhostButton`
+  labels (2 / 1.5 dp) and the onboarding chassis slot (3 dp). API 31+ and
+  reduce-motion gated; below either, the plain cross-fade still carries the
+  change. Rationale in `docs/product/DESIGN.md` §6.
 - **Navigation**: shared-axis X (slide + fade) for push/pop; fade-through for
   tab switches (`CashuNavHost.kt`). Predictive back is enabled
   (`android:enableOnBackInvokedCallback`).
@@ -70,7 +79,12 @@ like a port, make the Android-native choice instead.
   from *history* stays inline/persistent — it's reusable and multi-payment.
 - **Touch responds physically**: CTAs and number-pad keys spring-scale on press
   (`Buttons.kt`, `NumberPad.kt`); text buttons dim to 0.6 while pressed
-  (iOS `TextLinkButtonStyle`).
+  (iOS `TextLinkButtonStyle`). The response is **asymmetric** — a spring carries
+  no direction, so the spec is selected on the press edge instead:
+  `fastEffectsSpec` compressing, `defaultEffectsSpec` releasing. *Effects*, not
+  spatial, even for scale: Expressive's spatial springs are under-damped
+  (0.6–0.8) and a press must not overshoot — it is a state flip, not a reflow,
+  and no gesture momentum preceded it.
 - Lists animate placement (`Modifier.animateItem()` — History, Home recent,
   Mint discovery), reveals expand/shrink, page dots stretch into pills.
 - **Numbers are quiet**: `AmountText` cross-fades the whole string on change

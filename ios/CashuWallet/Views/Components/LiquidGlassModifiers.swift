@@ -452,7 +452,13 @@ struct FullWidthCapsuleButtonStyle: ButtonStyle {
             }
         }
         .opacity(isEnabled ? (configuration.isPressed ? 0.85 : 1) : 0.4)
-        .animation(.snappy(duration: 0.18), value: configuration.isPressed)
+        // Asymmetric, matching PressableButtonStyle: feedback belongs on
+        // touch-down and has to feel immediate, while the release is the system
+        // responding and can settle.
+        .animation(
+            .snappy(duration: configuration.isPressed ? 0.09 : 0.18),
+            value: configuration.isPressed
+        )
     }
 }
 
@@ -473,7 +479,10 @@ struct TextLinkButtonStyle: ButtonStyle {
             .foregroundStyle(.secondary)
             .contentShape(Rectangle())
             .opacity(isEnabled ? (configuration.isPressed ? 0.6 : 1) : 0.4)
-            .animation(.snappy(duration: 0.18), value: configuration.isPressed)
+            .animation(
+                .snappy(duration: configuration.isPressed ? 0.09 : 0.18),
+                value: configuration.isPressed
+            )
     }
 }
 

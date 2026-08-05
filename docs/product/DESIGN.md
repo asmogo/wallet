@@ -963,6 +963,14 @@ code must be).
    (`.snappy(0.09)`), springs back to 1.0 on release (`.snappy(0.18)`).
    Color/opacity unchanged. Apply only where the glass surface doesn't
    already carry feedback; `glassButton()` ships its own pressed opacity drop.
+   *Amended 2026-08-06:* the asymmetry is the point — feedback belongs on
+   touch-**down** and must feel immediate, while the release is the system
+   responding and can settle. `FullWidthCapsuleButtonStyle` and
+   `TextLinkButtonStyle` had been shipping a symmetric `.snappy(0.18)` and now
+   share the same 0.09-down / 0.18-up pair. Android states the identical ratio
+   in its own measure (`fastSpatialSpec` down / `defaultSpatialSpec` up for
+   scale; the effects pair for text-link opacity, which must not carry
+   overshoot).
 5. **Sheet cross-fade** — in-sheet flow swap, e.g. the home sheet's
    `.sheet(item:)` content morphing between `WalletSheet` cases (Send → Send
    Ecash, Receive → Bitcoin) or a flow flipping between two faces of one task.
@@ -1023,6 +1031,35 @@ curve or a delight beat):*
   (`AnyTransition.materializeBlur` lives in `LiquidGlassModifiers.swift`; the
   onboarding exemption below additionally rides it on stage and headline
   entrances — pre-wallet only.)
+- **Blur as a cross-fade *mask*** *(added 2026-08-06 — onboarding button-morph
+  pass; **onboarding exemption only**, see below).* Distinct from the entrance
+  modifier above: a 1.5–4 pt blur may ride **both halves** of a button's content
+  or slot cross-fade (label↔label, label↔spinner, slot↔slot). The rationale is
+  perceptual, not decorative — in an unmasked cross-fade the eye resolves the
+  outgoing and incoming states as two distinct objects overlapping, so the
+  change reads as a *replacement*. Blurred, they blend and it reads as one
+  object *transforming*, which is what a morph is supposed to be. Because it is
+  a mask, the usual "exits subtler than entrances" rule does not strip the blur
+  from the outgoing half — a mask on one half only does nothing; the exit is
+  instead made subtler by being *shorter* (~160 ms vs ~260 ms) and carrying no
+  scale. Radii stay small: this must never be legible as an effect. Primitives:
+  `AnyTransition.materializeBlur(radius:)` (iOS, already existed) and
+  `AnimatedVisibilityScope.morphBlur(radius:)` (Android, `Materialize.kt` — the
+  entrance-only `Modifier.materializeBlur()` cannot blur a child on its way out).
+  Both no-op under reduce motion; Android additionally no-ops below API 31.
+
+  **Reach differs by platform, and the asymmetry is deliberate rather than an
+  oversight.** On iOS the morph lives entirely in `OnboardingChassis.swift`, so
+  it is genuinely pre-wallet-only and stays barred inside the wallet proper
+  until deliberately propagated. On Android it lives in the shared
+  `PrimaryButton` / `GhostButton` (`ui/components/Buttons.kt`) and therefore
+  reaches every CTA in the app. That is the correct call: the thing being fixed
+  there is a **label→spinner hard cut**, which is a defect wherever it appears,
+  and gating a component's own internal correctness behind a call-site flag
+  would be worse than the inconsistency it avoids. Android's wallet-proper CTAs
+  consequently gain the blur mask early; iOS's do not until the propagation
+  pass, and until then the two platforms' non-onboarding CTAs are knowingly a
+  half-step apart.
 
 **Onboarding exemption** *(added 2026-08-05 — onboarding restyle,
 docs/product/onboarding-restyle-brief.md, user-directed):* pre-wallet
@@ -1044,8 +1081,27 @@ docs/android/DESIGN-ANDROID.md rather than copying the tween values:
 | Stage swap | blur 0→6, opacity 1→0, ~180 ms ease-out | scale 0.96→1, blur 6→0, opacity 0→1, ~280 ms `.smooth`; overlaps the tail of *out* by ~80 ms |
 | Element cascade inside a stage | — | 70 ms stride, reusing `stagger` (iOS) / `Modifier.riseIn` (Android) |
 | Chassis container | never animates | never animates |
-| CTA label change | in-place cross-fade | in-place cross-fade |
+| CTA content change (label ⇄ label ⇄ spinner) | blur 0→2, opacity 1→0, ~160 ms ease-out | blur 2→0, opacity 0→1, ~260 ms `.smooth` (Android also scales 0.96→1) |
+| CTA slot occupancy / style | opacity alone | scale 0.96→1, blur 4→0, opacity 0→1, on the step's own `.easeInOut(0.28)` (Android: M3 `defaultSpatialSpec` height spring, blur 3) |
 | Press feedback | existing 0.97 scale, `.snappy(0.09)` down / `.snappy(0.18)` up | — |
+
+Three notes on that table, all added by the 2026-08-06 button-morph pass:
+
+- **"Chassis container never animates" means the container.** Its padding,
+  background, and position are fixed. The *slots inside it* do animate their
+  height — that is how the stack grows upward from its fixed bottom edge as a
+  step's action set changes, and Android has always done it
+  (`SizeTransform` in `OnboardingChassis.kt`). iOS previously had no slot
+  transition at all and snapped; it now matches.
+- **"CTA content change" is one transition, not two.** Label→label and
+  label→spinner are the same morph: iOS keys a `CapsuleContent` enum, Android
+  uses a nullable label (`null` == loading) as the `AnimatedContent` target.
+  Branching the spinner *outside* the animation — which is what Android shipped
+  until now — produces a hard cut, and it was the single most visible snap in
+  the flow.
+- **The CTA never resizes mid-morph.** iOS reserves the footprint with an
+  invisible spacer glyph (the device `PaymentStatusView` already uses for its
+  CTA); Android's 64 dp `heightIn` covers both label and spinner already.
 
 The welcome stage carries **no ambient piece**: the note ↔ token morph that
 shipped with the restyle was cut on 2026-08-05 (user-directed) — an idle loop

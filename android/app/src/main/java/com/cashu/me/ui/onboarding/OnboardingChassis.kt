@@ -2,8 +2,6 @@ package com.cashu.me.ui.onboarding
 
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.SizeTransform
-import androidx.compose.animation.core.Spring
-import androidx.compose.animation.core.spring
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.togetherWith
@@ -35,11 +33,13 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.cashu.me.ui.components.GhostButton
 import com.cashu.me.ui.components.PrimaryButton
 import com.cashu.me.ui.components.SecondaryButton
+import com.cashu.me.ui.components.morphBlur
 import com.cashu.me.ui.testing.UiTestTags
 import com.cashu.me.ui.theme.CashuTheme
 import com.cashu.me.ui.theme.rememberReducedMotion
@@ -68,6 +68,10 @@ import com.cashu.me.ui.theme.rememberReducedMotion
 internal val HeaderPadding = 28.dp
 internal val CtaPadding = 24.dp
 internal val BottomPadding = 24.dp
+
+// Cross-fade mask for a whole-capsule slot swap — wider than the label mask in
+// Buttons.kt because there is more of the outgoing object to bridge.
+private val SlotMorphBlur = 3.dp
 
 /**
  * Step-layout metrics. Onboarding draws no `TopAppBar`, so these state the
@@ -230,12 +234,26 @@ private fun ChassisSlot(action: ChassisAction?, topPadding: Dp) {
     // from a moving top edge. Reduce Motion drops the size animation entirely
     // (`using(null)`): the stack snaps and only opacity moves.
     val reducedMotion = rememberReducedMotion()
+    // transitionSpec is not composable — capture the motion-scheme specs here.
+    // The size spring is stated rather than left to Compose's built-in default:
+    // this was the one place the chassis ignored MotionScheme.expressive() and
+    // drifted off the app's curve identity. Spatial (not effects) because a
+    // slot's height is a spatial property — the slight overshoot spatial specs
+    // carry is M3 Expressive's signature and is chartered in
+    // docs/android/DESIGN-ANDROID.md, which is explicitly off the iOS
+    // "no bounce" constraint.
+    val slotEnterSpec = MaterialTheme.motionScheme.defaultEffectsSpec<Float>()
+    val slotExitSpec = MaterialTheme.motionScheme.fastEffectsSpec<Float>()
+    val slotSizeSpec = MaterialTheme.motionScheme.defaultSpatialSpec<IntSize>()
     AnimatedContent(
         targetState = action?.style,
         transitionSpec = {
-            fadeIn(spring(stiffness = Spring.StiffnessMedium))
-                .togetherWith(fadeOut(spring(stiffness = Spring.StiffnessMedium)))
-                .using(if (reducedMotion) null else SizeTransform(clip = false))
+            fadeIn(slotEnterSpec)
+                // Exits subtler than entrances (DESIGN.md §6).
+                .togetherWith(fadeOut(slotExitSpec))
+                .using(
+                    if (reducedMotion) null else SizeTransform(clip = false) { _, _ -> slotSizeSpec },
+                )
         },
         contentAlignment = Alignment.BottomCenter,
         label = "chassis-slot",
@@ -254,7 +272,10 @@ private fun ChassisSlot(action: ChassisAction?, topPadding: Dp) {
             val live = action?.style == style
             val onClick = if (live) shown.onClick else fun() {}
             val tagModifier = shown.testTag?.let { Modifier.testTag(it) } ?: Modifier
-            Box(Modifier.padding(top = topPadding)) {
+            // Blur mask across the whole capsule: a Primary→Secondary restyle
+            // otherwise shows two stacked buttons mid-fade. A full button needs
+            // more bridging than a label, hence the wider radius.
+            Box(Modifier.padding(top = topPadding).then(morphBlur(SlotMorphBlur))) {
                 when (style) {
                     ChassisButtonStyle.Primary -> PrimaryButton(
                         text = shown.label,

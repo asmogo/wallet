@@ -704,7 +704,13 @@ struct OnboardingView: View {
 
     private func runICloudRestore() {
         guard detectedICloudBackup != nil else { return }
-        iCloudRestorePhase = .restoring
+        // This is the one place chassis *occupancy* changes without a step
+        // change — `.restoring` empties the stack entirely. It has to ride the
+        // same transaction `advance`/`retreat` use, or the slot's transition has
+        // nothing to animate against and the button snaps away.
+        withAnimation(.easeInOut(duration: 0.28)) {
+            iCloudRestorePhase = .restoring
+        }
         errorMessage = nil
         Task { @MainActor in
             do {
@@ -714,7 +720,9 @@ struct OnboardingView: View {
                 }
                 HapticFeedback.notification(.success)
             } catch {
-                iCloudRestorePhase = .preview
+                withAnimation(.easeInOut(duration: 0.28)) {
+                    iCloudRestorePhase = .preview
+                }
                 errorMessage = error.userFacingWalletMessage
             }
         }
