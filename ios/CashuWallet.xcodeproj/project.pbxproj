@@ -13,6 +13,7 @@
 		1100000000000005 /* KeychainService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2100000000000005 /* KeychainService.swift */; };
 		1100000000000007 /* MainWalletView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2100000000000007 /* MainWalletView.swift */; };
 		1100000000000008 /* OnboardingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2100000000000008 /* OnboardingView.swift */; };
+		1100000000000C41 /* OnboardingChassis.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2100000000000C41 /* OnboardingChassis.swift */; };
 		1100000000000009 /* ReceiveView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2100000000000009 /* ReceiveView.swift */; };
 		110000000000000A /* ReceiveLightningView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 210000000000000A /* ReceiveLightningView.swift */; };
 		110000000000000B /* SendView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 210000000000000B /* SendView.swift */; };
@@ -133,6 +134,7 @@
 		T2A0000000000002 /* ReceiveUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = T1A0000000000002 /* ReceiveUITests.swift */; };
 		T2A0000000000003 /* SettingsUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = T1A0000000000003 /* SettingsUITests.swift */; };
 		T2A0000000000004 /* UITestBase.swift in Sources */ = {isa = PBXBuildFile; fileRef = T1A0000000000004 /* UITestBase.swift */; };
+		T2A0000000000009 /* OnboardingChassisUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = T1A0000000000009 /* OnboardingChassisUITests.swift */; };
 		T2B0000000000001 /* InMemoryStorage.swift in Sources */ = {isa = PBXBuildFile; fileRef = T1B0000000000001 /* InMemoryStorage.swift */; };
 		T2B0000000000002 /* WalletStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = T1B0000000000002 /* WalletStoreTests.swift */; };
 		T2B0000000000003 /* MintServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = T1B0000000000003 /* MintServiceTests.swift */; };
@@ -180,6 +182,7 @@
 		2100000000000005 /* KeychainService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeychainService.swift; sourceTree = "<group>"; };
 		2100000000000007 /* MainWalletView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MainWalletView.swift; sourceTree = "<group>"; };
 		2100000000000008 /* OnboardingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingView.swift; sourceTree = "<group>"; };
+		2100000000000C41 /* OnboardingChassis.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingChassis.swift; sourceTree = "<group>"; };
 		2100000000000009 /* ReceiveView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReceiveView.swift; sourceTree = "<group>"; };
 		210000000000000A /* ReceiveLightningView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReceiveLightningView.swift; sourceTree = "<group>"; };
 		210000000000000B /* SendView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SendView.swift; sourceTree = "<group>"; };
@@ -295,6 +298,7 @@
 		T1A0000000000002 /* ReceiveUITests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = ReceiveUITests.swift; path = CashuWalletUITests/ReceiveUITests.swift; sourceTree = "<group>"; };
 		T1A0000000000003 /* SettingsUITests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = SettingsUITests.swift; path = CashuWalletUITests/SettingsUITests.swift; sourceTree = "<group>"; };
 		T1A0000000000004 /* UITestBase.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = UITestBase.swift; path = CashuWalletUITests/UITestBase.swift; sourceTree = "<group>"; };
+		T1A0000000000009 /* OnboardingChassisUITests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = OnboardingChassisUITests.swift; path = CashuWalletUITests/OnboardingChassisUITests.swift; sourceTree = "<group>"; };
 		T1B0000000000001 /* InMemoryStorage.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = InMemoryStorage.swift; path = CashuWalletTests/InMemoryStorage.swift; sourceTree = "<group>"; };
 		T1B0000000000002 /* WalletStoreTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = WalletStoreTests.swift; path = CashuWalletTests/WalletStoreTests.swift; sourceTree = "<group>"; };
 		T1B0000000000003 /* MintServiceTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = MintServiceTests.swift; path = CashuWalletTests/MintServiceTests.swift; sourceTree = "<group>"; };
@@ -503,6 +507,7 @@
 			children = (
 				2100000000000007 /* MainWalletView.swift */,
 				2100000000000008 /* OnboardingView.swift */,
+				2100000000000C41 /* OnboardingChassis.swift */,
 			);
 			path = Main;
 			sourceTree = "<group>";
@@ -589,6 +594,7 @@
 			isa = PBXGroup;
 			children = (
 				99846FC03810AE4BE904466F /* WalletIntegrationTests.swift */,
+				T1A0000000000009 /* OnboardingChassisUITests.swift */,
 				T1A0000000000001 /* MainTabUITests.swift */,
 				T1A0000000000002 /* ReceiveUITests.swift */,
 				T1A0000000000003 /* SettingsUITests.swift */,
@@ -974,6 +980,7 @@
 				AB00000000000001 /* CashuRequest.swift in Sources */,
 				1100000000000007 /* MainWalletView.swift in Sources */,
 				1100000000000008 /* OnboardingView.swift in Sources */,
+				1100000000000C41 /* OnboardingChassis.swift in Sources */,
 				6A8EC9412F2576800058C21B /* ReceiveTokenDetailView.swift in Sources */,
 				6A8EC9302F2442F00058C21B /* SettingsManager.swift in Sources */,
 				1100000000000009 /* ReceiveView.swift in Sources */,
@@ -1061,6 +1068,7 @@
 				T2A0000000000002 /* ReceiveUITests.swift in Sources */,
 				T2A0000000000003 /* SettingsUITests.swift in Sources */,
 				T2A0000000000004 /* UITestBase.swift in Sources */,
+				T2A0000000000009 /* OnboardingChassisUITests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
