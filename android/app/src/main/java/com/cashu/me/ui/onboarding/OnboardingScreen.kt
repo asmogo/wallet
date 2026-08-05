@@ -569,9 +569,11 @@ fun OnboardingScreen(
                         errorText = firstMintError,
                     )
 
-                    // Quiet stage — stage 3 of the restyle adds the restrained
-                    // variant of the welcome piece here.
-                    OnboardingStep.RestoreMethod -> Box(Modifier.fillMaxSize())
+                    // The restrained, static variant of the welcome piece.
+                    OnboardingStep.RestoreMethod -> WelcomeStagePiece(
+                        Modifier.fillMaxSize(),
+                        quiet = true,
+                    )
 
                     OnboardingStep.RestoreInput -> RestoreSeedStageContent(
                         input = restoreSeedInput,
@@ -686,7 +688,11 @@ internal fun WelcomeStageContent(
     modifier: Modifier = Modifier,
 ) {
     Column(modifier = modifier.fillMaxSize()) {
-        Spacer(Modifier.weight(1f))
+        WelcomeStagePiece(
+            Modifier
+                .weight(1f)
+                .fillMaxWidth(),
+        )
         if (startupFailure != null) {
             Column(
                 modifier = Modifier.padding(horizontal = CtaPadding),

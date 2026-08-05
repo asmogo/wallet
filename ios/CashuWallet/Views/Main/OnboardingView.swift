@@ -435,9 +435,8 @@ struct OnboardingView: View {
 
     private var welcomeStage: some View {
         VStack(spacing: 0) {
-            Spacer(minLength: 0)
-
-            // Stage 3 of the restyle fills this stage with the welcome piece.
+            OnboardingWelcomeStage()
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
 
             if let error = walletManager.errorMessage {
                 ErrorBannerView(message: "Couldn't start the wallet. \(error)", severity: .error)
@@ -508,9 +507,8 @@ struct OnboardingView: View {
     // MARK: - Restore Method Stage
 
     private var restoreMethodStage: some View {
-        // Quiet stage — Stage 3 of the restyle adds the restrained variant of
-        // the welcome piece here.
-        Color.clear
+        // The restrained, static variant of the welcome piece — a quiet mark.
+        OnboardingWelcomeStage(variant: .quiet)
             .onAppear {
                 triggerEntrance { restoreMethodAppeared = true }
             }
