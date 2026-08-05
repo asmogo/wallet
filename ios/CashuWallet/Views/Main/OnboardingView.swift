@@ -218,12 +218,6 @@ struct OnboardingView: View {
         switch currentStep {
         case .welcome:
             return OnboardingChassisModel(
-                // The only headline that keeps a hardcoded break. Left to
-                // wrap naturally it wraps after "In" — "Private cash. In" /
-                // "your pocket." — splitting the second sentence. Breaking
-                // at the sentence boundary is the deliberate exception.
-                headline: "Private cash.\nIn your pocket.",
-                subhead: "An ecash wallet for Bitcoin and Lightning.",
                 primary: OnboardingChassisAction(
                     label: "Create Wallet",
                     isLoading: isCreating,
@@ -389,8 +383,19 @@ struct OnboardingView: View {
 
     private var welcomeStage: some View {
         VStack(spacing: 0) {
-            OnboardingWelcomeStage()
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            stagger(appeared: welcomeAppeared, index: 0) {
+                // The only title that keeps a hardcoded break. Left to wrap
+                // naturally it wraps after "In" — "Private cash. In" / "your
+                // pocket." — splitting the second sentence. Breaking at the
+                // sentence boundary is the deliberate exception.
+                OnboardingStepHeader(
+                    title: "Private cash.\nIn your pocket.",
+                    subhead: "An ecash wallet for Bitcoin and Lightning."
+                )
+            }
+            .padding(.top, OnboardingMetrics.titleTopInset)
+
+            Spacer(minLength: 0)
 
             if let error = walletManager.errorMessage {
                 ErrorBannerView(message: "Couldn't start the wallet. \(error)", severity: .error)
@@ -475,10 +480,9 @@ struct OnboardingView: View {
             }
             .padding(.top, OnboardingMetrics.titleGap)
 
-            // The restrained, static variant of the welcome piece — a quiet mark.
-            OnboardingWelcomeStage(variant: .quiet)
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            Spacer(minLength: 0)
         }
+        .frame(maxWidth: .infinity)
         .onAppear {
             triggerEntrance { restoreMethodAppeared = true }
         }

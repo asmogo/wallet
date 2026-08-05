@@ -557,13 +557,7 @@ fun OnboardingScreen(
                             subhead = "Choose how to recover your wallet.",
                             modifier = Modifier.padding(top = OnboardingMetrics.TitleGap),
                         )
-                        // The restrained, static variant of the welcome piece.
-                        WelcomeStagePiece(
-                            Modifier
-                                .weight(1f)
-                                .fillMaxWidth(),
-                            quiet = true,
-                        )
+                        Spacer(Modifier.weight(1f))
                     }
 
                     OnboardingStep.RestoreInput -> Column(Modifier.fillMaxSize()) {
@@ -686,12 +680,6 @@ internal fun welcomeChassis(
     onRestore: () -> Unit,
     onInfo: () -> Unit,
 ): OnboardingChassisModel = OnboardingChassisModel(
-    // The only headline that keeps a hardcoded break. Left to wrap
-    // naturally it wraps after "In" — "Private cash. In" / "your
-    // pocket." — splitting the second sentence. Breaking at the
-    // sentence boundary is the deliberate exception.
-    headline = "Private cash.\nIn your pocket.",
-    subhead = "An ecash wallet for Bitcoin and Lightning.",
     primary = ChassisAction(
         label = "Create Wallet",
         onClick = onCreate,
@@ -713,8 +701,8 @@ internal fun welcomeChassis(
     ),
 )
 
-/** The welcome stage: startup-failure recovery + create errors, pinned just
- * above the chassis. Stage 3 of the restyle adds the welcome piece above. */
+/** The welcome stage: the app's title where every other step puts its own, then
+ * startup-failure recovery + create errors pinned just above the chassis. */
 @Composable
 internal fun WelcomeStageContent(
     startupFailure: WalletStartupFailure?,
@@ -724,11 +712,16 @@ internal fun WelcomeStageContent(
     modifier: Modifier = Modifier,
 ) {
     Column(modifier = modifier.fillMaxSize()) {
-        WelcomeStagePiece(
-            Modifier
-                .weight(1f)
-                .fillMaxWidth(),
+        // The only title that keeps a hardcoded break. Left to wrap naturally
+        // it wraps after "In" — "Private cash. In" / "your pocket." — splitting
+        // the second sentence. Breaking at the sentence boundary is the
+        // deliberate exception.
+        OnboardingStepHeader(
+            title = "Private cash.\nIn your pocket.",
+            subhead = "An ecash wallet for Bitcoin and Lightning.",
+            modifier = Modifier.padding(top = OnboardingMetrics.TitleTopInset),
         )
+        Spacer(Modifier.weight(1f))
         if (startupFailure != null) {
             Column(
                 modifier = Modifier.padding(horizontal = CtaPadding),

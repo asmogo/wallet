@@ -2,6 +2,7 @@ package com.cashu.me.ui.screenshots
 
 import android.content.res.Configuration
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -26,7 +27,6 @@ import com.cashu.me.ui.onboarding.SeedAcknowledgeRow
 import com.cashu.me.ui.onboarding.SeedPhraseReveal
 import com.cashu.me.ui.onboarding.ShowMnemonicStageContent
 import com.cashu.me.ui.onboarding.WelcomeStageContent
-import com.cashu.me.ui.onboarding.WelcomeStagePiece
 import com.cashu.me.ui.onboarding.welcomeChassis
 import com.cashu.me.ui.restore.RestoreMintPhase
 import com.cashu.me.ui.restore.RestoreMintsStageContent
@@ -214,12 +214,7 @@ fun onboardingRestoreMethodScreenshot() {
                     subhead = "Choose how to recover your wallet.",
                     modifier = Modifier.padding(top = 12.dp),
                 )
-                WelcomeStagePiece(
-                    Modifier
-                        .weight(1f)
-                        .fillMaxWidth(),
-                    quiet = true,
-                )
+                Spacer(Modifier.weight(1f))
             }
         }
     }

@@ -1,10 +1,10 @@
 import XCTest
 
 /// Design review 2026-08-05: every onboarding step's actions hug the bottom of
-/// the screen (no reserved slots), titles sit at the top on non-welcome steps,
-/// and retreat-capable steps expose a glass back button. This walks both
-/// branches, asserts the bottom-most action lands in the bottom band of the
-/// window on every step, and exercises the new back navigation.
+/// the screen (no reserved slots), every step's title — welcome included — sits
+/// at the top on the same line, and retreat-capable steps expose a glass back
+/// button. This walks both branches, asserts the bottom-most action lands in
+/// the bottom band of the window on every step, and exercises back navigation.
 final class OnboardingChassisUITests: UITestBase {
 
     func testCtasAnchoredToBottomAndBackNavigation() throws {
@@ -25,10 +25,25 @@ final class OnboardingChassisUITests: UITestBase {
         XCTAssertTrue(create.waitForExistence(timeout: 30), "Welcome step should appear")
         assertBottomAnchored(app.buttons["What is ecash?"], "welcome")
 
+        // Welcome titles itself at the top like every other step, on the line
+        // `OnboardingMetrics.titleTopInset` puts them all on.
+        let welcomeTitle = app.staticTexts.matching(
+            NSPredicate(format: "label BEGINSWITH 'Private cash.'")
+        ).firstMatch
+        XCTAssertTrue(welcomeTitle.waitForExistence(timeout: 10), "Welcome should title itself")
+        let welcomeTitleTop = welcomeTitle.frame.minY
+
         // Restore branch: method chooser, then seed input, then back out via
         // the new glass back buttons.
         app.buttons["Restore Wallet"].tap()
         assertBottomAnchored(app.buttons["Use Seed Phrase"], "restoreMethod")
+
+        let methodTitle = app.staticTexts["Restore Wallet"]
+        XCTAssertTrue(methodTitle.waitForExistence(timeout: 10), "restoreMethod should title itself")
+        XCTAssertEqual(
+            welcomeTitleTop, methodTitle.frame.minY, accuracy: 1,
+            "Welcome's title should land on the same line as every other step's"
+        )
 
         app.buttons["Use Seed Phrase"].tap()
         assertBottomAnchored(app.buttons["Next"], "restoreInput")

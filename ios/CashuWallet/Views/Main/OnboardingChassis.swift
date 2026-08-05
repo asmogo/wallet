@@ -17,12 +17,10 @@ struct OnboardingChassisAction {
 
 /// Per-step content for the bottom action chassis.
 ///
-/// `headline`/`subhead` are the *welcome* treatment only (design review
-/// 2026-08-05): every other step titles itself at the top of the stage with
-/// `OnboardingStepHeader` and leaves these nil, so its actions hug the bottom.
+/// Actions only: every step — welcome included — titles itself at the top of
+/// its stage with `OnboardingStepHeader`, so the chassis holds nothing but the
+/// buttons and they hug the bottom edge.
 struct OnboardingChassisModel {
-    var headline: String?
-    var subhead: String?
     var primary: OnboardingChassisAction?
     var secondary: OnboardingChassisAction?
     var tertiary: OnboardingChassisAction?
@@ -37,14 +35,12 @@ struct OnboardingChassisModel {
 ///
 /// Pinned via `.safeAreaInset(edge: .bottom)` on the onboarding root, it holds
 /// the step's actions (plus an optional accessory like the seed-acknowledge
-/// row) anchored to the bottom edge. The welcome step additionally carries its
-/// headline and subhead here; other steps render `OnboardingStepHeader` at the
-/// top of their stage instead. The container itself never animates on step
-/// change; its content swaps in place (text rise-and-fade, label cross-fades).
+/// row) anchored to the bottom edge; every step's title lives at the top of its
+/// stage in `OnboardingStepHeader`. The container itself never animates on step
+/// change; its content swaps in place (label cross-fades).
 struct OnboardingChassisView<Accessory: View>: View {
     let model: OnboardingChassisModel
     @ViewBuilder var accessory: Accessory
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -52,34 +48,6 @@ struct OnboardingChassisView<Accessory: View>: View {
             // branches into paths of different lengths, so page dots would
             // imply a linear path that doesn't exist. The slot stays here for
             // the record.
-
-            ZStack(alignment: .topLeading) {
-                if let headline = model.headline {
-                    Text(headline)
-                        .font(.largeTitle.weight(.heavy))
-                        .tracking(-0.5)
-                        .foregroundStyle(.primary)
-                        .fixedSize(horizontal: false, vertical: true)
-                        .id(headline)
-                        .transition(textSwapTransition)
-                }
-            }
-            .animation(.smooth(duration: 0.26), value: model.headline)
-            .padding(.horizontal, 28)
-
-            ZStack(alignment: .topLeading) {
-                if let subhead = model.subhead {
-                    Text(subhead)
-                        .font(.callout)
-                        .foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                        .padding(.top, 8)
-                        .id(subhead)
-                        .transition(textSwapTransition)
-                }
-            }
-            .animation(.smooth(duration: 0.26), value: model.subhead)
-            .padding(.horizontal, 28)
 
             accessory
                 .padding(.top, 16)
@@ -91,7 +59,7 @@ struct OnboardingChassisView<Accessory: View>: View {
                 capsuleSlot(model.secondary)
                 textLinkSlot(model.tertiary)
             }
-            .padding(.top, model.headline != nil ? 24 : 16)
+            .padding(.top, 16)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .opacity(model.contentOpacity)
@@ -100,20 +68,6 @@ struct OnboardingChassisView<Accessory: View>: View {
         .padding(.top, 8)
         .padding(.bottom, 12)
         .background(.background)
-    }
-
-    /// In-place text swap: enter with a 10 pt rise resolving from blur 3 → 0,
-    /// leave with opacity alone (DESIGN.md's subtler-exits carve-out). Reduce
-    /// Motion is opacity both ways.
-    private var textSwapTransition: AnyTransition {
-        guard !reduceMotion else { return .opacity }
-        return .asymmetric(
-            insertion: AnyTransition.offset(y: 10)
-                .combined(with: .materializeBlur(radius: 3))
-                .combined(with: .opacity)
-                .animation(.smooth(duration: 0.26)),
-            removal: AnyTransition.opacity.animation(.easeOut(duration: 0.14))
-        )
     }
 
     // MARK: Slots
@@ -184,8 +138,8 @@ enum OnboardingMetrics {
     static let titleTopInset: CGFloat = barTopInset + barHeight + titleGap
 }
 
-/// Top-of-step title + supporting copy — every step except welcome, which
-/// keeps its text in the bottom action block (design review 2026-08-05).
+/// Top-of-step title + supporting copy — every step, welcome included, so the
+/// title sits in the same place from the first screen onward.
 struct OnboardingStepHeader: View {
     var title: String
     var subhead: String?

@@ -377,8 +377,8 @@ because every layout uses `.frame(maxWidth: .infinity)` rather than fixed widths
   digit-by-digit on change. The single most important typographic moment in the
   app. `MainWalletView.swift:93`, `AnimatedBalanceView.swift`.
 - **Onboarding Hero** (`.largeTitle.weight(.heavy)` + `.tracking(-0.5)`): one
-  treatment for every step's title — the welcome chassis text block and every
-  other step's top `OnboardingStepHeader`, both in `OnboardingChassis.swift`.
+  treatment for every step's title, welcome included — all of them the top
+  `OnboardingStepHeader` in `OnboardingChassis.swift`.
 - **Title** (`.title.weight(.heavy)` / `.weight(.semibold)`): the "What is
   ecash?" concept-sheet heading. `OnboardingView.swift` (`conceptSheet`).
 - **Title3** (`.title3.weight(.medium)`): in-flow section heads such as the
@@ -976,8 +976,8 @@ curve or a delight beat):*
 
 **Onboarding exemption** *(added 2026-08-05 — onboarding restyle,
 docs/product/onboarding-restyle-brief.md, user-directed):* pre-wallet
-onboarding surfaces — `OnboardingView`, `OnboardingChassis`,
-`OnboardingWelcomeStage`, i.e. everything before `completeOnboarding()` /
+onboarding surfaces — `OnboardingView`, `OnboardingChassis`, i.e. everything
+before `completeOnboarding()` /
 `completeRestore()` hands off to the wallet — are **exempt from the
 seven-named-animation budget**. Nothing defined under this exemption may be
 reused inside the wallet proper. Two rules survive the exemption unchanged:
@@ -992,18 +992,21 @@ docs/android/DESIGN-ANDROID.md rather than copying the tween values:
 | Element | Out | In |
 | --- | --- | --- |
 | Stage swap | blur 0→6, opacity 1→0, ~180 ms ease-out | scale 0.96→1, blur 6→0, opacity 0→1, ~280 ms `.smooth`; overlaps the tail of *out* by ~80 ms |
-| Welcome chassis text (in-place swap) | opacity 1→0, ~140 ms | y +10→0, blur 3→0, ~260 ms `.smooth` |
 | Element cascade inside a stage | — | 70 ms stride, reusing `stagger` (iOS) / `Modifier.riseIn` (Android) |
 | Chassis container | never animates | never animates |
 | CTA label change | in-place cross-fade | in-place cross-fade |
 | Press feedback | existing 0.97 scale, `.snappy(0.09)` down / `.snappy(0.18)` up | — |
-| Welcome piece | one autoreversing note ↔ token morph, ~3.2 s each way, self-playing; Reduce Motion holds the composed end state | — |
+
+The welcome stage carries **no ambient piece**: the note ↔ token morph that
+shipped with the restyle was cut on 2026-08-05 (user-directed) — an idle loop
+earning nothing after the first launch. The stage is title, slack, and the
+error slot above the chassis.
 
 Exits stay subtler than entrances throughout (the carve-out above). The
-layout grammar (revised by design review 2026-08-05): welcome keeps its
-headline/subhead in the bottom action block; every other step titles itself
-at the top (`OnboardingStepHeader`, riding the stage swap) with its actions
-anchored to the bottom edge and a circular Liquid Glass back button
+layout grammar (revised by design review 2026-08-05): **every** step, welcome
+included, titles itself at the top (`OnboardingStepHeader`, riding the stage
+swap) with its actions anchored to the bottom edge and a circular Liquid Glass
+back button
 (`OnboardingBackButton`, `.quaternary` pre-26) wherever a retreat exists.
 Every step's title lands on the same line whether or not it has a retreat:
 the back button fills a bar band below the safe area, and a step without one

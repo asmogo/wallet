@@ -14,7 +14,6 @@
 		1100000000000007 /* MainWalletView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2100000000000007 /* MainWalletView.swift */; };
 		1100000000000008 /* OnboardingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2100000000000008 /* OnboardingView.swift */; };
 		1100000000000C41 /* OnboardingChassis.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2100000000000C41 /* OnboardingChassis.swift */; };
-		1100000000000C42 /* OnboardingWelcomeStage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2100000000000C42 /* OnboardingWelcomeStage.swift */; };
 		1100000000000009 /* ReceiveView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2100000000000009 /* ReceiveView.swift */; };
 		110000000000000A /* ReceiveLightningView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 210000000000000A /* ReceiveLightningView.swift */; };
 		110000000000000B /* SendView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 210000000000000B /* SendView.swift */; };
@@ -184,7 +183,6 @@
 		2100000000000007 /* MainWalletView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MainWalletView.swift; sourceTree = "<group>"; };
 		2100000000000008 /* OnboardingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingView.swift; sourceTree = "<group>"; };
 		2100000000000C41 /* OnboardingChassis.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingChassis.swift; sourceTree = "<group>"; };
-		2100000000000C42 /* OnboardingWelcomeStage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingWelcomeStage.swift; sourceTree = "<group>"; };
 		2100000000000009 /* ReceiveView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReceiveView.swift; sourceTree = "<group>"; };
 		210000000000000A /* ReceiveLightningView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReceiveLightningView.swift; sourceTree = "<group>"; };
 		210000000000000B /* SendView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SendView.swift; sourceTree = "<group>"; };
@@ -510,7 +508,6 @@
 				2100000000000007 /* MainWalletView.swift */,
 				2100000000000008 /* OnboardingView.swift */,
 				2100000000000C41 /* OnboardingChassis.swift */,
-				2100000000000C42 /* OnboardingWelcomeStage.swift */,
 			);
 			path = Main;
 			sourceTree = "<group>";
@@ -984,7 +981,6 @@
 				1100000000000007 /* MainWalletView.swift in Sources */,
 				1100000000000008 /* OnboardingView.swift in Sources */,
 				1100000000000C41 /* OnboardingChassis.swift in Sources */,
-				1100000000000C42 /* OnboardingWelcomeStage.swift in Sources */,
 				6A8EC9412F2576800058C21B /* ReceiveTokenDetailView.swift in Sources */,
 				6A8EC9302F2442F00058C21B /* SettingsManager.swift in Sources */,
 				1100000000000009 /* ReceiveView.swift in Sources */,

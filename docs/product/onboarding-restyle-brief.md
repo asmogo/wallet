@@ -176,10 +176,10 @@ Rules:
 
 | Step | Stage holds |
 | --- | --- |
-| `welcome` | An abstract ink motion piece. See §4. |
+| `welcome` | Its title + subhead at the top, like every other step, over open space. (Originally an abstract ink motion piece — see the note in §4.) |
 | `showMnemonic` | The 12-word grid (functional). **No entrance animation on the grid** — this is deliberate and documented; it flickers. |
 | `firstMint` | The mint list + custom-URL field (functional, scrolls, keyboard). |
-| `restoreMethod` | A quiet mark or a very restrained variant of the welcome piece. Two buttons in the chassis. |
+| `restoreMethod` | Header over open space (the quiet variant of the welcome piece went with it — see §4). Two buttons in the chassis. |
 | `restoreInput` | The seed `TextEditor` + word counter (functional, keyboard). |
 | `restoreMints` | The URL field, Add/Paste/Nostr chips, staged rows (functional, keyboard). |
 | `restoreProgress` | The live per-mint progress list — already a self-playing stage. |
@@ -201,6 +201,12 @@ it animates on branch selection, that animation must be honest about the new len
 indicator at all" is a legitimate answer — the stage can carry sense of place instead.
 
 ## 4. The `welcome` stage
+
+> **Superseded 2026-08-05 (user-directed).** The piece this section asked for shipped as a
+> note ↔ token morph and was then cut: an idle loop that earned nothing after the first
+> launch. `welcome` now carries the same top title + subhead as every other step
+> (`OnboardingStepHeader` at `OnboardingMetrics.titleTopInset` / `TitleTopInset`) over open
+> space — consistency beat novelty. The rest of this section is kept for the record.
 
 This is the only genuinely new visual element and the highest-risk part. It replaces empty
 `Spacer` space with something that moves.

@@ -2,6 +2,7 @@ package com.cashu.me.ui.components
 
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.SizeTransform
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
@@ -129,6 +130,23 @@ fun PrimaryButton(
 ) {
     val interactionSource = remember { MutableInteractionSource() }
     val scale = rememberPressScale(interactionSource)
+    // Resolve the enabled/disabled pair first, then ease the two resolved colors:
+    // a CTA that keeps its slot across a step change (the onboarding chassis keys
+    // its slot cross-fade on style, not on colors) would otherwise hard-cut its
+    // fill under the cross-fading label. Baking `active` in is why the disabled
+    // entries can carry the same animated values.
+    val active = enabled && !loading
+    val target = colors ?: neutralActionButtonColors()
+    val container by animateColorAsState(
+        targetValue = if (active) target.containerColor else target.disabledContainerColor,
+        animationSpec = spring(stiffness = Spring.StiffnessMedium),
+        label = "primary-button-container",
+    )
+    val content by animateColorAsState(
+        targetValue = if (active) target.contentColor else target.disabledContentColor,
+        animationSpec = spring(stiffness = Spring.StiffnessMedium),
+        label = "primary-button-content",
+    )
     Button(
         onClick = onClick,
         modifier = modifier
@@ -138,9 +156,9 @@ fun PrimaryButton(
                 scaleX = scale
                 scaleY = scale
             },
-        enabled = enabled && !loading,
+        enabled = active,
         interactionSource = interactionSource,
-        colors = colors ?: neutralActionButtonColors(),
+        colors = ButtonColors(container, content, container, content),
         contentPadding = PaddingValues(horizontal = CashuTheme.spacing.section, vertical = ButtonContentVertical),
     ) {
         Box(contentAlignment = Alignment.Center) {
@@ -155,7 +173,14 @@ fun PrimaryButton(
                     transitionSpec = {
                         fadeIn(spring(stiffness = Spring.StiffnessMedium))
                             .togetherWith(fadeOut(spring(stiffness = Spring.StiffnessMedium)))
+                            // clip = false: the default clipping size animation
+                            // shears a wide outgoing label mid-fade. Center: the
+                            // Box above only centers this node, not its children,
+                            // so TopStart would slide both labels sideways as the
+                            // box springs between the two label widths.
+                            .using(SizeTransform(clip = false))
                     },
+                    contentAlignment = Alignment.Center,
                     label = "primary-button-text",
                 ) { current ->
                     Text(
@@ -242,7 +267,9 @@ fun GhostButton(
             // Opt-in in-place label cross-fade (the onboarding chassis'
             // tertiary slot swaps "What is ecash?" ↔ "Back" ↔ "Skip for now").
             // clip = false: the default clipping size animation would crop a
-            // wide outgoing label mid-fade.
+            // wide outgoing label mid-fade. Center: the default TopStart would
+            // still walk both labels sideways while the box springs between the
+            // two widths and the parent re-centers it every frame.
             AnimatedContent(
                 targetState = text,
                 transitionSpec = {
@@ -250,6 +277,7 @@ fun GhostButton(
                         .togetherWith(fadeOut(spring(stiffness = Spring.StiffnessMedium)))
                         .using(SizeTransform(clip = false))
                 },
+                contentAlignment = Alignment.Center,
                 label = "ghost-button-text",
             ) { current ->
                 Text(text = current, style = textStyle)

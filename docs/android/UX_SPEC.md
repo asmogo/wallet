@@ -92,10 +92,10 @@ Flow: `Welcome → ShowMnemonic → FirstMint → done`, or
 
 | Step | Top + stage | Bottom actions |
 |------|-------------|----------------|
-| **Welcome** | The "note becomes cash" ink piece (`WelcomeStagePiece`); startup-failure recovery + create errors pin above the actions | "Private cash. In your pocket." + subhead · `PrimaryButton` "Create Wallet" (filled-tonal) / `SecondaryButton` "Restore Wallet" / `GhostButton` "What is ecash?" (opens the concept sheet) |
+| **Welcome** | "Private cash. / In your pocket." header + subhead, on the same line as every other step's title; startup-failure recovery + create errors pin above the actions | `PrimaryButton` "Create Wallet" (filled-tonal) / `SecondaryButton` "Restore Wallet" / `GhostButton` "What is ecash?" (opens the concept sheet) |
 | **ShowMnemonic** | Back → Welcome; "Your Seed Phrase." header + warning line; 12-word 3-column grid — masked (`"••••••"` + blur on API 31+, real words never composed) until tap-to-reveal — and a Copy ghost with clear separation | acknowledge row in the accessory slot gates "I've Saved My Seed Phrase" |
 | **FirstMint** | "Pick your first mint." header; multi-select recommended-mint rows, "Add custom mint URL" expands a `CashuTextField`, inline notices | "Continue" (disabled with no selection and empty input) / "Skip for now" |
-| **RestoreMethod** | Back → Welcome; "Restore Wallet" header; quiet variant of the welcome piece | "Use Seed Phrase" (Secondary styling — Android has no iCloud twin, iOS's chooser has two options) |
+| **RestoreMethod** | Back → Welcome; "Restore Wallet" header over open space | "Use Seed Phrase" (Secondary styling — Android has no iCloud twin, iOS's chooser has two options) |
 | **RestoreInput** | Back → Welcome (matching iOS); "Restore Wallet." header; monospaced seed editor with paste/clear corner control, live word counter | "Next" (disabled until 12 words) |
 | **RestoreMints** | Back → RestoreInput (clears staged list); "Recover Funds." header; URL field, Add / Paste / Nostr capsule chips, staged mint rows | "Restore from N mints" (disabled until ≥1 staged) |
 | **RestoreProgress** | "Recover Funds." header (no back — forward-only); recovered-sats total (mono digits, no roll) + live per-mint rows with expressive loaders and Retry | "Continue" (disabled until every mint settles) |

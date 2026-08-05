@@ -4,12 +4,14 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.unit.dp
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.cashu.me.ui.setCashuContent
@@ -96,6 +98,68 @@ class OnboardingChassisLayoutComposeTest {
             "A lone primary should hug the bottom itself — no reserved slots below it",
             bottomPaddingPx,
             bottomGap("frame-primary-only", "primary-only"),
+            2f,
+        )
+    }
+
+    /**
+     * Every step titles itself at the top on the same line — welcome included,
+     * since its title moved out of the chassis (2026-08-05, user-directed).
+     */
+    @Test
+    fun welcomeTitleSitsOnTheSameLineAsEveryOtherStep() {
+        compose.setCashuContent {
+            Column(Modifier.verticalScroll(rememberScrollState())) {
+                Box(
+                    Modifier
+                        .testTag("frame-welcome")
+                        .fillMaxWidth()
+                        .height(500.dp),
+                ) {
+                    OnboardingScaffold(chassis = OnboardingChassisModel()) {
+                        WelcomeStageContent(
+                            startupFailure = null,
+                            retryingStartup = false,
+                            errorText = null,
+                            onRetryStartup = {},
+                        )
+                    }
+                }
+                Box(
+                    Modifier
+                        .testTag("frame-step")
+                        .fillMaxWidth()
+                        .height(500.dp),
+                ) {
+                    OnboardingScaffold(chassis = OnboardingChassisModel()) {
+                        Column(Modifier.fillMaxWidth()) {
+                            OnboardingBackButton(
+                                onBack = {},
+                                modifier = Modifier.padding(
+                                    start = OnboardingMetrics.BarStartInset,
+                                    top = OnboardingMetrics.BarTopInset,
+                                ),
+                            )
+                            OnboardingStepHeader(
+                                title = "Restore Wallet",
+                                modifier = Modifier.padding(top = OnboardingMetrics.TitleGap),
+                            )
+                        }
+                    }
+                }
+            }
+        }
+
+        fun titleTopInFrame(frameTag: String, title: String): Float {
+            val frame = compose.onNodeWithTag(frameTag).fetchSemanticsNode()
+            val node = compose.onNodeWithText(title, substring = true).fetchSemanticsNode()
+            return node.positionInRoot.y - frame.positionInRoot.y
+        }
+
+        assertEquals(
+            "Welcome's title should start on the same line as a step that draws a back button",
+            titleTopInFrame("frame-step", "Restore Wallet"),
+            titleTopInFrame("frame-welcome", "Private cash."),
             2f,
         )
     }

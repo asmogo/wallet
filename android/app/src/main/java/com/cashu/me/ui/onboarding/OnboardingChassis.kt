@@ -1,15 +1,11 @@
 package com.cashu.me.ui.onboarding
 
 import androidx.compose.animation.AnimatedContent
-import androidx.compose.animation.AnimatedContentTransitionScope
-import androidx.compose.animation.ContentTransform
 import androidx.compose.animation.SizeTransform
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.spring
-import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
-import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -33,7 +29,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
@@ -50,14 +45,20 @@ import com.cashu.me.ui.theme.rememberReducedMotion
 // The fixed bottom action chassis shared by every onboarding step
 // (docs/product/onboarding-restyle-brief.md §3).
 //
-// The chassis pins headline → subhead → primary → secondary → tertiary at the
-// bottom of every step; the stage above owns all vertical slack. The primary
-// CTA's Y position is identical on every step: every slot BELOW the primary is
-// always reserved — an absent action renders a hidden template button, so slot
-// height tracks font scale instead of a hardcoded constant. Content ABOVE the
-// primary (headline, subhead, accessory) grows upward into the stage and can
-// never move the button. The container itself never animates on step change;
-// only its text and labels swap, in place.
+// The chassis pins primary → secondary → tertiary at the bottom of every step
+// (titles live at the top of the stage); the stage owns all vertical slack.
+// Absent actions
+// contribute zero height, so the stack always hugs the bottom edge rather than
+// reserving empty slots (design review 2026-08-05, replacing the earlier hidden
+// slot templates). Everything therefore grows UPWARD into the stage on a step
+// change; the bottom edge is the fixed point.
+//
+// Motion rule: only the stack's HEIGHT animates, and only on a spring. Nothing
+// ever moves laterally and nothing is ever clipped — every AnimatedContent here
+// must opt out of Compose's default SizeTransform(clip = true) and out of its
+// default Alignment.TopStart, or content pins to the top-left of a box whose
+// size is springing while the parent re-centers it, which reads as a button
+// sliding in from the left with its sides sheared off.
 // ---------------------------------------------------------------------------
 
 // Shared onboarding metrics (iOS parity: headers 28pt, CTA stacks 24pt).
@@ -138,14 +139,11 @@ class ChassisAction(
 
 /** Per-step content for the bottom action chassis.
  *
- * [headline]/[subhead] are the *welcome* treatment only (design review
- * 2026-08-05): every other step titles itself at the top of its stage with
- * [OnboardingStepHeader] and leaves these null, so its actions hug the
- * bottom. */
+ * Actions only: every step — welcome included — titles itself at the top of its
+ * stage with [OnboardingStepHeader], so the chassis holds nothing but the
+ * buttons and they hug the bottom edge. */
 @Immutable
 class OnboardingChassisModel(
-    val headline: String? = null,
-    val subhead: String? = null,
     val primary: ChassisAction? = null,
     val secondary: ChassisAction? = null,
     val tertiary: ChassisAction? = null,
@@ -163,52 +161,6 @@ fun OnboardingChassis(
         // a linear path that doesn't exist. The stage carries the sense of
         // place; the slot stays here for the record.
 
-        // In-place text swaps: the incoming line rises 10dp on a spring while
-        // fading in; the outgoing line just fades — exits subtler than
-        // entrances. Reduce Motion is opacity both ways. The container itself
-        // never moves.
-        val reducedMotion = rememberReducedMotion()
-        val riseOffsetPx = with(LocalDensity.current) { 10.dp.roundToPx() }
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = HeaderPadding),
-            verticalArrangement = Arrangement.spacedBy(CashuTheme.spacing.snug),
-        ) {
-            AnimatedContent(
-                targetState = model.headline,
-                transitionSpec = { chassisTextTransform(reducedMotion, riseOffsetPx) },
-                label = "chassis-headline",
-            ) { headline ->
-                if (headline != null) {
-                    Text(
-                        text = headline,
-                        style = onboardingTitleStyle(),
-                        color = MaterialTheme.colorScheme.onSurface,
-                        maxLines = if (headline.contains('\n')) Int.MAX_VALUE else 1,
-                        autoSize = if (headline.contains('\n')) null else HeadlineAutoSize,
-                    )
-                } else {
-                    Box(Modifier.fillMaxWidth())
-                }
-            }
-            AnimatedContent(
-                targetState = model.subhead,
-                transitionSpec = { chassisTextTransform(reducedMotion, riseOffsetPx) },
-                label = "chassis-subhead",
-            ) { subhead ->
-                if (subhead != null) {
-                    Text(
-                        text = subhead,
-                        style = MaterialTheme.typography.bodyLarge,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                } else {
-                    Box(Modifier.fillMaxWidth())
-                }
-            }
-        }
-
         if (accessory != null) {
             Box(
                 modifier = Modifier
@@ -224,13 +176,7 @@ fun OnboardingChassis(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = CtaPadding)
-                .padding(
-                    top = if (model.headline != null) {
-                        CashuTheme.spacing.section
-                    } else {
-                        CashuTheme.spacing.comfortable
-                    },
-                )
+                .padding(top = CashuTheme.spacing.comfortable)
                 .padding(bottom = BottomPadding),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
@@ -268,38 +214,27 @@ fun OnboardingScaffold(
     }
 }
 
-/** Rise-and-fade in, fade out — the chassis' in-place text swap. */
-private fun <T> AnimatedContentTransitionScope<T>.chassisTextTransform(
-    reducedMotion: Boolean,
-    riseOffsetPx: Int,
-): ContentTransform =
-    if (reducedMotion) {
-        fadeIn(tween(200))
-            .togetherWith(fadeOut(tween(140)))
-            .using(SizeTransform(clip = false))
-    } else {
-        (
-            fadeIn(spring(stiffness = Spring.StiffnessMedium)) +
-                slideInVertically(
-                    animationSpec = spring(stiffness = Spring.StiffnessMediumLow),
-                    initialOffsetY = { riseOffsetPx },
-                )
-            )
-            .togetherWith(fadeOut(spring(stiffness = Spring.StiffnessMedium)))
-            .using(SizeTransform(clip = false))
-    }
-
 @Composable
 private fun ChassisSlot(action: ChassisAction?, topPadding: Dp) {
     // Occupancy and style changes cross-fade the whole slot in place; label
     // changes within the same style flow through the button's own label
-    // cross-fade. Fades only — vestibular-safe without a reduce-motion branch.
+    // cross-fade.
+    //
+    // An empty slot measures 0×0, so an occupancy change is a real size
+    // animation — see the file header. clip = false keeps the button whole while
+    // its slot springs open, and BottomCenter anchors it to the stack's fixed
+    // bottom edge so it rides up with the stack instead of unwrapping downward
+    // from a moving top edge. Reduce Motion drops the size animation entirely
+    // (`using(null)`): the stack snaps and only opacity moves.
+    val reducedMotion = rememberReducedMotion()
     AnimatedContent(
         targetState = action?.style,
         transitionSpec = {
             fadeIn(spring(stiffness = Spring.StiffnessMedium))
                 .togetherWith(fadeOut(spring(stiffness = Spring.StiffnessMedium)))
+                .using(if (reducedMotion) null else SizeTransform(clip = false))
         },
+        contentAlignment = Alignment.BottomCenter,
         label = "chassis-slot",
     ) { style ->
         // Snapshot the action that was live when this content entered, so an
@@ -347,8 +282,8 @@ private fun ChassisSlot(action: ChassisAction?, topPadding: Dp) {
 
 // MARK: step chrome ---------------------------------------------------------
 
-/** Top-of-step title + supporting copy — every step except welcome, which
- * keeps its text in the bottom action block (design review 2026-08-05). */
+/** Top-of-step title + supporting copy — every step, welcome included, so the
+ * title sits in the same place from the first screen onward. */
 @Composable
 fun OnboardingStepHeader(
     title: String,
