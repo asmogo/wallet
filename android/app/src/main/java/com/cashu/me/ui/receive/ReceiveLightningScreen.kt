@@ -1,6 +1,14 @@
 package com.cashu.me.ui.receive
 
+import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.Crossfade
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -1245,25 +1253,43 @@ internal fun GeneratedInvoiceAmount(
  */
 @Composable
 private fun ReusableOfferStatus(received: Boolean, receivedAmountLabel: String?) {
-    if (received) {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(CashuTheme.spacing.snug),
-        ) {
-            Icon(
-                imageVector = Icons.Outlined.CheckCircle,
-                contentDescription = null,
-                tint = CashuTheme.colors.received,
-                modifier = Modifier.size(CashuTheme.spacing.loose),
-            )
-            Text(
-                text = receivedAmountLabel?.let { "Received $it" } ?: "Payment received!",
-                style = MaterialTheme.typography.titleMedium,
-                color = CashuTheme.colors.received,
-            )
+    // Waiting → received swaps with the same fade + scale-in the terminal
+    // glyph uses, so an arriving payment reads as a morph, not a pop.
+    AnimatedContent(
+        targetState = received,
+        transitionSpec = {
+            (
+                fadeIn(tween(200)) + scaleIn(
+                    animationSpec = spring(
+                        dampingRatio = 0.7f,
+                        stiffness = Spring.StiffnessMediumLow,
+                    ),
+                    initialScale = 0.9f,
+                )
+                ) togetherWith fadeOut(tween(150))
+        },
+        label = "reusable-offer-status",
+    ) { isReceived ->
+        if (isReceived) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(CashuTheme.spacing.snug),
+            ) {
+                Icon(
+                    imageVector = Icons.Outlined.CheckCircle,
+                    contentDescription = null,
+                    tint = CashuTheme.colors.received,
+                    modifier = Modifier.size(CashuTheme.spacing.loose),
+                )
+                Text(
+                    text = receivedAmountLabel?.let { "Received $it" } ?: "Payment received!",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = CashuTheme.colors.received,
+                )
+            }
+        } else {
+            WaitingForPaymentRow()
         }
-    } else {
-        WaitingForPaymentRow()
     }
 }
 

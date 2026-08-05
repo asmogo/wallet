@@ -1466,10 +1466,12 @@ struct CashuTopUpInvoiceSheet: View {
                         }
 
                         statusRow
+                            .animation(.smooth(duration: 0.3), value: phase)
 
                         if let errorMessage {
                             InlineNotice(message: errorMessage, severity: errorSeverity)
                                 .padding(.horizontal)
+                                .transition(.opacity)
                         }
                     }
                     .padding(.top, 12)
@@ -1510,11 +1512,14 @@ struct CashuTopUpInvoiceSheet: View {
 
     @ViewBuilder
     private var statusRow: some View {
+        // Phase swaps fade through (the app-wide .smooth(0.3) payment
+        // choreography) instead of popping per poll beat.
         switch phase {
         case .awaitingPayment:
             Label("Waiting for payment…", systemImage: "clock")
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
+                .transition(.opacity)
         case .paying:
             HStack(spacing: 8) {
                 ProgressView().controlSize(.small)
@@ -1522,12 +1527,14 @@ struct CashuTopUpInvoiceSheet: View {
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
             }
+            .transition(.opacity)
         case .done:
             // Monochrome, not green — green is reserved for the 64pt hero success
             // checks (DESIGN.md retired the small worded green ✓ badge).
             Label("Sent", systemImage: "checkmark.circle.fill")
                 .font(.subheadline)
                 .foregroundStyle(.primary)
+                .transition(.opacity)
         }
     }
 
@@ -1556,7 +1563,7 @@ struct CashuTopUpInvoiceSheet: View {
                 }
                 guard state == .paid || state == .issued else { continue }
 
-                phase = .paying
+                withAnimation(.smooth(duration: 0.3)) { phase = .paying }
                 do {
                     try await walletManager.finishTopUpAndPayCashuRequest(
                         context.summary,
@@ -1564,15 +1571,17 @@ struct CashuTopUpInvoiceSheet: View {
                         targetMintURL: context.targetMintURL,
                         targetQuoteId: context.quote.id
                     )
-                    phase = .done
+                    withAnimation(.smooth(duration: 0.3)) { phase = .done }
                     HapticFeedback.notification(.success)
                     try? await Task.sleep(nanoseconds: 1_000_000_000)
                     onComplete()
                 } catch {
                     let walletMessage = error.walletMessage
-                    errorMessage = walletMessage.text
-                    errorSeverity = walletMessage.severity
-                    phase = .awaitingPayment   // let the retries/History backstop settle it
+                    withAnimation(.smooth(duration: 0.3)) {
+                        errorMessage = walletMessage.text
+                        errorSeverity = walletMessage.severity
+                        phase = .awaitingPayment   // let the retries/History backstop settle it
+                    }
                 }
                 return
             }
