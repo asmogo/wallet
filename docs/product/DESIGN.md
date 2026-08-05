@@ -376,8 +376,11 @@ because every layout uses `.frame(maxWidth: .infinity)` rather than fixed widths
   the wallet balance and the recovered-amount counter. Tabular figures, animated
   digit-by-digit on change. The single most important typographic moment in the
   app. `MainWalletView.swift:93`, `AnimatedBalanceView.swift`.
-- **Title** (`.title.weight(.heavy)` / `.weight(.semibold)`): onboarding hero
-  headings only. `OnboardingView.swift:128, 258`.
+- **Onboarding Hero** (`.largeTitle.weight(.heavy)` + `.tracking(-0.5)`): the
+  onboarding chassis headline — one treatment for every step, rendered by
+  `OnboardingChassis.swift`.
+- **Title** (`.title.weight(.heavy)` / `.weight(.semibold)`): the "What is
+  ecash?" concept-sheet heading. `OnboardingView.swift` (`conceptSheet`).
 - **Title3** (`.title3.weight(.medium)`): in-flow section heads such as the
   send/receive transaction-type label, and in-body modal headings.
   `MainWalletView.swift:165`. Note: navigation-bar titles — including the
@@ -393,7 +396,8 @@ because every layout uses `.frame(maxWidth: .infinity)` rather than fixed widths
   "Copied", "Add custom mint URL". Always applied via `.textLinkButton()`
   (`TextLinkButtonStyle`), never hand-rolled per site.
 - **Callout** (`.callout`): supporting descriptive text under hero headings,
-  e.g. "An ecash wallet for Bitcoin and Lightning." `OnboardingView.swift:135`.
+  e.g. "An ecash wallet for Bitcoin and Lightning." — the onboarding chassis
+  subhead slot (`OnboardingChassis.swift`).
 - **Caption Emphasis** (`.caption.weight(.semibold)`, tracking `0.06em`,
   uppercase): history section headers ("TODAY", "YESTERDAY", "THIS WEEK").
   `HistoryView.swift:140`.
@@ -966,6 +970,40 @@ curve or a delight beat):*
   timing). Never on a money value (Numbers Are Sacred), never ambient, always
   dropped under `accessibilityReduceMotion`. Bounce stays reserved for the one
   celebration beat: a failure or historical-review glyph never bounces.
+  (`AnyTransition.materializeBlur` lives in `LiquidGlassModifiers.swift`; the
+  onboarding exemption below additionally rides it on stage and headline
+  entrances — pre-wallet only.)
+
+**Onboarding exemption** *(added 2026-08-05 — onboarding restyle,
+docs/product/onboarding-restyle-brief.md, user-directed):* pre-wallet
+onboarding surfaces — `OnboardingView`, `OnboardingChassis`,
+`OnboardingWelcomeStage`, i.e. everything before `completeOnboarding()` /
+`completeRestore()` hands off to the wallet — are **exempt from the
+seven-named-animation budget**. Nothing defined under this exemption may be
+reused inside the wallet proper. Two rules survive the exemption unchanged:
+**Numbers Are Sacred** (the restored balance and the recovered-sats total keep
+`.monospacedDigit()` + `.contentTransition(.numericText())`; no count-up, no
+odometer, no roll) and **Reduce Motion** (every onboarding animation honors
+`accessibilityReduceMotion` / `rememberReducedMotion()`; reduced-motion paths
+are opacity-or-nothing). The shared cross-platform spec — Android expresses
+the same intent with M3 Expressive motion-scheme springs per
+docs/android/DESIGN-ANDROID.md rather than copying the tween values:
+
+| Element | Out | In |
+| --- | --- | --- |
+| Stage swap | blur 0→6, opacity 1→0, ~180 ms ease-out | scale 0.96→1, blur 6→0, opacity 0→1, ~280 ms `.smooth`; overlaps the tail of *out* by ~80 ms |
+| Chassis headline / subhead | opacity 1→0, ~140 ms | y +10→0, blur 3→0, ~260 ms `.smooth` |
+| Element cascade inside a stage | — | 70 ms stride, reusing `stagger` (iOS) / `Modifier.riseIn` (Android) |
+| Chassis container | never animates | never animates |
+| CTA label change | in-place cross-fade | in-place cross-fade |
+| Press feedback | existing 0.97 scale, `.snappy(0.09)` down / `.snappy(0.18)` up | — |
+| Welcome piece | one autoreversing note ↔ token morph, ~3.2 s each way, self-playing; Reduce Motion holds the composed end state | — |
+
+Exits stay subtler than entrances throughout (the carve-out above). The
+chassis-and-stage layout grammar itself is documented in the restyle brief §3;
+the indicator slot is resolved as "no indicator" (the flow branches into paths
+of different lengths, so page dots would imply a linear path that does not
+exist).
 
 ## 7. Do's and Don'ts
 

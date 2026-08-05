@@ -83,6 +83,23 @@ like a port, make the Android-native choice instead.
   cascades) render their resting state when system animations are off.
   `rememberReducedMotion()` is reactive — it observes
   `ANIMATOR_DURATION_SCALE` and updates mid-session.
+- **Onboarding exemption (2026-08-05, onboarding restyle, user-directed):**
+  pre-wallet onboarding surfaces (`ui/onboarding/` — the chassis, stages, and
+  welcome piece, everything before `completeOnboarding()`/`completeRestore()`)
+  carry their own motion spec, shared with iOS via the table in
+  `docs/product/DESIGN.md` §6 and expressed here as motion-scheme springs
+  (`motionScheme.defaultEffectsSpec/defaultSpatialSpec/fastEffectsSpec`), the
+  gated `Modifier.materializeBlur()`, and `Modifier.riseIn` (70 ms
+  `CashuMotion.StaggerStepMs` stride). **Nothing defined under this exemption
+  may be reused inside the wallet proper.** Numbers stay quiet (the
+  recovered-sats total keeps mono digits, no roll) and every onboarding
+  animation is `rememberReducedMotion()`-gated to opacity-or-nothing.
+- **Onboarding system back (2026-08-05):** `OnboardingScreen` registers a
+  `BackHandler` mirroring the on-screen Back affordances exactly (method
+  chooser → welcome, seed entry → welcome, mint staging → seed entry with the
+  staged list cleared). Steps with no Back affordance keep the platform
+  default. Closes the gap where system back exited the app from every
+  onboarding step.
 
 ### Components — expressive first
 - Loaders are the expressive `LoadingIndicator` / `LinearWavyProgressIndicator`

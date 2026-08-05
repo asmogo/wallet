@@ -61,20 +61,40 @@ Contactless).
 
 ## 2. Onboarding
 
-A multi-step host displaying one step at a time with horizontal slide-through-fade transitions. No bottom nav. No `TopAppBar` except where noted.
+*(Rewritten 2026-08-05 to match shipped code — `ui/onboarding/OnboardingScreen.kt`
++ `OnboardingChassis.kt` + `ui/restore/RestoreWalletFlow.kt`.)*
 
-| Step | Purpose | Primary actions | Key elements |
-|------|---------|------------------|---------------|
-| **Welcome** | First-launch landing | "Create Wallet" (filled `Button`), "I have a seed phrase" (`TextButton`), "What is ecash?" (opens info sheet) | Centered hero: small caption "CASHU" (letter-spaced), title "Private cash. In your pocket." |
-| **Show mnemonic** | Display generated 12-word seed | "Copy & Back Up" (`FilledTonalButton`), "Continue" | 12 numbered words in a 2-column grid. Long-press to copy whole phrase. Warning supporting text: "Anyone with these words can spend your wallet." |
-| **Verify mnemonic** | Quiz user on 3 random positions | "Verify" (disabled until all 3 filled) | Three `OutlinedTextField`s labeled by word position ("Word 4", "Word 8", "Word 11"). Error supporting text on mismatch. |
-| **First mint** | Pick the wallet's first mint | "Continue" (disabled until selection) | Recommended mints as selectable cards (radio-style). Or "Use custom mint URL" expands an `OutlinedTextField`. |
-| **Restore input** | Paste seed for restore path | "Restore" (disabled until 12 valid BIP39 words) | Multi-line `OutlinedTextField` for seed phrase. Inline word-count chip ("11 / 12"). |
-| **Restore mints** | Show discovered mints from seed | "Restore selected" + "Skip for now" | List of mints found via NIP-60 discovery; each has a "Restore" `FilledTonalButton`. Shows balance found per mint as it loads. |
+One host (`OnboardingScreen`) built on the restyle's chassis grammar
+(docs/product/onboarding-restyle-brief.md §3): a **fixed bottom action
+chassis** — headline, subhead, then primary / secondary / tertiary action
+slots, the primary at an identical position on every step — under a flexible
+**stage** that owns all vertical slack. Steps swap with a quiet materialize
+(fade + 0.96→1 scale on expressive springs, blur-resolve on API 31+); the
+chassis never animates, only its text cross-fades in place. No horizontal
+push (binding cross-platform decision), no page indicator (the flow branches,
+so dots would imply a linear path that doesn't exist), no bottom nav, no
+`TopAppBar`. System back mirrors the on-screen Back affordances and only
+those.
 
-Information sheet "What is ecash?" — a `ModalBottomSheet` with two paragraphs and a "Got it" button.
+Flow: `Welcome → ShowMnemonic → FirstMint → done`, or
+`Welcome → RestoreMethod → RestoreInput → RestoreMints → RestoreProgress → done`.
 
-**Done state** triggers `walletManager.completeOnboarding()` → app re-evaluates the gate and renders `WalletScaffold`.
+| Step | Stage | Chassis (headline · primary / secondary / tertiary) |
+|------|-------|------------------------------------------------------|
+| **Welcome** | The "note becomes cash" ink piece (`WelcomeStagePiece`); startup-failure recovery + create errors pin above the chassis | "Private cash. In your pocket." · `PrimaryButton` "Create Wallet" (filled-tonal) / `SecondaryButton` "Restore Wallet" / `GhostButton` "What is ecash?" (opens the concept sheet) |
+| **ShowMnemonic** | Warning line, 12-word 3-column grid — masked (`"••••••"` + blur on API 31+, real words never composed) until tap-to-reveal — and a Copy ghost | "Your Seed Phrase." · acknowledge row in the accessory slot gates "I've Saved My Seed Phrase" |
+| **FirstMint** | Multi-select recommended-mint rows, "Add custom mint URL" expands a `CashuTextField`, inline notices | "Pick your first mint." · "Continue" (disabled with no selection and empty input) / — / "Skip for now" |
+| **RestoreMethod** | Quiet variant of the welcome piece | "Restore Wallet" · "Use Seed Phrase" (Secondary styling — Android has no iCloud twin, iOS's chooser has two options) / — / "Back" |
+| **RestoreInput** | Monospaced seed editor with paste/clear corner control, live word counter | "Restore Wallet." · "Next" (disabled until 12 words) / — / "Back" (returns to Welcome, matching iOS) |
+| **RestoreMints** | URL field, Add / Paste / Nostr capsule chips, staged mint rows | "Recover Funds." · "Restore from N mints" (disabled until ≥1 staged) / — / "Back" (clears staged list) |
+| **RestoreProgress** | Recovered-sats total (mono digits, no roll) + live per-mint rows with expressive loaders and Retry | "Recover Funds." · "Continue" (forward-only, disabled until every mint settles) |
+
+Information sheet "What is ecash?" — a `ModalBottomSheet` (hidden/expanded
+detents only) with three bearer-cash beats and a "Got it" button.
+
+**Done state** triggers `walletManager.completeOnboarding()` (create path,
+also reachable via "Skip for now") or `walletManager.completeRestore()`
+(restore path) → app re-evaluates the gate and renders `WalletScaffold`.
 
 ---
 
