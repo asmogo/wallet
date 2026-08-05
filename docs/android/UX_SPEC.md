@@ -71,7 +71,15 @@ bottom action block above its CTAs; **every other step** titles itself at the
 top (`OnboardingStepHeader` — title + supporting copy, with an M3
 `ArrowBack` icon button above it wherever a retreat exists) and pins its
 actions to the bottom edge (`OnboardingChassis` — no reserved slots, a lone
-primary hugs the bottom). The stage between owns all vertical slack. Steps
+primary hugs the bottom). The stage between owns all vertical slack. Every
+step's title lands on the same line whether or not it has a retreat: the
+icon button fills a bar band (M3's minimum touch target) below the status
+bar, and `RestoreProgress` — which has no retreat — **reserves that band**
+instead of riding up against the status bar, so the title stays put across
+the stage swap. `OnboardingMetrics` (`OnboardingChassis.kt`) is the only
+place that geometry is stated; no step hand-rolls its own top spacing. iOS
+states the same rule in its own measure (its navigation-bar band, DESIGN.md
+§6) — same grammar, native metric on each platform, not a shared number. Steps
 swap with a quiet materialize (fade + 0.96→1 scale on expressive springs,
 blur-resolve on API 31+); the chassis never animates, only its content
 cross-fades in place. No horizontal push (binding cross-platform decision),

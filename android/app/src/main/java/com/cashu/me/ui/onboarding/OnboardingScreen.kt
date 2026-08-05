@@ -548,14 +548,14 @@ fun OnboardingScreen(
                         OnboardingBackButton(
                             onBack = { step = OnboardingStep.Welcome },
                             modifier = Modifier.padding(
-                                start = CashuTheme.spacing.comfortable,
-                                top = CashuTheme.spacing.snug,
+                                start = OnboardingMetrics.BarStartInset,
+                                top = OnboardingMetrics.BarTopInset,
                             ),
                         )
                         OnboardingStepHeader(
                             title = "Restore Wallet",
                             subhead = "Choose how to recover your wallet.",
-                            modifier = Modifier.padding(top = CashuTheme.spacing.default),
+                            modifier = Modifier.padding(top = OnboardingMetrics.TitleGap),
                         )
                         // The restrained, static variant of the welcome piece.
                         WelcomeStagePiece(
@@ -570,14 +570,14 @@ fun OnboardingScreen(
                         OnboardingBackButton(
                             onBack = { step = OnboardingStep.Welcome },
                             modifier = Modifier.padding(
-                                start = CashuTheme.spacing.comfortable,
-                                top = CashuTheme.spacing.snug,
+                                start = OnboardingMetrics.BarStartInset,
+                                top = OnboardingMetrics.BarTopInset,
                             ),
                         )
                         OnboardingStepHeader(
                             title = "Restore Wallet.",
                             subhead = "Enter your 12 words in order.",
-                            modifier = Modifier.padding(top = CashuTheme.spacing.default),
+                            modifier = Modifier.padding(top = OnboardingMetrics.TitleGap),
                         )
                         RestoreSeedStageContent(
                             input = restoreSeedInput,
@@ -601,14 +601,14 @@ fun OnboardingScreen(
                                 step = OnboardingStep.RestoreInput
                             },
                             modifier = Modifier.padding(
-                                start = CashuTheme.spacing.comfortable,
-                                top = CashuTheme.spacing.snug,
+                                start = OnboardingMetrics.BarStartInset,
+                                top = OnboardingMetrics.BarTopInset,
                             ),
                         )
                         OnboardingStepHeader(
                             title = "Recover Funds.",
                             subhead = "Add the mints you used before to recover funds from this seed.",
-                            modifier = Modifier.padding(top = CashuTheme.spacing.default),
+                            modifier = Modifier.padding(top = OnboardingMetrics.TitleGap),
                         )
                         RestoreMintsStageContent(
                             input = restoreMintsStaging.input,
@@ -630,11 +630,14 @@ fun OnboardingScreen(
                     }
 
                     is OnboardingStep.RestoreProgress -> Column(Modifier.fillMaxSize()) {
+                        // No back button on this step (forward-only), so it
+                        // reserves the bar band rather than skipping it —
+                        // otherwise the title jumps up 56 dp on arrival.
                         OnboardingStepHeader(
                             title = "Recover Funds.",
                             subhead = progressState?.subhead,
                             modifier = Modifier.padding(
-                                top = CashuTheme.spacing.snug,
+                                top = OnboardingMetrics.TitleTopInset,
                                 bottom = CashuTheme.spacing.default,
                             ),
                         )
@@ -886,12 +889,15 @@ internal fun ShowMnemonicStageContent(
             onBack = onBack,
             modifier = Modifier
                 .align(Alignment.Start)
-                .padding(start = CashuTheme.spacing.comfortable, top = CashuTheme.spacing.snug),
+                .padding(
+                    start = OnboardingMetrics.BarStartInset,
+                    top = OnboardingMetrics.BarTopInset,
+                ),
         )
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(top = CashuTheme.spacing.default),
+                .padding(top = OnboardingMetrics.TitleGap),
             verticalArrangement = Arrangement.spacedBy(CashuTheme.spacing.snug),
         ) {
             OnboardingStepHeader(
@@ -1118,14 +1124,14 @@ internal fun FirstMintStageContent(
         OnboardingBackButton(
             onBack = onBack,
             modifier = Modifier.padding(
-                start = CashuTheme.spacing.comfortable,
-                top = CashuTheme.spacing.snug,
+                start = OnboardingMetrics.BarStartInset,
+                top = OnboardingMetrics.BarTopInset,
             ),
         )
         OnboardingStepHeader(
             title = "Pick your first mint.",
             subhead = "Mints issue your ecash and redeem it for Bitcoin. Add more anytime in Settings.",
-            modifier = Modifier.padding(top = CashuTheme.spacing.default),
+            modifier = Modifier.padding(top = OnboardingMetrics.TitleGap),
         )
         FirstMintList(
             state = state,

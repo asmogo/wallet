@@ -464,8 +464,8 @@ struct OnboardingView: View {
         VStack(spacing: 0) {
             OnboardingBackButton { retreat(to: .welcome) }
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.horizontal, 28)
-                .padding(.top, 8)
+                .padding(.horizontal, OnboardingMetrics.gutter)
+                .padding(.top, OnboardingMetrics.barTopInset)
 
             stagger(appeared: restoreMethodAppeared, index: 0) {
                 OnboardingStepHeader(
@@ -473,7 +473,7 @@ struct OnboardingView: View {
                     subhead: "Choose how to recover your wallet."
                 )
             }
-            .padding(.top, 12)
+            .padding(.top, OnboardingMetrics.titleGap)
 
             // The restrained, static variant of the welcome piece — a quiet mark.
             OnboardingWelcomeStage(variant: .quiet)
@@ -541,8 +541,8 @@ struct OnboardingView: View {
         VStack(spacing: 0) {
             OnboardingBackButton { retreat(to: .restoreMethod) }
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.horizontal, 28)
-                .padding(.top, 8)
+                .padding(.horizontal, OnboardingMetrics.gutter)
+                .padding(.top, OnboardingMetrics.barTopInset)
 
             stagger(appeared: iCloudPreviewAppeared, index: 0) {
                 VStack(alignment: .leading, spacing: 14) {
@@ -582,7 +582,7 @@ struct OnboardingView: View {
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
-            .padding(.top, 12)
+            .padding(.top, OnboardingMetrics.titleGap)
 
             Spacer()
 
@@ -607,7 +607,7 @@ struct OnboardingView: View {
                 title: "Restoring Wallet",
                 subhead: "Recovering your funds from \(mintCount) mint\(mintCount == 1 ? "" : "s")…"
             )
-            .padding(.top, 8)
+            .padding(.top, OnboardingMetrics.titleTopInset)
 
             Spacer()
             ProgressView()
@@ -629,7 +629,7 @@ struct OnboardingView: View {
                     ? "across \(count) mint\(count == 1 ? "" : "s")"
                     : "Your funds are ready."
             )
-            .padding(.top, 8)
+            .padding(.top, OnboardingMetrics.titleTopInset)
             .opacity(isCompleting ? 0 : 1)
 
             Spacer()
@@ -653,11 +653,14 @@ struct OnboardingView: View {
                 .lineLimit(1)
                 .contentTransition(.numericText(value: Double(walletManager.balance)))
                 .foregroundStyle(.primary)
+                // Gutter belongs to the elements that need it — the header
+                // carries its own, and stacking a second one indented the
+                // title to 56 pt.
+                .padding(.horizontal, OnboardingMetrics.gutter)
 
             Spacer()
         }
         .frame(maxWidth: .infinity)
-        .padding(.horizontal, 28)
     }
 
     private func runICloudRestore() {
@@ -704,8 +707,8 @@ struct OnboardingView: View {
         VStack(spacing: 0) {
             OnboardingBackButton { retreat(to: .welcome) }
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.horizontal, 28)
-                .padding(.top, 8)
+                .padding(.horizontal, OnboardingMetrics.gutter)
+                .padding(.top, OnboardingMetrics.barTopInset)
 
             stagger(appeared: mnemonicAppeared, index: 0) {
                 VStack(alignment: .leading, spacing: 8) {
@@ -722,7 +725,7 @@ struct OnboardingView: View {
                         .padding(.top, 2)
                 }
             }
-            .padding(.top, 12)
+            .padding(.top, OnboardingMetrics.titleGap)
 
             // The seed grid deliberately gets NO stagger entrance: any offset/
             // blur ramp on this block reads as a flicker on first paint, and
@@ -828,14 +831,14 @@ struct OnboardingView: View {
     // MARK: - First Mint Stage
 
     private var firstMintStage: some View {
-        VStack(spacing: 16) {
+        VStack(spacing: 0) {
             OnboardingBackButton {
                 guard !isAddingFirstMints else { return }
                 retreat(to: .showMnemonic)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.horizontal, 28)
-            .padding(.top, 8)
+            .padding(.horizontal, OnboardingMetrics.gutter)
+            .padding(.top, OnboardingMetrics.barTopInset)
 
             stagger(appeared: firstMintAppeared, index: 0) {
                 OnboardingStepHeader(
@@ -843,8 +846,10 @@ struct OnboardingView: View {
                     subhead: "Mints issue your ecash and redeem it for Bitcoin. Add more anytime in Settings."
                 )
             }
+            .padding(.top, OnboardingMetrics.titleGap)
 
             firstMintList
+                .padding(.top, 16)
         }
         .animation(.snappy, value: firstMintError)
         .onAppear {
@@ -1069,10 +1074,11 @@ struct OnboardingView: View {
         let invalidIndices = walletManager.invalidMnemonicWords(restoreMnemonic)
 
         // Mnemonic input — same pattern as Receive Ecash paste screen
-        return VStack(spacing: 16) {
+        return VStack(spacing: 0) {
             OnboardingBackButton { retreat(to: .welcome) }
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.horizontal, 28)
+                .padding(.horizontal, OnboardingMetrics.gutter)
+                .padding(.top, OnboardingMetrics.barTopInset)
 
             stagger(appeared: restoreInputAppeared, index: 0) {
                 OnboardingStepHeader(
@@ -1080,6 +1086,7 @@ struct OnboardingView: View {
                     subhead: "Enter your 12 words in order."
                 )
             }
+            .padding(.top, OnboardingMetrics.titleGap)
 
             ZStack(alignment: .bottomTrailing) {
                 ZStack(alignment: .topLeading) {
@@ -1116,6 +1123,7 @@ struct OnboardingView: View {
             .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 14))
             .frame(maxHeight: .infinity)
             .padding(.horizontal)
+            .padding(.top, 16)
 
             HStack(spacing: 6) {
                 Text("\(wordCount) / 12 words")
@@ -1128,14 +1136,15 @@ struct OnboardingView: View {
                         .foregroundStyle(.secondary)
                 }
             }
+            .padding(.top, 16)
 
             if let error = errorMessage {
                 ErrorBannerView(message: error, severity: .error)
                     .padding(.horizontal)
+                    .padding(.top, 16)
                     .transition(reduceMotion ? .opacity : .opacity.combined(with: .move(edge: .top)))
             }
         }
-        .padding(.top)
         .animation(.snappy, value: errorMessage)
         .onAppear {
             triggerEntrance { restoreInputAppeared = true }
@@ -1157,15 +1166,15 @@ struct OnboardingView: View {
     // MARK: - Restore Mints Stage
 
     private var restoreMintsStage: some View {
-        VStack(spacing: 16) {
+        VStack(spacing: 0) {
             OnboardingBackButton {
                 mintsToRestore.removeAll()
                 restoreMintError = nil
                 retreat(to: .restoreInput)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.horizontal, 28)
-            .padding(.top, 8)
+            .padding(.horizontal, OnboardingMetrics.gutter)
+            .padding(.top, OnboardingMetrics.barTopInset)
 
             stagger(appeared: restoreMintsAppeared, index: 0) {
                 OnboardingStepHeader(
@@ -1173,8 +1182,10 @@ struct OnboardingView: View {
                     subhead: "Add the mints you used before to recover funds from this seed."
                 )
             }
+            .padding(.top, OnboardingMetrics.titleGap)
 
             restoreMintsList
+                .padding(.top, 16)
         }
         .animation(.snappy, value: restoreMintError)
         .animation(.snappy, value: mintsToRestore.isEmpty)
@@ -1347,7 +1358,7 @@ struct OnboardingView: View {
                     subhead: restoreSubhead
                 )
             }
-            .padding(.top, 8)
+            .padding(.top, OnboardingMetrics.titleTopInset)
             .padding(.bottom, 12)
 
             // The recovered total is a money value — it keeps its monospaced

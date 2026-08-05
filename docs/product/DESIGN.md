@@ -1005,6 +1005,14 @@ headline/subhead in the bottom action block; every other step titles itself
 at the top (`OnboardingStepHeader`, riding the stage swap) with its actions
 anchored to the bottom edge and a circular Liquid Glass back button
 (`OnboardingBackButton`, `.quaternary` pre-26) wherever a retreat exists.
+Every step's title lands on the same line whether or not it has a retreat:
+the back button fills a bar band below the safe area, and a step without one
+(the terminal restore screens) **reserves that band** instead of riding up
+against the status bar — the title has to stay put across the stage swap.
+`OnboardingMetrics` (`OnboardingChassis.swift`) is the only place that
+geometry is stated; no step hand-rolls its own top spacing, and no stage
+re-applies the header's gutter. Android states the same rule in its own
+measure — see UX_SPEC.md §2.
 The indicator slot is resolved as "no indicator" (the flow branches into
 paths of different lengths, so page dots would imply a linear path that does
 not exist).

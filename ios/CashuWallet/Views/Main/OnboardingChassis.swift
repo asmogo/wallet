@@ -165,6 +165,25 @@ struct OnboardingChassisView<Accessory: View>: View {
 
 // MARK: - Step chrome
 
+/// Shared step-layout metrics. Onboarding draws no navigation bar, so these
+/// reproduce the system's large-title geometry by hand: a 44 pt bar band that
+/// holds the back button where a step has one, with the title on the line
+/// below it. Every step resolves to the same `titleTopInset`, so the title
+/// stays put across the stage swap instead of jumping per screen.
+enum OnboardingMetrics {
+    /// Page gutter — `spacing.page` in the design system.
+    static let gutter: CGFloat = 28
+    /// Margin above the bar band.
+    static let barTopInset: CGFloat = 8
+    /// Bar band height — a standard 44 pt navigation bar / hit target.
+    static let barHeight: CGFloat = 44
+    /// Band-to-title gap.
+    static let titleGap: CGFloat = 8
+    /// Where the title starts on a stage that draws no back button, so it
+    /// lands on the same line as the stages that do.
+    static let titleTopInset: CGFloat = barTopInset + barHeight + titleGap
+}
+
 /// Top-of-step title + supporting copy — every step except welcome, which
 /// keeps its text in the bottom action block (design review 2026-08-05).
 struct OnboardingStepHeader: View {
@@ -187,7 +206,7 @@ struct OnboardingStepHeader: View {
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.horizontal, 28)
+        .padding(.horizontal, OnboardingMetrics.gutter)
     }
 }
 

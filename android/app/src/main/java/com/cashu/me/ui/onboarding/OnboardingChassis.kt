@@ -65,6 +65,43 @@ internal val HeaderPadding = 28.dp
 internal val CtaPadding = 24.dp
 internal val BottomPadding = 24.dp
 
+/**
+ * Step-layout metrics. Onboarding draws no `TopAppBar`, so these state the
+ * top-chrome geometry once instead of letting each step hand-roll it: a bar
+ * band holding the back button, with the title on the line below. Every step
+ * resolves to the same [TitleTopInset], so the title stays put across the
+ * stage swap rather than jumping per screen.
+ *
+ * Same rule as iOS `OnboardingMetrics`, each platform in its own native
+ * measure — the band is M3's 48 dp minimum touch target (what `IconButton`
+ * occupies) where iOS uses its 44 pt navigation bar.
+ */
+internal object OnboardingMetrics {
+    /** Margin above the bar band (`spacing.snug`). */
+    val BarTopInset = 8.dp
+
+    /**
+     * Bar band height: M3's minimum interactive size, which is what an
+     * [IconButton] lays out as (40 dp state layer inside a 48 dp target).
+     */
+    val BarHeight = 48.dp
+
+    /** Band-to-title gap (`spacing.snug`). */
+    val TitleGap = 8.dp
+
+    /**
+     * Start padding for the back button. The 24 dp icon centers in the 48 dp
+     * target, so its glyph lands on the [HeaderPadding] gutter (16 + 12 = 28).
+     */
+    val BarStartInset = 16.dp
+
+    /**
+     * Where the title starts on a step that draws no back button, so it lands
+     * on the same line as the steps that do.
+     */
+    val TitleTopInset = BarTopInset + BarHeight + TitleGap
+}
+
 /** iOS `.largeTitle.weight(.heavy)` + `.tracking(-0.5)` — the step-title voice. */
 @Composable
 internal fun onboardingTitleStyle(): TextStyle =
