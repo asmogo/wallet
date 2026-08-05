@@ -1,5 +1,6 @@
 package com.cashu.me.ui.onboarding
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
@@ -446,6 +447,28 @@ fun OnboardingScreen(
                 colors = ButtonDefaults.filledTonalButtonColors(),
             ),
         )
+    }
+
+    // System back mirrors the on-screen Back affordances, and only those: the
+    // method chooser and seed entry retreat to welcome (seed entry deliberately
+    // skips the chooser, like its Back link), mint staging retreats to seed
+    // entry clearing the staged list exactly as its Back button does. Steps
+    // without a Back affordance — welcome, the seed reveal, first mint, and the
+    // forward-only restore progress — keep the platform default (exit).
+    BackHandler(
+        enabled = step is OnboardingStep.RestoreMethod ||
+            step is OnboardingStep.RestoreInput ||
+            step is OnboardingStep.RestoreMints,
+    ) {
+        when (step) {
+            OnboardingStep.RestoreMethod -> step = OnboardingStep.Welcome
+            OnboardingStep.RestoreInput -> if (!restoring) step = OnboardingStep.Welcome
+            is OnboardingStep.RestoreMints -> {
+                restoreMintsStaging.reset()
+                step = OnboardingStep.RestoreInput
+            }
+            else -> Unit
+        }
     }
 
     val accessory: (@Composable () -> Unit)? = if (step is OnboardingStep.ShowMnemonic) {
