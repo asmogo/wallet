@@ -1,6 +1,7 @@
 package com.cashu.me.ui.components
 
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.SizeTransform
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
@@ -240,11 +241,14 @@ fun GhostButton(
         if (animatedLabel) {
             // Opt-in in-place label cross-fade (the onboarding chassis'
             // tertiary slot swaps "What is ecash?" ↔ "Back" ↔ "Skip for now").
+            // clip = false: the default clipping size animation would crop a
+            // wide outgoing label mid-fade.
             AnimatedContent(
                 targetState = text,
                 transitionSpec = {
                     fadeIn(spring(stiffness = Spring.StiffnessMedium))
                         .togetherWith(fadeOut(spring(stiffness = Spring.StiffnessMedium)))
+                        .using(SizeTransform(clip = false))
                 },
                 label = "ghost-button-text",
             ) { current ->

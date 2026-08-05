@@ -253,29 +253,32 @@ private fun ChassisSlot(action: ChassisAction?, templateStyle: ChassisButtonStyl
         val shown = if (style != null) snapshot else null
         if (style != null && shown != null) {
             // While this content is exiting, `action` no longer matches —
-            // disable the outgoing snapshot so a tap can't fire a stale step.
+            // neutralize the click (not `enabled`, which would restyle the
+            // outgoing button to disabled colors mid-fade) so a tap can't
+            // fire a stale step.
             val live = action?.style == style
+            val onClick = if (live) shown.onClick else fun() {}
             val tagModifier = shown.testTag?.let { Modifier.testTag(it) } ?: Modifier
             when (style) {
                 ChassisButtonStyle.Primary -> PrimaryButton(
                     text = shown.label,
-                    onClick = shown.onClick,
+                    onClick = onClick,
                     modifier = tagModifier,
-                    enabled = shown.enabled && live,
+                    enabled = shown.enabled,
                     loading = shown.loading,
                     colors = shown.colors,
                 )
                 ChassisButtonStyle.Secondary -> SecondaryButton(
                     text = shown.label,
-                    onClick = shown.onClick,
+                    onClick = onClick,
                     modifier = tagModifier,
-                    enabled = shown.enabled && live,
+                    enabled = shown.enabled,
                 )
                 ChassisButtonStyle.Ghost -> GhostButton(
                     text = shown.label,
-                    onClick = shown.onClick,
+                    onClick = onClick,
                     modifier = tagModifier,
-                    enabled = shown.enabled && live,
+                    enabled = shown.enabled,
                     animatedLabel = true,
                 )
             }
