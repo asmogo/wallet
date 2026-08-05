@@ -227,7 +227,7 @@ func connectMintDestination(
     case .addCustom:
         AddMintFormView(onAdded: onAdded, onHeightChange: onHeightChange)
     case .discover:
-        MintDiscoveryList(addMint: { _ in onAdded() })
+        MintDiscoveryList(onMintAdded: onAdded)
             .navigationTitle("Discover Mints")
             .navigationBarTitleDisplayMode(.inline)
     }

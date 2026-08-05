@@ -1,10 +1,10 @@
 import SwiftUI
 
 /// The Nostr-relay discovery list, without chrome of its own — hosts supply the
-/// navigation container and title. Presented standalone by `MintDiscoverySheet`
-/// and pushed in place by the connect-a-mint picker.
+/// navigation container and title. The list owns add execution and row state so
+/// every host gets the same success/failure behavior.
 struct MintDiscoveryList: View {
-    let addMint: (String) -> Void
+    var onMintAdded: () -> Void = {}
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @EnvironmentObject private var walletManager: WalletManager
@@ -12,19 +12,11 @@ struct MintDiscoveryList: View {
     @ObservedObject private var settings = SettingsManager.shared
 
     @State private var searchText = ""
-    @State private var addedURLsThisSession: Set<String> = []
-    @State private var previews: [String: MintIdentityPreview] = [:]
-    @State private var loadingPreviewURLs: Set<String> = []
+    @State private var addStates: [String: MintDiscoveryAddState] = [:]
 
     var body: some View {
         content
-            // Lives here rather than on the host so a pushed instance releases
-            // its relay results too.
-            .onDisappear {
-                previews = [:]
-                loadingPreviewURLs = []
-                discoveryManager.clearDiscoveredMints()
-            }
+            .onDisappear { discoveryManager.clearDiscoveredMints() }
     }
 
     @ViewBuilder
@@ -39,9 +31,7 @@ struct MintDiscoveryList: View {
             List {
                 if !addedMints.isEmpty {
                     Section {
-                        ForEach(addedMints) { mint in
-                            addedRow(for: mint)
-                        }
+                        ForEach(addedMints) { mint in addedRow(for: mint) }
                     } header: {
                         Text("Added")
                     }
@@ -49,15 +39,11 @@ struct MintDiscoveryList: View {
 
                 if !discoverableMints.isEmpty {
                     Section {
-                        ForEach(discoverableMints) { mint in
-                            discoverableRow(for: mint)
-                        }
+                        ForEach(discoverableMints) { mint in discoverableRow(for: mint) }
                     } header: {
                         Text("Discovered")
                     }
-                } else if addedMints.isEmpty
-                            && !discoveryManager.isDiscovering
-                            && loadingPreviewURLs.isEmpty {
+                } else if addedMints.isEmpty && !discoveryManager.isDiscovering {
                     Section {
                         if searchText.isEmpty {
                             NativeEmptyState(
@@ -81,10 +67,9 @@ struct MintDiscoveryList: View {
             .listSectionSpacing(8)
             .contentMargins(.top, 0, for: .scrollContent)
             .safeAreaInset(edge: .top, spacing: 0) {
-                if discoveryManager.isDiscovering || !loadingPreviewURLs.isEmpty {
+                if discoveryManager.isDiscovering {
                     HStack(spacing: 8) {
-                        ProgressView()
-                            .controlSize(.small)
+                        ProgressView().controlSize(.small)
                         Text("Discovering mints…")
                             .font(.subheadline)
                             .foregroundStyle(.secondary)
@@ -95,40 +80,32 @@ struct MintDiscoveryList: View {
                     .accessibilityElement(children: .combine)
                 }
             }
-            .animation(reduceMotion ? nil : .smooth(duration: 0.3), value: addedURLsThisSession)
-            .searchable(text: $searchText, placement: .navigationBarDrawer(displayMode: .always), prompt: "Search mints")
-            .refreshable {
-                await discoveryManager.discoverMints()
-                await loadMissingPreviews()
-            }
+            .animation(reduceMotion ? nil : .smooth(duration: 0.3), value: addStates)
+            .searchable(
+                text: $searchText,
+                placement: .navigationBarDrawer(displayMode: .always),
+                prompt: "Search mints"
+            )
+            .refreshable { await discoveryManager.discoverMints() }
             .task {
                 if discoveryManager.discoveredMints.isEmpty {
                     await discoveryManager.discoverMints()
                 }
-                await loadMissingPreviews()
-            }
-            .task(id: discoveredMintURLsKey) {
-                await loadMissingPreviews()
             }
         }
     }
 
     private var filteredMints: [DiscoveredMint] {
         let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
-        let validatedMints = discoveryManager.discoveredMints.filter { previews[$0.url] != nil }
-        guard !query.isEmpty else { return validatedMints }
-        return validatedMints.filter { mint in
-            displayName(for: mint).localizedCaseInsensitiveContains(query)
+        guard !query.isEmpty else { return discoveryManager.discoveredMints }
+        return discoveryManager.discoveredMints.filter { mint in
+            mint.displayName.localizedCaseInsensitiveContains(query)
                 || mint.url.localizedCaseInsensitiveContains(query)
         }
     }
 
-    private var discoveredMintURLsKey: String {
-        discoveryManager.discoveredMints.map(\.url).joined(separator: "\n")
-    }
-
     private var addedMints: [DiscoveredMint] {
-        filteredMints.filter { isAlreadyAdded($0) }
+        filteredMints.filter(isAlreadyAdded)
     }
 
     private var discoverableMints: [DiscoveredMint] {
@@ -136,34 +113,22 @@ struct MintDiscoveryList: View {
     }
 
     private func isAlreadyAdded(_ mint: DiscoveredMint) -> Bool {
-        addedURLsThisSession.contains(mint.url)
-            || walletManager.mints.contains(where: { $0.url == mint.url })
+        addStates[mint.url] == .added
+            || walletManager.mints.contains(where: {
+                canonicalDiscoveredMintURL($0.url) == mint.url
+            })
     }
 
     @ViewBuilder
     private func addedRow(for mint: DiscoveredMint) -> some View {
         HStack(spacing: 12) {
-            MintAvatarView(iconUrl: avatarIconUrl(for: mint), name: displayName(for: mint), size: 36)
+            MintAvatarView(iconUrl: mint.iconUrl, name: mint.displayName, size: 36)
                 .accessibilityHidden(true)
-
-            VStack(alignment: .leading, spacing: 2) {
-                HStack(spacing: 6) {
-                    Text(displayName(for: mint))
-                        .font(.body)
-                        .lineLimit(1)
-                    MintMethodIcons(methods: methods(for: mint))
-                        .layoutPriority(1)
-                }
-                Text(mint.url)
-                    .font(.caption)
-                    .lineLimit(1)
-                    .truncationMode(.middle)
-            }
+            mintIdentity(mint)
             Spacer(minLength: 8)
-
             Image(systemName: "checkmark.circle.fill")
                 .font(.title3)
-                .symbolEffect(.bounce, value: reduceMotion ? false : addedURLsThisSession.contains(mint.url))
+                .symbolEffect(.bounce, value: reduceMotion ? false : addStates[mint.url] == .added)
                 .accessibilityLabel("Added")
         }
         .foregroundStyle(.secondary)
@@ -174,101 +139,107 @@ struct MintDiscoveryList: View {
 
     @ViewBuilder
     private func discoverableRow(for mint: DiscoveredMint) -> some View {
-        HStack(spacing: 12) {
-            MintAvatarView(iconUrl: avatarIconUrl(for: mint), name: displayName(for: mint), size: 36)
-                .accessibilityHidden(true)
+        let state = addStates[mint.url]
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(spacing: 12) {
+                MintAvatarView(iconUrl: mint.iconUrl, name: mint.displayName, size: 36)
+                    .accessibilityHidden(true)
+                mintIdentity(mint)
+                Spacer(minLength: 8)
 
-            VStack(alignment: .leading, spacing: 2) {
-                HStack(spacing: 6) {
-                    Text(displayName(for: mint))
-                        .font(.body)
-                        .lineLimit(1)
-                    MintMethodIcons(methods: methods(for: mint))
-                        .layoutPriority(1)
+                if state == .adding {
+                    ProgressView()
+                        .controlSize(.small)
+                        .frame(width: 44, height: 44)
+                        .accessibilityLabel("Adding \(mint.displayName)")
+                } else {
+                    Button { add(mint) } label: {
+                        Image(systemName: "plus.circle.fill")
+                            .font(.title3)
+                            .frame(width: 44, height: 44)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel(
+                        state?.failureMessage == nil
+                            ? "Add \(mint.displayName)"
+                            : "Retry adding \(mint.displayName)"
+                    )
                 }
-                Text(mint.url)
+            }
+
+            if let message = state?.failureMessage {
+                Text(message)
                     .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-                    .truncationMode(.middle)
+                    .foregroundStyle(.red)
+                    .padding(.leading, 48)
             }
-            Spacer(minLength: 8)
-
-            Button {
-                withAnimation(reduceMotion ? nil : .smooth(duration: 0.3)) {
-                    _ = addedURLsThisSession.insert(mint.url)
-                }
-                addMint(mint.url)
-                HapticFeedback.selection()
-            } label: {
-                Image(systemName: "plus.circle.fill")
-                    .font(.title3)
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel("Add \(displayName(for: mint))")
         }
         .contentShape(Rectangle())
         .accessibilityElement(children: .combine)
     }
 
-    private func avatarIconUrl(for mint: DiscoveredMint) -> String? {
-        previews[mint.url]?.iconUrl
-            ?? mint.iconUrl
-            ?? walletManager.mints.first(where: { $0.url == mint.url })?.iconUrl
-    }
-
-    private func displayName(for mint: DiscoveredMint) -> String {
-        if let name = previews[mint.url]?.name, !name.isEmpty { return name }
-        return mint.displayName
-    }
-
-    private func methods(for mint: DiscoveredMint) -> [PaymentMethodKind] {
-        previews[mint.url]?.methods ?? []
-    }
-
-    private func loadMissingPreviews() async {
-        let missingMints = discoveryManager.discoveredMints.filter {
-            previews[$0.url] == nil && !loadingPreviewURLs.contains($0.url)
-        }
-        loadingPreviewURLs.formUnion(missingMints.map(\.url))
-
-        for mint in missingMints {
-            let info = await walletManager.fetchMintPreviewInfo(url: mint.url)
-            guard !Task.isCancelled else {
-                withAnimation(reduceMotion ? nil : .smooth(duration: 0.3)) {
-                    _ = loadingPreviewURLs.remove(mint.url)
-                }
-                return
+    private func mintIdentity(_ mint: DiscoveredMint) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            HStack(spacing: 6) {
+                Text(mint.displayName)
+                    .font(.body)
+                    .lineLimit(1)
+                MintMethodIcons(methods: mint.methods)
+                    .layoutPriority(1)
             }
-            withAnimation(reduceMotion ? nil : .smooth(duration: 0.3)) {
-                if let info {
-                    previews[mint.url] = MintIdentityPreview(
-                        name: info.name,
-                        iconUrl: info.iconUrl,
-                        methods: info.methods
-                    )
+            Text(mint.url)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+                .truncationMode(.middle)
+        }
+    }
+
+    private func add(_ mint: DiscoveredMint) {
+        guard addStates[mint.url] != .adding, addStates[mint.url] != .added else { return }
+        withAnimation(reduceMotion ? nil : .smooth(duration: 0.3)) {
+            addStates[mint.url] = .adding
+        }
+        Task { @MainActor in
+            do {
+                try await walletManager.addMint(url: mint.url)
+                withAnimation(reduceMotion ? nil : .smooth(duration: 0.3)) {
+                    addStates[mint.url] = .added
                 }
-                _ = loadingPreviewURLs.remove(mint.url)
+                HapticFeedback.notification(.success)
+                onMintAdded()
+            } catch is CancellationError {
+                addStates[mint.url] = nil
+            } catch {
+                withAnimation(reduceMotion ? nil : .smooth(duration: 0.3)) {
+                    addStates[mint.url] = .failed("Couldn't connect to that mint. Try another.")
+                }
+                HapticFeedback.notification(.error)
             }
         }
     }
 }
 
-private struct MintIdentityPreview {
-    let name: String?
-    let iconUrl: String?
-    let methods: [PaymentMethodKind]
+enum MintDiscoveryAddState: Equatable {
+    case adding
+    case added
+    case failed(String)
+
+    var failureMessage: String? {
+        if case .failed(let message) = self { return message }
+        return nil
+    }
 }
 
 /// Standalone presentation from the Mints list and the mint-chip menu.
 struct MintDiscoverySheet: View {
-    let addMint: (String) -> Void
+    var onMintAdded: () -> Void = {}
 
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
         NavigationStack {
-            MintDiscoveryList(addMint: addMint)
+            MintDiscoveryList(onMintAdded: onMintAdded)
                 .navigationTitle("Discover Mints")
                 .navigationBarTitleDisplayMode(.inline)
                 .toolbar {
@@ -282,6 +253,6 @@ struct MintDiscoverySheet: View {
 }
 
 #Preview {
-    MintDiscoverySheet(addMint: { _ in })
+    MintDiscoverySheet()
         .environmentObject(WalletManager())
 }

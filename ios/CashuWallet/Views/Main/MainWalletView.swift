@@ -798,9 +798,7 @@ struct MainWalletView: View {
             ConnectMintSheet()
                 .environmentObject(walletManager)
         case .discoverMints:
-            MintDiscoverySheet { url in
-                Task { try? await walletManager.addMint(url: url) }
-            }
+            MintDiscoverySheet()
             .environmentObject(walletManager)
             .canvasSheetBackground()
         }

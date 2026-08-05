@@ -41,7 +41,7 @@ struct MintsListView: View {
                     .environmentObject(walletManager)
             }
             .sheet(isPresented: $showDiscoverySheet) {
-                MintDiscoverySheet { url in addMint(url: url) }
+                MintDiscoverySheet()
                     .environmentObject(walletManager)
                     .canvasSheetBackground()
             }
@@ -175,13 +175,6 @@ struct MintsListView: View {
     }
 
     // MARK: - Actions
-
-    private func addMint(url: String) {
-        guard !url.isEmpty else { return }
-        Task { @MainActor in
-            try? await walletManager.addMint(url: url)
-        }
-    }
 
     private func setActive(_ mint: MintInfo) {
         Task { try? await walletManager.setActiveMint(mint) }

@@ -223,6 +223,7 @@ fun ConnectMintSheetContent(
                     walletManager = walletManager,
                     settingsManager = settingsManager,
                     mintDiscoveryManager = mintDiscoveryManager,
+                    onMintAdded = onMintAdded,
                 )
             }
         }

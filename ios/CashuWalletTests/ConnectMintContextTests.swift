@@ -38,4 +38,52 @@ final class ConnectMintContextTests: XCTestCase {
             XCTAssertFalse(mint.name.isEmpty)
         }
     }
+
+    func testDiscoveryCanonicalizesHTTPSURLs() {
+        XCTAssertEqual(
+            canonicalDiscoveredMintURL(" HTTPS://MINT.EXAMPLE.COM/path/ "),
+            "https://mint.example.com/path"
+        )
+        XCTAssertNil(canonicalDiscoveredMintURL("http://mint.example.com"))
+        XCTAssertNil(canonicalDiscoveredMintURL("not-a-url"))
+        XCTAssertNil(canonicalDiscoveredMintURL("https://user:secret@mint.example.com"))
+        XCTAssertNil(canonicalDiscoveredMintURL("https://mint.example.com?network=test"))
+        XCTAssertNil(canonicalDiscoveredMintURL("https://mint.example.com/#fragment"))
+    }
+
+    func testDiscoveryPreviewParsesLiveMintCapabilities() throws {
+        let data = try XCTUnwrap(
+            """
+            {
+              "name": "Live Mint",
+              "description": "Ready",
+              "icon_url": "https://mint.example.com/icon.png",
+              "nuts": {
+                "4": { "methods": [
+                  { "method": "bolt11", "unit": "sat" },
+                  { "method": "bolt12", "unit": "usd" }
+                ] },
+                "5": { "methods": [
+                  { "method": "onchain", "unit": "sat" }
+                ] }
+              }
+            }
+            """.data(using: .utf8)
+        )
+
+        let preview = try XCTUnwrap(MintDiscoveryPreviewParser.parse(data))
+
+        XCTAssertEqual(preview.name, "Live Mint")
+        XCTAssertEqual(preview.description, "Ready")
+        XCTAssertEqual(preview.iconUrl, "https://mint.example.com/icon.png")
+        XCTAssertEqual(preview.methods, [.bolt11, .bolt12, .onchain])
+    }
+
+    func testDiscoveryFailureStateCanReturnToRetryableRow() {
+        let failed = MintDiscoveryAddState.failed("Couldn't connect")
+
+        XCTAssertEqual(failed.failureMessage, "Couldn't connect")
+        XCTAssertNotEqual(failed, .adding)
+        XCTAssertNotEqual(failed, .added)
+    }
 }
