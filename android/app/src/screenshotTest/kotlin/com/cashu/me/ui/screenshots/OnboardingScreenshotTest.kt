@@ -1,6 +1,9 @@
 package com.cashu.me.ui.screenshots
 
 import android.content.res.Configuration
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -25,6 +28,7 @@ import com.cashu.me.ui.onboarding.OnboardingScaffold
 import com.cashu.me.ui.onboarding.OnboardingStepHeader
 import com.cashu.me.ui.onboarding.SeedAcknowledgeRow
 import com.cashu.me.ui.onboarding.SeedPhraseReveal
+import com.cashu.me.ui.onboarding.SeedWarningNotice
 import com.cashu.me.ui.onboarding.ShowMnemonicStageContent
 import com.cashu.me.ui.onboarding.WelcomeStageContent
 import com.cashu.me.ui.onboarding.welcomeChassis
@@ -61,7 +65,6 @@ fun onboardingWelcomeLightScreenshot() {
                 retryingStartup = false,
                 onCreate = {},
                 onRestore = {},
-                onInfo = {},
             ),
         ) {
             WelcomeStageContent(
@@ -69,6 +72,7 @@ fun onboardingWelcomeLightScreenshot() {
                 retryingStartup = false,
                 errorText = null,
                 onRetryStartup = {},
+                onInfo = {},
             )
         }
     }
@@ -90,7 +94,6 @@ fun onboardingWelcomeDarkScreenshot() {
                 retryingStartup = false,
                 onCreate = {},
                 onRestore = {},
-                onInfo = {},
             ),
         ) {
             WelcomeStageContent(
@@ -98,6 +101,7 @@ fun onboardingWelcomeDarkScreenshot() {
                 retryingStartup = false,
                 errorText = null,
                 onRetryStartup = {},
+                onInfo = {},
             )
         }
     }
@@ -114,7 +118,6 @@ fun onboardingWelcomeLargeFontScreenshot() {
                 retryingStartup = false,
                 onCreate = {},
                 onRestore = {},
-                onInfo = {},
             ),
         ) {
             WelcomeStageContent(
@@ -122,6 +125,7 @@ fun onboardingWelcomeLargeFontScreenshot() {
                 retryingStartup = false,
                 errorText = null,
                 onRetryStartup = {},
+                onInfo = {},
             )
         }
     }
@@ -134,7 +138,7 @@ fun onboardingSeedHiddenScreenshot() {
     OnboardingFrame {
         OnboardingScaffold(
             chassis = seedChassis(acknowledged = false),
-            accessory = { SeedAcknowledgeRow(acknowledged = false, onToggle = {}) },
+            accessory = { SeedChassisAccessory(acknowledged = false) },
         ) {
             ShowMnemonicStageContent(
                 mnemonic = FixtureWords.joinToString(" "),
@@ -151,7 +155,7 @@ fun onboardingSeedRevealedScreenshot() {
     OnboardingFrame {
         OnboardingScaffold(
             chassis = seedChassis(acknowledged = true),
-            accessory = { SeedAcknowledgeRow(acknowledged = true, onToggle = {}) },
+            accessory = { SeedChassisAccessory(acknowledged = true) },
         ) {
             Column(Modifier.fillMaxSize()) {
                 OnboardingStepHeader(
@@ -159,16 +163,57 @@ fun onboardingSeedRevealedScreenshot() {
                     subhead = "Write these 12 words down in order. This is the only way to recover your wallet.",
                     modifier = Modifier.padding(top = 16.dp),
                 )
+                // Hand-built because ShowMnemonicStageContent owns `revealed`
+                // internally and starts hidden. SeedPhraseReveal draws its own
+                // card, so only the surrounding layout can drift here.
                 SeedPhraseReveal(
                     words = FixtureWords,
                     revealed = true,
-                    onReveal = {},
+                    onToggle = {},
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(horizontal = 28.dp, vertical = 32.dp),
                 )
             }
         }
+    }
+}
+
+/**
+ * Dark-mode coverage for a step that draws the *back* half of the bar band.
+ * Both bar-band icons set their content color explicitly, because the
+ * onboarding canvas is a `Modifier.background` rather than a `Surface` and so
+ * never provides `LocalContentColor` — inheriting it renders black-on-black.
+ * This preview is what would catch that regression.
+ */
+@PreviewTest
+@Preview(
+    name = "onboarding-seed-hidden-dark",
+    widthDp = 390,
+    heightDp = 844,
+    uiMode = Configuration.UI_MODE_NIGHT_YES,
+)
+@Composable
+fun onboardingSeedHiddenDarkScreenshot() {
+    OnboardingFrame(darkTheme = true) {
+        OnboardingScaffold(
+            chassis = seedChassis(acknowledged = false),
+            accessory = { SeedChassisAccessory(acknowledged = false) },
+        ) {
+            ShowMnemonicStageContent(
+                mnemonic = FixtureWords.joinToString(" "),
+                onBack = {},
+            )
+        }
+    }
+}
+
+/** Mirrors the production chassis accessory: warning above the acknowledge row. */
+@Composable
+private fun SeedChassisAccessory(acknowledged: Boolean) {
+    Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+        SeedWarningNotice()
+        SeedAcknowledgeRow(acknowledged = acknowledged, onToggle = {})
     }
 }
 
@@ -357,9 +402,16 @@ private fun OnboardingFrame(
     content: @Composable () -> Unit,
 ) {
     CashuTheme(darkTheme = darkTheme) {
-        Surface(
-            modifier = Modifier.fillMaxSize(),
-            color = MaterialTheme.colorScheme.background,
+        // Deliberately `Modifier.background`, NOT `Surface` — production paints
+        // the onboarding canvas exactly this way (OnboardingScreen's root
+        // modifier). A `Surface` here would provide `LocalContentColor` that
+        // production does not, so anything inheriting the ambient content color
+        // would render correctly in these previews while being invisible in the
+        // real app's dark mode. That drift hid a black-on-black bar-band icon.
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(MaterialTheme.colorScheme.background),
         ) {
             content()
         }

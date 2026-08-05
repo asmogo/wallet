@@ -35,7 +35,6 @@ class WalletStartupFailureComposeTest {
                     retryingStartup = false,
                     onCreate = {},
                     onRestore = {},
-                    onInfo = {},
                 ),
             ) {
                 WelcomeStageContent(
@@ -43,6 +42,7 @@ class WalletStartupFailureComposeTest {
                     retryingStartup = false,
                     errorText = null,
                     onRetryStartup = { retries += 1 },
+                    onInfo = {},
                 )
             }
         }

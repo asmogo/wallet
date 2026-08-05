@@ -9,6 +9,7 @@ import androidx.compose.animation.scaleIn
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -25,15 +26,18 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Cancel
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.ArrowCircleRight
 import androidx.compose.material.icons.outlined.Circle
+import androidx.compose.material.icons.outlined.ContentCopy
 import androidx.compose.material.icons.outlined.ContentPaste
 import androidx.compose.material.icons.outlined.Visibility
 import androidx.compose.material3.ButtonDefaults
@@ -53,11 +57,14 @@ import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.blur
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.testTag
@@ -139,6 +146,8 @@ private val SeedGridColumnGap = 12.dp
 private val SeedGridRowGap = 14.dp
 private val SeedIndexWidth = 22.dp
 private val SeedBlurRadius = 9.dp
+private val SeedCardRadius = 14.dp
+private val SeedCardPadding = 20.dp
 private val AckIconSize = 22.dp
 private val SelectIconSize = 24.dp
 private val MintAvatarSize = 36.dp
@@ -319,7 +328,6 @@ fun OnboardingScreen(
                 restoreError = null
                 step = OnboardingStep.RestoreMethod
             },
-            onInfo = { infoOpen = true },
         )
 
         is OnboardingStep.ShowMnemonic -> OnboardingChassisModel(
@@ -457,13 +465,18 @@ fun OnboardingScreen(
 
     val accessory: (@Composable () -> Unit)? = if (step is OnboardingStep.ShowMnemonic) {
         {
-            SeedAcknowledgeRow(
-                acknowledged = seedAcknowledged,
-                onToggle = {
-                    haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                    seedAcknowledged = !seedAcknowledged
-                },
-            )
+            Column(
+                verticalArrangement = Arrangement.spacedBy(CashuTheme.spacing.comfortable),
+            ) {
+                SeedWarningNotice()
+                SeedAcknowledgeRow(
+                    acknowledged = seedAcknowledged,
+                    onToggle = {
+                        haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                        seedAcknowledged = !seedAcknowledged
+                    },
+                )
+            }
         }
     } else {
         null
@@ -529,6 +542,7 @@ fun OnboardingScreen(
                                 }
                             }
                         },
+                        onInfo = { infoOpen = true },
                     )
 
                     is OnboardingStep.ShowMnemonic -> ShowMnemonicStageContent(
@@ -673,12 +687,14 @@ fun OnboardingScreen(
 /** The welcome chassis — shared with WalletStartupFailureComposeTest so the
  * test composes exactly the production frame. */
 @Composable
+// Two slots only. "What is ecash?" used to sit in the tertiary slot, making
+// welcome the sole 3-slot step — the button stack shrank the moment you left
+// it. It is now a bar-band icon on the stage (see WelcomeStageContent).
 internal fun welcomeChassis(
     creating: Boolean,
     retryingStartup: Boolean,
     onCreate: () -> Unit,
     onRestore: () -> Unit,
-    onInfo: () -> Unit,
 ): OnboardingChassisModel = OnboardingChassisModel(
     primary = ChassisAction(
         label = "Create Wallet",
@@ -694,11 +710,6 @@ internal fun welcomeChassis(
         style = ChassisButtonStyle.Secondary,
         enabled = !creating && !retryingStartup,
     ),
-    tertiary = ChassisAction(
-        label = "What is ecash?",
-        onClick = onInfo,
-        style = ChassisButtonStyle.Ghost,
-    ),
 )
 
 /** The welcome stage: the app's title where every other step puts its own, then
@@ -709,17 +720,37 @@ internal fun WelcomeStageContent(
     retryingStartup: Boolean,
     errorText: String?,
     onRetryStartup: () -> Unit,
+    onInfo: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Column(modifier = modifier.fillMaxSize()) {
+        // "What is ecash?" lives here rather than in the chassis: as a ghost
+        // tertiary it made welcome the only 3-slot step, so the button stack
+        // changed height the moment you left it. It sits in the bar band's
+        // trailing slot — opposite where other steps put Back — so the band
+        // reads the same everywhere and the chassis holds a steady two buttons.
+        OnboardingInfoButton(
+            onClick = onInfo,
+            modifier = Modifier
+                .align(Alignment.End)
+                .padding(
+                    // Symmetric with the back button's leading inset.
+                    end = OnboardingMetrics.BarStartInset,
+                    top = OnboardingMetrics.BarTopInset,
+                ),
+        )
         // The only title that keeps a hardcoded break. Left to wrap naturally
         // it wraps after "In" — "Private cash. In" / "your pocket." — splitting
         // the second sentence. Breaking at the sentence boundary is the
         // deliberate exception.
+        //
+        // Welcome now draws a bar button like every other step, so it uses the
+        // same BarTopInset + BarHeight + TitleGap stack instead of
+        // TitleTopInset — the title lands on the identical line either way.
         OnboardingStepHeader(
             title = "Private cash.\nIn your pocket.",
             subhead = "An ecash wallet for Bitcoin and Lightning.",
-            modifier = Modifier.padding(top = OnboardingMetrics.TitleTopInset),
+            modifier = Modifier.padding(top = OnboardingMetrics.TitleGap),
         )
         Spacer(Modifier.weight(1f))
         if (startupFailure != null) {
@@ -812,8 +843,43 @@ private fun EcashConceptSheet(onDismiss: () -> Unit) {
 // Seed phrase (showMnemonic)
 // ---------------------------------------------------------------------------
 
+/**
+ * Centered caution above the acknowledge row. Deliberately a warning triangle,
+ * not a check-shield: a shield reads as "you're protected", which is the
+ * opposite of what this sentence says.
+ *
+ * Not [com.cashu.me.ui.components.InlineNotice] — that is a tinted, left-aligned
+ * rounded container, and this screen already has one card. Bare centered
+ * icon-over-text keeps the bottom band quiet.
+ */
+@Composable
+internal fun SeedWarningNotice(modifier: Modifier = Modifier) {
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            .semantics(mergeDescendants = true) {},
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(CashuTheme.spacing.tight),
+    ) {
+        Icon(
+            imageVector = Icons.Filled.Warning,
+            contentDescription = null,
+            tint = CashuTheme.colors.pending,
+            modifier = Modifier.size(WarningIconSize),
+        )
+        Text(
+            text = "Never share these words with anyone.",
+            style = MaterialTheme.typography.labelMedium,
+            color = CashuTheme.colors.pending,
+            textAlign = TextAlign.Center,
+        )
+    }
+}
+
 /** The acknowledge row rides the chassis accessory slot — above the primary it
- * gates, so it can never move the button. */
+ * gates, so it can never move the button. The warning rides it for the same
+ * reason: pinned there it argues for the checkbox directly below it and can
+ * never push the CTA around. */
 @Composable
 internal fun SeedAcknowledgeRow(
     acknowledged: Boolean,
@@ -868,10 +934,13 @@ internal fun ShowMnemonicStageContent(
     var revealed by remember { mutableStateOf(false) }
     var copied by remember { mutableStateOf(false) }
 
-    fun reveal() {
-        if (revealed) return // one-way, like iOS
+    // Tapping the card toggles the phrase, like iOS — the seed should be easy
+    // to put away once it's been written down, not stuck on screen for the
+    // rest of the step. Hiding re-composes the "••••••" placeholders, so the
+    // real words stop being drawn on the same frame the blur returns.
+    fun toggleReveal() {
         haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-        revealed = true
+        revealed = !revealed
     }
 
     Column(
@@ -887,36 +956,14 @@ internal fun ShowMnemonicStageContent(
                     top = OnboardingMetrics.BarTopInset,
                 ),
         )
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(top = OnboardingMetrics.TitleGap),
-            verticalArrangement = Arrangement.spacedBy(CashuTheme.spacing.snug),
-        ) {
-            OnboardingStepHeader(
-                title = "Your Seed Phrase.",
-                subhead = "Write these 12 words down in order. This is the only way to recover your wallet.",
-            )
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = HeaderPadding),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(CashuTheme.spacing.tight),
-            ) {
-                Icon(
-                    imageVector = Icons.Filled.Warning,
-                    contentDescription = null,
-                    tint = CashuTheme.colors.pending,
-                    modifier = Modifier.size(WarningIconSize),
-                )
-                Text(
-                    text = "Never share these words with anyone",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = CashuTheme.colors.pending,
-                )
-            }
-        }
+        // Title + subhead only, like every sibling step. The "never share"
+        // warning used to sit here; it now rides the chassis accessory
+        // directly above the acknowledge row it argues for.
+        OnboardingStepHeader(
+            title = "Your Seed Phrase.",
+            subhead = "Write these 12 words down in order. This is the only way to recover your wallet.",
+            modifier = Modifier.padding(top = OnboardingMetrics.TitleGap),
+        )
         // The seed grid deliberately gets NO entrance motion: any motion on
         // this block reads as a flicker on first paint, and recomposition
         // mid-entrance restarts it. The step crossfade owns its appearance;
@@ -930,16 +977,19 @@ internal fun ShowMnemonicStageContent(
             verticalArrangement = Arrangement.spacedBy(CashuTheme.spacing.snug),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
+            // SeedPhraseReveal draws its own card — the caller passes layout
+            // only, so the screenshot previews can't drift from production.
             SeedPhraseReveal(
                 words = words,
                 revealed = revealed,
-                onReveal = ::reveal,
+                onToggle = ::toggleReveal,
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(horizontal = HeaderPadding),
             )
             GhostButton(
                 text = if (copied) "Copied" else "Copy",
+                leadingIcon = if (copied) Icons.Filled.Check else Icons.Outlined.ContentCopy,
                 onClick = {
                     clipboard.setText(AnnotatedString(words.joinToString(" ")))
                     copied = true
@@ -948,7 +998,9 @@ internal fun ShowMnemonicStageContent(
                         copied = false
                     }
                 },
-                modifier = Modifier.padding(top = CashuTheme.spacing.default),
+                // The card edge already separates the link from the words, so
+                // the total gap is 16 (snug + snug), not the bare grid's 20.
+                modifier = Modifier.padding(top = CashuTheme.spacing.snug),
             )
         }
         Spacer(Modifier.weight(1f))
@@ -956,40 +1008,73 @@ internal fun ShowMnemonicStageContent(
 }
 
 /**
- * Keeps the masked phrase out of TalkBack's tree and replaces the whole visual
- * with one reveal control. Once revealed, the control semantics disappear so
- * TalkBack can traverse the ordered words in [SeedGrid].
+ * The seed card: keeps the masked phrase out of TalkBack's tree and replaces the
+ * whole visual with one reveal control. Once revealed, the masking semantics
+ * disappear so TalkBack can traverse the ordered words in [SeedGrid], and the
+ * card's click action becomes "Hide seed phrase" — tapping toggles both ways.
+ *
+ * Draws its own card surface (The Seed Card Exception — the phrase is a single
+ * object you act on, not screen content, so it earns a container; the card is
+ * also what gives tap-to-reveal a visible edge, where the gesture previously
+ * targeted an invisible box). Owning the surface here rather than at the call
+ * site is what keeps the screenshot previews from drifting from production.
  */
 @Composable
 internal fun SeedPhraseReveal(
     words: List<String>,
     revealed: Boolean,
-    onReveal: () -> Unit,
+    onToggle: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val interactionSource = remember { MutableInteractionSource() }
+    val currentToggle by rememberUpdatedState(onToggle)
     val accessibilityModifier = if (revealed) {
+        // Revealed: the card stays tappable so the phrase can be put away
+        // again. Deliberately NOT `Modifier.clickable` — that merges its
+        // descendants' semantics, collapsing the 12 individually-traversable
+        // words into a single node and destroying the ordered per-word
+        // reading TalkBack relies on (and that
+        // `revealReplacesActionWithOrderedNumberedWords` asserts). A raw
+        // pointer handler plus a non-merging `onClick` semantic gives the same
+        // affordance while leaving the subtree intact.
         Modifier
+            .pointerInput(Unit) { detectTapGestures { currentToggle() } }
+            .semantics {
+                onClick(label = "Hide seed phrase") {
+                    currentToggle()
+                    true
+                }
+            }
     } else {
         Modifier
             .clickable(
-                interactionSource = remember { MutableInteractionSource() },
+                interactionSource = interactionSource,
                 indication = null,
                 onClickLabel = "Reveal seed phrase",
-                onClick = onReveal,
+                onClick = onToggle,
             )
             .clearAndSetSemantics {
                 semanticsTestTag = UiTestTags.RevealSeed
                 contentDescription = "Reveal seed phrase"
                 role = Role.Button
                 onClick(label = "Reveal seed phrase") {
-                    onReveal()
+                    onToggle()
                     true
                 }
             }
     }
 
     Box(
-        modifier = modifier.then(accessibilityModifier),
+        // Modifier order is load-bearing. clip + background come BEFORE the
+        // clickable so the whole card is the tap target, and the card's inner
+        // padding comes AFTER it — padded first, the tap target would shrink
+        // to the grid and the 20dp margin would look tappable without being
+        // tappable. Callers pass layout only.
+        modifier = modifier
+            .clip(RoundedCornerShape(SeedCardRadius))
+            .background(MaterialTheme.colorScheme.surfaceContainerHigh)
+            .then(accessibilityModifier)
+            .padding(SeedCardPadding),
         contentAlignment = Alignment.Center,
     ) {
         SeedGrid(words = words, revealed = revealed)
@@ -1015,9 +1100,10 @@ internal fun SeedPhraseReveal(
 }
 
 /**
- * 3-column × 4-row seed grid, plain on the canvas (no card chrome) — iOS
- * mnemonicWordsGrid. Zero-padded indices in a fixed trailing-aligned column,
- * monospaced medium words.
+ * 3-column × 4-row seed grid — iOS mnemonicWordsGrid. Zero-padded indices in a
+ * fixed trailing-aligned column, monospaced medium words. The card around the
+ * whole grid (applied by the caller, see The Seed Card Exception) carries the
+ * containment, so the words themselves stay quiet — no per-word chrome.
  *
  * While hidden the real words are never composed (iOS `.redacted` rationale:
  * an animatable blur alone can flicker the phrase legible on entrance, and

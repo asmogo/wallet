@@ -122,6 +122,7 @@ class OnboardingChassisLayoutComposeTest {
                             retryingStartup = false,
                             errorText = null,
                             onRetryStartup = {},
+                            onInfo = {},
                         )
                     }
                 }

@@ -92,7 +92,7 @@ Flow: `Welcome → ShowMnemonic → FirstMint → done`, or
 
 | Step | Top + stage | Bottom actions |
 |------|-------------|----------------|
-| **Welcome** | "Private cash. / In your pocket." header + subhead, on the same line as every other step's title; startup-failure recovery + create errors pin above the actions | `PrimaryButton` "Create Wallet" (filled-tonal) / `SecondaryButton` "Restore Wallet" / `GhostButton` "What is ecash?" (opens the concept sheet) |
+| **Welcome** | "Private cash. / In your pocket." header + subhead, on the same line as every other step's title; a `?` `OnboardingInfoButton` in the bar band's trailing slot (opposite where other steps put Back), opening the concept sheet; startup-failure recovery + create errors pin above the actions | `PrimaryButton` "Create Wallet" (filled-tonal) / `SecondaryButton` "Restore Wallet" — two slots only |
 | **ShowMnemonic** | Back → Welcome; "Your Seed Phrase." header + warning line; 12-word 3-column grid — masked (`"••••••"` + blur on API 31+, real words never composed) until tap-to-reveal — and a Copy ghost with clear separation | acknowledge row in the accessory slot gates "I've Saved My Seed Phrase" |
 | **FirstMint** | "Pick your first mint." header; multi-select recommended-mint rows, "Add custom mint URL" expands a `CashuTextField`, inline notices | "Continue" (disabled with no selection and empty input) / "Skip for now" |
 | **RestoreMethod** | Back → Welcome; "Restore Wallet" header over open space | "Use Seed Phrase" (Secondary styling — Android has no iCloud twin, iOS's chooser has two options) |

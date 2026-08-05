@@ -232,13 +232,6 @@ struct OnboardingView: View {
                         HapticFeedback.selection()
                         advance(to: .restoreMethod)
                     }
-                ),
-                tertiary: OnboardingChassisAction(
-                    label: "What is ecash?",
-                    action: {
-                        HapticFeedback.selection()
-                        showConceptSheet = true
-                    }
                 )
             )
 
@@ -351,38 +344,77 @@ struct OnboardingView: View {
 
     /// The seed-acknowledge row is the one control that must sit adjacent to
     /// the primary it gates — it rides the chassis accessory slot, above the
-    /// primary so it can never move the button.
+    /// primary so it can never move the button. The "never share" warning sits
+    /// with it for the same reason: pinned here it argues for the checkbox
+    /// directly below it and can never push the CTA around.
     @ViewBuilder
     private var chassisAccessory: some View {
         if currentStep == .showMnemonic {
-            Button(action: {
-                HapticFeedback.selection()
-                withAnimation(.snappy) { seedAcknowledged.toggle() }
-            }) {
-                HStack(spacing: 12) {
-                    Image(systemName: seedAcknowledged ? "checkmark.circle.fill" : "circle")
-                        .font(.title3)
-                        .foregroundStyle(seedAcknowledged ? Color.primary : Color.secondary)
-                        .contentTransition(.symbolEffect(.replace))
-                        // Value-scoped so the checkbox flip stays animated
-                        // under the chassis' step-change shield.
-                        .animation(.snappy, value: seedAcknowledged)
-                    Text("I've written down my seed phrase and stored it safely.")
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                        .multilineTextAlignment(.leading)
-                    Spacer(minLength: 0)
-                }
+            VStack(spacing: 16) {
+                seedWarningNotice
+                seedAcknowledgeRow
             }
-            .buttonStyle(.plain)
-            .accessibilityIdentifier("onboarding-ack-seed")
         }
+    }
+
+    /// Centered caution over the acknowledge row. Deliberately a triangle, not
+    /// a check-shield: a shield reads as "you're protected", which is the
+    /// opposite of what this sentence says.
+    private var seedWarningNotice: some View {
+        VStack(spacing: 6) {
+            Image(systemName: "exclamationmark.triangle.fill")
+                .font(.footnote)
+            Text("Never share these words with anyone.")
+                .font(.caption.weight(.medium))
+                .multilineTextAlignment(.center)
+        }
+        .foregroundStyle(.orange)
+        .frame(maxWidth: .infinity)
+        .accessibilityElement(children: .combine)
+    }
+
+    private var seedAcknowledgeRow: some View {
+        Button(action: {
+            HapticFeedback.selection()
+            withAnimation(.snappy) { seedAcknowledged.toggle() }
+        }) {
+            HStack(spacing: 12) {
+                Image(systemName: seedAcknowledged ? "checkmark.circle.fill" : "circle")
+                    .font(.title3)
+                    .foregroundStyle(seedAcknowledged ? Color.primary : Color.secondary)
+                    .contentTransition(.symbolEffect(.replace))
+                    // Value-scoped so the checkbox flip stays animated
+                    // under the chassis' step-change shield.
+                    .animation(.snappy, value: seedAcknowledged)
+                Text("I've written down my seed phrase and stored it safely.")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.leading)
+                Spacer(minLength: 0)
+            }
+        }
+        .buttonStyle(.plain)
+        .accessibilityIdentifier("onboarding-ack-seed")
     }
 
     // MARK: - Welcome Stage
 
     private var welcomeStage: some View {
         VStack(spacing: 0) {
+            // "What is ecash?" lives here rather than in the chassis: as a
+            // tertiary text link it made welcome the only 3-slot step, so the
+            // button stack changed height the moment you left it. It sits in
+            // the bar band's trailing slot — opposite where other steps put
+            // Back — so the band reads the same everywhere and the chassis
+            // holds a steady two buttons.
+            OnboardingInfoButton {
+                HapticFeedback.selection()
+                showConceptSheet = true
+            }
+            .frame(maxWidth: .infinity, alignment: .trailing)
+            .padding(.horizontal, OnboardingMetrics.gutter)
+            .padding(.top, OnboardingMetrics.barTopInset)
+
             stagger(appeared: welcomeAppeared, index: 0) {
                 // The only title that keeps a hardcoded break. Left to wrap
                 // naturally it wraps after "In" — "Private cash. In" / "your
@@ -393,7 +425,10 @@ struct OnboardingView: View {
                     subhead: "An ecash wallet for Bitcoin and Lightning."
                 )
             }
-            .padding(.top, OnboardingMetrics.titleTopInset)
+            // Welcome now draws a bar button like every other step, so it uses
+            // the same barTopInset + barHeight + titleGap stack instead of
+            // titleTopInset — the title lands on the identical line either way.
+            .padding(.top, OnboardingMetrics.titleGap)
 
             Spacer(minLength: 0)
 
@@ -714,20 +749,14 @@ struct OnboardingView: View {
                 .padding(.horizontal, OnboardingMetrics.gutter)
                 .padding(.top, OnboardingMetrics.barTopInset)
 
+            // Title + subhead only, like every sibling step. The "never share"
+            // warning used to sit here; it now rides the chassis accessory
+            // directly above the acknowledge row it argues for.
             stagger(appeared: mnemonicAppeared, index: 0) {
-                VStack(alignment: .leading, spacing: 8) {
-                    OnboardingStepHeader(
-                        title: "Your Seed Phrase.",
-                        subhead: "Write these 12 words down in order. This is the only way to recover your wallet."
-                    )
-
-                    Label("Never share these words with anyone", systemImage: "exclamationmark.triangle.fill")
-                        .font(.caption.weight(.medium))
-                        .foregroundStyle(.orange)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(.horizontal, 28)
-                        .padding(.top, 2)
-                }
+                OnboardingStepHeader(
+                    title: "Your Seed Phrase.",
+                    subhead: "Write these 12 words down in order. This is the only way to recover your wallet."
+                )
             }
             .padding(.top, OnboardingMetrics.titleGap)
 
@@ -736,8 +765,23 @@ struct OnboardingView: View {
             // re-composition mid-entrance restarts it. The step crossfade owns
             // its appearance; the tap-to-reveal animation is untouched.
             ZStack {
-                mnemonicWordsGrid(words: mnemonicWords)
-                    // Hide the seed at the CONTENT level, not just visually.
+                // While hidden, the real words are never put into the view at
+                // all — masked strings stand in, exactly like Android's
+                // "••••••" placeholders.
+                //
+                // `.redacted` stops the words being *drawn*, but a `Text` still
+                // publishes its own string to the accessibility tree, and
+                // `.accessibilityHidden` does not reliably reach the lazily
+                // created children of a `LazyVGrid`. VoiceOver could therefore
+                // read all 12 words aloud while they sat blurred on screen.
+                // Substituting the content is the only version of "hidden" that
+                // VoiceOver honours too. As a bonus the uniform mask width
+                // stops the redaction bars leaking each word's length.
+                mnemonicWordsGrid(
+                    words: seedRevealed
+                        ? mnemonicWords
+                        : Array(repeating: "••••••", count: mnemonicWords.count)
+                )
                     // A bare `.blur` is animatable, and on this screen's
                     // entrance transition SwiftUI ramps the radius up from its
                     // identity (0 = fully legible), briefly exposing the phrase
@@ -767,37 +811,76 @@ struct OnboardingView: View {
                     .accessibilityLabel("Reveal seed phrase")
                     .accessibilityHint("Shows your 12-word recovery phrase")
                     .accessibilityAddTraits(.isButton)
-                    .accessibilityAction(.default, revealSeed)
+                    .accessibilityAction(.default, toggleSeedReveal)
                 }
             }
-            .contentShape(Rectangle())
-            .onTapGesture(perform: revealSeed)
-            .padding(.horizontal, 28)
+            // Tapping a revealed card hides it again — the phrase should be
+            // easy to put away once it's been written down, not stuck on
+            // screen for the rest of the step. The label tracks the state so
+            // VoiceOver announces the action it will actually perform.
+            .accessibilityAction(
+                named: seedRevealed ? "Hide seed phrase" : "Reveal seed phrase",
+                toggleSeedReveal
+            )
+            // The Seed Card Exception (DESIGN.md §5): the phrase is a single
+            // object you act on, not screen content, so it earns a container.
+            // The card is also what gives tap-to-reveal a visible edge — the
+            // gesture used to target an invisible rectangle.
+            .padding(20)
+            .frame(maxWidth: .infinity)
+            .liquidGlass(in: RoundedRectangle(cornerRadius: 14))
+            // Must match the card's shape, not a bare rect, so the hit area is
+            // exactly the surface the user can see.
+            .contentShape(RoundedRectangle(cornerRadius: 14))
+            .onTapGesture(perform: toggleSeedReveal)
+            .padding(.horizontal, OnboardingMetrics.gutter)
             .padding(.top, 24)
 
             Button(action: copyMnemonic) {
-                Text(seedCopied ? "Copied" : "Copy")
-                    .contentTransition(.opacity)
+                HStack(spacing: 6) {
+                    Image(systemName: seedCopied ? "checkmark" : "doc.on.doc")
+                        .contentTransition(.symbolEffect(.replace))
+                    Text(seedCopied ? "Copied" : "Copy")
+                        .contentTransition(.opacity)
+                }
+                .animation(.snappy, value: seedCopied)
             }
             .textLinkButton()
             .frame(maxWidth: .infinity)
-            // Air between the grid and the link — flush against the words it
-            // read as part of the grid.
-            .padding(.top, 20)
+            // The card edge already separates the link from the words, so this
+            // is less than the 20 the bare grid needed.
+            .padding(.top, 16)
 
             Spacer(minLength: 0)
         }
         .onAppear {
             mnemonicWords = walletManager.getMnemonicWords()
+            // Every entry to this step starts hidden and unacknowledged.
+            // These three are @State on the root, so without this a back-out
+            // to Welcome and a second Create Wallet would re-enter with the
+            // phrase still revealed — and, worse, with the CTA already armed
+            // over words the user hasn't looked at this time. Resetting here
+            // rather than in `createWallet()` covers every entry path.
+            //
+            // Android gets the same reset for free: `seedAcknowledged` is
+            // cleared in the Welcome chassis' onCreate, and `revealed` /
+            // `copied` are `remember` state that dies with the stage
+            // composable (OnboardingScreen.kt).
+            seedRevealed = false
+            seedAcknowledged = false
+            seedCopied = false
             triggerEntrance { mnemonicAppeared = true }
         }
     }
 
-    private func revealSeed() {
-        guard !seedRevealed else { return }
+    /// Tapping the card toggles the phrase. Hiding is safe in the same way
+    /// revealing is: `.redacted` flips instantly so the real characters stop
+    /// being drawn on the same frame, and only the blur ramps — there is no
+    /// window where the words sit unblurred.
+    private func toggleSeedReveal() {
         HapticFeedback.selection()
         withAnimation(.snappy(duration: 0.25)) {
-            seedRevealed = true
+            seedRevealed.toggle()
         }
     }
 
@@ -811,9 +894,10 @@ struct OnboardingView: View {
     }
 
     private func mnemonicWordsGrid(words: [String]) -> some View {
-        // Family-style: plain words on the canvas, monospaced, with the
-        // number in tertiary. The seed phrase deserves quiet treatment — no
-        // glass material per word, no busy backgrounds.
+        // Monospaced words with the number in tertiary. The card around the
+        // whole grid carries the containment (see The Seed Card Exception),
+        // so the words themselves stay quiet — no per-word material, no
+        // per-word background.
         LazyVGrid(columns: [GridItem(.flexible(), spacing: 12), GridItem(.flexible(), spacing: 12), GridItem(.flexible(), spacing: 12)], spacing: 14) {
             ForEach(Array(words.enumerated()), id: \.offset) { index, word in
                 HStack(spacing: 6) {

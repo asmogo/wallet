@@ -392,8 +392,8 @@ because every layout uses `.frame(maxWidth: .infinity)` rather than fixed widths
   `glassButton()` / `FullWidthCapsuleButtonStyle`), history row title.
 - **Body** (`.body`): default for prose, settings rows, detail values.
 - **Text Link** (`.subheadline.weight(.medium)`, `.secondary`): borderless
-  tertiary actions — "Skip" / "Skip for now", "What is ecash?", "Copy" /
-  "Copied", "Add custom mint URL". Always applied via `.textLinkButton()`
+  tertiary actions — "Skip" / "Skip for now", "Copy" / "Copied",
+  "Add custom mint URL". Always applied via `.textLinkButton()`
   (`TextLinkButtonStyle`), never hand-rolled per site.
 - **Callout** (`.callout`): supporting descriptive text under hero headings,
   e.g. "An ecash wallet for Bitcoin and Lightning." — the onboarding chassis
@@ -490,7 +490,7 @@ right tool for the job.
   (full-width, padding, an optional leading SF Symbol like the "+" on "Add
   custom mint URL") stays at the call site, since text links range from inline
   ("Copy") to full-width ("Skip", "Add custom mint URL"). Used for "Skip" /
-  "Skip for now", "What is ecash?", "Copy", and "Add custom mint URL". Defined
+  "Skip for now", "Copy", and "Add custom mint URL". Defined
   in `ios/CashuWallet/Views/Components/LiquidGlassModifiers.swift`.
 - **Utility — `.buttonStyle(.plain)`** with a bare SF Symbol (no text label),
   often wrapped in `.liquidGlass(in: Capsule(), interactive: true)` when the
@@ -815,7 +815,7 @@ copy, and disabled state** — never from a parallel button vocabulary. A
 they are siblings, not parent-and-child.
 
 **The Text-Link Rule.** A borderless, text-only tertiary action ("Skip",
-"What is ecash?", "Copy", "Add custom mint URL") always goes through
+"Copy", "Add custom mint URL") always goes through
 `.textLinkButton()` — `.subheadline.weight(.medium)`, `.secondary`. Never
 hand-roll the font/color on a `.buttonStyle(.plain)` text link; that is how
 "Skip for now" drifted to `.footnote` while its twins stayed `.subheadline`.
@@ -870,6 +870,56 @@ Figure Rule (`.monospacedDigit()` +
 `.contentTransition(.numericText())`); the sat page keeps its ₿/sat tap-toggle
 and fiat sub-line, non-sat pages show the amount in its own currency (no fiat
 conversion — eur is already fiat).
+
+**The Bar-Band Rule (2026-08-05).** Onboarding draws no navigation bar, but every
+step reserves the same 44 pt band below the status bar, with two positions:
+**leading = back** (`OnboardingBackButton`) and **trailing = help**
+(`OnboardingInfoButton`, `?`, opening the ecash concept sheet). Neither position
+is ever repurposed for anything but one circular glyph, and a step may leave
+either empty. Welcome is the only step with the help glyph today.
+
+This is why "What is ecash?" is **not** a chassis text link: as a tertiary it made
+Welcome the only three-slot step, so the button stack visibly changed height the
+moment you left it. In the bar band the chassis holds a steady two buttons, and
+the title lands on the same line on every step either way
+(`barTopInset + barHeight + titleGap` == `titleTopInset`). On iOS both
+affordances are built from the same private `OnboardingBarButton` so they land on
+identical geometry.
+
+**Bar-band icons must set their content color explicitly.** The onboarding canvas
+is painted with a background modifier, not a `Surface` — and only a `Surface`
+provides an ambient content color. An icon that inherits the ambient value gets
+the framework default (**black**) and disappears on the dark canvas. On Android
+pass `IconButtonDefaults.iconButtonColors(contentColor = colorScheme.onSurface)`;
+on iOS `.foregroundStyle(.primary)` already resolves per appearance. The Android
+screenshot frame deliberately mirrors production here (background modifier, no
+`Surface`) — wrapping previews in a `Surface` made them render correct while the
+real app was black-on-black, which is exactly how this shipped unnoticed.
+
+**The Seed Card Exception (2026-08-05).** The onboarding seed step
+(`showMnemonic`) renders its 12 words inside a single container: Liquid Glass on
+iOS 26+ / `.quaternary` below (`.liquidGlass(in: RoundedRectangle(cornerRadius:
+14))`), `surfaceContainerHigh` at `RoundedCornerShape(14.dp)` on Android. This is
+the **only** screen permitted a content container, and the carve-out is narrow on
+purpose:
+
+- The phrase is **one object the user must act on**, not screen content. Bare
+  words on the canvas read as output; a container reads as a thing to handle.
+- The card is **load-bearing for the gesture**. Tap-to-reveal previously targeted
+  an invisible rectangle with no edges. The container is what tells you where to
+  tap, so it is an affordance, not decoration — exactly the case the
+  Glass-As-Surface Rule permits.
+
+It is one card, not a card stack, and the canvas around it stays bare. The
+Flat-By-Default Rule and the No-Shadow Absolute still apply to it in full: no
+shadow, no border, no per-word chrome inside it. The `Copy` link and the "never
+share" caution sit **outside** the card on the bare canvas.
+
+Reference: Family's Manual Backup screen. Implemented in
+`OnboardingView.showMnemonicStage` and `OnboardingScreen.SeedPhraseReveal` — on
+Android the surface is drawn *inside* `SeedPhraseReveal` (clip + background
+before the clickable, inner padding after) so the whole card is the tap target
+and the screenshot previews cannot drift from production.
 
 **The Share-At-Top Rule.** Any sheet that displays a shareable QR artifact —
 Lightning Invoice (`ReceiveLightningView`), Cashu Request
@@ -1088,6 +1138,9 @@ not exist).
   *The mint card row on home is a horizontally-scrolling row of Liquid Glass
   tiles, not a container wrapping content — the canvas underneath is still
   bare, and the transactions list below sits on it directly.*
+  *The onboarding seed phrase is the one screen with a content container — see
+  The Seed Card Exception in §5. It earns it because the card is the
+  tap-to-reveal affordance, not decoration. Do not generalize it.*
 - **Don't** introduce a display font, a serif pairing, a custom-loaded `.otf`,
   or a `Font.system(size: N)` for body text. SF system styles only.
 - **Don't** reach for `.fullScreenCover` for a confirmation, a settings flow,

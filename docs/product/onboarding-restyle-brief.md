@@ -71,7 +71,9 @@ welcome ──► showMnemonic ──► firstMint ──► done
    └──► restoreMethod ──► restoreInput ──► restoreMints ──► restoreProgress ──► done
 ```
 
-Plus the `What is ecash?` concept sheet from `welcome`.
+Plus the `What is ecash?` concept sheet, opened from `welcome`'s bar-band `?`
+button (it was a chassis text link until 2026-08-05 — see The Bar-Band Rule in
+DESIGN.md §5).
 
 Every CTA, secondary action, tertiary text link, back affordance, disabled-until-valid rule,
 skip path, retry affordance, and error surface stays. Notably:
@@ -108,6 +110,12 @@ is a break.
 click action and one "Reveal seed phrase" content description. Any new control you add to the
 masked seed stage breaks it — if that is deliberate, update the test in the same commit and say
 why.
+
+*Updated 2026-08-05:* the card is now a **toggle**, so the *revealed* state also carries exactly
+one click action ("Hide seed phrase") where it previously carried none. The masked-state contract
+above is unchanged. The revealed-state click action must stay **outside** `clearAndSetSemantics`
+— masking that subtree would hide the 12 ordered words from TalkBack, defeating the point of
+revealing them.
 
 ### Design system — non-negotiable
 
@@ -177,7 +185,7 @@ Rules:
 | Step | Stage holds |
 | --- | --- |
 | `welcome` | Its title + subhead at the top, like every other step, over open space. (Originally an abstract ink motion piece — see the note in §4.) |
-| `showMnemonic` | The 12-word grid (functional). **No entrance animation on the grid** — this is deliberate and documented; it flickers. |
+| `showMnemonic` | The 12-word grid inside the seed card, then the `Copy` link. **No entrance animation on the grid** — this is deliberate and documented; it flickers. The "never share these words" caution is **not** in the stage: it rides the chassis accessory directly above the acknowledge row (2026-08-05), so it argues for the checkbox it sits over and can never push the CTA. The card itself is The Seed Card Exception (DESIGN.md §5) — it is the tap-to-reveal affordance, not decoration. |
 | `firstMint` | The mint list + custom-URL field (functional, scrolls, keyboard). |
 | `restoreMethod` | Header over open space (the quiet variant of the welcome piece went with it — see §4). Two buttons in the chassis. |
 | `restoreInput` | The seed `TextEditor` + word counter (functional, keyboard). |

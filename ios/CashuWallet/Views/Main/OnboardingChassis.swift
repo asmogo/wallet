@@ -170,8 +170,44 @@ struct OnboardingBackButton: View {
     let action: () -> Void
 
     var body: some View {
+        OnboardingBarButton(
+            systemImage: "chevron.backward",
+            accessibilityLabel: "Back",
+            accessibilityIdentifier: "onboarding-back",
+            action: action
+        )
+    }
+}
+
+/// Help affordance for a step that has no back button — it takes the *same*
+/// bar-band leading slot, so the position is never empty and the glyph simply
+/// swaps as you move between steps instead of a text link appearing and
+/// disappearing from the chassis. Welcome is the only user today.
+struct OnboardingInfoButton: View {
+    let action: () -> Void
+
+    var body: some View {
+        OnboardingBarButton(
+            systemImage: "questionmark",
+            accessibilityLabel: "What is ecash?",
+            accessibilityIdentifier: "onboarding-info",
+            action: action
+        )
+    }
+}
+
+/// The shared bar-band affordance both of the above are made of: one 44 pt
+/// glass circle in the leading slot. Keeping it in one place is what makes the
+/// back/help swap land on identical geometry.
+private struct OnboardingBarButton: View {
+    let systemImage: String
+    let accessibilityLabel: String
+    let accessibilityIdentifier: String
+    let action: () -> Void
+
+    var body: some View {
         Button(action: action) {
-            Image(systemName: "chevron.backward")
+            Image(systemName: systemImage)
                 .font(.body.weight(.semibold))
                 .foregroundStyle(.primary)
                 .frame(width: 44, height: 44)
@@ -179,7 +215,7 @@ struct OnboardingBackButton: View {
                 .contentShape(Circle())
         }
         .buttonStyle(PressableButtonStyle())
-        .accessibilityLabel("Back")
-        .accessibilityIdentifier("onboarding-back")
+        .accessibilityLabel(accessibilityLabel)
+        .accessibilityIdentifier(accessibilityIdentifier)
     }
 }

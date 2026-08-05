@@ -16,9 +16,11 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.text.TextAutoSize
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.outlined.HelpOutline
 import androidx.compose.material3.ButtonColors
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -38,6 +40,7 @@ import androidx.compose.ui.unit.sp
 import com.cashu.me.ui.components.GhostButton
 import com.cashu.me.ui.components.PrimaryButton
 import com.cashu.me.ui.components.SecondaryButton
+import com.cashu.me.ui.testing.UiTestTags
 import com.cashu.me.ui.theme.CashuTheme
 import com.cashu.me.ui.theme.rememberReducedMotion
 
@@ -313,16 +316,54 @@ fun OnboardingStepHeader(
     }
 }
 
+/**
+ * Bar-band icon colors.
+ *
+ * These MUST be set explicitly. The onboarding root paints its canvas with
+ * `Modifier.background(colorScheme.background)` rather than wrapping in a
+ * `Surface`, and only a `Surface` provides `LocalContentColor` — so the
+ * ambient value stays at Compose's default of **black**, which is invisible on
+ * the dark canvas. Never let a bar-band icon inherit `LocalContentColor` here.
+ */
+@Composable
+private fun barButtonColors() = IconButtonDefaults.iconButtonColors(
+    contentColor = MaterialTheme.colorScheme.onSurface,
+)
+
 /** M3 back affordance for onboarding — a plain icon button, no top app bar. */
 @Composable
 fun OnboardingBackButton(
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    IconButton(onClick = onBack, modifier = modifier) {
+    IconButton(onClick = onBack, modifier = modifier, colors = barButtonColors()) {
         Icon(
             imageVector = Icons.AutoMirrored.Filled.ArrowBack,
             contentDescription = "Back",
+        )
+    }
+}
+
+/**
+ * Help affordance, in the bar band's *trailing* slot — opposite the back
+ * button's leading one, where a help glyph conventionally lives. Keeping it in
+ * the bar band rather than the chassis is what stops Welcome being the only
+ * three-slot step, so the button stack no longer changes height when you leave
+ * it. Welcome is the only user today.
+ */
+@Composable
+fun OnboardingInfoButton(
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    IconButton(
+        onClick = onClick,
+        modifier = modifier.testTag(UiTestTags.OnboardingInfo),
+        colors = barButtonColors(),
+    ) {
+        Icon(
+            imageVector = Icons.Outlined.HelpOutline,
+            contentDescription = "What is ecash?",
         )
     }
 }
