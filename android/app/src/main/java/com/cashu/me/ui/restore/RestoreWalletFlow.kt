@@ -70,7 +70,6 @@ import com.cashu.me.ui.components.InlineNotice
 import com.cashu.me.ui.components.MintAvatar
 import com.cashu.me.ui.components.NoticeSeverity
 import com.cashu.me.ui.components.PrimaryButton
-import com.cashu.me.ui.components.SecondaryButton
 import com.cashu.me.ui.theme.CapsuleShape
 import com.cashu.me.ui.theme.CashuTheme
 import com.cashu.me.ui.theme.withMonoDigits
@@ -1128,51 +1127,6 @@ private fun RestoreProgressRow(
             is RestoreMintPhase.Failed -> {
                 GhostButton(text = "Retry", onClick = onRetry)
             }
-        }
-    }
-}
-
-// ---------------------------------------------------------------------------
-// Method chooser (onboarding only — Android has no iCloud twin)
-// ---------------------------------------------------------------------------
-
-@Composable
-fun RestoreMethodStep(
-    onBack: () -> Unit,
-    onSeedPhrase: () -> Unit,
-) {
-    Column(modifier = Modifier.fillMaxSize()) {
-        Spacer(Modifier.weight(1f))
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = HeaderPadding),
-            verticalArrangement = Arrangement.spacedBy(CashuTheme.spacing.default),
-        ) {
-            Text(
-                text = "Restore Wallet",
-                style = restoreOnboardingTitleStyle(),
-                color = MaterialTheme.colorScheme.onSurface,
-            )
-            Text(
-                text = "Choose how to recover your wallet.",
-                style = MaterialTheme.typography.bodyLarge,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
-        Spacer(Modifier.weight(1f))
-        Column(
-            modifier = Modifier
-                .padding(horizontal = CtaPadding)
-                .padding(bottom = BottomPadding),
-            verticalArrangement = Arrangement.spacedBy(CashuTheme.spacing.tight),
-            horizontalAlignment = Alignment.CenterHorizontally,
-        ) {
-            SecondaryButton(
-                text = "Use Seed Phrase",
-                onClick = onSeedPhrase,
-            )
-            GhostButton(text = "Back", onClick = onBack)
         }
     }
 }
