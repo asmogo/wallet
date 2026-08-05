@@ -305,7 +305,17 @@ enum ContentFitSheetMetrics {
     ) -> CGFloat {
         let body = contentHeight > 0 ? contentHeight : estimate
         let window = activeWindow
-        let wanted = body + chrome(hasNavigationBar: hasNavigationBar) + (window?.safeAreaInsets.bottom ?? 0)
+        let bottomInset: CGFloat
+        if #available(iOS 26, *) {
+            // iOS 26's floating glass sheets already rest above the home
+            // indicator, so the window's bottom inset no longer applies to
+            // sheet content — folding it in lands as dead space under the
+            // sheet's own bottom padding (visible under onboarding's "Got it").
+            bottomInset = 0
+        } else {
+            bottomInset = window?.safeAreaInsets.bottom ?? 0
+        }
+        let wanted = body + chrome(hasNavigationBar: hasNavigationBar) + bottomInset
         // Read the ceiling from the *screen*, never from the sheet's own
         // geometry — the latter would reintroduce the feedback loop this whole
         // mechanism exists to avoid.

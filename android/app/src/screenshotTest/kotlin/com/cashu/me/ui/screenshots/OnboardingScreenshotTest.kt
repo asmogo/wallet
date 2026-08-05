@@ -191,6 +191,7 @@ fun onboardingFirstMintScreenshot() {
                 busy = false,
                 addingMintUrl = null,
                 errorText = null,
+                onBack = {},
             )
         }
     }

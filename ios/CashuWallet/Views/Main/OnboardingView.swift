@@ -829,13 +829,20 @@ struct OnboardingView: View {
 
     private var firstMintStage: some View {
         VStack(spacing: 16) {
+            OnboardingBackButton {
+                guard !isAddingFirstMints else { return }
+                retreat(to: .showMnemonic)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, 28)
+            .padding(.top, 8)
+
             stagger(appeared: firstMintAppeared, index: 0) {
                 OnboardingStepHeader(
                     title: "Pick your first mint.",
                     subhead: "Mints issue your ecash and redeem it for Bitcoin. Add more anytime in Settings."
                 )
             }
-            .padding(.top, 8)
 
             firstMintList
         }

@@ -436,12 +436,15 @@ fun OnboardingScreen(
     // forward-only restore progress — keep the platform default (exit).
     BackHandler(
         enabled = step is OnboardingStep.ShowMnemonic ||
+            step is OnboardingStep.FirstMint ||
             step is OnboardingStep.RestoreMethod ||
             step is OnboardingStep.RestoreInput ||
             step is OnboardingStep.RestoreMints,
     ) {
-        when (step) {
+        when (val current = step) {
             is OnboardingStep.ShowMnemonic -> step = OnboardingStep.Welcome
+            is OnboardingStep.FirstMint ->
+                if (!finishing) step = OnboardingStep.ShowMnemonic(current.mnemonic)
             OnboardingStep.RestoreMethod -> step = OnboardingStep.Welcome
             OnboardingStep.RestoreInput -> if (!restoring) step = OnboardingStep.Welcome
             is OnboardingStep.RestoreMints -> {
@@ -538,6 +541,7 @@ fun OnboardingScreen(
                         busy = finishing,
                         addingMintUrl = addingMintUrl,
                         errorText = firstMintError,
+                        onBack = { step = OnboardingStep.ShowMnemonic(current.mnemonic) },
                     )
 
                     OnboardingStep.RestoreMethod -> Column(Modifier.fillMaxSize()) {
@@ -1107,13 +1111,21 @@ internal fun FirstMintStageContent(
     busy: Boolean,
     addingMintUrl: String?,
     errorText: String?,
+    onBack: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Column(modifier = modifier.fillMaxSize()) {
+        OnboardingBackButton(
+            onBack = onBack,
+            modifier = Modifier.padding(
+                start = CashuTheme.spacing.comfortable,
+                top = CashuTheme.spacing.snug,
+            ),
+        )
         OnboardingStepHeader(
             title = "Pick your first mint.",
             subhead = "Mints issue your ecash and redeem it for Bitcoin. Add more anytime in Settings.",
-            modifier = Modifier.padding(top = CashuTheme.spacing.snug),
+            modifier = Modifier.padding(top = CashuTheme.spacing.default),
         )
         FirstMintList(
             state = state,
