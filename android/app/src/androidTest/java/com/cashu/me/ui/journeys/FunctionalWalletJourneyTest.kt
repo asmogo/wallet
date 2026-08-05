@@ -183,7 +183,7 @@ class FunctionalWalletJourneyTest {
         }
 
         robot.awaitText("Payment Received!", timeoutMillis = 20_000)
-            .assertTextDoesNotExist("Payment Received!", timeoutMillis = 10_000)
+            .tapText("Done")
             .awaitTag(UiTestTags.WalletScreen)
             .tapText("History")
             .awaitText("Lightning received")
@@ -265,7 +265,9 @@ class FunctionalWalletJourneyTest {
         }
         robot.tapDescription("1")
             .tapTextWithinTag(UiTestTags.SendEcashScreen, "Send")
+            .awaitText("Couldn't Create Ecash")
             .awaitText("Temporary backend failure. Try again.")
+            .tapTextWithinTag(UiTestTags.SendEcashScreen, "Try Again")
             .tapTextWithinTag(UiTestTags.SendEcashScreen, "Send")
             .awaitText("Pending Ecash")
     }
