@@ -12,7 +12,9 @@ class ScannerViewModel: ObservableObject {
     /// Severity of `errorMessage`. `.error` paints the alarm-red toast; `.info`
     /// renders a neutral material so a success confirmation (e.g. "copied") isn't
     /// styled as a failure.
-    @Published var noticeSeverity: ErrorSeverity = .error
+    // Caution, not error: a QR that isn't what we wanted didn't break
+    // anything. Genuine failures raise this explicitly.
+    @Published var noticeSeverity: ErrorSeverity = .caution
 
     #if canImport(URKit)
     private var decoder = URDecoder()
@@ -25,7 +27,7 @@ class ScannerViewModel: ObservableObject {
         scanProgress = 0
         isScanning = true
         errorMessage = nil
-        noticeSeverity = .error
+        noticeSeverity = .caution
     }
     
     func processFragment(_ fragment: String) -> String? {
@@ -275,16 +277,18 @@ struct ScannerWrapperView: View {
                 if let error = scannerModel.errorMessage {
                     VStack {
                         Spacer()
-                        Text(error)
-                            .foregroundStyle(.primary)
-                            .padding()
-                            .background(
-                                scannerModel.noticeSeverity == .error
-                                    ? AnyShapeStyle(Color.red)
-                                    : AnyShapeStyle(.regularMaterial)
-                            )
-                            .clipShape(.rect(cornerRadius: 10))
-                            .padding(.bottom, 100)
+                        // Floats over the camera preview, so it is the floating
+                        // channel's own component. This screen used to hand-roll
+                        // the banner's exact body — material, glyph, combined
+                        // accessibility element — which is how it drifted to a
+                        // solid red slab in the first place. Position it; don't
+                        // restyle it.
+                        ErrorBannerView(
+                            message: error,
+                            severity: scannerModel.noticeSeverity
+                        )
+                        .padding(.horizontal)
+                        .padding(.bottom, 100)
                     }
                 }
             }

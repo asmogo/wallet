@@ -689,7 +689,7 @@ struct ReceiveLightningView: View {
                             Text("Expires in \(formatTimeRemaining(expiryTimeRemaining))")
                                 .font(.footnote)
                         }
-                        .foregroundStyle(expiryTimeRemaining < 60 ? Color.red : Color.primary.opacity(0.5))
+                        .foregroundStyle(expiryTimeRemaining < 60 ? ErrorSeverity.error.foreground : Color.primary.opacity(0.5))
                     }
 
                     if walletManager.activeMint != nil || blockExplorerURL(for: quote) != nil {
@@ -874,7 +874,9 @@ struct ReceiveLightningView: View {
                     Text("Expired")
                 }
                 .font(.subheadline.weight(.medium))
-                .foregroundStyle(.red)
+                // Same severity token as the countdown above it, which already
+                // moved off Color.red — the two states of one clock.
+                .foregroundStyle(ErrorSeverity.error.foreground)
                 .transition(.opacity)
             } else if mintQuote?.state == .paid || mintQuote?.state == .issued {
                 HStack(spacing: 6) {

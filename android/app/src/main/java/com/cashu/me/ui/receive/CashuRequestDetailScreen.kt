@@ -340,7 +340,7 @@ fun CashuRequestDetailScreen(
                     InlineNotice(
                         text = deliveryNotice.title,
                         detail = deliveryNotice.message,
-                        severity = NoticeSeverity.Warning,
+                        severity = NoticeSeverity.Caution,
                     )
                 } else {
                     StatusBlock(
@@ -397,7 +397,7 @@ fun CashuRequestDetailScreen(
                     }
                 }
 
-                InlineNoticeHost(text = regenerateError, modifier = Modifier.fillMaxWidth())
+                InlineNoticeHost(text = regenerateError, modifier = Modifier.fillMaxWidth(), severity = NoticeSeverity.Error)
 
                 Spacer(Modifier.height(CashuTheme.spacing.snug))
             }

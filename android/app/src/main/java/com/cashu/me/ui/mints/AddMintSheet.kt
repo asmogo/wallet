@@ -116,6 +116,7 @@ fun AddMintFormBody(
             placeholder = "https://…",
             singleLine = true,
             isError = error != null,
+            supportingText = error,
             modifier = Modifier
                 .fillMaxWidth()
                 .testTag(UiTestTags.AddMintUrl),
@@ -138,10 +139,6 @@ fun AddMintFormBody(
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
-
-        if (error != null) {
-            InlineNotice(text = error!!)
-        }
 
         Spacer(modifier = Modifier.height(CashuTheme.spacing.tight))
 

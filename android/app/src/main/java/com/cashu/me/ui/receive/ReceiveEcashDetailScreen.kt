@@ -305,7 +305,7 @@ internal fun UnknownMintTrustNotice(
     InlineNotice(
         text = "New mint: ${trust.host}",
         detail = "Receiving this token will add the mint to your wallet. Continue only if you trust it.",
-        severity = NoticeSeverity.Warning,
+        severity = NoticeSeverity.Caution,
         modifier = modifier,
     )
 }

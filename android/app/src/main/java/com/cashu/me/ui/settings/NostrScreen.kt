@@ -228,17 +228,9 @@ fun NostrScreen(
                 onValueChange = { relayInput = it; addRelayError = null },
                 onSubmit = { submitRelay() },
                 isError = addRelayError != null,
+                errorText = addRelayError,
                 modifier = Modifier.padding(horizontal = CashuTheme.spacing.comfortable),
             )
-            addRelayError?.let {
-                InlineNotice(
-                    text = it,
-                    modifier = Modifier.padding(
-                        horizontal = CashuTheme.spacing.comfortable,
-                        vertical = CashuTheme.spacing.snug,
-                    ),
-                )
-            }
             Spacer(Modifier.height(CashuTheme.spacing.snug))
             // Relay add/remove animates the list resize (iOS
             // .animation(value: settings.nostrRelays) parity).
@@ -251,7 +243,7 @@ fun NostrScreen(
                     InlineNotice(
                         text = "No relays configured. Your Lightning address, encrypted " +
                             "backups, and payment requests stay off until you add one.",
-                        severity = NoticeSeverity.Warning,
+                        severity = NoticeSeverity.Caution,
                         modifier = Modifier.padding(
                             horizontal = CashuTheme.spacing.comfortable,
                             vertical = CashuTheme.spacing.snug,
@@ -363,10 +355,8 @@ fun NostrScreen(
                         modifier = Modifier.fillMaxWidth(),
                         singleLine = true,
                         isError = importError != null,
+                        supportingText = importError,
                     )
-                    if (importError != null) {
-                        InlineNotice(text = importError!!)
-                    }
                 }
             },
             confirmButton = {

@@ -656,7 +656,7 @@ private fun InputFace(
                     val mintName = activeMint?.name
                     InlineNotice(
                         text = "Insufficient balance",
-                        severity = NoticeSeverity.Warning,
+                        severity = NoticeSeverity.Caution,
                         detail = if (!compactHeight && mintName != null) {
                             "You have $balanceText in $mintName."
                         } else {
@@ -669,6 +669,7 @@ private fun InputFace(
                     InlineNotice(
                         text = errorText,
                         modifier = Modifier.padding(bottom = CashuTheme.spacing.snug),
+                        severity = NoticeSeverity.Error,
                     )
                 }
             }
@@ -953,14 +954,8 @@ internal fun P2pkLockSection(
                 fontFamily = CashuTheme.fonts.mono,
             ),
             isError = inputError != null && input.isNotBlank(),
+            supportingText = inputError?.takeIf { input.isNotBlank() },
         )
-        if (inputError != null && input.isNotBlank()) {
-            Text(
-                text = inputError,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.error,
-            )
-        }
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(CashuTheme.spacing.tight),
@@ -1112,6 +1107,7 @@ private fun GeneratedFace(
                         modifier = Modifier.semantics {
                             liveRegion = LiveRegionMode.Polite
                         },
+                        severity = NoticeSeverity.Caution,
                     )
                     PendingTokenClaimCheckResult.Claimed, null -> Unit
                 }

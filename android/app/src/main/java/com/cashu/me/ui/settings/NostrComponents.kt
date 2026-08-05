@@ -157,7 +157,7 @@ internal fun NostrKeySection(
             verticalArrangement = Arrangement.spacedBy(CashuTheme.spacing.snug),
         ) {
             progressMessage?.let { InlineNotice(text = it, severity = NoticeSeverity.Info) }
-            errorMessage?.let { InlineNotice(text = it) }
+            errorMessage?.let { InlineNotice(text = it, severity = NoticeSeverity.Error) }
         }
     }
 }
@@ -209,6 +209,7 @@ internal fun NostrRelayInputRow(
     onSubmit: () -> Unit,
     isError: Boolean,
     modifier: Modifier = Modifier,
+    errorText: String? = null,
 ) {
     val canSubmit = value.isNotBlank()
     CashuTextField(
@@ -218,6 +219,7 @@ internal fun NostrRelayInputRow(
         placeholder = "wss://relay.example.com",
         singleLine = true,
         isError = isError,
+        supportingText = errorText,
         textStyle = MaterialTheme.typography.bodyMedium.copy(fontFamily = CashuTheme.fonts.mono).withSlashedZero(),
         keyboardOptions = KeyboardOptions(
             capitalization = KeyboardCapitalization.None,

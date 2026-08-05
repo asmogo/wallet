@@ -92,6 +92,7 @@ import com.cashu.me.ui.components.GhostButton
 import com.cashu.me.ui.components.IconSwap
 import com.cashu.me.ui.components.InlineNotice
 import com.cashu.me.ui.components.MintAvatar
+import com.cashu.me.ui.components.NoticeSeverity
 import com.cashu.me.ui.components.PrimaryButton
 import com.cashu.me.ui.components.SecondaryButton
 import com.cashu.me.ui.mints.RecommendedMint
@@ -421,7 +422,7 @@ internal fun WelcomeFace(
                 modifier = Modifier.padding(horizontal = CtaPadding),
                 verticalArrangement = Arrangement.spacedBy(CashuTheme.spacing.snug),
             ) {
-                InlineNotice(text = startupFailure.message)
+                InlineNotice(text = startupFailure.message, severity = NoticeSeverity.Error)
                 PrimaryButton(
                     text = startupFailure.recoveryActionLabel,
                     onClick = onRetryStartup,
@@ -435,6 +436,7 @@ internal fun WelcomeFace(
             InlineNotice(
                 text = errorText,
                 modifier = Modifier.padding(horizontal = CtaPadding),
+                severity = NoticeSeverity.Error,
             )
             Spacer(Modifier.height(CashuTheme.spacing.snug))
         }
@@ -942,6 +944,10 @@ private fun FirstMintFace(
                     textStyle = MaterialTheme.typography.bodyMedium.copy(fontFamily = CashuTheme.fonts.mono).withSlashedZero(),
                     singleLine = true,
                     isError = customDraft.error != null,
+                    // Input validation belongs to the field. The connect failure
+                    // below is a different thing: by then the mint is staged, so
+                    // the message is about the staged row, not the text.
+                    supportingText = customDraft.error,
                     keyboardOptions = KeyboardOptions(
                         capitalization = KeyboardCapitalization.None,
                         keyboardType = KeyboardType.Uri,
@@ -963,10 +969,10 @@ private fun FirstMintFace(
                     },
                 )
             }
-            val notice = customDraft.error ?: errorText
+            val notice = errorText
             if (notice != null) {
                 Spacer(Modifier.height(CashuTheme.spacing.snug))
-                InlineNotice(text = notice)
+                InlineNotice(text = notice, severity = NoticeSeverity.Error)
             }
             if (addingMintUrl != null) {
                 Spacer(Modifier.height(CashuTheme.spacing.snug))

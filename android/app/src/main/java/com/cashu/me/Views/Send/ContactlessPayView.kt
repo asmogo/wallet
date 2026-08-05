@@ -50,6 +50,7 @@ import com.cashu.me.Core.Services.NFCPaymentService
 import com.cashu.me.Core.Services.NFCReaderDelegate
 import com.cashu.me.Core.WalletManager
 import com.cashu.me.ui.components.InlineNotice
+import com.cashu.me.ui.components.NoticeSeverity
 import com.cashu.me.ui.components.PrimaryButton
 
 /**
@@ -211,9 +212,9 @@ internal fun ContactlessPayContent(
 
         when (availability) {
             ContactlessAvailability.Unavailable ->
-                InlineNotice(text = "NFC is not available on this device.")
+                InlineNotice(text = "NFC is not available on this device.", severity = NoticeSeverity.Info)
             ContactlessAvailability.Disabled ->
-                InlineNotice(text = "NFC is disabled in system settings.")
+                InlineNotice(text = "NFC is disabled in system settings.", severity = NoticeSeverity.Caution)
             ContactlessAvailability.Ready ->
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -238,7 +239,7 @@ internal fun ContactlessPayContent(
                 Text("$it sat", style = MaterialTheme.typography.headlineSmall)
             }
         }
-        error?.let { InlineNotice(text = it) }
+        error?.let { InlineNotice(text = it, severity = NoticeSeverity.Error) }
 
         when (availability) {
             ContactlessAvailability.Disabled ->

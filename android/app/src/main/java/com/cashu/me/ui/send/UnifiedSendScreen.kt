@@ -825,7 +825,7 @@ private fun InputFace(
         )
         if (inputHint != null) {
             Spacer(Modifier.height(CashuTheme.spacing.default))
-            InlineNotice(text = inputHint, severity = NoticeSeverity.Warning)
+            InlineNotice(text = inputHint, severity = NoticeSeverity.Caution)
         }
         Spacer(Modifier.height(CashuTheme.spacing.page + CashuTheme.spacing.micro))
         // Ways to send: Scan · Ecash · Tap (NFC-gated), round 72dp buttons.
@@ -934,7 +934,7 @@ private fun AmountFace(
         if (insufficient) {
             InlineNotice(
                 text = "Insufficient balance",
-                severity = NoticeSeverity.Warning,
+                severity = NoticeSeverity.Caution,
             )
             Spacer(Modifier.height(CashuTheme.spacing.default))
         }
@@ -1091,12 +1091,14 @@ private fun ConfirmFace(
             Spacer(Modifier.height(CashuTheme.spacing.default))
             InlineNotice(
                 text = "This mint doesn't hold enough to cover the total.",
-                severity = NoticeSeverity.Warning,
+                severity = NoticeSeverity.Caution,
             )
         }
         if (quoteError != null) {
             Spacer(Modifier.height(CashuTheme.spacing.default))
-            InlineNotice(text = quoteError)
+            // Caution: the quote didn't arrive, but nothing was spent and
+            // "Try again" is right there.
+            InlineNotice(text = quoteError, severity = NoticeSeverity.Caution)
             GhostButton(text = "Try again", onClick = onRetryQuote)
         }
         when (cashuRoute) {
@@ -1104,14 +1106,14 @@ private fun ConfirmFace(
                 Spacer(Modifier.height(CashuTheme.spacing.default))
                 InlineNotice(
                     text = unsupportedCashuRequestUnit,
-                    severity = NoticeSeverity.Warning,
+                    severity = NoticeSeverity.Caution,
                 )
             }
             CashuPaymentRequestRoute.MissingAmount -> {
                 Spacer(Modifier.height(CashuTheme.spacing.default))
                 InlineNotice(
                     text = "This Cashu Request does not include an amount. Enter an amount before paying.",
-                    severity = NoticeSeverity.Warning,
+                    severity = NoticeSeverity.Caution,
                 )
             }
             is CashuPaymentRequestRoute.AddMintToPay -> {
@@ -1125,7 +1127,7 @@ private fun ConfirmFace(
                 Spacer(Modifier.height(CashuTheme.spacing.default))
                 InlineNotice(
                     text = "The compatible mint does not hold enough ecash for this request.",
-                    severity = NoticeSeverity.Warning,
+                    severity = NoticeSeverity.Caution,
                 )
                 cashuRoute.mintUrl?.let { mintUrl ->
                     GhostButton(
@@ -1148,11 +1150,11 @@ private fun ConfirmFace(
         }
         if (topUpError != null) {
             Spacer(Modifier.height(CashuTheme.spacing.default))
-            InlineNotice(text = topUpError)
+            InlineNotice(text = topUpError, severity = NoticeSeverity.Error)
         }
         if (confirmError != null) {
             Spacer(Modifier.height(CashuTheme.spacing.default))
-            InlineNotice(text = confirmError)
+            InlineNotice(text = confirmError, severity = NoticeSeverity.Error)
         }
         Spacer(Modifier.weight(1f))
         PrimaryButton(

@@ -287,39 +287,18 @@ struct SendView: View {
         .animation(.snappy(duration: 0.3), value: lockWithP2PK)
     }
 
-    /// Minimal notice for the send amount face — local so layout/animation stay
-    /// isolated from `InlineNotice` / overlay sizing quirks.
+    /// The send amount face's notice. Positioning only — the rendering belongs
+    /// to `InlineNotice`, which also supplies the VoiceOver severity prefix this
+    /// used to drop back when it was a hand-rolled copy of that component.
     private func sendInputNotice(
         message: String,
         detail: String?,
         severity: ErrorSeverity
     ) -> some View {
-        HStack(alignment: .top, spacing: 8) {
-            Image(systemName: severity.icon)
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(severity.foreground)
-                .accessibilityHidden(true)
-
-            VStack(alignment: .leading, spacing: 2) {
-                Text(message)
-                    .font(.caption)
-                    .foregroundStyle(severity.foreground)
-                if let detail {
-                    Text(detail)
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                }
-            }
-
-            Spacer(minLength: 0)
-        }
-        .padding(10)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(severity.tint, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-        .padding(.horizontal)
-        .padding(.bottom, 8)
-        .accessibilityElement(children: .combine)
-        .transition(.opacity)
+        InlineNotice(message: message, severity: severity, detail: detail)
+            .padding(.horizontal)
+            .padding(.bottom, 8)
+            .transition(.opacity)
     }
 
     // MARK: - Mint Selector
@@ -708,15 +687,13 @@ struct SendView: View {
                             InlineNotice(
                                 message: "This token has not been claimed yet.",
                                 title: "Status checked",
-                                severity: .info,
-                                tinted: true
+                                severity: .info
                             )
                         case .failed(let message):
                             InlineNotice(
                                 message: message.text,
                                 title: "Couldn't check status",
-                                severity: message.severity,
-                                tinted: true
+                                severity: message.severity
                             )
                         case .claimed, nil:
                             EmptyView()
@@ -1304,8 +1281,7 @@ struct UnifiedSendView: View {
         InlineNotice(
             message: message,
             severity: errorSeverity,
-            detail: errorShowsMintAction ? meltInsufficientDetail : nil,
-            tinted: true
+            detail: errorShowsMintAction ? meltInsufficientDetail : nil
         )
     }
 
@@ -2888,8 +2864,7 @@ struct MeltView: View {
         InlineNotice(
             message: message,
             severity: errorSeverity,
-            detail: errorShowsMintAction ? meltInsufficientDetail : nil,
-            tinted: true
+            detail: errorShowsMintAction ? meltInsufficientDetail : nil
         )
     }
 
@@ -3216,8 +3191,7 @@ struct MeltView: View {
             if displayMeltMint == nil, !availableMeltMints.isEmpty {
                 InlineNotice(
                     message: "No mint supports \(selectedMeltPaymentMethod.displayName) payments.",
-                    severity: .caution,
-                    tinted: true
+                    severity: .caution
                 )
                 .padding(.top, 12)
                 .padding(.horizontal)
@@ -3286,12 +3260,21 @@ struct MeltView: View {
         if !trimmed.isEmpty {
             let result = PaymentRequestDecoder.decode(trimmed)
             HStack(spacing: 6) {
-                Image(systemName: result == .unrecognized ? "exclamationmark.circle" : "checkmark.circle.fill")
+                Image(systemName: result == .unrecognized ? ErrorSeverity.error.icon : "checkmark.circle.fill")
                     .font(.caption.weight(.semibold))
                 Text(liveDecodeText(for: result))
                     .font(.caption)
             }
-            .foregroundStyle(result == .unrecognized ? Color.red : Color.secondary)
+            // Semantic red, and the severity's own glyph — this used to pair the
+            // *caution* circle with error red and bypass the token entirely.
+            //
+            // Deliberately NOT routed through InlineNotice, unlike every other
+            // site in this audit. This is a two-state decode *status* row, and
+            // its non-error state is a quiet secondary checkmark. InlineNotice's
+            // `.success` severity would render that green — turning a passive
+            // "yes, that parses" acknowledgement into a celebration. The row
+            // borrows the severity tokens without adopting the channel.
+            .foregroundStyle(result == .unrecognized ? ErrorSeverity.error.foreground : Color.secondary)
             .transition(.opacity)
             .accessibilityLabel(liveDecodeText(for: result))
         }

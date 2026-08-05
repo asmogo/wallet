@@ -111,6 +111,13 @@ data class CashuColors(
     val pending: Color,
     val receivedContainer: Color,
     val pendingContainer: Color,
+    // Content roles for the two containers above. Material pairs every container
+    // fill with an `on*Container` colour; these hues live outside
+    // MaterialColorScheme, so the pair has to be declared here. Without them
+    // callers reach for the full-strength hue as text, which is the fill colour,
+    // not the content colour.
+    val onPendingContainer: Color,
+    val onReceivedContainer: Color,
     val canvasDivider: Color,
 )
 
@@ -119,6 +126,8 @@ internal val LightCashuColors = CashuColors(
     pending = PendingOrange,
     receivedContainer = ReceivedGreen.copy(alpha = 0.12f),
     pendingContainer = PendingOrange.copy(alpha = 0.10f),
+    onPendingContainer = Color(0xFF7A3A00),
+    onReceivedContainer = Color(0xFF0B5227),
     canvasDivider = Color(0xFFEBEBEB),
 )
 
@@ -127,6 +136,8 @@ internal val DarkCashuColors = CashuColors(
     pending = Color(0xFFFFB74D),
     receivedContainer = ReceivedGreen.copy(alpha = 0.20f),
     pendingContainer = PendingOrange.copy(alpha = 0.18f),
+    onPendingContainer = Color(0xFFFFDCB0),
+    onReceivedContainer = Color(0xFFB7F0C8),
     canvasDivider = Color(0xFF262626),
 )
 

@@ -53,6 +53,7 @@ import com.cashu.me.ui.components.GhostButton
 import com.cashu.me.ui.components.InlineNotice
 import com.cashu.me.ui.components.InspectorRow
 import com.cashu.me.ui.components.MintPickerSheet
+import com.cashu.me.ui.components.NoticeSeverity
 import com.cashu.me.ui.components.PrimaryButton
 import com.cashu.me.ui.components.QrCard
 import com.cashu.me.ui.components.SectionHeader
@@ -213,6 +214,7 @@ fun LightningScreen(
                     InlineNotice(
                         text = npcState.errorMessage!!,
                         modifier = Modifier.padding(horizontal = CashuTheme.spacing.comfortable),
+                        severity = NoticeSeverity.Error,
                     )
                 }
             }
@@ -318,6 +320,7 @@ internal fun LightningAddressSetupFeedback(
             InlineNotice(
                 text = recoveryError
                     ?: "Wallet not fully initialized. Try setup again to finish your Lightning address.",
+                severity = NoticeSeverity.Error,
             )
             PrimaryButton(
                 text = "Try setup again",

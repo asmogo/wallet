@@ -65,6 +65,8 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.cashu.me.Core.AnimatedUrDecoder
 import com.cashu.me.Core.WalletHaptic
 import com.cashu.me.Core.rememberWalletHaptics
+import com.cashu.me.ui.components.InlineNotice
+import com.cashu.me.ui.components.NoticeSeverity
 import com.cashu.me.ui.components.PrimaryButton
 import com.google.mlkit.vision.barcode.BarcodeScanning
 import com.google.mlkit.vision.common.InputImage
@@ -335,10 +337,16 @@ private fun ScannerStatusOverlay(
             )
         }
         error?.let {
-            Text(
+            // The in-context component, positioned — not themed error text
+            // floating on an unthemed camera surface, where the tonal container
+            // is the only thing giving it a readable background. iOS's scanner
+            // overlay makes the matching move to its own shared banner.
+            // Caution, not Error: a QR that isn't a mint URL didn't break
+            // anything. Point the camera somewhere else.
+            InlineNotice(
                 text = it,
-                color = MaterialTheme.colorScheme.error,
-                style = MaterialTheme.typography.bodySmall,
+                severity = NoticeSeverity.Caution,
+                modifier = Modifier.fillMaxWidth(),
             )
         }
     }

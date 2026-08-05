@@ -275,7 +275,7 @@ fun ReceiveEcashScreen(
                 if (hint != null) {
                     Column {
                         Spacer(Modifier.height(CashuTheme.spacing.default))
-                        InlineNotice(text = hint, severity = NoticeSeverity.Warning)
+                        InlineNotice(text = hint, severity = NoticeSeverity.Caution)
                     }
                 }
             }
