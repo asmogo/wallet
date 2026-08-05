@@ -65,6 +65,7 @@ import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.testTag
@@ -482,8 +483,12 @@ fun OnboardingScreen(
         null
     }
 
-    OnboardingScaffold(
-        chassis = chassis,
+    // Chassis height feeds the ASCII backdrop's underlap. Constant across the
+    // welcome/restore pair (two capsules, no accessory), so the terrain
+    // cannot shift on that swap; it only changes while the field is hidden.
+    var chassisHeightPx by remember { mutableStateOf(0) }
+
+    Box(
         modifier = Modifier
             .fillMaxSize()
             .testTag(UiTestTags.OnboardingRoot)
@@ -491,184 +496,201 @@ fun OnboardingScreen(
             .statusBarsPadding()
             .navigationBarsPadding()
             .imePadding(),
-        accessory = accessory,
     ) {
-        AnimatedContent(
-            targetState = step,
+        // The terrain band, hoisted here — behind the stage switch, in front
+        // of the window ground — so the Welcome ↔ Restore Wallet swap changes
+        // only the text above it, never the terrain (see AsciiField.kt).
+        // Exactly these two steps show it; every other step fades it out on
+        // the stage swap's own specs and pauses the clock.
+        OnboardingAsciiBackdrop(
+            visible = step is OnboardingStep.Welcome || step is OnboardingStep.RestoreMethod,
+            conceptSheetOpen = infoOpen,
+            chassisHeightPx = chassisHeightPx,
+            modifier = Modifier.matchParentSize(),
+        )
+        OnboardingScaffold(
+            chassis = chassis,
             modifier = Modifier.fillMaxSize(),
-            // Quiet materialize — no lateral push between steps (2026-06-26
-            // iOS decision, binding product behavior). The incoming stage
-            // scales 0.96 → 1 on the expressive spatial spring while fading in
-            // and resolving from blur (the materializeBlur below); the outgoing
-            // stage just fades on the fast spec — exits subtler than entrances.
-            // Reduce Motion keeps a plain crossfade.
-            transitionSpec = {
-                if (reducedMotion) {
-                    fadeIn(tween(250)).togetherWith(fadeOut(tween(180)))
+            accessory = accessory,
+            chassisModifier = Modifier.onSizeChanged { chassisHeightPx = it.height },
+        ) {
+            AnimatedContent(
+                targetState = step,
+                modifier = Modifier.fillMaxSize(),
+                // Quiet materialize — no lateral push between steps (2026-06-26
+                // iOS decision, binding product behavior). The incoming stage
+                // scales 0.96 → 1 on the expressive spatial spring while fading in
+                // and resolving from blur (the materializeBlur below); the outgoing
+                // stage just fades on the fast spec — exits subtler than entrances.
+                // Reduce Motion keeps a plain crossfade.
+                transitionSpec = {
+                    if (reducedMotion) {
+                        fadeIn(tween(250)).togetherWith(fadeOut(tween(180)))
+                    } else {
+                        (
+                            fadeIn(stageEnterSpec) +
+                                scaleIn(animationSpec = stageScaleSpec, initialScale = 0.96f)
+                            )
+                            .togetherWith(fadeOut(stageExitSpec))
+                    }
+                },
+                label = "onboarding-step",
+            ) { current ->
+                // Incoming stages resolve from a 4dp blur (API 31+ and
+                // reduce-motion gated inside materializeBlur). Skipped on the
+                // initial composition so a cold launch's first frame renders sharp.
+                val enteredViaTransition = remember { transition.currentState != transition.targetState }
+                val stageModifier = if (enteredViaTransition) {
+                    Modifier
+                        .fillMaxSize()
+                        .materializeBlur()
                 } else {
-                    (
-                        fadeIn(stageEnterSpec) +
-                            scaleIn(animationSpec = stageScaleSpec, initialScale = 0.96f)
-                        )
-                        .togetherWith(fadeOut(stageExitSpec))
+                    Modifier.fillMaxSize()
                 }
-            },
-            label = "onboarding-step",
-        ) { current ->
-            // Incoming stages resolve from a 4dp blur (API 31+ and
-            // reduce-motion gated inside materializeBlur). Skipped on the
-            // initial composition so a cold launch's first frame renders sharp.
-            val enteredViaTransition = remember { transition.currentState != transition.targetState }
-            val stageModifier = if (enteredViaTransition) {
-                Modifier
-                    .fillMaxSize()
-                    .materializeBlur()
-            } else {
-                Modifier.fillMaxSize()
-            }
-            Box(stageModifier) {
-                when (current) {
-                    OnboardingStep.Welcome -> WelcomeStageContent(
-                        startupFailure = walletState.startupFailure,
-                        retryingStartup = retryingStartup,
-                        errorText = createError,
-                        onRetryStartup = {
-                            scope.launch {
-                                retryingStartup = true
-                                try {
-                                    walletManager.initialize()
-                                } finally {
-                                    retryingStartup = false
+                Box(stageModifier) {
+                    when (current) {
+                        OnboardingStep.Welcome -> WelcomeStageContent(
+                            startupFailure = walletState.startupFailure,
+                            retryingStartup = retryingStartup,
+                            errorText = createError,
+                            onRetryStartup = {
+                                scope.launch {
+                                    retryingStartup = true
+                                    try {
+                                        walletManager.initialize()
+                                    } finally {
+                                        retryingStartup = false
+                                    }
                                 }
-                            }
-                        },
-                        onInfo = { infoOpen = true },
-                    )
-
-                    is OnboardingStep.ShowMnemonic -> ShowMnemonicStageContent(
-                        mnemonic = current.mnemonic,
-                        onBack = { step = OnboardingStep.Welcome },
-                    )
-
-                    is OnboardingStep.FirstMint -> FirstMintStageContent(
-                        state = firstMint,
-                        busy = finishing,
-                        addingMintUrl = addingMintUrl,
-                        errorText = firstMintError,
-                        onBack = { step = OnboardingStep.ShowMnemonic(current.mnemonic) },
-                    )
-
-                    OnboardingStep.RestoreMethod -> Column(Modifier.fillMaxSize()) {
-                        OnboardingBackButton(
-                            onBack = { step = OnboardingStep.Welcome },
-                            modifier = Modifier.padding(
-                                start = OnboardingMetrics.BarStartInset,
-                                top = OnboardingMetrics.BarTopInset,
-                            ),
-                        )
-                        OnboardingStepHeader(
-                            title = "Restore Wallet",
-                            subhead = "Choose how to recover your wallet.",
-                            modifier = Modifier.padding(top = OnboardingMetrics.TitleGap),
-                        )
-                        Spacer(Modifier.weight(1f))
-                    }
-
-                    OnboardingStep.RestoreInput -> Column(Modifier.fillMaxSize()) {
-                        OnboardingBackButton(
-                            onBack = { step = OnboardingStep.Welcome },
-                            modifier = Modifier.padding(
-                                start = OnboardingMetrics.BarStartInset,
-                                top = OnboardingMetrics.BarTopInset,
-                            ),
-                        )
-                        OnboardingStepHeader(
-                            title = "Restore Wallet.",
-                            subhead = "Enter your 12 words in order.",
-                            modifier = Modifier.padding(top = OnboardingMetrics.TitleGap),
-                        )
-                        RestoreSeedStageContent(
-                            input = restoreSeedInput,
-                            onInputChange = {
-                                restoreSeedInput = it
-                                restoreError = null
                             },
-                            wordCount = restoreSeedInput.trim().split(Regex("\\s+")).count { it.isNotBlank() },
-                            invalidCount = Bip39WordList.invalidWordIndices(restoreSeedInput).size,
-                            errorText = restoreError,
-                            modifier = Modifier
-                                .weight(1f)
-                                .fillMaxWidth(),
+                            onInfo = { infoOpen = true },
                         )
-                    }
 
-                    is OnboardingStep.RestoreMints -> Column(Modifier.fillMaxSize()) {
-                        OnboardingBackButton(
-                            onBack = {
-                                restoreMintsStaging.reset()
-                                step = OnboardingStep.RestoreInput
-                            },
-                            modifier = Modifier.padding(
-                                start = OnboardingMetrics.BarStartInset,
-                                top = OnboardingMetrics.BarTopInset,
-                            ),
+                        is OnboardingStep.ShowMnemonic -> ShowMnemonicStageContent(
+                            mnemonic = current.mnemonic,
+                            onBack = { step = OnboardingStep.Welcome },
                         )
-                        OnboardingStepHeader(
-                            title = "Recover Funds.",
-                            subhead = "Add the mints you used before to recover funds from this seed.",
-                            modifier = Modifier.padding(top = OnboardingMetrics.TitleGap),
-                        )
-                        RestoreMintsStageContent(
-                            input = restoreMintsStaging.input,
-                            staged = restoreMintsStaging.staged,
-                            previews = restoreMintsStaging.previews,
-                            notice = restoreMintsStaging.notice,
-                            noticeSeverity = restoreMintsStaging.noticeSeverity,
-                            searching = nostrBackupState.isSearching,
-                            onInputChange = restoreMintsStaging::updateInput,
-                            onAdd = restoreMintsStaging::addInput,
-                            onPaste = restoreMintsStaging::pasteFromClipboard,
-                            onNostr = restoreMintsStaging::searchNostrBackup,
-                            onRemove = restoreMintsStaging::remove,
-                            modifier = Modifier
-                                .weight(1f)
-                                .fillMaxWidth()
-                                .padding(top = CashuTheme.spacing.comfortable),
-                        )
-                    }
 
-                    is OnboardingStep.RestoreProgress -> Column(Modifier.fillMaxSize()) {
-                        // No back button on this step (forward-only), so it
-                        // reserves the bar band rather than skipping it —
-                        // otherwise the title jumps up 56 dp on arrival.
-                        OnboardingStepHeader(
-                            title = "Recover Funds.",
-                            subhead = progressState?.subhead,
-                            modifier = Modifier.padding(
-                                top = OnboardingMetrics.TitleTopInset,
-                                bottom = CashuTheme.spacing.default,
-                            ),
+                        is OnboardingStep.FirstMint -> FirstMintStageContent(
+                            state = firstMint,
+                            busy = finishing,
+                            addingMintUrl = addingMintUrl,
+                            errorText = firstMintError,
+                            onBack = { step = OnboardingStep.ShowMnemonic(current.mnemonic) },
                         )
-                        if (progressState != null && progressState.totalRecovered > 0L) {
-                            // Money value — monospaced digits + no roll (Numbers
-                            // Are Sacred), exactly as the shared component
-                            // renders it.
-                            RestoreRecoveredTotal(
-                                totalRecovered = progressState.totalRecovered,
+
+                        OnboardingStep.RestoreMethod -> Column(Modifier.fillMaxSize()) {
+                            OnboardingBackButton(
+                                onBack = { step = OnboardingStep.Welcome },
+                                modifier = Modifier.padding(
+                                    start = OnboardingMetrics.BarStartInset,
+                                    top = OnboardingMetrics.BarTopInset,
+                                ),
+                            )
+                            OnboardingStepHeader(
+                                title = "Restore Wallet",
+                                subhead = "Choose how to recover your wallet.",
+                                modifier = Modifier.padding(top = OnboardingMetrics.TitleGap),
+                            )
+                            Spacer(Modifier.weight(1f))
+                        }
+
+                        OnboardingStep.RestoreInput -> Column(Modifier.fillMaxSize()) {
+                            OnboardingBackButton(
+                                onBack = { step = OnboardingStep.Welcome },
+                                modifier = Modifier.padding(
+                                    start = OnboardingMetrics.BarStartInset,
+                                    top = OnboardingMetrics.BarTopInset,
+                                ),
+                            )
+                            OnboardingStepHeader(
+                                title = "Restore Wallet.",
+                                subhead = "Enter your 12 words in order.",
+                                modifier = Modifier.padding(top = OnboardingMetrics.TitleGap),
+                            )
+                            RestoreSeedStageContent(
+                                input = restoreSeedInput,
+                                onInputChange = {
+                                    restoreSeedInput = it
+                                    restoreError = null
+                                },
+                                wordCount = restoreSeedInput.trim().split(Regex("\\s+")).count { it.isNotBlank() },
+                                invalidCount = Bip39WordList.invalidWordIndices(restoreSeedInput).size,
+                                errorText = restoreError,
                                 modifier = Modifier
-                                    .padding(horizontal = HeaderPadding)
-                                    .padding(top = CashuTheme.spacing.snug, bottom = CashuTheme.spacing.default),
+                                    .weight(1f)
+                                    .fillMaxWidth(),
                             )
                         }
-                        RestoreProgressRows(
-                            mintUrls = current.mintUrls,
-                            phases = progressState?.phases ?: emptyMap(),
-                            previews = current.mintPreviews,
-                            onRetry = { url -> progressState?.retry(url) },
-                            modifier = Modifier
-                                .weight(1f)
-                                .fillMaxWidth(),
-                        )
+
+                        is OnboardingStep.RestoreMints -> Column(Modifier.fillMaxSize()) {
+                            OnboardingBackButton(
+                                onBack = {
+                                    restoreMintsStaging.reset()
+                                    step = OnboardingStep.RestoreInput
+                                },
+                                modifier = Modifier.padding(
+                                    start = OnboardingMetrics.BarStartInset,
+                                    top = OnboardingMetrics.BarTopInset,
+                                ),
+                            )
+                            OnboardingStepHeader(
+                                title = "Recover Funds.",
+                                subhead = "Add the mints you used before to recover funds from this seed.",
+                                modifier = Modifier.padding(top = OnboardingMetrics.TitleGap),
+                            )
+                            RestoreMintsStageContent(
+                                input = restoreMintsStaging.input,
+                                staged = restoreMintsStaging.staged,
+                                previews = restoreMintsStaging.previews,
+                                notice = restoreMintsStaging.notice,
+                                noticeSeverity = restoreMintsStaging.noticeSeverity,
+                                searching = nostrBackupState.isSearching,
+                                onInputChange = restoreMintsStaging::updateInput,
+                                onAdd = restoreMintsStaging::addInput,
+                                onPaste = restoreMintsStaging::pasteFromClipboard,
+                                onNostr = restoreMintsStaging::searchNostrBackup,
+                                onRemove = restoreMintsStaging::remove,
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .fillMaxWidth()
+                                    .padding(top = CashuTheme.spacing.comfortable),
+                            )
+                        }
+
+                        is OnboardingStep.RestoreProgress -> Column(Modifier.fillMaxSize()) {
+                            // No back button on this step (forward-only), so it
+                            // reserves the bar band rather than skipping it —
+                            // otherwise the title jumps up 56 dp on arrival.
+                            OnboardingStepHeader(
+                                title = "Recover Funds.",
+                                subhead = progressState?.subhead,
+                                modifier = Modifier.padding(
+                                    top = OnboardingMetrics.TitleTopInset,
+                                    bottom = CashuTheme.spacing.default,
+                                ),
+                            )
+                            if (progressState != null && progressState.totalRecovered > 0L) {
+                                // Money value — monospaced digits + no roll (Numbers
+                                // Are Sacred), exactly as the shared component
+                                // renders it.
+                                RestoreRecoveredTotal(
+                                    totalRecovered = progressState.totalRecovered,
+                                    modifier = Modifier
+                                        .padding(horizontal = HeaderPadding)
+                                        .padding(top = CashuTheme.spacing.snug, bottom = CashuTheme.spacing.default),
+                                )
+                            }
+                            RestoreProgressRows(
+                                mintUrls = current.mintUrls,
+                                phases = progressState?.phases ?: emptyMap(),
+                                previews = current.mintPreviews,
+                                onRetry = { url -> progressState?.retry(url) },
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .fillMaxWidth(),
+                            )
+                        }
                     }
                 }
             }

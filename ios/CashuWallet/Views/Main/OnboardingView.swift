@@ -70,6 +70,15 @@ struct OnboardingView: View {
     // holds, then `completeRestore()` hands off to the ContentView crossfade.
     @State private var isCompleting = false
 
+    // ASCII terrain band entrance (first launch of onboarding only): the title
+    // y-rise settles at ~400ms, then this flips at 450ms under a 900ms easeOut
+    // so the field comes up like light in a room — a slow plain fade, not a
+    // materialize. It's a texture, not an object; a blur on already-soft 12pt
+    // glyphs behind a gradient mask reads as nothing while costing a full
+    // offscreen pass. Mirrors the web's `<Reveal immediate variant="fade" slow
+    // delay={480}>`.
+    @State private var asciiFieldEntered = false
+
     // Per-step entrance animation triggers
     @State private var welcomeAppeared = false
     @State private var mnemonicAppeared = false
@@ -125,6 +134,9 @@ struct OnboardingView: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        // Behind the stage switch, in front of the window ground — error
+        // banners and stage content render over it.
+        .background { asciiFieldLayer }
         .safeAreaInset(edge: .bottom) {
             // The chassis container never animates (brief §3) — only its text
             // and labels cross-fade in place, choreographed inside
@@ -137,11 +149,101 @@ struct OnboardingView: View {
             conceptSheet
         }
         .onAppear {
+            startAsciiFieldEntrance()
             guard walletManager.hasIncompleteICloudRestore else { return }
             currentStep = .iCloudRestore
             iCloudRestorePhase = .preview
             detectedICloudBackup = nil
             isDetectingICloudBackup = true
+        }
+    }
+
+    // MARK: - Ascii Field Layer
+
+    /// The two adjacent steps that share the terrain. Nothing else gets it —
+    /// not seed, not first-mint, not the restore substeps.
+    private var stepShowsAsciiField: Bool {
+        currentStep == .welcome || currentStep == .restoreMethod
+    }
+
+    /// Deterministic-evidence hook: launching with
+    /// `ASCII_FIELD_STATIC_TIME=2.5` freezes the band at that moment (the
+    /// docs/screenshots strips). Absent in normal launches.
+    private static let asciiFieldStaticTime: Double? =
+        ProcessInfo.processInfo.environment["ASCII_FIELD_STATIC_TIME"].flatMap(Double.init)
+
+    /// The terrain band, mounted once here at the root rather than inside the
+    /// stages. Welcome and Restore Wallet are *adjacent* steps; mounted
+    /// per-stage the field would unmount and materialize-blur on that swap,
+    /// and the two screens would read as two separate wallpapers that happen
+    /// to match. Hoisted, the terrain keeps drifting and only the text above
+    /// it changes — one continuous space. Visibility is opacity only: leaving
+    /// the pair fades over the existing 0.28s step transition (the clock
+    /// pauses); returning fades back in and resumes from wall-clock.
+    private var asciiFieldLayer: some View {
+        GeometryReader { geo in
+            // `safeAreaInset` extends the bottom safe area by the chassis
+            // height, so the inset read here is chassis + home indicator —
+            // exactly the underlap the layer needs to run beneath the
+            // chassis' opaque background and terminate with no visible edge.
+            let chassisInset = geo.safeAreaInsets.bottom
+            let windowHeight = geo.size.height + geo.safeAreaInsets.top + chassisInset
+            let resolved = AsciiFieldLayout.resolve(
+                windowHeight: windowHeight,
+                topInset: geo.safeAreaInsets.top,
+                chassisInset: chassisInset,
+                headerClearance: AsciiFieldLayout.headerClearance()
+            )
+            // Suppression (tight vertical space) hides rather than unmounts:
+            // the view's identity — and with it the wall clock — must survive,
+            // or a pass through a suppressed layout would replay from t=0.
+            let layout = resolved ?? AsciiFieldLayout.Resolution(
+                visibleBand: AsciiFieldLayout.minBand,
+                layerHeight: AsciiFieldLayout.minBand + chassisInset,
+                maskOpaqueFraction: AsciiFieldLayout.maskFade
+            )
+            let visible = resolved != nil && stepShowsAsciiField && asciiFieldEntered
+            AsciiFieldView(
+                staticTime: Self.asciiFieldStaticTime,
+                active: stepShowsAsciiField && !showConceptSheet && resolved != nil
+            )
+                .frame(width: geo.size.width, height: layout.layerHeight)
+                // Transparent → opaque over the visible band's top ~30%, like
+                // the web band's mask-image. A continuous gradient, never
+                // stepped, so the fade cannot band.
+                .mask {
+                    LinearGradient(
+                        stops: [
+                            .init(color: .clear, location: 0),
+                            .init(color: .black, location: layout.maskOpaqueFraction),
+                            .init(color: .black, location: 1),
+                        ],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
+                }
+                // Pinned to the *window* bottom (through the extended safe
+                // area), so the terrain's on-screen position is a function of
+                // window size and the pair's constant chassis height — never
+                // of header height, stage content, or current step.
+                .offset(y: geo.size.height + chassisInset - layout.layerHeight)
+                .opacity(visible ? 1 : 0)
+        }
+    }
+
+    /// First-launch entrance: title y-rise settles (~400ms), then a 450ms
+    /// delay and a 900ms easeOut fade. Under Reduce Motion the field is
+    /// simply present — full opacity, no fade.
+    private func startAsciiFieldEntrance() {
+        guard !asciiFieldEntered else { return }
+        if reduceMotion || Self.asciiFieldStaticTime != nil {
+            asciiFieldEntered = true
+            return
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) {
+            withAnimation(.easeOut(duration: 0.9)) {
+                asciiFieldEntered = true
+            }
         }
     }
 

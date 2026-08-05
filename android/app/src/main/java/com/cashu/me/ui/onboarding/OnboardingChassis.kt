@@ -5,6 +5,7 @@ import androidx.compose.animation.SizeTransform
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -162,7 +163,15 @@ fun OnboardingChassis(
     modifier: Modifier = Modifier,
     accessory: (@Composable () -> Unit)? = null,
 ) {
-    Column(modifier = modifier.fillMaxWidth()) {
+    // Opaque ground, stated on the chassis itself (iOS parity:
+    // `.background(.background)`): the ASCII terrain band runs underneath
+    // this chassis, and this fill is what terminates it — the terrain reads
+    // as continuing behind the buttons with no visible bottom edge.
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            .background(MaterialTheme.colorScheme.background),
+    ) {
         // Indicator slot — resolved as "no indicator" (brief §3): the flow
         // branches into paths of different lengths, so page dots would imply
         // a linear path that doesn't exist. The stage carries the sense of
@@ -207,6 +216,9 @@ fun OnboardingScaffold(
     chassis: OnboardingChassisModel,
     modifier: Modifier = Modifier,
     accessory: (@Composable () -> Unit)? = null,
+    /** Extra chassis modifiers — the onboarding root measures the chassis
+     * height here so the ASCII backdrop knows how far to underlap it. */
+    chassisModifier: Modifier = Modifier,
     stage: @Composable () -> Unit,
 ) {
     Column(modifier = modifier.fillMaxSize()) {
@@ -217,7 +229,7 @@ fun OnboardingScaffold(
         ) {
             stage()
         }
-        OnboardingChassis(model = chassis, accessory = accessory)
+        OnboardingChassis(model = chassis, modifier = chassisModifier, accessory = accessory)
     }
 }
 

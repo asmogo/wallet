@@ -38,6 +38,7 @@
 		6A8EC93F2F256F350058C21B /* URKit in Frameworks */ = {isa = PBXBuildFile; productRef = 6A8EC93E2F256F350058C21B /* URKit */; };
 		6A8EC9412F2576800058C21B /* ReceiveTokenDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6A8EC9402F2576800058C21B /* ReceiveTokenDetailView.swift */; };
 		6A8EC9452F257FFB0058C21B /* ActivityOrbView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6A8EC9422F257FFB0058C21B /* ActivityOrbView.swift */; };
+		6AF1E1D02F310A010058C21B /* AsciiField.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6AF1E1D12F310A010058C21B /* AsciiField.swift */; };
 		6A8EC9462F257FFB0058C21B /* AnimatedBalanceView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6A8EC9442F257FFB0058C21B /* AnimatedBalanceView.swift */; };
 		6A8EC9472F257FFB0058C21B /* AmountEntryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6A8EC9432F257FFB0058C21B /* AmountEntryView.swift */; };
 		6A8EC9482F2580000058C21B /* TransactionIcon.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6A8EC9492F2580000058C21B /* TransactionIcon.swift */; };
@@ -155,6 +156,7 @@
 		T2B000000000000F /* HistorySearchTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = T1B000000000000F /* HistorySearchTests.swift */; };
 		T2B0000000000010 /* WalletSurfaceCoordinatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = T1B0000000000010 /* WalletSurfaceCoordinatorTests.swift */; };
 		T2B0000000000011 /* ScanRouterTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = T1B0000000000011 /* ScanRouterTests.swift */; };
+		T2B0000000000012 /* AsciiFieldTerrainTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = T1B0000000000012 /* AsciiFieldTerrainTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -206,6 +208,7 @@
 		6A8EC9352F244C8C0058C21B /* TransactionDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TransactionDetailView.swift; sourceTree = "<group>"; };
 		6A8EC9402F2576800058C21B /* ReceiveTokenDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReceiveTokenDetailView.swift; sourceTree = "<group>"; };
 		6A8EC9422F257FFB0058C21B /* ActivityOrbView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActivityOrbView.swift; sourceTree = "<group>"; };
+		6AF1E1D12F310A010058C21B /* AsciiField.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AsciiField.swift; sourceTree = "<group>"; };
 		6A8EC9432F257FFB0058C21B /* AmountEntryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AmountEntryView.swift; sourceTree = "<group>"; };
 		6A8EC9442F257FFB0058C21B /* AnimatedBalanceView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AnimatedBalanceView.swift; sourceTree = "<group>"; };
 		6A8EC9492F2580000058C21B /* TransactionIcon.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TransactionIcon.swift; sourceTree = "<group>"; };
@@ -321,6 +324,7 @@
 		T1B000000000000F /* HistorySearchTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = HistorySearchTests.swift; path = CashuWalletTests/HistorySearchTests.swift; sourceTree = "<group>"; };
 		T1B0000000000010 /* WalletSurfaceCoordinatorTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = WalletSurfaceCoordinatorTests.swift; path = CashuWalletTests/WalletSurfaceCoordinatorTests.swift; sourceTree = "<group>"; };
 		T1B0000000000011 /* ScanRouterTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = ScanRouterTests.swift; path = CashuWalletTests/ScanRouterTests.swift; sourceTree = "<group>"; };
+		T1B0000000000012 /* AsciiFieldTerrainTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = AsciiFieldTerrainTests.swift; path = CashuWalletTests/AsciiFieldTerrainTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -381,6 +385,7 @@
 				T1B000000000000F /* HistorySearchTests.swift */,
 				T1B0000000000010 /* WalletSurfaceCoordinatorTests.swift */,
 				T1B0000000000011 /* ScanRouterTests.swift */,
+				T1B0000000000012 /* AsciiFieldTerrainTests.swift */,
 			);
 			name = CashuWalletTests;
 			sourceTree = "<group>";
@@ -575,6 +580,7 @@
 			isa = PBXGroup;
 			children = (
 				6A8EC9422F257FFB0058C21B /* ActivityOrbView.swift */,
+				6AF1E1D12F310A010058C21B /* AsciiField.swift */,
 				6A8EC9432F257FFB0058C21B /* AmountEntryView.swift */,
 				6A8EC9442F257FFB0058C21B /* AnimatedBalanceView.swift */,
 				6A8EC9492F2580000058C21B /* TransactionIcon.swift */,
@@ -938,6 +944,7 @@
 				T2B000000000000F /* HistorySearchTests.swift in Sources */,
 				T2B0000000000010 /* WalletSurfaceCoordinatorTests.swift in Sources */,
 				T2B0000000000011 /* ScanRouterTests.swift in Sources */,
+				T2B0000000000012 /* AsciiFieldTerrainTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -986,6 +993,7 @@
 				1100000000000009 /* ReceiveView.swift in Sources */,
 				6A8EC9322F2448B60058C21B /* MintDiscoveryManager.swift in Sources */,
 				6A8EC9452F257FFB0058C21B /* ActivityOrbView.swift in Sources */,
+				6AF1E1D02F310A010058C21B /* AsciiField.swift in Sources */,
 				6A8EC9462F257FFB0058C21B /* AnimatedBalanceView.swift in Sources */,
 				6A8EC9472F257FFB0058C21B /* AmountEntryView.swift in Sources */,
 				110000000000000A /* ReceiveLightningView.swift in Sources */,

@@ -22,6 +22,7 @@ object UiTestTags {
     const val CustomMintUrl = "cashu.onboarding.mint.url"
     const val ContinueWithMint = "cashu.onboarding.mint.continue"
     const val SkipMint = "cashu.onboarding.mint.skip"
+    const val OnboardingAsciiField = "cashu.onboarding.asciifield"
 
     const val WalletScreen = "cashu.screen.wallet"
     const val WalletScan = "cashu.wallet.scan"

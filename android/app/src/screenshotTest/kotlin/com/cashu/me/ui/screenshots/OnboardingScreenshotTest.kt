@@ -14,6 +14,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.android.tools.screenshot.PreviewTest
@@ -22,6 +23,7 @@ import com.cashu.me.ui.onboarding.ChassisAction
 import com.cashu.me.ui.onboarding.ChassisButtonStyle
 import com.cashu.me.ui.onboarding.FirstMintSelectionState
 import com.cashu.me.ui.onboarding.FirstMintStageContent
+import com.cashu.me.ui.onboarding.OnboardingAsciiBackdrop
 import com.cashu.me.ui.onboarding.OnboardingBackButton
 import com.cashu.me.ui.onboarding.OnboardingChassisModel
 import com.cashu.me.ui.onboarding.OnboardingScaffold
@@ -386,6 +388,148 @@ fun onboardingRestoreProgressScreenshot() {
             }
         }
     }
+}
+
+// ---------------------------------------------------------------------------
+// ASCII terrain band (AsciiField.kt). The production field mounts at the
+// OnboardingScreen root, so the plain scaffold goldens above never see it —
+// these compositions mount the backdrop explicitly, mirroring the root's
+// wiring, frozen at a fixed staticTime so every run renders identical
+// terrain. The synthetic chassis height stands in for the root's measured
+// one (the screenshot renderer can't be trusted to settle an onSizeChanged
+// round-trip before capture).
+// ---------------------------------------------------------------------------
+
+/** ~the two-capsule welcome/restore chassis. */
+private val FixtureChassisHeight = 176.dp
+
+@Composable
+private fun AsciiFieldFrame(
+    darkTheme: Boolean = false,
+    staticTime: Float = 2.5f,
+    chassis: OnboardingChassisModel,
+    stage: @Composable () -> Unit,
+) {
+    OnboardingFrame(darkTheme = darkTheme) {
+        Box(Modifier.fillMaxSize()) {
+            OnboardingAsciiBackdrop(
+                visible = true,
+                conceptSheetOpen = false,
+                chassisHeightPx = with(LocalDensity.current) { FixtureChassisHeight.roundToPx() },
+                staticTime = staticTime,
+                modifier = Modifier.matchParentSize(),
+            )
+            OnboardingScaffold(chassis = chassis, modifier = Modifier.fillMaxSize()) {
+                stage()
+            }
+        }
+    }
+}
+
+@Composable
+private fun AsciiWelcomeFrame(darkTheme: Boolean = false, staticTime: Float = 2.5f) {
+    AsciiFieldFrame(
+        darkTheme = darkTheme,
+        staticTime = staticTime,
+        chassis = welcomeChassis(
+            creating = false,
+            retryingStartup = false,
+            onCreate = {},
+            onRestore = {},
+        ),
+    ) {
+        WelcomeStageContent(
+            startupFailure = null,
+            retryingStartup = false,
+            errorText = null,
+            onRetryStartup = {},
+            onInfo = {},
+        )
+    }
+}
+
+@Composable
+private fun AsciiRestoreMethodFrame(darkTheme: Boolean = false) {
+    AsciiFieldFrame(
+        darkTheme = darkTheme,
+        chassis = OnboardingChassisModel(
+            primary = ChassisAction("Use Seed Phrase", onClick = {}, style = ChassisButtonStyle.Secondary),
+        ),
+    ) {
+        Column(Modifier.fillMaxSize()) {
+            OnboardingBackButton(onBack = {}, modifier = Modifier.padding(start = 16.dp, top = 8.dp))
+            OnboardingStepHeader(
+                title = "Restore Wallet",
+                subhead = "Choose how to recover your wallet.",
+                modifier = Modifier.padding(top = 12.dp),
+            )
+            Spacer(Modifier.weight(1f))
+        }
+    }
+}
+
+@PreviewTest
+@Preview(name = "onboarding-ascii-welcome-light", widthDp = 390, heightDp = 844, showBackground = true)
+@Composable
+fun onboardingAsciiWelcomeLightScreenshot() {
+    AsciiWelcomeFrame()
+}
+
+@PreviewTest
+@Preview(
+    name = "onboarding-ascii-welcome-dark",
+    widthDp = 390,
+    heightDp = 844,
+    uiMode = Configuration.UI_MODE_NIGHT_YES,
+)
+@Composable
+fun onboardingAsciiWelcomeDarkScreenshot() {
+    AsciiWelcomeFrame(darkTheme = true)
+}
+
+@PreviewTest
+@Preview(name = "onboarding-ascii-restore-light", widthDp = 390, heightDp = 844, showBackground = true)
+@Composable
+fun onboardingAsciiRestoreLightScreenshot() {
+    AsciiRestoreMethodFrame()
+}
+
+@PreviewTest
+@Preview(
+    name = "onboarding-ascii-restore-dark",
+    widthDp = 390,
+    heightDp = 844,
+    uiMode = Configuration.UI_MODE_NIGHT_YES,
+)
+@Composable
+fun onboardingAsciiRestoreDarkScreenshot() {
+    AsciiRestoreMethodFrame(darkTheme = true)
+}
+
+// The §11 strip frames: the same welcome composition at t = 0 / 2.5 / 5.0s.
+// Together they prove the terrain evolves — and, against the iOS strip at the
+// same times, that both platforms evolve identically — with no video to
+// eyeball.
+
+@PreviewTest
+@Preview(name = "onboarding-ascii-strip-t0", widthDp = 390, heightDp = 844, showBackground = true)
+@Composable
+fun onboardingAsciiStripT0Screenshot() {
+    AsciiWelcomeFrame(staticTime = 0f)
+}
+
+@PreviewTest
+@Preview(name = "onboarding-ascii-strip-t2-5", widthDp = 390, heightDp = 844, showBackground = true)
+@Composable
+fun onboardingAsciiStripT25Screenshot() {
+    AsciiWelcomeFrame(staticTime = 2.5f)
+}
+
+@PreviewTest
+@Preview(name = "onboarding-ascii-strip-t5", widthDp = 390, heightDp = 844, showBackground = true)
+@Composable
+fun onboardingAsciiStripT5Screenshot() {
+    AsciiWelcomeFrame(staticTime = 5f)
 }
 
 private fun seedChassis(acknowledged: Boolean): OnboardingChassisModel = OnboardingChassisModel(
