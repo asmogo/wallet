@@ -184,11 +184,11 @@ struct ReceiveTokenDetailView: View {
                 )
             } else {
                 // Non-sat account unit: show it directly, no BTC-price flip.
-                Text(formatAmount(netReceiveAmount))
-                    .font(.system(size: 64, weight: .semibold, design: .rounded))
-                    .monospacedDigit()
-                    .minimumScaleFactor(0.4)
-                    .lineLimit(1)
+                AmountLockup(
+                    parts: AmountParts.parse(formatAmount(netReceiveAmount)),
+                    role: .amountHero,
+                    value: Double(netReceiveAmount)
+                )
             }
         } details: {
             VStack(spacing: 16) {

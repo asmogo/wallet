@@ -8,7 +8,10 @@ import SwiftUI
 struct CurrencyAmountDisplay: View {
     let sats: UInt64
     @Binding var primary: AmountDisplayPrimary
-    var primarySize: CGFloat = 64
+    /// The rung of the amount ladder this instance sits on. A role, never a
+    /// point size: six sizes serving this one job is how the same number ended
+    /// up rendering in two typefaces on adjacent screens.
+    var role: CashuTextRole = .amountHero
     /// Live-entry mode: the raw typed string. When set, the primary line renders
     /// the typed value verbatim (partial decimals included) instead of deriving
     /// from `sats`; the secondary line still shows `sats` converted. Display-only
@@ -41,19 +44,22 @@ struct CurrencyAmountDisplay: View {
         return primary
     }
 
-    private var primaryText: String {
+    private var primaryParts: AmountParts {
         if let entryRaw {
-            return AmountFormatter.entryPrimary(
+            return AmountFormatter.entryPrimaryParts(
                 raw: entryRaw,
                 unit: effectivePrimary,
                 useBitcoinSymbol: settings.useBitcoinSymbol
             )
         }
+        let satsParts = AmountFormatter.satsParts(sats, useBitcoinSymbol: settings.useBitcoinSymbol)
         switch effectivePrimary {
-        case .fiat: return displayFiat ?? AmountFormatter.sats(sats, useBitcoinSymbol: settings.useBitcoinSymbol)
-        case .sats: return AmountFormatter.sats(sats, useBitcoinSymbol: settings.useBitcoinSymbol)
+        case .fiat: return displayFiat.map(AmountParts.parse) ?? satsParts
+        case .sats: return satsParts
         }
     }
+
+    private var primaryText: String { primaryParts.joined }
 
     private var secondaryText: String {
         switch effectivePrimary {
@@ -67,16 +73,14 @@ struct CurrencyAmountDisplay: View {
 
     var body: some View {
         VStack(spacing: 6) {
-            Text(primaryText)
-                .font(.system(size: primarySize, weight: .semibold, design: .rounded))
-                .monospacedDigit()
-                .foregroundStyle(isDimmed ? .secondary : .primary)
-                .minimumScaleFactor(0.4)
-                .lineLimit(1)
-                .contentTransition(.numericText(value: Double(sats)))
-                .animation(.snappy, value: sats)
-                .animation(.snappy, value: effectivePrimary)
-                .animation(.snappy, value: isDimmed)
+            AmountLockup(
+                parts: primaryParts,
+                role: role,
+                value: Double(sats),
+                isDimmed: isDimmed
+            )
+            .animation(.snappy, value: effectivePrimary)
+            .animation(.snappy, value: isDimmed)
 
             // The secondary pill is only meaningful when fiat is available —
             // otherwise there's no second unit to flip into, and we'd render

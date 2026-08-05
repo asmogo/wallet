@@ -143,10 +143,6 @@ struct SuggestedMintsSection: View {
     let existingURLs: Set<String>
     let onAdd: (String) -> Void
 
-    /// 0.06em on a 12pt caption, per DESIGN.md §3. `@ScaledMetric` so it tracks
-    /// Dynamic Type — an absolute value would not.
-    @ScaledMetric(relativeTo: .caption) private var sectionTracking: CGFloat = 0.72
-
     private var available: [RecommendedMint] {
         RecommendedMint.suggested.filter { !existingURLs.contains($0.url) }
     }
@@ -155,10 +151,8 @@ struct SuggestedMintsSection: View {
         if !available.isEmpty {
             VStack(alignment: .leading, spacing: 0) {
                 Text("Suggested mints")
-                    .font(.caption.weight(.semibold))
+                    .cashuText(.overline)
                     .foregroundStyle(.secondary)
-                    .textCase(.uppercase)
-                    .tracking(sectionTracking)
                     .padding(.bottom, ConnectMintMetrics.sectionToRows)
 
                 ForEach(Array(available.enumerated()), id: \.element.id) { index, mint in

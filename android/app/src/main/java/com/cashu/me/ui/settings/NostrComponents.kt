@@ -35,7 +35,6 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.KeyboardType
@@ -50,6 +49,7 @@ import com.cashu.me.ui.components.SectionHeader
 import com.cashu.me.ui.components.SelectionRow
 import com.cashu.me.ui.components.SettingsFooterText
 import com.cashu.me.ui.theme.CashuTheme
+import com.cashu.me.ui.theme.withSlashedZero
 
 /**
  * Resetting only warrants a confirmation when it would discard a relay the
@@ -218,7 +218,7 @@ internal fun NostrRelayInputRow(
         placeholder = "wss://relay.example.com",
         singleLine = true,
         isError = isError,
-        textStyle = MaterialTheme.typography.bodyMedium.copy(fontFamily = FontFamily.Monospace),
+        textStyle = MaterialTheme.typography.bodyMedium.copy(fontFamily = CashuTheme.fonts.mono).withSlashedZero(),
         keyboardOptions = KeyboardOptions(
             capitalization = KeyboardCapitalization.None,
             autoCorrectEnabled = false,
@@ -270,7 +270,7 @@ internal fun NostrRelayRow(
         )
         Text(
             text = relay,
-            style = MaterialTheme.typography.bodyMedium.copy(fontFamily = FontFamily.Monospace),
+            style = MaterialTheme.typography.bodyMedium.copy(fontFamily = CashuTheme.fonts.mono).withSlashedZero(),
             color = MaterialTheme.colorScheme.onSurface,
             modifier = Modifier.weight(1f),
             maxLines = 1,

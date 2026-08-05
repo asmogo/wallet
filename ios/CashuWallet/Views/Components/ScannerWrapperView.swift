@@ -617,8 +617,7 @@ struct CashuPaymentRequestPayView: View {
         } else if let amount = request.amount {
             VStack(spacing: 6) {
                 Text("\(amount)")
-                    .font(.system(size: 48, weight: .semibold, design: .rounded))
-                    .monospacedDigit()
+                    .cashuAmount(.amountHero, value: Double(amount))
                 Text(request.unit ?? "unknown unit")
                     .font(.headline)
                     .foregroundStyle(.secondary)

@@ -22,6 +22,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.cashu.me.ui.theme.CashuTheme
 
 // Compact chrome under the system drag handle — title row sits tight to the top.
 private val SheetHeaderMinHeight = 40.dp
@@ -66,9 +67,7 @@ fun SheetHeader(
         ) { current ->
             Text(
                 text = current,
-                style = MaterialTheme.typography.titleMedium.let { base ->
-                    base.copy(fontSize = base.fontSize * 1.2f)
-                },
+                style = CashuTheme.type.sheetTitle,
                 color = MaterialTheme.colorScheme.onSurface,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,

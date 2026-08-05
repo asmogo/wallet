@@ -73,7 +73,6 @@ import androidx.compose.ui.semantics.testTag as semanticsTestTag
 import androidx.compose.ui.semantics.traversalIndex
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.KeyboardType
@@ -82,10 +81,6 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.sync.Mutex
-import kotlinx.coroutines.sync.withLock
 import com.cashu.me.Core.MnemonicInput
 import com.cashu.me.Core.NostrMintBackupService
 import com.cashu.me.Core.WalletManager
@@ -99,17 +94,22 @@ import com.cashu.me.ui.components.InlineNotice
 import com.cashu.me.ui.components.MintAvatar
 import com.cashu.me.ui.components.PrimaryButton
 import com.cashu.me.ui.components.SecondaryButton
+import com.cashu.me.ui.mints.RecommendedMint
+import com.cashu.me.ui.mints.RecommendedMints
 import com.cashu.me.ui.restore.RestoreMethodStep
 import com.cashu.me.ui.restore.RestoreMintsStep
 import com.cashu.me.ui.restore.RestorePresentation
 import com.cashu.me.ui.restore.RestoreProgressStep
 import com.cashu.me.ui.restore.RestoreSeedStep
 import com.cashu.me.ui.restore.restoreSeedInstallErrorMessage
-import com.cashu.me.ui.theme.CashuTheme
-import com.cashu.me.ui.mints.RecommendedMint
-import com.cashu.me.ui.mints.RecommendedMints
-import com.cashu.me.ui.theme.rememberReducedMotion
 import com.cashu.me.ui.testing.UiTestTags
+import com.cashu.me.ui.theme.CashuTheme
+import com.cashu.me.ui.theme.rememberReducedMotion
+import com.cashu.me.ui.theme.withSlashedZero
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 
 // ---------------------------------------------------------------------------
 // iOS OnboardingView parity. Source of truth: ios/CashuWallet/Views/Main/
@@ -148,13 +148,15 @@ private val WarningIconSize = 16.dp
 private val RevealEyeSize = 22.dp
 
 /** iOS `.largeTitle.weight(.heavy)` + `.tracking(-0.5)` — the step-title voice. */
+/**
+ * The onboarding/restore hero heading.
+ *
+ * Shared rather than duplicated: this function previously existed twice,
+ * byte-identical, in two files.
+ */
 @Composable
-private fun onboardingTitleStyle(): TextStyle =
-    MaterialTheme.typography.displaySmall.copy(
-        fontWeight = FontWeight.ExtraBold,
-        letterSpacing = (-0.5).sp,
-        lineHeight = 40.sp,
-    )
+fun onboardingTitleStyle(): TextStyle =
+    CashuTheme.type.title
 
 /**
  * iOS entrance stagger: content blocks rise 12pt into place, 0.4s, 70ms per
@@ -498,7 +500,6 @@ private fun EcashConceptSheet(onDismiss: () -> Unit) {
                     text = "Ecash is bearer cash for Bitcoin.",
                     style = MaterialTheme.typography.headlineMedium.copy(
                         fontWeight = FontWeight.ExtraBold,
-                        letterSpacing = (-0.3).sp,
                     ),
                     color = MaterialTheme.colorScheme.onSurface,
                 )
@@ -739,9 +740,9 @@ internal fun SeedPhraseReveal(
  */
 @Composable
 private fun SeedGrid(words: List<String>, revealed: Boolean) {
-    val indexStyle = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace)
+    val indexStyle = MaterialTheme.typography.bodySmall.copy(fontFamily = CashuTheme.fonts.mono).withSlashedZero()
     val wordStyle = MaterialTheme.typography.bodyMedium.copy(
-        fontFamily = FontFamily.Monospace,
+        fontFamily = CashuTheme.fonts.mono,
         fontWeight = FontWeight.Medium,
     )
     Column(
@@ -938,7 +939,7 @@ private fun FirstMintFace(
                         .fillMaxWidth()
                         .testTag(UiTestTags.CustomMintUrl),
                     placeholder = "https://mint.example.com",
-                    textStyle = MaterialTheme.typography.bodyMedium.copy(fontFamily = FontFamily.Monospace),
+                    textStyle = MaterialTheme.typography.bodyMedium.copy(fontFamily = CashuTheme.fonts.mono).withSlashedZero(),
                     singleLine = true,
                     isError = customDraft.error != null,
                     keyboardOptions = KeyboardOptions(

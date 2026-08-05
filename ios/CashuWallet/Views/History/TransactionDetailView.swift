@@ -125,24 +125,26 @@ struct TransactionDetailView: View {
                         // carries the state colour.
                         Group {
                             if !isSatUnit {
-                                Text(formattedNativeAmount)
-                                    .font(.system(size: showsQR ? 32 : 48, weight: .semibold, design: .rounded))
-                                    .monospacedDigit()
-                                    .lineLimit(1)
-                                    .minimumScaleFactor(0.5)
-                                    .accessibilityLabel("Amount: \(formattedNativeAmount)")
+                                AmountLockup(
+                                    parts: AmountParts.parse(formattedNativeAmount),
+                                    role: showsQR ? .amountCompact : .amountConfirm,
+                                    value: Double(transaction.amount),
+                                    accessibilityPrefix: "Amount"
+                                )
                             } else if transaction.kind == .onchain {
-                                Text(AmountFormatter.sats(transaction.amount, useBitcoinSymbol: settings.useBitcoinSymbol))
-                                    .font(.system(size: showsQR ? 32 : 48, weight: .semibold, design: .rounded))
-                                    .monospacedDigit()
-                                    .lineLimit(1)
-                                    .minimumScaleFactor(0.5)
-                                    .accessibilityLabel("Amount: \(transaction.amount) sats")
+                                AmountLockup(
+                                    parts: AmountFormatter.satsParts(
+                                        transaction.amount, useBitcoinSymbol: settings.useBitcoinSymbol
+                                    ),
+                                    role: showsQR ? .amountCompact : .amountConfirm,
+                                    value: Double(transaction.amount),
+                                    accessibilityPrefix: "Amount"
+                                )
                             } else {
                                 CurrencyAmountDisplay(
                                     sats: transaction.amount,
                                     primary: $settings.amountDisplayPrimary,
-                                    primarySize: showsQR ? 32 : 48
+                                    role: showsQR ? .amountCompact : .amountConfirm
                                 )
                                 .accessibilityLabel("Amount: \(transaction.amount) sats")
                             }

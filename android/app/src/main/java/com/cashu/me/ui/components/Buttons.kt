@@ -159,10 +159,7 @@ fun PrimaryButton(
                 ) { current ->
                     Text(
                         text = current,
-                        style = MaterialTheme.typography.titleMedium.copy(
-                            fontWeight = FontWeight.SemiBold,
-                            fontSize = 18.sp,
-                        ),
+                        style = CashuTheme.type.buttonLabel,
                     )
                 }
             }
@@ -195,10 +192,7 @@ fun SecondaryButton(
     ) {
         Text(
             text = text,
-            style = MaterialTheme.typography.titleMedium.copy(
-                fontWeight = FontWeight.SemiBold,
-                fontSize = 18.sp,
-            ),
+            style = CashuTheme.type.buttonLabel,
         )
     }
 }

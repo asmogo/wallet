@@ -16,20 +16,17 @@ struct TransactionAmountColumn: View {
 
     var body: some View {
         VStack(alignment: .trailing, spacing: 2) {
+            // The Row rung of the amount ladder. It carries the tabular figures,
+            // the line limit, the digit transition and the deliberate absence of
+            // autoscale — see `CashuTextRole.amountRow`, which documents why
+            // those last two cannot both be on.
             Text(formattedAmount)
-                .font(.system(.body, design: .rounded).weight(.medium))
-                .monospacedDigit()
+                .cashuAmount(.amountRow, value: Double(transaction.amount))
                 .foregroundStyle(amountColor)
-                .lineLimit(1)
-                // No `.minimumScaleFactor` here: it collides with `.numericText`
-                // (the numeric renderer reports a tiny intermediate width and the
-                // scale factor then shrinks short amounts toward 50%). Row amounts
-                // use compact grouped wallet formatting, so they remain readable.
-                .contentTransition(.numericText(value: Double(transaction.amount)))
 
             if let secondaryAmount {
                 Text(secondaryAmount)
-                    .font(.system(.subheadline, design: .rounded).weight(.regular))
+                    .font(.subheadline)
                     .monospacedDigit()
                     .foregroundStyle(.secondary)
             }

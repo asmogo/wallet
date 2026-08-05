@@ -41,8 +41,8 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
-import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Key
+import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.outlined.AccountBalance
 import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.Close
@@ -55,11 +55,11 @@ import androidx.compose.material.icons.outlined.Payments
 import androidx.compose.material.icons.outlined.Receipt
 import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material.icons.outlined.Schedule
-import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
-import androidx.compose.material3.LoadingIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LoadingIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -77,11 +77,11 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.AccessibilityAction
 import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.AccessibilityAction
-import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
@@ -91,42 +91,43 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
-import com.cashu.me.Views.Components.ScannerQuickAction
 import com.cashu.me.Core.AmountFormatter
-import com.cashu.me.Core.WalletHaptic
-import com.cashu.me.Core.rememberWalletHaptics
+import com.cashu.me.Core.PendingTokenClaimCheckResult
 import com.cashu.me.Core.Protocols.CurrencyAmount
 import com.cashu.me.Core.Protocols.CurrencyRegistry
 import com.cashu.me.Core.SettingsManager
-import com.cashu.me.Core.PendingTokenClaimCheckResult
-import com.cashu.me.Core.runPendingTokenClaimCheck
 import com.cashu.me.Core.Wallet.isInsufficientBalance
 import com.cashu.me.Core.Wallet.userFacingWalletMessage
+import com.cashu.me.Core.WalletHaptic
 import com.cashu.me.Core.WalletManager
+import com.cashu.me.Core.rememberWalletHaptics
+import com.cashu.me.Core.runPendingTokenClaimCheck
 import com.cashu.me.Models.SendTokenResult
+import com.cashu.me.Views.Components.ScannerQuickAction
+import com.cashu.me.ui.components.SectionHeader
 import com.cashu.me.ui.components.AmountEntryHero
 import com.cashu.me.ui.components.CashuTextField
 import com.cashu.me.ui.components.GhostButton
 import com.cashu.me.ui.components.InlineNotice
-import com.cashu.me.ui.components.NoticeSeverity
 import com.cashu.me.ui.components.MintPickerSheet
 import com.cashu.me.ui.components.MintSelectorRow
+import com.cashu.me.ui.components.NoticeSeverity
 import com.cashu.me.ui.components.NumberPadFooter
 import com.cashu.me.ui.components.PrimaryButton
-import com.cashu.me.ui.components.neutralActionButtonColors
 import com.cashu.me.ui.components.QrCard
 import com.cashu.me.ui.components.SheetHeader
+import com.cashu.me.ui.components.ToolbarIcon
 import com.cashu.me.ui.components.TwoFaceScreen
 import com.cashu.me.ui.components.UnitPickerSheet
+import com.cashu.me.ui.components.neutralActionButtonColors
 import com.cashu.me.ui.components.shareText
-import com.cashu.me.ui.components.ToolbarIcon
 import com.cashu.me.ui.settings.P2PKKeyDisplay
+import com.cashu.me.ui.testing.UiTestTags
 import com.cashu.me.ui.theme.CashuTheme
 import com.cashu.me.ui.theme.rememberReducedMotion
 import com.cashu.me.ui.theme.withMonoDigits
-import com.cashu.me.ui.testing.UiTestTags
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 // Inline status icons inside dense rows — smaller than the standard 20dp body icon.
 private val STATUS_ICON_SMALL = 18.dp
@@ -829,7 +830,7 @@ internal fun P2pkRecipientConfirmation(
                     Icon(Icons.Filled.Lock, null, tint = MaterialTheme.colorScheme.onSurface, modifier = Modifier.size(18.dp))
                 }
                 Column(Modifier.weight(1f)) {
-                    Text("LOCKED TO", style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold, letterSpacing = 0.5.sp), color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    SectionHeader("Locked to")
                     Text(recipientLabel, style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Medium), color = MaterialTheme.colorScheme.onSurface, maxLines = 1, overflow = TextOverflow.MiddleEllipsis)
                 }
             }
@@ -899,7 +900,7 @@ internal fun P2pkLockSection(
                             fontFamily = if (recipientIsOwnKey) {
                                 FontFamily.Default
                             } else {
-                                FontFamily.Monospace
+                                CashuTheme.fonts.mono
                             },
                         ),
                         color = MaterialTheme.colorScheme.onSurface,
@@ -949,7 +950,7 @@ internal fun P2pkLockSection(
                 capitalization = androidx.compose.ui.text.input.KeyboardCapitalization.None,
             ),
             textStyle = MaterialTheme.typography.bodyMedium.copy(
-                fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
+                fontFamily = CashuTheme.fonts.mono,
             ),
             isError = inputError != null && input.isNotBlank(),
         )

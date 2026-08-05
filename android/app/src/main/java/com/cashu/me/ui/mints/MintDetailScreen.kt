@@ -1,8 +1,8 @@
 package com.cashu.me.ui.mints
 
 import androidx.compose.animation.animateContentSize
-import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -68,11 +68,9 @@ import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.AnnotatedString
-import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import kotlinx.coroutines.delay
 import com.cashu.me.Core.AmountFormatter
 import com.cashu.me.Core.PriceService
 import com.cashu.me.Core.Protocols.CurrencyAmount
@@ -95,9 +93,11 @@ import com.cashu.me.ui.components.SpinnerRing
 import com.cashu.me.ui.components.ToolbarIcon
 import com.cashu.me.ui.components.neutralActionButtonColors
 import com.cashu.me.ui.components.openInBrowser
+import com.cashu.me.ui.testing.UiTestTags
 import com.cashu.me.ui.theme.CapsuleShape
 import com.cashu.me.ui.theme.CashuTheme
-import com.cashu.me.ui.testing.UiTestTags
+import com.cashu.me.ui.theme.withSlashedZero
+import kotlinx.coroutines.delay
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -718,7 +718,7 @@ private fun NutRow(code: String, label: String, supported: Boolean) {
     ) {
         Text(
             text = code,
-            style = MaterialTheme.typography.labelSmall.copy(fontFamily = FontFamily.Monospace),
+            style = MaterialTheme.typography.labelSmall.copy(fontFamily = CashuTheme.fonts.mono).withSlashedZero(),
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.width(56.dp),
         )
