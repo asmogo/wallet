@@ -44,6 +44,7 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LoadingIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.SheetValue
@@ -153,6 +154,9 @@ private val AckIconSize = 22.dp
 private val SelectIconSize = 24.dp
 private val MintAvatarSize = 36.dp
 private val RevealEyeSize = 22.dp
+
+/** Inline loader beside "Connecting to…", matching the restore flow's. */
+private val FirstMintSpinnerSize = 18.dp
 
 /** Hoisted first-mint selection state — the chassis reads the Continue rule
  * and commits pending drafts while the stage renders the list. */
@@ -1349,11 +1353,29 @@ private fun FirstMintList(
         }
         if (addingMintUrl != null) {
             Spacer(Modifier.height(CashuTheme.spacing.snug))
-            Text(
-                text = "Connecting to ${shortenMintUrl(addingMintUrl)}…",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
+            // Mirrors the iOS connecting row (OnboardingView): spinner beside
+            // the label, the pair centred under the list. Left-aligned bare
+            // copy read as a status line that had failed to start.
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(
+                    CashuTheme.spacing.snug,
+                    Alignment.CenterHorizontally,
+                ),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                // Expressive loader per DESIGN-ANDROID.md §1 — the classic
+                // circular spinner is reserved for nothing.
+                LoadingIndicator(
+                    modifier = Modifier.size(FirstMintSpinnerSize),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Text(
+                    text = "Connecting to ${shortenMintUrl(addingMintUrl)}…",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
         }
     }
 }
