@@ -3,6 +3,7 @@ package com.cashu.me.ui.onboarding
 import android.content.Context
 import android.os.PowerManager
 import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.EaseInOut
 import androidx.compose.animation.core.EaseOut
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
@@ -52,8 +53,10 @@ import kotlinx.coroutines.withContext
 //   T+0        curtain reveals top → bottom (450ms, soft 30%-height edge)
 //   T+450ms    gate flip under full cover — the root swap is invisible
 //   T+480ms    lens bloom fires at screen center (existing warp envelopes)
-//   T+750ms    overlay slides down 20dp and fades out (500ms)
-//   T+1250ms   session ends, overlay unmounts
+//   T+750ms    overlay slides down 20dp and fades out (700ms ease-in-out —
+//              the curtain holds a beat, then melts; the bloom's release
+//              swirl stays visible through the fade)
+//   T+1450ms   session ends, overlay unmounts
 //
 // Under Reduce Motion the overlay never shows and completion runs
 // immediately — the app gate's plain crossfade is the entire transition
@@ -105,7 +108,7 @@ private const val SweepInMs = 450
 private const val BloomDelayMs = 30
 private const val HoldMs = 270
 private const val ReleaseDelayMs = 10
-private const val DissolveMs = 500
+private const val DissolveMs = 700
 private val DissolveSlide = 20.dp
 
 /** The curtain itself: an opaque scrim plus full-bleed drifting terrain,
@@ -222,8 +225,8 @@ internal fun OnboardingHandoffHost(controller: OnboardingHandoffController) {
             if (!powerSave) session.touch.press(centerXDp, centerYDp, nowSeconds())
 
             delay(HoldMs.toLong())
-            launch { fade.animateTo(0f, tween(DissolveMs, easing = EaseOut)) }
-            launch { slide.animateTo(slidePx, tween(DissolveMs, easing = EaseOut)) }
+            launch { fade.animateTo(0f, tween(DissolveMs, easing = EaseInOut)) }
+            launch { slide.animateTo(slidePx, tween(DissolveMs, easing = EaseInOut)) }
 
             delay(ReleaseDelayMs.toLong())
             if (!powerSave) session.touch.release(nowSeconds())

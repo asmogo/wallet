@@ -13,8 +13,10 @@ import SwiftUI
 ///   T+0        curtain reveals top → bottom (0.45s, soft 30%-height edge)
 ///   T+450ms    gate flip under full cover — the root swap is invisible
 ///   T+480ms    lens bloom fires at screen center (existing warp envelopes)
-///   T+750ms    overlay slides down 20pt and fades out (0.5s)
-///   T+1250ms   session ends, overlay unmounts
+///   T+750ms    overlay slides down 20pt and fades out (0.7s ease-in-out —
+///              the curtain holds a beat, then melts; the bloom's release
+///              swirl stays visible through the fade)
+///   T+1450ms   session ends, overlay unmounts
 ///
 /// Under Reduce Motion or disabled-animation test runs the overlay never
 /// mounts and completion runs immediately — ContentView's plain 0.35s
@@ -158,13 +160,13 @@ struct OnboardingHandoffOverlay: View {
 
         try? await Task.sleep(for: .milliseconds(270))
         guard !Task.isCancelled else { return }
-        withAnimation(.easeOut(duration: 0.5)) { dissolved = true }
+        withAnimation(.easeInOut(duration: 0.7)) { dissolved = true }
 
         try? await Task.sleep(for: .milliseconds(10))
         guard !Task.isCancelled else { return }
         if canBloom { session.touch.release(now: CACurrentMediaTime()) }
 
-        try? await Task.sleep(for: .milliseconds(490))
+        try? await Task.sleep(for: .milliseconds(690))
         guard !Task.isCancelled else { return }
         coordinator.end()
     }
