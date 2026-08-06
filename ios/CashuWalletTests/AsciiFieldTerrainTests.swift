@@ -208,4 +208,32 @@ final class AsciiFieldLayoutTests: XCTestCase {
         )
         XCTAssertLessThan(layout.maskOpaqueFraction, 0.30)
     }
+
+    func testBottomFadeBracketsTheChassisEdge() {
+        let layout = AsciiFieldLayout.resolve(
+            windowHeight: 844, topInset: topInset, chassisInset: chassis, headerClearance: clearance
+        )!
+        let chassisEdge = layout.visibleBand / layout.layerHeight
+        // The fade starts 48pt above the chassis edge and completes 40pt past
+        // it — the terrain dissolves toward the buttons instead of ending on
+        // a hard cut, with a small sliver continuing behind their glass.
+        XCTAssertEqual(
+            layout.bottomFadeStart,
+            (layout.visibleBand - 48) / layout.layerHeight,
+            accuracy: 1e-4
+        )
+        XCTAssertEqual(
+            layout.bottomFadeEnd,
+            (layout.visibleBand + 40) / layout.layerHeight,
+            accuracy: 1e-4
+        )
+        XCTAssertLessThan(layout.bottomFadeStart, chassisEdge)
+        XCTAssertGreaterThan(layout.bottomFadeEnd, chassisEdge)
+        XCTAssertLessThanOrEqual(layout.bottomFadeEnd, 1)
+        // The opaque plateau between the two fades must survive.
+        XCTAssertGreaterThan(layout.bottomFadeStart, layout.maskOpaqueFraction)
+        // A chassis shallower than the underlap clamps the fade inside it.
+        let shallow = AsciiFieldLayout.fallback(chassisInset: 24)
+        XCTAssertEqual(shallow.bottomFadeEnd, 1, accuracy: 1e-4)
+    }
 }

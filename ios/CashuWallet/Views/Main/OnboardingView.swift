@@ -144,6 +144,18 @@ struct OnboardingView: View {
             OnboardingChassisView(model: chassisModel) {
                 chassisAccessory
             }
+            // The chassis ground: solid on scrolling steps (content must not
+            // bleed under the CTAs), clear on the ASCII-field pair so the
+            // terrain's bottom fade continues faintly behind the glass
+            // buttons. Driven by opacity, not a style swap, so it dissolves
+            // inside the same 0.28s transaction as the field itself when the
+            // pair is entered or left.
+            .background {
+                Rectangle()
+                    .fill(.background)
+                    .opacity(stepShowsAsciiField ? 0 : 1)
+                    .ignoresSafeArea()
+            }
         }
         .sheet(isPresented: $showConceptSheet) {
             conceptSheet
@@ -197,11 +209,7 @@ struct OnboardingView: View {
             // Suppression (tight vertical space) hides rather than unmounts:
             // the view's identity — and with it the wall clock — must survive,
             // or a pass through a suppressed layout would replay from t=0.
-            let layout = resolved ?? AsciiFieldLayout.Resolution(
-                visibleBand: AsciiFieldLayout.minBand,
-                layerHeight: AsciiFieldLayout.minBand + chassisInset,
-                maskOpaqueFraction: AsciiFieldLayout.maskFade
-            )
+            let layout = resolved ?? AsciiFieldLayout.fallback(chassisInset: chassisInset)
             let visible = resolved != nil && stepShowsAsciiField && asciiFieldEntered
             AsciiFieldView(
                 staticTime: Self.asciiFieldStaticTime,
@@ -209,14 +217,18 @@ struct OnboardingView: View {
             )
                 .frame(width: geo.size.width, height: layout.layerHeight)
                 // Transparent → opaque over the visible band's top ~30%, like
-                // the web band's mask-image. A continuous gradient, never
-                // stepped, so the fade cannot band.
+                // the web band's mask-image; then opaque → transparent across
+                // the chassis edge, so the terrain dissolves toward the
+                // buttons — a faint sliver continuing behind their glass —
+                // rather than ending on a hard cut at the chassis top.
+                // Continuous gradients, never stepped, so neither fade bands.
                 .mask {
                     LinearGradient(
                         stops: [
                             .init(color: .clear, location: 0),
                             .init(color: .black, location: layout.maskOpaqueFraction),
-                            .init(color: .black, location: 1),
+                            .init(color: .black, location: layout.bottomFadeStart),
+                            .init(color: .clear, location: layout.bottomFadeEnd),
                         ],
                         startPoint: .top,
                         endPoint: .bottom

@@ -104,13 +104,15 @@ enum AsciiFieldTerrain {
 /// Band geometry as a pure function, so the layout-invariant test can assert
 /// it without composing views.
 ///
-/// The field pins to the *window* bottom and runs under the chassis; the
-/// chassis' opaque background is what terminates it, so there is no visible
-/// bottom edge and the terrain reads as continuing behind the buttons. The
-/// on-screen glyph positions are a function of window size and the (constant
-/// across the welcome/restore pair) chassis inset — never of header height,
-/// stage content, or current step — which is what lets the terrain hold
-/// perfectly still across the Welcome ↔ Restore Wallet swap.
+/// The field pins to the *window* bottom and runs under the chassis. It
+/// terminates through its own mask, not through occlusion: the bottom fade
+/// begins above the chassis edge and reaches zero a little past it, so the
+/// terrain dissolves toward the buttons — with a faint sliver continuing
+/// behind their glass — instead of ending on a hard cut at the chassis top.
+/// The on-screen glyph positions are a function of window size and the
+/// (constant across the welcome/restore pair) chassis inset — never of header
+/// height, stage content, or current step — which is what lets the terrain
+/// hold perfectly still across the Welcome ↔ Restore Wallet swap.
 enum AsciiFieldLayout {
     /// Web is `clamp(180px, 26vh, 320px)`; scaled slightly for phone-sized
     /// viewports.
@@ -124,6 +126,11 @@ enum AsciiFieldLayout {
     /// band (the web masks the top 30% of its fully-visible band; ours also
     /// extends under the chassis, so the fraction applies to the visible part).
     static let maskFade: CGFloat = 0.30
+    /// The bottom fade starts this far above the chassis edge…
+    static let bottomFadeReach: CGFloat = 48
+    /// …and reaches zero this far past it — just enough that a faint sliver
+    /// of terrain sits behind the top of the primary capsule, no deeper.
+    static let bottomFadeUnderlap: CGFloat = 40
 
     struct Resolution: Equatable {
         /// Height of the band above the chassis — the part the user sees.
@@ -132,6 +139,13 @@ enum AsciiFieldLayout {
         var layerHeight: CGFloat
         /// Where the mask becomes fully opaque, as a fraction of layerHeight.
         var maskOpaqueFraction: CGFloat
+        /// Where the bottom fade begins (fraction of layerHeight) — above the
+        /// chassis edge, so the dissolve is already underway when the terrain
+        /// meets the buttons.
+        var bottomFadeStart: CGFloat
+        /// Where the bottom fade completes (fraction of layerHeight) —
+        /// slightly past the chassis edge, behind the buttons.
+        var bottomFadeEnd: CGFloat
     }
 
     /// `headerClearance` is the vertical room the pair's tallest header
@@ -151,11 +165,23 @@ enum AsciiFieldLayout {
         // than squashed — the band never shrinks to fit.
         let available = windowHeight - topInset - headerClearance - chassisInset
         guard min(band, available) >= suppressionThreshold else { return nil }
+        return resolution(band: band, chassisInset: chassisInset)
+    }
+
+    /// The suppressed case still needs a stable frame (the view hides rather
+    /// than unmounts, to keep its wall clock), so it lays out the floor band.
+    static func fallback(chassisInset: CGFloat) -> Resolution {
+        resolution(band: minBand, chassisInset: chassisInset)
+    }
+
+    private static func resolution(band: CGFloat, chassisInset: CGFloat) -> Resolution {
         let layerHeight = band + chassisInset
         return Resolution(
             visibleBand: band,
             layerHeight: layerHeight,
-            maskOpaqueFraction: (band * maskFade) / layerHeight
+            maskOpaqueFraction: (band * maskFade) / layerHeight,
+            bottomFadeStart: (band - bottomFadeReach) / layerHeight,
+            bottomFadeEnd: (band + min(bottomFadeUnderlap, chassisInset)) / layerHeight
         )
     }
 

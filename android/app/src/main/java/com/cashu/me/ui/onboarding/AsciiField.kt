@@ -150,13 +150,15 @@ internal object AsciiFieldTerrain {
 /** Band geometry as pure math, so the layout-invariant test can assert it
  * without composing views. Mirrors iOS `AsciiFieldLayout`.
  *
- * The field pins to the window bottom and runs under the chassis; the
- * chassis' opaque background is what terminates it, so there is no visible
- * bottom edge and the terrain reads as continuing behind the buttons. The
- * on-screen glyph positions are a function of window size and the (constant
- * across the welcome/restore pair) chassis height — never of header height,
- * stage content, or current step — which is what lets the terrain hold
- * perfectly still across the Welcome ↔ Restore Wallet swap. */
+ * The field pins to the window bottom and runs under the chassis. It
+ * terminates through its own mask, not through occlusion: the bottom fade
+ * begins above the chassis edge and reaches zero a little past it, so the
+ * terrain dissolves toward the buttons — a faint sliver continuing behind
+ * them — instead of ending on a hard cut at the chassis top. The on-screen
+ * glyph positions are a function of window size and the (constant across the
+ * welcome/restore pair) chassis height — never of header height, stage
+ * content, or current step — which is what lets the terrain hold perfectly
+ * still across the Welcome ↔ Restore Wallet swap. */
 internal object AsciiFieldLayout {
     /** Web is `clamp(180px, 26vh, 320px)`; scaled slightly for phone-sized
      * viewports. All values dp. */
@@ -173,6 +175,13 @@ internal object AsciiFieldLayout {
      * extends under the chassis, so the fraction applies to the visible part). */
     const val MASK_FADE = 0.30f
 
+    /** The bottom fade starts this far (dp) above the chassis edge… */
+    const val BOTTOM_FADE_REACH = 48f
+
+    /** …and reaches zero this far past it — just enough that a faint sliver
+     * of terrain sits behind the top of the primary button, no deeper. */
+    const val BOTTOM_FADE_UNDERLAP = 40f
+
     data class Resolution(
         /** Height of the band above the chassis — the part the user sees. */
         val visibleBand: Float,
@@ -180,6 +189,13 @@ internal object AsciiFieldLayout {
         val layerHeight: Float,
         /** Where the mask becomes fully opaque, as a fraction of layerHeight. */
         val maskOpaqueFraction: Float,
+        /** Where the bottom fade begins (fraction of layerHeight) — above the
+         * chassis edge, so the dissolve is already underway when the terrain
+         * meets the buttons. */
+        val bottomFadeStart: Float,
+        /** Where the bottom fade completes (fraction of layerHeight) —
+         * slightly past the chassis edge, behind the buttons. */
+        val bottomFadeEnd: Float,
     )
 
     /** [headerClearance] is the vertical room the pair's tallest header
@@ -198,11 +214,22 @@ internal object AsciiFieldLayout {
         // than squashed — the band never shrinks to fit.
         val available = windowHeight - headerClearance - chassisHeight
         if (min(band, available) < SUPPRESSION_THRESHOLD) return null
+        return resolution(band, chassisHeight)
+    }
+
+    /** The suppressed case still needs a stable frame (the backdrop hides
+     * rather than unmounts, to keep its wall clock), so it lays out the
+     * floor band. */
+    fun fallback(chassisHeight: Float): Resolution = resolution(MIN_BAND, chassisHeight)
+
+    private fun resolution(band: Float, chassisHeight: Float): Resolution {
         val layerHeight = band + chassisHeight
         return Resolution(
             visibleBand = band,
             layerHeight = layerHeight,
             maskOpaqueFraction = (band * MASK_FADE) / layerHeight,
+            bottomFadeStart = (band - BOTTOM_FADE_REACH) / layerHeight,
+            bottomFadeEnd = (band + min(BOTTOM_FADE_UNDERLAP, chassisHeight)) / layerHeight,
         )
     }
 
@@ -258,11 +285,7 @@ internal fun OnboardingAsciiBackdrop(
             headerClearance = AsciiFieldLayout.headerClearanceDp(density.fontScale),
             chassisHeight = chassisDp,
         )
-        val layout = resolved ?: AsciiFieldLayout.Resolution(
-            visibleBand = AsciiFieldLayout.MIN_BAND,
-            layerHeight = AsciiFieldLayout.MIN_BAND + chassisDp,
-            maskOpaqueFraction = AsciiFieldLayout.MASK_FADE,
-        )
+        val layout = resolved ?: AsciiFieldLayout.fallback(chassisHeight = chassisDp)
         val shouldShow = visible && resolved != null
 
         // First-launch entrance: title y-rise settles (~400ms), then a 450ms
@@ -309,15 +332,19 @@ internal fun OnboardingAsciiBackdrop(
                     compositingStrategy = CompositingStrategy.Offscreen
                 }
                 // Transparent → opaque over the visible band's top ~30%, like
-                // the web band's mask-image. A continuous gradient, never
-                // stepped, so the fade cannot band.
+                // the web band's mask-image; then opaque → transparent across
+                // the chassis edge, so the terrain dissolves toward the
+                // buttons — a faint sliver continuing behind them — rather
+                // than ending on a hard cut at the chassis top. Continuous
+                // gradients, never stepped, so neither fade bands.
                 .drawWithContent {
                     drawContent()
                     drawRect(
                         brush = Brush.verticalGradient(
                             0f to Color.Transparent,
                             layout.maskOpaqueFraction to Color.Black,
-                            1f to Color.Black,
+                            layout.bottomFadeStart to Color.Black,
+                            layout.bottomFadeEnd to Color.Transparent,
                         ),
                         blendMode = BlendMode.DstIn,
                     )

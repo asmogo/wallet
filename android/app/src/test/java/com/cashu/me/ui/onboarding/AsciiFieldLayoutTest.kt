@@ -83,4 +83,31 @@ class AsciiFieldLayoutTest {
         )
         assertTrue(layout.maskOpaqueFraction < 0.30f)
     }
+
+    @Test
+    fun bottomFadeBracketsTheChassisEdge() {
+        val layout = AsciiFieldLayout.resolve(844f, clearance, 176f)!!
+        val chassisEdge = layout.visibleBand / layout.layerHeight
+        // The fade starts 48dp above the chassis edge and completes 40dp past
+        // it — the terrain dissolves toward the buttons instead of ending on
+        // a hard cut, with a small sliver continuing behind them.
+        assertEquals(
+            (layout.visibleBand - 48f) / layout.layerHeight,
+            layout.bottomFadeStart,
+            1e-4f,
+        )
+        assertEquals(
+            (layout.visibleBand + 40f) / layout.layerHeight,
+            layout.bottomFadeEnd,
+            1e-4f,
+        )
+        assertTrue(layout.bottomFadeStart < chassisEdge)
+        assertTrue(layout.bottomFadeEnd > chassisEdge)
+        assertTrue(layout.bottomFadeEnd <= 1f)
+        // The opaque plateau between the two fades must survive.
+        assertTrue(layout.bottomFadeStart > layout.maskOpaqueFraction)
+        // A chassis shallower than the underlap clamps the fade inside it.
+        val shallow = AsciiFieldLayout.fallback(chassisHeight = 24f)
+        assertEquals(1f, shallow.bottomFadeEnd, 1e-4f)
+    }
 }

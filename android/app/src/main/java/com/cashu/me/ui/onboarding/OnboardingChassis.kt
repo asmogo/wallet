@@ -5,7 +5,6 @@ import androidx.compose.animation.SizeTransform
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.togetherWith
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -163,15 +162,12 @@ fun OnboardingChassis(
     modifier: Modifier = Modifier,
     accessory: (@Composable () -> Unit)? = null,
 ) {
-    // Opaque ground, stated on the chassis itself (iOS parity:
-    // `.background(.background)`): the ASCII terrain band runs underneath
-    // this chassis, and this fill is what terminates it — the terrain reads
-    // as continuing behind the buttons with no visible bottom edge.
-    Column(
-        modifier = modifier
-            .fillMaxWidth()
-            .background(MaterialTheme.colorScheme.background),
-    ) {
+    // Deliberately no background: the ASCII terrain band's bottom fade
+    // continues a little way behind the buttons (AsciiField.kt), and an
+    // opaque ground here would cut it off at the chassis edge. The scaffold
+    // stacks the chassis below the stage, so nothing ever scrolls under it —
+    // unlike iOS, whose safe-area-inset chassis needs a conditional ground.
+    Column(modifier = modifier.fillMaxWidth()) {
         // Indicator slot — resolved as "no indicator" (brief §3): the flow
         // branches into paths of different lengths, so page dots would imply
         // a linear path that doesn't exist. The stage carries the sense of

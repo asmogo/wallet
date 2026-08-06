@@ -69,7 +69,11 @@ struct OnboardingChassisView<Accessory: View>: View {
         .animation(.easeOut(duration: 0.22), value: model.contentOpacity)
         .padding(.top, 8)
         .padding(.bottom, 12)
-        .background(.background)
+        // The opaque ground lives at the call site (OnboardingView), not
+        // here: on the two ASCII-field steps it clears so the terrain's
+        // bottom fade can continue behind the glass buttons, and on every
+        // other step it stays solid so scrolled content can't bleed under
+        // the CTAs.
     }
 
     // MARK: Slots
