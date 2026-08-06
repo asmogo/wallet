@@ -789,23 +789,13 @@ struct OnboardingView: View {
             OnboardingStepHeader(
                 title: "Wallet Restored",
                 subhead: walletManager.balance > 0 && count > 0
-                    ? "across \(count) mint\(count == 1 ? "" : "s")"
+                    ? "Across \(count) mint\(count == 1 ? "" : "s")"
                     : "Your funds are ready."
             )
             .padding(.top, OnboardingMetrics.titleTopInset)
             .opacity(isCompleting ? 0 : 1)
 
             Spacer()
-
-            Image(systemName: "checkmark.circle.fill")
-                .font(.system(size: 56))
-                .foregroundStyle(.green)
-                // One hero gesture: the symbol bounce. Scale floor raised to
-                // 0.85 (Emil's "never below 0.9-ish") so it settles rather
-                // than pops. Reduce Motion gets a plain fade, no bounce.
-                .symbolEffect(.bounce, value: reduceMotion ? false : iCloudRestorePhase == .success)
-                .transition(reduceMotion ? .opacity : .scale(scale: 0.85).combined(with: .opacity))
-                .opacity(isCompleting ? 0 : 1)
 
             // Hero — echoes MainWalletView's balance treatment exactly; the
             // one element held at full opacity while the chrome recedes,
@@ -821,6 +811,16 @@ struct OnboardingView: View {
                 // carries its own, and stacking a second one indented the
                 // title to 56 pt.
                 .padding(.horizontal, OnboardingMetrics.gutter)
+
+            Image(systemName: "checkmark.circle.fill")
+                .font(.system(size: 56))
+                .foregroundStyle(.green)
+                // One hero gesture: the symbol bounce. Scale floor raised to
+                // 0.85 (Emil's "never below 0.9-ish") so it settles rather
+                // than pops. Reduce Motion gets a plain fade, no bounce.
+                .symbolEffect(.bounce, value: reduceMotion ? false : iCloudRestorePhase == .success)
+                .transition(reduceMotion ? .opacity : .scale(scale: 0.85).combined(with: .opacity))
+                .opacity(isCompleting ? 0 : 1)
 
             Spacer()
         }
