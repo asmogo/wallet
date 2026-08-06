@@ -1170,24 +1170,19 @@ struct OnboardingView: View {
     }
 
     private var customMintInputRow: some View {
+        // Styled to read as the same control as the Recover-funds mint field
+        // (`restoreMintsList`): system font, standard placeholder, 14pt
+        // corner. It used to be monospaced with a hand-rolled placeholder
+        // overlay — a URL you type is input like any other, not code.
         HStack(spacing: 10) {
-            TextField("", text: $customMintInput)
+            TextField("mint.example.com", text: $customMintInput)
                 .textInputAutocapitalization(.never)
                 .autocorrectionDisabled()
                 .keyboardType(.URL)
                 .submitLabel(.done)
                 .onSubmit(commitCustomMintInput)
-                .font(.system(.subheadline, design: .monospaced))
                 .foregroundStyle(.primary)
                 .tint(.primary)
-                .overlay(alignment: .leading) {
-                    if customMintInput.isEmpty {
-                        Text("https://mint.example.com")
-                            .font(.system(.subheadline, design: .monospaced))
-                            .foregroundStyle(.tertiary)
-                            .allowsHitTesting(false)
-                    }
-                }
                 .accessibilityIdentifier("onboarding-custom-mint-field")
 
             Button(action: commitCustomMintInput) {
@@ -1201,9 +1196,9 @@ struct OnboardingView: View {
             .accessibilityHint(customMintInput.isEmpty ? "Pastes mint URL from clipboard" : "Adds mint to restore list")
             .accessibilityIdentifier("onboarding-commit-custom-mint")
         }
-        .padding(.vertical, 12)
+        .padding(.vertical, 14)
         .padding(.horizontal, 14)
-        .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 12))
+        .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 14))
     }
 
     private func commitCustomMintInput() {
@@ -1388,7 +1383,7 @@ struct OnboardingView: View {
 
             stagger(appeared: restoreMintsAppeared, index: 0) {
                 OnboardingStepHeader(
-                    title: "Recover Funds.",
+                    title: "Recover funds.",
                     subhead: "Add the mints you used before to recover funds from this seed."
                 )
             }
@@ -1564,7 +1559,7 @@ struct OnboardingView: View {
         VStack(spacing: 0) {
             stagger(appeared: restoreProgressAppeared, index: 0) {
                 OnboardingStepHeader(
-                    title: "Recover Funds.",
+                    title: "Recover funds.",
                     subhead: restoreSubhead
                 )
             }
@@ -1787,7 +1782,9 @@ struct OnboardingView: View {
                     setRestoreMintNotice("Added \(addedCount) mint\(addedCount == 1 ? "" : "s") from your Nostr backup.")
                 }
             } catch {
-                setRestoreMintNotice(error.localizedDescription, severity: .error)
+                // Through the shared mapper, never `localizedDescription` —
+                // a relay failure here surfaced as a raw CDK FFI dump.
+                setRestoreMintNotice(error.userFacingWalletMessage, severity: .error)
             }
         }
     }

@@ -79,6 +79,16 @@ class NostrMintBackupService(
         mutableState.value = mutableState.value.copy(isSearching = true)
         return try {
             gateway.fetchMintBackup(relays, timeoutSecs = RESTORE_TIMEOUT_SECS)
+        } catch (t: Throwable) {
+            // CDK reports "no backup published for this seed" as an error
+            // rather than an empty result. Fold it into the documented empty
+            // return so call sites keep a single friendly "nothing found"
+            // path instead of surfacing a raw FFI dump.
+            if (t.message?.contains("no backup event found", ignoreCase = true) == true) {
+                emptyList()
+            } else {
+                throw t
+            }
         } finally {
             mutableState.value = mutableState.value.copy(isSearching = false)
         }

@@ -314,7 +314,7 @@ fun onboardingRestoreMintsScreenshot() {
             Column(Modifier.fillMaxSize()) {
                 OnboardingBackButton(onBack = {}, modifier = Modifier.padding(start = 16.dp, top = 8.dp))
                 OnboardingStepHeader(
-                    title = "Recover Funds.",
+                    title = "Recover funds.",
                     subhead = "Add the mints you used before to recover funds from this seed.",
                     modifier = Modifier.padding(top = 12.dp),
                 )
@@ -370,7 +370,7 @@ fun onboardingRestoreProgressScreenshot() {
         ) {
             Column(Modifier.fillMaxSize()) {
                 OnboardingStepHeader(
-                    title = "Recover Funds.",
+                    title = "Recover funds.",
                     subhead = "Recovering funds from your mints…",
                     modifier = Modifier.padding(top = 8.dp, bottom = 12.dp),
                 )

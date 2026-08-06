@@ -478,7 +478,9 @@ class RestoreMintsStagingState internal constructor(
                     )
                 }
                 .onFailure {
-                    setNotice(it.message ?: "Could not search your relays.", NoticeSeverity.Error)
+                    // Through the shared mapper, never the raw message — a
+                    // relay failure here surfaced as a raw CDK FFI dump.
+                    setNotice(it.userFacingWalletMessage, NoticeSeverity.Error)
                 }
         }
     }
@@ -623,7 +625,7 @@ fun RestoreMintsStep(
     }
     val (title, subtitle) = when (presentation) {
         RestorePresentation.Onboarding ->
-            "Recover Funds." to
+            "Recover funds." to
                 "Add the mints you used before to recover funds from this seed."
         RestorePresentation.InApp ->
             "Restore Funds" to
@@ -952,7 +954,7 @@ fun RestoreProgressStep(
         TextAlign.Start
     }
     val title = when (presentation) {
-        RestorePresentation.Onboarding -> "Recover Funds."
+        RestorePresentation.Onboarding -> "Recover funds."
         RestorePresentation.InApp ->
             if (state.allSettled) "Restore Complete" else "Restoring…"
     }

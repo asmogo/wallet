@@ -635,7 +635,7 @@ fun OnboardingScreen(
                                 ),
                             )
                             OnboardingStepHeader(
-                                title = "Recover Funds.",
+                                title = "Recover funds.",
                                 subhead = "Add the mints you used before to recover funds from this seed.",
                                 modifier = Modifier.padding(top = OnboardingMetrics.TitleGap),
                             )
@@ -663,7 +663,7 @@ fun OnboardingScreen(
                             // reserves the bar band rather than skipping it —
                             // otherwise the title jumps up 56 dp on arrival.
                             OnboardingStepHeader(
-                                title = "Recover Funds.",
+                                title = "Recover funds.",
                                 subhead = progressState?.subhead,
                                 modifier = Modifier.padding(
                                     top = OnboardingMetrics.TitleTopInset,
@@ -1307,8 +1307,11 @@ private fun FirstMintList(
                 modifier = Modifier
                     .fillMaxWidth()
                     .testTag(UiTestTags.CustomMintUrl),
-                placeholder = "https://mint.example.com",
-                textStyle = MaterialTheme.typography.bodyMedium.copy(fontFamily = FontFamily.Monospace),
+                // Same voice as the Recover-funds mint field
+                // (RestoreWalletFlow): system face, bare-host placeholder. A
+                // URL you type is input like any other, not code.
+                placeholder = "mint.example.com",
+                textStyle = MaterialTheme.typography.bodyMedium,
                 singleLine = true,
                 isError = state.customDraft.error != null,
                 keyboardOptions = KeyboardOptions(

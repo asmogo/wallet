@@ -1075,7 +1075,9 @@ struct RestoreWalletView: View {
                     setMintNotice("Added \(addedCount) mint\(addedCount == 1 ? "" : "s") from your Nostr backup.")
                 }
             } catch {
-                setMintNotice(error.localizedDescription, severity: .error)
+                // Through the shared mapper, never `localizedDescription` —
+                // a relay failure here surfaced as a raw CDK FFI dump.
+                setMintNotice(error.userFacingWalletMessage, severity: .error)
             }
         }
     }
