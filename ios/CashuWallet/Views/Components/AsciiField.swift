@@ -441,6 +441,10 @@ struct AsciiFieldView: View {
     /// Test/preview hook so the synthesized-₿ path can be exercised on a
     /// platform whose mono face carries a native ₿.
     var forceSynthesizedPeak: Bool = false
+    /// Externally driven lens (the onboarding handoff's programmatic center
+    /// bloom). When set, the field never listens to fingers — the owner is
+    /// the only one pressing. Warp math and constants are untouched.
+    var touchOverride: AsciiFieldWarpTouch? = nil
 
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.scenePhase) private var scenePhase
@@ -457,6 +461,9 @@ struct AsciiFieldView: View {
     /// Stable reference; touch events mutate it without invalidating the view
     /// (the 30fps tick picks the changes up).
     @State private var touch = AsciiFieldWarpTouch()
+    /// The lens the frame loop reads: the injected instance when present,
+    /// else the finger-driven one.
+    private var activeTouch: AsciiFieldWarpTouch { touchOverride ?? touch }
     /// Release detection: `@GestureState` resets even when the system
     /// *cancels* the drag — `.onEnded` doesn't fire then, and a missed
     /// release would pin the lens open.
@@ -493,7 +500,7 @@ struct AsciiFieldView: View {
             frozenT = runs ? nil : currentT()
             // Never carry a stale lens across a pause — a resume must not
             // replay a half-finished decay.
-            touch.reset()
+            activeTouch.reset()
         }
         // The power-state notification arrives off the main thread.
         .onReceive(
@@ -520,7 +527,7 @@ struct AsciiFieldView: View {
         .onChange(of: touchDown) { _, down in
             if !down { touch.release(now: CACurrentMediaTime()) }
         }
-        .allowsHitTesting(clockRuns)
+        .allowsHitTesting(clockRuns && touchOverride == nil)
     }
 
     // MARK: Frame
@@ -543,6 +550,7 @@ struct AsciiFieldView: View {
         // untouched frame samples through the exact expressions it always
         // has — byte-identical stills.
         let now = CACurrentMediaTime()
+        let touch = activeTouch
         touch.advance(now: now)
         let k = touch.currentK(now: now)
         let tx = touch.x

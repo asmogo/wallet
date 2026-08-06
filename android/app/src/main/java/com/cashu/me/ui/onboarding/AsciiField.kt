@@ -570,6 +570,9 @@ internal fun OnboardingAsciiBackdrop(
  *   field, and no concept sheet is presented over it.
  * @param forceSynthesizedPeak Test/preview hook so the synthesized-₿ path can
  *   be exercised on a device whose mono face carries a native ₿.
+ * @param touchOverride Externally driven lens (the onboarding handoff's
+ *   programmatic center bloom). When set, the field never listens to fingers —
+ *   the owner is the only one pressing. Warp math and constants are untouched.
  */
 @Composable
 internal fun AsciiField(
@@ -577,6 +580,7 @@ internal fun AsciiField(
     staticTime: Float? = null,
     active: Boolean = true,
     forceSynthesizedPeak: Boolean = false,
+    touchOverride: AsciiFieldWarpTouch? = null,
 ) {
     val context = LocalContext.current
     val density = LocalDensity.current.density
@@ -618,8 +622,10 @@ internal fun AsciiField(
     val startNanos = remember { System.nanoTime() }
     val timeState = remember { mutableFloatStateOf(0f) }
     // Remembered independently of the theme-keyed renderer, so a dark-mode
-    // flip mid-press keeps the lens where the finger is.
-    val touch = remember { AsciiFieldWarpTouch() }
+    // flip mid-press keeps the lens where the finger is. An injected lens
+    // takes its place wholesale — one identity per field, never both.
+    val internalTouch = remember { AsciiFieldWarpTouch() }
+    val touch = touchOverride ?: internalTouch
     // 60fps while a finger is down — the lens pursuit reads steppy at the
     // ambient 30. Plain state: the frame loop reads it each frame, and the
     // release settle runs at the ambient rate (nothing tracks the finger
@@ -671,8 +677,8 @@ internal fun AsciiField(
     // and the chassis still win.
     Canvas(
         modifier
-            .pointerInput(clockRuns, density) {
-                if (!clockRuns) return@pointerInput
+            .pointerInput(clockRuns, density, touchOverride) {
+                if (!clockRuns || touchOverride != null) return@pointerInput
                 awaitEachGesture {
                     val down = awaitFirstDown(requireUnconsumed = false)
                     interacting.value = true

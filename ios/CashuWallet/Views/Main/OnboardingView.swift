@@ -2,6 +2,7 @@ import SwiftUI
 
 struct OnboardingView: View {
     @EnvironmentObject var walletManager: WalletManager
+    @EnvironmentObject var handoff: OnboardingHandoffCoordinator
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @ObservedObject private var nostrBackupService = NostrMintBackupService.shared
 
@@ -67,7 +68,7 @@ struct OnboardingView: View {
     @State private var isDetectingICloudBackup = true
     @State private var iCloudRestorePhase = ICloudRestorePhase.preview
     // Staged exit on the success screen: chrome recedes while the balance hero
-    // holds, then `completeRestore()` hands off to the ContentView crossfade.
+    // holds, then the ASCII handoff curtain sweeps down over what remains.
     @State private var isCompleting = false
 
     // ASCII terrain band entrance (first launch of onboarding only): the title
@@ -781,8 +782,8 @@ struct OnboardingView: View {
 
     private var iCloudSuccessStage: some View {
         // A centered terminal "done" moment: the recovered balance is the hero,
-        // rendered identically to the wallet's balance so it appears to stay put
-        // through the crossfade into the wallet. Everything else recedes on exit.
+        // rendered identically to the wallet's balance. Everything else recedes
+        // on exit; the ASCII handoff curtain then sweeps down over what's left.
         let count = detectedICloudBackup?.mintURLs.count ?? 0
         return VStack(spacing: 16) {
             OnboardingStepHeader(
@@ -807,7 +808,8 @@ struct OnboardingView: View {
                 .opacity(isCompleting ? 0 : 1)
 
             // Hero — echoes MainWalletView's balance treatment exactly; the
-            // one element held at full opacity so it carries the handoff.
+            // one element held at full opacity while the chrome recedes,
+            // until the curtain covers it.
             Text(SettingsManager.shared.formatBalanceWithUnit(walletManager.balance))
                 .font(.system(size: 44, weight: .bold))
                 .monospacedDigit()
@@ -855,20 +857,18 @@ struct OnboardingView: View {
         guard !isCompleting else { return }
         HapticFeedback.selection()
 
-        // Reduce Motion: skip the staged exit entirely; ContentView still
-        // crossfades (opacity is vestibular-safe).
+        // Reduce Motion: skip the staged exit entirely; the coordinator also
+        // skips the curtain, so ContentView's plain crossfade is the whole
+        // transition (opacity is vestibular-safe).
         if reduceMotion {
-            Task { @MainActor in await walletManager.completeRestore() }
+            handoff.begin(reduceMotion: true) { await walletManager.completeRestore() }
             return
         }
 
-        // Chrome recedes while the balance hero holds, a brief settle, then the
-        // handoff flips `needsOnboarding` and ContentView dissolves to the wallet.
+        // Chrome recedes while the balance hero holds; the curtain sweeps down
+        // over both and the handoff flips `needsOnboarding` at full cover.
         withAnimation(.easeOut(duration: 0.22)) { isCompleting = true }
-        Task { @MainActor in
-            try? await Task.sleep(for: .milliseconds(240))
-            await walletManager.completeRestore()
-        }
+        handoff.begin(reduceMotion: false) { await walletManager.completeRestore() }
     }
 
     // MARK: - Show Mnemonic Stage
@@ -1890,18 +1890,21 @@ struct OnboardingView: View {
     }
 
     private func finishRestore() {
-        Task {
+        handoff.begin(reduceMotion: reduceMotion) {
             await walletManager.completeRestore()
         }
     }
 
     private func finishOnboarding() {
-        // Onboarding complete - wallet is ready
-        walletManager.completeOnboarding()
+        // Onboarding complete — the handoff curtain flips the gate at full cover.
+        handoff.begin(reduceMotion: reduceMotion) {
+            walletManager.completeOnboarding()
+        }
     }
 }
 
 #Preview {
     OnboardingView()
         .environmentObject(WalletManager())
+        .environmentObject(OnboardingHandoffCoordinator())
 }

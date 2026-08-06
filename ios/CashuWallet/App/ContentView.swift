@@ -9,6 +9,9 @@ struct ContentView: View {
     /// The flow cover on screen as of the last change, so a held-approval
     /// page closed without a decision can drop the prompt.
     @State private var lastPresentedCover: FlowCover?
+    /// The onboarding→wallet ASCII handoff. Owned here — above the root gate —
+    /// so the curtain survives the onboarding teardown it conceals.
+    @StateObject private var handoff = OnboardingHandoffCoordinator()
 
     var body: some View {
         // ZStack (not Group) so the outgoing and incoming roots overlap and truly
@@ -28,8 +31,22 @@ struct ContentView: View {
                 LoadingView()
                     .transition(.opacity)
             }
+
+            // The ASCII handoff curtain — onboarding's closing beat. While it
+            // covers the screen the gate flips beneath it unseen.
+            if let session = handoff.session {
+                OnboardingHandoffOverlay(session: session, coordinator: handoff)
+                    .zIndex(2)
+            }
         }
-        .animation(.easeInOut(duration: 0.35), value: walletManager.needsOnboarding)
+        // Suppressed while a handoff session runs: the curtain is the
+        // transition, and the root swap must be instant under its cover.
+        // (`completeOnboarding` flips the flag with no `withAnimation`, so
+        // this value-scoped modifier is the only animator of the swap.)
+        .animation(
+            handoff.session == nil ? .easeInOut(duration: 0.35) : nil,
+            value: walletManager.needsOnboarding
+        )
         // The one full-screen flow-page slot: token claims (scan, deep link,
         // paste-into-flow), scan-routed pay screens, held NUT-18 approvals.
         // `onDismiss` promotes any surface parked by `NavigationManager.present`.
@@ -46,6 +63,7 @@ struct ContentView: View {
         .onChange(of: cashuRequestListener.heldForApproval) { presentInterruptsIfIdle() }
         .onChange(of: appLock.isLocked) { presentInterruptsIfIdle() }
         .onAppear { presentInterruptsIfIdle() }
+        .environmentObject(handoff)
     }
 
     @ViewBuilder

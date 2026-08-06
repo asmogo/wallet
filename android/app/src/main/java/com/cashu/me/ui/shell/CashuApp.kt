@@ -60,6 +60,8 @@ import com.cashu.me.Views.Components.ScannerDefaultPrompt
 import com.cashu.me.Views.Send.ContactlessPayView
 import com.cashu.me.ui.mints.ConnectMintContext
 import com.cashu.me.ui.mints.ConnectMintSheetContent
+import com.cashu.me.ui.onboarding.OnboardingHandoffController
+import com.cashu.me.ui.onboarding.OnboardingHandoffHost
 import com.cashu.me.ui.onboarding.OnboardingScreen
 import com.cashu.me.ui.navigation.Routes
 import com.cashu.me.ui.navigation.TopTab
@@ -231,6 +233,10 @@ private fun CashuAppContent(container: AppContainer) {
         walletState.needsOnboarding -> AppGate.Onboarding
         else -> AppGate.Shell
     }
+    // The onboarding→wallet ASCII handoff. Hoisted here — above the gate's
+    // AnimatedContent — so the curtain survives the onboarding teardown it
+    // conceals. See OnboardingHandoff.kt.
+    val onboardingHandoff = remember { OnboardingHandoffController() }
     Box(modifier = Modifier.fillMaxSize()) {
         AnimatedContent(
             targetState = gate,
@@ -246,6 +252,7 @@ private fun CashuAppContent(container: AppContainer) {
                 AppGate.Onboarding -> OnboardingScreen(
                     walletManager = container.walletManager,
                     nostrMintBackupService = container.nostrMintBackupService,
+                    handoff = onboardingHandoff,
                 )
                 AppGate.Shell -> AuthenticatedShell(container = container)
             }
@@ -257,6 +264,9 @@ private fun CashuAppContent(container: AppContainer) {
             hostState = container.snackbarHostState,
             modifier = Modifier.align(Alignment.BottomCenter),
         )
+        // The handoff curtain — topmost, full cover; the gate flip plays
+        // beneath it unseen.
+        OnboardingHandoffHost(onboardingHandoff)
     }
 }
 

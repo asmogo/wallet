@@ -107,7 +107,15 @@ like a port, make the Android-native choice instead.
   `CashuMotion.StaggerStepMs` stride). **Nothing defined under this exemption
   may be reused inside the wallet proper.** Numbers stay quiet (the
   recovered-sats total keeps mono digits, no roll) and every onboarding
-  animation is `rememberReducedMotion()`-gated to opacity-or-nothing.
+  animation is `rememberReducedMotion()`-gated to opacity-or-nothing. The
+  exemption's terminal beat is the ASCII handoff (`OnboardingHandoff.kt`): a
+  full-screen terrain curtain over the last onboarding screen that flips the
+  app gate at full cover and dissolves onto the wallet — onboarding-owned,
+  hosted above the gate in `CashuApp` only so it survives the teardown it
+  conceals, played once, never referenced by wallet code. The gate's own
+  `transitionSpec` is untouched and plays unseen beneath it (plan 008 stays
+  orthogonal); under Reduce Motion the curtain never mounts and the gate
+  crossfade is the entire transition.
 - **Onboarding system back (2026-08-05):** `OnboardingScreen` registers a
   `BackHandler` mirroring the on-screen back buttons exactly (seed reveal →
   welcome, method chooser → welcome, seed entry → welcome, mint staging →

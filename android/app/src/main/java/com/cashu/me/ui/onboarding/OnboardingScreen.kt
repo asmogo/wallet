@@ -196,9 +196,10 @@ internal class FirstMintSelectionState {
 }
 
 @Composable
-fun OnboardingScreen(
+internal fun OnboardingScreen(
     walletManager: WalletManager,
     nostrMintBackupService: NostrMintBackupService,
+    handoff: OnboardingHandoffController,
 ) {
     val scope = rememberCoroutineScope()
     val haptics = LocalHapticFeedback.current
@@ -246,13 +247,15 @@ fun OnboardingScreen(
                     walletManager.addMint(url)
                 }
                 addingMintUrl = null
-                walletManager.completeOnboarding()
+                // The handoff curtain flips the gate at full cover. Leave
+                // `finishing` set — this subtree is torn down at the flip, and
+                // re-enabling the CTA mid-sweep would invite a second run.
+                handoff.begin { runCatching { walletManager.completeOnboarding() } }
             } catch (t: Throwable) {
                 firstMintError = current?.let {
                     "Couldn't connect to ${shortenMintUrl(it)}. Check the URL or try another mint."
                 } ?: (t.message ?: "Couldn't set up the wallet.")
                 addingMintUrl = null
-            } finally {
                 finishing = false
             }
         }
@@ -423,10 +426,10 @@ fun OnboardingScreen(
                 label = "Continue",
                 onClick = {
                     progressState?.let { state ->
+                        // `finishing` stays set until the handoff tears this
+                        // subtree down — the curtain owns the rest.
                         state.finishing = true
-                        scope.launch {
-                            runCatching { walletManager.completeRestore() }
-                        }
+                        handoff.begin { runCatching { walletManager.completeRestore() } }
                     }
                 },
                 enabled = progressState?.let { it.allSettled && !it.finishing } == true,

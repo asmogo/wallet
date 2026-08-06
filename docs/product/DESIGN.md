@@ -1067,7 +1067,13 @@ onboarding surfaces — `OnboardingView`, `OnboardingChassis`, i.e. everything
 before `completeOnboarding()` /
 `completeRestore()` hands off to the wallet — are **exempt from the
 seven-named-animation budget**. Nothing defined under this exemption may be
-reused inside the wallet proper. Two rules survive the exemption unchanged:
+reused inside the wallet proper. The exemption's terminal beat is the **ASCII
+handoff** (`OnboardingHandoff.swift` / `OnboardingHandoff.kt`): a full-screen
+terrain curtain that sweeps down over the last onboarding screen, flips the
+root gate at full cover, blooms once at center, and dissolves onto the wallet
+— onboarding-owned, mounted at the app root only so it survives the teardown
+it conceals, played exactly once, never referenced by wallet code. The wallet
+composes beneath it with no entrance animation of its own. Two rules survive the exemption unchanged:
 **Numbers Are Sacred** (the restored balance and the recovered-sats total keep
 `.monospacedDigit()` + `.contentTransition(.numericText())`; no count-up, no
 odometer, no roll) and **Reduce Motion** (every onboarding animation honors
