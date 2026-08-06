@@ -472,26 +472,27 @@ struct OnboardingView: View {
     @ViewBuilder
     private var chassisAccessory: some View {
         if currentStep == .showMnemonic {
-            VStack(spacing: 16) {
+            VStack(spacing: 20) {
                 seedWarningNotice
                 seedAcknowledgeRow
             }
         }
     }
 
-    /// Centered caution over the acknowledge row. Deliberately a triangle, not
-    /// a check-shield: a shield reads as "you're protected", which is the
-    /// opposite of what this sentence says.
+    /// Mirrors the acknowledge row's geometry — icon column, gap, and text
+    /// style all match — so the two read as one aligned block. Deliberately a
+    /// triangle, not a check-shield: a shield reads as "you're protected",
+    /// which is the opposite of what this sentence says.
     private var seedWarningNotice: some View {
-        VStack(spacing: 6) {
+        HStack(spacing: 12) {
             Image(systemName: "exclamationmark.triangle.fill")
-                .font(.footnote)
+                .font(.title3)
             Text("Never share these words with anyone.")
-                .font(.caption.weight(.medium))
-                .multilineTextAlignment(.center)
+                .font(.subheadline)
+                .multilineTextAlignment(.leading)
+            Spacer(minLength: 0)
         }
         .foregroundStyle(.orange)
-        .frame(maxWidth: .infinity)
         .accessibilityElement(children: .combine)
     }
 

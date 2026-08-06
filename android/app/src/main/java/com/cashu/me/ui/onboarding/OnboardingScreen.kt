@@ -152,7 +152,6 @@ private val SeedCardPadding = 20.dp
 private val AckIconSize = 22.dp
 private val SelectIconSize = 24.dp
 private val MintAvatarSize = 36.dp
-private val WarningIconSize = 16.dp
 private val RevealEyeSize = 22.dp
 
 /** Hoisted first-mint selection state — the chassis reads the Continue rule
@@ -467,7 +466,7 @@ fun OnboardingScreen(
     val accessory: (@Composable () -> Unit)? = if (step is OnboardingStep.ShowMnemonic) {
         {
             Column(
-                verticalArrangement = Arrangement.spacedBy(CashuTheme.spacing.comfortable),
+                verticalArrangement = Arrangement.spacedBy(CashuTheme.spacing.loose),
             ) {
                 SeedWarningNotice()
                 SeedAcknowledgeRow(
@@ -870,34 +869,35 @@ private fun EcashConceptSheet(onDismiss: () -> Unit) {
 // ---------------------------------------------------------------------------
 
 /**
- * Centered caution above the acknowledge row. Deliberately a warning triangle,
- * not a check-shield: a shield reads as "you're protected", which is the
- * opposite of what this sentence says.
+ * Mirrors [SeedAcknowledgeRow]'s geometry — icon column, gap, and text style
+ * all match — so the two read as one aligned block. Deliberately a warning
+ * triangle, not a check-shield: a shield reads as "you're protected", which is
+ * the opposite of what this sentence says.
  *
- * Not [com.cashu.me.ui.components.InlineNotice] — that is a tinted, left-aligned
- * rounded container, and this screen already has one card. Bare centered
- * icon-over-text keeps the bottom band quiet.
+ * Not [com.cashu.me.ui.components.InlineNotice] — that is a tinted rounded
+ * container, and this screen already has one card. A bare row keeps the
+ * bottom band quiet.
  */
 @Composable
 internal fun SeedWarningNotice(modifier: Modifier = Modifier) {
-    Column(
+    Row(
         modifier = modifier
             .fillMaxWidth()
-            .semantics(mergeDescendants = true) {},
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(CashuTheme.spacing.tight),
+            .semantics(mergeDescendants = true) {}
+            .padding(horizontal = CashuTheme.spacing.micro),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(CashuTheme.spacing.snug),
     ) {
         Icon(
             imageVector = Icons.Filled.Warning,
             contentDescription = null,
             tint = CashuTheme.colors.pending,
-            modifier = Modifier.size(WarningIconSize),
+            modifier = Modifier.size(AckIconSize),
         )
         Text(
             text = "Never share these words with anyone.",
-            style = MaterialTheme.typography.labelMedium,
+            style = MaterialTheme.typography.bodyMedium,
             color = CashuTheme.colors.pending,
-            textAlign = TextAlign.Center,
         )
     }
 }
