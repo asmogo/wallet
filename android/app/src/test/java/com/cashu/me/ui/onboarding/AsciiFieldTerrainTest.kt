@@ -108,3 +108,59 @@ class AsciiFieldTerrainTest {
         assertEquals(4, AsciiFieldTerrain.pickLevel(255))
     }
 }
+
+/**
+ * Parity vectors for the lens warp (mirrors iOS AsciiFieldWarpTests).
+ *
+ * Unlike the terrain, the warp has no web original: the vectors are
+ * hand-derived from the agreed formula and pasted identically into both
+ * platforms' tests. If a port disagrees, fix the port — never the vector.
+ */
+class AsciiFieldWarpTest {
+    @Test
+    fun displacementMatchesParityVectors() {
+        // Bump peak: s = 0.5 → the full 36.
+        assertEquals(36.0, AsciiFieldWarp.displacement(60.0, 1.0), 1e-9)
+        // Interior point at half envelope: 18 · 16 · (35/144)².
+        assertEquals(17.013888888888889, AsciiFieldWarp.displacement(50.0, 0.5), 1e-9)
+        // Zero at the touch point, the rim, beyond it, and at zero envelope.
+        assertEquals(0.0, AsciiFieldWarp.displacement(0.0, 1.0), 0.0)
+        assertEquals(0.0, AsciiFieldWarp.displacement(120.0, 1.0), 0.0)
+        assertEquals(0.0, AsciiFieldWarp.displacement(150.0, 1.0), 0.0)
+        assertEquals(0.0, AsciiFieldWarp.displacement(60.0, 0.0), 0.0)
+    }
+
+    @Test
+    fun envelopesMatchParityVectors() {
+        assertEquals(0.5, AsciiFieldWarp.pressEnvelope(0.09, 0.0), 1e-9)
+        assertEquals(0.15625, AsciiFieldWarp.pressEnvelope(0.045, 0.0), 1e-9)
+        // Re-press mid-decay ramps from the current envelope, not from zero.
+        assertEquals(0.7, AsciiFieldWarp.pressEnvelope(0.09, 0.4), 1e-9)
+        assertEquals(1.0, AsciiFieldWarp.pressEnvelope(0.3, 0.0), 1e-9)
+        assertEquals(0.125, AsciiFieldWarp.releaseEnvelope(0.25, 1.0), 1e-9)
+        assertEquals(0.4096, AsciiFieldWarp.releaseEnvelope(0.1, 0.8), 1e-9)
+        assertEquals(0.0, AsciiFieldWarp.releaseEnvelope(0.6, 1.0), 1e-9)
+    }
+
+    /** The constants both ports share; retuning is a keep-in-lockstep edit of
+     * both platform files plus these vectors. */
+    @Test
+    fun warpConstantsShape() {
+        assertEquals(120.0, AsciiFieldWarp.RADIUS, 0.0)
+        assertEquals(36.0, AsciiFieldWarp.MAX_DISPLACEMENT, 0.0)
+        assertEquals(0.18, AsciiFieldWarp.PRESS_DURATION, 0.0)
+        assertEquals(0.5, AsciiFieldWarp.RELEASE_DURATION, 0.0)
+    }
+
+    /** Warped sampling must never fold: `d - displacement(d)` non-decreasing
+     * across the lens, or terrain would mirror inside the ring. */
+    @Test
+    fun displacementNeverFoldsSampling() {
+        var previous = Double.NEGATIVE_INFINITY
+        for (d in 0..120) {
+            val warped = d - AsciiFieldWarp.displacement(d.toDouble(), 1.0)
+            assertTrue("fold at d=$d", warped >= previous)
+            previous = warped
+        }
+    }
+}

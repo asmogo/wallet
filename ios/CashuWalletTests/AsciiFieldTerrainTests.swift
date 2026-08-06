@@ -89,6 +89,56 @@ final class AsciiFieldTerrainTests: XCTestCase {
     }
 }
 
+/// Parity vectors for the lens warp (mirrors Android `AsciiFieldWarpTest`).
+///
+/// Unlike the terrain, the warp has no web original: the vectors are
+/// hand-derived from the agreed formula and pasted identically into both
+/// platforms' tests. If a port disagrees, fix the port — never the vector.
+final class AsciiFieldWarpTests: XCTestCase {
+    func testDisplacementMatchesParityVectors() {
+        // Bump peak: s = 0.5 → the full 36.
+        XCTAssertEqual(AsciiFieldWarp.displacement(60, 1), 36.0, accuracy: 1e-9)
+        // Interior point at half envelope: 18 · 16 · (35/144)².
+        XCTAssertEqual(AsciiFieldWarp.displacement(50, 0.5), 17.013888888888889, accuracy: 1e-9)
+        // Zero at the touch point, the rim, beyond it, and at zero envelope.
+        XCTAssertEqual(AsciiFieldWarp.displacement(0, 1), 0)
+        XCTAssertEqual(AsciiFieldWarp.displacement(120, 1), 0)
+        XCTAssertEqual(AsciiFieldWarp.displacement(150, 1), 0)
+        XCTAssertEqual(AsciiFieldWarp.displacement(60, 0), 0)
+    }
+
+    func testEnvelopesMatchParityVectors() {
+        XCTAssertEqual(AsciiFieldWarp.pressEnvelope(elapsed: 0.09, from: 0), 0.5, accuracy: 1e-9)
+        XCTAssertEqual(AsciiFieldWarp.pressEnvelope(elapsed: 0.045, from: 0), 0.15625, accuracy: 1e-9)
+        // Re-press mid-decay ramps from the current envelope, not from zero.
+        XCTAssertEqual(AsciiFieldWarp.pressEnvelope(elapsed: 0.09, from: 0.4), 0.7, accuracy: 1e-9)
+        XCTAssertEqual(AsciiFieldWarp.pressEnvelope(elapsed: 0.3, from: 0), 1.0, accuracy: 1e-9)
+        XCTAssertEqual(AsciiFieldWarp.releaseEnvelope(elapsed: 0.25, from: 1), 0.125, accuracy: 1e-9)
+        XCTAssertEqual(AsciiFieldWarp.releaseEnvelope(elapsed: 0.1, from: 0.8), 0.4096, accuracy: 1e-9)
+        XCTAssertEqual(AsciiFieldWarp.releaseEnvelope(elapsed: 0.6, from: 1), 0.0, accuracy: 1e-9)
+    }
+
+    /// The constants both ports share; retuning is a keep-in-lockstep edit of
+    /// both platform files plus these vectors.
+    func testWarpConstantsShape() {
+        XCTAssertEqual(AsciiFieldWarp.radius, 120)
+        XCTAssertEqual(AsciiFieldWarp.maxDisplacement, 36)
+        XCTAssertEqual(AsciiFieldWarp.pressDuration, 0.18)
+        XCTAssertEqual(AsciiFieldWarp.releaseDuration, 0.5)
+    }
+
+    /// Warped sampling must never fold: `d - displacement(d)` non-decreasing
+    /// across the lens, or terrain would mirror inside the ring.
+    func testDisplacementNeverFoldsSampling() {
+        var previous = -Double.infinity
+        for d in 0...120 {
+            let warped = Double(d) - AsciiFieldWarp.displacement(Double(d), 1)
+            XCTAssertGreaterThanOrEqual(warped, previous, "fold at d=\(d)")
+            previous = warped
+        }
+    }
+}
+
 /// CPU cost of one frame's terrain pass — every cell of a 6.1" phone's band
 /// (34 × 29 cells including the chassis underlap) through brightness →
 /// pickLevel → bucket. The draw side is 5 batched fills on Metal; this math
@@ -122,6 +172,50 @@ final class AsciiFieldFrameBudgetTests: XCTestCase {
         // per-cell allocation) still trips.
         XCTAssertLessThan(perFrameMs, 15, "terrain pass took \(perFrameMs)ms per frame")
         print("AsciiField terrain pass: \(String(format: "%.3f", perFrameMs))ms per frame (\(cols)×\(rows) cells)")
+    }
+
+    /// The same pass with the lens fully open (k = 1): the warp adds a square
+    /// root and a few multiplies per cell against the baseline's 45 trig
+    /// calls — pinned here so the interactive path can't regress the budget.
+    func testWarpedFrameComputationWellUnderFrameBudget() {
+        let cols = 34
+        let rows = 29
+        var buckets = [[Double]](repeating: [], count: 5)
+        // A mid-band finger, in the grid units the renderer uses.
+        let tx = 204.0
+        let ty = 203.0
+        let start = CACurrentMediaTime()
+        let frames = 100
+        for frame in 0..<frames {
+            let t = Double(frame) / 30.0 * AsciiFieldTerrain.speed
+            for level in 0..<5 { buckets[level].removeAll(keepingCapacity: true) }
+            for row in 0..<rows {
+                let py = Double(row) * 14 + 7
+                let sy = (Double(row) + 0.5) * AsciiFieldTerrain.terrainScale
+                for col in 0..<cols {
+                    let px = Double(col) * 12 + 6
+                    var sampleX = (Double(col) + 0.5) * AsciiFieldTerrain.terrainScale
+                    var sampleY = sy
+                    let dx = px - tx
+                    let dy = py - ty
+                    let d = (dx * dx + dy * dy).squareRoot()
+                    let f = AsciiFieldWarp.displacement(d, 1)
+                    if f > 0 {
+                        sampleX = (px - dx * (f / d)) / 12 * AsciiFieldTerrain.terrainScale
+                        sampleY = (py - dy * (f / d)) / 14 * AsciiFieldTerrain.terrainScale
+                    }
+                    let level = AsciiFieldTerrain.pickLevel(
+                        AsciiFieldTerrain.brightness(sampleX, sampleY, t)
+                    )
+                    if level < 0 { continue }
+                    buckets[level].append(px)
+                    buckets[level].append(py)
+                }
+            }
+        }
+        let perFrameMs = (CACurrentMediaTime() - start) / Double(frames) * 1000
+        XCTAssertLessThan(perFrameMs, 15, "warped terrain pass took \(perFrameMs)ms per frame")
+        print("AsciiField warped terrain pass: \(String(format: "%.3f", perFrameMs))ms per frame (\(cols)×\(rows) cells)")
     }
 }
 

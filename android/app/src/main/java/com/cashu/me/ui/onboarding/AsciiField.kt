@@ -12,6 +12,8 @@ import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.EaseOut
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -37,6 +39,7 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalInspectionMode
@@ -52,6 +55,7 @@ import kotlin.math.hypot
 import kotlin.math.min
 import kotlin.math.roundToInt
 import kotlin.math.sin
+import kotlin.math.sqrt
 import kotlinx.coroutines.delay
 
 // ---------------------------------------------------------------------------
@@ -144,6 +148,110 @@ internal object AsciiFieldTerrain {
         val hash = (col * 31) xor (row * 17)
         val mixed = (hash xor (hash ushr 13)) * 1274126177
         return (mixed.toUInt() % 3u).toInt()
+    }
+}
+
+/** The lens warp under a pressed finger, as pure functions mirrored on iOS
+ * and pinned by [AsciiFieldWarpTest] (hand-authored vectors, same constants
+ * in both test files — if a port disagrees, fix the port).
+ *
+ * All distances are in grid units (dp here, points on iOS): the space where a
+ * cell is 12×14, so the lens is circular on screen and both ports feed the
+ * functions numerically identical inputs. */
+internal object AsciiFieldWarp {
+    /** Lens radius: 10 columns / ~8.6 rows of the band grid. */
+    const val RADIUS = 120.0
+
+    /** Peak sample displacement: 3 cells ≈ 0.39 noise-x units. */
+    const val MAX_DISPLACEMENT = 36.0
+
+    /** Envelope durations in wall-clock seconds — not terrain `t`, which is
+     * speed-scaled and freezes with the clock. */
+    const val PRESS_DURATION = 0.18
+    const val RELEASE_DURATION = 0.5
+
+    fun smoothstep(u: Double): Double {
+        val c = u.coerceIn(0.0, 1.0)
+        return c * c * (3 - 2 * c)
+    }
+
+    /** Sample displacement at distance [d] from the finger, envelope [k].
+     * The bump `16·(s(1-s))²` is zero in value *and* slope at the touch point
+     * and at the rim, so contours never kink at the lens boundary, and its
+     * max slope (3.079·A/R ≈ 0.92) stays below 1, so the warped sampling
+     * never folds over itself. */
+    fun displacement(d: Double, k: Double): Double {
+        if (k <= 0.0 || d <= 0.0 || d >= RADIUS) return 0.0
+        val s = d / RADIUS
+        val e = s * (1 - s)
+        return MAX_DISPLACEMENT * k * 16 * e * e
+    }
+
+    /** Ease-in from [k0] (non-zero when a finger lands mid-decay). */
+    fun pressEnvelope(elapsed: Double, k0: Double): Double =
+        k0 + (1 - k0) * smoothstep(elapsed / PRESS_DURATION)
+
+    /** `k0·(1-v)³` — a settle, deliberately not a spring: overshoot would
+     * swing `k` negative and flip the lens into attraction. */
+    fun releaseEnvelope(elapsed: Double, k0: Double): Double {
+        val v = 1 - (elapsed / RELEASE_DURATION).coerceIn(0.0, 1.0)
+        return k0 * v * v * v
+    }
+}
+
+/** Mutable finger state, read by the frame loop. Deliberately not Compose
+ * state: the 30fps [withFrameNanos] tick already repaints, so mutations here
+ * surface on the next frame without invalidating the composition per touch
+ * event. Mirrors iOS `AsciiFieldWarpTouch`. */
+internal class AsciiFieldWarpTouch {
+    enum class Phase { Idle, Pressed, Released }
+
+    var phase = Phase.Idle
+        private set
+
+    /** Finger position in grid units (dp, the warp's coordinate space). */
+    var x = 0.0
+        private set
+    var y = 0.0
+        private set
+
+    private var phaseStart = 0.0
+    private var k0 = 0.0
+
+    fun press(px: Double, py: Double, now: Double) {
+        x = px
+        y = py
+        // Ramp from the current envelope, so re-pressing mid-decay doesn't
+        // snap the lens shut and reopen it from zero.
+        k0 = currentK(now)
+        phaseStart = now
+        phase = Phase.Pressed
+    }
+
+    fun move(px: Double, py: Double) {
+        x = px
+        y = py
+    }
+
+    fun release(now: Double) {
+        if (phase != Phase.Pressed) return
+        k0 = currentK(now)
+        phaseStart = now
+        phase = Phase.Released
+    }
+
+    fun reset() {
+        phase = Phase.Idle
+    }
+
+    fun currentK(now: Double): Double = when (phase) {
+        Phase.Idle -> 0.0
+        Phase.Pressed -> AsciiFieldWarp.pressEnvelope(now - phaseStart, k0)
+        Phase.Released -> {
+            val k = AsciiFieldWarp.releaseEnvelope(now - phaseStart, k0)
+            if (k <= 0.0) phase = Phase.Idle
+            k
+        }
     }
 }
 
@@ -411,7 +519,13 @@ internal fun AsciiField(
     // the terrain simply is where the clock says it is.
     val startNanos = remember { System.nanoTime() }
     val timeState = remember { mutableFloatStateOf(0f) }
+    // Remembered independently of the theme-keyed renderer, so a dark-mode
+    // flip mid-press keeps the lens where the finger is.
+    val touch = remember { AsciiFieldWarpTouch() }
     LaunchedEffect(clockRuns) {
+        // Never carry a stale lens across a pause — a resume must not replay
+        // a half-finished decay.
+        touch.reset()
         if (clockRuns) {
             // 30fps cap by elapsed time rather than the web's every-2nd-frame
             // skip: alternate frames on a 120 Hz panel would still be 60fps.
@@ -443,13 +557,50 @@ internal fun AsciiField(
     // accessibility tree the chassis UI tests walk. The test tag is the one
     // property left behind: it carries no assistive content, and it's what
     // the layout-invariant test measures the field's frame through.
-    Canvas(modifier.clearAndSetSemantics { testTag = UiTestTags.OnboardingAsciiField }) {
+    //
+    // Touch is the one exception to "decoration only": the finger warps the
+    // terrain (lens warp) — but only while the clock runs. The decay needs
+    // the frame loop to render, Reduce Motion users shouldn't get a motion
+    // effect, and battery saver / static goldens must stay inert. The field
+    // is a pure observer: it never consumes a change, and as the lowest
+    // sibling it only sees touches nothing above claimed — buttons, banners,
+    // and the chassis still win.
+    Canvas(
+        modifier
+            .pointerInput(clockRuns, density) {
+                if (!clockRuns) return@pointerInput
+                awaitEachGesture {
+                    val down = awaitFirstDown(requireUnconsumed = false)
+                    // Grid units are dp — the warp's (and iOS's) space.
+                    touch.press(
+                        down.position.x / density.toDouble(),
+                        down.position.y / density.toDouble(),
+                        nowSeconds(),
+                    )
+                    while (true) {
+                        val change = awaitPointerEvent().changes.firstOrNull { it.id == down.id } ?: break
+                        if (!change.pressed) break
+                        touch.move(
+                            change.position.x / density.toDouble(),
+                            change.position.y / density.toDouble(),
+                        )
+                    }
+                    touch.release(nowSeconds())
+                }
+            }
+            .clearAndSetSemantics { testTag = UiTestTags.OnboardingAsciiField },
+    ) {
         val t = (staticTime ?: timeState.floatValue).toDouble()
+        val warpK = touch.currentK(nowSeconds())
         drawIntoCanvas { canvas ->
-            renderer.draw(canvas.nativeCanvas, size.width, size.height, t)
+            renderer.draw(canvas.nativeCanvas, size.width, size.height, t, touch.x, touch.y, warpK)
         }
     }
 }
+
+/** Wall-clock seconds for the warp envelope — monotonic, arbitrary epoch;
+ * only differences are ever used. */
+private fun nowSeconds(): Double = System.nanoTime() / 1e9
 
 /**
  * Paints, glyph metrics, and reusable buckets — everything the frame loop
@@ -506,7 +657,15 @@ internal class AsciiFieldRenderer(
      * zero per-frame allocation once warm. */
     private val buckets = Array(AsciiFieldTerrain.LEVELS) { FloatArrayBucket() }
 
-    fun draw(canvas: android.graphics.Canvas, widthPx: Float, heightPx: Float, t: Double) {
+    fun draw(
+        canvas: android.graphics.Canvas,
+        widthPx: Float,
+        heightPx: Float,
+        t: Double,
+        touchX: Double = 0.0,
+        touchY: Double = 0.0,
+        warpK: Double = 0.0,
+    ) {
         val cellWPx = (AsciiFieldTerrain.CELL_W * density).toFloat()
         val cellHPx = (AsciiFieldTerrain.CELL_H * density).toFloat()
         val cols = ceil(widthPx / cellWPx).toInt() + 1
@@ -516,9 +675,33 @@ internal class AsciiFieldRenderer(
         for (row in 0 until rows) {
             val sy = (row + 0.5) * AsciiFieldTerrain.TERRAIN_SCALE
             val py = row * cellHPx + cellHPx / 2f
+            // Cell center on the dp grid — the warp's (and iOS's) space, so
+            // both ports feed identical numbers into the shared math.
+            val cyDp = (row + 0.5) * AsciiFieldTerrain.CELL_H
             for (col in 0 until cols) {
+                var sampleX = (col + 0.5) * AsciiFieldTerrain.TERRAIN_SCALE
+                var sampleY = sy
+                if (warpK > 0) {
+                    // Samples are displaced *toward* the finger: the inverse
+                    // mapping moves the visible terrain away from it — a
+                    // clearing with a compressed contour ring at the rim.
+                    // Displacing away would read as a magnifier pulling
+                    // contours in. Only sampling warps; glyph positions (and
+                    // the currency hash keyed on them) never move.
+                    val cxDp = (col + 0.5) * AsciiFieldTerrain.CELL_W
+                    val dx = cxDp - touchX
+                    val dy = cyDp - touchY
+                    val d = sqrt(dx * dx + dy * dy)
+                    val f = AsciiFieldWarp.displacement(d, warpK)
+                    if (f > 0) {
+                        sampleX = (cxDp - dx * (f / d)) /
+                            AsciiFieldTerrain.CELL_W * AsciiFieldTerrain.TERRAIN_SCALE
+                        sampleY = (cyDp - dy * (f / d)) /
+                            AsciiFieldTerrain.CELL_H * AsciiFieldTerrain.TERRAIN_SCALE
+                    }
+                }
                 val level = AsciiFieldTerrain.pickLevel(
-                    AsciiFieldTerrain.brightness((col + 0.5) * AsciiFieldTerrain.TERRAIN_SCALE, sy, t),
+                    AsciiFieldTerrain.brightness(sampleX, sampleY, t),
                 )
                 if (level < 0) continue
                 buckets[level].add(col * cellWPx + cellWPx / 2f, py)

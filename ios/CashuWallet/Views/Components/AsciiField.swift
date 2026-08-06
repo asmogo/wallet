@@ -99,6 +99,103 @@ enum AsciiFieldTerrain {
     }
 }
 
+// MARK: - Touch warp
+
+/// The lens warp under a pressed finger, as pure functions mirrored on
+/// Android and pinned by `AsciiFieldWarpTests` (hand-authored vectors, same
+/// constants in both test files — if a port disagrees, fix the port).
+///
+/// All distances are in grid units (points here, dp on Android): the space
+/// where a cell is 12×14, so the lens is circular on screen and both ports
+/// feed the functions numerically identical inputs.
+enum AsciiFieldWarp {
+    /// Lens radius: 10 columns / ~8.6 rows of the band grid.
+    static let radius: Double = 120
+    /// Peak sample displacement: 3 cells ≈ 0.39 noise-x units.
+    static let maxDisplacement: Double = 36
+    /// Envelope durations in wall-clock seconds — not terrain `t`, which is
+    /// speed-scaled and freezes with the clock.
+    static let pressDuration: Double = 0.18
+    static let releaseDuration: Double = 0.5
+
+    static func smoothstep(_ u: Double) -> Double {
+        let c = min(1, max(0, u))
+        return c * c * (3 - 2 * c)
+    }
+
+    /// Sample displacement at distance `d` from the finger, envelope `k`.
+    /// The bump `16·(s(1-s))²` is zero in value *and* slope at the touch
+    /// point and at the rim, so contours never kink at the lens boundary,
+    /// and its max slope (3.079·A/R ≈ 0.92) stays below 1, so the warped
+    /// sampling never folds over itself.
+    static func displacement(_ d: Double, _ k: Double) -> Double {
+        guard k > 0, d > 0, d < radius else { return 0 }
+        let s = d / radius
+        let e = s * (1 - s)
+        return maxDisplacement * k * 16 * e * e
+    }
+
+    /// Ease-in from `k0` (non-zero when a finger lands mid-decay).
+    static func pressEnvelope(elapsed: Double, from k0: Double) -> Double {
+        k0 + (1 - k0) * smoothstep(elapsed / pressDuration)
+    }
+
+    /// `k0·(1-v)³` — a settle, deliberately not a spring: overshoot would
+    /// swing `k` negative and flip the lens into attraction.
+    static func releaseEnvelope(elapsed: Double, from k0: Double) -> Double {
+        let v = 1 - min(1, max(0, elapsed / releaseDuration))
+        return k0 * v * v * v
+    }
+}
+
+/// Mutable finger state, read by the frame loop. Deliberately not observed
+/// state: the 30fps tick already repaints, so mutations here surface on the
+/// next frame without invalidating the view per touch event.
+final class AsciiFieldWarpTouch {
+    enum Phase { case idle, pressed, released }
+    private(set) var phase: Phase = .idle
+    /// Finger position in grid units (the view's own coordinate space).
+    private(set) var x: Double = 0
+    private(set) var y: Double = 0
+    private var phaseStart: Double = 0
+    private var k0: Double = 0
+
+    func pressOrMove(at point: CGPoint, now: Double) {
+        x = point.x
+        y = point.y
+        guard phase != .pressed else { return }
+        // Ramp from the current envelope, so re-pressing mid-decay doesn't
+        // snap the lens shut and reopen it from zero.
+        k0 = currentK(now: now)
+        phaseStart = now
+        phase = .pressed
+    }
+
+    func release(now: Double) {
+        guard phase == .pressed else { return }
+        k0 = currentK(now: now)
+        phaseStart = now
+        phase = .released
+    }
+
+    func reset() {
+        phase = .idle
+    }
+
+    func currentK(now: Double) -> Double {
+        switch phase {
+        case .idle:
+            return 0
+        case .pressed:
+            return AsciiFieldWarp.pressEnvelope(elapsed: now - phaseStart, from: k0)
+        case .released:
+            let k = AsciiFieldWarp.releaseEnvelope(elapsed: now - phaseStart, from: k0)
+            if k <= 0 { phase = .idle }
+            return k
+        }
+    }
+}
+
 // MARK: - Layout
 
 /// Band geometry as a pure function, so the layout-invariant test can assert
@@ -273,6 +370,13 @@ struct AsciiFieldView: View {
     /// reuse the frozen moment instead of silently drifting.
     @State private var frozenT: Double?
     @State private var cache = RenderCache()
+    /// Stable reference; touch events mutate it without invalidating the view
+    /// (the 30fps tick picks the changes up).
+    @State private var touch = AsciiFieldWarpTouch()
+    /// Release detection: `@GestureState` resets even when the system
+    /// *cancels* the drag — `.onEnded` doesn't fire then, and a missed
+    /// release would pin the lens open.
+    @GestureState private var touchDown = false
 
     /// The single decision point for every play/pause input, mirroring the
     /// web's `sync()`: Reduce Motion / Low Power / `staticTime` paint one
@@ -299,6 +403,9 @@ struct AsciiFieldView: View {
         .onAppear { if !clockRuns { frozenT = currentT() } }
         .onChange(of: clockRuns) { _, runs in
             frozenT = runs ? nil : currentT()
+            // Never carry a stale lens across a pause — a resume must not
+            // replay a half-finished decay.
+            touch.reset()
         }
         // The power-state notification arrives off the main thread.
         .onReceive(
@@ -308,9 +415,24 @@ struct AsciiFieldView: View {
         ) { _ in
             lowPower = ProcessInfo.processInfo.isLowPowerModeEnabled
         }
-        // Decoration only — never reaches VoiceOver, never intercepts touches.
+        // Decoration for VoiceOver always. Touch is the one exception: the
+        // finger warps the terrain (lens warp), so the band accepts drags —
+        // but only while the clock runs. The decay needs the frame loop to
+        // render, Reduce Motion users shouldn't get a motion effect, and
+        // Low Power / static evidence must stay inert. As the stage's
+        // `.background` the band only receives touches that fell through the
+        // foreground — buttons, banners, and the chassis still win.
         .accessibilityHidden(true)
-        .allowsHitTesting(false)
+        .contentShape(Rectangle())
+        .gesture(
+            DragGesture(minimumDistance: 0)
+                .updating($touchDown) { _, state, _ in state = true }
+                .onChanged { touch.pressOrMove(at: $0.location, now: CACurrentMediaTime()) }
+        )
+        .onChange(of: touchDown) { _, down in
+            if !down { touch.release(now: CACurrentMediaTime()) }
+        }
+        .allowsHitTesting(clockRuns)
     }
 
     // MARK: Frame
@@ -328,6 +450,13 @@ struct AsciiFieldView: View {
         let cols = Int(ceil(size.width / cellW)) + 1
         let rows = Int(ceil(size.height / cellH)) + 1
 
+        // The lens envelope, evaluated once per frame. Zero short-circuits
+        // every warp branch below, so an untouched frame samples through the
+        // exact expressions it always has — byte-identical stills.
+        let k = touch.currentK(now: CACurrentMediaTime())
+        let tx = touch.x
+        let ty = touch.y
+
         // Bucket cells by level, then draw one level at a time — the fill is
         // effectively set 5 times per frame instead of ~700. The trig is not
         // the bottleneck; unbatched draw-state changes would be. Buckets are
@@ -337,11 +466,30 @@ struct AsciiFieldView: View {
             let sy = (Double(row) + 0.5) * scale
             let py = Double(row) * cellH + cellH / 2
             for col in 0..<cols {
+                let px = Double(col) * cellW + cellW / 2
+                var sampleX = (Double(col) + 0.5) * scale
+                var sampleY = sy
+                if k > 0 {
+                    // Samples are displaced *toward* the finger: the inverse
+                    // mapping moves the visible terrain away from it — a
+                    // clearing with a compressed contour ring at the rim.
+                    // Displacing away would read as a magnifier pulling
+                    // contours in. Only sampling warps; glyph positions
+                    // (and the currency hash keyed on them) never move.
+                    let dx = px - tx
+                    let dy = py - ty
+                    let d = (dx * dx + dy * dy).squareRoot()
+                    let f = AsciiFieldWarp.displacement(d, k)
+                    if f > 0 {
+                        sampleX = (px - dx * (f / d)) / cellW * scale
+                        sampleY = (py - dy * (f / d)) / cellH * scale
+                    }
+                }
                 let level = AsciiFieldTerrain.pickLevel(
-                    AsciiFieldTerrain.brightness((Double(col) + 0.5) * scale, sy, t)
+                    AsciiFieldTerrain.brightness(sampleX, sampleY, t)
                 )
                 if level < 0 { continue }
-                cache.buckets[level].append(Double(col) * cellW + cellW / 2)
+                cache.buckets[level].append(px)
                 cache.buckets[level].append(py)
             }
         }
