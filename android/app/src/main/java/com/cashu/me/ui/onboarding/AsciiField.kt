@@ -152,6 +152,30 @@ internal object AsciiFieldTerrain {
     /** The level the renderer draws: [pickLevel], plus the ₿ boost. */
     fun displayLevel(b: Int): Int = if (b >= PEAK_BOOST_MIN) PEAK_LEVEL else pickLevel(b)
 
+    // Erosion
+    //
+    // The handoff's exit dissolves the terrain by its own material rather than
+    // by geometry: the faint dotted plain thins out first, the contour
+    // ridgelines hold, and the ₿ peaks are the last glyphs standing. Nothing
+    // translates and no edge travels, so the field never reads as a slide or a
+    // wipe — it erodes, and the wallet comes up through it.
+    //
+    // Mirrored on iOS and pinned by AsciiFieldErosionTest (same constants in
+    // both test files — if a port disagrees, fix the port). Only the handoff
+    // overlay ever passes a non-zero progress; the welcome band always renders
+    // at full strength.
+    const val EROSION_STAGGER = 0.13
+    const val EROSION_WINDOW = 0.48
+
+    /** Opacity multiplier for [level] at erosion [progress] (0 intact → 1
+     * gone). Windows overlap, so the field thins continuously instead of
+     * clearing in five visible steps; each window is smoothstepped so no
+     * level pops. */
+    fun erosionAlpha(level: Int, progress: Double): Double {
+        val u = ((progress - level * EROSION_STAGGER) / EROSION_WINDOW).coerceIn(0.0, 1.0)
+        return 1 - u * u * (3 - 2 * u)
+    }
+
     /** Stable spatial hash: a cell always keeps the same currency, so motion
      * comes from the terrain crossing thresholds rather than random shimmer.
      * Kotlin's Int `*` already wraps at 32 bits like JS `Math.imul`, and
@@ -581,6 +605,11 @@ internal fun AsciiField(
     active: Boolean = true,
     forceSynthesizedPeak: Boolean = false,
     touchOverride: AsciiFieldWarpTouch? = null,
+    /** The handoff's exit dissolve, 0 (intact) → 1 (gone). A lambda, not a
+     * value: the overlay's animation is read inside the draw scope, so a
+     * dissolving field repaints without recomposing 30 times a second. At 0
+     * the draw is byte-identical to what it always was. */
+    erosion: () -> Double = { 0.0 },
 ) {
     val context = LocalContext.current
     val density = LocalDensity.current.density
@@ -712,7 +741,10 @@ internal fun AsciiField(
         touch.advance(now)
         val warpK = touch.currentK(now)
         drawIntoCanvas { canvas ->
-            renderer.draw(canvas.nativeCanvas, size.width, size.height, t, touch.x, touch.y, warpK)
+            renderer.draw(
+                canvas.nativeCanvas, size.width, size.height, t,
+                touch.x, touch.y, warpK, erosion(),
+            )
         }
     }
 }
@@ -754,6 +786,11 @@ internal class AsciiFieldRenderer(
         }
     }
 
+    /** The ramp alphas as the paints were built with them, so an erosion of 0
+     * restores the exact byte the goldens were captured against rather than a
+     * recomputed one. */
+    private val baseAlpha: IntArray = IntArray(AsciiFieldTerrain.LEVELS) { paints[it].alpha }
+
     /** Probed once: draw ₿ directly when the platform mono face carries
      * U+20BF (`Paint.hasGlyph`, real coverage — not the web's advance-width
      * heuristic); otherwise reproduce the web's synthesis: the font's own B
@@ -784,6 +821,7 @@ internal class AsciiFieldRenderer(
         touchX: Double = 0.0,
         touchY: Double = 0.0,
         warpK: Double = 0.0,
+        erosion: Double = 0.0,
     ) {
         val cellWPx = (AsciiFieldTerrain.CELL_W * density).toFloat()
         val cellHPx = (AsciiFieldTerrain.CELL_H * density).toFloat()
@@ -839,6 +877,16 @@ internal class AsciiFieldRenderer(
             val bucket = buckets[level]
             if (bucket.size == 0) continue
             val paint = paints[level]
+            // Per-level opacity is one paint mutation per bucket — the
+            // batching that makes the field cheap is exactly what lets it
+            // erode by material.
+            if (erosion > 0.0) {
+                val alpha = AsciiFieldTerrain.erosionAlpha(level, erosion)
+                if (alpha <= 0.0) continue
+                paint.alpha = (baseAlpha[level] * alpha).roundToInt()
+            } else {
+                paint.alpha = baseAlpha[level]
+            }
             val isPeak = level >= AsciiFieldTerrain.PEAK_LEVEL
             val isCurrency = level == AsciiFieldTerrain.CURRENCY_LEVEL
             var i = 0

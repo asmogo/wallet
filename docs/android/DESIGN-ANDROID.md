@@ -110,7 +110,12 @@ like a port, make the Android-native choice instead.
   animation is `rememberReducedMotion()`-gated to opacity-or-nothing. The
   exemption's terminal beat is the ASCII handoff (`OnboardingHandoff.kt`): a
   full-screen terrain curtain over the last onboarding screen that flips the
-  app gate at full cover and dissolves onto the wallet — onboarding-owned,
+  app gate at full cover, then erodes: the scrim clears early so the wallet
+  stands behind a terrain still substantially there, and the glyphs dissolve
+  level by level (`AsciiFieldTerrain.erosionAlpha`, mirrored on iOS and pinned
+  by `AsciiFieldErosionTest`) — faint plain first, ₿ peaks last. Nothing
+  translates and no edge travels; the only motion is the field's own drift and
+  the bloom's release swirl — onboarding-owned,
   hosted above the gate in `CashuApp` only so it survives the teardown it
   conceals, played once, never referenced by wallet code. The gate's own
   `transitionSpec` is untouched and plays unseen beneath it (plan 008 stays

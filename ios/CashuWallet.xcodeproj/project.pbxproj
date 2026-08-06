@@ -158,6 +158,7 @@
 		T2B0000000000010 /* WalletSurfaceCoordinatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = T1B0000000000010 /* WalletSurfaceCoordinatorTests.swift */; };
 		T2B0000000000011 /* ScanRouterTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = T1B0000000000011 /* ScanRouterTests.swift */; };
 		T2B0000000000012 /* AsciiFieldTerrainTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = T1B0000000000012 /* AsciiFieldTerrainTests.swift */; };
+		T2B0000000000013 /* AsciiFieldErosionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = T1B0000000000013 /* AsciiFieldErosionTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -327,6 +328,7 @@
 		T1B0000000000010 /* WalletSurfaceCoordinatorTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = WalletSurfaceCoordinatorTests.swift; path = CashuWalletTests/WalletSurfaceCoordinatorTests.swift; sourceTree = "<group>"; };
 		T1B0000000000011 /* ScanRouterTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = ScanRouterTests.swift; path = CashuWalletTests/ScanRouterTests.swift; sourceTree = "<group>"; };
 		T1B0000000000012 /* AsciiFieldTerrainTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = AsciiFieldTerrainTests.swift; path = CashuWalletTests/AsciiFieldTerrainTests.swift; sourceTree = "<group>"; };
+		T1B0000000000013 /* AsciiFieldErosionTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = AsciiFieldErosionTests.swift; path = CashuWalletTests/AsciiFieldErosionTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -388,6 +390,7 @@
 				T1B0000000000010 /* WalletSurfaceCoordinatorTests.swift */,
 				T1B0000000000011 /* ScanRouterTests.swift */,
 				T1B0000000000012 /* AsciiFieldTerrainTests.swift */,
+				T1B0000000000013 /* AsciiFieldErosionTests.swift */,
 			);
 			name = CashuWalletTests;
 			sourceTree = "<group>";
@@ -948,6 +951,7 @@
 				T2B0000000000010 /* WalletSurfaceCoordinatorTests.swift in Sources */,
 				T2B0000000000011 /* ScanRouterTests.swift in Sources */,
 				T2B0000000000012 /* AsciiFieldTerrainTests.swift in Sources */,
+				T2B0000000000013 /* AsciiFieldErosionTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

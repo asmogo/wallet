@@ -1070,7 +1070,15 @@ seven-named-animation budget**. Nothing defined under this exemption may be
 reused inside the wallet proper. The exemption's terminal beat is the **ASCII
 handoff** (`OnboardingHandoff.swift` / `OnboardingHandoff.kt`): a full-screen
 terrain curtain that sweeps down over the last onboarding screen, flips the
-root gate at full cover, blooms once at center, and dissolves onto the wallet
+root gate at full cover, blooms once at center, then **erodes**: the opaque
+scrim clears early so the wallet stands behind a terrain that is still there,
+and the glyphs then dissolve level by level (`AsciiFieldTerrain.erosionAlpha`,
+mirrored and pinned by `AsciiFieldErosionTests`) — the faint dotted plain
+thins first, the contour ridgelines hold, and the ₿ peaks are the last things
+over the balance. Nothing translates and no edge travels: a moving plane reads
+as a slide and a moving edge reads as a wipe, and the last beat of onboarding
+is neither. The only motion is the field's own drift and the bloom's release
+swirl
 — onboarding-owned, mounted at the app root only so it survives the teardown
 it conceals, played exactly once, never referenced by wallet code. The wallet
 composes beneath it with no entrance animation of its own. Two rules survive the exemption unchanged:

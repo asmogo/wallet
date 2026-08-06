@@ -3,8 +3,8 @@ package com.cashu.me.ui.onboarding
 import android.content.Context
 import android.os.PowerManager
 import androidx.compose.animation.core.Animatable
-import androidx.compose.animation.core.EaseInOut
 import androidx.compose.animation.core.EaseOut
+import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
@@ -28,8 +28,6 @@ import androidx.compose.ui.graphics.CompositingStrategy
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
@@ -43,8 +41,8 @@ import kotlinx.coroutines.withContext
 //
 // The closing beat of onboarding: a full-screen ASCII terrain curtain that
 // sweeps down over the last onboarding screen, holds for one center bloom
-// while the app gate flips beneath it, then slides down and dissolves onto
-// the wallet already in place. Defined under the onboarding motion exemption
+// while the app gate flips beneath it, then lifts off the top to reveal the
+// wallet already in place. Defined under the onboarding motion exemption
 // and owned by onboarding — CashuApp only mounts the host; nothing here is
 // referenced by wallet-proper code. The gate's own transition spec is
 // untouched; it simply plays unseen under the cover.
@@ -53,10 +51,21 @@ import kotlinx.coroutines.withContext
 //   T+0        curtain reveals top → bottom (450ms, soft 30%-height edge)
 //   T+450ms    gate flip under full cover — the root swap is invisible
 //   T+480ms    lens bloom fires at screen center (existing warp envelopes)
-//   T+750ms    overlay slides down 20dp and fades out (700ms ease-in-out —
-//              the curtain holds a beat, then melts; the bloom's release
-//              swirl stays visible through the fade)
-//   T+1450ms   session ends, overlay unmounts
+//   T+750ms    the curtain erodes (1000ms, linear driver — the easing lives
+//              in the material). Nothing translates and no edge travels: a
+//              moving plane reads as a slide and a moving edge reads as a
+//              wipe, and both are the wrong register for the last beat of
+//              onboarding. Three things run off one progress value:
+//              the opaque scrim clears early (by 42%), so the wallet arrives
+//              *behind* a still-standing terrain rather than by a cut;
+//              the glyphs dissolve level by level (`erosionAlpha`) — the
+//              faint dotted plain thins first, the ridgelines hold, and the
+//              ₿ peaks are the last things over the balance; and a
+//              screen-anchored top bias deepens so the field clears from the
+//              top down. The terrain keeps drifting and the bloom's release
+//              swirl keeps unwinding throughout — the motion is the field's
+//              own life, not the plane's.
+//   T+1750ms   session ends, overlay unmounts
 //
 // Under Reduce Motion the overlay never shows and completion runs
 // immediately — the app gate's plain crossfade is the entire transition
@@ -104,12 +113,27 @@ internal class OnboardingHandoffController {
 /** Soft leading edge of the sweep, as a fraction of screen height — mirrors
  * the band's `AsciiFieldLayout.MASK_FADE`. */
 private const val SweepEdge = 0.30f
+
+/** The erosion progress by which the opaque scrim is fully gone. Early, so the
+ * wallet stands behind a terrain that is still substantially there — the
+ * reveal is a change of material, not a change of screen. */
+private const val ScrimClear = 0.42f
+
+/** Depth of the screen-anchored top bias, as a fraction of screen height.
+ * Fixed geometry: only its strength animates, so nothing ever travels. */
+private const val TopBiasDepth = 0.55f
+
 private const val SweepInMs = 450
 private const val BloomDelayMs = 30
 private const val HoldMs = 270
 private const val ReleaseDelayMs = 10
-private const val DissolveMs = 700
-private val DissolveSlide = 20.dp
+private const val ErosionMs = 1000
+
+/** Smoothstepped so the scrim neither snaps at the start nor lingers. */
+private fun scrimOpacity(erosion: Float): Float {
+    val u = (erosion / ScrimClear).coerceIn(0f, 1f)
+    return 1f - u * u * (3f - 2f * u)
+}
 
 /** The curtain itself: an opaque scrim plus full-bleed drifting terrain,
  * revealed by a sweeping mask. Blocks all input while it runs — the
@@ -138,8 +162,11 @@ internal fun OnboardingHandoffHost(controller: OnboardingHandoffController) {
     val lifecycleOwner = LocalLifecycleOwner.current
 
     val sweep = remember(session) { Animatable(0f) }
-    val fade = remember(session) { Animatable(1f) }
-    val slide = remember(session) { Animatable(0f) }
+
+    /** 0 (intact) → 1 (gone). The single driver of the exit: scrim, glyph
+     * erosion, and top bias are all pure functions of it, so the curtain
+     * clears as one material rather than as three overlapping animations. */
+    val erosion = remember(session) { Animatable(0f) }
 
     // Backgrounding escape hatch: run the flip if it hasn't happened and drop
     // the overlay with no animation, so a mid-sweep exit can never strand the
@@ -161,11 +188,8 @@ internal fun OnboardingHandoffHost(controller: OnboardingHandoffController) {
         Modifier
             .fillMaxSize()
             .graphicsLayer {
-                translationY = slide.value
-                alpha = fade.value
-                // The sweep mask needs scrim + glyphs flattened into one
-                // layer first, or DstIn would knock through to the wallet
-                // beneath.
+                // The masks need scrim + glyphs flattened into one layer
+                // first, or DstIn would knock through to the wallet beneath.
                 compositingStrategy = CompositingStrategy.Offscreen
             }
             .drawWithContent {
@@ -185,6 +209,20 @@ internal fun OnboardingHandoffHost(controller: OnboardingHandoffController) {
                     ),
                     blendMode = BlendMode.DstIn,
                 )
+                // The exit's only geometry, and it never moves: a fixed
+                // gradient whose strength grows with the erosion, so the field
+                // clears from the top down.
+                if (erosion.value > 0f) {
+                    drawRect(
+                        brush = Brush.verticalGradient(
+                            0f to Color.Black.copy(alpha = 1f - erosion.value),
+                            1f to Color.Black,
+                            startY = 0f,
+                            endY = size.height * TopBiasDepth,
+                        ),
+                        blendMode = BlendMode.DstIn,
+                    )
+                }
             }
             // Full-screen input block while the wallet is half-born.
             .pointerInput(Unit) {
@@ -195,21 +233,26 @@ internal fun OnboardingHandoffHost(controller: OnboardingHandoffController) {
                 }
             },
     ) {
+        // The scrim clears early and on its own curve, so the wallet is
+        // already standing behind the terrain when the glyphs begin to go.
+        // graphicsLayer, not a recomposing alpha: the read happens in the draw
+        // phase.
         Box(
             Modifier
                 .fillMaxSize()
+                .graphicsLayer { alpha = scrimOpacity(erosion.value) }
                 .background(MaterialTheme.colorScheme.background),
         )
-        // Full-bleed, no band geometry — the sweep above is the only mask.
+        // Full-bleed, no band geometry — the sweep is the only mask.
         // Same renderer, speed, glyphs, and opacity ramp as the welcome band.
         AsciiField(
             modifier = Modifier.fillMaxSize(),
             touchOverride = session.touch,
+            erosion = { erosion.value.toDouble() },
         )
 
         val centerXDp = maxWidth.value / 2.0
         val centerYDp = maxHeight.value / 2.0
-        val slidePx = with(LocalDensity.current) { DissolveSlide.toPx() }
 
         LaunchedEffect(session) {
             launch { sweep.animateTo(1f, tween(SweepInMs, easing = EaseOut)) }
@@ -225,13 +268,15 @@ internal fun OnboardingHandoffHost(controller: OnboardingHandoffController) {
             if (!powerSave) session.touch.press(centerXDp, centerYDp, nowSeconds())
 
             delay(HoldMs.toLong())
-            launch { fade.animateTo(0f, tween(DissolveMs, easing = EaseInOut)) }
-            launch { slide.animateTo(slidePx, tween(DissolveMs, easing = EaseInOut)) }
+            // Linear driver on purpose: every stage of the exit carries its
+            // own smoothstep, so easing the driver too would double-ease the
+            // dissolve and stall it in the middle.
+            launch { erosion.animateTo(1f, tween(ErosionMs, easing = LinearEasing)) }
 
             delay(ReleaseDelayMs.toLong())
             if (!powerSave) session.touch.release(nowSeconds())
 
-            delay((DissolveMs - ReleaseDelayMs).toLong())
+            delay((ErosionMs - ReleaseDelayMs).toLong())
             controller.end()
         }
     }

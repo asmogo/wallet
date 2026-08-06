@@ -4,8 +4,8 @@ import SwiftUI
 
 /// The closing beat of onboarding: a full-screen ASCII terrain curtain that
 /// sweeps down over the last onboarding screen, holds for one center bloom
-/// while the root gate flips beneath it, then slides down and dissolves onto
-/// the wallet already in place. Defined under the onboarding motion exemption
+/// while the root gate flips beneath it, then lifts off the top to reveal the
+/// wallet already in place. Defined under the onboarding motion exemption
 /// and owned by onboarding — ContentView only mounts it; nothing here is
 /// referenced by wallet-proper code.
 ///
@@ -13,10 +13,21 @@ import SwiftUI
 ///   T+0        curtain reveals top → bottom (0.45s, soft 30%-height edge)
 ///   T+450ms    gate flip under full cover — the root swap is invisible
 ///   T+480ms    lens bloom fires at screen center (existing warp envelopes)
-///   T+750ms    overlay slides down 20pt and fades out (0.7s ease-in-out —
-///              the curtain holds a beat, then melts; the bloom's release
-///              swirl stays visible through the fade)
-///   T+1450ms   session ends, overlay unmounts
+///   T+750ms    the curtain erodes (1.0s, linear driver — the easing lives in
+///              the material). Nothing translates and no edge travels: a
+///              moving plane reads as a slide and a moving edge reads as a
+///              wipe, and both are the wrong register for the last beat of
+///              onboarding. Three things run off one progress value:
+///              the opaque scrim clears early (by 42%), so the wallet arrives
+///              *behind* a still-standing terrain rather than by a cut;
+///              the glyphs dissolve level by level (`erosionAlpha`) — the
+///              faint dotted plain thins first, the ridgelines hold, and the
+///              ₿ peaks are the last things over the balance; and a
+///              screen-anchored top bias deepens so the field clears from the
+///              top down. The terrain keeps drifting and the bloom's release
+///              swirl keeps unwinding throughout — the motion is the field's
+///              own life, not the plane's.
+///   T+1750ms   session ends, overlay unmounts
 ///
 /// Under Reduce Motion or disabled-animation test runs the overlay never
 /// mounts and completion runs immediately — ContentView's plain 0.35s
@@ -79,6 +90,24 @@ final class OnboardingHandoffCoordinator: ObservableObject {
     }
 }
 
+/// SwiftUI interpolates a `withAnimation` change only where the value reaches
+/// an animatable modifier. The erosion reaches a `Canvas` parameter and a
+/// gradient stop — neither is animatable — so it would snap 0 → 1 and the
+/// dissolve would never play. Routing it through an `Animatable` view puts it
+/// back on SwiftUI's own clock: `animatableData` is interpolated per frame and
+/// the body re-evaluates with each interpolated value.
+private struct ErosionDriver<Content: View>: View, Animatable {
+    var erosion: Double
+    @ViewBuilder var content: (Double) -> Content
+
+    var animatableData: Double {
+        get { erosion }
+        set { erosion = newValue }
+    }
+
+    var body: some View { content(erosion) }
+}
+
 /// The curtain itself: an opaque scrim plus full-bleed drifting terrain,
 /// revealed by a sweeping mask. Blocks all input while it runs — the
 /// half-born wallet beneath must not be tappable.
@@ -90,7 +119,10 @@ struct OnboardingHandoffOverlay: View {
     /// 0 → 1: the mask column (screen height + soft edge) slides from fully
     /// above the window to fully covering it.
     @State private var sweepProgress: CGFloat = 0
-    @State private var dissolved = false
+    /// 0 (intact) → 1 (gone). The single driver of the exit: scrim, glyph
+    /// erosion, and top bias are all pure functions of it, so the curtain
+    /// clears as one material rather than as three overlapping animations.
+    @State private var erosion: Double = 0
 
     /// Same deterministic-evidence hook as the onboarding band: freezes the
     /// terrain (and skips the bloom) for screenshot runs.
@@ -100,36 +132,52 @@ struct OnboardingHandoffOverlay: View {
     /// Soft leading edge of the sweep, as a fraction of screen height —
     /// mirrors the band's `AsciiFieldLayout.maskFade`.
     private static let sweepEdge: CGFloat = 0.30
+    /// The erosion progress by which the opaque scrim is fully gone. Early,
+    /// so the wallet stands behind a terrain that is still substantially
+    /// there — the reveal is a change of material, not a change of screen.
+    private static let scrimClear: Double = 0.42
+    /// Depth of the screen-anchored top bias, as a fraction of screen height.
+    /// Fixed geometry: only its strength animates, so nothing ever travels.
+    private static let topBiasDepth: CGFloat = 0.55
+
+    /// Smoothstepped so the scrim neither snaps at the start nor lingers.
+    private static func scrimOpacity(_ erosion: Double) -> Double {
+        let u = min(1, max(0, erosion / scrimClear))
+        return 1 - u * u * (3 - 2 * u)
+    }
 
     var body: some View {
         GeometryReader { geo in
             let maskHeight = geo.size.height * (1 + Self.sweepEdge)
-            ZStack {
-                Color(.systemBackground)
-                // Full-bleed, no band geometry: the sweep is the only mask.
-                AsciiFieldView(
-                    staticTime: Self.staticTime,
-                    active: true,
-                    touchOverride: session.touch
-                )
-                .allowsHitTesting(false)
+            ErosionDriver(erosion: erosion) { e in
+                ZStack {
+                    Color(.systemBackground)
+                        .opacity(Self.scrimOpacity(e))
+                    // Full-bleed, no band geometry: the sweep is the only mask.
+                    AsciiFieldView(
+                        staticTime: Self.staticTime,
+                        active: true,
+                        touchOverride: session.touch,
+                        erosion: e
+                    )
+                    .allowsHitTesting(false)
+                }
+                .compositingGroup()
+                .mask(alignment: .top) {
+                    LinearGradient(
+                        stops: [
+                            .init(color: .black, location: 0),
+                            .init(color: .black, location: 1 / (1 + Self.sweepEdge)),
+                            .init(color: .clear, location: 1),
+                        ],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
+                    .frame(height: maskHeight)
+                    .offset(y: (sweepProgress - 1) * maskHeight)
+                }
+                .mask { Self.topBias(e) }
             }
-            .compositingGroup()
-            .mask(alignment: .top) {
-                LinearGradient(
-                    stops: [
-                        .init(color: .black, location: 0),
-                        .init(color: .black, location: 1 / (1 + Self.sweepEdge)),
-                        .init(color: .clear, location: 1),
-                    ],
-                    startPoint: .top,
-                    endPoint: .bottom
-                )
-                .frame(height: maskHeight)
-                .offset(y: (sweepProgress - 1) * maskHeight)
-            }
-            .offset(y: dissolved ? 20 : 0)
-            .opacity(dissolved ? 0 : 1)
             .task(id: session.id) { await run(size: geo.size) }
         }
         .ignoresSafeArea()
@@ -137,6 +185,21 @@ struct OnboardingHandoffOverlay: View {
         .onChange(of: scenePhase) { _, phase in
             if phase == .background { coordinator.finishImmediately() }
         }
+    }
+
+    /// The exit's only geometry, and it never moves: a fixed gradient whose
+    /// strength grows with the erosion, so the field clears from the top down.
+    /// At `erosion == 0` it is solid black and masks nothing.
+    private static func topBias(_ erosion: Double) -> some View {
+        LinearGradient(
+            stops: [
+                .init(color: .black.opacity(1 - erosion), location: 0),
+                .init(color: .black, location: topBiasDepth),
+                .init(color: .black, location: 1),
+            ],
+            startPoint: .top,
+            endPoint: .bottom
+        )
     }
 
     private func run(size: CGSize) async {
@@ -160,13 +223,16 @@ struct OnboardingHandoffOverlay: View {
 
         try? await Task.sleep(for: .milliseconds(270))
         guard !Task.isCancelled else { return }
-        withAnimation(.easeInOut(duration: 0.7)) { dissolved = true }
+        // Linear driver on purpose: every stage of the exit carries its own
+        // smoothstep, so easing the driver too would double-ease the dissolve
+        // and stall it in the middle.
+        withAnimation(.linear(duration: 1.0)) { erosion = 1 }
 
         try? await Task.sleep(for: .milliseconds(10))
         guard !Task.isCancelled else { return }
         if canBloom { session.touch.release(now: CACurrentMediaTime()) }
 
-        try? await Task.sleep(for: .milliseconds(690))
+        try? await Task.sleep(for: .milliseconds(990))
         guard !Task.isCancelled else { return }
         coordinator.end()
     }

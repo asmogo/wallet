@@ -96,6 +96,29 @@ enum AsciiFieldTerrain {
         b >= peakBoostMin ? peakLevel : pickLevel(b)
     }
 
+    // MARK: Erosion
+
+    /// The handoff's exit dissolves the terrain by its own material rather
+    /// than by geometry: the faint dotted plain thins out first, the contour
+    /// ridgelines hold, and the ₿ peaks are the last glyphs standing. Nothing
+    /// translates and no edge travels, so the field never reads as a slide or
+    /// a wipe — it erodes, and the wallet comes up through it.
+    ///
+    /// Mirrored on Android and pinned by `AsciiFieldErosionTests` (same
+    /// constants in both test files — if a port disagrees, fix the port).
+    /// Only the handoff overlay ever passes a non-zero progress; the welcome
+    /// band always renders at full strength.
+    static let erosionStagger: Double = 0.13
+    static let erosionWindow: Double = 0.48
+
+    /// Opacity multiplier for `level` at erosion `e` (0 intact → 1 gone).
+    /// Windows overlap, so the field thins continuously instead of clearing
+    /// in five visible steps; each window is smoothstepped so no level pops.
+    static func erosionAlpha(level: Int, progress e: Double) -> Double {
+        let u = min(1, max(0, (e - Double(level) * erosionStagger) / erosionWindow))
+        return 1 - u * u * (3 - 2 * u)
+    }
+
     /// Stable spatial hash: a cell always keeps the same currency, so motion
     /// comes from the terrain crossing thresholds rather than random shimmer.
     /// Reproduces JS `Math.imul` (32-bit signed multiply with wraparound) and
@@ -445,6 +468,9 @@ struct AsciiFieldView: View {
     /// bloom). When set, the field never listens to fingers — the owner is
     /// the only one pressing. Warp math and constants are untouched.
     var touchOverride: AsciiFieldWarpTouch? = nil
+    /// The handoff's exit dissolve, 0 (intact) → 1 (gone). At 0 the draw is
+    /// byte-identical to what it always was — the welcome band never sets it.
+    var erosion: Double = 0
 
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.scenePhase) private var scenePhase
@@ -604,6 +630,15 @@ struct AsciiFieldView: View {
         for level in 0..<5 {
             let points = cache.buckets[level]
             if points.isEmpty { continue }
+            // Per-level opacity is one draw-state change per bucket — the
+            // batching that makes the field cheap is exactly what lets it
+            // erode by material.
+            var context = context
+            if erosion > 0 {
+                let alpha = AsciiFieldTerrain.erosionAlpha(level: level, progress: erosion)
+                if alpha <= 0 { continue }
+                context.opacity = alpha
+            }
             let isPeak = level >= AsciiFieldTerrain.peakLevel
             let isCurrency = level == AsciiFieldTerrain.currencyLevel
             var i = 0
