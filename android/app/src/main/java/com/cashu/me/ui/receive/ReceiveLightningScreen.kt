@@ -1,6 +1,14 @@
 package com.cashu.me.ui.receive
 
+import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.Crossfade
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -95,6 +103,7 @@ import com.cashu.me.ui.components.InlineNotice
 import com.cashu.me.ui.components.InspectorRow
 import com.cashu.me.ui.components.MintAvatar
 import com.cashu.me.ui.components.MintPickerSheet
+import com.cashu.me.ui.components.NoticeSeverity
 import com.cashu.me.ui.components.NumberPadFooter
 import com.cashu.me.ui.components.PaymentStatusPhase
 import com.cashu.me.ui.components.PaymentStatusScreen
@@ -116,6 +125,30 @@ import com.cashu.me.ui.testing.UiTestTags
 private sealed interface ReceiveLnFace {
     data object Input : ReceiveLnFace
     data class Display(val quote: MintQuoteInfo) : ReceiveLnFace
+    data class Failure(
+        val title: String,
+        val detail: String,
+        val retry: Retry,
+    ) : ReceiveLnFace
+
+    data class Retry(
+        val method: PaymentMethodKind,
+        val amountless: Boolean,
+        val forceNewReusableOffer: Boolean,
+        val amountOverride: Long?,
+    )
+}
+
+private fun receiveRequestHeaderTitle(method: PaymentMethodKind): String = when (method) {
+    PaymentMethodKind.Bolt11 -> "Lightning Invoice"
+    PaymentMethodKind.Bolt12 -> "Reusable Invoice"
+    PaymentMethodKind.Onchain -> "Bitcoin Address"
+}
+
+private fun receiveRequestFailureTitle(method: PaymentMethodKind): String = when (method) {
+    PaymentMethodKind.Bolt11,
+    PaymentMethodKind.Bolt12 -> "Couldn't Create Invoice"
+    PaymentMethodKind.Onchain -> "Couldn't Create Address"
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -141,8 +174,8 @@ fun ReceiveLightningScreen(
     var method by remember { mutableStateOf(PaymentMethodKind.Bolt11) }
     var creating by remember { mutableStateOf(false) }
     var errorText by remember { mutableStateOf<String?>(null) }
-    // When a payment lands the whole screen crossfades to the shared full-screen
-    // success terminal (iOS parity — no inline "Paid" row, no Done button).
+    // When a payment lands the body crossfades to the shared receipt while the
+    // sheet header stays mounted, matching iOS ReceiveLightningView.
     var successInfo by remember { mutableStateOf<ReceiveSuccessInfo?>(null) }
     // On-chain quotes abandoned via "Use new address": a payment may already be
     // racing toward the old address, so keep checking them for the life of the
@@ -246,7 +279,16 @@ fun ReceiveLightningScreen(
                 }
                 face = ReceiveLnFace.Display(quote)
             } catch (t: Throwable) {
-                errorText = t.userFacingWalletMessage
+                face = ReceiveLnFace.Failure(
+                    title = receiveRequestFailureTitle(requestMethod),
+                    detail = t.userFacingWalletMessage,
+                    retry = ReceiveLnFace.Retry(
+                        method = requestMethod,
+                        amountless = amountless,
+                        forceNewReusableOffer = forceNewReusableOffer,
+                        amountOverride = amountOverride,
+                    ),
+                )
             } finally {
                 creating = false
             }
@@ -350,11 +392,12 @@ fun ReceiveLightningScreen(
         previousAmountEntryContext = amountEntryContext
     }
 
-    // Dismissal contract: system back = swipe = abandon to the wallet — the
+// Dismissal contract: system back = swipe = abandon to the wallet — the
     // sheet handles it at every face. Waiting for an invoice to be paid is a
     // freely-dismissible phase: the global pending-quote sweep and quote-keyed
     // monitors credit a later payment, surfaced via the home delta/History.
     // The header chevron owns the internal Display → Input step-back.
+    // Failure terminal uses the header close affordance (and Try Again).
 
     // Abandoned-quote watcher: every quote-keyed monitor re-keys to the
     // replacement after "Use new address", so this screen-scoped loop is what
@@ -398,6 +441,7 @@ fun ReceiveLightningScreen(
                     },
                     mintName = walletState.mints.firstOrNull { it.url == refreshed?.mintUrl }?.name
                         ?: walletState.activeMint?.name,
+                    method = refreshed?.paymentMethod ?: PaymentMethodKind.Onchain,
                 )
                 return@LaunchedEffect // terminal owns the sheet now
             }
@@ -405,11 +449,27 @@ fun ReceiveLightningScreen(
         }
     }
 
-    // The paid terminal replaces the whole sheet body (header + faces), fading
-    // in over the QR the way iOS swaps `body` to the success view.
+    // The paid terminal replaces the sheet body while retaining the same header
+    // and explicit Done action as iOS.
     Crossfade(targetState = successInfo, label = "receive-ln-terminal") { terminal ->
       if (terminal != null) {
-        ReceiveSuccessTerminal(info = terminal, onDone = onClose)
+        Column(
+            modifier = Modifier
+                .fillMaxHeight()
+                .testTag(UiTestTags.ReceiveLightningScreen),
+        ) {
+            SheetHeader(
+                title = receiveRequestHeaderTitle(terminal.method),
+                navigationIcon = Icons.Outlined.Close,
+                navigationContentDescription = "Close",
+                onNavigationClick = onClose,
+            )
+            ReceiveSuccessTerminal(
+                info = terminal,
+                onDone = onClose,
+                modifier = Modifier.weight(1f),
+            )
+        }
       } else {
         Column(
             modifier = Modifier
@@ -419,25 +479,25 @@ fun ReceiveLightningScreen(
         SheetHeader(
             title = when (val current = face) {
                 ReceiveLnFace.Input -> "Receive"
-                is ReceiveLnFace.Display -> when (current.quote.paymentMethod) {
-                    PaymentMethodKind.Bolt11 -> "Lightning Invoice"
-                    PaymentMethodKind.Bolt12 -> "Reusable Invoice"
-                    PaymentMethodKind.Onchain -> "Bitcoin Address"
-                }
+                is ReceiveLnFace.Display -> receiveRequestHeaderTitle(current.quote.paymentMethod)
+                is ReceiveLnFace.Failure -> receiveRequestHeaderTitle(current.retry.method)
             },
             // Input: close X (same as Receive Ecash / Cashu Request). Display:
             // back chevron returns to the amount pad.
             navigationIcon = when (face) {
                 ReceiveLnFace.Input -> Icons.Outlined.Close
                 is ReceiveLnFace.Display -> Icons.AutoMirrored.Outlined.ArrowBack
+                is ReceiveLnFace.Failure -> Icons.Outlined.Close
             },
             navigationContentDescription = when (face) {
                 ReceiveLnFace.Input -> "Close"
                 is ReceiveLnFace.Display -> "Back"
+                is ReceiveLnFace.Failure -> "Close"
             },
             onNavigationClick = when (face) {
                 ReceiveLnFace.Input -> onClose
                 is ReceiveLnFace.Display -> { { face = ReceiveLnFace.Input } }
+                is ReceiveLnFace.Failure -> onClose
             },
             actions = {
                 val current = face
@@ -538,7 +598,9 @@ fun ReceiveLightningScreen(
                 .weight(1f)
                 .fillMaxWidth(),
             // Display → Display (fresh on-chain address) also slides forward.
-            forward = { _, target -> target is ReceiveLnFace.Display },
+            forward = { _, target ->
+                target is ReceiveLnFace.Display || target is ReceiveLnFace.Failure
+            },
             label = "receive-lightning-face",
         ) { current ->
             when (current) {
@@ -737,6 +799,7 @@ fun ReceiveLightningScreen(
                             successInfo = ReceiveSuccessInfo(
                                 amountLabel = amountLabel,
                                 mintName = activeMint?.name,
+                                method = liveQuote.paymentMethod,
                             )
                         }
                     }
@@ -800,6 +863,23 @@ fun ReceiveLightningScreen(
                         onOpenExplorer = explorerUrl?.let { url -> { context.openInBrowser(url) } },
                     )
                 }
+
+                is ReceiveLnFace.Failure -> PaymentStatusScreen(
+                    phase = PaymentStatusPhase.Failure,
+                    title = current.title,
+                    detail = current.detail,
+                    doneLabel = "Try Again",
+                    onDone = {
+                        val retry = current.retry
+                        face = ReceiveLnFace.Input
+                        createMintRequest(
+                            requestMethod = retry.method,
+                            amountless = retry.amountless,
+                            forceNewReusableOffer = retry.forceNewReusableOffer,
+                            amountOverride = retry.amountOverride,
+                        )
+                    },
+                )
             }
         }
       }
@@ -988,7 +1068,7 @@ private fun InputFace(
         }
         if (errorText != null) {
             Spacer(Modifier.height(CashuTheme.spacing.default))
-            InlineNotice(text = errorText)
+            InlineNotice(text = errorText, severity = NoticeSeverity.Error)
         }
         Spacer(Modifier.weight(1f))
         NumberPadFooter(
@@ -1120,7 +1200,7 @@ private fun DisplayFace(
             } else {
                 WaitingForPaymentRow(text = pendingStatusText)
             }
-            errorText?.let { InlineNotice(text = it) }
+            errorText?.let { InlineNotice(text = it, severity = NoticeSeverity.Error) }
             if (!isReusable) {
                 ExpiryCaption(expirySeconds = quote.expiryEpochSeconds)
             }
@@ -1244,25 +1324,43 @@ internal fun GeneratedInvoiceAmount(
  */
 @Composable
 private fun ReusableOfferStatus(received: Boolean, receivedAmountLabel: String?) {
-    if (received) {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(CashuTheme.spacing.snug),
-        ) {
-            Icon(
-                imageVector = Icons.Outlined.CheckCircle,
-                contentDescription = null,
-                tint = CashuTheme.colors.received,
-                modifier = Modifier.size(CashuTheme.spacing.loose),
-            )
-            Text(
-                text = receivedAmountLabel?.let { "Received $it" } ?: "Payment received!",
-                style = MaterialTheme.typography.titleMedium,
-                color = CashuTheme.colors.received,
-            )
+    // Waiting → received swaps with the same fade + scale-in the terminal
+    // glyph uses, so an arriving payment reads as a morph, not a pop.
+    AnimatedContent(
+        targetState = received,
+        transitionSpec = {
+            (
+                fadeIn(tween(200)) + scaleIn(
+                    animationSpec = spring(
+                        dampingRatio = 0.7f,
+                        stiffness = Spring.StiffnessMediumLow,
+                    ),
+                    initialScale = 0.9f,
+                )
+                ) togetherWith fadeOut(tween(150))
+        },
+        label = "reusable-offer-status",
+    ) { isReceived ->
+        if (isReceived) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(CashuTheme.spacing.snug),
+            ) {
+                Icon(
+                    imageVector = Icons.Outlined.CheckCircle,
+                    contentDescription = null,
+                    tint = CashuTheme.colors.received,
+                    modifier = Modifier.size(CashuTheme.spacing.loose),
+                )
+                Text(
+                    text = receivedAmountLabel?.let { "Received $it" } ?: "Payment received!",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = CashuTheme.colors.received,
+                )
+            }
+        } else {
+            WaitingForPaymentRow()
         }
-    } else {
-        WaitingForPaymentRow()
     }
 }
 
@@ -1463,21 +1561,23 @@ private fun ExpiryCaption(expirySeconds: Long?) {
 private data class ReceiveSuccessInfo(
     val amountLabel: String?,
     val mintName: String?,
+    val method: PaymentMethodKind,
 )
 
 /** Full-screen shared success terminal for a paid receive (iOS
- *  `receiveSuccessView`). Auto-dismisses after a brief dwell — no Done button
- *  (Android carve-out; the mint runs on the wallet's app-lifetime scope). */
+ *  `receiveSuccessView`). The mint still runs on the wallet's app-lifetime
+ *  scope, while dismissal remains an explicit user action on both platforms. */
 @Composable
-private fun ReceiveSuccessTerminal(info: ReceiveSuccessInfo, onDone: () -> Unit) {
-    LaunchedEffect(Unit) {
-        delay(1800)
-        onDone()
-    }
+private fun ReceiveSuccessTerminal(
+    info: ReceiveSuccessInfo,
+    onDone: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
     PaymentStatusScreen(
         phase = PaymentStatusPhase.Success,
         title = "Payment Received!",
-        onDone = null,
+        onDone = onDone,
+        modifier = modifier,
         rows = {
             if (info.amountLabel != null) {
                 InspectorRow(

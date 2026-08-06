@@ -24,6 +24,8 @@ struct MainWalletView: View {
     @ObservedObject var settings = SettingsManager.shared
     @ObservedObject var priceService = PriceService.shared
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.dynamicTypeSize) private var typeSize
+    @Environment(\.cashuFonts) private var fonts
 
     @State private var receivedDelta: ReceivedDelta?
     @State private var deltaDismissTask: Task<Void, Never>?
@@ -36,11 +38,24 @@ struct MainWalletView: View {
 
     private let recentRowCap = 5
     private let scrollFadeBand: CGFloat = 24
-    /// Fixed hero height (primary + status). Same whether single-unit or pager.
-    /// Sized 20% taller for the ~53pt balance type + converted status slot.
-    private let heroPagerHeight: CGFloat = 94
+    /// Hero height (primary + status). Same whether single-unit or pager.
+    ///
+    /// Derived from the resolved type metrics rather than being a constant. It
+    /// stays fixed for a given text size, so a unit swap or a fiat show/hide
+    /// still cannot reflow the home canvas — that guarantee is the entire
+    /// reason the reservation exists. But it now grows with the text size, so
+    /// large-text users are no longer cropped by a box sized for the default.
+    /// The old 94 also held an 18pt slot around a `.body`, whose line box is
+    /// ~22pt, so the status line was clipping even at the default size.
+    private var heroPagerHeight: CGFloat {
+        CashuTextRole.amountHero.lineHeight(at: typeSize, fonts: fonts)
+            + balanceLineSpacing + statusLineHeight
+    }
+
     /// Reserved status-line slot under the primary amount.
-    private let statusLineHeight: CGFloat = 18
+    private var statusLineHeight: CGFloat {
+        CashuTextRole.body.lineHeight(at: typeSize, fonts: fonts)
+    }
     /// Move the converted line upward without changing the hero footprint:
     /// remove 2pt above it and reserve the same 2pt below it.
     private let balanceLineSpacing: CGFloat = 2
@@ -48,7 +63,6 @@ struct MainWalletView: View {
     private let pageDotSize: CGFloat = 6
     /// Gap between hero and dots — always reserved with the dots slot.
     private let pageDotGap: CGFloat = 0
-    private let balanceFontSize: CGFloat = 53
 
     /// Units the home hero can page through: sat, then each held non-sat unit.
     private var homeUnits: [String] {
@@ -241,14 +255,12 @@ struct MainWalletView: View {
             if unit.lowercased() == "sat" {
                 let sats = walletManager.balancesByUnit["sat"] ?? walletManager.balance
                 let display = balanceDisplay(sats)
-                Text(display.primary)
-                    .font(.system(size: balanceFontSize, weight: .bold))
-                    .monospacedDigit()
-                    .minimumScaleFactor(0.5)
-                    .lineLimit(1)
-                    .contentTransition(.numericText(value: Double(sats)))
-                    .animation(.snappy, value: sats)
-                    .accessibilityLabel("Balance: \(display.primary)")
+                AmountLockup(
+                    parts: display.primaryParts,
+                    value: Double(sats),
+                    accessibilityPrefix: "Balance"
+                )
+                .animation(.snappy, value: sats)
 
                 // Status line under the balance: a transient monochrome
                 // received-delta beat takes over the fiat slot for 2.5s on receipt,
@@ -261,14 +273,12 @@ struct MainWalletView: View {
                     value: amount,
                     currency: CurrencyRegistry.currency(forMintUnit: unit)
                 ).formatted()
-                Text(formatted)
-                    .font(.system(size: balanceFontSize, weight: .bold))
-                    .monospacedDigit()
-                    .minimumScaleFactor(0.5)
-                    .lineLimit(1)
-                    .contentTransition(.numericText(value: Double(amount)))
-                    .animation(.snappy, value: amount)
-                    .accessibilityLabel("Balance: \(formatted)")
+                AmountLockup(
+                    parts: AmountParts.parse(formatted),
+                    value: Double(amount),
+                    accessibilityPrefix: "Balance"
+                )
+                .animation(.snappy, value: amount)
                 // Same reserved status slot as sat (no fiat conversion for non-sat).
                 Color.clear.frame(height: statusLineHeight)
             }
@@ -313,7 +323,13 @@ struct MainWalletView: View {
                     .transition(.opacity)
             } else if settings.showFiatBalance,
                       let fiatBalance = priceService.formatSatsAsFiat(walletManager.balance) {
+                // Was the one branch of this ZStack with no styling at all: it
+                // rendered in primary ink beside three secondary siblings, and
+                // skipped tabular figures on a money value.
                 Text(fiatBalance)
+                    .cashuAmount(.amountRow, value: nil)
+                    .foregroundStyle(.secondary)
+                    .transition(.opacity)
             } else if let secondary = display.secondary {
                 Text(secondary)
                     .font(.body)
@@ -570,10 +586,8 @@ struct MainWalletView: View {
 
     private func sectionHeader(_ title: String) -> some View {
         Text(title)
-            .font(.caption.weight(.semibold))
+            .cashuText(.overline)
             .foregroundStyle(.secondary)
-            .textCase(.uppercase)
-            .tracking(1.2)
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.horizontal, 4)
             .padding(.top, 16)
@@ -606,7 +620,7 @@ struct MainWalletView: View {
                         .lineLimit(1)
 
                     Text(formatRelativeDate(transaction.date))
-                        .font(.caption)
+                        .cashuText(.metadata)
                         .foregroundStyle(.secondary)
                 }
 
@@ -784,9 +798,7 @@ struct MainWalletView: View {
             ConnectMintSheet()
                 .environmentObject(walletManager)
         case .discoverMints:
-            MintDiscoverySheet { url in
-                Task { try? await walletManager.addMint(url: url) }
-            }
+            MintDiscoverySheet()
             .environmentObject(walletManager)
             .canvasSheetBackground()
         }

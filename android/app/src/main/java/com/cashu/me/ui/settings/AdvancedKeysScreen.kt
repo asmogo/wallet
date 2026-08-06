@@ -40,6 +40,7 @@ import com.cashu.me.Models.P2PKKeyInfo
 import com.cashu.me.ui.components.CashuTextField
 import com.cashu.me.ui.components.InlineNotice
 import com.cashu.me.ui.components.NavRow
+import com.cashu.me.ui.components.NoticeSeverity
 import com.cashu.me.ui.components.SectionHeader
 import com.cashu.me.ui.components.SettingsFooterText
 import com.cashu.me.ui.components.ToolbarIcon
@@ -110,6 +111,7 @@ fun AdvancedKeysScreen(
                         horizontal = CashuTheme.spacing.comfortable,
                         vertical = CashuTheme.spacing.snug,
                     ),
+                    severity = NoticeSeverity.Error,
                 )
             }
 
@@ -193,8 +195,8 @@ internal fun ImportP2PKDialog(
                     modifier = Modifier.fillMaxWidth(),
                     singleLine = true,
                     isError = inputError != null,
+                    supportingText = inputError,
                 )
-                inputError?.let { InlineNotice(text = it) }
             }
         },
         confirmButton = {

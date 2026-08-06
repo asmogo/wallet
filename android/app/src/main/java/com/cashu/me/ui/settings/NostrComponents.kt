@@ -35,7 +35,6 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.KeyboardType
@@ -50,6 +49,7 @@ import com.cashu.me.ui.components.SectionHeader
 import com.cashu.me.ui.components.SelectionRow
 import com.cashu.me.ui.components.SettingsFooterText
 import com.cashu.me.ui.theme.CashuTheme
+import com.cashu.me.ui.theme.withSlashedZero
 
 /**
  * Resetting only warrants a confirmation when it would discard a relay the
@@ -157,7 +157,7 @@ internal fun NostrKeySection(
             verticalArrangement = Arrangement.spacedBy(CashuTheme.spacing.snug),
         ) {
             progressMessage?.let { InlineNotice(text = it, severity = NoticeSeverity.Info) }
-            errorMessage?.let { InlineNotice(text = it) }
+            errorMessage?.let { InlineNotice(text = it, severity = NoticeSeverity.Error) }
         }
     }
 }
@@ -209,6 +209,7 @@ internal fun NostrRelayInputRow(
     onSubmit: () -> Unit,
     isError: Boolean,
     modifier: Modifier = Modifier,
+    errorText: String? = null,
 ) {
     val canSubmit = value.isNotBlank()
     CashuTextField(
@@ -218,7 +219,8 @@ internal fun NostrRelayInputRow(
         placeholder = "wss://relay.example.com",
         singleLine = true,
         isError = isError,
-        textStyle = MaterialTheme.typography.bodyMedium.copy(fontFamily = FontFamily.Monospace),
+        supportingText = errorText,
+        textStyle = MaterialTheme.typography.bodyMedium.copy(fontFamily = CashuTheme.fonts.mono).withSlashedZero(),
         keyboardOptions = KeyboardOptions(
             capitalization = KeyboardCapitalization.None,
             autoCorrectEnabled = false,
@@ -270,7 +272,7 @@ internal fun NostrRelayRow(
         )
         Text(
             text = relay,
-            style = MaterialTheme.typography.bodyMedium.copy(fontFamily = FontFamily.Monospace),
+            style = MaterialTheme.typography.bodyMedium.copy(fontFamily = CashuTheme.fonts.mono).withSlashedZero(),
             color = MaterialTheme.colorScheme.onSurface,
             modifier = Modifier.weight(1f),
             maxLines = 1,

@@ -1,6 +1,11 @@
 package com.cashu.me.ui.receive
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
@@ -139,18 +144,26 @@ fun ReceiveEcashDetailScreen(
             .testTag(UiTestTags.ReceiveEcashDetail),
         color = MaterialTheme.colorScheme.background,
     ) {
-        when (val current = status) {
-            // Claiming / success / failure own the whole screen (iOS: the
-            // full-screen page morphs to PaymentStatusView).
-            is TokenClaimStatus -> TokenClaimTerminal(
-                status = current,
-                formatter = formatter,
-                useBitcoinSymbol = settings.useBitcoinSymbol,
-                onDone = onDone,
-                onRetry = { status = null },
-            )
-
-            null -> when (parsed) {
+        // One content key for every claim status keeps a single terminal
+        // mounted across Claiming → Claimed/Failed (TokenClaimTerminal morphs
+        // the spinner into the check/X in place); confirm ↔ terminal fades
+        // through instead of hard-cutting (iOS: the full-screen page morphs
+        // to PaymentStatusView).
+        AnimatedContent(
+            targetState = status,
+            transitionSpec = { fadeIn(tween(200)) togetherWith fadeOut(tween(150)) },
+            label = "receive-ecash-terminal",
+            contentKey = { it != null },
+        ) { current ->
+            if (current != null) {
+                TokenClaimTerminal(
+                    status = current,
+                    formatter = formatter,
+                    useBitcoinSymbol = settings.useBitcoinSymbol,
+                    onDone = onDone,
+                    onRetry = { status = null },
+                )
+            } else when (parsed) {
                 is TokenParseOutcome.Invalid -> PaymentStatusScreen(
                     phase = PaymentStatusPhase.Failure,
                     title = "Couldn't read token",
@@ -305,7 +318,7 @@ internal fun UnknownMintTrustNotice(
     InlineNotice(
         text = "New mint: ${trust.host}",
         detail = "Receiving this token will add the mint to your wallet. Continue only if you trust it.",
-        severity = NoticeSeverity.Warning,
+        severity = NoticeSeverity.Caution,
         modifier = modifier,
     )
 }

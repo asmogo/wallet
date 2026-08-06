@@ -4,12 +4,12 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -61,9 +61,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
 import com.cashu.me.Core.AmountDisplayPrimary
 import com.cashu.me.Core.AmountFormatter
 import com.cashu.me.Core.CashuPaymentRequestRoute
@@ -87,29 +84,32 @@ import com.cashu.me.R
 import com.cashu.me.ui.components.AmountEntryHero
 import com.cashu.me.ui.components.AmountText
 import com.cashu.me.ui.components.CashuTextField
+import com.cashu.me.ui.components.CircularMethodButton
 import com.cashu.me.ui.components.EmptyState
 import com.cashu.me.ui.components.EmptyStateSize
 import com.cashu.me.ui.components.FlowSheetTitle
 import com.cashu.me.ui.components.GhostButton
 import com.cashu.me.ui.components.InlineNotice
 import com.cashu.me.ui.components.InspectorRow
+import com.cashu.me.ui.components.MethodRowSpacing
 import com.cashu.me.ui.components.MintPickerSheet
 import com.cashu.me.ui.components.MintSelectorRow
 import com.cashu.me.ui.components.NoticeSeverity
 import com.cashu.me.ui.components.NumberPadFooter
 import com.cashu.me.ui.components.PaymentStatusPhase
 import com.cashu.me.ui.components.PaymentStatusScreen
-import com.cashu.me.ui.components.CircularMethodButton
-import com.cashu.me.ui.components.MethodRowSpacing
 import com.cashu.me.ui.components.PrimaryButton
 import com.cashu.me.ui.components.QrCard
 import com.cashu.me.ui.components.SheetHeader
+import com.cashu.me.ui.components.TwoFaceScreen
 import com.cashu.me.ui.mints.ConnectMintContext
 import com.cashu.me.ui.mints.ConnectMintSheetContent
-import com.cashu.me.ui.components.TwoFaceScreen
+import com.cashu.me.ui.testing.UiTestTags
 import com.cashu.me.ui.theme.CashuTheme
 import com.cashu.me.ui.theme.withMonoDigits
-import com.cashu.me.ui.testing.UiTestTags
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 private const val TYPE_DEBOUNCE_MS = 400L
 
@@ -476,44 +476,40 @@ fun UnifiedSendScreen(
             }
             ).testTag(UiTestTags.SendSheet),
     ) {
-        // Status terminal replaces the whole body (iOS PaymentStatusView slot).
-        when (val current = status) {
-            is SendStatus.Sending -> Box(Modifier.weight(1f).fillMaxWidth()) {
-                PaymentStatusScreen(
-                    phase = PaymentStatusPhase.Processing,
-                    title = "Sending payment…",
-                    rows = { SendPaymentDetailRows(current.details, formatter, settings.useBitcoinSymbol) },
-                )
-            }
-            is SendStatus.Sent -> Box(Modifier.weight(1f).fillMaxWidth()) {
-                // An async-accepted (NUT-05) melt — typical for on-chain — isn't
-                // settled yet: the mint took the payment and pays out in the
-                // background, so say "processing", not "sent" (iOS parity).
-                val settlementPending = current.result?.settlement == MeltSettlement.Pending
-                PaymentStatusScreen(
-                    phase = PaymentStatusPhase.Success,
-                    title = if (settlementPending) "Payment processing" else "Payment sent",
-                    onDone = onClose,
-                    rows = {
-                        SendPaymentDetailRows(current.details, formatter, settings.useBitcoinSymbol)
-                    },
-                )
-            }
-            is SendStatus.Failed -> Box(Modifier.weight(1f).fillMaxWidth()) {
-                PaymentStatusScreen(
-                    phase = PaymentStatusPhase.Failure,
-                    title = "Payment failed",
-                    detail = current.message.text,
-                    // A terminal outcome (already paid) can't be retried — offer
-                    // Done; anything else returns to the confirm step.
-                    doneLabel = if (current.message.isTerminal) "Done" else "Try again",
-                    onDone = {
-                        if (current.message.isTerminal) onClose() else status = null
-                    },
-                    rows = { SendPaymentDetailRows(current.details, formatter, settings.useBitcoinSymbol) },
-                )
-            }
-            null -> if (step == SendStep.Input && walletState.mints.isEmpty()) {
+        // Status terminal replaces the form body but retains the sheet title,
+        // matching the toolbar-owned iOS PaymentStatusView slot.
+        // One content key for every status value keeps a single
+        // PaymentStatusScreen mounted across Sending → Sent/Failed, so the
+        // spinner morphs into the check/X in place; the form ↔ terminal swap
+        // itself fades through instead of hard-cutting.
+        AnimatedContent(
+            targetState = status,
+            modifier = if (status == null && step == SendStep.Input) {
+                Modifier.fillMaxWidth()
+            } else {
+                Modifier
+                    .weight(1f)
+                    .fillMaxWidth()
+            },
+            transitionSpec = { fadeIn(tween(200)) togetherWith fadeOut(tween(150)) },
+            label = "unified-send-terminal",
+            contentKey = { it != null },
+        ) { current ->
+            if (current != null) {
+                Column(modifier = Modifier.fillMaxSize()) {
+                    FlowSheetTitle(
+                        title = if (creqFromScan) "Pay Cashu Request" else "Send",
+                    )
+                    SendStatusTerminal(
+                        status = current,
+                        formatter = formatter,
+                        useBitcoinSymbol = settings.useBitcoinSymbol,
+                        onClose = onClose,
+                        onRetry = { status = null },
+                        modifier = Modifier.weight(1f),
+                    )
+                }
+            } else if (step == SendStep.Input && walletState.mints.isEmpty()) {
                 // Same surface the wallet-home "Add mint" CTA opens. It draws its
                 // own header so it can swap the title and reveal a back chevron
                 // when its URL / discovery steps are pushed — don't add one here.
@@ -545,12 +541,12 @@ fun UnifiedSendScreen(
                 }
                 TwoFaceScreen(
                     targetState = step,
+                    // The AnimatedContent above carries the Column weight; the
+                    // faces just fill it (Input stays wrap-height).
                     modifier = if (step == SendStep.Input) {
                         Modifier.fillMaxWidth()
                     } else {
-                        Modifier
-                            .weight(1f)
-                            .fillMaxWidth()
+                        Modifier.fillMaxSize()
                     },
                     forward = { initial, target -> target.ordinal >= initial.ordinal },
                     label = "unified-send-step",
@@ -690,6 +686,54 @@ fun UnifiedSendScreen(
     }
 }
 
+/**
+ * One [PaymentStatusScreen] for every send status: staying mounted across
+ * Sending → Sent/Failed lets the spinner morph into the check/X in place and
+ * the title crossfade (iOS PaymentStatusView), instead of remounting a fresh
+ * terminal per outcome.
+ */
+@Composable
+private fun SendStatusTerminal(
+    status: SendStatus,
+    formatter: AmountFormatter,
+    useBitcoinSymbol: Boolean,
+    onClose: () -> Unit,
+    onRetry: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    // An async-accepted (NUT-05) melt — typical for on-chain — isn't settled
+    // yet: the mint took the payment and pays out in the background, so say
+    // "processing", not "sent" (iOS parity).
+    val settlementPending = (status as? SendStatus.Sent)
+        ?.result?.settlement == MeltSettlement.Pending
+    // A terminal outcome (already paid) can't be retried — offer Done;
+    // anything else returns to the confirm step.
+    val failure = (status as? SendStatus.Failed)?.message
+    PaymentStatusScreen(
+        modifier = modifier,
+        phase = when (status) {
+            is SendStatus.Sending -> PaymentStatusPhase.Processing
+            is SendStatus.Sent -> PaymentStatusPhase.Success
+            is SendStatus.Failed -> PaymentStatusPhase.Failure
+        },
+        title = when (status) {
+            is SendStatus.Sending -> "Sending payment…"
+            is SendStatus.Sent -> if (settlementPending) "Payment processing" else "Payment sent"
+            is SendStatus.Failed -> "Payment failed"
+        },
+        detail = failure?.text,
+        doneLabel = if (failure != null && !failure.isTerminal) "Try again" else "Done",
+        onDone = when (status) {
+            is SendStatus.Sending -> null
+            is SendStatus.Sent -> onClose
+            is SendStatus.Failed -> {
+                { if (status.message.isTerminal) onClose() else onRetry() }
+            }
+        },
+        rows = { SendPaymentDetailRows(status.details, formatter, useBitcoinSymbol) },
+    )
+}
+
 @Composable
 internal fun SendPaymentDetailRows(
     details: SendPaymentDetails,
@@ -825,7 +869,7 @@ private fun InputFace(
         )
         if (inputHint != null) {
             Spacer(Modifier.height(CashuTheme.spacing.default))
-            InlineNotice(text = inputHint, severity = NoticeSeverity.Warning)
+            InlineNotice(text = inputHint, severity = NoticeSeverity.Caution)
         }
         Spacer(Modifier.height(CashuTheme.spacing.page + CashuTheme.spacing.micro))
         // Ways to send: Scan · Ecash · Tap (NFC-gated), round 72dp buttons.
@@ -872,7 +916,7 @@ private fun ToPill(destination: String) {
         Text(
             text = destination,
             style = MaterialTheme.typography.bodyMedium.copy(
-                fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
+                fontFamily = CashuTheme.fonts.mono,
             ),
             color = MaterialTheme.colorScheme.onSurface,
             maxLines = 1,
@@ -934,7 +978,7 @@ private fun AmountFace(
         if (insufficient) {
             InlineNotice(
                 text = "Insufficient balance",
-                severity = NoticeSeverity.Warning,
+                severity = NoticeSeverity.Caution,
             )
             Spacer(Modifier.height(CashuTheme.spacing.default))
         }
@@ -1091,12 +1135,14 @@ private fun ConfirmFace(
             Spacer(Modifier.height(CashuTheme.spacing.default))
             InlineNotice(
                 text = "This mint doesn't hold enough to cover the total.",
-                severity = NoticeSeverity.Warning,
+                severity = NoticeSeverity.Caution,
             )
         }
         if (quoteError != null) {
             Spacer(Modifier.height(CashuTheme.spacing.default))
-            InlineNotice(text = quoteError)
+            // Caution: the quote didn't arrive, but nothing was spent and
+            // "Try again" is right there.
+            InlineNotice(text = quoteError, severity = NoticeSeverity.Caution)
             GhostButton(text = "Try again", onClick = onRetryQuote)
         }
         when (cashuRoute) {
@@ -1104,14 +1150,14 @@ private fun ConfirmFace(
                 Spacer(Modifier.height(CashuTheme.spacing.default))
                 InlineNotice(
                     text = unsupportedCashuRequestUnit,
-                    severity = NoticeSeverity.Warning,
+                    severity = NoticeSeverity.Caution,
                 )
             }
             CashuPaymentRequestRoute.MissingAmount -> {
                 Spacer(Modifier.height(CashuTheme.spacing.default))
                 InlineNotice(
                     text = "This Cashu Request does not include an amount. Enter an amount before paying.",
-                    severity = NoticeSeverity.Warning,
+                    severity = NoticeSeverity.Caution,
                 )
             }
             is CashuPaymentRequestRoute.AddMintToPay -> {
@@ -1125,7 +1171,7 @@ private fun ConfirmFace(
                 Spacer(Modifier.height(CashuTheme.spacing.default))
                 InlineNotice(
                     text = "The compatible mint does not hold enough ecash for this request.",
-                    severity = NoticeSeverity.Warning,
+                    severity = NoticeSeverity.Caution,
                 )
                 cashuRoute.mintUrl?.let { mintUrl ->
                     GhostButton(
@@ -1148,11 +1194,11 @@ private fun ConfirmFace(
         }
         if (topUpError != null) {
             Spacer(Modifier.height(CashuTheme.spacing.default))
-            InlineNotice(text = topUpError)
+            InlineNotice(text = topUpError, severity = NoticeSeverity.Error)
         }
         if (confirmError != null) {
             Spacer(Modifier.height(CashuTheme.spacing.default))
-            InlineNotice(text = confirmError)
+            InlineNotice(text = confirmError, severity = NoticeSeverity.Error)
         }
         Spacer(Modifier.weight(1f))
         PrimaryButton(

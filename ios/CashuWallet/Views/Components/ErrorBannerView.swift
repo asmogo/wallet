@@ -2,40 +2,40 @@ import SwiftUI
 
 // MARK: - Severity
 
-/// The one severity vocabulary shared by every error surface in the app.
+/// The one severity vocabulary shared by every error surface in the app, and
+/// shared by name with Android's `NoticeSeverity`.
 ///
-/// - `error`   — the action is blocked or just failed. Saturated red.
-/// - `caution` — non-blocking "proceed carefully / this won't work here". Orange.
-///               (Orange also means *pending* elsewhere; the warning-triangle vs
-///               pending clock-badge iconography keeps the two distinct.)
-/// - `info`    — validation-in-progress that isn't a failure yet. Quiet secondary,
-///               never a saturated hue.
+/// - `error`   — the action failed or is blocked. Something broke.
+/// - `caution` — non-blocking "proceed carefully / this won't work here".
+///               (Orange also means *pending* elsewhere; the glyph keeps the
+///               two distinct.)
+/// - `info`    — a neutral precondition, not a failure yet.
+/// - `success` — confirmation.
+///
+/// The *names* match Android. The *glyphs* deliberately do not: Material uses a
+/// filled circle for field errors and reserves the triangle for warnings, while
+/// Apple leans on the triangle for errors. Each platform follows its own
+/// convention — see docs/product/inline-error-fixes.md §2.
 enum ErrorSeverity {
-    case error, caution, info
+    case error, caution, info, success
 
     var icon: String {
         switch self {
         case .error:   return "exclamationmark.triangle.fill"
         case .caution: return "exclamationmark.circle.fill"
         case .info:    return "info.circle.fill"
+        case .success: return "checkmark.circle.fill"
         }
     }
 
-    /// Text + icon tint. Maps to DESIGN.md state tokens.
+    /// Text + icon tint. System semantic colours only, so they adapt to dark
+    /// mode and Increase Contrast without a custom palette.
     var foreground: Color {
         switch self {
-        case .error:   return Color(.systemRed)   // state-error  #FF3B30
-        case .caution: return .orange             // state-pending #FF9500
-        case .info:    return .secondary          // no saturated hue
-        }
-    }
-
-    /// Surface fill behind a tinted notice/banner. Maps to the *-tint tokens.
-    var tint: Color {
-        switch self {
-        case .error:   return Color(.systemRed).opacity(0.18)  // error-tint   #FF3B302E
-        case .caution: return Color.orange.opacity(0.10)       // pending-tint #FF95001A
-        case .info:    return Color(.secondarySystemBackground)
+        case .error:   return Color(.systemRed)
+        case .caution: return Color(.systemOrange)
+        case .info:    return .secondary
+        case .success: return Color(.systemGreen)
         }
     }
 
@@ -45,97 +45,37 @@ enum ErrorSeverity {
         case .error:   return "Error. "
         case .caution: return "Caution. "
         case .info:    return ""
+        case .success: return ""
         }
     }
 }
 
-// MARK: - Shared banner (async / system failures, screen-level)
+// MARK: - Inline notice (the inline channel)
 
-/// Standardized error/info banner for async or system *failures* not tied to a
-/// single control (mint unreachable, payment failed, backup failed). Prefer the
-/// `.errorBanner(_:)` modifier to pin it to the bottom safe area; place it inline
-/// only where the layout already reserves a slot for it.
-struct ErrorBannerView: View {
-    let message: String
-    var severity: ErrorSeverity = .error
-    var retry: (() -> Void)? = nil
-    var onDismiss: (() -> Void)? = nil
-
-    var body: some View {
-        HStack(alignment: .firstTextBaseline, spacing: 10) {
-            Image(systemName: severity.icon)
-                .font(.footnote.weight(.semibold))
-                .foregroundStyle(severity.foreground)
-                .accessibilityHidden(true)
-
-            Text(message)
-                .font(.footnote)
-                .foregroundStyle(severity.foreground)
-                .multilineTextAlignment(.leading)
-                .fixedSize(horizontal: false, vertical: true)
-                .frame(maxWidth: .infinity, alignment: .leading)
-
-            if let retry {
-                Button("Retry", action: retry)
-                    .font(.footnote.weight(.semibold))
-                    .buttonStyle(.plain)
-                    .foregroundStyle(severity.foreground)
-            }
-
-            if let onDismiss {
-                Button(action: onDismiss) {
-                    // Compact banner: 32pt target (not the full 44) so a short
-                    // single-line banner doesn't visibly inflate.
-                    Image(systemName: "xmark")
-                        .font(.caption2.weight(.semibold))
-                        .foregroundStyle(.secondary)
-                        .frame(width: 32, height: 32)
-                        .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel("Dismiss")
-            }
-        }
-        .padding(12)
-        .background(severity.tint, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .strokeBorder(Color(.separator), lineWidth: 0.5)
-        )
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel(severity.announcementPrefix + message)
-        .onAppear {
-            guard severity != .info else { return }
-            AccessibilityNotification.Announcement(message).post()
-        }
-    }
-}
-
-// MARK: - Inline notice (preconditions / validation, tied to a control)
-
-/// A calm, control-tied notice for preconditions and validation feedback — the
-/// thing that sits directly under a field or amount and tells the user why they
-/// can't proceed yet, plus what to do about it.
+/// The inline error channel: validation under a control, and preconditions that
+/// block the primary action.
 ///
-/// Defaults to a bare caption (no box) so most sites stay quiet; opt into
-/// `tinted` only where the message deserves a surface (e.g. an insufficient-
-/// balance notice carrying amounts and an action).
+/// **Never draws a container.** Apple renders validation as plain coloured
+/// caption text directly under the control it belongs to — Settings and App
+/// Store account creation both do exactly this. A tinted box here would read as
+/// someone else's design system.
+///
+/// The other channels, per docs/product/inline-error-fixes.md §1b:
+/// - already happened, nothing to fix → `.errorBanner(_:)`
+/// - blocks the whole screen → `ContentUnavailableView`
 struct InlineNotice: View {
     let message: String
     /// Optional bold leading line (e.g. "New mint"). When present the `message`
-    /// drops to a secondary explanatory body — turning the notice into a titled
-    /// callout instead of a single tinted caption. Keep it to a few words.
+    /// drops to a secondary explanatory body.
     var title: String? = nil
-    var severity: ErrorSeverity = .error
+    var severity: ErrorSeverity
     /// Optional second line, always secondary — for amounts / supporting detail.
     var detail: String? = nil
-    /// Hide the leading glyph (e.g. the seed word-counter, which reads as plain text).
+    /// Hide the leading glyph, for footers that read as plain text.
     var showsIcon: Bool = true
-    /// Wrap in a 12pt tint surface. Off by default to preserve the existing calm look.
-    var tinted: Bool = false
 
     var body: some View {
-        HStack(alignment: .firstTextBaseline, spacing: 6) {
+        HStack(alignment: .top, spacing: 6) {
             if showsIcon {
                 Image(systemName: severity.icon)
                     .font(.caption.weight(.semibold))
@@ -151,8 +91,6 @@ struct InlineNotice: View {
                         .fixedSize(horizontal: false, vertical: true)
                 }
 
-                // With a title the message becomes the calm secondary body;
-                // untitled it carries the severity hue as the primary line.
                 Text(message)
                     .font(title == nil ? .caption : .caption2)
                     .foregroundStyle(title == nil ? severity.foreground : Color.secondary)
@@ -169,13 +107,14 @@ struct InlineNotice: View {
             Spacer(minLength: 0)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(tinted ? 10 : 0)
-        .background(
-            tinted ? AnyShapeStyle(severity.tint) : AnyShapeStyle(Color.clear),
-            in: RoundedRectangle(cornerRadius: 12, style: .continuous)
-        )
         .accessibilityElement(children: .combine)
         .accessibilityLabel(accessibilityText)
+        .onAppear {
+            // Owned here so no call site can forget it. This is exactly what the
+            // hand-rolled copy in SendView used to drop.
+            guard severity != .info else { return }
+            AccessibilityNotification.Announcement(accessibilityText).post()
+        }
     }
 
     private var accessibilityText: String {
@@ -185,20 +124,77 @@ struct InlineNotice: View {
     }
 }
 
-// MARK: - Banner presentation modifier
+// MARK: - Banner presentation (the transient channel)
 
 extension View {
-    /// Pins the shared error banner to the bottom safe area while `message` is
-    /// non-nil. Reuses an existing `@State var errorMessage: String?` — no new
-    /// observable object. Use for screen-level/async failures; do NOT use on
-    /// screens whose bottom safe area is owned by a primary CTA (Send/Pay) —
-    /// those use `InlineNotice` instead.
+    /// Pins a floating error banner to the bottom safe area while `message` is
+    /// non-nil. For failures that already happened and have nothing to fix in
+    /// place — a backup that failed, a delete that didn't take.
+    ///
+    /// Do NOT use on screens whose bottom safe area is owned by a primary CTA
+    /// (Send/Pay); those use `InlineNotice`.
     func errorBanner(
         _ message: Binding<String?>,
         severity: ErrorSeverity = .error,
         retry: (() -> Void)? = nil
     ) -> some View {
         modifier(ErrorBannerModifier(message: message, severity: severity, retry: retry))
+    }
+}
+
+/// The floating banner. Not a general-purpose inline component — reach it only
+/// through `.errorBanner(_:)`.
+///
+/// This is the one error surface that genuinely floats over content, so it is
+/// the one that takes a material rather than a flat tint, matching the material
+/// vocabulary in DESIGN.md. Colour stays on the icon.
+struct ErrorBannerView: View {
+    let message: String
+    var severity: ErrorSeverity
+    var retry: (() -> Void)? = nil
+    var onDismiss: (() -> Void)? = nil
+
+    var body: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 10) {
+            Image(systemName: severity.icon)
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(severity.foreground)
+                .accessibilityHidden(true)
+
+            Text(message)
+                .font(.subheadline)
+                .foregroundStyle(.primary)
+                .multilineTextAlignment(.leading)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity, alignment: .leading)
+
+            if let retry {
+                Button("Retry", action: retry)
+                    .font(.subheadline.weight(.semibold))
+                    .buttonStyle(.plain)
+                    .foregroundStyle(severity.foreground)
+            }
+
+            if let onDismiss {
+                Button(action: onDismiss) {
+                    Image(systemName: "xmark")
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                        .frame(width: 32, height: 32)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Dismiss")
+            }
+        }
+        .padding(12)
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(severity.announcementPrefix + message)
+        .onAppear {
+            guard severity != .info else { return }
+            AccessibilityNotification.Announcement(message).post()
+        }
     }
 }
 
@@ -220,9 +216,8 @@ private struct ErrorBannerModifier: ViewModifier {
                     )
                     .padding(.horizontal)
                     .padding(.bottom, 8)
-                    // Enter slides up from the bottom edge; exit is a quiet fade only
-                    // (Jakub: exits are subtler than entrances — the user's focus has
-                    // already moved on). See DESIGN.md §6 exit convention.
+                    // Enter slides up from the bottom edge; exit is a quiet fade
+                    // only — the user's focus has already moved on.
                     .transition(
                         reduceMotion
                             ? .opacity

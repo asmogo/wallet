@@ -21,17 +21,12 @@ struct CashuRequestAmountColumn: View {
             let display = amountDisplay(receivedAmount)
             VStack(alignment: .trailing, spacing: 2) {
                 Text("+\(display.primary)")
-                    .font(.system(.body, design: .rounded).weight(.medium))
-                    .monospacedDigit()
+                    .cashuAmount(.amountRow, value: Double(receivedAmount))
                     .foregroundStyle(.green)
-                    .lineLimit(1)
-                    // No `.minimumScaleFactor` — it collides with `.numericText`
-                    // (short amounts collapse toward 50%).
-                    .contentTransition(.numericText(value: Double(receivedAmount)))
 
                 if let secondary = display.secondary {
                     Text(secondary)
-                        .font(.system(.subheadline, design: .rounded).weight(.regular))
+                        .font(.subheadline)
                         .monospacedDigit()
                         .foregroundStyle(.secondary)
                 }
@@ -39,15 +34,15 @@ struct CashuRequestAmountColumn: View {
         } else if let amount = request.amount, amount > 0 {
             let display = amountDisplay(amount)
             VStack(alignment: .trailing, spacing: 2) {
+                // No value passed: a waiting amount is static, so it takes the
+                // role's tabular figures without the digit transition.
                 Text(display.primary)
-                    .font(.system(.body, design: .rounded).weight(.medium))
-                    .monospacedDigit()
+                    .cashuText(.amountRow)
                     .foregroundStyle(.secondary)
-                    .lineLimit(1)
 
                 if let secondary = display.secondary {
                     Text(secondary)
-                        .font(.system(.subheadline, design: .rounded).weight(.regular))
+                        .font(.subheadline)
                         .monospacedDigit()
                         .foregroundStyle(.secondary)
                 }

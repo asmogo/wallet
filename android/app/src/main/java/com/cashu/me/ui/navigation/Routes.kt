@@ -35,6 +35,7 @@ object Routes {
     const val SETTINGS_NOSTR = "settings/nostr"
     const val SETTINGS_NWC = "settings/nostr/wallet-connect"
     const val SETTINGS_PRIVACY = "settings/privacy"
+    const val SETTINGS_LICENSES = "settings/licenses"
 
     /** Top tabs in display order. */
     val TopTabs: List<TopTab> = listOf(

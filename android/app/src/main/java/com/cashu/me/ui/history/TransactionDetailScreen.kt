@@ -302,6 +302,7 @@ fun TransactionDetailScreen(
                             modifier = Modifier.semantics {
                                 liveRegion = LiveRegionMode.Polite
                             },
+                            severity = NoticeSeverity.Caution,
                         )
                         PendingTokenClaimCheckResult.Claimed, null -> Unit
                     }

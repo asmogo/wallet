@@ -47,7 +47,6 @@ import androidx.compose.ui.platform.ClipboardManager
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
@@ -73,6 +72,7 @@ import com.cashu.me.ui.components.PrimaryButton
 import com.cashu.me.ui.theme.CapsuleShape
 import com.cashu.me.ui.theme.CashuTheme
 import com.cashu.me.ui.theme.withMonoDigits
+import com.cashu.me.ui.theme.withSlashedZero
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 
@@ -108,11 +108,7 @@ internal fun restoreMintFailurePhase(error: Throwable): RestoreMintPhase.Failed 
 
 @Composable
 fun restoreOnboardingTitleStyle(): TextStyle =
-    MaterialTheme.typography.displaySmall.copy(
-        fontWeight = FontWeight.ExtraBold,
-        letterSpacing = (-0.5).sp,
-        lineHeight = 40.sp,
-    )
+    CashuTheme.type.title
 
 // Single-line onboarding titles render at full display size and step down only
 // when the line would overflow (narrow devices / large font scales).
@@ -169,7 +165,7 @@ fun RestoreSeedStageContent(
                 onValueChange = onInputChange,
                 modifier = Modifier.fillMaxSize(),
                 placeholder = "word1 word2 word3 …",
-                textStyle = MaterialTheme.typography.bodyMedium.copy(fontFamily = FontFamily.Monospace),
+                textStyle = MaterialTheme.typography.bodyMedium.copy(fontFamily = CashuTheme.fonts.mono).withSlashedZero(),
                 isError = errorText != null || (wordCount >= 12 && invalidCount > 0),
                 keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.None),
             )
@@ -221,7 +217,7 @@ fun RestoreSeedStageContent(
             }
         }
         if (errorText != null) {
-            InlineNotice(text = errorText)
+            InlineNotice(text = errorText, severity = NoticeSeverity.Error)
         }
     }
 }

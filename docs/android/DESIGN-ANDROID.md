@@ -26,20 +26,48 @@ like a port, make the Android-native choice instead.
   red via `CashuColors` + the `error` role) — chromatic color is reserved
   exclusively for payment state.
 
-### Type & shape — stock M3
-- `Typography()` and `Shapes()` defaults (`ui/theme/Type.kt`, `Shape.kt`).
-  Roles used as designed; no custom ramps.
-- Money always chains `withMonoDigits()` (tabular figures) — amounts roll,
-  never reflow. `asOverline()` for section headers. `CapsuleShape` available.
-- **Weight carve-outs (2026-07-10, cross-platform brand parity, user-directed):**
-  two deliberate deviations from stock W400. (1) The tab titles render **Bold**
-  via the shared `ui/components/TabTopBar.kt` — the one wrapper every top-level
-  tab (History/Mints/Settings) routes through, so their big collapsing titles are
-  identical by construction. (2) Every live amount-entry hero renders **SemiBold**
-  with the unit baked *inline* (`₿1,234` / `1,234 sat`, no separate caption) via
-  the shared `ui/components/AmountEntryHero.kt` + `AmountFormatter.entryDisplay`,
-  mirroring iOS `CurrencyAmountDisplay`. Kept at the `displayMedium` (45sp) size so
-  long amounts stay on one line. Native collapse-on-scroll is unchanged.
+### Type — Geist on the M3 scale
+*Rewritten 2026-08-03.*
+
+- **Geist Sans and Geist Mono, bundled** (`res/font/geist.ttf`,
+  `geist_mono.ttf`; SIL OFL 1.1, surfaced in Settings → Licenses). Android-first
+  carve-out, user-directed: iOS keeps SF Pro because SF Symbols are metrically
+  bound to it and system-presented surfaces cannot be restyled. Neither cost
+  applies here — Compose renders its own text and every M3 component reads
+  `MaterialTheme.typography`, so the swap is total.
+- **Source the GitHub release build, never Google Fonts.** The Google Fonts
+  build strips the full OpenType table; if it were substituted,
+  `withMonoDigits()` would silently no-op and every amount column would start
+  jittering with no error anywhere. `GeistFontTest` parses the shipped files and
+  fails the build if `tnum`, `ss09`, the `wght`-only axis set, or the declared
+  cap/ascent ratios are wrong.
+- **Sizes, line heights and tracking are Material's own.** Geist's cap height
+  (0.710) and x-height (0.530) are within a thousandth of Roboto's, so
+  Material's Roboto-tuned reading tracking transfers unchanged rather than
+  needing a Geist-specific table. Measured, not assumed.
+- **`ui/theme/Type.kt` owns everything.** `CashuTheme.type.*` supplies twelve
+  app roles on top of the Material scale. `TextStyle.atSize(size, leading,
+  trackingEm)` is the only sanctioned way to change a size — a bare
+  `copy(fontSize = …)` orphans the line height, which is how the entry hero came
+  to set 64sp type in a 52sp box, a 0.81× ratio that crops the glyph.
+  `TypographyGuardTest` enforces this with an empty allowlist.
+- **The amount ladder is four rungs**: `amountHero` 52sp (balance *and* live
+  entry — one component, `ui/components/AmountHero.kt`), `amountConfirm` 40sp,
+  `amountCompact` 28sp, `amountRow` 16sp. Typed by role, never by point size.
+  52 rather than 56 because Geist sets ~7% wider than Roboto.
+- **The unit is subordinated, not set at parity.** Formatters return
+  `AmountParts`; `AmountHero` composes value and unit as two runs of one string
+  (one `Text`, so autosize scales both together) with a unit word at half size,
+  one weight down, secondary ink, baseline-aligned.
+- Money always chains `withMonoDigits()`. The mono roles add `withSlashedZero()`
+  — via **`ss09`**, since Geist ships no standard `zero` feature.
+- **Weight carve-out (2026-07-10, user-directed):** tab titles render **Bold**
+  via the shared `ui/components/TabTopBar.kt`, so every top-level tab's
+  collapsing title is identical by construction. Native collapse-on-scroll is
+  unchanged.
+
+### Shape — stock M3
+- `Shapes()` defaults (`ui/theme/Shape.kt`); `CapsuleShape` available.
 
 ### Motion — M3 Expressive springs
 - `MaterialExpressiveTheme` + `MotionScheme.expressive()`: spring physics drive

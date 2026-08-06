@@ -4,6 +4,83 @@ struct AmountDisplayText {
     let primary: String
     let secondary: String?
     let effectivePrimary: AmountDisplayPrimary
+
+    /// [primary] decomposed, so a hero can subordinate the unit rather than
+    /// setting it at the same size, weight and ink as the digits.
+    var primaryParts: AmountParts { AmountParts.parse(primary) }
+}
+
+/// A money value decomposed into its numerals and its unit.
+///
+/// The unit is deliberately *not* joined into the numeral string, because a
+/// joined string cannot be typeset: the unit ends up at the same size, weight
+/// and ink as the digits, occupying about a third of the lockup while carrying
+/// none of the information. `AmountLockup` composes the two runs with the unit
+/// subordinated; see DESIGN.md, The Lockup Rule.
+///
+/// [joined] reproduces exactly what the string API returns, which is what lets
+/// the split be verified against the existing formatter tests rather than
+/// trusted.
+struct AmountParts: Equatable {
+
+    /// Where the unit sits, and — because the two coincide throughout this app
+    /// — what *kind* of unit it is. A prefix is always a symbol (`₿`, `$`) and a
+    /// suffix is always a word (`sat`, `USD`), and the two want opposite
+    /// typographic treatment: a symbol stays at full ink tucked tight to the
+    /// digits, a word steps down in size, weight and ink.
+    enum Affix: Equatable {
+        case none
+        case prefix(String)
+        case suffix(String)
+    }
+
+    var value: String
+    var affix: Affix
+
+    var joined: String {
+        switch affix {
+        case .none: value
+        case .prefix(let symbol): symbol + value
+        case .suffix(let word): value + " " + word
+        }
+    }
+
+    /// Recovers the split from an already-joined string.
+    ///
+    /// A compatibility shim, not the preferred path — producers that know the
+    /// unit should say so structurally. It exists because some amount strings
+    /// arrive already assembled (converted fiat from `PriceService`, mint-unit
+    /// amounts from `CurrencyAmount`), and without it those would render with
+    /// the unit at full size and ink while every other amount in the app
+    /// subordinated it. A quiet inconsistency is worse than a conservative parse.
+    ///
+    /// Deliberately conservative: a trailing space-delimited run with no digits
+    /// is a unit word, a leading run of non-digits that isn't merely a sign is a
+    /// symbol, and anything else is left whole.
+    static func parse(_ joined: String) -> AmountParts {
+        if let space = joined.lastIndex(of: " "), space < joined.index(before: joined.endIndex) {
+            let tail = String(joined[joined.index(after: space)...])
+            if !tail.contains(where: \.isNumber) {
+                return AmountParts(value: String(joined[..<space]), affix: .suffix(tail))
+            }
+        }
+        let lead = String(joined.prefix { !$0.isNumber })
+        if !lead.isEmpty, lead.contains(where: { $0 != "-" && $0 != "+" && $0 != " " }) {
+            return AmountParts(value: String(joined.dropFirst(lead.count)), affix: .prefix(lead))
+        }
+        return AmountParts(value: joined, affix: .none)
+    }
+
+    /// VoiceOver form. Never reads a bare `₿`, which announces as nothing
+    /// useful; the symbol is a visual shorthand for the word.
+    var spoken: String {
+        switch affix {
+        case .none: value
+        case .prefix("₿"): "\(value) sats"
+        case .prefix(let symbol): "\(symbol)\(value)"
+        case .suffix(let word): "\(value) \(word)"
+        }
+    }
 }
 
 enum AmountFormatter {
@@ -14,12 +91,28 @@ enum AmountFormatter {
         return formatter
     }()
 
-    static func sats(_ sats: UInt64, useBitcoinSymbol: Bool, includeUnit: Bool = true) -> String {
+    /// Sats decomposed for typesetting. The canonical source; `sats(_:…)` is
+    /// this joined back up.
+    static func satsParts(_ sats: UInt64, useBitcoinSymbol: Bool) -> AmountParts {
         let formatted = decimalFormatter.string(from: NSNumber(value: sats)) ?? "\(sats)"
-        if useBitcoinSymbol {
-            return "₿\(formatted)"
+        return AmountParts(
+            value: formatted,
+            affix: useBitcoinSymbol ? .prefix("₿") : .suffix("sat")
+        )
+    }
+
+    /// - Parameter includeUnit: suppresses the trailing `sat` **word** only.
+    ///   The `₿` prefix is the unit in symbol mode and is kept either way, so a
+    ///   caller appending its own suffix never renders a doubled unit. This is
+    ///   a deliberate contract, pinned by `testNoUnitBitcoinSymbolMode`.
+    static func sats(_ sats: UInt64, useBitcoinSymbol: Bool, includeUnit: Bool = true) -> String {
+        let parts = satsParts(sats, useBitcoinSymbol: useBitcoinSymbol)
+        switch parts.affix {
+        case .suffix where !includeUnit:
+            return parts.value
+        default:
+            return parts.joined
         }
-        return includeUnit ? "\(formatted) sat" : formatted
     }
 
     /// Canonical fiat presentation for wallet amounts. A fixed POSIX/US
@@ -28,6 +121,37 @@ enum AmountFormatter {
     static func fiat(_ amount: Double, currencyCode: String) -> String {
         let formatter = currencyFormatter(currencyCode: currencyCode)
         return formatter.string(from: NSNumber(value: amount)) ?? String(format: "%.2f", amount)
+    }
+
+    /// Fiat decomposed for typesetting.
+    ///
+    /// Kept alongside `fiat(_:currencyCode:)` rather than replacing it: a
+    /// currency whose symbol trails the number joins without a space, while a
+    /// unit *word* like `sat` joins with one, and collapsing both conventions
+    /// into `AmountParts.joined` would quietly change the rendered string for
+    /// some currency codes. `testFiatPartsJoinMatchesFiat` asserts the two
+    /// agree for every currency the app offers, so a divergence fails a test
+    /// rather than shipping.
+    static func fiatParts(_ amount: Double, currencyCode: String) -> AmountParts {
+        let formatter = currencyFormatter(currencyCode: currencyCode)
+        let affix = currencyAffix(currencyCode: currencyCode)
+        formatter.positivePrefix = ""
+        formatter.positiveSuffix = ""
+        let number = formatter.string(from: NSNumber(value: amount))
+            ?? String(format: "%.2f", amount)
+        return AmountParts(value: number, affix: affix)
+    }
+
+    /// Where this currency's symbol sits, and what it is.
+    static func currencyAffix(currencyCode: String) -> AmountParts.Affix {
+        let formatter = currencyFormatter(currencyCode: currencyCode)
+        if let prefix = formatter.positivePrefix, !prefix.isEmpty {
+            return .prefix(prefix)
+        }
+        if let suffix = formatter.positiveSuffix, !suffix.isEmpty {
+            return .suffix(suffix)
+        }
+        return .none
     }
 
     /// Converts sats at the supplied BTC price and formats the selected fiat
@@ -223,19 +347,41 @@ enum AmountFormatter {
         case .sats:
             return sats(UInt64(raw) ?? 0, useBitcoinSymbol: useBitcoinSymbol)
         case .fiat:
-            let sep = decimalSeparator
-            let parts = raw.split(separator: Character(sep), omittingEmptySubsequences: false)
-            let intRaw = parts.first.map(String.init) ?? ""
-            let intValue = UInt64(intRaw) ?? 0
-            let groupedInt = fiatGroupingFormatter.string(from: NSNumber(value: intValue)) ?? "\(intValue)"
-
-            var number = groupedInt
-            if raw.contains(sep) {
-                let fracRaw = parts.count > 1 ? String(parts[1]) : ""
-                number += sep + fracRaw
-            }
-            return wrapWithCurrencySymbol(number)
+            return wrapWithCurrencySymbol(partialFiatNumber(raw))
         }
+    }
+
+    /// The live entry hero, decomposed for typesetting.
+    @MainActor
+    static func entryPrimaryParts(
+        raw: String,
+        unit: AmountDisplayPrimary,
+        useBitcoinSymbol: Bool
+    ) -> AmountParts {
+        switch unit {
+        case .sats:
+            return satsParts(UInt64(raw) ?? 0, useBitcoinSymbol: useBitcoinSymbol)
+        case .fiat:
+            return AmountParts(
+                value: partialFiatNumber(raw),
+                affix: currencyAffix(currencyCode: PriceService.shared.currencyCode)
+            )
+        }
+    }
+
+    /// The numerals of a partially typed fiat amount, grouped but unwrapped.
+    /// Partial-aware: a trailing separator and trailing zeros render exactly as
+    /// typed, so the hero doesn't jump while the user is still keying.
+    private static func partialFiatNumber(_ raw: String) -> String {
+        let sep = decimalSeparator
+        let parts = raw.split(separator: Character(sep), omittingEmptySubsequences: false)
+        let intRaw = parts.first.map(String.init) ?? ""
+        let intValue = UInt64(intRaw) ?? 0
+        let groupedInt = fiatGroupingFormatter.string(from: NSNumber(value: intValue)) ?? "\(intValue)"
+
+        guard raw.contains(sep) else { return groupedInt }
+        let fracRaw = parts.count > 1 ? String(parts[1]) : ""
+        return groupedInt + sep + fracRaw
     }
 
     // MARK: - Fiat parsing / formatting helpers

@@ -295,10 +295,8 @@ struct HistoryView: View {
 
     private func sectionHeader(_ title: String) -> some View {
         Text(title)
-            .font(.caption.weight(.semibold))
+            .cashuText(.overline)
             .foregroundStyle(.secondary)
-            .textCase(.uppercase)
-            .tracking(1.2)
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.horizontal, 4)
             .padding(.top, 16)
@@ -494,7 +492,7 @@ struct HistoryView: View {
                         .lineLimit(1)
 
                     Text(formatRelativeDate(request.createdAt))
-                        .font(.caption)
+                        .cashuText(.metadata)
                         .foregroundStyle(.secondary)
                 }
 
@@ -548,7 +546,7 @@ struct HistoryView: View {
                         .lineLimit(1)
 
                     Text(formatRelativeDate(transaction.date))
-                        .font(.caption)
+                        .cashuText(.metadata)
                         .foregroundStyle(.secondary)
                 }
 

@@ -242,7 +242,7 @@ struct MintDetailView: View {
             case .online:
                 Text("Online").foregroundStyle(.primary)
             case .offline:
-                Text("Offline").foregroundStyle(.red)
+                Text("Offline").foregroundStyle(ErrorSeverity.error.foreground)
             }
         }
         .font(.body)
@@ -566,9 +566,8 @@ struct MintDetailView: View {
     @ViewBuilder
     private func section<Content: View>(_ title: String, @ViewBuilder content: () -> Content) -> some View {
         VStack(alignment: .leading, spacing: 0) {
-            Text(title.uppercased())
-                .font(.caption.weight(.semibold))
-                .tracking(1.2)
+            Text(title)
+                .cashuText(.overline)
                 .foregroundStyle(.secondary)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.horizontal, 4)

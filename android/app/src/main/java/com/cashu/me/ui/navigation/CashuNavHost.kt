@@ -39,6 +39,7 @@ import com.cashu.me.ui.settings.LightningScreen
 import com.cashu.me.ui.settings.NostrScreen
 import com.cashu.me.ui.settings.NwcSettingsScreen
 import com.cashu.me.ui.settings.P2PKScreen
+import com.cashu.me.ui.settings.LicensesScreen
 import com.cashu.me.ui.settings.PrivacyScreen
 import com.cashu.me.ui.settings.SettingsScreen
 import com.cashu.me.ui.theme.CashuMotion
@@ -154,6 +155,7 @@ fun CashuNavHost(
                 onOpenLockedEcash = { navController.navigate(Routes.SETTINGS_P2PK) },
                 onOpenNostr = { navController.navigate(Routes.SETTINGS_NOSTR) },
                 onOpenPrivacy = { navController.navigate(Routes.SETTINGS_PRIVACY) },
+                onOpenLicenses = { navController.navigate(Routes.SETTINGS_LICENSES) },
                 contentPadding = contentPadding,
             )
         }
@@ -249,6 +251,9 @@ fun CashuNavHost(
                 settingsManager = container.settingsManager,
                 onClose = { navController.popBackStack() },
             )
+        }
+        composable(Routes.SETTINGS_LICENSES) {
+            LicensesScreen(onClose = { navController.popBackStack() })
         }
     }
 }

@@ -48,6 +48,7 @@ import com.cashu.me.Models.MintInfo
 import com.cashu.me.ui.components.GhostButton
 import com.cashu.me.ui.components.InlineNotice
 import com.cashu.me.ui.components.MintAvatar
+import com.cashu.me.ui.components.NoticeSeverity
 import com.cashu.me.ui.components.SectionHeader
 import com.cashu.me.ui.components.SheetHeader
 import com.cashu.me.ui.components.TwoFaceScreen
@@ -222,6 +223,7 @@ fun ConnectMintSheetContent(
                     walletManager = walletManager,
                     settingsManager = settingsManager,
                     mintDiscoveryManager = mintDiscoveryManager,
+                    onMintAdded = onMintAdded,
                 )
             }
         }
@@ -287,7 +289,7 @@ internal fun SuggestedMintsFace(
 
         if (error != null) {
             Spacer(Modifier.height(CashuTheme.spacing.default))
-            InlineNotice(text = error)
+            InlineNotice(text = error, severity = NoticeSeverity.Error)
         }
 
         Spacer(Modifier.height(CashuTheme.spacing.loose))

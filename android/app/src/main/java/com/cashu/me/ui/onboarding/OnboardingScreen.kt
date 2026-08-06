@@ -80,7 +80,6 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.testTag as semanticsTestTag
 import androidx.compose.ui.semantics.traversalIndex
 import androidx.compose.ui.text.AnnotatedString
-import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.KeyboardType
@@ -104,6 +103,7 @@ import com.cashu.me.ui.components.GhostButton
 import com.cashu.me.ui.components.IconSwap
 import com.cashu.me.ui.components.InlineNotice
 import com.cashu.me.ui.components.MintAvatar
+import com.cashu.me.ui.components.NoticeSeverity
 import com.cashu.me.ui.components.PrimaryButton
 import com.cashu.me.ui.components.materializeBlur
 import com.cashu.me.ui.restore.RestoreMintsStageContent
@@ -115,6 +115,7 @@ import com.cashu.me.ui.restore.rememberRestoreProgressState
 import com.cashu.me.ui.restore.restoreSeedInstallErrorMessage
 import com.cashu.me.ui.theme.CashuTheme
 import com.cashu.me.ui.theme.rememberReducedMotion
+import com.cashu.me.ui.theme.withSlashedZero
 import com.cashu.me.ui.mints.RecommendedMints
 import com.cashu.me.ui.testing.UiTestTags
 
@@ -790,7 +791,7 @@ internal fun WelcomeStageContent(
                 modifier = Modifier.padding(horizontal = CtaPadding),
                 verticalArrangement = Arrangement.spacedBy(CashuTheme.spacing.snug),
             ) {
-                InlineNotice(text = startupFailure.message)
+                InlineNotice(text = startupFailure.message, severity = NoticeSeverity.Error)
                 PrimaryButton(
                     text = startupFailure.recoveryActionLabel,
                     onClick = onRetryStartup,
@@ -803,6 +804,7 @@ internal fun WelcomeStageContent(
         if (errorText != null) {
             InlineNotice(
                 text = errorText,
+                severity = NoticeSeverity.Error,
                 modifier = Modifier.padding(horizontal = CtaPadding),
             )
             Spacer(Modifier.height(CashuTheme.spacing.snug))
@@ -843,7 +845,6 @@ private fun EcashConceptSheet(onDismiss: () -> Unit) {
                     text = "Ecash is bearer cash for Bitcoin.",
                     style = MaterialTheme.typography.headlineMedium.copy(
                         fontWeight = FontWeight.ExtraBold,
-                        letterSpacing = (-0.3).sp,
                     ),
                     color = MaterialTheme.colorScheme.onSurface,
                 )
@@ -1145,9 +1146,9 @@ internal fun SeedPhraseReveal(
  */
 @Composable
 private fun SeedGrid(words: List<String>, revealed: Boolean) {
-    val indexStyle = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace)
+    val indexStyle = MaterialTheme.typography.bodySmall.copy(fontFamily = CashuTheme.fonts.mono).withSlashedZero()
     val wordStyle = MaterialTheme.typography.bodyMedium.copy(
-        fontFamily = FontFamily.Monospace,
+        fontFamily = CashuTheme.fonts.mono,
         fontWeight = FontWeight.Medium,
     )
     Column(
@@ -1325,6 +1326,10 @@ private fun FirstMintList(
                 textStyle = MaterialTheme.typography.bodyMedium,
                 singleLine = true,
                 isError = state.customDraft.error != null,
+                // Input validation belongs to the field. The connect failure
+                // below is a different thing: by then the mint is staged, so
+                // the message is about the staged row, not the text.
+                supportingText = state.customDraft.error,
                 keyboardOptions = KeyboardOptions(
                     capitalization = KeyboardCapitalization.None,
                     keyboardType = KeyboardType.Uri,
@@ -1346,10 +1351,10 @@ private fun FirstMintList(
                 },
             )
         }
-        val notice = state.customDraft.error ?: errorText
+        val notice = errorText
         if (notice != null) {
             Spacer(Modifier.height(CashuTheme.spacing.snug))
-            InlineNotice(text = notice)
+            InlineNotice(text = notice, severity = NoticeSeverity.Error)
         }
         if (addingMintUrl != null) {
             Spacer(Modifier.height(CashuTheme.spacing.snug))

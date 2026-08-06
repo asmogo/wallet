@@ -59,7 +59,6 @@ import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.AnnotatedString
-import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.delay
@@ -72,7 +71,7 @@ import com.cashu.me.ui.components.QrCard
 import com.cashu.me.ui.components.shareText
 import com.cashu.me.ui.security.rememberWalletAuthenticationLauncher
 import com.cashu.me.ui.theme.CashuTheme
-import com.cashu.me.ui.theme.asOverline
+import com.cashu.me.ui.theme.withSlashedZero
 
 // iOS KeyCard geometry: 34pt glyph circle, rounded-14 card.
 private val KeyGlyphSize = 36.dp
@@ -257,7 +256,7 @@ fun KeyCard(
             ) {
                 Text(
                     text = P2PKKeyDisplay.shortLabel(pubkey),
-                    style = MaterialTheme.typography.bodyMedium.copy(fontFamily = FontFamily.Monospace),
+                    style = MaterialTheme.typography.bodyMedium.copy(fontFamily = CashuTheme.fonts.mono).withSlashedZero(),
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 1,
                     overflow = TextOverflow.MiddleEllipsis,
@@ -366,7 +365,7 @@ fun QrDetailSheet(
             Spacer(Modifier.height(CashuTheme.spacing.default))
             Text(
                 text = content,
-                style = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace),
+                style = MaterialTheme.typography.bodySmall.copy(fontFamily = CashuTheme.fonts.mono).withSlashedZero(),
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
@@ -486,7 +485,7 @@ internal fun PrivateKeyRevealContent(
         // P2PK key, and any number of device keys.
         Text(
             text = title.uppercase(),
-            style = MaterialTheme.typography.labelMedium.asOverline(),
+            style = CashuTheme.type.overline,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         Spacer(Modifier.height(CashuTheme.spacing.micro))
@@ -512,7 +511,7 @@ internal fun PrivateKeyRevealContent(
         ) {
             Text(
                 text = "Private key (nsec)",
-                style = MaterialTheme.typography.labelMedium.asOverline(),
+                style = CashuTheme.type.overline,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             Row(
@@ -521,7 +520,7 @@ internal fun PrivateKeyRevealContent(
             ) {
                 Text(
                     text = revealedNsec ?: "\u2022".repeat(HiddenKeyDots),
-                    style = MaterialTheme.typography.bodyMedium.copy(fontFamily = FontFamily.Monospace),
+                    style = MaterialTheme.typography.bodyMedium.copy(fontFamily = CashuTheme.fonts.mono).withSlashedZero(),
                     color = if (revealedNsec != null) MaterialTheme.colorScheme.onSurface
                     else MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 3,

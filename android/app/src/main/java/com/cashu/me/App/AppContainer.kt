@@ -72,7 +72,7 @@ class AppContainer(
         allowCleartextLocalTestMints = runtimePolicy.allowCleartextLocalTestMints,
     )
     val priceService = PriceService(settingsStore)
-    val mintDiscoveryManager = MintDiscoveryManager(settingsManager, cdkGateway)
+    val mintDiscoveryManager = MintDiscoveryManager(settingsManager)
     val cashuRequestListener = CashuRequestListener(
         nostrService = nostrService,
         settingsManager = settingsManager,

@@ -18,6 +18,7 @@ struct SendView: View {
     @State private var tokenFee: UInt64 = 0
     @State private var isGenerating = false
     @State private var errorMessage: String?
+    @State private var tokenCreationFailure: String?
     @State private var errorSeverity: ErrorSeverity = .error
     @State private var errorShowsMintAction = false
     // Optional second line under the error notice (e.g. the change-fee hint);
@@ -58,7 +59,10 @@ struct SendView: View {
     var body: some View {
         NavigationStack {
             Group {
-                if let token = generatedToken {
+                if let failure = tokenCreationFailure {
+                    tokenCreationFailureView(failure)
+                        .transition(.opacity)
+                } else if let token = generatedToken {
                     if tokenClaimed {
                         // Recipient claimed → the same full-screen success the
                         // pay/receive flows use, replacing the QR entirely.
@@ -81,6 +85,7 @@ struct SendView: View {
             }
             .animation(.smooth(duration: 0.3), value: generatedToken != nil)
             .animation(.smooth(duration: 0.3), value: tokenClaimed)
+            .animation(.smooth(duration: 0.3), value: tokenCreationFailure != nil)
             .navigationBarTitleDisplayMode(.inline)
             .navigationTitle(generatedToken != nil ? "Pending Ecash" : "Send Ecash")
             // Match the Lightning Invoice screen: float the title + chrome
@@ -108,7 +113,7 @@ struct SendView: View {
                     }
                 }
 
-                if generatedToken == nil {
+                if generatedToken == nil && tokenCreationFailure == nil {
                     ToolbarItem(placement: .topBarTrailing) {
                         Button {
                             HapticFeedback.selection()
@@ -124,7 +129,8 @@ struct SendView: View {
 
                 // Unit selector — only when the active mint offers more than one
                 // unit. Declared after the lock so it sits to the lock's right.
-                if generatedToken == nil, let mint = unitContextMint, mint.supportsMultipleUnits {
+                if generatedToken == nil, tokenCreationFailure == nil,
+                   let mint = unitContextMint, mint.supportsMultipleUnits {
                     ToolbarItem(placement: .topBarTrailing) {
                         Button {
                             HapticFeedback.selection()
@@ -198,6 +204,16 @@ struct SendView: View {
 
     // MARK: - Send Input View
 
+    private func tokenCreationFailureView(_ message: String) -> some View {
+        PaymentStatusView(
+            details: [],
+            phase: .failure(message: message),
+            failureTitle: "Couldn't Create Ecash",
+            onDone: { tokenCreationFailure = nil },
+            onRetry: { tokenCreationFailure = nil }
+        )
+    }
+
     private var sendInputView: some View {
         VStack(spacing: 0) {
             // Mint selector
@@ -226,15 +242,13 @@ struct SendView: View {
                             isDimmed: isInsufficientBalance
                         )
                     } else {
-                        Text(sendUnitEntryDisplay)
-                            .font(.system(size: 64, weight: .semibold, design: .rounded))
-                            .monospacedDigit()
-                            .foregroundStyle(isInsufficientBalance ? .secondary : .primary)
-                            .minimumScaleFactor(0.4)
-                            .lineLimit(1)
-                            .contentTransition(.numericText(value: Double(amountBaseUnits)))
-                            .animation(.snappy, value: amountBaseUnits)
-                            .animation(.snappy, value: isInsufficientBalance)
+                        AmountLockup(
+                            parts: AmountParts.parse(sendUnitEntryDisplay),
+                            role: .amountHero,
+                            value: Double(amountBaseUnits),
+                            isDimmed: isInsufficientBalance
+                        )
+                        .animation(.snappy, value: isInsufficientBalance)
                     }
                 }
 
@@ -289,39 +303,18 @@ struct SendView: View {
         .animation(.snappy(duration: 0.3), value: lockWithP2PK)
     }
 
-    /// Minimal notice for the send amount face — local so layout/animation stay
-    /// isolated from `InlineNotice` / overlay sizing quirks.
+    /// The send amount face's notice. Positioning only — the rendering belongs
+    /// to `InlineNotice`, which also supplies the VoiceOver severity prefix this
+    /// used to drop back when it was a hand-rolled copy of that component.
     private func sendInputNotice(
         message: String,
         detail: String?,
         severity: ErrorSeverity
     ) -> some View {
-        HStack(alignment: .top, spacing: 8) {
-            Image(systemName: severity.icon)
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(severity.foreground)
-                .accessibilityHidden(true)
-
-            VStack(alignment: .leading, spacing: 2) {
-                Text(message)
-                    .font(.caption)
-                    .foregroundStyle(severity.foreground)
-                if let detail {
-                    Text(detail)
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                }
-            }
-
-            Spacer(minLength: 0)
-        }
-        .padding(10)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(severity.tint, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-        .padding(.horizontal)
-        .padding(.bottom, 8)
-        .accessibilityElement(children: .combine)
-        .transition(.opacity)
+        InlineNotice(message: message, severity: severity, detail: detail)
+            .padding(.horizontal)
+            .padding(.bottom, 8)
+            .transition(.opacity)
     }
 
     // MARK: - Mint Selector
@@ -656,14 +649,16 @@ struct SendView: View {
                         CurrencyAmountDisplay(
                             sats: generatedAmount,
                             primary: $settings.amountDisplayPrimary,
-                            primarySize: 32
+                            role: .amountCompact
                         )
                     } else {
-                        Text(CurrencyAmount(value: generatedAmount, currency: generatedUnitCurrency).formatted())
-                            .font(.system(size: 32, weight: .semibold, design: .rounded))
-                            .monospacedDigit()
-                            .minimumScaleFactor(0.4)
-                            .lineLimit(1)
+                        AmountLockup(
+                            parts: AmountParts.parse(
+                                CurrencyAmount(value: generatedAmount, currency: generatedUnitCurrency).formatted()
+                            ),
+                            role: .amountCompact,
+                            value: Double(generatedAmount)
+                        )
                     }
 
                     // Status — inline badge transition, then dismiss + toast.
@@ -708,15 +703,13 @@ struct SendView: View {
                             InlineNotice(
                                 message: "This token has not been claimed yet.",
                                 title: "Status checked",
-                                severity: .info,
-                                tinted: true
+                                severity: .info
                             )
                         case .failed(let message):
                             InlineNotice(
                                 message: message.text,
                                 title: "Couldn't check status",
-                                severity: message.severity,
-                                tinted: true
+                                severity: message.severity
                             )
                         case .claimed, nil:
                             EmptyView()
@@ -878,6 +871,7 @@ struct SendView: View {
 
         isGenerating = true
         errorMessage = nil
+        tokenCreationFailure = nil
 
         Task { @MainActor in
             do {
@@ -901,19 +895,11 @@ struct SendView: View {
                     // change for it carries a fee the remainder can't absorb —
                     // the plain "Not enough balance." reads as a wallet bug when
                     // the user typed exactly what the screen says they hold.
-                    presentError(
-                        "Not enough balance to cover the mint fee.",
-                        severity: .caution,
-                        detail: "The mint charges a fee to make change for this amount. Try Send Max."
-                    )
+                    tokenCreationFailure = "Not enough balance to cover the mint fee. Try Send Max."
                 } else {
-                    presentError(
-                        walletMessage.text,
-                        severity: walletMessage.severity,
-                        showsMintAction: error.isInsufficientBalanceError
-                    )
+                    tokenCreationFailure = walletMessage.text
                 }
-                HapticFeedback.notification(.error)
+                errorMessage = nil
             }
             isGenerating = false
         }
@@ -1304,8 +1290,7 @@ struct UnifiedSendView: View {
         InlineNotice(
             message: message,
             severity: errorSeverity,
-            detail: errorShowsMintAction ? meltInsufficientDetail : nil,
-            tinted: true
+            detail: errorShowsMintAction ? meltInsufficientDetail : nil
         )
     }
 
@@ -2888,8 +2873,7 @@ struct MeltView: View {
         InlineNotice(
             message: message,
             severity: errorSeverity,
-            detail: errorShowsMintAction ? meltInsufficientDetail : nil,
-            tinted: true
+            detail: errorShowsMintAction ? meltInsufficientDetail : nil
         )
     }
 
@@ -3216,8 +3200,7 @@ struct MeltView: View {
             if displayMeltMint == nil, !availableMeltMints.isEmpty {
                 InlineNotice(
                     message: "No mint supports \(selectedMeltPaymentMethod.displayName) payments.",
-                    severity: .caution,
-                    tinted: true
+                    severity: .caution
                 )
                 .padding(.top, 12)
                 .padding(.horizontal)
@@ -3286,12 +3269,21 @@ struct MeltView: View {
         if !trimmed.isEmpty {
             let result = PaymentRequestDecoder.decode(trimmed)
             HStack(spacing: 6) {
-                Image(systemName: result == .unrecognized ? "exclamationmark.circle" : "checkmark.circle.fill")
+                Image(systemName: result == .unrecognized ? ErrorSeverity.error.icon : "checkmark.circle.fill")
                     .font(.caption.weight(.semibold))
                 Text(liveDecodeText(for: result))
                     .font(.caption)
             }
-            .foregroundStyle(result == .unrecognized ? Color.red : Color.secondary)
+            // Semantic red, and the severity's own glyph — this used to pair the
+            // *caution* circle with error red and bypass the token entirely.
+            //
+            // Deliberately NOT routed through InlineNotice, unlike every other
+            // site in this audit. This is a two-state decode *status* row, and
+            // its non-error state is a quiet secondary checkmark. InlineNotice's
+            // `.success` severity would render that green — turning a passive
+            // "yes, that parses" acknowledgement into a celebration. The row
+            // borrows the severity tokens without adopting the channel.
+            .foregroundStyle(result == .unrecognized ? ErrorSeverity.error.foreground : Color.secondary)
             .transition(.opacity)
             .accessibilityLabel(liveDecodeText(for: result))
         }
@@ -3318,7 +3310,7 @@ struct MeltView: View {
         CurrencyAmountDisplay(
             sats: amountSats,
             primary: $settings.amountDisplayPrimary,
-            primarySize: 48,
+            role: .amountConfirm,
             entryRaw: amountString
         )
         .accessibilityElement(children: .combine)

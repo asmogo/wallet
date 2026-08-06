@@ -109,20 +109,20 @@ struct CashuRequestAmountPickerSheet: View {
             CurrencyAmountDisplay(
                 sats: amountBaseUnits,
                 primary: $settings.amountDisplayPrimary,
-                primarySize: 56,
+                role: .amountHero,
                 entryRaw: amountString
             )
             .accessibilityLabel("Request amount: \(amountString.isEmpty ? "0" : amountString) sats")
         } else {
             // Non-sat mint unit: show it directly, no BTC-price flip.
-            Text(CurrencyAmount(value: amountBaseUnits, currency: unitCurrency).formatted())
-                .font(.system(size: 56, weight: .semibold, design: .rounded))
-                .monospacedDigit()
-                .minimumScaleFactor(0.4)
-                .lineLimit(1)
-                .contentTransition(.numericText(value: Double(amountBaseUnits)))
-                .animation(.snappy, value: amountBaseUnits)
-                .accessibilityLabel("Request amount: \(amountString.isEmpty ? "0" : amountString) \(unit)")
+            AmountLockup(
+                parts: AmountParts.parse(
+                    CurrencyAmount(value: amountBaseUnits, currency: unitCurrency).formatted()
+                ),
+                role: .amountHero,
+                value: Double(amountBaseUnits),
+                accessibilityPrefix: "Request amount"
+            )
         }
     }
 

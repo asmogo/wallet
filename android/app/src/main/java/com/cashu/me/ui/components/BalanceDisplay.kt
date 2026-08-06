@@ -11,37 +11,39 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.semantics.clearAndSetSemantics
-import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.cashu.me.Core.AmountDisplayText
+import com.cashu.me.Core.AmountParts
+import com.cashu.me.ui.theme.AmountScale
 import com.cashu.me.ui.theme.CashuTheme
 import com.cashu.me.ui.theme.rememberReducedMotion
 import com.cashu.me.ui.theme.withMonoDigits
 
-/** Fixed primary-line height for the 53sp hero number. */
-val BalanceHeroPrimaryHeight: Dp = 62.dp
-
-/** Fixed status-line height (titleMedium / delta / empty reserve). */
+/** Status-line height (titleMedium / delta / empty reserve). */
 val BalanceHeroStatusHeight: Dp = 24.dp
 
-/** Full hero column: primary + micro gap + status. */
-val BalanceHeroHeight: Dp = BalanceHeroPrimaryHeight + 4.dp + BalanceHeroStatusHeight
-
-private val BalanceHeroFontSize = 53.sp
+/**
+ * The hero column's reserved height: primary line box + micro gap + status.
+ *
+ * Derived from the resolved type metrics rather than being a constant. It stays
+ * fixed for a given text size, so a unit swap or a fiat show/hide still cannot
+ * reflow the home canvas — that guarantee is why the reservation exists. But it
+ * now grows with the text size, so a large-text user is no longer cropped by a
+ * box that was sized for the default.
+ */
+@Composable
+fun balanceHeroHeight(): Dp = amountHeroHeight(AmountScale.Hero) + 4.dp + BalanceHeroStatusHeight
 
 /** What occupies the status line under the hero number. */
 private sealed interface BalanceStatusLine {
@@ -86,24 +88,11 @@ fun BalanceDisplay(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(CashuTheme.spacing.micro),
     ) {
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(BalanceHeroPrimaryHeight),
-            contentAlignment = Alignment.Center,
-        ) {
-            AmountText(
-                text = amount.primary,
-                modifier = Modifier.clearAndSetSemantics {
-                    contentDescription = "Balance: ${amount.primary}"
-                },
-                style = MaterialTheme.typography.displayMedium.copy(
-                    fontWeight = FontWeight.Bold,
-                    fontSize = BalanceHeroFontSize,
-                ),
-                color = LocalContentColor.current,
-            )
-        }
+        AmountHero(
+            parts = amount.primaryParts,
+            scale = AmountScale.Hero,
+            accessibilityPrefix = "Balance",
+        )
         val statusLine: BalanceStatusLine = when {
             receivedDelta != null -> BalanceStatusLine.Delta(receivedDelta)
             statusMessage != null -> BalanceStatusLine.Status(statusMessage)

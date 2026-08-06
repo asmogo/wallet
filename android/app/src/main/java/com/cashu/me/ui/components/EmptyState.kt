@@ -136,7 +136,6 @@ fun EmptyState(
                 EmptyStateSize.Section ->
                     MaterialTheme.typography.titleMedium.copy(
                         fontWeight = FontWeight.SemiBold,
-                        letterSpacing = 0.sp,
                     )
             },
             color = MaterialTheme.colorScheme.onSurface,
@@ -150,9 +149,9 @@ fun EmptyState(
                 // roles' default letter spacing reads looser than the iOS twin.
                 style = when (size) {
                     EmptyStateSize.FullScreen ->
-                        MaterialTheme.typography.bodyLarge.copy(letterSpacing = 0.sp)
+                        MaterialTheme.typography.bodyLarge
                     EmptyStateSize.Section ->
-                        MaterialTheme.typography.bodyMedium.copy(letterSpacing = 0.sp)
+                        MaterialTheme.typography.bodyMedium
                 },
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 textAlign = TextAlign.Center,

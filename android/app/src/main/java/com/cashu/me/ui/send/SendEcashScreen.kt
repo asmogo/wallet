@@ -41,8 +41,8 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
-import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Key
+import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.outlined.AccountBalance
 import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.Close
@@ -55,11 +55,11 @@ import androidx.compose.material.icons.outlined.Payments
 import androidx.compose.material.icons.outlined.Receipt
 import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material.icons.outlined.Schedule
-import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
-import androidx.compose.material3.LoadingIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LoadingIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -77,11 +77,11 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.AccessibilityAction
 import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.AccessibilityAction
-import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
@@ -91,42 +91,45 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
-import com.cashu.me.Views.Components.ScannerQuickAction
 import com.cashu.me.Core.AmountFormatter
-import com.cashu.me.Core.WalletHaptic
-import com.cashu.me.Core.rememberWalletHaptics
+import com.cashu.me.Core.PendingTokenClaimCheckResult
 import com.cashu.me.Core.Protocols.CurrencyAmount
 import com.cashu.me.Core.Protocols.CurrencyRegistry
 import com.cashu.me.Core.SettingsManager
-import com.cashu.me.Core.PendingTokenClaimCheckResult
-import com.cashu.me.Core.runPendingTokenClaimCheck
 import com.cashu.me.Core.Wallet.isInsufficientBalance
 import com.cashu.me.Core.Wallet.userFacingWalletMessage
+import com.cashu.me.Core.WalletHaptic
 import com.cashu.me.Core.WalletManager
+import com.cashu.me.Core.rememberWalletHaptics
+import com.cashu.me.Core.runPendingTokenClaimCheck
 import com.cashu.me.Models.SendTokenResult
+import com.cashu.me.Views.Components.ScannerQuickAction
+import com.cashu.me.ui.components.SectionHeader
 import com.cashu.me.ui.components.AmountEntryHero
 import com.cashu.me.ui.components.CashuTextField
 import com.cashu.me.ui.components.GhostButton
 import com.cashu.me.ui.components.InlineNotice
-import com.cashu.me.ui.components.NoticeSeverity
 import com.cashu.me.ui.components.MintPickerSheet
 import com.cashu.me.ui.components.MintSelectorRow
+import com.cashu.me.ui.components.NoticeSeverity
+import com.cashu.me.ui.components.PaymentStatusPhase
+import com.cashu.me.ui.components.PaymentStatusScreen
 import com.cashu.me.ui.components.NumberPadFooter
 import com.cashu.me.ui.components.PrimaryButton
-import com.cashu.me.ui.components.neutralActionButtonColors
 import com.cashu.me.ui.components.QrCard
 import com.cashu.me.ui.components.SheetHeader
+import com.cashu.me.ui.components.ToolbarIcon
 import com.cashu.me.ui.components.TwoFaceScreen
 import com.cashu.me.ui.components.UnitPickerSheet
+import com.cashu.me.ui.components.neutralActionButtonColors
 import com.cashu.me.ui.components.shareText
-import com.cashu.me.ui.components.ToolbarIcon
 import com.cashu.me.ui.settings.P2PKKeyDisplay
+import com.cashu.me.ui.testing.UiTestTags
 import com.cashu.me.ui.theme.CashuTheme
 import com.cashu.me.ui.theme.rememberReducedMotion
 import com.cashu.me.ui.theme.withMonoDigits
-import com.cashu.me.ui.testing.UiTestTags
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 // Inline status icons inside dense rows — smaller than the standard 20dp body icon.
 private val STATUS_ICON_SMALL = 18.dp
@@ -156,6 +159,8 @@ data class SendEcashDraft(
 
 private sealed interface SendFace {
     data object Input : SendFace
+
+    data class Failure(val detail: String) : SendFace
 
     // Unit and amount are captured at generation time so the token face keeps
     // rendering correctly after the entry state resets.
@@ -322,9 +327,10 @@ fun SendEcashScreen(
     // Generation counts as money-in-motion: block sheet dismissal.
     LaunchedEffect(sending) { onDismissLockChanged(sending) }
 
-    // Dismissal contract: system back = swipe = abandon to the wallet, so the
+// Dismissal contract: system back = swipe = abandon to the wallet, so the
     // sheet handles it. The header chevron owns internal step-back (Generated →
-    // Input → Send). Swallow back only while a token is being generated.
+    // Input → Send, and Failure → Input). Swallow back only while a token is
+    // being generated.
     BackHandler(enabled = sending) {}
 
     Column(
@@ -336,6 +342,7 @@ fun SendEcashScreen(
             title = when (face) {
                 SendFace.Input -> "Send Ecash"
                 is SendFace.Generated -> "Pending Ecash"
+                is SendFace.Failure -> "Send Ecash"
             },
             navigationIcon = Icons.AutoMirrored.Outlined.ArrowBack,
             navigationContentDescription = "Back",
@@ -343,6 +350,7 @@ fun SendEcashScreen(
                 when (face) {
                     SendFace.Input -> onBack()
                     is SendFace.Generated -> face = SendFace.Input
+                    is SendFace.Failure -> face = SendFace.Input
                 }
             },
             actions = {
@@ -376,7 +384,8 @@ fun SendEcashScreen(
                 .weight(1f)
                 .fillMaxWidth(),
             forward = { initial, target ->
-                initial is SendFace.Input && target is SendFace.Generated
+                initial is SendFace.Input &&
+                    (target is SendFace.Generated || target is SendFace.Failure)
             },
             label = "send-ecash-face",
         ) { current ->
@@ -456,7 +465,7 @@ fun SendEcashScreen(
                                 face = SendFace.Generated(result, mintUrl, effectiveUnit, amountValue)
                                 amount = ""
                             } catch (t: Throwable) {
-                                errorText = if (t.isInsufficientBalance && amountValue <= mintBalance) {
+                                val detail = if (t.isInsufficientBalance && amountValue <= mintBalance) {
                                     // The balance covers the amount, but the
                                     // swap that makes change for it carries a
                                     // fee the remainder can't absorb — the
@@ -467,6 +476,8 @@ fun SendEcashScreen(
                                 } else {
                                     t.userFacingWalletMessage
                                 }
+                                errorText = null
+                                face = SendFace.Failure(detail)
                             } finally {
                                 sending = false
                             }
@@ -502,6 +513,14 @@ fun SendEcashScreen(
                         null
                     },
                     onDone = onClose,
+                )
+
+                is SendFace.Failure -> PaymentStatusScreen(
+                    phase = PaymentStatusPhase.Failure,
+                    title = "Couldn't Create Ecash",
+                    detail = current.detail,
+                    doneLabel = "Try Again",
+                    onDone = { face = SendFace.Input },
                 )
             }
         }
@@ -655,7 +674,7 @@ private fun InputFace(
                     val mintName = activeMint?.name
                     InlineNotice(
                         text = "Insufficient balance",
-                        severity = NoticeSeverity.Warning,
+                        severity = NoticeSeverity.Caution,
                         detail = if (!compactHeight && mintName != null) {
                             "You have $balanceText in $mintName."
                         } else {
@@ -668,6 +687,7 @@ private fun InputFace(
                     InlineNotice(
                         text = errorText,
                         modifier = Modifier.padding(bottom = CashuTheme.spacing.snug),
+                        severity = NoticeSeverity.Error,
                     )
                 }
             }
@@ -829,7 +849,7 @@ internal fun P2pkRecipientConfirmation(
                     Icon(Icons.Filled.Lock, null, tint = MaterialTheme.colorScheme.onSurface, modifier = Modifier.size(18.dp))
                 }
                 Column(Modifier.weight(1f)) {
-                    Text("LOCKED TO", style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold, letterSpacing = 0.5.sp), color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    SectionHeader("Locked to")
                     Text(recipientLabel, style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Medium), color = MaterialTheme.colorScheme.onSurface, maxLines = 1, overflow = TextOverflow.MiddleEllipsis)
                 }
             }
@@ -899,7 +919,7 @@ internal fun P2pkLockSection(
                             fontFamily = if (recipientIsOwnKey) {
                                 FontFamily.Default
                             } else {
-                                FontFamily.Monospace
+                                CashuTheme.fonts.mono
                             },
                         ),
                         color = MaterialTheme.colorScheme.onSurface,
@@ -949,17 +969,11 @@ internal fun P2pkLockSection(
                 capitalization = androidx.compose.ui.text.input.KeyboardCapitalization.None,
             ),
             textStyle = MaterialTheme.typography.bodyMedium.copy(
-                fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
+                fontFamily = CashuTheme.fonts.mono,
             ),
             isError = inputError != null && input.isNotBlank(),
+            supportingText = inputError?.takeIf { input.isNotBlank() },
         )
-        if (inputError != null && input.isNotBlank()) {
-            Text(
-                text = inputError,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.error,
-            )
-        }
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(CashuTheme.spacing.tight),
@@ -1038,41 +1052,46 @@ private fun GeneratedFace(
     }
 
     // Claimed resolves to the shared full-screen terminal (iOS parity), with
-    // the same Amount/Fee/Mint facts shown while the token is pending.
-    if (claimState == ClaimState.Claimed) {
-        val receipt = buildSendEcashReceiptDetails(
-            amountLabel = amountPresentation.primary,
-            fee = result.fee,
-            unit = unit,
-            mintUrl = mintUrl,
-        )
-        com.cashu.me.ui.components.PaymentStatusScreen(
-            phase = com.cashu.me.ui.components.PaymentStatusPhase.Success,
-            title = "Claimed",
-            onDone = onDone,
-            rows = {
-                com.cashu.me.ui.components.InspectorRow(
-                    label = "Amount",
-                    value = amountPresentation.primary,
-                    leadingIcon = Icons.Outlined.Payments,
-                )
-                receipt.fee?.let { feeLabel ->
+    // the same Amount/Fee/Mint facts shown while the token is pending. The QR
+    // face fades into it instead of hard-cutting.
+    AnimatedContent(
+        targetState = claimState == ClaimState.Claimed,
+        transitionSpec = { fadeIn(tween(200)) togetherWith fadeOut(tween(150)) },
+        label = "send-ecash-claimed-terminal",
+    ) { claimed ->
+        if (claimed) {
+            val receipt = buildSendEcashReceiptDetails(
+                amountLabel = amountPresentation.primary,
+                fee = result.fee,
+                unit = unit,
+                mintUrl = mintUrl,
+            )
+            com.cashu.me.ui.components.PaymentStatusScreen(
+                phase = com.cashu.me.ui.components.PaymentStatusPhase.Success,
+                title = "Claimed",
+                onDone = onDone,
+                rows = {
                     com.cashu.me.ui.components.InspectorRow(
-                        label = "Fee",
-                        value = feeLabel,
-                        valueMonospaced = true,
-                        leadingIcon = Icons.Outlined.Receipt,
+                        label = "Amount",
+                        value = amountPresentation.primary,
+                        leadingIcon = Icons.Outlined.Payments,
                     )
-                }
-                com.cashu.me.ui.components.InspectorRow(
-                    label = "Mint",
-                    value = receipt.mint,
-                    leadingIcon = Icons.Outlined.AccountBalance,
-                )
-            },
-        )
-        return
-    }
+                    receipt.fee?.let { feeLabel ->
+                        com.cashu.me.ui.components.InspectorRow(
+                            label = "Fee",
+                            value = feeLabel,
+                            valueMonospaced = true,
+                            leadingIcon = Icons.Outlined.Receipt,
+                        )
+                    }
+                    com.cashu.me.ui.components.InspectorRow(
+                        label = "Mint",
+                        value = receipt.mint,
+                        leadingIcon = Icons.Outlined.AccountBalance,
+                    )
+                },
+            )
+        } else {
 
     // Scroll region + pinned footer, mirroring iOS (ScrollView with the Copy
     // button outside it) and TransactionDetailScreen's Copy action.
@@ -1111,6 +1130,7 @@ private fun GeneratedFace(
                         modifier = Modifier.semantics {
                             liveRegion = LiveRegionMode.Polite
                         },
+                        severity = NoticeSeverity.Caution,
                     )
                     PendingTokenClaimCheckResult.Claimed, null -> Unit
                 }
@@ -1188,6 +1208,8 @@ private fun GeneratedFace(
             }
         }
         Spacer(Modifier.windowInsetsBottomHeight(WindowInsets.navigationBars))
+    }
+        }
     }
 }
 

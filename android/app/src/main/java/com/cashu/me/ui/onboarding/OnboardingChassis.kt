@@ -110,14 +110,12 @@ internal object OnboardingMetrics {
     val TitleTopInset = BarTopInset + BarHeight + TitleGap
 }
 
-/** iOS `.largeTitle.weight(.heavy)` + `.tracking(-0.5)` — the step-title voice. */
+/** iOS `.largeTitle.weight(.heavy)` + `.tracking(-0.5)` — the step-title voice.
+ * The role carries size, leading, and tracking together; a literal sp tracking
+ * here would not scale with the text, which `TypographyGuardTest` enforces. */
 @Composable
 internal fun onboardingTitleStyle(): TextStyle =
-    MaterialTheme.typography.displaySmall.copy(
-        fontWeight = FontWeight.ExtraBold,
-        letterSpacing = (-0.5).sp,
-        lineHeight = 40.sp,
-    )
+    CashuTheme.type.title
 
 // Single-line headlines render at full display size and step down only when
 // the line would overflow (narrow devices / large font scales). Multi-line

@@ -40,6 +40,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -47,6 +48,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
@@ -56,7 +59,9 @@ import kotlinx.coroutines.launch
 import com.cashu.me.Core.AppLogger
 import com.cashu.me.Core.MintDiscoveryManager
 import com.cashu.me.Core.SettingsManager
+import com.cashu.me.Core.Wallet.userFacingWalletMessage
 import com.cashu.me.Core.WalletManager
+import com.cashu.me.Core.canonicalDiscoveredMintUrl
 import com.cashu.me.Core.shortenMintUrl
 import com.cashu.me.Models.MintInfo
 import com.cashu.me.ui.components.CashuSearchBar
@@ -73,17 +78,20 @@ fun MintDiscoveryContent(
     walletManager: WalletManager,
     settingsManager: SettingsManager,
     mintDiscoveryManager: MintDiscoveryManager,
+    onMintAdded: () -> Unit = {},
 ) {
     val walletState by walletManager.state.collectAsState()
     val settings by settingsManager.state.collectAsState()
     val discoveryState by mintDiscoveryManager.state.collectAsState()
     val scope = rememberCoroutineScope()
+    val haptics = LocalHapticFeedback.current
 
     var query by remember { mutableStateOf("") }
+    val addStates = remember { mutableStateMapOf<String, DiscoveryRowState>() }
 
-    val configuredUrls = remember(walletState.mints) { walletState.mints.map { it.url }.toSet() }
-    var addedUrlsThisSession by remember { mutableStateOf(emptySet<String>()) }
-    val addedUrls = remember(configuredUrls, addedUrlsThisSession) { configuredUrls + addedUrlsThisSession }
+    val configuredUrls = remember(walletState.mints) {
+        walletState.mints.mapNotNull { canonicalDiscoveredMintUrl(it.url) }.toSet()
+    }
 
     val filtered by remember(discoveryState.discoveredMints, query) {
         derivedStateOf {
@@ -96,11 +104,19 @@ fun MintDiscoveryContent(
             }
         }
     }
-    val addedMints by remember(filtered, addedUrls) {
-        derivedStateOf { filtered.filter { it.url in addedUrls } }
+    val addedMints by remember(filtered, configuredUrls, addStates) {
+        derivedStateOf {
+            filtered.filter { mint ->
+                mint.url in configuredUrls || addStates[mint.url] == DiscoveryRowState.Added
+            }
+        }
     }
-    val discoverableMints by remember(filtered, addedUrls) {
-        derivedStateOf { filtered.filterNot { it.url in addedUrls } }
+    val discoverableMints by remember(filtered, configuredUrls, addStates) {
+        derivedStateOf {
+            filtered.filterNot { mint ->
+                mint.url in configuredUrls || addStates[mint.url] == DiscoveryRowState.Added
+            }
+        }
     }
 
     LaunchedEffect(settings.useWebsockets) {
@@ -213,7 +229,6 @@ fun MintDiscoveryContent(
                                 DiscoveryRow(
                                     mint = mint,
                                     state = DiscoveryRowState.Added,
-                                    isBusy = walletState.isLoading,
                                     onAdd = {},
                                 )
                             }
@@ -228,11 +243,27 @@ fun MintDiscoveryContent(
                             Column(modifier = Modifier.animateItem()) {
                                 DiscoveryRow(
                                     mint = mint,
-                                    state = DiscoveryRowState.Discovered,
-                                    isBusy = walletState.isLoading,
+                                    state = addStates[mint.url] ?: DiscoveryRowState.Ready,
                                     onAdd = {
-                                        addedUrlsThisSession = addedUrlsThisSession + mint.url
-                                        scope.launch { runCatching { walletManager.addMint(mint.url) } }
+                                        if (addStates[mint.url] != DiscoveryRowState.Adding) {
+                                            addStates[mint.url] = DiscoveryRowState.Adding
+                                            scope.launch {
+                                                try {
+                                                    walletManager.addMint(mint.url)
+                                                    addStates[mint.url] = DiscoveryRowState.Added
+                                                    haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                                    onMintAdded()
+                                                } catch (error: CancellationException) {
+                                                    addStates.remove(mint.url)
+                                                    throw error
+                                                } catch (error: Throwable) {
+                                                    addStates[mint.url] = DiscoveryRowState.Failed(
+                                                        error.userFacingWalletMessage,
+                                                    )
+                                                    haptics.performHapticFeedback(HapticFeedbackType.Reject)
+                                                }
+                                            }
+                                        }
                                     },
                                 )
                             }
@@ -249,7 +280,6 @@ fun MintDiscoveryContent(
 private fun DiscoveryRow(
     mint: MintInfo,
     state: DiscoveryRowState,
-    isBusy: Boolean,
     onAdd: () -> Unit,
 ) {
     val displayName = mint.discoveryDisplayName()
@@ -290,6 +320,13 @@ private fun DiscoveryRow(
                 maxLines = 1,
                 overflow = TextOverflow.MiddleEllipsis,
             )
+            if (state is DiscoveryRowState.Failed) {
+                Text(
+                    text = state.message,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.error,
+                )
+            }
         }
         // Add ↔ Added swaps within one fixed slot so both glyphs stay aligned
         // and render at exactly the same size.
@@ -312,21 +349,35 @@ private fun DiscoveryRow(
             label = "discovery-trailing",
         ) { rowState ->
             val isAdded = rowState == DiscoveryRowState.Added
-            IconButton(
-                onClick = { if (!isAdded) onAdd() },
-                enabled = !isAdded && !isBusy,
-                modifier = Modifier.size(48.dp),
-            ) {
-                Icon(
-                    imageVector = if (isAdded) Icons.Filled.CheckCircle else Icons.Outlined.AddCircle,
-                    contentDescription = if (isAdded) "Added" else "Add $displayName",
-                    tint = if (isAdded) {
-                        MaterialTheme.colorScheme.onSurfaceVariant
-                    } else {
-                        MaterialTheme.colorScheme.onSurface
-                    },
-                    modifier = Modifier.size(DiscoveryActionGlyphSize),
-                )
+            if (rowState == DiscoveryRowState.Adding) {
+                Box(modifier = Modifier.size(48.dp), contentAlignment = Alignment.Center) {
+                    LoadingIndicator(
+                        modifier = Modifier
+                            .size(DiscoveryActionGlyphSize)
+                            .semantics { contentDescription = "Adding $displayName" },
+                    )
+                }
+            } else {
+                IconButton(
+                    onClick = { if (!isAdded) onAdd() },
+                    enabled = !isAdded,
+                    modifier = Modifier.size(48.dp),
+                ) {
+                    Icon(
+                        imageVector = if (isAdded) Icons.Filled.CheckCircle else Icons.Outlined.AddCircle,
+                        contentDescription = when {
+                            isAdded -> "Added"
+                            rowState is DiscoveryRowState.Failed -> "Retry adding $displayName"
+                            else -> "Add $displayName"
+                        },
+                        tint = if (isAdded) {
+                            MaterialTheme.colorScheme.onSurfaceVariant
+                        } else {
+                            MaterialTheme.colorScheme.onSurface
+                        },
+                        modifier = Modifier.size(DiscoveryActionGlyphSize),
+                    )
+                }
             }
         }
     }
@@ -374,7 +425,12 @@ private fun DiscoverySectionHeader(title: String, modifier: Modifier = Modifier)
     )
 }
 
-private enum class DiscoveryRowState { Added, Discovered }
+private sealed interface DiscoveryRowState {
+    data object Ready : DiscoveryRowState
+    data object Adding : DiscoveryRowState
+    data object Added : DiscoveryRowState
+    data class Failed(val message: String) : DiscoveryRowState
+}
 
 private fun MintInfo.discoveryDisplayName(): String {
     val trimmed = name.trim()

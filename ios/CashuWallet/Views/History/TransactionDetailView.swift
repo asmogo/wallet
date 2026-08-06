@@ -125,24 +125,26 @@ struct TransactionDetailView: View {
                         // carries the state colour.
                         Group {
                             if !isSatUnit {
-                                Text(formattedNativeAmount)
-                                    .font(.system(size: showsQR ? 32 : 48, weight: .semibold, design: .rounded))
-                                    .monospacedDigit()
-                                    .lineLimit(1)
-                                    .minimumScaleFactor(0.5)
-                                    .accessibilityLabel("Amount: \(formattedNativeAmount)")
+                                AmountLockup(
+                                    parts: AmountParts.parse(formattedNativeAmount),
+                                    role: showsQR ? .amountCompact : .amountConfirm,
+                                    value: Double(transaction.amount),
+                                    accessibilityPrefix: "Amount"
+                                )
                             } else if transaction.kind == .onchain {
-                                Text(AmountFormatter.sats(transaction.amount, useBitcoinSymbol: settings.useBitcoinSymbol))
-                                    .font(.system(size: showsQR ? 32 : 48, weight: .semibold, design: .rounded))
-                                    .monospacedDigit()
-                                    .lineLimit(1)
-                                    .minimumScaleFactor(0.5)
-                                    .accessibilityLabel("Amount: \(transaction.amount) sats")
+                                AmountLockup(
+                                    parts: AmountFormatter.satsParts(
+                                        transaction.amount, useBitcoinSymbol: settings.useBitcoinSymbol
+                                    ),
+                                    role: showsQR ? .amountCompact : .amountConfirm,
+                                    value: Double(transaction.amount),
+                                    accessibilityPrefix: "Amount"
+                                )
                             } else {
                                 CurrencyAmountDisplay(
                                     sats: transaction.amount,
                                     primary: $settings.amountDisplayPrimary,
-                                    primarySize: showsQR ? 32 : 48
+                                    role: showsQR ? .amountCompact : .amountConfirm
                                 )
                                 .accessibilityLabel("Amount: \(transaction.amount) sats")
                             }
@@ -172,15 +174,13 @@ struct TransactionDetailView: View {
                                 InlineNotice(
                                     message: "This token has not been claimed yet.",
                                     title: "Status checked",
-                                    severity: .info,
-                                    tinted: true
+                                    severity: .info
                                 )
                             case .failed(let message):
                                 InlineNotice(
                                     message: message.text,
                                     title: "Couldn't check status",
-                                    severity: message.severity,
-                                    tinted: true
+                                    severity: message.severity
                                 )
                             case .claimed, nil:
                                 EmptyView()
@@ -295,15 +295,18 @@ struct TransactionDetailView: View {
             // Static glyph — no `.symbolEffect(.bounce)`. This is historical review
             // (a detail screen re-opened often), not the live payment-received moment
             // that owns the bounce (DESIGN.md §6). The status already happened.
+            // Status hero, not an inline notice — but it speaks the same
+            // severity vocabulary, so it takes the same tokens rather than
+            // raw .green/.red.
             Image(systemName: "checkmark.circle.fill")
                 .font(.system(size: 64))
-                .foregroundStyle(.green)
+                .foregroundStyle(ErrorSeverity.success.foreground)
                 .padding(.top, 24)
                 .accessibilityLabel("Completed")
         } else if transaction.status == .failed {
             Image(systemName: "xmark.circle.fill")
                 .font(.system(size: 64))
-                .foregroundStyle(.red)
+                .foregroundStyle(ErrorSeverity.error.foreground)
                 .padding(.top, 24)
                 .accessibilityLabel("Failed")
         }

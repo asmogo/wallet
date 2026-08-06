@@ -246,10 +246,7 @@ fun PrimaryButton(
                     Text(
                         text = current,
                         modifier = morph,
-                        style = MaterialTheme.typography.titleMedium.copy(
-                            fontWeight = FontWeight.SemiBold,
-                            fontSize = 18.sp,
-                        ),
+                        style = CashuTheme.type.buttonLabel,
                     )
                 }
             }
@@ -282,10 +279,7 @@ fun SecondaryButton(
     ) {
         Text(
             text = text,
-            style = MaterialTheme.typography.titleMedium.copy(
-                fontWeight = FontWeight.SemiBold,
-                fontSize = 18.sp,
-            ),
+            style = CashuTheme.type.buttonLabel,
         )
     }
 }

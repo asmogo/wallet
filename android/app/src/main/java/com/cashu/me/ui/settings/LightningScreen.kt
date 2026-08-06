@@ -19,8 +19,8 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.outlined.QrCode2
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -43,7 +43,6 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.text.AnnotatedString
-import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.cashu.me.Core.NPCService
@@ -54,12 +53,14 @@ import com.cashu.me.ui.components.GhostButton
 import com.cashu.me.ui.components.InlineNotice
 import com.cashu.me.ui.components.InspectorRow
 import com.cashu.me.ui.components.MintPickerSheet
+import com.cashu.me.ui.components.NoticeSeverity
 import com.cashu.me.ui.components.PrimaryButton
 import com.cashu.me.ui.components.QrCard
 import com.cashu.me.ui.components.SectionHeader
 import com.cashu.me.ui.components.ToggleRow
 import com.cashu.me.ui.components.ToolbarIcon
 import com.cashu.me.ui.theme.CashuTheme
+import com.cashu.me.ui.theme.withSlashedZero
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 
@@ -213,6 +214,7 @@ fun LightningScreen(
                     InlineNotice(
                         text = npcState.errorMessage!!,
                         modifier = Modifier.padding(horizontal = CashuTheme.spacing.comfortable),
+                        severity = NoticeSeverity.Error,
                     )
                 }
             }
@@ -268,7 +270,7 @@ fun LightningScreen(
                 )
                 Text(
                     text = npcState.lightningAddress,
-                    style = MaterialTheme.typography.bodyMedium.copy(fontFamily = FontFamily.Monospace),
+                    style = MaterialTheme.typography.bodyMedium.copy(fontFamily = CashuTheme.fonts.mono).withSlashedZero(),
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 Spacer(Modifier.height(CashuTheme.spacing.snug))
@@ -318,6 +320,7 @@ internal fun LightningAddressSetupFeedback(
             InlineNotice(
                 text = recoveryError
                     ?: "Wallet not fully initialized. Try setup again to finish your Lightning address.",
+                severity = NoticeSeverity.Error,
             )
             PrimaryButton(
                 text = "Try setup again",
@@ -355,7 +358,7 @@ private fun LightningAddressRow(
         )
         Text(
             text = address,
-            style = MaterialTheme.typography.bodyLarge.copy(fontFamily = FontFamily.Monospace),
+            style = MaterialTheme.typography.bodyLarge.copy(fontFamily = CashuTheme.fonts.mono).withSlashedZero(),
             color = MaterialTheme.colorScheme.onSurface,
             modifier = Modifier.weight(1f),
             maxLines = 1,

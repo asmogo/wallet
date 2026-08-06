@@ -279,34 +279,43 @@ internal fun NfcReceiveOverlayContent(
     onSuccessDone: () -> Unit,
     onRetry: () -> Unit,
 ) {
-    when (state.phase) {
-        NfcReceivePhase.Failure -> PaymentStatusScreen(
-            phase = PaymentStatusPhase.Failure,
-            title = "Payment failed",
-            detail = state.message ?: "The payment could not be received.",
-            doneLabel = "Try again",
-            onDone = onRetry,
-        )
-        NfcReceivePhase.Validating,
-        NfcReceivePhase.Redeeming,
-        NfcReceivePhase.Converting,
-        NfcReceivePhase.Success,
-        -> {
-            val succeeded = state.phase == NfcReceivePhase.Success
+    // One content key for every status phase keeps a single
+    // PaymentStatusScreen mounted across Validating → … → Success/Failure, so
+    // the spinner morphs into the check/X and the title crossfades in place;
+    // keep-phones-together ↔ status fades through instead of hard-cutting.
+    AnimatedContent(
+        targetState = state.phase,
+        transitionSpec = { fadeIn(tween(200)) togetherWith fadeOut(tween(150)) },
+        label = "nfc-receive-terminal",
+        contentKey = { it in NfcStatusPhases },
+    ) { phase ->
+        if (phase in NfcStatusPhases) {
             PaymentStatusScreen(
-                phase = if (succeeded) PaymentStatusPhase.Success else PaymentStatusPhase.Processing,
-                title = if (succeeded) {
-                    "Payment Received!"
-                } else {
-                    when (state.phase) {
-                        NfcReceivePhase.Validating -> "Checking payment"
-                        NfcReceivePhase.Redeeming -> "Securing ecash"
-                        else -> "Moving to your default mint"
-                    }
+                phase = when (phase) {
+                    NfcReceivePhase.Success -> PaymentStatusPhase.Success
+                    NfcReceivePhase.Failure -> PaymentStatusPhase.Failure
+                    else -> PaymentStatusPhase.Processing
                 },
-                detail = if (succeeded) null else "Transfer complete — you can move the phones apart.",
-                onDone = onSuccessDone.takeIf { succeeded },
-                rows = if (succeeded) {
+                title = when (phase) {
+                    NfcReceivePhase.Success -> "Payment Received!"
+                    NfcReceivePhase.Failure -> "Payment failed"
+                    NfcReceivePhase.Validating -> "Checking payment"
+                    NfcReceivePhase.Redeeming -> "Securing ecash"
+                    else -> "Moving to your default mint"
+                },
+                detail = when (phase) {
+                    NfcReceivePhase.Failure ->
+                        state.message ?: "The payment could not be received."
+                    NfcReceivePhase.Success -> null
+                    else -> "Transfer complete — you can move the phones apart."
+                },
+                doneLabel = if (phase == NfcReceivePhase.Failure) "Try again" else "Done",
+                onDone = when (phase) {
+                    NfcReceivePhase.Success -> onSuccessDone
+                    NfcReceivePhase.Failure -> onRetry
+                    else -> null
+                },
+                rows = if (phase == NfcReceivePhase.Success) {
                     {
                         CashuRequestReceiptRows(
                             amountLabel = successAmountLabel,
@@ -317,10 +326,20 @@ internal fun NfcReceiveOverlayContent(
                     null
                 },
             )
+        } else {
+            NfcTransferScreen()
         }
-        else -> NfcTransferScreen()
     }
 }
+
+/** Phases rendered on the shared status terminal (the rest is the transfer beat). */
+private val NfcStatusPhases = setOf(
+    NfcReceivePhase.Validating,
+    NfcReceivePhase.Redeeming,
+    NfcReceivePhase.Converting,
+    NfcReceivePhase.Success,
+    NfcReceivePhase.Failure,
+)
 
 @Composable
 private fun NfcTransferScreen() {

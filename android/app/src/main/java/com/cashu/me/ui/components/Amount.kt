@@ -15,6 +15,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -24,6 +27,15 @@ import com.cashu.me.ui.theme.withMonoDigits
  * Monospaced-digit amount text. Use everywhere balances, amounts, and fees
  * appear. Cross-fades on change — the same quiet, no-slide transition the
  * app's other amount swaps already use (see [AmountFlipDisplay], [BalanceDisplay]).
+ *
+ * @param annotated a pre-composed styled string to render in place of [text],
+ *   used by [AmountHero] to set the value and its unit as two runs of one
+ *   string. [text] still supplies the cross-fade key and the fallback
+ *   accessibility reading, so the animation keys on the value rather than on
+ *   incidental styling.
+ * @param semanticsLabel replaces the node's reading entirely. Amount strings
+ *   contain glyphs like `₿` that announce as nothing useful, so a hero should
+ *   always pass a spoken form.
  */
 @Composable
 fun AmountText(
@@ -33,8 +45,12 @@ fun AmountText(
     color: Color = Color.Unspecified,
     animated: Boolean = true,
     maxLines: Int = Int.MAX_VALUE,
-    overflow: TextOverflow = TextOverflow.Clip,
+    // Ellipsis, not Clip: a hard cut mid-glyph reads as a rendering fault,
+    // and every caller that had thought about it was already overriding this.
+    overflow: TextOverflow = TextOverflow.Ellipsis,
     autoSize: TextAutoSize? = null,
+    annotated: AnnotatedString? = null,
+    semanticsLabel: String? = null,
 ) {
     val resolvedColor = if (color == Color.Unspecified) LocalContentColor.current else color
     val finalStyle = style.withMonoDigits().copy(color = resolvedColor)
@@ -43,11 +59,15 @@ fun AmountText(
         TextAlign.End, TextAlign.Right -> Alignment.CenterEnd
         else -> Alignment.CenterStart
     }
+    val semantics = semanticsLabel?.let { label ->
+        Modifier.clearAndSetSemantics { contentDescription = label }
+    } ?: Modifier
     // Auto-size needs a bounded width; fill so the Text sees the parent's max.
-    val textModifier = if (autoSize != null) Modifier.fillMaxWidth() else Modifier
+    val textModifier = (if (autoSize != null) Modifier.fillMaxWidth() else Modifier).then(semantics)
+
     if (!animated) {
         Text(
-            text = text,
+            text = annotated ?: AnnotatedString(text),
             style = finalStyle,
             modifier = modifier.then(textModifier),
             maxLines = maxLines,
@@ -57,7 +77,21 @@ fun AmountText(
         return
     }
     AnimatedContent(
-        targetState = text,
+        // Each state carries the styled string it was composed with, and
+        // `contentKey` keys the transition on the plain value alone — so a
+        // styling change still does not trigger a fade.
+        //
+        // Reading `annotated` from the enclosing scope instead was a flicker on
+        // every keypress. AnimatedContent keeps the outgoing content composed
+        // while it fades and re-invokes this lambda for it, passing the *old*
+        // value while `text` and `annotated` have already advanced — so an
+        // `targetText == text` test fails for the outgoing number every time and
+        // drops it to an unstyled string. The unit snapped from half-size,
+        // one-weight-down, secondary ink up to full size and full ink at the
+        // instant it began to disappear, and the wider unstyled string could
+        // take a different autosize step on the way out.
+        targetState = text to (annotated ?: AnnotatedString(text)),
+        contentKey = { it.first },
         transitionSpec = {
             fadeIn(spring(stiffness = Spring.StiffnessMedium))
                 .togetherWith(fadeOut(spring(stiffness = Spring.StiffnessMedium)))
@@ -65,9 +99,9 @@ fun AmountText(
         modifier = modifier,
         contentAlignment = contentAlignment,
         label = "amount-text",
-    ) { targetText ->
+    ) { (_, styled) ->
         Text(
-            text = targetText,
+            text = styled,
             style = finalStyle,
             modifier = textModifier,
             maxLines = maxLines,

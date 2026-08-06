@@ -12,7 +12,9 @@ class ScannerViewModel: ObservableObject {
     /// Severity of `errorMessage`. `.error` paints the alarm-red toast; `.info`
     /// renders a neutral material so a success confirmation (e.g. "copied") isn't
     /// styled as a failure.
-    @Published var noticeSeverity: ErrorSeverity = .error
+    // Caution, not error: a QR that isn't what we wanted didn't break
+    // anything. Genuine failures raise this explicitly.
+    @Published var noticeSeverity: ErrorSeverity = .caution
 
     #if canImport(URKit)
     private var decoder = URDecoder()
@@ -25,7 +27,7 @@ class ScannerViewModel: ObservableObject {
         scanProgress = 0
         isScanning = true
         errorMessage = nil
-        noticeSeverity = .error
+        noticeSeverity = .caution
     }
     
     func processFragment(_ fragment: String) -> String? {
@@ -275,16 +277,18 @@ struct ScannerWrapperView: View {
                 if let error = scannerModel.errorMessage {
                     VStack {
                         Spacer()
-                        Text(error)
-                            .foregroundStyle(.primary)
-                            .padding()
-                            .background(
-                                scannerModel.noticeSeverity == .error
-                                    ? AnyShapeStyle(Color.red)
-                                    : AnyShapeStyle(.regularMaterial)
-                            )
-                            .clipShape(.rect(cornerRadius: 10))
-                            .padding(.bottom, 100)
+                        // Floats over the camera preview, so it is the floating
+                        // channel's own component. This screen used to hand-roll
+                        // the banner's exact body — material, glyph, combined
+                        // accessibility element — which is how it drifted to a
+                        // solid red slab in the first place. Position it; don't
+                        // restyle it.
+                        ErrorBannerView(
+                            message: error,
+                            severity: scannerModel.noticeSeverity
+                        )
+                        .padding(.horizontal)
+                        .padding(.bottom, 100)
                     }
                 }
             }
@@ -617,8 +621,7 @@ struct CashuPaymentRequestPayView: View {
         } else if let amount = request.amount {
             VStack(spacing: 6) {
                 Text("\(amount)")
-                    .font(.system(size: 48, weight: .semibold, design: .rounded))
-                    .monospacedDigit()
+                    .cashuAmount(.amountHero, value: Double(amount))
                 Text(request.unit ?? "unknown unit")
                     .font(.headline)
                     .foregroundStyle(.secondary)
@@ -1463,10 +1466,12 @@ struct CashuTopUpInvoiceSheet: View {
                         }
 
                         statusRow
+                            .animation(.smooth(duration: 0.3), value: phase)
 
                         if let errorMessage {
                             InlineNotice(message: errorMessage, severity: errorSeverity)
                                 .padding(.horizontal)
+                                .transition(.opacity)
                         }
                     }
                     .padding(.top, 12)
@@ -1507,11 +1512,14 @@ struct CashuTopUpInvoiceSheet: View {
 
     @ViewBuilder
     private var statusRow: some View {
+        // Phase swaps fade through (the app-wide .smooth(0.3) payment
+        // choreography) instead of popping per poll beat.
         switch phase {
         case .awaitingPayment:
             Label("Waiting for payment…", systemImage: "clock")
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
+                .transition(.opacity)
         case .paying:
             HStack(spacing: 8) {
                 ProgressView().controlSize(.small)
@@ -1519,12 +1527,14 @@ struct CashuTopUpInvoiceSheet: View {
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
             }
+            .transition(.opacity)
         case .done:
             // Monochrome, not green — green is reserved for the 64pt hero success
             // checks (DESIGN.md retired the small worded green ✓ badge).
             Label("Sent", systemImage: "checkmark.circle.fill")
                 .font(.subheadline)
                 .foregroundStyle(.primary)
+                .transition(.opacity)
         }
     }
 
@@ -1553,7 +1563,7 @@ struct CashuTopUpInvoiceSheet: View {
                 }
                 guard state == .paid || state == .issued else { continue }
 
-                phase = .paying
+                withAnimation(.smooth(duration: 0.3)) { phase = .paying }
                 do {
                     try await walletManager.finishTopUpAndPayCashuRequest(
                         context.summary,
@@ -1561,15 +1571,17 @@ struct CashuTopUpInvoiceSheet: View {
                         targetMintURL: context.targetMintURL,
                         targetQuoteId: context.quote.id
                     )
-                    phase = .done
+                    withAnimation(.smooth(duration: 0.3)) { phase = .done }
                     HapticFeedback.notification(.success)
                     try? await Task.sleep(nanoseconds: 1_000_000_000)
                     onComplete()
                 } catch {
                     let walletMessage = error.walletMessage
-                    errorMessage = walletMessage.text
-                    errorSeverity = walletMessage.severity
-                    phase = .awaitingPayment   // let the retries/History backstop settle it
+                    withAnimation(.smooth(duration: 0.3)) {
+                        errorMessage = walletMessage.text
+                        errorSeverity = walletMessage.severity
+                        phase = .awaitingPayment   // let the retries/History backstop settle it
+                    }
                 }
                 return
             }

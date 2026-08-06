@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
@@ -45,6 +46,7 @@ import com.cashu.me.Core.NostrService
 import com.cashu.me.Core.SettingsManager
 import com.cashu.me.Core.TokenParser
 import com.cashu.me.Core.WalletManager
+import com.cashu.me.Core.Wallet.userFacingWalletMessage
 import com.cashu.me.Core.createNostrCashuRequest
 import com.cashu.me.ui.components.CashuTextField
 import com.cashu.me.ui.components.CircularMethodButton
@@ -53,6 +55,8 @@ import com.cashu.me.ui.components.GhostButton
 import com.cashu.me.ui.components.InlineNotice
 import com.cashu.me.ui.components.MethodRowSpacing
 import com.cashu.me.ui.components.NoticeSeverity
+import com.cashu.me.ui.components.PaymentStatusPhase
+import com.cashu.me.ui.components.PaymentStatusScreen
 import com.cashu.me.ui.send.SendDestinationResolution
 import com.cashu.me.ui.send.resolveSendDestination
 import com.cashu.me.ui.theme.CashuTheme
@@ -106,6 +110,7 @@ fun ReceiveEcashScreen(
 
     var input by remember { mutableStateOf("") }
     var inputHint by remember { mutableStateOf<String?>(null) }
+    var requestFailure by remember { mutableStateOf<String?>(null) }
     // Once we've routed away (token → claim, payable → Send) the debounce must
     // not re-fire; reset whenever the field is edited or cleared.
     var routed by remember { mutableStateOf(false) }
@@ -132,9 +137,10 @@ fun ReceiveEcashScreen(
                 relays = configuration.relays,
             )
         }.onSuccess { request ->
+            requestFailure = null
             onOpenRequest(request.id)
         }.onFailure {
-            inputHint = it.message ?: "Couldn't create a request."
+            requestFailure = it.userFacingWalletMessage
         }
     }
 
@@ -185,6 +191,27 @@ fun ReceiveEcashScreen(
         input = pre
         routeInput(pre)
         onPrefilledConsumed()
+    }
+
+    val failure = requestFailure
+    if (failure != null) {
+        Column(
+            modifier = Modifier
+                .fillMaxHeight()
+                .fillMaxWidth()
+                .testTag(UiTestTags.ReceiveSheet),
+        ) {
+            FlowSheetTitle(title = "Receive")
+            PaymentStatusScreen(
+                phase = PaymentStatusPhase.Failure,
+                title = "Couldn't Create Request",
+                detail = failure,
+                modifier = Modifier.weight(1f),
+                doneLabel = "Try Again",
+                onDone = { requestFailure = null },
+            )
+        }
+        return
     }
 
     Column(
@@ -275,7 +302,7 @@ fun ReceiveEcashScreen(
                 if (hint != null) {
                     Column {
                         Spacer(Modifier.height(CashuTheme.spacing.default))
-                        InlineNotice(text = hint, severity = NoticeSeverity.Warning)
+                        InlineNotice(text = hint, severity = NoticeSeverity.Caution)
                     }
                 }
             }

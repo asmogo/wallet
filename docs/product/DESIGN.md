@@ -14,49 +14,66 @@ colors:
   pending-tint: "#FF95001A"
   error-tint: "#FF3B302E"
 typography:
-  balance:
-    fontFamily: "SF Pro, -apple-system, system-ui, sans-serif"
-    fontSize: "34px"
-    fontWeight: 700
-    lineHeight: 1.06
+  # Reified in ios/CashuWallet/DesignSystem/CashuTextRole.swift and
+  # android .../ui/theme/Type.kt. Sizes are iOS pt at the default text size;
+  # tracking is em, resolved against the live size. See DESIGN.md section 3.
+  amountHero:
+    fontSize: "52px"
+    fontWeight: 600
+    lineHeight: 1.1
+    letterSpacing: "-0.015em"
+    fontFeature: "tnum"
+  amountConfirm:
+    fontSize: "40px"
+    fontWeight: 600
+    lineHeight: 1.1
+    letterSpacing: "-0.01em"
+    fontFeature: "tnum"
+  amountCompact:
+    fontSize: "28px"
+    fontWeight: 600
+    lineHeight: 1.15
+    fontFeature: "tnum"
+  amountRow:
+    fontSize: "17px"
+    fontWeight: 500
+    lineHeight: 1.29
     fontFeature: "tnum"
   title:
-    fontFamily: "SF Pro, -apple-system, system-ui, sans-serif"
     fontSize: "28px"
     fontWeight: 600
     lineHeight: 1.14
   title3:
-    fontFamily: "SF Pro, -apple-system, system-ui, sans-serif"
     fontSize: "20px"
     fontWeight: 500
     lineHeight: 1.2
-  body:
-    fontFamily: "SF Pro, -apple-system, system-ui, sans-serif"
-    fontSize: "17px"
-    fontWeight: 400
-    lineHeight: 1.29
-  body-emphasis:
-    fontFamily: "SF Pro, -apple-system, system-ui, sans-serif"
+  bodyEmphasis:
     fontSize: "17px"
     fontWeight: 600
     lineHeight: 1.29
-  callout:
-    fontFamily: "SF Pro, -apple-system, system-ui, sans-serif"
-    fontSize: "16px"
+  body:
+    fontSize: "17px"
     fontWeight: 400
+    lineHeight: 1.29
+  textLink:
+    fontSize: "15px"
+    fontWeight: 500
     lineHeight: 1.3
+  metadata:
+    fontSize: "13px"
+    fontWeight: 400
+    lineHeight: 1.31
   caption:
-    fontFamily: "SF Pro, -apple-system, system-ui, sans-serif"
     fontSize: "12px"
     fontWeight: 400
     lineHeight: 1.33
-  caption-emphasis:
-    fontFamily: "SF Pro, -apple-system, system-ui, sans-serif"
+  overline:
     fontSize: "12px"
     fontWeight: 600
     lineHeight: 1.33
     letterSpacing: "0.06em"
-  mono-caption:
+    textTransform: "uppercase"
+  monoCaption:
     fontFamily: "SF Mono, ui-monospace, Menlo, monospace"
     fontSize: "11px"
     fontWeight: 400
@@ -357,18 +374,249 @@ amount right; the trailing edge stays fixed.
 
 ## 3. Typography
 
-**Body Font:** San Francisco (`SF Pro`), via the iOS system font stack. No
-`Font.custom(...)`, no font files in `Resources/`.
-**Mono Font:** San Francisco Mono (`.system(.caption2, design: .monospaced)` or
-`.fontDesign(.monospaced)`), used for token IDs, mnemonic words, and any place a
-hex/base58 string would otherwise blur.
+*Rewritten 2026-08-03. The system below is reified in code — it is no longer
+prose that the implementation is expected to follow by hand. That gap is what
+produced 465 `.font()` call sites across ~65 distinct specs, six sizes serving
+one amount role, and a home balance in a different typeface from the amount you
+type one screen later.*
 
-**Character:** the silent typographic confidence of a native iOS app. Text styles
-are quoted by name (`.largeTitle`, `.title`, `.body`, `.caption`), never by
-hardcoded `.system(size:)` except for the few monospaced fragments. Dynamic Type
-inherits automatically; balance and amount displays survive AX5 because
-`.minimumScaleFactor(0.5)` is paired with `.lineLimit(1)` on the balance and
-because every layout uses `.frame(maxWidth: .infinity)` rather than fixed widths.
+**Body Font:** San Francisco (`SF Pro`), via the iOS system font stack. No
+`Font.custom(...)`, no font files in `Resources/`. **This is an iOS-specific
+rule**, and the reason is worth recording: SF Symbols are drawn to SF Pro's cap
+height and weight axis, so pairing them with any other family desynchronises
+icon-and-label alignment across every `Label`, settings row and the tab bar —
+and alerts, action sheets, the share sheet and the keyboard render in SF Pro
+regardless, so a bundled body face would leave the app permanently mixed-face.
+Android incurs neither cost and ships Geist; see DESIGN-ANDROID.md.
+
+**Mono Font:** San Francisco Mono, used for token IDs, mnemonic words, and any
+place a hex/base58 string would otherwise blur.
+
+**Character:** the silent typographic confidence of a native iOS app. Type is
+applied by *role*, through `.cashuText(_:)` and `.cashuAmount(_:value:)` — never
+by a bare `.system(size:)` or a hand-written `.tracking()`. A role carries font,
+face, weight, tracking, casing, line limit and numeric treatment as one value,
+because those travelling separately is exactly how a call site came to take the
+size and forget the tracking, or take the tabular figures and forget the digit
+transition.
+
+### The roles
+
+Defined in `ios/CashuWallet/DesignSystem/CashuTextRole.swift`.
+
+| Role | Size | Weight | Tracking | Notes |
+|---|---|---|---|---|
+| `amountHero` | 52pt, scaled vs `.largeTitle`, capped 70 | semibold | −0.015em | balance **and** amount entry |
+| `amountConfirm` | 40pt, vs `.title`, capped 56 | semibold | −0.010em | transaction detail |
+| `amountCompact` | 28pt, vs `.title2`, capped 40 | semibold | −0.005em | Lightning, Cashu Request, QR-adjacent |
+| `amountRow` | `.body` | medium | 0 | list rows, fee lines, sub-balances |
+| `numberPadKey` | `.title` | regular | 0 | tabular, so keys don't shift width |
+| `title` | `.title` | semibold | 0 | onboarding heroes, modal headings |
+| `title3` | `.title3` | medium | 0 | in-flow section heads |
+| `bodyEmphasis` | `.body` | semibold | 0 | button labels, row titles |
+| `body` | `.body` | regular | 0 | prose, settings rows, detail values |
+| `textLink` | `.subheadline` | medium | 0 | borderless tertiary actions |
+| `metadata` | `.footnote` | regular | 0 | timestamps, secondary row text |
+| `caption` | `.caption` | regular | 0 | incidental chrome only |
+| `overline` | `.caption` | semibold | 0.06em | uppercase section headers |
+| `monoBody` / `monoCaption` | `.subheadline` / `.caption2` | regular | 0 | hex, mnemonics, npubs |
+
+**Metadata sits at `.footnote` (13pt), not `.caption` (12pt).** Metadata is
+already demoted by secondary ink; stacking the 12pt floor on top of that is a
+double demotion that pushes it under the legibility line. `caption` and
+`caption2` are reserved for genuinely incidental chrome.
+
+### Notes on particular roles
+
+- **The amount ladder is four rungs and no more.** Amounts are typed by role,
+  never by point size. Six sizes serving this one job (64/56/53/48/44/32) is how
+  the balance and the amount being typed one screen later ended up in different
+  typefaces at different weights. `amountHero` covers the balance *and* live
+  entry deliberately: they are the same object and now say so.
+- **No `design: .rounded`.** It previously applied to the send/receive heroes
+  but not the home balance, so the two most important numbers in the app were
+  set in different faces. Everything is SF Pro.
+- **Navigation-bar titles** — including the sheet/flow screens (Send, Pending
+  Ecash, Pay, Receive, Lightning Invoice) — use the **native inline title**
+  (`.navigationTitle` + `.navigationBarTitleDisplayMode(.inline)`), so they
+  centre to the screen and scale via the system. Do not use `title3` or an
+  ad-hoc `.principal` font for a nav-bar title.
+- **Text Link** is always applied via `.textLinkButton()`
+  (`TextLinkButtonStyle`), never hand-rolled per site: "Skip" / "Skip for now",
+  "What is ecash?", "Copy" / "Copied", "Add custom mint URL".
+- **Overline** is the only uppercase in the system, and casing lives in the role
+  so no call site has to remember it. Use the shared `SectionHeader`.
+
+### Named Rules
+
+**The Semantic-Only Rule.** No file in `ios/CashuWallet/` defines a custom
+`extension Color`. If a new color is needed, it is either a system semantic
+(`Color.primary`, `Color.secondary`, `Color.accentColor`, `Color(.systemBackground)`,
+`Color(.separator)`) or one of three state hues at a stated opacity. There is no
+fourth case.
+
+**The One Green Rule.** *Amended 2026-07-21:* within a ledger row, green belongs
+only to the primary amount of completed incoming money: green `+amount` for an
+incoming transaction or received Cashu Request. A completed outgoing amount is
+unsigned `.primary`; pending and expired amounts are unsigned `.secondary`.
+The title, timestamp, leading arrow, and converted sub-amount never turn green.
+The shared `TransactionAmountColumn` is the canonical implementation; do not
+re-derive the sign or color elsewhere. Direction for outgoing rows is already
+carried by the title and upward arrow, so a minus sign adds noise without new
+information.
+
+Outside ledger rows, confirmed green also appears in deliberate success and
+selection states, including:
+1. The **default-mint indicator dot** — a small green dot on a mint's icon
+   (Mints list `MintsListView`, mint profile `MintDetailView`) marking the
+   user's selected default mint. A *selection* marker (same axis as "Set as
+   Default"), carries no amount or arrow, never appears on a transaction row
+   (added 2026-05-31).
+*Amended 2026-07-05: the home-screen received-delta beat is no longer green.* The
+green `✓ +amount` celebration under the balance was retired as corny; the hero
+balance now rolls upward (`.contentTransition(.numericText())`) and a **monochrome**
+`+amount` (`.secondary`, in `MainWalletView.receivedDeltaBeat`) confirms the exact
+receipt in the fiat slot, with a `.success` haptic for background receipts.
+
+*Amended 2026-07-05(b)→(c): what was "corny" was the **small** green
+`checkmark.circle.fill` + "Received" **worded badge**, not green itself.* The brief
+2026-07-05(b) removal of the green check from `PaymentStatusView` and the detail
+sheet was **reverted**. `PaymentStatusView` success keeps its 64pt green
+`checkmark.circle.fill` (`.symbolEffect(.bounce)`) with the amount as a detail row
+— unchanged from before. The detail sheet regains a green check too, but as the
+**large** 64pt one (below); only the small worded "✓ Received" badge stays retired.
+`CashuRequestDetailView`'s green pills + "N payments received" seal are unchanged
+(their own later pass).
+
+The detail sheet (`TransactionDetailView`) is a **hero state slot above a crisp
+`.primary` amount hero**. The slot resolves by state: an **actionable request**
+shows its QR (unclaimed outgoing token — gated on `status == .pending` since the
+token string is retained after claim — a pending invoice, or a reusable BOLT12
+offer, `lno` prefix); a **completed** transaction shows the 64pt green
+`checkmark.circle.fill`; a **failed** one shows the 64pt red `xmark.circle.fill`;
+both bounce in on open (`.symbolEffect(.bounce, value: didAppear)`), matching the
+payment-success entrance. A **pending, no-QR** transaction shows no glyph. The old
+directional-arrow-on-a-circle hero and the small green "✓ Received" badge are gone.
+State also rides an explicit **`Status` row** — the first detail row, monochrome
+value (the hero glyph already carries the colour): completed → **Claimed** (ecash)
+/ **Paid** (lightning) / **Confirmed** (on-chain); pending → **Pending**; failed →
+**Failed**; expired → **Expired** *(added 2026-07-21: an unpaid BOLT11 invoice
+past its quote expiry — the QR/Share/Copy retire with it and the hero stays
+empty like a pending no-QR row; no red X, since nothing failed, the invoice
+simply lapsed. A quote paid before expiry stays **Pending** even past expiry —
+NUT-04 lets it be minted afterwards)*. A **`Date` row** follows. Remaining rows are conditional essentials —
+**Fee** when `> 0`, **Mint** always; the **Unit** row and the settled **Request**
+row stay dropped (`unitLabel` is always BTC/SAT; the live request is the QR/Copy).
+On-chain keeps **Address** / **Transaction ID** and its address QR. The **Type**
+row stays omitted (the nav title names kind/direction).
+
+**The Settled-Ecash Receipt carve-out.** *Added 2026-07-05.* A **settled ecash
+token** (completed, either direction) additionally exposes the **bottom Copy
+button as a receipt** — it copies the raw token string as a *record* of what was
+received/sent. This is a deliberate exception to the actionability gate above: a
+claimed token is spent, so the QR hero and top **Share stay retired** for it (the
+green-check "done" hero and the "Claimed" Status row already read the screen as
+settled). Only the *passive* Copy is extended, via a `copyableContent` slot
+distinct from `showsQR` — a spent token must never be re-presented as a scannable
+or shareable payment code. Consistent with the Share-At-Top Rule below, which
+governs sheets that *display a shareable QR artifact* (a settled ecash row shows
+none). Received tokens are persisted at redeem time for this — Copy surfaces only
+on rows received/sent after this shipped, since older received tokens were
+discarded and can't be recovered.
+
+**The Quiet Pending Rule.** *Amended 2026-06-01.* On **any list row** —
+transaction or Cashu Request — pending/waiting is conveyed by the muted
+`.secondary` amount **alone**: no badge, no icon, no orange. (The
+`arrow.triangle.2.circlepath` per-row refresh button *and* the waiting-request
+leading `clock` were both removed; manual re-check lives on History
+pull-to-refresh — `.refreshable { syncPendingMintQuotes(); checkAllPendingTokens() }`.)
+The muted-orange pending language survives only off the list, on the
+"Waiting for payment…" status clock inside `CashuRequestDetailView`. (The detail
+sheet's pending state is now a monochrome "Pending" `Status` row — no orange,
+2026-07-05(c).) Never a full-saturation pill, never a loud "PENDING" wordmark.
+
+*Amended 2026-07-21: only a completed incoming row uses a sign: green `+amount`.
+Completed outgoing rows are unsigned and `.primary`; their title and upward arrow
+already carry direction. Pending and expired rows are also unsigned and muted.
+Cashu Request / Reusable Invoice rows follow the same rule: waiting is bare and
+muted, received is green with `+`.*
+
+*Amended 2026-07-21: **expired** rows (`isUnsettled` = pending or expired) keep
+the same bare, muted amount — an expired invoice never credited the balance, so
+it must not read as settled.*
+
+**The Fiat Sub-Amount Rule.** When
+`settings.showFiatBalance && priceService.btcPriceUSD > 0`, any sat-unit row
+renders its configured primary amount with the converted value below it in
+`.system(.subheadline, design: .rounded).weight(.regular) / .secondary /
+.monospacedDigit()`. The primary value is the neighboring
+`.system(.body, design: .rounded).weight(.medium)`: enough hierarchy to preserve
+the configured primary currency without making the conversion read like tiny
+metadata. Cashu Request "any amount" rows (no fixed expected total) render no
+trailing element and therefore no fiat. Fiat re-renders silently on price
+ticks; no `.contentTransition`. Same gate as the hero balance fiat line, so
+turning fiat off in Settings clears the entire app uniformly.
+
+**The Amount Column Rule.** No list row has a left-of-amount indicator anymore
+— both the transaction `arrow.triangle.2.circlepath` refresh button and the
+waiting-Cashu-Request `clock` were removed (2026-06-01). Every row's amount
+anchors to the trailing edge so the column reads as one straight vertical line
+down the list. The `Spacer(minLength:)` before the amount column pushes the
+amount right; the trailing edge stays fixed.
+
+## 3. Typography
+
+*Rewritten 2026-08-03. The system below is reified in code — it is no longer
+prose that the implementation is expected to follow by hand. That gap is what
+produced 465 `.font()` call sites across ~65 distinct specs, six sizes serving
+one amount role, and a home balance in a different typeface from the amount you
+type one screen later.*
+
+**Body Font:** San Francisco (`SF Pro`), via the iOS system font stack. No
+`Font.custom(...)`, no font files in `Resources/`. **This is an iOS-specific
+rule**, and the reason is worth recording: SF Symbols are drawn to SF Pro's cap
+height and weight axis, so pairing them with any other family desynchronises
+icon-and-label alignment across every `Label`, settings row and the tab bar —
+and alerts, action sheets, the share sheet and the keyboard render in SF Pro
+regardless, so a bundled body face would leave the app permanently mixed-face.
+Android incurs neither cost and ships Geist; see DESIGN-ANDROID.md.
+
+**Mono Font:** San Francisco Mono, used for token IDs, mnemonic words, and any
+place a hex/base58 string would otherwise blur.
+
+**Character:** the silent typographic confidence of a native iOS app. Type is
+applied by *role*, through `.cashuText(_:)` and `.cashuAmount(_:value:)` — never
+by a bare `.system(size:)` or a hand-written `.tracking()`. A role carries font,
+face, weight, tracking, casing, line limit and numeric treatment as one value,
+because those travelling separately is exactly how a call site came to take the
+size and forget the tracking, or take the tabular figures and forget the digit
+transition.
+
+### The roles
+
+Defined in `ios/CashuWallet/DesignSystem/CashuTextRole.swift`.
+
+| Role | Size | Weight | Tracking | Notes |
+|---|---|---|---|---|
+| `amountHero` | 52pt, scaled vs `.largeTitle`, capped 70 | semibold | −0.015em | balance **and** amount entry |
+| `amountConfirm` | 40pt, vs `.title`, capped 56 | semibold | −0.010em | transaction detail |
+| `amountCompact` | 28pt, vs `.title2`, capped 40 | semibold | −0.005em | Lightning, Cashu Request, QR-adjacent |
+| `amountRow` | `.body` | medium | 0 | list rows, fee lines, sub-balances |
+| `numberPadKey` | `.title` | regular | 0 | tabular, so keys don't shift width |
+| `title` | `.title` | semibold | 0 | onboarding heroes, modal headings |
+| `title3` | `.title3` | medium | 0 | in-flow section heads |
+| `bodyEmphasis` | `.body` | semibold | 0 | button labels, row titles |
+| `body` | `.body` | regular | 0 | prose, settings rows, detail values |
+| `textLink` | `.subheadline` | medium | 0 | borderless tertiary actions |
+| `metadata` | `.footnote` | regular | 0 | timestamps, secondary row text |
+| `caption` | `.caption` | regular | 0 | incidental chrome only |
+| `overline` | `.caption` | semibold | 0.06em | uppercase section headers |
+| `monoBody` / `monoCaption` | `.subheadline` / `.caption2` | regular | 0 | hex, mnemonics, npubs |
+
+**Metadata sits at `.footnote` (13pt), not `.caption` (12pt).** Metadata is
+already demoted by secondary ink; stacking the 12pt floor on top of that is a
+double demotion that pushes it under the legibility line. `caption` and
+`caption2` are reserved for genuinely incidental chrome.
 
 ### Hierarchy
 
@@ -413,11 +661,40 @@ because every layout uses `.frame(maxWidth: .infinity)` rather than fixed widths
 `.contentTransition(.numericText(value:))` so digits slide rather than reflow.
 This is non-negotiable; numeric jitter on a money value reads as broken.
 
-**The System-Style Rule.** Text uses named iOS text styles (`.body`,
-`.largeTitle`, `.caption`) so Dynamic Type "just works" from xSmall through AX5.
-`.system(size:)` is reserved for the handful of monospaced fragments and the
-ActivityOrb glyph. No `.system(size: 14)` to "make it fit"; pick the right style
-and let the layout breathe.
+**The System-Style Rule.** *Amended 2026-08-03.* Text is applied by role
+(`.cashuText(_:)` / `.cashuAmount(_:value:)`), and roles resolve to named iOS
+text styles so Dynamic Type works from xSmall through AX5. A bare
+`.system(size:)` outside `DesignSystem/` is a bug; the only exceptions are SF
+Symbol glyph sizes and the ActivityOrb. No `.system(size: 14)` to "make it fit";
+pick the right role and let the layout breathe.
+
+**The Leading Rule.** *Added 2026-08-03.* A size change is a line-box change.
+Hero roles carry their own leading, and a reserved height for a hero is computed
+from `CashuTextRole.lineHeight(at:fonts:)` — never from a constant. A constant
+box around scaled text is a crop waiting to happen: the home status line held an
+18pt slot around a `.body`, whose line box is ~22pt, so it was clipping at the
+*default* text size. Reserved heights must stay fixed within a text size, so a
+unit swap cannot reflow the canvas, while growing with it, so large text is not
+cropped. (Android enforces the same rule mechanically via `TextStyle.atSize`;
+see DESIGN-ANDROID.md.)
+
+**The Size-Role Rule.** *Added 2026-08-03.* Amounts are typed by role —
+`amountHero` / `amountConfirm` / `amountCompact` / `amountRow` — never by point
+size. Six sizes serving one role is how the same number came to render in two
+typefaces on adjacent screens.
+
+**The Lockup Rule.** *Added 2026-08-03.* A unit is never joined into a numeral
+string. Formatters return `AmountParts { value, affix }` and `AmountLockup`
+composes the two, subordinating a unit *word* on three axes — half the size, one
+weight step down, secondary ink — while leaving a currency *symbol* at full ink
+and weight. The unit sits on the digits' **baseline**, not their cap line: a unit
+word is lowercase, so its visual mass is at x-height, and lifting it to the cap
+line leaves it floating like a superscript. At parity the unit occupied roughly a
+third of the lockup while carrying none of the information.
+
+**Tracking is expressed in em, never in points.** A point value is correct at one
+text size and wrong at every other. Five of the six hand-rolled section headers
+froze `.tracking(1.2)` — 0.1em at 12pt, nearly double the documented 0.06em.
 
 ## 4. Elevation
 
@@ -766,7 +1043,17 @@ contexts.
   avoid a double-buzz. Defined in `MainWalletView` (`balanceStatusLine` /
   `receivedDeltaBeat`). *Amended 2026-07-05: de-greened — the green `✓` celebration
   was retired as corny; the balance roll now carries the moment.*
-- **`ErrorBannerView`**: inline red banner for in-context errors.
+- **`ErrorBannerView`**: inline red banner for in-context errors. Screen-level
+  async/system failures, `.footnote`, bordered. Prefer the `.errorBanner(_:)`
+  modifier to pin it to the bottom safe area.
+- **`InlineNotice`**: the control-tied notice for preconditions and validation —
+  the thing that sits under a field or amount and says why you can't proceed.
+  `.caption`, no border, optional `title`/`detail`/`tinted`. Shares
+  `ErrorSeverity` with the banner. This is the surface most error copy uses
+  (~38 call sites) and it was previously undocumented here.
+  > These two disagree on body size and border, and are used interchangeably for
+  > the same kinds of failure. See `inline-error-audit.md` for the divergence
+  > inventory and the proposed collapse into one surface.
 
 ### Signature: ActivityOrb
 
@@ -1211,8 +1498,15 @@ not exist).
   *The onboarding seed phrase is the one screen with a content container — see
   The Seed Card Exception in §5. It earns it because the card is the
   tap-to-reveal affordance, not decoration. Do not generalize it.*
-- **Don't** introduce a display font, a serif pairing, a custom-loaded `.otf`,
-  or a `Font.system(size: N)` for body text. SF system styles only.
+- **Don't** introduce a display font, a serif pairing, or a custom-loaded
+  `.otf` **on iOS**. SF system styles only — see §3 for why this is an
+  iOS-specific rule and why Android's Geist carve-out (2026-08-03,
+  user-directed) does not contradict it.
+- **Don't** write a bare `.system(size: N)`, a literal `.tracking()`, or a
+  reserved height as a constant. Roles carry all three; `TypographyGuardTest`
+  fails the build on the Android side and the same rule holds on iOS.
+- **Don't** hand a pre-joined amount string to a hero. Pass `AmountParts` so the
+  unit can be subordinated.
 - **Don't** reach for `.fullScreenCover` for a confirmation, a settings flow,
   or any modal that is not the camera. Use a sheet with the right detent.
 - **Don't** add bounce, elastic, or new `.spring` parameters outside the

@@ -194,18 +194,18 @@ struct CashuRequestDetailView: View {
                             CurrencyAmountDisplay(
                                 sats: amount,
                                 primary: $settings.amountDisplayPrimary,
-                                primarySize: 32
+                                role: .amountCompact
                             )
                         } else {
                             // Non-sat unit: render in its own currency, no sats flip.
-                            Text(CurrencyAmount(
-                                value: amount,
-                                currency: CurrencyRegistry.currency(forMintUnit: request.unit)
-                            ).formatted())
-                                .font(.system(size: 32, weight: .semibold, design: .rounded))
-                                .monospacedDigit()
-                                .minimumScaleFactor(0.4)
-                                .lineLimit(1)
+                            AmountLockup(
+                                parts: AmountParts.parse(CurrencyAmount(
+                                    value: amount,
+                                    currency: CurrencyRegistry.currency(forMintUnit: request.unit)
+                                ).formatted()),
+                                role: .amountCompact,
+                                value: Double(amount)
+                            )
                         }
                     }
 
@@ -318,8 +318,7 @@ struct CashuRequestDetailView: View {
             InlineNotice(
                 message: notice.message,
                 title: notice.title,
-                severity: .caution,
-                tinted: true
+                severity: .caution
             )
             .transition(reduceMotion ? .opacity : .opacity.combined(with: .scale(scale: 0.98)))
         } else {
