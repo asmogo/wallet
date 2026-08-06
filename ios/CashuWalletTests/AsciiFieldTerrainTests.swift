@@ -109,44 +109,76 @@ final class AsciiFieldTerrainTests: XCTestCase {
 /// platforms' tests. If a port disagrees, fix the port — never the vector.
 final class AsciiFieldWarpTests: XCTestCase {
     func testDisplacementMatchesParityVectors() {
-        // Bump peak: s = 0.5 → the full 36.
+        // Bump peak at full envelope (radius fully bloomed): s = 0.5 → 36.
         XCTAssertEqual(AsciiFieldWarp.displacement(60, 1), 36.0, accuracy: 1e-9)
-        // Interior point at half envelope: 18 · 16 · (35/144)².
-        XCTAssertEqual(AsciiFieldWarp.displacement(50, 0.5), 17.013888888888889, accuracy: 1e-9)
-        // Zero at the touch point, the rim, beyond it, and at zero envelope.
+        // Half envelope blooms the radius to 105; peak sits at 52.5.
+        XCTAssertEqual(AsciiFieldWarp.displacement(52.5, 0.5), 18.0, accuracy: 1e-9)
+        XCTAssertEqual(AsciiFieldWarp.displacement(50, 0.5), 17.91845990096719, accuracy: 1e-9)
+        // Zero at the touch point, at/beyond the bloomed rim, and at zero
+        // envelope.
         XCTAssertEqual(AsciiFieldWarp.displacement(0, 1), 0)
         XCTAssertEqual(AsciiFieldWarp.displacement(120, 1), 0)
+        XCTAssertEqual(AsciiFieldWarp.displacement(105, 0.5), 0)
         XCTAssertEqual(AsciiFieldWarp.displacement(150, 1), 0)
         XCTAssertEqual(AsciiFieldWarp.displacement(60, 0), 0)
     }
 
+    func testBloomedRadiusMatchesParityVectors() {
+        XCTAssertEqual(AsciiFieldWarp.bloomedRadius(0), 90.0, accuracy: 1e-9)
+        XCTAssertEqual(AsciiFieldWarp.bloomedRadius(0.5), 105.0, accuracy: 1e-9)
+        XCTAssertEqual(AsciiFieldWarp.bloomedRadius(1), 120.0, accuracy: 1e-9)
+        // Overshoot never grows the lens past full.
+        XCTAssertEqual(AsciiFieldWarp.bloomedRadius(2), 120.0, accuracy: 1e-9)
+    }
+
     func testEnvelopesMatchParityVectors() {
-        XCTAssertEqual(AsciiFieldWarp.pressEnvelope(elapsed: 0.09, from: 0), 0.5, accuracy: 1e-9)
-        XCTAssertEqual(AsciiFieldWarp.pressEnvelope(elapsed: 0.045, from: 0), 0.15625, accuracy: 1e-9)
+        XCTAssertEqual(AsciiFieldWarp.pressEnvelope(elapsed: 0.28, from: 0), 1.0, accuracy: 1e-9)
+        // Mid-press is already past 1 — the easeOutBack bloom.
+        XCTAssertEqual(AsciiFieldWarp.pressEnvelope(elapsed: 0.14, from: 0), 1.025, accuracy: 1e-9)
         // Re-press mid-decay ramps from the current envelope, not from zero.
-        XCTAssertEqual(AsciiFieldWarp.pressEnvelope(elapsed: 0.09, from: 0.4), 0.7, accuracy: 1e-9)
-        XCTAssertEqual(AsciiFieldWarp.pressEnvelope(elapsed: 0.3, from: 0), 1.0, accuracy: 1e-9)
-        XCTAssertEqual(AsciiFieldWarp.releaseEnvelope(elapsed: 0.25, from: 1), 0.125, accuracy: 1e-9)
-        XCTAssertEqual(AsciiFieldWarp.releaseEnvelope(elapsed: 0.1, from: 0.8), 0.4096, accuracy: 1e-9)
-        XCTAssertEqual(AsciiFieldWarp.releaseEnvelope(elapsed: 0.6, from: 1), 0.0, accuracy: 1e-9)
+        XCTAssertEqual(AsciiFieldWarp.pressEnvelope(elapsed: 0.07, from: 0.4), 0.848125, accuracy: 1e-9)
+        XCTAssertEqual(AsciiFieldWarp.releaseEnvelope(elapsed: 0.3, from: 1), 0.125, accuracy: 1e-9)
+        XCTAssertEqual(AsciiFieldWarp.releaseEnvelope(elapsed: 0.15, from: 0.8), 0.3375, accuracy: 1e-9)
+        XCTAssertEqual(AsciiFieldWarp.releaseEnvelope(elapsed: 0.7, from: 1), 0.0, accuracy: 1e-9)
+        // The overshoot stays within its designed bound.
+        for step in 0...200 {
+            let k = AsciiFieldWarp.pressEnvelope(elapsed: Double(step) / 200 * 0.28, from: 0)
+            XCTAssertLessThanOrEqual(k, 1.0529, "overshoot bound at step \(step)")
+            XCTAssertGreaterThanOrEqual(k, 0, "negative envelope at step \(step)")
+        }
+    }
+
+    func testSwirlAndFollowMatchParityVectors() {
+        XCTAssertEqual(AsciiFieldWarp.swirlAngle(36), 0.35, accuracy: 1e-9)
+        XCTAssertEqual(AsciiFieldWarp.swirlAngle(18), 0.175, accuracy: 1e-9)
+        XCTAssertEqual(AsciiFieldWarp.swirlAngle(0), 0.0, accuracy: 1e-9)
+        XCTAssertEqual(AsciiFieldWarp.followFactor(1.0 / 30.0), 0.3788548423845485, accuracy: 1e-9)
+        XCTAssertEqual(AsciiFieldWarp.followFactor(1.0 / 60.0), 0.21187237225468902, accuracy: 1e-9)
+        XCTAssertEqual(AsciiFieldWarp.followFactor(0), 0.0, accuracy: 1e-9)
     }
 
     /// The constants both ports share; retuning is a keep-in-lockstep edit of
     /// both platform files plus these vectors.
     func testWarpConstantsShape() {
         XCTAssertEqual(AsciiFieldWarp.radius, 120)
+        XCTAssertEqual(AsciiFieldWarp.radiusBloomFloor, 0.75)
         XCTAssertEqual(AsciiFieldWarp.maxDisplacement, 36)
-        XCTAssertEqual(AsciiFieldWarp.pressDuration, 0.18)
-        XCTAssertEqual(AsciiFieldWarp.releaseDuration, 0.5)
+        XCTAssertEqual(AsciiFieldWarp.pressDuration, 0.28)
+        XCTAssertEqual(AsciiFieldWarp.releaseDuration, 0.6)
+        XCTAssertEqual(AsciiFieldWarp.backOvershoot, 1.2)
+        XCTAssertEqual(AsciiFieldWarp.swirlMax, 0.35)
+        XCTAssertEqual(AsciiFieldWarp.followTau, 0.07)
     }
 
     /// Warped sampling must never fold: `d - displacement(d)` non-decreasing
-    /// across the lens, or terrain would mirror inside the ring.
+    /// across the lens — checked at the overshoot peak (k = 1.053), the
+    /// worst case, or terrain would mirror inside the ring.
     func testDisplacementNeverFoldsSampling() {
         var previous = -Double.infinity
-        for d in 0...120 {
-            let warped = Double(d) - AsciiFieldWarp.displacement(Double(d), 1)
-            XCTAssertGreaterThanOrEqual(warped, previous, "fold at d=\(d)")
+        for step in 0...1200 {
+            let d = Double(step) / 10
+            let warped = d - AsciiFieldWarp.displacement(d, 1.053)
+            XCTAssertGreaterThanOrEqual(warped, previous - 1e-12, "fold at d=\(d)")
             previous = warped
         }
     }
@@ -214,8 +246,12 @@ final class AsciiFieldFrameBudgetTests: XCTestCase {
                     let d = (dx * dx + dy * dy).squareRoot()
                     let f = AsciiFieldWarp.displacement(d, 1)
                     if f > 0 {
-                        sampleX = (px - dx * (f / d)) / 12 * AsciiFieldTerrain.terrainScale
-                        sampleY = (py - dy * (f / d)) / 14 * AsciiFieldTerrain.terrainScale
+                        let theta = AsciiFieldWarp.swirlAngle(f)
+                        let cosT = cos(theta)
+                        let sinT = sin(theta)
+                        let inv = f / d
+                        sampleX = (px - (dx * cosT - dy * sinT) * inv) / 12 * AsciiFieldTerrain.terrainScale
+                        sampleY = (py - (dx * sinT + dy * cosT) * inv) / 14 * AsciiFieldTerrain.terrainScale
                     }
                     let level = AsciiFieldTerrain.displayLevel(
                         AsciiFieldTerrain.brightness(sampleX, sampleY, t)

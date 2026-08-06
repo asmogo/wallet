@@ -133,27 +133,55 @@ class AsciiFieldTerrainTest {
 class AsciiFieldWarpTest {
     @Test
     fun displacementMatchesParityVectors() {
-        // Bump peak: s = 0.5 → the full 36.
+        // Bump peak at full envelope (radius fully bloomed): s = 0.5 → 36.
         assertEquals(36.0, AsciiFieldWarp.displacement(60.0, 1.0), 1e-9)
-        // Interior point at half envelope: 18 · 16 · (35/144)².
-        assertEquals(17.013888888888889, AsciiFieldWarp.displacement(50.0, 0.5), 1e-9)
-        // Zero at the touch point, the rim, beyond it, and at zero envelope.
+        // Half envelope blooms the radius to 105; peak sits at 52.5.
+        assertEquals(18.0, AsciiFieldWarp.displacement(52.5, 0.5), 1e-9)
+        assertEquals(17.91845990096719, AsciiFieldWarp.displacement(50.0, 0.5), 1e-9)
+        // Zero at the touch point, at/beyond the bloomed rim, and at zero
+        // envelope.
         assertEquals(0.0, AsciiFieldWarp.displacement(0.0, 1.0), 0.0)
         assertEquals(0.0, AsciiFieldWarp.displacement(120.0, 1.0), 0.0)
+        assertEquals(0.0, AsciiFieldWarp.displacement(105.0, 0.5), 0.0)
         assertEquals(0.0, AsciiFieldWarp.displacement(150.0, 1.0), 0.0)
         assertEquals(0.0, AsciiFieldWarp.displacement(60.0, 0.0), 0.0)
     }
 
     @Test
+    fun bloomedRadiusMatchesParityVectors() {
+        assertEquals(90.0, AsciiFieldWarp.bloomedRadius(0.0), 1e-9)
+        assertEquals(105.0, AsciiFieldWarp.bloomedRadius(0.5), 1e-9)
+        assertEquals(120.0, AsciiFieldWarp.bloomedRadius(1.0), 1e-9)
+        // Overshoot never grows the lens past full.
+        assertEquals(120.0, AsciiFieldWarp.bloomedRadius(2.0), 1e-9)
+    }
+
+    @Test
     fun envelopesMatchParityVectors() {
-        assertEquals(0.5, AsciiFieldWarp.pressEnvelope(0.09, 0.0), 1e-9)
-        assertEquals(0.15625, AsciiFieldWarp.pressEnvelope(0.045, 0.0), 1e-9)
+        assertEquals(1.0, AsciiFieldWarp.pressEnvelope(0.28, 0.0), 1e-9)
+        // Mid-press is already past 1 — the easeOutBack bloom.
+        assertEquals(1.025, AsciiFieldWarp.pressEnvelope(0.14, 0.0), 1e-9)
         // Re-press mid-decay ramps from the current envelope, not from zero.
-        assertEquals(0.7, AsciiFieldWarp.pressEnvelope(0.09, 0.4), 1e-9)
-        assertEquals(1.0, AsciiFieldWarp.pressEnvelope(0.3, 0.0), 1e-9)
-        assertEquals(0.125, AsciiFieldWarp.releaseEnvelope(0.25, 1.0), 1e-9)
-        assertEquals(0.4096, AsciiFieldWarp.releaseEnvelope(0.1, 0.8), 1e-9)
-        assertEquals(0.0, AsciiFieldWarp.releaseEnvelope(0.6, 1.0), 1e-9)
+        assertEquals(0.848125, AsciiFieldWarp.pressEnvelope(0.07, 0.4), 1e-9)
+        assertEquals(0.125, AsciiFieldWarp.releaseEnvelope(0.3, 1.0), 1e-9)
+        assertEquals(0.3375, AsciiFieldWarp.releaseEnvelope(0.15, 0.8), 1e-9)
+        assertEquals(0.0, AsciiFieldWarp.releaseEnvelope(0.7, 1.0), 1e-9)
+        // The overshoot stays within its designed bound.
+        for (step in 0..200) {
+            val k = AsciiFieldWarp.pressEnvelope(step / 200.0 * 0.28, 0.0)
+            assertTrue("overshoot bound at step $step", k <= 1.0529)
+            assertTrue("negative envelope at step $step", k >= 0.0)
+        }
+    }
+
+    @Test
+    fun swirlAndFollowMatchParityVectors() {
+        assertEquals(0.35, AsciiFieldWarp.swirlAngle(36.0), 1e-9)
+        assertEquals(0.175, AsciiFieldWarp.swirlAngle(18.0), 1e-9)
+        assertEquals(0.0, AsciiFieldWarp.swirlAngle(0.0), 1e-9)
+        assertEquals(0.3788548423845485, AsciiFieldWarp.followFactor(1.0 / 30.0), 1e-9)
+        assertEquals(0.21187237225468902, AsciiFieldWarp.followFactor(1.0 / 60.0), 1e-9)
+        assertEquals(0.0, AsciiFieldWarp.followFactor(0.0), 1e-9)
     }
 
     /** The constants both ports share; retuning is a keep-in-lockstep edit of
@@ -161,19 +189,25 @@ class AsciiFieldWarpTest {
     @Test
     fun warpConstantsShape() {
         assertEquals(120.0, AsciiFieldWarp.RADIUS, 0.0)
+        assertEquals(0.75, AsciiFieldWarp.RADIUS_BLOOM_FLOOR, 0.0)
         assertEquals(36.0, AsciiFieldWarp.MAX_DISPLACEMENT, 0.0)
-        assertEquals(0.18, AsciiFieldWarp.PRESS_DURATION, 0.0)
-        assertEquals(0.5, AsciiFieldWarp.RELEASE_DURATION, 0.0)
+        assertEquals(0.28, AsciiFieldWarp.PRESS_DURATION, 0.0)
+        assertEquals(0.6, AsciiFieldWarp.RELEASE_DURATION, 0.0)
+        assertEquals(1.2, AsciiFieldWarp.BACK_OVERSHOOT, 0.0)
+        assertEquals(0.35, AsciiFieldWarp.SWIRL_MAX, 0.0)
+        assertEquals(0.07, AsciiFieldWarp.FOLLOW_TAU, 0.0)
     }
 
     /** Warped sampling must never fold: `d - displacement(d)` non-decreasing
-     * across the lens, or terrain would mirror inside the ring. */
+     * across the lens — checked at the overshoot peak (k = 1.053), the worst
+     * case, or terrain would mirror inside the ring. */
     @Test
     fun displacementNeverFoldsSampling() {
         var previous = Double.NEGATIVE_INFINITY
-        for (d in 0..120) {
-            val warped = d - AsciiFieldWarp.displacement(d.toDouble(), 1.0)
-            assertTrue("fold at d=$d", warped >= previous)
+        for (step in 0..1200) {
+            val d = step / 10.0
+            val warped = d - AsciiFieldWarp.displacement(d, 1.053)
+            assertTrue("fold at d=$d", warped >= previous - 1e-12)
             previous = warped
         }
     }

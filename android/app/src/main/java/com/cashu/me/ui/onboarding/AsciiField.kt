@@ -53,6 +53,7 @@ import com.cashu.me.ui.testing.UiTestTags
 import com.cashu.me.ui.theme.rememberReducedMotion
 import kotlin.math.ceil
 import kotlin.math.cos
+import kotlin.math.exp
 import kotlin.math.floor
 import kotlin.math.hypot
 import kotlin.math.min
@@ -173,44 +174,87 @@ internal object AsciiFieldTerrain {
  * cell is 12×14, so the lens is circular on screen and both ports feed the
  * functions numerically identical inputs. */
 internal object AsciiFieldWarp {
-    /** Lens radius: 10 columns / ~8.6 rows of the band grid. */
+    /** Full-bloom lens radius: 10 columns / ~8.6 rows of the band grid. */
     const val RADIUS = 120.0
+
+    /** The lens materializes at this fraction of its radius and blooms to
+     * full as the envelope rises — it grows out of the touch point rather
+     * than appearing at final size. */
+    const val RADIUS_BLOOM_FLOOR = 0.75
 
     /** Peak sample displacement: 3 cells ≈ 0.39 noise-x units. */
     const val MAX_DISPLACEMENT = 36.0
 
     /** Envelope durations in wall-clock seconds — not terrain `t`, which is
      * speed-scaled and freezes with the clock. */
-    const val PRESS_DURATION = 0.18
-    const val RELEASE_DURATION = 0.5
+    const val PRESS_DURATION = 0.28
+    const val RELEASE_DURATION = 0.6
 
-    fun smoothstep(u: Double): Double {
-        val c = u.coerceIn(0.0, 1.0)
-        return c * c * (3 - 2 * c)
-    }
+    /** easeOutBack shape parameter: ~5% overshoot (envelope peaks at
+     * 1.0529), so the lens blooms slightly past full and relaxes. Positive
+     * overshoot is safe — only a *negative* envelope would flip the lens
+     * into attraction — and the no-fold margin holds at the peak
+     * (max slope 3.079·A·k/R = 0.973 < 1). */
+    const val BACK_OVERSHOOT = 1.2
+
+    /** Swirl at full displacement, radians. The displacement direction is
+     * rotated in proportion to local strength, so terrain flows *around*
+     * the finger instead of only fleeing it — and un-twists as the release
+     * envelope decays. */
+    const val SWIRL_MAX = 0.35
+
+    /** Position-glide time constant: the lens eases toward the finger with
+     * `1 - exp(-dt/τ)` per frame, so a drag reads as fluid pursuit rather
+     * than per-frame teleports. */
+    const val FOLLOW_TAU = 0.07
+
+    /** Lens radius at envelope [k] — the bloom. */
+    fun bloomedRadius(k: Double): Double =
+        RADIUS * (RADIUS_BLOOM_FLOOR + (1 - RADIUS_BLOOM_FLOOR) * min(1.0, k))
 
     /** Sample displacement at distance [d] from the finger, envelope [k].
      * The bump `16·(s(1-s))²` is zero in value *and* slope at the touch point
      * and at the rim, so contours never kink at the lens boundary, and its
-     * max slope (3.079·A/R ≈ 0.92) stays below 1, so the warped sampling
-     * never folds over itself. */
+     * max slope stays below 1 even at the overshoot peak, so the warped
+     * sampling never folds over itself. */
     fun displacement(d: Double, k: Double): Double {
-        if (k <= 0.0 || d <= 0.0 || d >= RADIUS) return 0.0
-        val s = d / RADIUS
+        if (k <= 0.0 || d <= 0.0) return 0.0
+        val r = bloomedRadius(k)
+        if (d >= r) return 0.0
+        val s = d / r
         val e = s * (1 - s)
         return MAX_DISPLACEMENT * k * 16 * e * e
     }
 
+    /** easeOutBack: fast rise, small overshoot, soft settle. Clamped at
+     * zero — the polynomial dips to −2e-16 at u = 0 in floating point, and
+     * even that microscopically negative envelope is the attraction flip
+     * the design forbids (the parity tests assert k ≥ 0 throughout). */
+    private fun backOut(u: Double): Double {
+        val c = u.coerceIn(0.0, 1.0)
+        val q = c - 1
+        return (1 + (BACK_OVERSHOOT + 1) * q * q * q + BACK_OVERSHOOT * q * q).coerceAtLeast(0.0)
+    }
+
     /** Ease-in from [k0] (non-zero when a finger lands mid-decay). */
     fun pressEnvelope(elapsed: Double, k0: Double): Double =
-        k0 + (1 - k0) * smoothstep(elapsed / PRESS_DURATION)
+        k0 + (1 - k0) * backOut(elapsed / PRESS_DURATION)
 
-    /** `k0·(1-v)³` — a settle, deliberately not a spring: overshoot would
-     * swing `k` negative and flip the lens into attraction. */
+    /** `k0·(1-v)³` — a settle, deliberately not a spring: overshoot *here*
+     * would swing `k` negative and flip the lens into attraction. */
     fun releaseEnvelope(elapsed: Double, k0: Double): Double {
         val v = 1 - (elapsed / RELEASE_DURATION).coerceIn(0.0, 1.0)
         return k0 * v * v * v
     }
+
+    /** Rotation of the displacement direction at displacement [f] —
+     * proportional to local strength, so the swirl is strongest mid-lens
+     * and vanishes at both the touch point and the rim. */
+    fun swirlAngle(f: Double): Double = SWIRL_MAX * f / MAX_DISPLACEMENT
+
+    /** Per-frame glide fraction for elapsed [dt] — exponential smoothing,
+     * frame-rate independent. */
+    fun followFactor(dt: Double): Double = 1 - exp(-dt / FOLLOW_TAU)
 }
 
 /** Mutable finger state, read by the frame loop. Deliberately not Compose
@@ -223,18 +267,28 @@ internal class AsciiFieldWarpTouch {
     var phase = Phase.Idle
         private set
 
-    /** Finger position in grid units (dp, the warp's coordinate space). */
+    /** Where the lens *is*, in grid units (dp) — glides toward the finger
+     * via [advance] (see [AsciiFieldWarp.FOLLOW_TAU]). */
     var x = 0.0
         private set
     var y = 0.0
         private set
 
+    /** Where the finger is — the glide target. */
+    private var targetX = 0.0
+    private var targetY = 0.0
     private var phaseStart = 0.0
     private var k0 = 0.0
+    private var lastAdvance = 0.0
 
     fun press(px: Double, py: Double, now: Double) {
+        targetX = px
+        targetY = py
+        // A landing finger snaps the lens under it — the bloom starts where
+        // the touch is, never gliding in from a stale spot.
         x = px
         y = py
+        lastAdvance = now
         // Ramp from the current envelope, so re-pressing mid-decay doesn't
         // snap the lens shut and reopen it from zero.
         k0 = currentK(now)
@@ -243,8 +297,8 @@ internal class AsciiFieldWarpTouch {
     }
 
     fun move(px: Double, py: Double) {
-        x = px
-        y = py
+        targetX = px
+        targetY = py
     }
 
     fun release(now: Double) {
@@ -256,6 +310,19 @@ internal class AsciiFieldWarpTouch {
 
     fun reset() {
         phase = Phase.Idle
+    }
+
+    /** Advances the position glide; call once per frame before sampling.
+     * Keeps gliding through the release settle, so a flick's lens drifts
+     * to rest at the lift point instead of freezing mid-pursuit. */
+    fun advance(now: Double) {
+        if (phase == Phase.Idle) return
+        // Clamp dt so a hitch or pause can't turn into a teleport.
+        val dt = (now - lastAdvance).coerceIn(0.0, 0.1)
+        lastAdvance = now
+        val a = AsciiFieldWarp.followFactor(dt)
+        x += (targetX - x) * a
+        y += (targetY - y) * a
     }
 
     fun currentK(now: Double): Double = when (phase) {
@@ -553,17 +620,23 @@ internal fun AsciiField(
     // Remembered independently of the theme-keyed renderer, so a dark-mode
     // flip mid-press keeps the lens where the finger is.
     val touch = remember { AsciiFieldWarpTouch() }
+    // 60fps while a finger is down — the lens pursuit reads steppy at the
+    // ambient 30. Plain state: the frame loop reads it each frame, and the
+    // release settle runs at the ambient rate (nothing tracks the finger
+    // anymore).
+    val interacting = remember { mutableStateOf(false) }
     LaunchedEffect(clockRuns) {
         // Never carry a stale lens across a pause — a resume must not replay
         // a half-finished decay.
         touch.reset()
         if (clockRuns) {
-            // 30fps cap by elapsed time rather than the web's every-2nd-frame
+            // Frame cap by elapsed time rather than the web's every-2nd-frame
             // skip: alternate frames on a 120 Hz panel would still be 60fps.
             var lastDrawNanos = 0L
             while (true) {
                 withFrameNanos { nanos ->
-                    if (nanos - lastDrawNanos >= 33_000_000L) {
+                    val capNanos = if (interacting.value) 16_000_000L else 33_000_000L
+                    if (nanos - lastDrawNanos >= capNanos) {
                         lastDrawNanos = nanos
                         timeState.floatValue =
                             ((nanos - startNanos) / 1e9 * AsciiFieldTerrain.SPEED).toFloat()
@@ -602,27 +675,36 @@ internal fun AsciiField(
                 if (!clockRuns) return@pointerInput
                 awaitEachGesture {
                     val down = awaitFirstDown(requireUnconsumed = false)
-                    // Grid units are dp — the warp's (and iOS's) space.
-                    touch.press(
-                        down.position.x / density.toDouble(),
-                        down.position.y / density.toDouble(),
-                        nowSeconds(),
-                    )
-                    while (true) {
-                        val change = awaitPointerEvent().changes.firstOrNull { it.id == down.id } ?: break
-                        if (!change.pressed) break
-                        touch.move(
-                            change.position.x / density.toDouble(),
-                            change.position.y / density.toDouble(),
+                    interacting.value = true
+                    try {
+                        // Grid units are dp — the warp's (and iOS's) space.
+                        touch.press(
+                            down.position.x / density.toDouble(),
+                            down.position.y / density.toDouble(),
+                            nowSeconds(),
                         )
+                        while (true) {
+                            val change = awaitPointerEvent().changes.firstOrNull { it.id == down.id } ?: break
+                            if (!change.pressed) break
+                            touch.move(
+                                change.position.x / density.toDouble(),
+                                change.position.y / density.toDouble(),
+                            )
+                        }
+                    } finally {
+                        // finally, so a cancelled gesture (scrim, system) still
+                        // releases the lens and drops back to the ambient rate.
+                        interacting.value = false
+                        touch.release(nowSeconds())
                     }
-                    touch.release(nowSeconds())
                 }
             }
             .clearAndSetSemantics { testTag = UiTestTags.OnboardingAsciiField },
     ) {
         val t = (staticTime ?: timeState.floatValue).toDouble()
-        val warpK = touch.currentK(nowSeconds())
+        val now = nowSeconds()
+        touch.advance(now)
+        val warpK = touch.currentK(now)
         drawIntoCanvas { canvas ->
             renderer.draw(canvas.nativeCanvas, size.width, size.height, t, touch.x, touch.y, warpK)
         }
@@ -717,17 +799,25 @@ internal class AsciiFieldRenderer(
                     // mapping moves the visible terrain away from it — a
                     // clearing with a compressed contour ring at the rim.
                     // Displacing away would read as a magnifier pulling
-                    // contours in. Only sampling warps; glyph positions (and
-                    // the currency hash keyed on them) never move.
+                    // contours in. The direction is rotated by the swirl, so
+                    // the terrain flows around the finger as it flees. Only
+                    // sampling warps; glyph positions (and the currency hash
+                    // keyed on them) never move.
                     val cxDp = (col + 0.5) * AsciiFieldTerrain.CELL_W
                     val dx = cxDp - touchX
                     val dy = cyDp - touchY
                     val d = sqrt(dx * dx + dy * dy)
                     val f = AsciiFieldWarp.displacement(d, warpK)
                     if (f > 0) {
-                        sampleX = (cxDp - dx * (f / d)) /
+                        val theta = AsciiFieldWarp.swirlAngle(f)
+                        val cosT = cos(theta)
+                        val sinT = sin(theta)
+                        val inv = f / d
+                        val shiftX = (dx * cosT - dy * sinT) * inv
+                        val shiftY = (dx * sinT + dy * cosT) * inv
+                        sampleX = (cxDp - shiftX) /
                             AsciiFieldTerrain.CELL_W * AsciiFieldTerrain.TERRAIN_SCALE
-                        sampleY = (cyDp - dy * (f / d)) /
+                        sampleY = (cyDp - shiftY) /
                             AsciiFieldTerrain.CELL_H * AsciiFieldTerrain.TERRAIN_SCALE
                     }
                 }

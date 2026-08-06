@@ -122,42 +122,86 @@ enum AsciiFieldTerrain {
 /// where a cell is 12×14, so the lens is circular on screen and both ports
 /// feed the functions numerically identical inputs.
 enum AsciiFieldWarp {
-    /// Lens radius: 10 columns / ~8.6 rows of the band grid.
+    /// Full-bloom lens radius: 10 columns / ~8.6 rows of the band grid.
     static let radius: Double = 120
+    /// The lens materializes at this fraction of its radius and blooms to
+    /// full as the envelope rises — it grows out of the touch point rather
+    /// than appearing at final size.
+    static let radiusBloomFloor: Double = 0.75
     /// Peak sample displacement: 3 cells ≈ 0.39 noise-x units.
     static let maxDisplacement: Double = 36
     /// Envelope durations in wall-clock seconds — not terrain `t`, which is
     /// speed-scaled and freezes with the clock.
-    static let pressDuration: Double = 0.18
-    static let releaseDuration: Double = 0.5
+    static let pressDuration: Double = 0.28
+    static let releaseDuration: Double = 0.6
+    /// easeOutBack shape parameter: ~5% overshoot (envelope peaks at
+    /// 1.0529), so the lens blooms slightly past full and relaxes. Positive
+    /// overshoot is safe — only a *negative* envelope would flip the lens
+    /// into attraction — and the no-fold margin holds at the peak
+    /// (max slope 3.079·A·k/R = 0.973 < 1).
+    static let backOvershoot: Double = 1.2
+    /// Swirl at full displacement, radians. The displacement direction is
+    /// rotated in proportion to local strength, so terrain flows *around*
+    /// the finger instead of only fleeing it — and un-twists as the release
+    /// envelope decays.
+    static let swirlMax: Double = 0.35
+    /// Position-glide time constant: the lens eases toward the finger with
+    /// `1 - exp(-dt/τ)` per frame, so a drag reads as fluid pursuit rather
+    /// than per-frame teleports.
+    static let followTau: Double = 0.07
 
-    static func smoothstep(_ u: Double) -> Double {
-        let c = min(1, max(0, u))
-        return c * c * (3 - 2 * c)
+    /// Lens radius at envelope `k` — the bloom.
+    static func bloomedRadius(_ k: Double) -> Double {
+        radius * (radiusBloomFloor + (1 - radiusBloomFloor) * min(1, k))
     }
 
     /// Sample displacement at distance `d` from the finger, envelope `k`.
     /// The bump `16·(s(1-s))²` is zero in value *and* slope at the touch
     /// point and at the rim, so contours never kink at the lens boundary,
-    /// and its max slope (3.079·A/R ≈ 0.92) stays below 1, so the warped
-    /// sampling never folds over itself.
+    /// and its max slope stays below 1 even at the overshoot peak, so the
+    /// warped sampling never folds over itself.
     static func displacement(_ d: Double, _ k: Double) -> Double {
-        guard k > 0, d > 0, d < radius else { return 0 }
-        let s = d / radius
+        guard k > 0, d > 0 else { return 0 }
+        let r = bloomedRadius(k)
+        guard d < r else { return 0 }
+        let s = d / r
         let e = s * (1 - s)
         return maxDisplacement * k * 16 * e * e
     }
 
-    /// Ease-in from `k0` (non-zero when a finger lands mid-decay).
-    static func pressEnvelope(elapsed: Double, from k0: Double) -> Double {
-        k0 + (1 - k0) * smoothstep(elapsed / pressDuration)
+    /// easeOutBack: fast rise, small overshoot, soft settle. Clamped at
+    /// zero — the polynomial dips to −2e-16 at u = 0 in floating point, and
+    /// even that microscopically negative envelope is the attraction flip
+    /// the design forbids (the parity tests assert k ≥ 0 throughout).
+    private static func backOut(_ u: Double) -> Double {
+        let c = min(1, max(0, u))
+        let q = c - 1
+        return max(0, 1 + (backOvershoot + 1) * q * q * q + backOvershoot * q * q)
     }
 
-    /// `k0·(1-v)³` — a settle, deliberately not a spring: overshoot would
-    /// swing `k` negative and flip the lens into attraction.
+    /// Ease-in from `k0` (non-zero when a finger lands mid-decay).
+    static func pressEnvelope(elapsed: Double, from k0: Double) -> Double {
+        k0 + (1 - k0) * backOut(elapsed / pressDuration)
+    }
+
+    /// `k0·(1-v)³` — a settle, deliberately not a spring: overshoot *here*
+    /// would swing `k` negative and flip the lens into attraction.
     static func releaseEnvelope(elapsed: Double, from k0: Double) -> Double {
         let v = 1 - min(1, max(0, elapsed / releaseDuration))
         return k0 * v * v * v
+    }
+
+    /// Rotation of the displacement direction at displacement `f` —
+    /// proportional to local strength, so the swirl is strongest mid-lens
+    /// and vanishes at both the touch point and the rim.
+    static func swirlAngle(_ f: Double) -> Double {
+        swirlMax * f / maxDisplacement
+    }
+
+    /// Per-frame glide fraction for elapsed `dt` — exponential smoothing,
+    /// frame-rate independent.
+    static func followFactor(_ dt: Double) -> Double {
+        1 - exp(-dt / followTau)
     }
 }
 
@@ -167,16 +211,26 @@ enum AsciiFieldWarp {
 final class AsciiFieldWarpTouch {
     enum Phase { case idle, pressed, released }
     private(set) var phase: Phase = .idle
-    /// Finger position in grid units (the view's own coordinate space).
+    /// Where the lens *is*, in grid units — glides toward the finger via
+    /// `advance` (see `AsciiFieldWarp.followTau`).
     private(set) var x: Double = 0
     private(set) var y: Double = 0
+    /// Where the finger is — the glide target.
+    private var targetX: Double = 0
+    private var targetY: Double = 0
     private var phaseStart: Double = 0
     private var k0: Double = 0
+    private var lastAdvance: Double = 0
 
     func pressOrMove(at point: CGPoint, now: Double) {
-        x = point.x
-        y = point.y
+        targetX = point.x
+        targetY = point.y
         guard phase != .pressed else { return }
+        // A landing finger snaps the lens under it — the bloom starts where
+        // the touch is, never gliding in from a stale spot.
+        x = targetX
+        y = targetY
+        lastAdvance = now
         // Ramp from the current envelope, so re-pressing mid-decay doesn't
         // snap the lens shut and reopen it from zero.
         k0 = currentK(now: now)
@@ -193,6 +247,19 @@ final class AsciiFieldWarpTouch {
 
     func reset() {
         phase = .idle
+    }
+
+    /// Advances the position glide; call once per frame before sampling.
+    /// Keeps gliding through the release settle, so a flick's lens drifts
+    /// to rest at the lift point instead of freezing mid-pursuit.
+    func advance(now: Double) {
+        guard phase != .idle else { return }
+        // Clamp dt so a hitch or pause can't turn into a teleport.
+        let dt = min(0.1, max(0, now - lastAdvance))
+        lastAdvance = now
+        let a = AsciiFieldWarp.followFactor(dt)
+        x += (targetX - x) * a
+        y += (targetY - y) * a
     }
 
     func currentK(now: Double) -> Double {
@@ -412,7 +479,11 @@ struct AsciiFieldView: View {
     }
 
     var body: some View {
-        TimelineView(.animation(minimumInterval: 1.0 / 30.0, paused: !clockRuns)) { _ in
+        // 60fps while a finger is down — the lens pursuit reads steppy at
+        // the ambient 30. `touchDown` is @GestureState, so the interval
+        // change re-evaluates for free; the release settle runs at the
+        // ambient rate (nothing tracks the finger anymore).
+        TimelineView(.animation(minimumInterval: touchDown ? 1.0 / 60.0 : 1.0 / 30.0, paused: !clockRuns)) { _ in
             Canvas { context, size in
                 draw(in: &context, size: size, t: staticTime ?? frozenT ?? currentT())
             }
@@ -467,10 +538,13 @@ struct AsciiFieldView: View {
         let cols = Int(ceil(size.width / cellW)) + 1
         let rows = Int(ceil(size.height / cellH)) + 1
 
-        // The lens envelope, evaluated once per frame. Zero short-circuits
-        // every warp branch below, so an untouched frame samples through the
-        // exact expressions it always has — byte-identical stills.
-        let k = touch.currentK(now: CACurrentMediaTime())
+        // The lens envelope and position glide, advanced once per frame.
+        // Zero envelope short-circuits every warp branch below, so an
+        // untouched frame samples through the exact expressions it always
+        // has — byte-identical stills.
+        let now = CACurrentMediaTime()
+        touch.advance(now: now)
+        let k = touch.currentK(now: now)
         let tx = touch.x
         let ty = touch.y
 
@@ -491,15 +565,23 @@ struct AsciiFieldView: View {
                     // mapping moves the visible terrain away from it — a
                     // clearing with a compressed contour ring at the rim.
                     // Displacing away would read as a magnifier pulling
-                    // contours in. Only sampling warps; glyph positions
-                    // (and the currency hash keyed on them) never move.
+                    // contours in. The direction is rotated by the swirl, so
+                    // the terrain flows around the finger as it flees. Only
+                    // sampling warps; glyph positions (and the currency hash
+                    // keyed on them) never move.
                     let dx = px - tx
                     let dy = py - ty
                     let d = (dx * dx + dy * dy).squareRoot()
                     let f = AsciiFieldWarp.displacement(d, k)
                     if f > 0 {
-                        sampleX = (px - dx * (f / d)) / cellW * scale
-                        sampleY = (py - dy * (f / d)) / cellH * scale
+                        let theta = AsciiFieldWarp.swirlAngle(f)
+                        let cosT = cos(theta)
+                        let sinT = sin(theta)
+                        let inv = f / d
+                        let shiftX = (dx * cosT - dy * sinT) * inv
+                        let shiftY = (dx * sinT + dy * cosT) * inv
+                        sampleX = (px - shiftX) / cellW * scale
+                        sampleY = (py - shiftY) / cellH * scale
                     }
                 }
                 let level = AsciiFieldTerrain.displayLevel(
