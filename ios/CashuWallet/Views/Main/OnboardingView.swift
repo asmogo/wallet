@@ -217,18 +217,26 @@ struct OnboardingView: View {
             )
                 .frame(width: geo.size.width, height: layout.layerHeight)
                 // Transparent → opaque over the visible band's top ~30%, like
-                // the web band's mask-image; then opaque → transparent across
-                // the chassis edge, so the terrain dissolves toward the
-                // buttons — a faint sliver continuing behind their glass —
-                // rather than ending on a hard cut at the chassis top.
-                // Continuous gradients, never stepped, so neither fade bands.
+                // the web band's mask-image; then opaque → floor across the
+                // chassis edge, so the terrain dims toward the buttons and
+                // keeps running — very subtle — behind their glass all the
+                // way to the window bottom, instead of cutting out above
+                // them. Continuous gradients, never stepped, so neither
+                // fade bands.
                 .mask {
                     LinearGradient(
                         stops: [
                             .init(color: .clear, location: 0),
                             .init(color: .black, location: layout.maskOpaqueFraction),
                             .init(color: .black, location: layout.bottomFadeStart),
-                            .init(color: .clear, location: layout.bottomFadeEnd),
+                            .init(
+                                color: .black.opacity(AsciiFieldLayout.bottomFloorAlpha),
+                                location: layout.bottomFadeEnd
+                            ),
+                            .init(
+                                color: .black.opacity(AsciiFieldLayout.bottomFloorAlpha),
+                                location: 1
+                            ),
                         ],
                         startPoint: .top,
                         endPoint: .bottom

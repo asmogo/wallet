@@ -492,16 +492,16 @@ fun OnboardingScreen(
         modifier = Modifier
             .fillMaxSize()
             .testTag(UiTestTags.OnboardingRoot)
-            .background(MaterialTheme.colorScheme.background)
-            .statusBarsPadding()
-            .navigationBarsPadding()
-            .imePadding(),
+            .background(MaterialTheme.colorScheme.background),
     ) {
         // The terrain band, hoisted here — behind the stage switch, in front
         // of the window ground — so the Welcome ↔ Restore Wallet swap changes
         // only the text above it, never the terrain (see AsciiField.kt).
         // Exactly these two steps show it; every other step fades it out on
-        // the stage swap's own specs and pauses the clock.
+        // the stage swap's own specs and pauses the clock. Mounted *outside*
+        // the inset padding below so the terrain's floor runs behind the nav
+        // bar to the physical screen bottom; the backdrop reads the insets
+        // itself.
         OnboardingAsciiBackdrop(
             visible = step is OnboardingStep.Welcome || step is OnboardingStep.RestoreMethod,
             conceptSheetOpen = infoOpen,
@@ -510,7 +510,11 @@ fun OnboardingScreen(
         )
         OnboardingScaffold(
             chassis = chassis,
-            modifier = Modifier.fillMaxSize(),
+            modifier = Modifier
+                .fillMaxSize()
+                .statusBarsPadding()
+                .navigationBarsPadding()
+                .imePadding(),
             accessory = accessory,
             chassisModifier = Modifier.onSizeChanged { chassisHeightPx = it.height },
         ) {

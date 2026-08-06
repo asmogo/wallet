@@ -107,6 +107,20 @@ class AsciiFieldTerrainTest {
         assertEquals(0, AsciiFieldTerrain.pickLevel(40))
         assertEquals(4, AsciiFieldTerrain.pickLevel(255))
     }
+
+    /** The ₿ boost — the wallet's one deliberate divergence from the web
+     * terrain (mirrors iOS `testDisplayLevelBoostsPeaks`). [AsciiFieldTerrain.pickLevel]
+     * stays pinned by the fixture; only the renderer's `displayLevel`
+     * promotes the top of the currency band to the peak glyph. */
+    @Test
+    fun displayLevelBoostsPeaks() {
+        assertEquals(208, AsciiFieldTerrain.PEAK_BOOST_MIN)
+        assertEquals(3, AsciiFieldTerrain.displayLevel(207))
+        assertEquals(4, AsciiFieldTerrain.displayLevel(208))
+        assertEquals(4, AsciiFieldTerrain.displayLevel(216))
+        assertEquals(2, AsciiFieldTerrain.displayLevel(199))
+        assertEquals(-1, AsciiFieldTerrain.displayLevel(39))
+    }
 }
 
 /**

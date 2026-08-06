@@ -87,6 +87,19 @@ final class AsciiFieldTerrainTests: XCTestCase {
         XCTAssertEqual(AsciiFieldTerrain.pickLevel(40), 0)
         XCTAssertEqual(AsciiFieldTerrain.pickLevel(255), 4)
     }
+
+    /// The ₿ boost — the wallet's one deliberate divergence from the web
+    /// terrain (mirrors Android `displayLevelBoostsPeaks`). `pickLevel` stays
+    /// pinned by the fixture; only the renderer's `displayLevel` promotes the
+    /// top of the currency band to the peak glyph.
+    func testDisplayLevelBoostsPeaks() {
+        XCTAssertEqual(AsciiFieldTerrain.peakBoostMin, 208)
+        XCTAssertEqual(AsciiFieldTerrain.displayLevel(207), 3)
+        XCTAssertEqual(AsciiFieldTerrain.displayLevel(208), 4)
+        XCTAssertEqual(AsciiFieldTerrain.displayLevel(216), 4)
+        XCTAssertEqual(AsciiFieldTerrain.displayLevel(199), 2)
+        XCTAssertEqual(AsciiFieldTerrain.displayLevel(39), -1)
+    }
 }
 
 /// Parity vectors for the lens warp (mirrors Android `AsciiFieldWarpTest`).
@@ -157,7 +170,7 @@ final class AsciiFieldFrameBudgetTests: XCTestCase {
             for row in 0..<rows {
                 let sy = (Double(row) + 0.5) * AsciiFieldTerrain.terrainScale
                 for col in 0..<cols {
-                    let level = AsciiFieldTerrain.pickLevel(
+                    let level = AsciiFieldTerrain.displayLevel(
                         AsciiFieldTerrain.brightness((Double(col) + 0.5) * AsciiFieldTerrain.terrainScale, sy, t)
                     )
                     if level < 0 { continue }
@@ -204,7 +217,7 @@ final class AsciiFieldFrameBudgetTests: XCTestCase {
                         sampleX = (px - dx * (f / d)) / 12 * AsciiFieldTerrain.terrainScale
                         sampleY = (py - dy * (f / d)) / 14 * AsciiFieldTerrain.terrainScale
                     }
-                    let level = AsciiFieldTerrain.pickLevel(
+                    let level = AsciiFieldTerrain.displayLevel(
                         AsciiFieldTerrain.brightness(sampleX, sampleY, t)
                     )
                     if level < 0 { continue }

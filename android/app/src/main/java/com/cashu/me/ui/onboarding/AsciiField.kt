@@ -15,8 +15,11 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.statusBars
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -136,6 +139,17 @@ internal object AsciiFieldTerrain {
         }
         return -1
     }
+
+    /** The wallet's one deliberate divergence from the web terrain: more ₿.
+     * Cells in the top of the currency band are promoted to the peak glyph
+     * (roughly doubling the on-screen ₿, ≈1.6 → ≈3.2 on a phone band)
+     * without touching the $¥€ population below the boost line. [pickLevel]
+     * itself stays verbatim-web so the golden-vector fixture keeps pinning
+     * both ports; the boost is its own mirrored constant + function. */
+    const val PEAK_BOOST_MIN = 208
+
+    /** The level the renderer draws: [pickLevel], plus the ₿ boost. */
+    fun displayLevel(b: Int): Int = if (b >= PEAK_BOOST_MIN) PEAK_LEVEL else pickLevel(b)
 
     /** Stable spatial hash: a cell always keeps the same currency, so motion
      * comes from the terrain crossing thresholds rather than random shimmer.
@@ -286,9 +300,14 @@ internal object AsciiFieldLayout {
     /** The bottom fade starts this far (dp) above the chassis edge… */
     const val BOTTOM_FADE_REACH = 48f
 
-    /** …and reaches zero this far past it — just enough that a faint sliver
-     * of terrain sits behind the top of the primary button, no deeper. */
+    /** …and settles onto the floor opacity this far past it, so the dimming
+     * is complete by the time the terrain passes behind the buttons. */
     const val BOTTOM_FADE_UNDERLAP = 40f
+
+    /** The fade lands on this opacity — not zero — and holds it to the very
+     * bottom of the window: the terrain runs subtly behind the chassis
+     * buttons and the navigation bar instead of cutting out above them. */
+    const val BOTTOM_FLOOR_ALPHA = 0.25f
 
     data class Resolution(
         /** Height of the band above the chassis — the part the user sees. */
@@ -386,8 +405,18 @@ internal fun OnboardingAsciiBackdrop(
     val reducedMotion = rememberReducedMotion()
 
     BoxWithConstraints(modifier) {
-        val windowHeightDp = with(density) { constraints.maxHeight.toDp().value }
-        val chassisDp = with(density) { chassisHeightPx.toDp().value }
+        // The backdrop spans the *un-inset* window (the onboarding root
+        // mounts it outside its own inset padding), so the terrain can run
+        // to the physical screen bottom. The nav bar joins the chassis as
+        // underlap — exactly how iOS folds the home indicator into
+        // `chassisInset` — and the status bar is subtracted back out of the
+        // resolver's window so the suppression math matches the content
+        // area. Tests compose the backdrop with zero insets and are
+        // unaffected.
+        val statusBarDp = with(density) { WindowInsets.statusBars.getTop(this).toDp().value }
+        val navBarDp = with(density) { WindowInsets.navigationBars.getBottom(this).toDp().value }
+        val windowHeightDp = with(density) { constraints.maxHeight.toDp().value } - statusBarDp
+        val chassisDp = with(density) { chassisHeightPx.toDp().value } + navBarDp
         val resolved = AsciiFieldLayout.resolve(
             windowHeight = windowHeightDp,
             headerClearance = AsciiFieldLayout.headerClearanceDp(density.fontScale),
@@ -440,11 +469,11 @@ internal fun OnboardingAsciiBackdrop(
                     compositingStrategy = CompositingStrategy.Offscreen
                 }
                 // Transparent → opaque over the visible band's top ~30%, like
-                // the web band's mask-image; then opaque → transparent across
-                // the chassis edge, so the terrain dissolves toward the
-                // buttons — a faint sliver continuing behind them — rather
-                // than ending on a hard cut at the chassis top. Continuous
-                // gradients, never stepped, so neither fade bands.
+                // the web band's mask-image; then opaque → floor across the
+                // chassis edge, so the terrain dims toward the buttons and
+                // keeps running — very subtle — behind them all the way to
+                // the window bottom, instead of cutting out above them.
+                // Continuous gradients, never stepped, so neither fade bands.
                 .drawWithContent {
                     drawContent()
                     drawRect(
@@ -452,7 +481,9 @@ internal fun OnboardingAsciiBackdrop(
                             0f to Color.Transparent,
                             layout.maskOpaqueFraction to Color.Black,
                             layout.bottomFadeStart to Color.Black,
-                            layout.bottomFadeEnd to Color.Transparent,
+                            layout.bottomFadeEnd to
+                                Color.Black.copy(alpha = AsciiFieldLayout.BOTTOM_FLOOR_ALPHA),
+                            1f to Color.Black.copy(alpha = AsciiFieldLayout.BOTTOM_FLOOR_ALPHA),
                         ),
                         blendMode = BlendMode.DstIn,
                     )
@@ -700,7 +731,7 @@ internal class AsciiFieldRenderer(
                             AsciiFieldTerrain.CELL_H * AsciiFieldTerrain.TERRAIN_SCALE
                     }
                 }
-                val level = AsciiFieldTerrain.pickLevel(
+                val level = AsciiFieldTerrain.displayLevel(
                     AsciiFieldTerrain.brightness(sampleX, sampleY, t),
                 )
                 if (level < 0) continue

@@ -83,6 +83,19 @@ enum AsciiFieldTerrain {
         return -1
     }
 
+    /// The wallet's one deliberate divergence from the web terrain: more ₿.
+    /// Cells in the top of the currency band are promoted to the peak glyph
+    /// (roughly doubling the on-screen ₿, ≈1.6 → ≈3.2 on a phone band)
+    /// without touching the $¥€ population below the boost line. `pickLevel`
+    /// itself stays verbatim-web so the golden-vector fixture keeps pinning
+    /// both ports; the boost is its own mirrored constant + function.
+    static let peakBoostMin = 208
+
+    /// The level the renderer draws: `pickLevel`, plus the ₿ boost.
+    static func displayLevel(_ b: Int) -> Int {
+        b >= peakBoostMin ? peakLevel : pickLevel(b)
+    }
+
     /// Stable spatial hash: a cell always keeps the same currency, so motion
     /// comes from the terrain crossing thresholds rather than random shimmer.
     /// Reproduces JS `Math.imul` (32-bit signed multiply with wraparound) and
@@ -225,9 +238,13 @@ enum AsciiFieldLayout {
     static let maskFade: CGFloat = 0.30
     /// The bottom fade starts this far above the chassis edge…
     static let bottomFadeReach: CGFloat = 48
-    /// …and reaches zero this far past it — just enough that a faint sliver
-    /// of terrain sits behind the top of the primary capsule, no deeper.
+    /// …and settles onto the floor opacity this far past it, so the dimming
+    /// is complete by the time the terrain passes behind the buttons.
     static let bottomFadeUnderlap: CGFloat = 40
+    /// The fade lands on this opacity — not zero — and holds it to the very
+    /// bottom of the window: the terrain runs subtly behind the chassis
+    /// buttons and the home indicator instead of cutting out above them.
+    static let bottomFloorAlpha: CGFloat = 0.25
 
     struct Resolution: Equatable {
         /// Height of the band above the chassis — the part the user sees.
@@ -485,7 +502,7 @@ struct AsciiFieldView: View {
                         sampleY = (py - dy * (f / d)) / cellH * scale
                     }
                 }
-                let level = AsciiFieldTerrain.pickLevel(
+                let level = AsciiFieldTerrain.displayLevel(
                     AsciiFieldTerrain.brightness(sampleX, sampleY, t)
                 )
                 if level < 0 { continue }
