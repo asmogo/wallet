@@ -50,15 +50,16 @@ struct CashuFonts {
 /// size fixes that by construction.
 ///
 /// SF Pro applies its own optical tracking curve per text style, so these are
-/// *deltas* on top of that and are mostly zero. Only the display numerals —
-/// which run at fixed sizes rather than named styles, and so sit outside the
-/// system's curve — and the overline carry real values.
+/// *deltas* on top of that and are mostly zero. The display numerals — which
+/// run at fixed sizes rather than named styles, and so sit outside the system's
+/// curve — the overline, and the onboarding title carry real values.
 struct CashuTracking {
     var amountHero: CGFloat = 0
     var amountConfirm: CGFloat = 0
     var amountCompact: CGFloat = 0
     var amountRow: CGFloat = 0
     var overline: CGFloat = 0
+    var onboardingTitle: CGFloat = 0
     var mono: CGFloat = 0
     var body: CGFloat = 0
 
@@ -70,6 +71,12 @@ struct CashuTracking {
         // The documented value. 0.06em is 0.72pt at 12pt — half of what five of
         // the six hand-rolled section headers currently apply.
         overline: 0.060,
+        // The one named style that carries a delta. SF Pro's curve is drawn for
+        // the regular/semibold end of the range; at `.heavy` a largeTitle sets
+        // visibly loose, which is why the onboarding headers were hand-rolling
+        // `.tracking(-0.5)`. Same value, expressed so it scales: -0.015em is
+        // -0.5pt at largeTitle's 34pt.
+        onboardingTitle: -0.015,
         mono: 0,
         body: 0
     )

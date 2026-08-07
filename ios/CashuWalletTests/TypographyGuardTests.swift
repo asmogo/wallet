@@ -141,7 +141,8 @@ final class TypographyGuardTests: XCTestCase {
     private static let roles: [(String, CashuTextRole)] = [
         ("amountHero", .amountHero), ("amountConfirm", .amountConfirm),
         ("amountCompact", .amountCompact), ("amountRow", .amountRow),
-        ("numberPadKey", .numberPadKey), ("title", .title), ("title3", .title3),
+        ("numberPadKey", .numberPadKey), ("onboardingTitle", .onboardingTitle),
+        ("title", .title), ("title3", .title3),
         ("bodyEmphasis", .bodyEmphasis), ("body", .body), ("callout", .callout),
         ("textLink", .textLink), ("metadata", .metadata), ("caption", .caption),
         ("overline", .overline), ("monoBody", .monoBody), ("monoCaption", .monoCaption),
@@ -151,7 +152,7 @@ final class TypographyGuardTests: XCTestCase {
     /// drift wearing a nicer API, so growing it should be a reviewed act.
     func testRoleInventoryIsFrozen() {
         XCTAssertEqual(
-            Self.roles.count, 16,
+            Self.roles.count, 17,
             "Adding or removing a role is a design decision — update this count deliberately"
         )
     }

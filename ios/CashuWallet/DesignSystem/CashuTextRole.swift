@@ -149,6 +149,16 @@ extension CashuTextRole {
 
     // MARK: Structure
 
+    /// The onboarding step title. Every step wears it, welcome included, which
+    /// is what puts them all on one line — so it is one role, not a font stack
+    /// each header repeats. Heavy rather than bold, and the only named style
+    /// carrying a tracking delta; see `CashuTracking.onboardingTitle`.
+    static let onboardingTitle = CashuTextRole(
+        size: .style(.largeTitle),
+        weight: .heavy,
+        trackingKey: \.onboardingTitle
+    )
+
     static let title = CashuTextRole(size: .style(.title), weight: .semibold)
     static let title3 = CashuTextRole(size: .style(.title3), weight: .medium)
     static let bodyEmphasis = CashuTextRole(size: .style(.body), weight: .semibold)

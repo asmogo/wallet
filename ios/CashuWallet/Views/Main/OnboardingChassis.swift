@@ -239,8 +239,7 @@ struct OnboardingStepHeader: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             Text(title)
-                .font(.largeTitle.weight(.heavy))
-                .tracking(-0.5)
+                .cashuText(.onboardingTitle)
                 .foregroundStyle(.primary)
                 .fixedSize(horizontal: false, vertical: true)
 
