@@ -14,13 +14,16 @@ enum ConnectMintContext {
     var navigationTitle: String {
         switch self {
         case .send: "Send"
-        case .addMint: "Add Mint"
+        case .addMint: "Add mint"
         }
     }
 
     var showsHeadline: Bool { self == .send }
 
-    static let headline = "Connect a mint first"
+    // The app says "add" everywhere else — CTAs, row a11y labels, the submit
+    // button — so the headline says it too rather than introducing "connect" as
+    // a second verb for the same act.
+    static let headline = "Add a mint first"
     static let subtitle = "Mints issue the ecash you send and receive. Add one to get started."
 }
 
@@ -87,8 +90,11 @@ struct ConnectMintPicker: View {
             // 44pt hit targets; stacking them with plain spacing would leave
             // ~20pt-tall taps.
             VStack(spacing: 0) {
+                // Verb + object, matching "Discover mints" below it. "Custom" is
+                // an implementation label, and "URL" is already said by the step
+                // it opens.
                 footerLink(
-                    title: "Add custom mint URL",
+                    title: "Add by URL",
                     systemImage: "plus",
                     route: .addCustom
                 )
@@ -134,7 +140,7 @@ struct ConnectMintPicker: View {
     }
 }
 
-// MARK: - Suggested mints
+// MARK: - Known mints
 
 /// Quick-add rows for known public mints, filtered against what the wallet
 /// already has. Rows sit on the bare canvas.
@@ -150,7 +156,10 @@ struct SuggestedMintsSection: View {
     var body: some View {
         if !available.isEmpty {
             VStack(alignment: .leading, spacing: 0) {
-                Text("Suggested mints")
+                // Not "Suggested": the disclaimer on the pushed step says this
+                // wallet isn't affiliated with any mint, and suggesting implies
+                // it is.
+                Text("Known mints")
                     .cashuText(.overline)
                     .foregroundStyle(.secondary)
                     .padding(.bottom, ConnectMintMetrics.sectionToRows)
@@ -225,10 +234,16 @@ func connectMintDestination(
 ) -> some View {
     switch route {
     case .addCustom:
-        AddMintFormView(onAdded: onAdded, onHeightChange: onHeightChange)
+        // Titled after the link that pushed it. The standalone Mints-tab sheet
+        // isn't reached through that link, so it keeps the form's default.
+        AddMintFormView(
+            navigationTitle: "Add by URL",
+            onAdded: onAdded,
+            onHeightChange: onHeightChange
+        )
     case .discover:
         MintDiscoveryList(onMintAdded: onAdded)
-            .navigationTitle("Discover Mints")
+            .navigationTitle("Discover mints")
             .navigationBarTitleDisplayMode(.inline)
     }
 }
@@ -291,7 +306,9 @@ struct ConnectMintSheet: View {
                 try await walletManager.addMint(url: url)
                 dismiss()
             } catch {
-                addMintError = "Couldn't connect to that mint. Try another."
+                // Same mapper Android's quick-add uses. The old string blamed
+                // this wallet's own shortlist for what is usually the network.
+                addMintError = error.userFacingWalletMessage
             }
         }
     }

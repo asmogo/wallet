@@ -70,12 +70,18 @@ fun AddMintFormBody(
     var isAdding by remember { mutableStateOf(false) }
 
     fun pasteFromClipboard() {
-        val candidate = clipboard.getText()?.text?.let { mintUrlCandidates(it).firstOrNull() }
-        if (candidate == null) {
-            error = "No valid mint URL in clipboard."
-        } else {
-            url = candidate
-            error = null
+        val clipboardText = clipboard.getText()?.text
+        val candidate = clipboardText?.let { mintUrlCandidates(it).firstOrNull() }
+        when {
+            // Empty and "held something, but not a mint URL" are different
+            // mistakes with different fixes — iOS already split them.
+            clipboardText.isNullOrBlank() -> error = "Clipboard is empty."
+            candidate == null ->
+                error = "No mint URL in your clipboard. Copy the mint's address, then paste."
+            else -> {
+                url = candidate
+                error = null
+            }
         }
     }
 
@@ -85,7 +91,9 @@ fun AddMintFormBody(
             allowCleartextLocalTestMints = allowCleartextLocalTestMints,
         )
         if (normalized == null) {
-            error = "Enter a valid HTTPS mint URL."
+            // Names the requirement, which no earlier copy does — the field's
+            // placeholder is the only other place https:// appears.
+            error = "That doesn't look like a mint address. Mint URLs start with https://."
             return
         }
         error = null
@@ -134,8 +142,10 @@ fun AddMintFormBody(
         )
 
         Text(
-            text = "Enter the URL of a Cashu mint to connect to it. " +
-                "This wallet is not affiliated with any mint.",
+            // The label and placeholder already say "enter a mint URL"; the only
+            // load-bearing sentence here is the trust one.
+            text = "Mints are run by third parties; this wallet isn't affiliated " +
+                "with any of them. Only add a mint you trust.",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
@@ -150,7 +160,7 @@ fun AddMintFormBody(
             modifier = Modifier.testTag(UiTestTags.AddMintSubmit),
         )
         GhostButton(
-            text = "Paste URL from clipboard",
+            text = "Paste from clipboard",
             onClick = ::pasteFromClipboard,
             enabled = !isAdding,
             modifier = Modifier.fillMaxWidth(),
@@ -187,7 +197,9 @@ fun AddMintSheet(
                 .padding(bottom = CashuTheme.spacing.comfortable),
             verticalArrangement = Arrangement.spacedBy(CashuTheme.spacing.snug),
         ) {
-            FlowSheetTitle(title = "Add Mint")
+            // Reached from the Mints tab, not through the "Add by URL" link, so
+            // this one keeps the plain name.
+            FlowSheetTitle(title = "Add mint")
 
             AddMintFormBody(
                 walletManager = walletManager,

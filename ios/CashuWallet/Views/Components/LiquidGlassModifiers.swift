@@ -50,7 +50,7 @@ extension View {
     }
 
     /// Canonical borderless text-link button for tertiary actions
-    /// ("Skip", "What is ecash?", "Copy", "Add custom mint URL"). The single
+    /// ("Skip", "What is ecash?", "Copy", "Add by URL"). The single
     /// text-link vocabulary in the app — see `TextLinkButtonStyle`.
     func textLinkButton() -> some View {
         self.buttonStyle(TextLinkButtonStyle())
@@ -266,7 +266,7 @@ private struct ContentFitDetent: ViewModifier {
 // MARK: - Content-Fit Sheet Metrics
 
 /// The one place the content-fit sheet arithmetic lives. Every partial-height
-/// sheet in the app — Send's compact input, Receive, Add Mint, connect-a-mint,
+/// sheet in the app — Send's compact input, Receive, Add mint, connect-a-mint,
 /// onboarding's "What is ecash?" — hugs its content through
 /// ``View/contentFitMeasured(_:)`` +
 /// ``View/contentFitDetent(_:enabled:estimate:navigationBar:)``.
@@ -447,11 +447,11 @@ struct FullWidthCapsuleButtonStyle: ButtonStyle {
 // MARK: - Text Link Button Style
 
 /// Borderless, text-only tertiary action ("Skip", "What is ecash?", "Copy",
-/// "Add custom mint URL"). The single canonical style for plain text links —
+/// "Add by URL"). The single canonical style for plain text links —
 /// `.subheadline.weight(.medium)`, `.secondary`, with a press-dim and disabled
 /// fade that match the rest of the button family. Layout (full-width, padding,
 /// optional leading SF Symbol) stays at the call site, since text links vary
-/// from inline ("Copy") to full-width ("Add custom mint URL").
+/// from inline ("Copy") to full-width ("Add by URL").
 struct TextLinkButtonStyle: ButtonStyle {
     @Environment(\.isEnabled) private var isEnabled
 

@@ -72,14 +72,17 @@ enum class ConnectMintContext {
     internal val pickerTitle: String
         get() = when (this) {
             Send -> "Send"
-            AddMint -> "Add Mint"
+            AddMint -> "Add mint"
         }
 
     internal val showsHeadline: Boolean
         get() = this == Send
 
     internal companion object {
-        const val HEADLINE = "Connect a mint first"
+        // The app says "add" everywhere else — CTAs, row a11y labels, the submit
+        // button — so the headline says it too rather than introducing "connect"
+        // as a second verb for the same act.
+        const val HEADLINE = "Add a mint first"
         const val SUBTITLE =
             "Mints issue the ecash you send and receive. Add one to get started."
     }
@@ -170,8 +173,9 @@ fun ConnectMintSheetContent(
         SheetHeader(
             title = when (step) {
                 ConnectMintStep.Picker -> context.pickerTitle
-                ConnectMintStep.AddCustom -> "Add Mint"
-                ConnectMintStep.Discover -> "Discover Mints"
+                // The pushed step is titled after the link that opened it.
+                ConnectMintStep.AddCustom -> "Add by URL"
+                ConnectMintStep.Discover -> "Discover mints"
             },
             navigationIcon = Icons.AutoMirrored.Outlined.ArrowBack.takeIf {
                 step != ConnectMintStep.Picker
@@ -275,7 +279,9 @@ internal fun SuggestedMintsFace(
         if (suggested.isNotEmpty()) {
             Spacer(Modifier.height(CashuTheme.spacing.section))
             SectionHeader(
-                text = "Suggested mints",
+                // Not "Suggested": the disclaimer two lines up says this wallet
+                // isn't affiliated with any mint, and suggesting implies it is.
+                text = "Known mints",
                 contentPadding = PaddingValues(bottom = CashuTheme.spacing.snug),
             )
             suggested.forEachIndexed { index, mint ->
@@ -295,7 +301,10 @@ internal fun SuggestedMintsFace(
         Spacer(Modifier.height(CashuTheme.spacing.loose))
         Column(verticalArrangement = Arrangement.spacedBy(CashuTheme.spacing.default)) {
             GhostButton(
-                text = "Add custom mint URL",
+                // Verb + object, matching "Discover mints" beside it. "Custom" is
+                // an implementation label, and "URL" is already said by the step
+                // it opens.
+                text = "Add by URL",
                 onClick = onAddCustom,
                 leadingIcon = Icons.Outlined.Add,
                 modifier = Modifier

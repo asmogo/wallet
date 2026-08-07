@@ -2792,7 +2792,7 @@ struct UnifiedSendView: View {
             do {
                 try await walletManager.addMint(url: url)
             } catch {
-                addMintError = "Couldn't connect to that mint. Try another."
+                addMintError = error.userFacingWalletMessage
             }
         }
     }

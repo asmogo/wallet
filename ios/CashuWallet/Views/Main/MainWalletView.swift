@@ -406,7 +406,7 @@ struct MainWalletView: View {
                 Button {
                     navigationManager.activeWalletSheet = .discoverMints
                 } label: {
-                    Label("Add Mint", systemImage: "plus")
+                    Label("Add mint", systemImage: "plus")
                 }
             } label: {
                 HStack(spacing: 8) {

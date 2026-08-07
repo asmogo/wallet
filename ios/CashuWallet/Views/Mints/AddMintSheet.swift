@@ -5,6 +5,10 @@ import UIKit
 /// host supplies one. Used standalone by `AddMintSheet` (Mints list) and as the
 /// pushed step of `ConnectMintPicker`.
 struct AddMintFormView: View {
+    /// Inline title for the host's navigation bar. The connect-a-mint picker
+    /// pushes this as "Add by URL" — the link that opened it — while the
+    /// standalone Mints-tab sheet keeps the plain name.
+    var navigationTitle: String
     /// Called after the mint is connected. Standalone hosts dismiss; the
     /// connect-a-mint picker pops back or closes depending on where it was opened.
     var onAdded: () -> Void
@@ -22,9 +26,11 @@ struct AddMintFormView: View {
 
     init(
         initialUrl: String = "",
+        navigationTitle: String = "Add mint",
         onAdded: @escaping () -> Void,
         onHeightChange: @escaping (CGFloat) -> Void = { _ in }
     ) {
+        self.navigationTitle = navigationTitle
         self.onAdded = onAdded
         self.onHeightChange = onHeightChange
         _mintUrl = State(initialValue: initialUrl)
@@ -36,8 +42,17 @@ struct AddMintFormView: View {
         // second visual system inside one sheet, and its greedy height forces the
         // host to `.large`, stranding the buttons under a band of dead space.
         VStack(alignment: .leading, spacing: 0) {
+            // A persistent label, not a placeholder doing double duty: the old
+            // "Mint URL (https://…)" vanished the moment they typed, taking the
+            // VoiceOver label with it. Android's floating label already does this.
+            Text("Mint URL")
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+                .padding(.bottom, 6)
+
             HStack(spacing: 10) {
-                TextField("Mint URL (https://…)", text: $mintUrl)
+                TextField("https://…", text: $mintUrl)
+                    .accessibilityLabel("Mint URL")
                     .textInputAutocapitalization(.never)
                     .autocorrectionDisabled()
                     .keyboardType(.URL)
@@ -65,7 +80,9 @@ struct AddMintFormView: View {
             .padding(.vertical, 14)
             .background(.quaternary.opacity(0.5), in: RoundedRectangle(cornerRadius: 12))
 
-            Text("Enter the URL of a Cashu mint to connect to it. This wallet is not affiliated with any mint.")
+            // The label and placeholder already say "enter a mint URL"; the only
+            // load-bearing sentence here is the trust one.
+            Text("Mints are run by third parties; this wallet isn't affiliated with any of them. Only add a mint you trust.")
                 .font(.footnote)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
@@ -81,7 +98,7 @@ struct AddMintFormView: View {
                     if isAdding {
                         ProgressView().tint(.primary)
                     } else {
-                        Text("Add Mint")
+                        Text("Add mint")
                     }
                 }
             }
@@ -90,7 +107,7 @@ struct AddMintFormView: View {
             .accessibilityIdentifier("mints-add-submit-button")
             .padding(.top, 24)
 
-            Button("Paste URL from Clipboard", action: pasteFromClipboard)
+            Button("Paste from clipboard", action: pasteFromClipboard)
                 .textLinkButton()
                 .frame(maxWidth: .infinity)
                 .disabled(isAdding)
@@ -100,7 +117,7 @@ struct AddMintFormView: View {
         .padding(.top, 8)
         .padding(.bottom, 16)
         .contentFitMeasured { onHeightChange($0) }
-        .navigationTitle("Add Mint")
+        .navigationTitle(navigationTitle)
         .navigationBarTitleDisplayMode(.inline)
         // Sheet, not fullScreenCover — the one presentation kind every
         // value-returning scanner uses.
@@ -162,7 +179,7 @@ struct AddMintFormView: View {
             mintUrl = normalized
             errorMessage = nil
         } else {
-            errorMessage = "No valid mint URL found in clipboard."
+            errorMessage = "No mint URL in your clipboard. Copy the mint's address, then paste."
         }
     }
 

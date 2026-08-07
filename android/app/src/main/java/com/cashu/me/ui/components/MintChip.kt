@@ -92,7 +92,7 @@ fun MintChip(
                 )
             }
             DropdownMenuItem(
-                text = { Text("Add Mint") },
+                text = { Text("Add mint") },
                 onClick = {
                     expanded = false
                     onManage()
