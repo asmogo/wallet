@@ -69,6 +69,7 @@ import com.cashu.me.ui.components.InlineNotice
 import com.cashu.me.ui.components.MintAvatar
 import com.cashu.me.ui.components.NoticeSeverity
 import com.cashu.me.ui.components.PrimaryButton
+import com.cashu.me.ui.components.ScrollFadeBand
 import com.cashu.me.ui.components.scrollEdgeFade
 import com.cashu.me.ui.theme.CapsuleShape
 import com.cashu.me.ui.theme.CashuTheme
@@ -598,7 +599,11 @@ fun RestoreMintsStageContent(
             // top mask would permanently dim it.
             .scrollEdgeFade(bottom = 0.dp)
             .verticalScroll(rememberScrollState())
-            .padding(horizontal = HeaderPadding),
+            .padding(horizontal = HeaderPadding)
+            // Bottom clearance equal to the fade band, so scrolling to the end
+            // parks the last row clear of the gradient instead of leaving it
+            // permanently dimmed.
+            .padding(bottom = ScrollFadeBand),
         verticalArrangement = Arrangement.spacedBy(CashuTheme.spacing.default),
     ) {
         CashuTextField(
@@ -1002,8 +1007,19 @@ fun RestoreProgressRows(
 ) {
     Column(
         modifier = modifier
+            // Both edges, unlike the staging step: this list scrolls
+            // unattended while mints settle, so rows cross both boundaries
+            // with nobody driving. The recovered total is pinned above and the
+            // CTA below, and rows were cutting dead against each.
+            .scrollEdgeFade(top = 0.dp, bottom = 0.dp)
             .verticalScroll(rememberScrollState())
-            .padding(horizontal = HeaderPadding),
+            .padding(horizontal = HeaderPadding)
+            // Clearance equal to the fade band at both ends. A static edge mask
+            // can't tell "scrolled past" from "this is the end", so without this
+            // the first and last rows sit inside the gradient and render dimmed
+            // at rest — a defect, not a hint. Padded, the extremes park clear of
+            // the band and only genuinely-clipped rows dissolve.
+            .padding(vertical = ScrollFadeBand),
     ) {
         mintUrls.forEach { url ->
             RestoreProgressRow(

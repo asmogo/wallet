@@ -85,13 +85,6 @@ struct OnboardingView: View {
     // delay={480}>`.
     @State private var asciiFieldEntered = false
 
-    /// Chassis height + home indicator, read off the safe area `safeAreaInset`
-    /// extends. Scrolling steps fade their content out over this band so rows
-    /// dissolve into the CTAs instead of cutting against the opaque ground.
-    /// Measured rather than derived: with the keyboard up the inset grows to
-    /// include it, so the fade tracks to just above the keyboard for free.
-    @State private var chassisInset: CGFloat = 0
-
     // Per-step entrance animation triggers
     @State private var welcomeAppeared = false
     @State private var mnemonicAppeared = false
@@ -149,12 +142,7 @@ struct OnboardingView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         // Behind the stage switch, in front of the window ground — error
         // banners and stage content render over it.
-        .background {
-            asciiFieldLayer
-                .onGeometryChange(for: CGFloat.self) { proxy in
-                    proxy.safeAreaInsets.bottom
-                } action: { chassisInset = $0 }
-        }
+        .background { asciiFieldLayer }
         .safeAreaInset(edge: .bottom) {
             // The chassis container never animates (brief §3) — only its text
             // and labels cross-fade in place, choreographed inside
@@ -1644,16 +1632,20 @@ struct OnboardingView: View {
                 }
             }
             .padding(.top, 8)
-            .padding(.bottom, 8)
+            // Bottom clearance equal to the fade band, so scrolling to the end
+            // parks the last row clear of the gradient instead of leaving it
+            // permanently dimmed.
+            .padding(.bottom, ScrollFadeMetrics.band)
         }
         .scrollDismissesKeyboard(.interactively)
-        // Content genuinely extends behind the chassis (the opaque ground hides
-        // it), so the fade is inset by the chassis rather than run at the
-        // container's own edge — otherwise the band lands under the ground and
-        // you see no fade at all. No top fade: the whole stage scrolls as one
-        // unit, so the first thing in the container is the URL field sitting
-        // flush at the top edge, and a top mask would permanently dim it.
-        .scrollEdgeFade(bottom: chassisInset)
+        // Zero inset, not a chassis-height one: `safeAreaInset` on the root
+        // *reduces* the region the stage lays out in, so this ScrollView's own
+        // bottom edge already sits at the chassis top and nothing runs
+        // underneath. Insetting by the chassis floated the band a chassis-height
+        // up the screen, which is what shipped and looked broken. No top fade:
+        // the whole stage scrolls as one unit, so the first thing in the
+        // container is the URL field, and a top mask would dim it at rest.
+        .scrollEdgeFade(bottom: 0)
         // Tap anywhere off the field dismisses the keyboard. Guarded so the
         // first tap that focuses the field isn't immediately revoked.
         .simultaneousGesture(
@@ -1778,12 +1770,24 @@ struct OnboardingView: View {
                         }
                     }
                     .padding(.horizontal)
-                    .padding(.bottom, 8)
+                    // Clearance equal to the fade band at both ends. A static
+                    // edge mask can't tell "scrolled past" from "this is the
+                    // end", so without this the first and last rows sit inside
+                    // the gradient and render dimmed at rest — which is a
+                    // defect, not a hint. Padded, the extremes park clear of
+                    // the band and only genuinely-clipped rows dissolve.
+                    .padding(.vertical, ScrollFadeMetrics.band)
                 }
                 .onChange(of: currentRestoringUrl) { _, active in
                     guard let active else { return }
                     withAnimation(.snappy) { proxy.scrollTo(active, anchor: .center) }
                 }
+                // Both edges here, unlike the staging step: this list
+                // auto-scrolls to whichever mint is working, so rows cross both
+                // boundaries unattended. The recovered-total line is pinned
+                // above and the chassis below, and rows were cutting dead
+                // against each.
+                .scrollEdgeFade(top: 0, bottom: 0)
             }
         }
         .padding(.top, 8)
