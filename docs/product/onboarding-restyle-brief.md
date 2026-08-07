@@ -189,7 +189,7 @@ Rules:
 | `firstMint` | The mint list + custom-URL field (functional, scrolls, keyboard). |
 | `restoreMethod` | Header over open space (the quiet variant of the welcome piece went with it — see §4). Two buttons in the chassis. |
 | `restoreInput` | The seed `TextEditor` + word counter (functional, keyboard). |
-| `restoreMints` | The URL field, Add/Paste/Nostr chips, staged rows (functional, keyboard). |
+| `restoreMints` | The URL field, Add/Paste/Find-my-mints chips, staged rows (functional, keyboard). The only step besides `welcome` to use the bar band's trailing help slot, and the only one to fill both slots at once: the backup lookup is the way through for most people and nothing else on screen says what it does. The scroll fades at its bottom edge (`scrollEdgeFade`) so rows dissolve into the CTA rather than cutting against it. |
 | `restoreProgress` | The live per-mint progress list — already a self-playing stage. |
 | `iCloudRestore` | State-driven: symbol → spinner → success glyph + balance. Already the closest thing to the reference. |
 

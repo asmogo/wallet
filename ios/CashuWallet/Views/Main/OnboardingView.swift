@@ -16,9 +16,11 @@ struct OnboardingView: View {
     @State private var mintUrlInput = ""
     @State private var mintsToRestore: [String] = []
     @State private var restoreMintError: String?
-    /// The mint-backup lookup runs itself once per visit to the mint step.
-    @State private var hasAutoSearchedMintBackup = false
     @State private var mintBackupSearchCompleted = false
+    @State private var showMintBackupSheet = false
+    /// Measured height of `mintBackupSheet` — same content-fit pair as
+    /// `conceptSheet`, so the sheet hugs its copy instead of sitting at `.medium`.
+    @State private var mintBackupSheetHeight: CGFloat = 0
     @FocusState private var mintFieldFocused: Bool
 
     // Dedicated restore/results screen (forward-only): a snapshot of the staged
@@ -83,6 +85,13 @@ struct OnboardingView: View {
     // delay={480}>`.
     @State private var asciiFieldEntered = false
 
+    /// Chassis height + home indicator, read off the safe area `safeAreaInset`
+    /// extends. Scrolling steps fade their content out over this band so rows
+    /// dissolve into the CTAs instead of cutting against the opaque ground.
+    /// Measured rather than derived: with the keyboard up the inset grows to
+    /// include it, so the fade tracks to just above the keyboard for free.
+    @State private var chassisInset: CGFloat = 0
+
     // Per-step entrance animation triggers
     @State private var welcomeAppeared = false
     @State private var mnemonicAppeared = false
@@ -140,7 +149,12 @@ struct OnboardingView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         // Behind the stage switch, in front of the window ground — error
         // banners and stage content render over it.
-        .background { asciiFieldLayer }
+        .background {
+            asciiFieldLayer
+                .onGeometryChange(for: CGFloat.self) { proxy in
+                    proxy.safeAreaInsets.bottom
+                } action: { chassisInset = $0 }
+        }
         .safeAreaInset(edge: .bottom) {
             // The chassis container never animates (brief §3) — only its text
             // and labels cross-fade in place, choreographed inside
@@ -163,6 +177,11 @@ struct OnboardingView: View {
         }
         .sheet(isPresented: $showConceptSheet) {
             conceptSheet
+        }
+        // A second sibling sheet rather than an enum-driven one: the two belong
+        // to different steps and are never both true.
+        .sheet(isPresented: $showMintBackupSheet) {
+            mintBackupSheet
         }
         .onAppear {
             startAsciiFieldEntrance()
@@ -417,6 +436,9 @@ struct OnboardingView: View {
                     label: "Continue",
                     isLoading: isRestoring,
                     isDisabled: restoreWordCount != 12 || isRestoring,
+                    // The seed keyboard's return key is also labelled
+                    // "Continue", so a label-only query matches two elements.
+                    accessibilityIdentifier: "onboarding-restore-continue",
                     action: initializeAndProceed
                 )
             )
@@ -428,6 +450,9 @@ struct OnboardingView: View {
                         ? "Restore"
                         : "Restore from \(mintsToRestore.count) mint\(mintsToRestore.count == 1 ? "" : "s")",
                     isDisabled: mintsToRestore.isEmpty,
+                    // Stable handle for the label, which is the only readout of
+                    // how many mints got staged.
+                    accessibilityIdentifier: "onboarding-restore-mints",
                     action: startRestoreFlow
                 )
             )
@@ -636,6 +661,49 @@ struct OnboardingView: View {
         // chrome. Very large accessibility text scrolls inside the clamped
         // sheet — the same contract as every other content-fit sheet.
         .contentFitDetent(conceptSheetHeight, estimate: 360, navigationBar: false)
+        .presentationDragIndicator(.visible)
+    }
+
+    // MARK: - Mint Backup Sheet
+
+    /// What "Find my mints" actually does. The chip deliberately names the
+    /// outcome rather than the transport, but this sheet is the one place the
+    /// user has explicitly asked how it works, and withholding the mechanism
+    /// there is the same opacity that made the old automatic lookup feel like
+    /// the wallet knew too much. Beat one matches the Settings copy almost word
+    /// for word (`NostrSettingsSection`), so the two surfaces corroborate each
+    /// other and a curious user can find the toggle. Beat two is why the button
+    /// is safe to press. Beat three pre-answers the empty-handed outcome.
+    private var mintBackupSheet: some View {
+        VStack(alignment: .leading, spacing: 20) {
+            Text("Your mint list can be backed up.")
+                .font(.title.weight(.heavy))
+                .tracking(-0.3)
+                .lineSpacing(-1)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.top, 8)
+
+            VStack(alignment: .leading, spacing: 16) {
+                Text("Your wallet publishes an encrypted list of the mints you use to your Nostr relays. Only your seed phrase can open it.")
+                Text("Find my mints looks that list up and stages every mint in it. Nothing is restored until you tap Restore.")
+                Text("If you never published a list, nothing turns up. Add your mints by hand instead.")
+            }
+            .font(.callout)
+            .foregroundStyle(.secondary)
+            .fixedSize(horizontal: false, vertical: true)
+
+            Button(action: {
+                HapticFeedback.selection()
+                showMintBackupSheet = false
+            }) {
+                Text("Got it")
+            }
+            .glassButton()
+            .padding(.top, 4)
+        }
+        .padding(28)
+        .contentFitMeasured { mintBackupSheetHeight = $0 }
+        .contentFitDetent(mintBackupSheetHeight, estimate: 360, navigationBar: false)
         .presentationDragIndicator(.visible)
     }
 
@@ -1435,12 +1503,30 @@ struct OnboardingView: View {
 
     private var restoreMintsStage: some View {
         VStack(spacing: 0) {
-            OnboardingBackButton {
-                mintsToRestore.removeAll()
-                restoreMintError = nil
-                retreat(to: .restoreInput)
+            // Both bar-band slots are occupied here: Back leading, and help
+            // trailing because "Find my mints" is the way through this step for
+            // most people and nothing else on screen says what it does.
+            HStack(spacing: 0) {
+                OnboardingBackButton {
+                    mintsToRestore.removeAll()
+                    restoreMintError = nil
+                    // Clear the searched flag too, or returning to this step
+                    // lands on "No backup found" instead of the line that names
+                    // the button — a dead screen with no way forward.
+                    mintBackupSearchCompleted = false
+                    retreat(to: .restoreInput)
+                }
+
+                Spacer(minLength: 0)
+
+                OnboardingInfoButton(
+                    accessibilityLabel: "What does Find my mints do?",
+                    accessibilityIdentifier: "onboarding-mint-backup-info"
+                ) {
+                    HapticFeedback.selection()
+                    showMintBackupSheet = true
+                }
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.horizontal, OnboardingMetrics.gutter)
             .padding(.top, OnboardingMetrics.barTopInset)
 
@@ -1449,8 +1535,10 @@ struct OnboardingView: View {
                     title: "Add your mints.",
                     // Name the reason this step exists at all. Without it the
                     // screen reads as busywork, and the user has no way to know
-                    // the seed alone can't find their money.
-                    subhead: "Your seed phrase doesn't record which mints you used."
+                    // the seed alone can't find their money. The second
+                    // sentence names both routes forward, because the backup
+                    // lookup no longer runs itself.
+                    subhead: "Your seed phrase doesn't record which mints you used. Find them from a backup, or add them yourself."
                 )
             }
             .padding(.top, OnboardingMetrics.titleGap)
@@ -1465,7 +1553,6 @@ struct OnboardingView: View {
             // from the seed screen's crossfade).
             mintFieldFocused = false
             triggerEntrance { restoreMintsAppeared = true }
-            autoSearchMintBackup()
         }
     }
 
@@ -1508,7 +1595,7 @@ struct OnboardingView: View {
                 // it is the way through this step for anyone who can't recite
                 // their mint URLs, which is most people; third-of-a-row next
                 // to Add and Paste both buried it and truncated it.
-                Button(action: { searchMintBackup(automatic: false) }) {
+                Button(action: searchMintBackup) {
                     restoreCapsuleChip(
                         nostrBackupService.isSearching ? "Checking for your mints…" : "Find my mints",
                         systemImage: "magnifyingglass"
@@ -1517,7 +1604,13 @@ struct OnboardingView: View {
                 .buttonStyle(.plain)
                 .disabled(nostrBackupService.isSearching)
                 .opacity(nostrBackupService.isSearching ? 0.4 : 1)
-                .accessibilityLabel("Check for a backup of your mint list")
+                // No `accessibilityLabel` override — it used to read "Check for
+                // a backup of your mint list", which is not what the button
+                // says. Voice Control matches spoken words against the label,
+                // so "tap Find my mints" missed the one control that is now the
+                // way through this step. The visible text is the label; the
+                // explanation belongs in the hint.
+                .accessibilityHint("Checks your relays for a backup of your mint list")
                 .padding(.horizontal)
 
                 // Staged mints — the list that gets restored. Each shows its host.
@@ -1554,6 +1647,13 @@ struct OnboardingView: View {
             .padding(.bottom, 8)
         }
         .scrollDismissesKeyboard(.interactively)
+        // Content genuinely extends behind the chassis (the opaque ground hides
+        // it), so the fade is inset by the chassis rather than run at the
+        // container's own edge — otherwise the band lands under the ground and
+        // you see no fade at all. No top fade: the whole stage scrolls as one
+        // unit, so the first thing in the container is the URL field sitting
+        // flush at the top edge, and a top mask would permanently dim it.
+        .scrollEdgeFade(bottom: chassisInset)
         // Tap anywhere off the field dismisses the keyboard. Guarded so the
         // first tap that focuses the field isn't immediately revoked.
         .simultaneousGesture(
@@ -1851,24 +1951,19 @@ struct OnboardingView: View {
         }
     }
 
-    /// Run the backup lookup once on arrival. Publishing is on by default
-    /// (`nostrMintBackupEnabled`), so most people already have a mint list
-    /// waiting and never need to type a URL — asking them to press a button
-    /// for it was making them do the wallet's work.
-    private func autoSearchMintBackup() {
-        guard !hasAutoSearchedMintBackup else { return }
-        hasAutoSearchedMintBackup = true
-        searchMintBackup(automatic: true)
-    }
-
     /// Look up the encrypted mint-list backup for this seed on the user's
     /// relays (NUT-27, fetched by cdk) and stage every mint it contains.
     ///
-    /// The automatic pass stays quiet on failure: the user didn't ask for it,
-    /// and a relay timeout is not something they can act on. Only an explicit
-    /// tap earns an error.
-    private func searchMintBackup(automatic: Bool) {
-        if !automatic { HapticFeedback.selection() }
+    /// Only ever runs from an explicit tap. It used to fire on arrival, on the
+    /// grounds that publishing is on by default so most people have a list
+    /// waiting — but the step opens by telling the user their seed phrase
+    /// doesn't record which mints they used, and then a dozen of their mints
+    /// appeared anyway. The user has no way to see the lookup happen, so the
+    /// screen read as contradicting itself, or as the wallet knowing more about
+    /// them than they agreed to. The lookup is still one tap away; the tap is
+    /// now theirs, which is what makes the result explicable.
+    private func searchMintBackup() {
+        HapticFeedback.selection()
 
         Task { @MainActor in
             do {
@@ -1880,9 +1975,9 @@ struct OnboardingView: View {
                 if addedCount > 0 {
                     setRestoreMintNotice("Added \(addedCount) mint\(addedCount == 1 ? "" : "s") from your backup.")
                 } else if urls.isEmpty {
-                    // The empty-state line already carries this for the
-                    // automatic pass — don't say it twice.
-                    if !automatic {
+                    // When the list is empty the empty-state line is on screen
+                    // already saying this — speak here only when it isn't.
+                    if !mintsToRestore.isEmpty {
                         setRestoreMintNotice("No backup of your mint list found.", severity: .caution)
                     }
                 } else {
@@ -1892,7 +1987,6 @@ struct OnboardingView: View {
             } catch {
                 mintBackupSearchCompleted = true
                 AppLogger.wallet.error("Mint backup lookup failed: \(error)")
-                guard !automatic else { return }
                 // Through the shared mapper, never `localizedDescription` —
                 // a relay failure here surfaced as a raw CDK FFI dump.
                 setRestoreMintNotice(error.userFacingWalletMessage, severity: .error)
@@ -1901,8 +1995,13 @@ struct OnboardingView: View {
     }
 
     /// Fills the blank where the staged list will go. It has three jobs: say
-    /// the wallet is already looking, say what turned up, and name the manual
-    /// route when nothing did.
+    /// the wallet is looking, say what turned up, and name the manual route
+    /// when nothing did.
+    ///
+    /// The landing line carries the most weight now that the lookup is manual:
+    /// it is where everyone arrives, so it names the button rather than
+    /// describing the situation. Android twin: `RestoreMintsEmpty*` in
+    /// `RestoreWalletFlow.kt`.
     private var emptyMintListNotice: String {
         if nostrBackupService.isSearching {
             return "Checking for a backup of your mint list…"
@@ -1910,7 +2009,7 @@ struct OnboardingView: View {
         if mintBackupSearchCompleted {
             return "No backup found. Add the mints you used before, then restore."
         }
-        return "Add the mints you used before, then restore."
+        return "Tap Find my mints to look for a backup of your mint list, or add them above."
     }
 
     @discardableResult

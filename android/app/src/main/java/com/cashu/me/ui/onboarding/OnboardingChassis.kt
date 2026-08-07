@@ -376,21 +376,27 @@ fun OnboardingBackButton(
  * button's leading one, where a help glyph conventionally lives. Keeping it in
  * the bar band rather than the chassis is what stops Welcome being the only
  * three-slot step, so the button stack no longer changes height when you leave
- * it. Welcome is the only user today.
+ * it.
+ *
+ * The defaults are Welcome's, which was the first and for a while the only
+ * caller. Steps that explain something else pass their own description and tag;
+ * add-your-mints does, for the mint-backup lookup.
  */
 @Composable
 fun OnboardingInfoButton(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
+    contentDescription: String = "What is ecash?",
+    testTag: String = UiTestTags.OnboardingInfo,
 ) {
     IconButton(
         onClick = onClick,
-        modifier = modifier.testTag(UiTestTags.OnboardingInfo),
+        modifier = modifier.testTag(testTag),
         colors = barButtonColors(),
     ) {
         Icon(
             imageVector = Icons.Outlined.HelpOutline,
-            contentDescription = "What is ecash?",
+            contentDescription = contentDescription,
         )
     }
 }

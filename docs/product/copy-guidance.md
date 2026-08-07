@@ -99,3 +99,47 @@ indicator line, a home balance delta, a "N payments received" counter.
 - **Contract:** must name the receipt (e.g. "Payment Received!", "Received
   21 sat", "Payment received — paying request…"). Celebration vs. neutral tone,
   capitalization, and punctuation are platform-native and may vary by surface.
+
+## Empty states that are the only way forward
+
+When a screen's list starts empty and the action that fills it is a button the
+user has to find, the empty-state line is not a description — it is the
+navigation. Restore's "Add your mints" step is the case that set this contract.
+
+The step used to look up the user's published mint list automatically on
+arrival. That read as the wallet contradicting itself: the subhead says the seed
+phrase doesn't record which mints you used, and then a dozen of the user's mints
+appeared from nowhere. In a wallet whose whole promise is that nothing leaves
+the device unasked, an unexplained list of your own mints is the worst possible
+thing to show. The lookup is now user-triggered, which puts the entire burden of
+getting people through the step onto copy.
+
+Three states, and each has a distinct job:
+
+1. **Landing** (nothing searched yet) — the state everyone arrives in. Names the
+   button literally and capitalized exactly as it appears, plus the manual
+   escape hatch: "Tap Find my mints to look for a backup of your mint list, or
+   add them above."
+2. **Working** — says the wallet is looking, in the user's terms rather than the
+   transport's: "Checking for a backup of your mint list…"
+3. **Came back empty** — says so and names the way out: "No backup found. Add
+   the mints you used before, then restore."
+
+Rules this generalizes to:
+
+- **Name the control, don't describe the situation.** "Add the mints you used
+  before" was true and useless; it never mentioned the button that does it.
+- **Quote the label verbatim.** Voice Control matches spoken words against a
+  control's accessibility label, so the label must equal the visible text and
+  the empty state must quote it exactly. Overriding a button's
+  `accessibilityLabel` with a longer explanation breaks this; put the
+  explanation in the hint instead.
+- **Don't say the same thing twice.** A notice and an empty-state line can both
+  fire on "nothing found". Gate the notice on the list being non-empty, so
+  whichever surface is actually on screen carries the message alone.
+- **Reset "already searched" on retreat.** Backing out and returning must land
+  on the landing line, not on "No backup found" — otherwise the user comes back
+  to a dead screen with no pointer.
+
+Both platforms hold these strings in one place (`RestoreMints*` constants in
+`RestoreWalletFlow.kt`; `emptyMintListNotice` in `OnboardingView.swift`).

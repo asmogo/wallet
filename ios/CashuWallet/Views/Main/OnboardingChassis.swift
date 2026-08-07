@@ -270,12 +270,17 @@ struct OnboardingBackButton: View {
     }
 }
 
-/// Help affordance for a step that has no back button. It takes the bar band's
-/// *trailing* slot (`OnboardingView.swift`, `alignment: .trailing`) — opposite
-/// the leading slot every other step gives Back — so the band is occupied on
-/// every step rather than a text link appearing and disappearing from the
-/// chassis. Android states the same rule in its own measure
-/// (`OnboardingChassis.kt`, `Alignment.End`). Welcome is the only user today.
+/// Help affordance taking the bar band's *trailing* slot — opposite the leading
+/// slot every other step gives Back — so the band is occupied on every step
+/// rather than a text link appearing and disappearing from the chassis. Android
+/// states the same rule in its own measure (`OnboardingChassis.kt`,
+/// `Alignment.End`).
+///
+/// The defaults are Welcome's, which was the first and for a while the only
+/// caller. Steps that explain something else pass their own label and
+/// identifier; add-your-mints does, for the mint-backup lookup. Welcome is also
+/// the only step with no back button, so it is the only one where this sits
+/// alone in the band rather than opposite Back.
 ///
 /// Note this is *not* a shared-geometry glyph swap, and never was: back and help
 /// are mounted inside their own stage views, so they unmount with the stage and
@@ -284,13 +289,15 @@ struct OnboardingBackButton: View {
 /// true morph would mean hoisting the bar band out of all eight stages into the
 /// onboarding root.
 struct OnboardingInfoButton: View {
+    var accessibilityLabel: String = "What is ecash?"
+    var accessibilityIdentifier: String = "onboarding-info"
     let action: () -> Void
 
     var body: some View {
         OnboardingBarButton(
             systemImage: "questionmark",
-            accessibilityLabel: "What is ecash?",
-            accessibilityIdentifier: "onboarding-info",
+            accessibilityLabel: accessibilityLabel,
+            accessibilityIdentifier: accessibilityIdentifier,
             action: action
         )
     }

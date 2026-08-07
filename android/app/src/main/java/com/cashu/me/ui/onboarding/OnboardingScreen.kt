@@ -109,6 +109,8 @@ import com.cashu.me.ui.components.NoticeSeverity
 import com.cashu.me.ui.components.PrimaryButton
 import com.cashu.me.ui.components.materializeBlur
 import com.cashu.me.ui.restore.RestoreMintsStageContent
+import com.cashu.me.ui.restore.RestoreMintsSubhead
+import com.cashu.me.ui.restore.RestoreMintsTitleOnboarding
 import com.cashu.me.ui.restore.RestoreProgressRows
 import com.cashu.me.ui.restore.RestoreRecoveredTotal
 import com.cashu.me.ui.restore.RestoreSeedStageContent
@@ -221,6 +223,7 @@ internal fun OnboardingScreen(
 
     var step: OnboardingStep by remember { mutableStateOf(OnboardingStep.Welcome) }
     var infoOpen by remember { mutableStateOf(false) }
+    var mintBackupInfoOpen by remember { mutableStateOf(false) }
     var creating by remember { mutableStateOf(false) }
     var retryingStartup by remember { mutableStateOf(false) }
     var createError by remember { mutableStateOf<String?>(null) }
@@ -644,26 +647,38 @@ internal fun OnboardingScreen(
                         }
 
                         is OnboardingStep.RestoreMints -> Column(Modifier.fillMaxSize()) {
-                            OnboardingBackButton(
-                                onBack = {
-                                    restoreMintsStaging.reset()
-                                    step = OnboardingStep.RestoreInput
-                                },
-                                modifier = Modifier.padding(
-                                    start = OnboardingMetrics.BarStartInset,
-                                    top = OnboardingMetrics.BarTopInset,
-                                ),
-                            )
+                            // Both bar-band slots are occupied here: Back
+                            // leading, and help trailing because "Find my mints"
+                            // is the way through this step for most people and
+                            // nothing else on screen says what it does.
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(
+                                        horizontal = OnboardingMetrics.BarStartInset,
+                                        vertical = 0.dp,
+                                    )
+                                    .padding(top = OnboardingMetrics.BarTopInset),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                OnboardingBackButton(
+                                    onBack = {
+                                        restoreMintsStaging.reset()
+                                        step = OnboardingStep.RestoreInput
+                                    },
+                                )
+                                OnboardingInfoButton(
+                                    onClick = { mintBackupInfoOpen = true },
+                                    contentDescription = "What does Find my mints do?",
+                                    testTag = UiTestTags.OnboardingMintBackupInfo,
+                                )
+                            }
                             OnboardingStepHeader(
-                                title = "Add your mints.",
-                                subhead = "Your seed phrase doesn't record which mints you used.",
+                                title = RestoreMintsTitleOnboarding,
+                                subhead = RestoreMintsSubhead,
                                 modifier = Modifier.padding(top = OnboardingMetrics.TitleGap),
                             )
-                            // Most people already have a mint list published,
-                            // so go and look for it rather than making them ask.
-                            LaunchedEffect(restoreMintsStaging) {
-                                restoreMintsStaging.autoSearchBackup()
-                            }
                             RestoreMintsStageContent(
                                 input = restoreMintsStaging.input,
                                 staged = restoreMintsStaging.staged,
@@ -725,6 +740,10 @@ internal fun OnboardingScreen(
 
     if (infoOpen) {
         EcashConceptSheet(onDismiss = { infoOpen = false })
+    }
+
+    if (mintBackupInfoOpen) {
+        MintBackupSheet(onDismiss = { mintBackupInfoOpen = false })
     }
 }
 
@@ -876,6 +895,73 @@ private fun EcashConceptSheet(onDismiss: () -> Unit) {
                     )
                     Text(
                         text = "Send instantly. Cash out to Lightning anytime.",
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+            Spacer(Modifier.height(CashuTheme.spacing.comfortable))
+            PrimaryButton(text = "Got it", onClick = onDismiss)
+        }
+    }
+}
+
+/**
+ * What "Find my mints" actually does. The chip deliberately names the outcome
+ * rather than the transport, but this sheet is the one place the user has
+ * explicitly asked how it works, and withholding the mechanism there is the same
+ * opacity that made the old automatic lookup feel like the wallet knew too much.
+ *
+ * Beat one matches the Settings copy almost word for word (BackupRestoreScreen),
+ * so the two surfaces corroborate each other and a curious user can find the
+ * toggle. Beat two is why the button is safe to press. Beat three pre-answers
+ * the empty-handed outcome. iOS twin: `OnboardingView.mintBackupSheet`.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun MintBackupSheet(onDismiss: () -> Unit) {
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        // Same reason as EcashConceptSheet: at the partial detent a short
+        // viewport or a large font scale clipped "Got it".
+        sheetState = rememberBottomSheetState(
+            initialValue = SheetValue.Hidden,
+            enabledValues = setOf(SheetValue.Hidden, SheetValue.Expanded),
+        ),
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = HeaderPadding)
+                .padding(bottom = CashuTheme.spacing.comfortable)
+                .navigationBarsPadding(),
+        ) {
+            Column(
+                modifier = Modifier
+                    .weight(1f, fill = false)
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(CashuTheme.spacing.comfortable),
+            ) {
+                Text(
+                    text = "Your mint list can be backed up.",
+                    style = MaterialTheme.typography.headlineMedium.copy(
+                        fontWeight = FontWeight.ExtraBold,
+                    ),
+                    color = MaterialTheme.colorScheme.onSurface,
+                )
+                Column(verticalArrangement = Arrangement.spacedBy(CashuTheme.spacing.default)) {
+                    Text(
+                        text = "Your wallet publishes an encrypted list of the mints you use to your Nostr relays. Only your seed phrase can open it.",
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Text(
+                        text = "Find my mints looks that list up and stages every mint in it. Nothing is restored until you tap Restore.",
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Text(
+                        text = "If you never published a list, nothing turns up. Add your mints by hand instead.",
                         style = MaterialTheme.typography.bodyLarge,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )

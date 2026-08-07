@@ -69,6 +69,7 @@ import com.cashu.me.ui.components.InlineNotice
 import com.cashu.me.ui.components.MintAvatar
 import com.cashu.me.ui.components.NoticeSeverity
 import com.cashu.me.ui.components.PrimaryButton
+import com.cashu.me.ui.components.scrollEdgeFade
 import com.cashu.me.ui.theme.CapsuleShape
 import com.cashu.me.ui.theme.CashuTheme
 import com.cashu.me.ui.theme.withMonoDigits
@@ -89,6 +90,30 @@ private val CtaPadding = 24.dp
 private val BottomPadding = 24.dp
 private val MintAvatarSize = 36.dp
 private val ProgressSpinnerSize = 18.dp
+
+// Mint-staging copy. Hoisted because the subhead alone had four call sites
+// (both hosts here, the onboarding stage, and the screenshot baseline) and they
+// had already started drifting. iOS twin: OnboardingView.restoreMintsStage.
+//
+// Name the reason this step exists at all. Without it the screen reads as
+// busywork, and the user has no way to know the seed alone can't find their
+// money. The second sentence names both routes forward, because the backup
+// lookup no longer runs itself.
+internal const val RestoreMintsTitleOnboarding = "Add your mints."
+internal const val RestoreMintsTitleInApp = "Add your mints"
+internal const val RestoreMintsSubhead =
+    "Your seed phrase doesn't record which mints you used. " +
+        "Find them from a backup, or add them yourself."
+
+// The list is empty far more often than not, and the disabled primary never
+// says why. These three lines are the only place that explains the wait and the
+// way out. The landing line carries the most weight: it is where everyone now
+// arrives, so it has to name the button rather than describe the situation.
+internal const val RestoreMintsEmptyLanding =
+    "Tap Find my mints to look for a backup of your mint list, or add them above."
+internal const val RestoreMintsEmptySearching = "Checking for a backup of your mint list…"
+internal const val RestoreMintsEmptyNoBackup =
+    "No backup found. Add the mints you used before, then restore."
 
 /** Layout chrome for onboarding (large heavy titles) vs in-app settings. */
 enum class RestorePresentation {
@@ -465,28 +490,20 @@ class RestoreMintsStagingState internal constructor(
     var backupSearchCompleted by mutableStateOf(false)
         private set
 
-    private var hasAutoSearched = false
-
     /**
-     * Run the backup lookup once on arrival. Publishing is on by default
-     * (`nostrMintBackupEnabled`), so most people already have a mint list
-     * waiting and never need to type a URL — asking them to press a button for
-     * it was making them do the wallet's work.
+     * Look up the encrypted mint-list backup for this seed on the user's relays
+     * and stage every mint it contains.
+     *
+     * Only ever runs from an explicit tap. It used to fire on arrival, on the
+     * grounds that publishing is on by default so most people have a list
+     * waiting — but the step opens by telling the user their seed phrase doesn't
+     * record which mints they used, and then a dozen of their mints appeared
+     * anyway. The user has no way to see the lookup happen, so the screen read
+     * as contradicting itself, or as the wallet knowing more about them than
+     * they agreed to. The lookup is still one tap away; the tap is now theirs,
+     * which is what makes the result explicable.
      */
-    fun autoSearchBackup() {
-        if (hasAutoSearched) return
-        hasAutoSearched = true
-        searchMintBackup(automatic = true)
-    }
-
-    fun searchNostrBackup() = searchMintBackup(automatic = false)
-
-    /**
-     * The automatic pass stays quiet on failure: the user didn't ask for it,
-     * and a relay timeout is not something they can act on. Only an explicit
-     * tap earns an error.
-     */
-    private fun searchMintBackup(automatic: Boolean) {
+    fun searchNostrBackup() {
         scope.launch {
             runCatching { nostrMintBackupService.fetchBackedUpMintUrls() }
                 .onSuccess { urls ->
@@ -498,10 +515,11 @@ class RestoreMintsStagingState internal constructor(
                     when {
                         added > 0 ->
                             setNotice("Added $added mint${if (added == 1) "" else "s"} from your backup.")
-                        // The empty-state line already carries this for the
-                        // automatic pass — don't say it twice.
+                        // When the list is empty the empty-state line is on
+                        // screen already saying this — speak here only when it
+                        // isn't.
                         normalized.isEmpty() ->
-                            if (!automatic) {
+                            if (staged.isNotEmpty()) {
                                 setNotice("No backup of your mint list found.", NoticeSeverity.Caution)
                             }
                         else -> setNotice("Backup found. Its mints are already in the list.")
@@ -510,7 +528,6 @@ class RestoreMintsStagingState internal constructor(
                 }
                 .onFailure {
                     backupSearchCompleted = true
-                    if (automatic) return@onFailure
                     // Through the shared mapper, never the raw message — a
                     // relay failure here surfaced as a raw CDK FFI dump.
                     setNotice(it.userFacingWalletMessage, NoticeSeverity.Error)
@@ -529,6 +546,10 @@ class RestoreMintsStagingState internal constructor(
         previews.clear()
         notice = null
         noticeSeverity = NoticeSeverity.Info
+        // Clear the searched flag too, or returning to this step lands on "No
+        // backup found" instead of the line that names the button — a dead
+        // screen with no way forward.
+        backupSearchCompleted = false
     }
 }
 
@@ -568,6 +589,14 @@ fun RestoreMintsStageContent(
 ) {
     Column(
         modifier = modifier
+            // The chassis is a sibling below this stage rather than an overlay,
+            // so the stage's own bottom edge is the clip line — hence a zero
+            // inset, not a chassis-height one. iOS insets by the chassis
+            // because its content really does run underneath. No top fade: the
+            // whole stage scrolls as one unit, so the first thing in the
+            // container is the URL field sitting flush at the top edge, and a
+            // top mask would permanently dim it.
+            .scrollEdgeFade(bottom = 0.dp)
             .verticalScroll(rememberScrollState())
             .padding(horizontal = HeaderPadding),
         verticalArrangement = Arrangement.spacedBy(CashuTheme.spacing.default),
@@ -634,15 +663,11 @@ fun RestoreMintsStageContent(
                 }
             }
         } else {
-            // The list is empty far more often than not, and the disabled
-            // primary never says why. This is the only place that explains the
-            // wait and the way out.
             Text(
                 text = when {
-                    searching -> "Checking for a backup of your mint list…"
-                    backupSearchCompleted ->
-                        "No backup found. Add the mints you used before, then restore."
-                    else -> "Add the mints you used before, then restore."
+                    searching -> RestoreMintsEmptySearching
+                    backupSearchCompleted -> RestoreMintsEmptyNoBackup
+                    else -> RestoreMintsEmptyLanding
                 },
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -671,8 +696,6 @@ fun RestoreMintsStep(
     val staging = rememberRestoreMintsStagingState(walletManager, nostrMintBackupService)
     val backupState by nostrMintBackupService.state.collectAsState()
 
-    LaunchedEffect(staging) { staging.autoSearchBackup() }
-
     val titleAlign = if (presentation == RestorePresentation.InApp) {
         Alignment.CenterHorizontally
     } else {
@@ -683,16 +706,14 @@ fun RestoreMintsStep(
     } else {
         TextAlign.Start
     }
-    // Name the reason this step exists at all. Without it the screen reads as
-    // busywork, and the user has no way to know the seed alone can't find
-    // their money.
+    // Onboarding renders its own header via OnboardingStepHeader and only calls
+    // RestoreMintsStageContent, so that arm is unreachable in production today.
+    // It stays keyed off the shared consts rather than being deleted here — the
+    // whole RestorePresentation split is dead across every Restore*Step and is
+    // worth removing in one pass, not piecemeal.
     val (title, subtitle) = when (presentation) {
-        RestorePresentation.Onboarding ->
-            "Add your mints." to
-                "Your seed phrase doesn't record which mints you used."
-        RestorePresentation.InApp ->
-            "Add your mints" to
-                "Your seed phrase doesn't record which mints you used."
+        RestorePresentation.Onboarding -> RestoreMintsTitleOnboarding to RestoreMintsSubhead
+        RestorePresentation.InApp -> RestoreMintsTitleInApp to RestoreMintsSubhead
     }
 
     Column(modifier = Modifier.fillMaxSize()) {

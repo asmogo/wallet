@@ -8,11 +8,13 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.tooling.preview.Preview
@@ -26,6 +28,7 @@ import com.cashu.me.ui.onboarding.FirstMintStageContent
 import com.cashu.me.ui.onboarding.OnboardingAsciiBackdrop
 import com.cashu.me.ui.onboarding.OnboardingBackButton
 import com.cashu.me.ui.onboarding.OnboardingChassisModel
+import com.cashu.me.ui.onboarding.OnboardingInfoButton
 import com.cashu.me.ui.onboarding.OnboardingScaffold
 import com.cashu.me.ui.onboarding.OnboardingStepHeader
 import com.cashu.me.ui.onboarding.SeedAcknowledgeRow
@@ -36,10 +39,13 @@ import com.cashu.me.ui.onboarding.WelcomeStageContent
 import com.cashu.me.ui.onboarding.welcomeChassis
 import com.cashu.me.ui.restore.RestoreMintPhase
 import com.cashu.me.ui.restore.RestoreMintsStageContent
+import com.cashu.me.ui.restore.RestoreMintsSubhead
+import com.cashu.me.ui.restore.RestoreMintsTitleOnboarding
 import com.cashu.me.ui.restore.RestoreProgressRows
 import com.cashu.me.ui.restore.RestoreRecoveredTotal
 import com.cashu.me.ui.restore.RestoreSeedStageContent
 import com.cashu.me.Models.RestoreMintResult
+import com.cashu.me.ui.testing.UiTestTags
 import com.cashu.me.ui.theme.CashuTheme
 
 // ---------------------------------------------------------------------------
@@ -300,40 +306,111 @@ fun onboardingRestoreInputScreenshot() {
     }
 }
 
+/** The bar band both restore-mints previews draw: Back leading, help trailing. */
+@Composable
+private fun RestoreMintsBarBand() {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 0.dp)
+            .padding(top = 8.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        OnboardingBackButton(onBack = {})
+        OnboardingInfoButton(
+            onClick = {},
+            contentDescription = "What does Find my mints do?",
+            testTag = UiTestTags.OnboardingMintBackupInfo,
+        )
+    }
+}
+
+// Enough mints to overflow the viewport. Two didn't, so this baseline used to
+// pin nothing about the bottom edge — which is exactly where the list was
+// reported cutting off dead against the CTA.
 @PreviewTest
 @Preview(name = "onboarding-restore-mints", widthDp = 390, heightDp = 844, showBackground = true)
 @Composable
 fun onboardingRestoreMintsScreenshot() {
     OnboardingFrame {
-        val staged = listOf("https://mint.example.com", "https://cash.example.org")
+        val staged = List(11) { "https://mint${it + 1}.example.com" }
         OnboardingScaffold(
             chassis = OnboardingChassisModel(
-                primary = ChassisAction("Restore from 2 mints", onClick = {}),
+                primary = ChassisAction("Restore from 11 mints", onClick = {}),
             ),
         ) {
             Column(Modifier.fillMaxSize()) {
-                OnboardingBackButton(onBack = {}, modifier = Modifier.padding(start = 16.dp, top = 8.dp))
+                RestoreMintsBarBand()
                 OnboardingStepHeader(
-                    title = "Add your mints.",
-                    subhead = "Your seed phrase doesn't record which mints you used.",
+                    title = RestoreMintsTitleOnboarding,
+                    subhead = RestoreMintsSubhead,
                     modifier = Modifier.padding(top = 12.dp),
                 )
                 RestoreMintsStageContent(
-                input = "",
-                staged = staged,
-                previews = emptyMap(),
-                notice = "Added 2 mints.",
-                noticeSeverity = NoticeSeverity.Info,
-                searching = false,
-                onInputChange = {},
-                onAdd = {},
-                onPaste = {},
-                onNostr = {},
+                    input = "",
+                    staged = staged,
+                    previews = emptyMap(),
+                    notice = "Added 11 mints from your backup.",
+                    noticeSeverity = NoticeSeverity.Info,
+                    searching = false,
+                    onInputChange = {},
+                    onAdd = {},
+                    onPaste = {},
+                    onNostr = {},
                     onRemove = {},
                     modifier = Modifier
                         .weight(1f)
                         .fillMaxWidth()
                         .padding(top = 16.dp),
+                )
+            }
+        }
+    }
+}
+
+// The state everyone now arrives in, since the backup lookup no longer runs
+// itself: empty list, disabled primary, and the empty-state line carrying the
+// whole way forward.
+@PreviewTest
+@Preview(
+    name = "onboarding-restore-mints-landing",
+    widthDp = 390,
+    heightDp = 844,
+    showBackground = true,
+)
+@Composable
+fun onboardingRestoreMintsLandingScreenshot() {
+    OnboardingFrame {
+        OnboardingScaffold(
+            chassis = OnboardingChassisModel(
+                primary = ChassisAction("Restore", onClick = {}, enabled = false),
+            ),
+        ) {
+            Column(Modifier.fillMaxSize()) {
+                RestoreMintsBarBand()
+                OnboardingStepHeader(
+                    title = RestoreMintsTitleOnboarding,
+                    subhead = RestoreMintsSubhead,
+                    modifier = Modifier.padding(top = 12.dp),
+                )
+                RestoreMintsStageContent(
+                    input = "",
+                    staged = emptyList(),
+                    previews = emptyMap(),
+                    notice = null,
+                    noticeSeverity = NoticeSeverity.Info,
+                    searching = false,
+                    onInputChange = {},
+                    onAdd = {},
+                    onPaste = {},
+                    onNostr = {},
+                    onRemove = {},
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxWidth()
+                        .padding(top = 16.dp),
+                    backupSearchCompleted = false,
                 )
             }
         }

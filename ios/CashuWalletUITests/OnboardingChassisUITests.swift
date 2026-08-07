@@ -160,4 +160,87 @@ final class OnboardingChassisUITests: UITestBase {
             "Re-entering the seed step should clear the acknowledgement and disarm the CTA"
         )
     }
+
+    /// The mint-backup lookup must not run itself.
+    ///
+    /// It used to fire on arrival, which left the step saying "your seed phrase
+    /// doesn't record which mints you used" over a list of the user's mints that
+    /// had appeared from nowhere. The disabled primary is the load-bearing
+    /// assertion here: it can only read a bare "Restore" if nothing was staged
+    /// without being asked.
+    func testRestoreMintsDoesNotStageAnythingUntilAsked() throws {
+        let create = app.buttons["onboarding-create-wallet"]
+        XCTAssertTrue(create.waitForExistence(timeout: 30), "Welcome step should appear")
+
+        tapWhenReady(app.buttons["Restore Wallet"], timeout: 30)
+        tapWhenReady(app.buttons["Use Seed Phrase"], timeout: 10)
+
+        // The canonical all-zeros BIP39 vector — twelve valid words with a good
+        // checksum, so `validateMnemonic` lets the flow through.
+        let seedField = app.textViews.firstMatch
+        tapWhenReady(seedField, timeout: 10)
+        XCTAssertTrue(
+            app.keyboards.element.waitForExistence(timeout: 10),
+            "Tapping the seed field should raise the keyboard"
+        )
+        seedField.typeText(
+            "abandon abandon abandon abandon abandon abandon "
+                + "abandon abandon abandon abandon abandon about"
+        )
+
+        // By identifier, not label — the seed keyboard's return key is also
+        // labelled "Continue".
+        let cont = app.buttons["onboarding-restore-continue"]
+        XCTAssertTrue(
+            cont.waitUntilEnabledAndHittable(timeout: 10),
+            "Continue should arm once twelve valid words are entered"
+        )
+        tapWhenReady(cont)
+
+        // --- Add your mints ---
+        let restore = app.buttons["onboarding-restore-mints"]
+        XCTAssertTrue(
+            restore.waitForExistence(timeout: 30),
+            "The mint step's primary should appear"
+        )
+        XCTAssertEqual(
+            restore.label, "Restore",
+            "Arriving on the mint step must stage nothing, so the primary can't "
+                + "have counted any mints into its label"
+        )
+        XCTAssertFalse(
+            restore.isEnabled,
+            "Arriving on the mint step must stage nothing, leaving the primary disabled"
+        )
+
+        // The way through the step, and the line that names it.
+        XCTAssertTrue(
+            app.buttons["Find my mints"].exists,
+            "The manual lookup should be the way through this step"
+        )
+        XCTAssertTrue(
+            app.staticTexts.matching(
+                NSPredicate(format: "label CONTAINS 'Tap Find my mints'")
+            ).firstMatch.exists,
+            "The empty state should point at the lookup rather than describe the situation"
+        )
+
+        // The help affordance explains what that button does.
+        let help = app.buttons["onboarding-mint-backup-info"]
+        XCTAssertTrue(help.exists, "The mint step should offer the backup explainer")
+        tapWhenReady(help)
+        XCTAssertTrue(
+            app.staticTexts["Your mint list can be backed up."].waitForExistence(timeout: 10),
+            "The help button should open the mint-backup sheet"
+        )
+        tapWhenReady(app.buttons["Got it"], timeout: 10)
+
+        // Tapping the lookup is allowed to find nothing — CI has no relay — but
+        // it must acknowledge the tap and settle back.
+        tapWhenReady(app.buttons["Find my mints"], timeout: 10)
+        XCTAssertTrue(
+            app.buttons["Find my mints"].waitForExistence(timeout: 30),
+            "The lookup chip should settle back to its resting label"
+        )
+    }
 }
