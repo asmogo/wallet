@@ -496,13 +496,21 @@ struct AsciiFieldView: View {
     @GestureState private var touchDown = false
 
     /// The single decision point for every play/pause input, mirroring the
-    /// web's `sync()`: Reduce Motion / Low Power / `staticTime` paint one
-    /// still frame; backgrounding, leaving the step pair, and the concept
-    /// sheet stop the clockwork.
+    /// web's `sync()`: Reduce Motion / Low Power / `staticTime` / UI tests
+    /// paint one still frame; backgrounding, leaving the step pair, and the
+    /// concept sheet stop the clockwork.
+    ///
+    /// UI tests belong on that list because this is a `TimelineView(.animation)`
+    /// — a redraw every frame, forever, for as long as the step is on screen.
+    /// XCUITest waits for the app to go idle before each interaction, so a
+    /// clock that never stops means every tap on welcome and restoreMethod
+    /// pays the full idle timeout. `UITEST_DISABLE_ANIMATIONS` was already
+    /// being set by the harness for exactly this reason; nothing had read it.
     private var clockRuns: Bool {
         staticTime == nil
             && !reduceMotion
             && !lowPower
+            && !IntegrationTestConfig.shouldDisableAnimations
             && active
             && scenePhase == .active
     }
