@@ -608,7 +608,7 @@ internal fun OnboardingScreen(
                                 ),
                             )
                             OnboardingStepHeader(
-                                title = "Restore Wallet",
+                                title = "Restore wallet.",
                                 subhead = "Choose how to recover your wallet.",
                                 modifier = Modifier.padding(top = OnboardingMetrics.TitleGap),
                             )
@@ -624,7 +624,7 @@ internal fun OnboardingScreen(
                                 ),
                             )
                             OnboardingStepHeader(
-                                title = "Restore Wallet.",
+                                title = "Restore wallet.",
                                 subhead = "Enter your 12 words in order.",
                                 modifier = Modifier.padding(top = OnboardingMetrics.TitleGap),
                             )
@@ -1003,7 +1003,7 @@ internal fun ShowMnemonicStageContent(
         // warning used to sit here; it now rides the chassis accessory
         // directly above the acknowledge row it argues for.
         OnboardingStepHeader(
-            title = "Your Seed Phrase.",
+            title = "Your seed phrase.",
             subhead = "Write these 12 words down in order. This is the only way to recover your wallet.",
             modifier = Modifier.padding(top = OnboardingMetrics.TitleGap),
         )

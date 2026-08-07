@@ -633,7 +633,7 @@ struct OnboardingView: View {
 
             stagger(appeared: restoreMethodAppeared, index: 0) {
                 OnboardingStepHeader(
-                    title: "Restore Wallet",
+                    title: "Restore wallet.",
                     subhead: "Choose how to recover your wallet."
                 )
             }
@@ -694,9 +694,9 @@ struct OnboardingView: View {
 
     private var iCloudPreviewTitle: String {
         switch iCloudPreviewState {
-        case .detecting: return "Checking\niCloud…"
-        case .found: return "Wallet found\nin iCloud."
-        case .notFound: return "No backup\nin iCloud."
+        case .detecting: return "Checking iCloud…"
+        case .found: return "Wallet found in iCloud."
+        case .notFound: return "No backup in iCloud."
         }
     }
 
@@ -731,7 +731,7 @@ struct OnboardingView: View {
                             VStack(alignment: .leading, spacing: 4) {
                                 Text(backup.timestamp.formatted(date: .abbreviated, time: .shortened))
                                 Text(backup.mintURLs.isEmpty
-                                     ? "Seed backup — add mints after"
+                                     ? "Seed backup. Add mints after."
                                      : "\(backup.mintURLs.count) mint\(backup.mintURLs.count == 1 ? "" : "s")")
                             }
                         case .notFound:
@@ -767,7 +767,7 @@ struct OnboardingView: View {
         let mintCount = detectedICloudBackup?.mintURLs.count ?? 0
         return VStack(spacing: 0) {
             OnboardingStepHeader(
-                title: "Restoring Wallet",
+                title: "Restoring wallet…",
                 subhead: "Recovering your funds from \(mintCount) mint\(mintCount == 1 ? "" : "s")…"
             )
             .padding(.top, OnboardingMetrics.titleTopInset)
@@ -787,7 +787,7 @@ struct OnboardingView: View {
         let count = detectedICloudBackup?.mintURLs.count ?? 0
         return VStack(spacing: 16) {
             OnboardingStepHeader(
-                title: "Wallet Restored",
+                title: "Wallet restored.",
                 subhead: walletManager.balance > 0 && count > 0
                     ? "Across \(count) mint\(count == 1 ? "" : "s")"
                     : "Your funds are ready."
@@ -885,7 +885,7 @@ struct OnboardingView: View {
             // directly above the acknowledge row it argues for.
             stagger(appeared: mnemonicAppeared, index: 0) {
                 OnboardingStepHeader(
-                    title: "Your Seed Phrase.",
+                    title: "Your seed phrase.",
                     subhead: "Write these 12 words down in order. This is the only way to recover your wallet."
                 )
             }
@@ -1296,7 +1296,7 @@ struct OnboardingView: View {
 
             stagger(appeared: restoreInputAppeared, index: 0) {
                 OnboardingStepHeader(
-                    title: "Restore Wallet.",
+                    title: "Restore wallet.",
                     subhead: "Enter your 12 words in order."
                 )
             }

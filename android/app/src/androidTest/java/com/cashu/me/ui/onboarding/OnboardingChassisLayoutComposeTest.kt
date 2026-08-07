@@ -142,7 +142,7 @@ class OnboardingChassisLayoutComposeTest {
                                 ),
                             )
                             OnboardingStepHeader(
-                                title = "Restore Wallet",
+                                title = "Restore wallet.",
                                 modifier = Modifier.padding(top = OnboardingMetrics.TitleGap),
                             )
                         }
@@ -159,7 +159,7 @@ class OnboardingChassisLayoutComposeTest {
 
         assertEquals(
             "Welcome's title should start on the same line as a step that draws a back button",
-            titleTopInFrame("frame-step", "Restore Wallet"),
+            titleTopInFrame("frame-step", "Restore wallet."),
             titleTopInFrame("frame-welcome", "Private cash."),
             2f,
         )

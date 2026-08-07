@@ -261,7 +261,7 @@ fun RestoreSeedStep(
     val title = if (presentation == RestorePresentation.InApp) {
         "Restore Wallet"
     } else {
-        "Restore Wallet."
+        "Restore wallet."
     }
 
     Column(modifier = Modifier.fillMaxSize()) {

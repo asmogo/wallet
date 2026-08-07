@@ -161,7 +161,7 @@ fun onboardingSeedRevealedScreenshot() {
         ) {
             Column(Modifier.fillMaxSize()) {
                 OnboardingStepHeader(
-                    title = "Your Seed Phrase.",
+                    title = "Your seed phrase.",
                     subhead = "Write these 12 words down in order. This is the only way to recover your wallet.",
                     modifier = Modifier.padding(top = 16.dp),
                 )
@@ -257,7 +257,7 @@ fun onboardingRestoreMethodScreenshot() {
             Column(Modifier.fillMaxSize()) {
                 OnboardingBackButton(onBack = {}, modifier = Modifier.padding(start = 16.dp, top = 8.dp))
                 OnboardingStepHeader(
-                    title = "Restore Wallet",
+                    title = "Restore wallet.",
                     subhead = "Choose how to recover your wallet.",
                     modifier = Modifier.padding(top = 12.dp),
                 )
@@ -281,7 +281,7 @@ fun onboardingRestoreInputScreenshot() {
             Column(Modifier.fillMaxSize()) {
                 OnboardingBackButton(onBack = {}, modifier = Modifier.padding(start = 16.dp, top = 8.dp))
                 OnboardingStepHeader(
-                    title = "Restore Wallet.",
+                    title = "Restore wallet.",
                     subhead = "Enter your 12 words in order.",
                     modifier = Modifier.padding(top = 12.dp),
                 )
@@ -459,7 +459,7 @@ private fun AsciiRestoreMethodFrame(darkTheme: Boolean = false) {
         Column(Modifier.fillMaxSize()) {
             OnboardingBackButton(onBack = {}, modifier = Modifier.padding(start = 16.dp, top = 8.dp))
             OnboardingStepHeader(
-                title = "Restore Wallet",
+                title = "Restore wallet.",
                 subhead = "Choose how to recover your wallet.",
                 modifier = Modifier.padding(top = 12.dp),
             )

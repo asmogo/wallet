@@ -44,7 +44,7 @@ final class OnboardingChassisUITests: UITestBase {
         app.buttons["Restore Wallet"].tap()
         assertBottomAnchored(app.buttons["Use Seed Phrase"], "restoreMethod")
 
-        let methodTitle = app.staticTexts["Restore Wallet"]
+        let methodTitle = app.staticTexts["Restore wallet."]
         XCTAssertTrue(methodTitle.waitForExistence(timeout: 10), "restoreMethod should title itself")
         XCTAssertEqual(
             welcomeTitleTop, methodTitle.frame.minY, accuracy: 1,
