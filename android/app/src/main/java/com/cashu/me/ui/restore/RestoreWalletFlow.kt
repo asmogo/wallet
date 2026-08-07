@@ -19,8 +19,8 @@ import androidx.compose.material.icons.filled.Cancel
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.RemoveCircleOutline
 import androidx.compose.material.icons.outlined.Add
-import androidx.compose.material.icons.outlined.CellTower
 import androidx.compose.material.icons.outlined.ContentPaste
+import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -373,11 +373,12 @@ class RestoreMintsStagingState internal constructor(
 
     private fun stageUrl(raw: String, showDuplicate: Boolean, showInvalid: Boolean): Boolean {
         val normalized = normalizeMintUrl(raw) ?: run {
-            if (showInvalid) setNotice("That doesn't look like a mint URL.", NoticeSeverity.Error)
+            if (showInvalid) setNotice("That doesn't look like a mint URL.", NoticeSeverity.Caution)
             return false
         }
         if (staged.any { it.equals(normalized, ignoreCase = true) }) {
-            if (showDuplicate) setNotice("That mint is already staged.")
+            // "staged" is our word, not the user's.
+            if (showDuplicate) setNotice("This mint is already in the list.", NoticeSeverity.Caution)
             return false
         }
         staged = staged + normalized
@@ -403,7 +404,7 @@ class RestoreMintsStagingState internal constructor(
             if (stageUrl(candidate, showDuplicate = false, showInvalid = false)) added++
         }
         when {
-            added == 0 -> setNotice("No new mint URLs to add.")
+            added == 0 -> setNotice("No new mints to add.")
             added == 1 -> {
                 haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                 setNotice(null)
@@ -444,10 +445,13 @@ class RestoreMintsStagingState internal constructor(
         when {
             added == 0 && invalid > 0 ->
                 setNotice("Nothing in the clipboard looked like a mint URL.", NoticeSeverity.Error)
-            added == 0 -> setNotice("No new mint URLs to add.")
+            added == 0 -> setNotice("No new mints to add.")
             invalid > 0 -> {
                 haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                setNotice("Added $added mint${if (added == 1) "" else "s"}. Skipped $invalid invalid.")
+                setNotice(
+                    "Added $added mint${if (added == 1) "" else "s"}. " +
+                        "Skipped $invalid that didn't look like a mint URL.",
+                )
             }
             else -> {
                 haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
@@ -456,7 +460,33 @@ class RestoreMintsStagingState internal constructor(
         }
     }
 
-    fun searchNostrBackup() {
+    /// True once a lookup has finished, however it finished — drives the
+    /// empty-state line's "no backup found" wording.
+    var backupSearchCompleted by mutableStateOf(false)
+        private set
+
+    private var hasAutoSearched = false
+
+    /**
+     * Run the backup lookup once on arrival. Publishing is on by default
+     * (`nostrMintBackupEnabled`), so most people already have a mint list
+     * waiting and never need to type a URL — asking them to press a button for
+     * it was making them do the wallet's work.
+     */
+    fun autoSearchBackup() {
+        if (hasAutoSearched) return
+        hasAutoSearched = true
+        searchMintBackup(automatic = true)
+    }
+
+    fun searchNostrBackup() = searchMintBackup(automatic = false)
+
+    /**
+     * The automatic pass stays quiet on failure: the user didn't ask for it,
+     * and a relay timeout is not something they can act on. Only an explicit
+     * tap earns an error.
+     */
+    private fun searchMintBackup(automatic: Boolean) {
         scope.launch {
             runCatching { nostrMintBackupService.fetchBackedUpMintUrls() }
                 .onSuccess { urls ->
@@ -465,15 +495,22 @@ class RestoreMintsStagingState internal constructor(
                     for (url in normalized) {
                         if (stageUrl(url, showDuplicate = false, showInvalid = false)) added++
                     }
-                    setNotice(
-                        when {
-                            normalized.isEmpty() -> "No Nostr mint backup found on your relays."
-                            added == 0 -> "Backup found — its mints are already in the list."
-                            else -> "Added $added mint${if (added == 1) "" else "s"} from your Nostr backup."
-                        },
-                    )
+                    when {
+                        added > 0 ->
+                            setNotice("Added $added mint${if (added == 1) "" else "s"} from your backup.")
+                        // The empty-state line already carries this for the
+                        // automatic pass — don't say it twice.
+                        normalized.isEmpty() ->
+                            if (!automatic) {
+                                setNotice("No backup of your mint list found.", NoticeSeverity.Caution)
+                            }
+                        else -> setNotice("Backup found. Its mints are already in the list.")
+                    }
+                    backupSearchCompleted = true
                 }
                 .onFailure {
+                    backupSearchCompleted = true
+                    if (automatic) return@onFailure
                     // Through the shared mapper, never the raw message — a
                     // relay failure here surfaced as a raw CDK FFI dump.
                     setNotice(it.userFacingWalletMessage, NoticeSeverity.Error)
@@ -527,6 +564,7 @@ fun RestoreMintsStageContent(
     onNostr: () -> Unit,
     onRemove: (String) -> Unit,
     modifier: Modifier = Modifier,
+    backupSearchCompleted: Boolean = false,
 ) {
     Column(
         modifier = modifier
@@ -566,14 +604,20 @@ fun RestoreMintsStageContent(
                 onClick = onPaste,
                 modifier = Modifier.weight(1f),
             )
-            RestoreCapsuleChip(
-                text = if (searching) "Searching…" else "Nostr",
-                icon = Icons.Outlined.CellTower,
-                onClick = onNostr,
-                enabled = !searching,
-                modifier = Modifier.weight(1f),
-            )
         }
+
+        // "Nostr" named the transport, not the outcome. The user doesn't need
+        // to know where their mint list is kept — only that we can go and look
+        // for it. It gets its own row because it is the way through this step
+        // for anyone who can't recite their mint URLs, which is most people;
+        // third-of-a-row next to Add and Paste both buried it and truncated it.
+        RestoreCapsuleChip(
+            text = if (searching) "Checking for your mints…" else "Find my mints",
+            icon = Icons.Outlined.Search,
+            onClick = onNostr,
+            enabled = !searching,
+            modifier = Modifier.fillMaxWidth(),
+        )
 
         if (notice != null) {
             InlineNotice(text = notice, severity = noticeSeverity)
@@ -589,6 +633,24 @@ fun RestoreMintsStageContent(
                     )
                 }
             }
+        } else {
+            // The list is empty far more often than not, and the disabled
+            // primary never says why. This is the only place that explains the
+            // wait and the way out.
+            Text(
+                text = when {
+                    searching -> "Checking for a backup of your mint list…"
+                    backupSearchCompleted ->
+                        "No backup found. Add the mints you used before, then restore."
+                    else -> "Add the mints you used before, then restore."
+                },
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                textAlign = TextAlign.Center,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = CashuTheme.spacing.default),
+            )
         }
     }
 }
@@ -609,6 +671,8 @@ fun RestoreMintsStep(
     val staging = rememberRestoreMintsStagingState(walletManager, nostrMintBackupService)
     val backupState by nostrMintBackupService.state.collectAsState()
 
+    LaunchedEffect(staging) { staging.autoSearchBackup() }
+
     val titleAlign = if (presentation == RestorePresentation.InApp) {
         Alignment.CenterHorizontally
     } else {
@@ -619,13 +683,16 @@ fun RestoreMintsStep(
     } else {
         TextAlign.Start
     }
+    // Name the reason this step exists at all. Without it the screen reads as
+    // busywork, and the user has no way to know the seed alone can't find
+    // their money.
     val (title, subtitle) = when (presentation) {
         RestorePresentation.Onboarding ->
-            "Recover funds." to
-                "Add the mints you used before to recover funds from this seed."
+            "Add your mints." to
+                "Your seed phrase doesn't record which mints you used."
         RestorePresentation.InApp ->
-            "Restore Funds" to
-                "Add the mints you used before to recover funds from this seed."
+            "Add your mints" to
+                "Your seed phrase doesn't record which mints you used."
     }
 
     Column(modifier = Modifier.fillMaxSize()) {
@@ -673,6 +740,7 @@ fun RestoreMintsStep(
             modifier = Modifier
                 .weight(1f)
                 .fillMaxWidth(),
+            backupSearchCompleted = staging.backupSearchCompleted,
         )
 
         Column(
@@ -830,9 +898,11 @@ class RestoreProgressState internal constructor(
 
     val subhead: String
         get() = when {
-            !allSettled -> "Recovering funds from your mints…"
-            totalRecovered > 0L -> "Here's what we recovered."
-            else -> "No funds found on these mints."
+            !allSettled -> "Checking your mints…"
+            totalRecovered > 0L -> "Here's what we restored."
+            // Zero back is the outcome the user fears most. Name the one cause
+            // they can still act on instead of leaving them to guess.
+            else -> "No funds on these mints. If you used others, go back and add them."
         }
 
     internal suspend fun restoreMint(url: String) {
@@ -950,9 +1020,9 @@ fun RestoreProgressStep(
         TextAlign.Start
     }
     val title = when (presentation) {
-        RestorePresentation.Onboarding -> "Recover funds."
+        RestorePresentation.Onboarding -> "Restoring wallet."
         RestorePresentation.InApp ->
-            if (state.allSettled) "Restore Complete" else "Restoring…"
+            if (state.allSettled) "Restore complete" else "Restoring…"
     }
 
     Column(modifier = Modifier.fillMaxSize()) {
@@ -1144,7 +1214,7 @@ fun restoreSeedInstallErrorMessage(error: Throwable): String {
     return if (looksInvalid) {
         "That seed phrase doesn't look right. Check the spelling and try again."
     } else {
-        "Couldn't open the wallet. ${error.message ?: "Try again."}"
+        "Couldn't restore the wallet. ${error.message ?: "Try again."}"
     }
 }
 

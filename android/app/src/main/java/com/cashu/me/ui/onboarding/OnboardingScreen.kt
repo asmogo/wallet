@@ -391,7 +391,7 @@ internal fun OnboardingScreen(
             val wordCount = restoreSeedInput.trim().split(Regex("\\s+")).count { it.isNotBlank() }
             OnboardingChassisModel(
                 primary = ChassisAction(
-                    label = "Next",
+                    label = "Continue",
                     onClick = {
                         // iOS initializeAndProceed: install the restored wallet
                         // before the mint-staging step so the repository is keyed
@@ -609,7 +609,7 @@ internal fun OnboardingScreen(
                             )
                             OnboardingStepHeader(
                                 title = "Restore wallet.",
-                                subhead = "Choose how to recover your wallet.",
+                                subhead = "Choose how to restore your wallet.",
                                 modifier = Modifier.padding(top = OnboardingMetrics.TitleGap),
                             )
                             Spacer(Modifier.weight(1f))
@@ -655,10 +655,15 @@ internal fun OnboardingScreen(
                                 ),
                             )
                             OnboardingStepHeader(
-                                title = "Recover funds.",
-                                subhead = "Add the mints you used before to recover funds from this seed.",
+                                title = "Add your mints.",
+                                subhead = "Your seed phrase doesn't record which mints you used.",
                                 modifier = Modifier.padding(top = OnboardingMetrics.TitleGap),
                             )
+                            // Most people already have a mint list published,
+                            // so go and look for it rather than making them ask.
+                            LaunchedEffect(restoreMintsStaging) {
+                                restoreMintsStaging.autoSearchBackup()
+                            }
                             RestoreMintsStageContent(
                                 input = restoreMintsStaging.input,
                                 staged = restoreMintsStaging.staged,
@@ -675,6 +680,7 @@ internal fun OnboardingScreen(
                                     .weight(1f)
                                     .fillMaxWidth()
                                     .padding(top = CashuTheme.spacing.comfortable),
+                                backupSearchCompleted = restoreMintsStaging.backupSearchCompleted,
                             )
                         }
 
@@ -683,7 +689,7 @@ internal fun OnboardingScreen(
                             // reserves the bar band rather than skipping it —
                             // otherwise the title jumps up 56 dp on arrival.
                             OnboardingStepHeader(
-                                title = "Recover funds.",
+                                title = "Restoring wallet.",
                                 subhead = progressState?.subhead,
                                 modifier = Modifier.padding(
                                     top = OnboardingMetrics.TitleTopInset,

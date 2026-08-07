@@ -16,6 +16,9 @@ struct OnboardingView: View {
     @State private var mintUrlInput = ""
     @State private var mintsToRestore: [String] = []
     @State private var restoreMintError: String?
+    /// The mint-backup lookup runs itself once per visit to the mint step.
+    @State private var hasAutoSearchedMintBackup = false
+    @State private var mintBackupSearchCompleted = false
     @FocusState private var mintFieldFocused: Bool
 
     // Dedicated restore/results screen (forward-only): a snapshot of the staged
@@ -411,7 +414,7 @@ struct OnboardingView: View {
         case .restoreInput:
             return OnboardingChassisModel(
                 primary: OnboardingChassisAction(
-                    label: "Next",
+                    label: "Continue",
                     isLoading: isRestoring,
                     isDisabled: restoreWordCount != 12 || isRestoring,
                     action: initializeAndProceed
@@ -423,7 +426,7 @@ struct OnboardingView: View {
                 primary: OnboardingChassisAction(
                     label: mintsToRestore.isEmpty
                         ? "Restore"
-                        : "Restore from \(mintsToRestore.count) Mint\(mintsToRestore.count == 1 ? "" : "s")",
+                        : "Restore from \(mintsToRestore.count) mint\(mintsToRestore.count == 1 ? "" : "s")",
                     isDisabled: mintsToRestore.isEmpty,
                     action: startRestoreFlow
                 )
@@ -442,6 +445,20 @@ struct OnboardingView: View {
         case .iCloudRestore:
             switch iCloudRestorePhase {
             case .preview:
+                // No backup is not a dead end. The seed phrase is the way
+                // through, so the primary becomes that route rather than a
+                // permanently disabled "Restore Wallet".
+                if case .notFound = iCloudPreviewState {
+                    return OnboardingChassisModel(
+                        primary: OnboardingChassisAction(
+                            label: "Use Seed Phrase Instead",
+                            action: {
+                                HapticFeedback.selection()
+                                advance(to: .restoreInput)
+                            }
+                        )
+                    )
+                }
                 return OnboardingChassisModel(
                     primary: OnboardingChassisAction(
                         label: "Restore Wallet",
@@ -634,7 +651,7 @@ struct OnboardingView: View {
             stagger(appeared: restoreMethodAppeared, index: 0) {
                 OnboardingStepHeader(
                     title: "Restore wallet.",
-                    subhead: "Choose how to recover your wallet."
+                    subhead: "Choose how to restore your wallet."
                 )
             }
             .padding(.top, OnboardingMetrics.titleGap)
@@ -730,12 +747,16 @@ struct OnboardingView: View {
                         case .found(let backup):
                             VStack(alignment: .leading, spacing: 4) {
                                 Text(backup.timestamp.formatted(date: .abbreviated, time: .shortened))
+                                // A backup written before any mint was added
+                                // carries the seed alone. Say so plainly — the
+                                // wallet lands empty and Settings is the only
+                                // place to add mints afterwards.
                                 Text(backup.mintURLs.isEmpty
-                                     ? "Seed backup. Add mints after."
+                                     ? "Seed only. No mints saved."
                                      : "\(backup.mintURLs.count) mint\(backup.mintURLs.count == 1 ? "" : "s")")
                             }
                         case .notFound:
-                            Text("No backup found. Make sure you're signed in to the same Apple ID with iCloud Keychain enabled.")
+                            Text("Make sure you're signed in to the same Apple ID with iCloud Keychain enabled. Otherwise, restore with your seed phrase.")
                                 .fixedSize(horizontal: false, vertical: true)
                         }
                     }
@@ -767,8 +788,12 @@ struct OnboardingView: View {
         let mintCount = detectedICloudBackup?.mintURLs.count ?? 0
         return VStack(spacing: 0) {
             OnboardingStepHeader(
-                title: "Restoring wallet…",
-                subhead: "Recovering your funds from \(mintCount) mint\(mintCount == 1 ? "" : "s")…"
+                title: "Restoring wallet.",
+                // A seed-only backup has no mints to scan, so naming a count
+                // of zero here would read as a failure mid-flight.
+                subhead: mintCount == 0
+                    ? "Restoring your seed…"
+                    : "Restoring your funds from \(mintCount) mint\(mintCount == 1 ? "" : "s")…"
             )
             .padding(.top, OnboardingMetrics.titleTopInset)
 
@@ -780,6 +805,20 @@ struct OnboardingView: View {
         .frame(maxWidth: .infinity)
     }
 
+    /// Three genuinely different outcomes hide behind one success screen, and
+    /// only one of them is "your money is back". A seed-only backup lands in an
+    /// empty wallet with no mints, and a mint-carrying backup can still restore
+    /// to zero — neither may claim the funds are ready.
+    private func iCloudSuccessSubhead(mintCount: Int) -> String {
+        if mintCount == 0 {
+            return "Add your mints in Settings to recover any funds."
+        }
+        if walletManager.balance > 0 {
+            return "Across \(mintCount) mint\(mintCount == 1 ? "" : "s")."
+        }
+        return "No funds on your \(mintCount) mint\(mintCount == 1 ? "" : "s")."
+    }
+
     private var iCloudSuccessStage: some View {
         // A centered terminal "done" moment: the recovered balance is the hero,
         // rendered identically to the wallet's balance. Everything else recedes
@@ -788,9 +827,7 @@ struct OnboardingView: View {
         return VStack(spacing: 16) {
             OnboardingStepHeader(
                 title: "Wallet restored.",
-                subhead: walletManager.balance > 0 && count > 0
-                    ? "Across \(count) mint\(count == 1 ? "" : "s")"
-                    : "Your funds are ready."
+                subhead: iCloudSuccessSubhead(mintCount: count)
             )
             .padding(.top, OnboardingMetrics.titleTopInset)
             .opacity(isCompleting ? 0 : 1)
@@ -1345,7 +1382,7 @@ struct OnboardingView: View {
                     .foregroundStyle(wordCount == 12 && invalidIndices.isEmpty ? .green : .secondary)
                     .animation(.smooth(duration: 0.2), value: wordCount == 12 && invalidIndices.isEmpty)
                 if wordCount > 0 && !invalidIndices.isEmpty {
-                    Text("· \(invalidIndices.count) invalid")
+                    Text("· \(invalidWordsNotice(for: invalidIndices))")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
@@ -1362,6 +1399,23 @@ struct OnboardingView: View {
         .animation(.snappy, value: errorMessage)
         .onAppear {
             triggerEntrance { restoreInputAppeared = true }
+        }
+    }
+
+    /// "2 invalid" tells the user how bad it is but not where to look. The
+    /// positions are already computed, so name them — capped at three so the
+    /// caption stays one line on the narrowest device.
+    private func invalidWordsNotice(for indices: [Int]) -> String {
+        let positions = indices.map { String($0 + 1) }
+        switch positions.count {
+        case 1:
+            return "word \(positions[0]) isn't in the list"
+        case 2:
+            return "words \(positions[0]) and \(positions[1]) aren't in the list"
+        case 3:
+            return "words \(positions[0]), \(positions[1]) and \(positions[2]) aren't in the list"
+        default:
+            return "\(positions.count) words aren't in the list"
         }
     }
 
@@ -1392,8 +1446,11 @@ struct OnboardingView: View {
 
             stagger(appeared: restoreMintsAppeared, index: 0) {
                 OnboardingStepHeader(
-                    title: "Recover funds.",
-                    subhead: "Add the mints you used before to recover funds from this seed."
+                    title: "Add your mints.",
+                    // Name the reason this step exists at all. Without it the
+                    // screen reads as busywork, and the user has no way to know
+                    // the seed alone can't find their money.
+                    subhead: "Your seed phrase doesn't record which mints you used."
                 )
             }
             .padding(.top, OnboardingMetrics.titleGap)
@@ -1408,6 +1465,7 @@ struct OnboardingView: View {
             // from the seed screen's crossfade).
             mintFieldFocused = false
             triggerEntrance { restoreMintsAppeared = true }
+            autoSearchMintBackup()
         }
     }
 
@@ -1441,17 +1499,25 @@ struct OnboardingView: View {
                     .buttonStyle(.plain)
                     .accessibilityLabel("Paste mint URLs from clipboard")
 
-                    Button(action: searchNostrMintBackups) {
-                        restoreCapsuleChip(
-                            nostrBackupService.isSearching ? "Searching…" : "Nostr",
-                            systemImage: "antenna.radiowaves.left.and.right"
-                        )
-                    }
-                    .buttonStyle(.plain)
-                    .disabled(nostrBackupService.isSearching)
-                    .opacity(nostrBackupService.isSearching ? 0.4 : 1)
-                    .accessibilityLabel("Find mints from your Nostr backup")
                 }
+                .padding(.horizontal)
+
+                // "Nostr" named the transport, not the outcome. The user
+                // doesn't need to know where their mint list is kept — only
+                // that we can go and look for it. It gets its own row because
+                // it is the way through this step for anyone who can't recite
+                // their mint URLs, which is most people; third-of-a-row next
+                // to Add and Paste both buried it and truncated it.
+                Button(action: { searchMintBackup(automatic: false) }) {
+                    restoreCapsuleChip(
+                        nostrBackupService.isSearching ? "Checking for your mints…" : "Find my mints",
+                        systemImage: "magnifyingglass"
+                    )
+                }
+                .buttonStyle(.plain)
+                .disabled(nostrBackupService.isSearching)
+                .opacity(nostrBackupService.isSearching ? 0.4 : 1)
+                .accessibilityLabel("Check for a backup of your mint list")
                 .padding(.horizontal)
 
                 // Staged mints — the list that gets restored. Each shows its host.
@@ -1462,6 +1528,19 @@ struct OnboardingView: View {
                         }
                     }
                     .padding(.horizontal)
+                } else {
+                    // The list is empty far more often than not, and the
+                    // disabled primary never says why. This is the only place
+                    // that explains the wait and the way out.
+                    Text(emptyMintListNotice)
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.center)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .frame(maxWidth: .infinity)
+                        .padding(.horizontal, 32)
+                        .padding(.top, 8)
+                        .transition(.opacity)
                 }
 
                 // Mint-list notice (success / advisory / error)
@@ -1558,17 +1637,18 @@ struct OnboardingView: View {
     }
 
     private var restoreSubhead: String {
-        if !restoreAllSettled { return "Recovering funds from your mints…" }
-        return restoreTotalRecovered > 0
-            ? "Here's what we recovered."
-            : "No funds found on these mints."
+        if !restoreAllSettled { return "Checking your mints…" }
+        if restoreTotalRecovered > 0 { return "Here's what we restored." }
+        // Zero back is the outcome the user fears most. Name the one cause
+        // they can still act on instead of leaving them to guess.
+        return "No funds on these mints. If you used others, go back and add them."
     }
 
     private var restoreProgressStage: some View {
         VStack(spacing: 0) {
             stagger(appeared: restoreProgressAppeared, index: 0) {
                 OnboardingStepHeader(
-                    title: "Recover funds.",
+                    title: "Restoring wallet.",
                     subhead: restoreSubhead
                 )
             }
@@ -1725,7 +1805,7 @@ struct OnboardingView: View {
                 try await walletManager.initializeRestoredWallet(mnemonic: cleanedMnemonic)
                 advance(to: .restoreMints)
             } catch {
-                errorMessage = "Couldn't open the wallet. \(error.userFacingWalletMessage)"
+                errorMessage = "Couldn't restore the wallet. \(error.userFacingWalletMessage)"
             }
             isRestoring = false
         }
@@ -1763,18 +1843,32 @@ struct OnboardingView: View {
         }
 
         if addedCount == 0 {
-            setRestoreMintNotice(invalidCount > 0 ? "Nothing in the clipboard looked like a mint URL." : "No new mint URLs to add.")
+            setRestoreMintNotice(invalidCount > 0 ? "Nothing in the clipboard looked like a mint URL." : "No new mints to add.")
         } else if invalidCount > 0 {
-            setRestoreMintNotice("Added \(addedCount) mint URL\(addedCount == 1 ? "" : "s"). Skipped \(invalidCount) that didn't look like a mint URL.")
+            setRestoreMintNotice("Added \(addedCount) mint\(addedCount == 1 ? "" : "s"). Skipped \(invalidCount) that didn't look like a mint URL.")
         } else {
             restoreMintError = nil
         }
     }
 
+    /// Run the backup lookup once on arrival. Publishing is on by default
+    /// (`nostrMintBackupEnabled`), so most people already have a mint list
+    /// waiting and never need to type a URL — asking them to press a button
+    /// for it was making them do the wallet's work.
+    private func autoSearchMintBackup() {
+        guard !hasAutoSearchedMintBackup else { return }
+        hasAutoSearchedMintBackup = true
+        searchMintBackup(automatic: true)
+    }
+
     /// Look up the encrypted mint-list backup for this seed on the user's
     /// relays (NUT-27, fetched by cdk) and stage every mint it contains.
-    private func searchNostrMintBackups() {
-        HapticFeedback.selection()
+    ///
+    /// The automatic pass stays quiet on failure: the user didn't ask for it,
+    /// and a relay timeout is not something they can act on. Only an explicit
+    /// tap earns an error.
+    private func searchMintBackup(automatic: Bool) {
+        if !automatic { HapticFeedback.selection() }
 
         Task { @MainActor in
             do {
@@ -1783,19 +1877,40 @@ struct OnboardingView: View {
                 for url in urls where addMintUrlToRestoreList(url, showDuplicateError: false, showValidationError: false) {
                     addedCount += 1
                 }
-                if urls.isEmpty {
-                    setRestoreMintNotice("No Nostr mint backup found on your relays.", severity: .caution)
-                } else if addedCount == 0 {
-                    setRestoreMintNotice("Backup found — its mints are already in the list.")
+                if addedCount > 0 {
+                    setRestoreMintNotice("Added \(addedCount) mint\(addedCount == 1 ? "" : "s") from your backup.")
+                } else if urls.isEmpty {
+                    // The empty-state line already carries this for the
+                    // automatic pass — don't say it twice.
+                    if !automatic {
+                        setRestoreMintNotice("No backup of your mint list found.", severity: .caution)
+                    }
                 } else {
-                    setRestoreMintNotice("Added \(addedCount) mint\(addedCount == 1 ? "" : "s") from your Nostr backup.")
+                    setRestoreMintNotice("Backup found. Its mints are already in the list.")
                 }
+                mintBackupSearchCompleted = true
             } catch {
+                mintBackupSearchCompleted = true
+                AppLogger.wallet.error("Mint backup lookup failed: \(error)")
+                guard !automatic else { return }
                 // Through the shared mapper, never `localizedDescription` —
                 // a relay failure here surfaced as a raw CDK FFI dump.
                 setRestoreMintNotice(error.userFacingWalletMessage, severity: .error)
             }
         }
+    }
+
+    /// Fills the blank where the staged list will go. It has three jobs: say
+    /// the wallet is already looking, say what turned up, and name the manual
+    /// route when nothing did.
+    private var emptyMintListNotice: String {
+        if nostrBackupService.isSearching {
+            return "Checking for a backup of your mint list…"
+        }
+        if mintBackupSearchCompleted {
+            return "No backup found. Add the mints you used before, then restore."
+        }
+        return "Add the mints you used before, then restore."
     }
 
     @discardableResult

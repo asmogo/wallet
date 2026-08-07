@@ -258,7 +258,7 @@ fun onboardingRestoreMethodScreenshot() {
                 OnboardingBackButton(onBack = {}, modifier = Modifier.padding(start = 16.dp, top = 8.dp))
                 OnboardingStepHeader(
                     title = "Restore wallet.",
-                    subhead = "Choose how to recover your wallet.",
+                    subhead = "Choose how to restore your wallet.",
                     modifier = Modifier.padding(top = 12.dp),
                 )
                 Spacer(Modifier.weight(1f))
@@ -275,7 +275,7 @@ fun onboardingRestoreInputScreenshot() {
         val partial = FixtureWords.take(6).joinToString(" ")
         OnboardingScaffold(
             chassis = OnboardingChassisModel(
-                primary = ChassisAction("Next", onClick = {}, enabled = false),
+                primary = ChassisAction("Continue", onClick = {}, enabled = false),
             ),
         ) {
             Column(Modifier.fillMaxSize()) {
@@ -314,8 +314,8 @@ fun onboardingRestoreMintsScreenshot() {
             Column(Modifier.fillMaxSize()) {
                 OnboardingBackButton(onBack = {}, modifier = Modifier.padding(start = 16.dp, top = 8.dp))
                 OnboardingStepHeader(
-                    title = "Recover funds.",
-                    subhead = "Add the mints you used before to recover funds from this seed.",
+                    title = "Add your mints.",
+                    subhead = "Your seed phrase doesn't record which mints you used.",
                     modifier = Modifier.padding(top = 12.dp),
                 )
                 RestoreMintsStageContent(
@@ -370,8 +370,8 @@ fun onboardingRestoreProgressScreenshot() {
         ) {
             Column(Modifier.fillMaxSize()) {
                 OnboardingStepHeader(
-                    title = "Recover funds.",
-                    subhead = "Recovering funds from your mints…",
+                    title = "Restoring wallet.",
+                    subhead = "Checking your mints…",
                     modifier = Modifier.padding(top = 8.dp, bottom = 12.dp),
                 )
                 RestoreRecoveredTotal(
@@ -460,7 +460,7 @@ private fun AsciiRestoreMethodFrame(darkTheme: Boolean = false) {
             OnboardingBackButton(onBack = {}, modifier = Modifier.padding(start = 16.dp, top = 8.dp))
             OnboardingStepHeader(
                 title = "Restore wallet.",
-                subhead = "Choose how to recover your wallet.",
+                subhead = "Choose how to restore your wallet.",
                 modifier = Modifier.padding(top = 12.dp),
             )
             Spacer(Modifier.weight(1f))

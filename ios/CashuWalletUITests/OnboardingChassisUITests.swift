@@ -52,7 +52,7 @@ final class OnboardingChassisUITests: UITestBase {
         )
 
         app.buttons["Use Seed Phrase"].tap()
-        assertBottomAnchored(app.buttons["Next"], "restoreInput")
+        assertBottomAnchored(app.buttons["Continue"], "restoreInput")
 
         tapWhenReady(app.buttons["onboarding-back"], timeout: 10)
         XCTAssertTrue(create.waitForExistence(timeout: 10), "restoreInput back should return to welcome")
