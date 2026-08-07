@@ -63,7 +63,6 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
@@ -156,7 +155,8 @@ private val SeedBlurRadius = 9.dp
 // Stand-in for the blur wherever it cannot run — see SeedGrid. Blurred, the
 // placeholder rows lose enough contrast for the centred reveal overlay to read
 // over them; crisp, they collide with it. Fading them buys the same separation
-// with no renderer involved.
+// with no renderer involved. Multiplied into each row's text colour rather
+// than applied as `Modifier.alpha`, which is not the same thing — see SeedGrid.
 private const val SeedUnblurredAlpha = 0.28f
 private val SeedCardRadius = 14.dp
 private val SeedCardPadding = 20.dp
@@ -1165,12 +1165,22 @@ internal fun SeedPhraseReveal(
  * accommodation: unfaded, the crisp placeholder rows run straight through the
  * centred "Tap to reveal" overlay, which is what every API 26–30 device has
  * been rendering. API 31+ still blurs and is unchanged.
+ *
+ * The fade is multiplied into each row's text colour, NOT applied as
+ * `Modifier.alpha`. The modifier promotes the grid to an offscreen layer, so
+ * every glyph is blended twice — once at its own alpha, once when the layer
+ * composites — and the second rounding is host-dependent in the same way the
+ * blur was, just 20× smaller (~0.2% of pixels, still fatal to a pixel-exact
+ * validator). Folding the factor into the colour keeps it to a single blend in
+ * the normal raster pass, which the revealed baseline already proves is stable
+ * across hosts: its index column draws at `alpha = 0.65f` and has never
+ * mismatched.
  */
 @Composable
 private fun SeedGrid(words: List<String>, revealed: Boolean) {
     val canBlur = !LocalInspectionMode.current && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
     val blurred = !revealed && canBlur
-    val faded = !revealed && !canBlur
+    val fade = if (!revealed && !canBlur) SeedUnblurredAlpha else 1f
     val indexStyle = MaterialTheme.typography.bodySmall.copy(fontFamily = CashuTheme.fonts.mono).withSlashedZero()
     val wordStyle = MaterialTheme.typography.bodyMedium.copy(
         fontFamily = CashuTheme.fonts.mono,
@@ -1191,8 +1201,7 @@ private fun SeedGrid(words: List<String>, revealed: Boolean) {
                     }
                 },
             )
-            .then(if (blurred) Modifier.blur(SeedBlurRadius) else Modifier)
-            .then(if (faded) Modifier.alpha(SeedUnblurredAlpha) else Modifier),
+            .then(if (blurred) Modifier.blur(SeedBlurRadius) else Modifier),
         verticalArrangement = Arrangement.spacedBy(SeedGridRowGap),
     ) {
         words.chunked(3).forEachIndexed { rowIndex, rowWords ->
@@ -1221,7 +1230,7 @@ private fun SeedGrid(words: List<String>, revealed: Boolean) {
                         Text(
                             text = "%02d".format(number),
                             style = indexStyle,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.65f),
+                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.65f * fade),
                             textAlign = TextAlign.End,
                             modifier = Modifier.width(SeedIndexWidth),
                         )
@@ -1231,7 +1240,7 @@ private fun SeedGrid(words: List<String>, revealed: Boolean) {
                             color = if (revealed) {
                                 MaterialTheme.colorScheme.onSurface
                             } else {
-                                MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+                                MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f * fade)
                             },
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
