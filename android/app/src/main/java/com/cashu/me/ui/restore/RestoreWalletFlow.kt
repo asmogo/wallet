@@ -1,5 +1,6 @@
 package com.cashu.me.ui.restore
 
+import androidx.compose.animation.Crossfade
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -91,6 +92,7 @@ private val CtaPadding = 24.dp
 private val BottomPadding = 24.dp
 private val MintAvatarSize = 36.dp
 private val ProgressSpinnerSize = 18.dp
+private val ChipGlyphSize = 18.dp
 
 // Mint-staging copy. Hoisted because the subhead alone had four call sites
 // (both hosts here, the onboarding stage, and the screenshot baseline) and they
@@ -505,6 +507,10 @@ class RestoreMintsStagingState internal constructor(
      * which is what makes the result explicable.
      */
     fun searchNostrBackup() {
+        // The chip stops taking taps while a lookup is in flight, but that is a
+        // view-layer courtesy; refuse re-entry here so a second call can never
+        // double-stage the same backup.
+        if (nostrMintBackupService.state.value.isSearching) return
         scope.launch {
             runCatching { nostrMintBackupService.fetchBackedUpMintUrls() }
                 .onSuccess { urls ->
@@ -649,7 +655,7 @@ fun RestoreMintsStageContent(
             text = if (searching) "Checking for your mints…" else "Find my mints",
             icon = Icons.Outlined.Search,
             onClick = onNostr,
-            enabled = !searching,
+            loading = searching,
             modifier = Modifier.fillMaxWidth(),
         )
 
@@ -806,10 +812,16 @@ private fun RestoreCapsuleChip(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
+    loading: Boolean = false,
 ) {
     val contentAlpha = if (enabled) 1f else 0.38f
     Surface(
-        onClick = onClick,
+        // Working is not the same as disabled. Passing `enabled = false` while a
+        // lookup runs drops the content to 0.38 alpha, and a spinner in a greyed
+        // capsule looks broken rather than busy — the spinner is already the
+        // busy signal. Swallow the click instead and keep the chip at full
+        // strength. Re-entry is refused in the state holder regardless.
+        onClick = { if (!loading) onClick() },
         enabled = enabled,
         modifier = modifier,
         shape = CapsuleShape,
@@ -823,12 +835,29 @@ private fun RestoreCapsuleChip(
             horizontalArrangement = Arrangement.Center,
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Icon(
-                imageVector = icon,
-                contentDescription = null,
-                modifier = Modifier.size(18.dp),
-                tint = MaterialTheme.colorScheme.onSurface.copy(alpha = contentAlpha),
-            )
+            // Fixed glyph box so swapping the symbol for a spinner can't change
+            // the chip's height, and a cross-fade rather than a swap so the
+            // glyph dissolves in place. iOS twin: OnboardingView.mintLookupChip.
+            Box(
+                modifier = Modifier.size(ChipGlyphSize),
+                contentAlignment = Alignment.Center,
+            ) {
+                Crossfade(targetState = loading, label = "chip-glyph") { busy ->
+                    if (busy) {
+                        LoadingIndicator(
+                            modifier = Modifier.size(ChipGlyphSize),
+                            color = MaterialTheme.colorScheme.onSurface,
+                        )
+                    } else {
+                        Icon(
+                            imageVector = icon,
+                            contentDescription = null,
+                            modifier = Modifier.size(ChipGlyphSize),
+                            tint = MaterialTheme.colorScheme.onSurface.copy(alpha = contentAlpha),
+                        )
+                    }
+                }
+            }
             Spacer(Modifier.size(CashuTheme.spacing.micro))
             Text(
                 text = text,

@@ -1584,14 +1584,17 @@ struct OnboardingView: View {
                 // their mint URLs, which is most people; third-of-a-row next
                 // to Add and Paste both buried it and truncated it.
                 Button(action: searchMintBackup) {
-                    restoreCapsuleChip(
-                        nostrBackupService.isSearching ? "Checking for your mints…" : "Find my mints",
-                        systemImage: "magnifyingglass"
-                    )
+                    mintLookupChip
                 }
                 .buttonStyle(.plain)
-                .disabled(nostrBackupService.isSearching)
-                .opacity(nostrBackupService.isSearching ? 0.4 : 1)
+                // Hit testing, not `.disabled`: a disabled plain Button dims its
+                // whole label, glass included, so the pill washed out from
+                // 221 to 237 and the spinner sat in a greyed-out capsule looking
+                // broken rather than busy. The spinner is the busy signal; the
+                // chip should stay at full strength behind it. Re-entry is
+                // refused in `searchMintBackup` itself, so this is presentation
+                // only.
+                .allowsHitTesting(!nostrBackupService.isSearching)
                 // No `accessibilityLabel` override — it used to read "Check for
                 // a backup of your mint list", which is not what the button
                 // says. Voice Control matches spoken words against the label,
@@ -1659,13 +1662,67 @@ struct OnboardingView: View {
     /// Non-interactive glass so taps land on the plain Button label; falls back
     /// to `.quaternary` below iOS 26.
     private func restoreCapsuleChip(_ title: String, systemImage: String) -> some View {
-        Label(title, systemImage: systemImage)
-            .font(.subheadline.weight(.semibold))
-            .foregroundStyle(.primary)
+        restoreChipLabel(title) { Image(systemName: systemImage) }
             .frame(maxWidth: .infinity)
             .padding(.vertical, 12)
             .liquidGlass(in: Capsule())
             .contentShape(Capsule())
+    }
+
+    /// A chip's inner label, without the glass. Kept as a `Label` (rather than a
+    /// hand-rolled HStack) so a chip with a custom glyph lays out identically to
+    /// the plain `systemImage` ones — same icon/title spacing, same Dynamic Type
+    /// behaviour. The glyph box is fixed so swapping the symbol for a spinner
+    /// can't change the chip's height.
+    private func restoreChipLabel<Glyph: View>(
+        _ title: String,
+        @ViewBuilder glyph: () -> Glyph
+    ) -> some View {
+        Label {
+            Text(title)
+        } icon: {
+            glyph().frame(width: 16, height: 16)
+        }
+        .font(.subheadline.weight(.semibold))
+        .foregroundStyle(.primary)
+    }
+
+    /// The backup-lookup chip, which is the way through this step and therefore
+    /// the one chip that has a working state.
+    ///
+    /// Both states are always mounted and cross-faded, rather than one `Label`
+    /// whose title and icon change. That is not a stylistic choice: the stage
+    /// carries `.animation(.snappy, value: mintsToRestore.isEmpty)`, so the
+    /// moment a lookup stages its mints the whole subtree animates — and a
+    /// single `Label` reverting to a shorter title re-centres its row, which
+    /// dragged the magnifying glass across the chip. With both states resident
+    /// the chip's geometry is constant, so that blanket animation has nothing
+    /// to slide and only the opacity moves.
+    private var mintLookupChip: some View {
+        let searching = nostrBackupService.isSearching
+        return ZStack {
+            restoreChipLabel("Find my mints") {
+                Image(systemName: "magnifyingglass")
+            }
+            .opacity(searching ? 0 : 1)
+
+            restoreChipLabel("Checking for your mints…") {
+                // The system spinner, at the size Apple uses inline in a
+                // control. No dimming behind it — a button showing a spinner is
+                // already saying it is busy, and a 40% spinner just looks broken.
+                ProgressView().controlSize(.small)
+            }
+            .opacity(searching ? 1 : 0)
+        }
+        .animation(.smooth(duration: 0.2), value: searching)
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 12)
+        .liquidGlass(in: Capsule())
+        .contentShape(Capsule())
+        // One glass capsule around both states. Two stacked chips would double
+        // the glass wherever they overlap mid-fade.
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(searching ? "Checking for your mints" : "Find my mints")
     }
 
     // MARK: - Staged Mint Row (add screen)
@@ -1967,6 +2024,10 @@ struct OnboardingView: View {
     /// them than they agreed to. The lookup is still one tap away; the tap is
     /// now theirs, which is what makes the result explicable.
     private func searchMintBackup() {
+        // The chip stops taking taps while a lookup is in flight, but that is a
+        // view-layer courtesy; refuse re-entry here so a second call can never
+        // double-stage the same backup.
+        guard !nostrBackupService.isSearching else { return }
         HapticFeedback.selection()
 
         Task { @MainActor in

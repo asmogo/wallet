@@ -369,6 +369,53 @@ fun onboardingRestoreMintsScreenshot() {
     }
 }
 
+// The lookup in flight: the chip's glyph becomes the house spinner in a
+// fixed-size slot, and the capsule keeps full contrast rather than dimming to
+// a disabled 0.38 — a spinner in a greyed pill reads as broken, not busy.
+@PreviewTest
+@Preview(
+    name = "onboarding-restore-mints-searching",
+    widthDp = 390,
+    heightDp = 844,
+    showBackground = true,
+)
+@Composable
+fun onboardingRestoreMintsSearchingScreenshot() {
+    OnboardingFrame {
+        OnboardingScaffold(
+            chassis = OnboardingChassisModel(
+                primary = ChassisAction("Restore", onClick = {}, enabled = false),
+            ),
+        ) {
+            Column(Modifier.fillMaxSize()) {
+                RestoreMintsBarBand()
+                OnboardingStepHeader(
+                    title = RestoreMintsTitleOnboarding,
+                    subhead = RestoreMintsSubhead,
+                    modifier = Modifier.padding(top = 12.dp),
+                )
+                RestoreMintsStageContent(
+                    input = "",
+                    staged = emptyList(),
+                    previews = emptyMap(),
+                    notice = null,
+                    noticeSeverity = NoticeSeverity.Info,
+                    searching = true,
+                    onInputChange = {},
+                    onAdd = {},
+                    onPaste = {},
+                    onNostr = {},
+                    onRemove = {},
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxWidth()
+                        .padding(top = 16.dp),
+                )
+            }
+        }
+    }
+}
+
 // The state everyone now arrives in, since the backup lookup no longer runs
 // itself: empty list, disabled primary, and the empty-state line carrying the
 // whole way forward.
