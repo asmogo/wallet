@@ -136,6 +136,87 @@ extension View {
         ))
     }
 
+    /// Dissolves scroll content into the chrome at one or both edges, so rows
+    /// fade out as they approach a pinned header or CTA instead of cutting
+    /// against it.
+    ///
+    /// `top` / `bottom` are the distances from each edge at which the content is
+    /// still fully clear — pass the measured height of whatever chrome sits
+    /// there. The `band` above/below that inset is the gradient itself. `nil`
+    /// leaves that edge alone, which is why `0` has to stay meaningful: it means
+    /// "fade right at the container's own edge", the case where the chrome is a
+    /// sibling rather than an overlay.
+    ///
+    /// One mask with one stop list, never two stacked masks — overlapping masks
+    /// multiply their alpha and the shared band comes out twice as dark as
+    /// either edge alone. Android mirrors this in `Modifier.scrollEdgeFade`.
+    func scrollEdgeFade(
+        top: CGFloat? = nil,
+        bottom: CGFloat? = nil,
+        band: CGFloat = ScrollFadeMetrics.band
+    ) -> some View {
+        mask {
+            GeometryReader { proxy in
+                LinearGradient(
+                    stops: ScrollFadeMetrics.stops(
+                        total: proxy.size.height,
+                        top: top,
+                        bottom: bottom,
+                        band: band
+                    ),
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+            }
+        }
+    }
+
+}
+
+// MARK: - Scroll Edge Fade
+
+enum ScrollFadeMetrics {
+    /// Distance over which content dissolves. Android holds the same value in
+    /// `ScrollEdgeFade.kt` — the two fades are meant to be indistinguishable, so
+    /// this number only ever moves in both places at once.
+    static let band: CGFloat = 24
+
+    /// Mask stops for ``SwiftUI/View/scrollEdgeFade(top:bottom:band:)``.
+    ///
+    /// Locations are forced non-decreasing on the way out. On a short container
+    /// the two bands can otherwise cross, and a `LinearGradient` handed
+    /// out-of-order stops renders a hard seam rather than clamping.
+    static func stops(
+        total rawTotal: CGFloat,
+        top: CGFloat?,
+        bottom: CGFloat?,
+        band: CGFloat
+    ) -> [Gradient.Stop] {
+        let total = max(rawTotal, 1)
+        var stops: [Gradient.Stop] = []
+
+        if let top {
+            stops.append(.init(color: .clear, location: 0))
+            stops.append(.init(color: .clear, location: top / total))
+            stops.append(.init(color: .black, location: (top + band) / total))
+        } else {
+            stops.append(.init(color: .black, location: 0))
+        }
+
+        if let bottom {
+            stops.append(.init(color: .black, location: 1 - (bottom + band) / total))
+            stops.append(.init(color: .clear, location: 1 - bottom / total))
+            stops.append(.init(color: .clear, location: 1))
+        } else {
+            stops.append(.init(color: .black, location: 1))
+        }
+
+        var highWater: CGFloat = 0
+        return stops.map { stop in
+            highWater = max(highWater, min(max(stop.location, 0), 1))
+            return .init(color: stop.color, location: highWater)
+        }
+    }
 }
 
 // MARK: - Sheet Close Button
