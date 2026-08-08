@@ -259,17 +259,32 @@ struct ConnectMintSheet: View {
     @ObservedObject private var settings = SettingsManager.shared
 
     @State private var route: ConnectMintRoute?
-    /// One height per step, not one shared value. A shared value cannot survive
-    /// a pop: `contentFitMeasured` only reports when its measurement *changes*,
-    /// and the picker settles back to the height it already had, so nothing ever
-    /// fires to undo the pushed step's height — the sheet stays sized for the
-    /// step the user just left. Held apart, each step keeps its own last-known
-    /// good height and a transient measured mid-transition corrects itself.
+    /// A store per step, never one shared value. `contentFitMeasured` only
+    /// reports when its measurement *changes*, and the picker settles back to the
+    /// height it already had, so a shared value would have nothing to fire and
+    /// undo the pushed step's — the sheet would stay sized for the step just
+    /// left. Held apart, each keeps its own last-known good height and a
+    /// transient measured mid-transition corrects itself.
     @State private var pickerHeight: CGFloat = 0
     @State private var pushedHeight: CGFloat = 0
     @State private var addMintError: String?
 
-    private var contentHeight: CGFloat { route == nil ? pickerHeight : pushedHeight }
+    /// One height for the whole stack, and the sheet deliberately does *not*
+    /// re-hug each step.
+    ///
+    /// Changing height across a push or pop is what produced the sliced
+    /// shortlist: for the length of the transition UIKit lays the arriving page
+    /// out at the departing page's height, so the shortlist came back cut
+    /// through a row with ~158pt of empty sheet under it. Holding the resize
+    /// until after the slide fixed the cut but traded it for a sheet that lands,
+    /// pauses, then grows — the size change carries no meaning, it is the layout
+    /// catching up in public. One height removes both.
+    ///
+    /// `max`, not the picker's height outright, so a pushed step that outgrows
+    /// it — the URL form with an inline error — still gets the room.
+    private var contentHeight: CGFloat {
+        route == nil ? pickerHeight : max(pickerHeight, pushedHeight)
+    }
 
     var body: some View {
         NavigationStack {
@@ -292,9 +307,10 @@ struct ConnectMintSheet: View {
                 )
             }
         }
-        // Both the shortlist and the pushed URL step hug their content, matching
-        // Android. Only discovery fills the sheet — it hosts a scrolling list and
-        // needs bounded height.
+        // The sheet hugs the shortlist and keeps that height while the URL step
+        // is pushed — the push and pop are a plain slide at a fixed size, like
+        // any navigation stack. Only discovery fills the sheet: it hosts a
+        // scrolling list and needs bounded height.
         .contentFitDetent(contentHeight, enabled: route != .discover)
         .presentationDragIndicator(.visible)
         // Hugging the shortlist, this floats over the canvas and keeps the

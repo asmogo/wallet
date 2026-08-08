@@ -1334,9 +1334,15 @@ struct UnifiedSendView: View {
     /// step's height and the sheet stays sized for the step just left.
     @State private var connectMintContentHeight: CGFloat = 0
 
-    /// Whichever step currently owns the sheet's height.
+    /// One height across the connect-a-mint push, for the reason spelled out on
+    /// `ConnectMintSheet.contentHeight`: re-hugging each step means changing
+    /// height across a navigation transition, which either cuts the arriving
+    /// page off or makes the sheet settle and then visibly grow. `max` so a
+    /// pushed step that outgrows the input face still gets the room.
     private var sheetContentHeight: CGFloat {
-        connectMintRoute == nil ? compactContentHeight : connectMintContentHeight
+        connectMintRoute == nil
+            ? compactContentHeight
+            : max(compactContentHeight, connectMintContentHeight)
     }
 
     enum Step: Equatable { case input, amount, confirm, sending, sent, failed }
@@ -1354,7 +1360,8 @@ struct UnifiedSendView: View {
     /// Input step (with balance, or empty states) hugs content. Amount / confirm /
     /// status expand to `.large` so the keypad and pay scaffold have room.
     private var prefersCompactSheet: Bool {
-        // The pushed URL step hugs too; only discovery needs the full sheet.
+        // The pushed URL step rides the input face's height; only discovery
+        // needs the full sheet.
         statusPhase == nil && step == .input && connectMintRoute != .discover
     }
 

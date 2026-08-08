@@ -99,14 +99,7 @@ extension View {
     ///
     /// Never hang `.onGeometryChange` off a bare view to drive a detent.
     func contentFitMeasured(_ onHeight: @escaping (CGFloat) -> Void) -> some View {
-        ScrollView {
-            self.onGeometryChange(for: CGFloat.self) { proxy in
-                proxy.size.height
-            } action: { newHeight in
-                onHeight(newHeight)
-            }
-        }
-        .scrollBounceBehavior(.basedOnSize)
+        modifier(ContentFitMeasure(onHeight: onHeight))
     }
 
     /// Sizes a sheet to the height reported by ``contentFitMeasured(_:)``.
@@ -224,6 +217,64 @@ private struct CanvasSheetBackground: ViewModifier {
     }
 }
 
+// MARK: - Content-Fit Sheet Measurement
+
+/// Reports the body's ideal height, but only from a layout pass that has actually
+/// happened. See ``View/contentFitMeasured(_:)``.
+///
+/// The first pass after a sheet is presented reports garbage. Measured on an
+/// iPhone 17 Pro presenting Send's no-mints face: the content comes back
+/// **139.7 × 1032.3** while the enclosing `ScrollView` is still **139.7 × 0** —
+/// the sheet has no laid-out geometry yet, so the body is measured at a third of
+/// its real width, every line of text wraps about three times over, and the ideal
+/// height is nearly triple the truth. The real pass, 402 × 368.3, lands
+/// immediately after.
+///
+/// Passed straight through, that first number sets the detent to
+/// `min(1032 + chrome, 90% of the screen)` — a full-height sheet with the content
+/// stranded at the top, the exact bug this file's detent machinery kept being
+/// blamed for. Recovery then depends on the corrected measurement arriving *and*
+/// UIKit honouring it; a simulator wins that, a device need not.
+///
+/// So nothing is published until the container has a real height, and the last
+/// measurement is re-published when it gets one. Gating on the container rather
+/// than on the number itself keeps genuinely tall content — accessibility text
+/// sizes — free to exceed the screen and scroll, which is what the ceiling in
+/// ``ContentFitSheetMetrics/maxScreenFraction`` is for.
+private struct ContentFitMeasure: ViewModifier {
+    let onHeight: (CGFloat) -> Void
+
+    @State private var bodyHeight: CGFloat = 0
+    @State private var containerHeight: CGFloat = 0
+
+    func body(content: Content) -> some View {
+        ScrollView {
+            content.onGeometryChange(for: CGFloat.self) { proxy in
+                proxy.size.height
+            } action: { newHeight in
+                bodyHeight = newHeight
+                publish()
+            }
+        }
+        .scrollBounceBehavior(.basedOnSize)
+        // Fires *after* the body's own measurement on the pass that gives the
+        // sheet its geometry, which is why the republish here is load-bearing:
+        // the real body height is already known by then and would otherwise
+        // never be reported.
+        .onGeometryChange(for: CGFloat.self) { proxy in
+            proxy.size.height
+        } action: { newHeight in
+            containerHeight = newHeight
+            publish()
+        }
+    }
+
+    private func publish() {
+        guard containerHeight > 0, bodyHeight > 0 else { return }
+        onHeight(bodyHeight)
+    }
+}
+
 // MARK: - Content-Fit Sheet Detent
 
 /// Pins the sheet to the newest computed height.
@@ -291,9 +342,28 @@ private struct ContentFitDetent: ViewModifier {
         )
     }
 
+    /// The height being moved to, plus the one currently selected.
+    ///
+    /// At rest those are the same value, so this is a one-element set and the
+    /// sheet is not user-draggable. They differ for exactly one update — a new
+    /// measurement lands, `body` re-runs with the new `detent`, and `onChange`
+    /// has not yet moved `selection` onto it — and that single update is the
+    /// whole bug: a `selection` the set does not contain is invalid, and UIKit
+    /// answers an invalid selection by opening the sheet **full height**.
+    ///
+    /// Seeding `selection` in `init` (see there) narrowed that window but cannot
+    /// close it, because the set is recomputed from the live `contentHeight`
+    /// while `selection` is frozen at the value from first construction. Whether
+    /// the window is ever observed is pure timing — the same commit that never
+    /// reproduced under XCUITest on a simulator reproduced every launch from
+    /// Xcode, on Send's no-mints face. Keeping the old selection a member removes
+    /// the race rather than narrowing it: the sheet holds its current height for
+    /// that one update, then `onChange` converges it.
+    private var detents: Set<PresentationDetent> { [detent, selection] }
+
     func body(content: Content) -> some View {
         content
-            .presentationDetents([detent], selection: $selection)
+            .presentationDetents(detents, selection: $selection)
             .onAppear { selection = detent }
             .onChange(of: detent) { _, newDetent in selection = newDetent }
     }
