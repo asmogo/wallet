@@ -72,6 +72,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.cashu.me.Core.CommitOutcome
+import kotlinx.coroutines.delay
 import com.cashu.me.Core.SeedPhraseEntry
 import com.cashu.me.ui.components.InlineNotice
 import com.cashu.me.ui.components.NoticeSeverity
@@ -216,10 +217,20 @@ fun SeedWordEntryField(
         onOutcome(outcome)
     }
 
+    var hasAutoFocused by remember { mutableStateOf(false) }
     LaunchedEffect(autoFocus, state.isReviewing) {
-        // Word-by-word entry is keyboard-driven from the first frame — a
+        // Word-by-word entry is keyboard-driven, so the field autofocuses — a
         // deliberate exception to the "land calm" rule the mint step keeps.
+        // But not on the first frame: the IME's own animation overlapping the
+        // stage swap read as two fighting motions (device review 2026-08-08).
+        // Let the swap land, then the keyboard rises as its own clean motion.
+        // Later refocuses (leaving the review grid) are within-stage and stay
+        // immediate.
         if (autoFocus && !state.isReviewing) {
+            if (!hasAutoFocused) {
+                hasAutoFocused = true
+                delay(350)
+            }
             focusRequester.requestFocus()
             keyboard?.show()
         }

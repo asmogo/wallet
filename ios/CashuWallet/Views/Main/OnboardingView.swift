@@ -1379,7 +1379,24 @@ struct OnboardingView: View {
 
     private var restoreInputStage: some View {
         VStack(spacing: 0) {
-            OnboardingBackButton { retreat(to: .welcome) }
+            OnboardingBackButton {
+                // A sequenced exit, one motion at a time (device review
+                // 2026-08-08, twice). Everything at once — 300pt of chassis
+                // travel on the keyboard's fast system curve, the buttons
+                // morphing one-into-two mid-flight, the stage cross-fading
+                // behind them — read as "buttons mash to the bottom". So:
+                // the tap drops the keyboard immediately (that is the
+                // response cue) and the chassis rides down as a stable
+                // object, Continue still Continue; only once it has landed
+                // does the stage cross-fade and the slots morph in place.
+                // Back is one hop to the method chooser, not two to welcome
+                // (product decision, reversing the restyle brief's rule).
+                seedFieldFocused = false
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
+                    guard currentStep == .restoreInput else { return }
+                    retreat(to: .restoreMethod)
+                }
+            }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.horizontal, OnboardingMetrics.gutter)
                 .padding(.top, OnboardingMetrics.barTopInset)
@@ -1424,10 +1441,17 @@ struct OnboardingView: View {
         .animation(.snappy, value: errorMessage)
         .onAppear {
             triggerEntrance { restoreInputAppeared = true }
-            // Word-by-word entry is keyboard-driven from the first frame. A
-            // deliberate exception to the "land calm" rule that restoreMints
-            // still keeps — there, arriving with the keyboard up would be noise.
-            seedFieldFocused = true
+            // Word-by-word entry is keyboard-driven, so the field autofocuses —
+            // a deliberate exception to the "land calm" rule that restoreMints
+            // still keeps. But not on the first frame: the keyboard's own
+            // animation overlapping the stage materialize read as two fighting
+            // motions (device review 2026-08-08). Let the stage land (~0.38s:
+            // 0.10 delay + 0.28 transition), then the keyboard rises as its
+            // own clean motion.
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
+                guard currentStep == .restoreInput else { return }
+                seedFieldFocused = true
+            }
         }
         .onDisappear { seedFieldFocused = false }
         .onChange(of: seedEntry.isReviewing) { _, reviewing in

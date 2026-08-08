@@ -86,7 +86,10 @@ skip path, retry affordance, and error surface stays. Notably:
   only Settings checked validity; word-by-word entry makes per-word validity structural —
   a non-word cannot be committed — and the BIP-39 checksum gates the CTA on top of it.)*
 - `restoreProgress` stays forward-only, primary disabled until every mint settles.
-- `restoreInput`'s Back still returns to `welcome`, not `restoreMethod`.
+- ~~`restoreInput`'s Back still returns to `welcome`, not `restoreMethod`.~~
+  *Reversed 2026-08-08 (product decision, device review):* Back now retreats **one
+  hop to `restoreMethod`** — back undoes the last step. Entered words survive the
+  round trip on both platforms.
 - The `.onAppear` jump straight to `iCloudRestore` when `hasIncompleteICloudRestore` stays.
 
 If you believe a step should be merged, reordered, or removed, **stop and ask**. Do not do it

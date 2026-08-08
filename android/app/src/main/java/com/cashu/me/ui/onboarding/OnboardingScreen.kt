@@ -69,6 +69,7 @@ import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.LocalInspectionMode
 import androidx.compose.ui.platform.testTag
@@ -236,6 +237,7 @@ internal fun OnboardingScreen(
     var restoreError by remember { mutableStateOf<String?>(null) }
     val seedState = rememberSeedPhraseEntryState()
     val seedClipboard = LocalClipboardManager.current
+    val focusManager = LocalFocusManager.current
     var seedAcknowledged by remember { mutableStateOf(false) }
     val firstMint = remember { FirstMintSelectionState() }
     // First-mint completion state (wallet installs once, then mints add sequentially).
@@ -389,7 +391,9 @@ internal fun OnboardingScreen(
                 label = "Use Seed Phrase",
                 onClick = {
                     restoreError = null
-                    seedState.reset()
+                    // No reset: back is now a one-hop peek at the method
+                    // chooser, and returning must not cost the words already
+                    // entered. iOS has never reset here either.
                     step = OnboardingStep.RestoreInput
                 },
                 style = ChassisButtonStyle.Secondary,
@@ -483,7 +487,16 @@ internal fun OnboardingScreen(
             is OnboardingStep.FirstMint ->
                 if (!finishing) step = OnboardingStep.ShowMnemonic(current.mnemonic)
             OnboardingStep.RestoreMethod -> step = OnboardingStep.Welcome
-            OnboardingStep.RestoreInput -> if (!restoring) step = OnboardingStep.Welcome
+            OnboardingStep.RestoreInput -> if (!restoring) {
+                // Same sequenced exit as the on-screen back button.
+                focusManager.clearFocus()
+                scope.launch {
+                    delay(250)
+                    if (step == OnboardingStep.RestoreInput) {
+                        step = OnboardingStep.RestoreMethod
+                    }
+                }
+            }
             is OnboardingStep.RestoreMints -> {
                 restoreMintsStaging.reset()
                 step = OnboardingStep.RestoreInput
@@ -629,7 +642,23 @@ internal fun OnboardingScreen(
 
                         OnboardingStep.RestoreInput -> Column(Modifier.fillMaxSize()) {
                             OnboardingBackButton(
-                                onBack = { step = OnboardingStep.Welcome },
+                                // A sequenced exit, one motion at a time: the
+                                // tap drops the IME immediately and the chassis
+                                // rides down as a stable object; only once it
+                                // has landed does the stage swap and the slots
+                                // morph in place. Overlapped, the travel and
+                                // the label morph read as "buttons mash to the
+                                // bottom" (device review 2026-08-08). Back is
+                                // one hop to the method chooser.
+                                onBack = {
+                                    focusManager.clearFocus()
+                                    scope.launch {
+                                        delay(250)
+                                        if (step == OnboardingStep.RestoreInput) {
+                                            step = OnboardingStep.RestoreMethod
+                                        }
+                                    }
+                                },
                                 modifier = Modifier.padding(
                                     start = OnboardingMetrics.BarStartInset,
                                     top = OnboardingMetrics.BarTopInset,

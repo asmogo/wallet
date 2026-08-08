@@ -79,8 +79,15 @@ final class OnboardingChassisUITests: UITestBase {
             "restoreInput should offer the paste chip while nothing is entered"
         )
 
+        // Back is one hop, not two (product decision 2026-08-08): the seed
+        // step retreats to the method chooser, and the chooser to welcome.
         tapWhenReady(app.buttons["onboarding-back"], timeout: 10)
-        XCTAssertTrue(create.waitForExistence(timeout: 10), "restoreInput back should return to welcome")
+        XCTAssertTrue(
+            app.buttons["Use Seed Phrase"].waitForExistence(timeout: 10),
+            "restoreInput back should return to the method chooser"
+        )
+        tapWhenReady(app.buttons["onboarding-back"], timeout: 10)
+        XCTAssertTrue(create.waitForExistence(timeout: 10), "restoreMethod back should return to welcome")
 
         // Create branch: seed step (back button returns to welcome), then on
         // through acknowledge to the first-mint step.
