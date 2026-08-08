@@ -605,6 +605,12 @@ private struct SeedWordTextField: UIViewRepresentable {
         field.wantsFocus = isFocused
         if isFocused, field.window != nil, !field.isFirstResponder {
             field.becomeFirstResponder()
+        } else if !isFocused, field.isFirstResponder {
+            // The binding must drop the keyboard too. Without this the host's
+            // `isFocused = false` is a silent no-op and the keyboard only
+            // leaves when the field unmounts — after the stage transition,
+            // which is exactly the "everything jumps at once" exit.
+            field.resignFirstResponder()
         }
     }
 
@@ -626,6 +632,13 @@ private struct SeedWordTextField: UIViewRepresentable {
 
         func textFieldDidBeginEditing(_ field: UITextField) {
             parent.isFocused = true
+        }
+
+        func textFieldDidEndEditing(_ field: UITextField) {
+            // Keep the binding honest when focus is lost by any route other
+            // than the host clearing it (system dismissal, unmount), so a
+            // stale `true` can't re-summon the keyboard on the next update.
+            parent.isFocused = false
         }
     }
 }

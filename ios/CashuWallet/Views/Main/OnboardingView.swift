@@ -95,9 +95,6 @@ struct OnboardingView: View {
     @State private var firstMintAppeared = false
     @State private var restoreMethodAppeared = false
     @State private var restoreInputAppeared = false
-    /// Back was tapped on seed entry and the retreat is waiting for the
-    /// keyboard to finish dismissing. See the back button for why.
-    @State private var pendingSeedRetreat = false
     @State private var restoreMintsAppeared = false
     @State private var restoreProgressAppeared = false
     @State private var iCloudPreviewAppeared = false
@@ -186,24 +183,6 @@ struct OnboardingView: View {
             detectedICloudBackup = nil
             isDetectingICloudBackup = true
         }
-        // The moment the keyboard is actually gone — spring tail included —
-        // which is when a pending seed-entry retreat may land. See the seed
-        // stage's back button.
-        .onReceive(
-            NotificationCenter.default.publisher(for: UIResponder.keyboardDidHideNotification)
-        ) { _ in
-            completePendingSeedRetreat()
-        }
-    }
-
-    /// Runs the retreat a seed-entry back tap queued behind the keyboard
-    /// dismissal. Idempotent: the didHide notification and the fallback timer
-    /// can both arrive, and only the first may act.
-    private func completePendingSeedRetreat() {
-        guard pendingSeedRetreat else { return }
-        pendingSeedRetreat = false
-        guard currentStep == .restoreInput else { return }
-        retreat(to: .restoreMethod)
     }
 
     // MARK: - Ascii Field Layer
@@ -228,7 +207,21 @@ struct OnboardingView: View {
     /// it changes — one continuous space. Visibility is opacity only: leaving
     /// the pair fades over the existing 0.28s step transition (the clock
     /// pauses); returning fades back in and resumes from wall-clock.
+    ///
+    /// The layer ignores the keyboard's safe area, and that is load-bearing:
+    /// with the keyboard's inset in play, a raised keyboard collapses
+    /// `available` in `AsciiFieldLayout.resolve` to nil, so on the seed-entry
+    /// retreat the terrain sat suppressed through the whole cross-fade and
+    /// then popped to full opacity the frame the keyboard finished — outside
+    /// any transaction. Keyboard-blind, the floor is laid out in its resting
+    /// position at all times; a dismissing keyboard merely uncovers it while
+    /// its opacity rides the step transition like everything else.
     private var asciiFieldLayer: some View {
+        asciiFieldLayerContent
+            .ignoresSafeArea(.keyboard)
+    }
+
+    private var asciiFieldLayerContent: some View {
         GeometryReader { geo in
             // `safeAreaInset` extends the bottom safe area by the chassis
             // height, so the inset read here is chassis + home indicator —
@@ -1401,29 +1394,21 @@ struct OnboardingView: View {
     private var restoreInputStage: some View {
         VStack(spacing: 0) {
             OnboardingBackButton {
-                // A sequenced exit, one motion at a time (device review
-                // 2026-08-08, three times). The tap drops the keyboard
-                // immediately — that is the response cue — and the chassis
-                // rides down with it as a stable object, Continue still
-                // Continue; only once everything has settled does the stage
-                // cross-fade and one button morph into two in place.
-                //
-                // "Settled" is keyboardDidHide, not a guessed delay: the
-                // keyboard's declared duration is 0.25s but its spring tail
-                // runs visibly longer, and a cross-fade launched into that
-                // tail lands the terrain and the growing chassis on a
-                // still-moving floor — the "crashes down" of review three.
-                // The timer below is only a fallback for the no-software-
-                // keyboard case (hardware keyboard attached), where didHide
-                // never fires.
+                // The same exit as every other step: the tap answers at once
+                // with the 0.28s materialize cross-fade, and the keyboard
+                // drops concurrently as its own system motion. Three earlier
+                // passes tried to *sequence* keyboard-then-cross-fade and each
+                // read as a dead wait followed by a lurch; the sequencing was
+                // only ever needed because the terrain's layout used to move
+                // with the keyboard's safe area. Now that the floor is
+                // keyboard-blind (see `asciiFieldLayer`), the dismissing
+                // keyboard simply uncovers a stage that is already settling,
+                // which is how every stock iOS pop-with-keyboard behaves.
                 //
                 // Back is one hop to the method chooser, not two to welcome
                 // (product decision, reversing the restyle brief's rule).
                 seedFieldFocused = false
-                pendingSeedRetreat = true
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
-                    completePendingSeedRetreat()
-                }
+                retreat(to: .restoreMethod)
             }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.horizontal, OnboardingMetrics.gutter)
@@ -1471,15 +1456,13 @@ struct OnboardingView: View {
             triggerEntrance { restoreInputAppeared = true }
             // Word-by-word entry is keyboard-driven, so the field autofocuses —
             // a deliberate exception to the "land calm" rule that restoreMints
-            // still keeps. But not on the first frame: the keyboard's own
-            // animation overlapping the stage materialize read as two fighting
-            // motions (device review 2026-08-08). Let the stage land (~0.38s:
-            // 0.10 delay + 0.28 transition), then the keyboard rises as its
-            // own clean motion.
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
-                guard currentStep == .restoreInput else { return }
-                seedFieldFocused = true
-            }
+            // still keeps. Immediately, not after a settle delay: the keyboard
+            // rises alongside the stage materialize the way it rides a stock
+            // push (becomeFirstResponder in viewWillAppear). The "two fighting
+            // motions" of the earlier device review were the terrain reacting
+            // to the keyboard's safe area, fixed at the root; the delayed
+            // variant answered the tap twice, seconds apart.
+            seedFieldFocused = true
         }
         .onDisappear { seedFieldFocused = false }
         .onChange(of: seedEntry.isReviewing) { _, reviewing in
