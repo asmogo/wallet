@@ -103,9 +103,6 @@ private val SuggestedRowTextGap = 2.dp
  *
  * The surface owns its own [SheetHeader] so it can swap the title and reveal a
  * back chevron when a step is pushed — hosts must not draw one above it.
- *
- * Camera overlays sit under dialog windows, so [onScanMintUrl] must dismiss the
- * host sheet before opening the scanner; the result returns via [initialCustomUrl].
  */
 @Composable
 fun ConnectMintSheetContent(
@@ -113,12 +110,9 @@ fun ConnectMintSheetContent(
     settingsManager: SettingsManager,
     mintDiscoveryManager: MintDiscoveryManager,
     context: ConnectMintContext,
-    onScanMintUrl: () -> Unit,
     onMintAdded: () -> Unit,
     modifier: Modifier = Modifier,
     allowCleartextLocalTestMints: Boolean = false,
-    prefilledMintUrl: String? = null,
-    onPrefilledMintUrlConsumed: () -> Unit = {},
 ) {
     val walletState by walletManager.state.collectAsState()
     val settings by settingsManager.state.collectAsState()
@@ -128,12 +122,6 @@ fun ConnectMintSheetContent(
     var step by remember { mutableStateOf(ConnectMintStep.Picker) }
     var quickAddError by remember { mutableStateOf<String?>(null) }
     var isQuickAdding by remember { mutableStateOf(false) }
-
-    // A scan lands back here with a URL: reopen straight onto the form the user
-    // left, prefilled, instead of dropping them on the picker.
-    LaunchedEffect(prefilledMintUrl) {
-        if (!prefilledMintUrl.isNullOrBlank()) step = ConnectMintStep.AddCustom
-    }
 
     fun goBack() {
         when (connectMintBackAction(onPickerStep = step == ConnectMintStep.Picker)) {
@@ -210,12 +198,7 @@ fun ConnectMintSheetContent(
 
                 ConnectMintStep.AddCustom -> AddMintFormBody(
                     walletManager = walletManager,
-                    initialUrl = prefilledMintUrl.orEmpty(),
                     allowCleartextLocalTestMints = allowCleartextLocalTestMints,
-                    onScan = {
-                        onPrefilledMintUrlConsumed()
-                        onScanMintUrl()
-                    },
                     onAdded = onMintAdded,
                     modifier = Modifier
                         .padding(horizontal = CashuTheme.spacing.loose)

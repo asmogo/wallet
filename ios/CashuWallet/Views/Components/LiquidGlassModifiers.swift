@@ -244,15 +244,51 @@ private struct ContentFitDetent: ViewModifier {
     let estimate: CGFloat
     let navigationBar: Bool
 
-    @State private var selection: PresentationDetent = .large
+    @State private var selection: PresentationDetent
 
-    private var detent: PresentationDetent {
+    @MainActor
+    init(contentHeight: CGFloat, enabled: Bool, estimate: CGFloat, navigationBar: Bool) {
+        self.contentHeight = contentHeight
+        self.enabled = enabled
+        self.estimate = estimate
+        self.navigationBar = navigationBar
+        // Seed with a detent the set actually contains. `.large` is not one:
+        // while `enabled`, the set holds a single `.height(…)`, so a `.large`
+        // seed is an invalid selection and the sheet opens full-height until
+        // `onAppear` replaces it. That is a race — the simulator usually wins
+        // it, a device often loses — and losing it is what put the Send sheet's
+        // no-mints face on a full-height sheet with its content stranded at the
+        // top.
+        _selection = State(initialValue: Self.detent(
+            for: contentHeight,
+            enabled: enabled,
+            estimate: estimate,
+            navigationBar: navigationBar
+        ))
+    }
+
+    @MainActor
+    private static func detent(
+        for contentHeight: CGFloat,
+        enabled: Bool,
+        estimate: CGFloat,
+        navigationBar: Bool
+    ) -> PresentationDetent {
         guard enabled else { return .large }
         return .height(ContentFitSheetMetrics.detentHeight(
             for: contentHeight,
             estimate: estimate,
             hasNavigationBar: navigationBar
         ))
+    }
+
+    private var detent: PresentationDetent {
+        Self.detent(
+            for: contentHeight,
+            enabled: enabled,
+            estimate: estimate,
+            navigationBar: navigationBar
+        )
     }
 
     func body(content: Content) -> some View {

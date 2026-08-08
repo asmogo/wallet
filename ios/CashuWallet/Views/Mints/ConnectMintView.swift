@@ -241,6 +241,7 @@ func connectMintDestination(
             onAdded: onAdded,
             onHeightChange: onHeightChange
         )
+        .containerBackground(.clear, for: .navigation)
     case .discover:
         MintDiscoveryList(onMintAdded: onAdded)
             .navigationTitle("Discover mints")
@@ -258,8 +259,17 @@ struct ConnectMintSheet: View {
     @ObservedObject private var settings = SettingsManager.shared
 
     @State private var route: ConnectMintRoute?
-    @State private var contentHeight: CGFloat = 0
+    /// One height per step, not one shared value. A shared value cannot survive
+    /// a pop: `contentFitMeasured` only reports when its measurement *changes*,
+    /// and the picker settles back to the height it already had, so nothing ever
+    /// fires to undo the pushed step's height — the sheet stays sized for the
+    /// step the user just left. Held apart, each step keeps its own last-known
+    /// good height and a transient measured mid-transition corrects itself.
+    @State private var pickerHeight: CGFloat = 0
+    @State private var pushedHeight: CGFloat = 0
     @State private var addMintError: String?
+
+    private var contentHeight: CGFloat { route == nil ? pickerHeight : pushedHeight }
 
     var body: some View {
         NavigationStack {
@@ -270,12 +280,7 @@ struct ConnectMintSheet: View {
                 existingURLs: Set(walletManager.mints.map(\.url)),
                 discoveryAvailable: settings.useWebsockets,
                 errorMessage: addMintError,
-                onHeightChange: { newHeight in
-                    // Ignore re-measures from the off-screen picker while a step
-                    // is pushed — the pushed view reports its own height.
-                    guard route == nil else { return }
-                    contentHeight = newHeight
-                }
+                onHeightChange: { pickerHeight = $0 }
             )
             .navigationTitle(ConnectMintContext.addMint.navigationTitle)
             .navigationBarTitleDisplayMode(.inline)
@@ -283,7 +288,7 @@ struct ConnectMintSheet: View {
                 connectMintDestination(
                     route,
                     onAdded: { dismiss() },
-                    onHeightChange: { contentHeight = $0 }
+                    onHeightChange: { pushedHeight = $0 }
                 )
             }
         }

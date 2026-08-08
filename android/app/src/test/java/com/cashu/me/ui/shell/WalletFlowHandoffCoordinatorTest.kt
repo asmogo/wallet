@@ -59,22 +59,6 @@ class WalletFlowHandoffCoordinatorTest {
     }
 
     @Test
-    fun mintScannerCarriesTheFlowToReplayAfterTheScan() {
-        val dispatched = mutableListOf<FlowHandoffDestination>()
-        val coordinator = WalletFlowHandoffCoordinator()
-
-        coordinator.request(FlowHandoffDestination.MintScanner(returnTo = WalletFlow.Send)) {}
-        coordinator.completeDismissal { dispatched += it }
-
-        assertEquals(
-            listOf<FlowHandoffDestination>(
-                FlowHandoffDestination.MintScanner(returnTo = WalletFlow.Send),
-            ),
-            dispatched,
-        )
-    }
-
-    @Test
     fun plainDismissalDispatchesNothing() {
         val dispatched = mutableListOf<FlowHandoffDestination>()
 

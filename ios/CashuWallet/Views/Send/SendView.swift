@@ -1327,6 +1327,17 @@ struct UnifiedSendView: View {
     /// states). Drives a content-fit detent so Scan/Ecash/Tap stay thumb-reachable
     /// instead of sitting at the bottom of a `.large` sheet.
     @State private var compactContentHeight: CGFloat = 0
+    /// The pushed connect-a-mint step measures into its own store, not into
+    /// `compactContentHeight`. Sharing one value cannot survive the pop back:
+    /// `contentFitMeasured` only reports on *change*, and the input face settles
+    /// back to the height it already had, so nothing fires to undo the pushed
+    /// step's height and the sheet stays sized for the step just left.
+    @State private var connectMintContentHeight: CGFloat = 0
+
+    /// Whichever step currently owns the sheet's height.
+    private var sheetContentHeight: CGFloat {
+        connectMintRoute == nil ? compactContentHeight : connectMintContentHeight
+    }
 
     enum Step: Equatable { case input, amount, confirm, sending, sent, failed }
 
@@ -1392,7 +1403,7 @@ struct UnifiedSendView: View {
                 connectMintDestination(
                     route,
                     onAdded: { connectMintRoute = nil },
-                    onHeightChange: { compactContentHeight = $0 }
+                    onHeightChange: { connectMintContentHeight = $0 }
                 )
             }
             .sheet(isPresented: $showingScanner) {
@@ -1428,7 +1439,7 @@ struct UnifiedSendView: View {
         }
         // Own the sheet chrome so the detent can follow the step: compact for
         // input, `.large` + flat canvas for amount/confirm/status.
-        .contentFitDetent(compactContentHeight, enabled: prefersCompactSheet)
+        .contentFitDetent(sheetContentHeight, enabled: prefersCompactSheet)
         .presentationDragIndicator(.visible)
         // A stray swipe must not tear down the flow while the melt is executing.
         .interactiveDismissDisabled(step == .sending)

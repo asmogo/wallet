@@ -210,12 +210,6 @@ fun MintsScreen(
             walletManager = walletManager,
             initialUrl = addMintInitialUrl,
             allowCleartextLocalTestMints = allowCleartextLocalTestMints,
-            onScan = {
-                // Camera overlays render under dialog windows — yield the sheet
-                // first; a successful scan reopens via scannedMintUrl.
-                addMintOpen = false
-                onScan()
-            },
             onDismiss = { addMintOpen = false },
         )
     }
