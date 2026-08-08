@@ -47,6 +47,7 @@ import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.ClipboardManager
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
@@ -57,9 +58,11 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.cashu.me.Core.Bip39WordList
+import com.cashu.me.Core.CommitOutcome
 import com.cashu.me.Core.NostrMintBackupService
-import com.cashu.me.Core.WalletManager
+import com.cashu.me.Core.PasteOutcome
 import com.cashu.me.Core.Wallet.userFacingWalletMessage
+import com.cashu.me.Core.WalletManager
 import com.cashu.me.Core.mintUrlCandidates
 import com.cashu.me.Models.MintInfo
 import com.cashu.me.Models.RestoreMintResult
@@ -72,6 +75,7 @@ import com.cashu.me.ui.components.NoticeSeverity
 import com.cashu.me.ui.components.PrimaryButton
 import com.cashu.me.ui.components.ScrollFadeBand
 import com.cashu.me.ui.components.scrollEdgeFade
+import com.cashu.me.ui.testing.UiTestTags
 import com.cashu.me.ui.theme.CapsuleShape
 import com.cashu.me.ui.theme.CashuTheme
 import com.cashu.me.ui.theme.withMonoDigits
@@ -162,88 +166,84 @@ private fun restoreTitleStyle(presentation: RestorePresentation): TextStyle =
 // ---------------------------------------------------------------------------
 
 /**
- * The live seed-entry stage: monospaced editor with paste/clear corner control,
- * word counter, and the error notice. Stateless — the caller owns the input.
+ * The BIP-39 checksum, run at the only moment it can be: once all twelve words
+ * are in. It says one of them is wrong but never which, so a failure hands the
+ * whole phrase back on the review grid. iOS twin: `runSeedChecksum`.
+ */
+internal suspend fun runSeedChecksum(
+    state: SeedPhraseEntryState,
+    validate: suspend (String) -> Boolean,
+) {
+    if (!state.isComplete) return
+    if (validate(state.phrase)) {
+        state.notice = null
+        return
+    }
+    state.markReviewing()
+    state.notice = SeedEntryNotice(SeedEntryCopy.CHECKSUM, NoticeSeverity.Error)
+}
+
+/** Fill every slot from the clipboard. iOS twin: `pasteMnemonicFromClipboard`. */
+internal suspend fun pasteSeedPhrase(
+    state: SeedPhraseEntryState,
+    clipboardText: String?,
+    validate: suspend (String) -> Boolean,
+) {
+    if (clipboardText.isNullOrBlank()) {
+        state.notice = SeedEntryNotice(SeedEntryCopy.PASTE_UNUSABLE, NoticeSeverity.Caution)
+        return
+    }
+    val result = state.entry.fill(clipboardText)
+    state.entry = result.entry
+    when (val outcome = result.outcome) {
+        PasteOutcome.Filled -> {
+            state.notice = null
+            runSeedChecksum(state, validate)
+        }
+        is PasteOutcome.Partial ->
+            state.notice = SeedEntryNotice(
+                SeedEntryCopy.pastePartial(outcome.count),
+                NoticeSeverity.Caution,
+            )
+        is PasteOutcome.Invalid ->
+            state.notice = SeedEntryNotice(
+                SeedEntryCopy.pasteInvalid(outcome.index),
+                NoticeSeverity.Caution,
+            )
+        PasteOutcome.Unusable ->
+            state.notice = SeedEntryNotice(SeedEntryCopy.PASTE_UNUSABLE, NoticeSeverity.Caution)
+    }
+}
+
+/**
+ * The live seed-entry stage: one word at a time, validated as it lands, with a
+ * progress rail and wordlist completions. Stateless — the caller owns the
+ * [SeedPhraseEntryState]. Shared by the onboarding chassis host and the
+ * Settings wrapper, because both ask for exactly the same thing.
  */
 @Composable
 fun RestoreSeedStageContent(
-    input: String,
-    onInputChange: (String) -> Unit,
-    wordCount: Int,
-    invalidCount: Int,
+    state: SeedPhraseEntryState,
+    onOutcome: (CommitOutcome) -> Unit,
     errorText: String?,
     modifier: Modifier = Modifier,
+    autoFocus: Boolean = true,
 ) {
-    val clipboard = LocalClipboardManager.current
-    val haptics = LocalHapticFeedback.current
-
     Column(
         modifier = modifier
             .padding(horizontal = HeaderPadding)
-            .padding(top = CashuTheme.spacing.section),
+            .padding(top = CashuTheme.spacing.section)
+            .verticalScroll(rememberScrollState()),
         verticalArrangement = Arrangement.spacedBy(CashuTheme.spacing.comfortable),
     ) {
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .weight(1f),
-        ) {
-            CashuTextField(
-                value = input,
-                onValueChange = onInputChange,
-                modifier = Modifier.fillMaxSize(),
-                placeholder = "word1 word2 word3 …",
-                textStyle = MaterialTheme.typography.bodyMedium.copy(fontFamily = CashuTheme.fonts.mono).withSlashedZero(),
-                isError = errorText != null || (wordCount >= 12 && invalidCount > 0),
-                keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.None),
-            )
-            IconButton(
-                onClick = {
-                    haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                    if (input.isBlank()) {
-                        clipboard.getText()?.text?.let {
-                            onInputChange(it.trim())
-                        }
-                    } else {
-                        onInputChange("")
-                    }
-                },
-                modifier = Modifier
-                    .align(Alignment.BottomEnd)
-                    .padding(CashuTheme.spacing.micro),
-            ) {
-                IconSwap(
-                    icon = if (input.isBlank()) Icons.Outlined.ContentPaste else Icons.Filled.Cancel,
-                    contentDescription = if (input.isBlank()) "Paste from clipboard" else "Clear",
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-        }
-        Row(
+        SeedWordEntryField(
+            state = state,
+            onOutcome = onOutcome,
+            autoFocus = autoFocus,
             modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(
-                CashuTheme.spacing.micro,
-                Alignment.CenterHorizontally,
-            ),
-        ) {
-            Text(
-                text = "$wordCount / 12 words",
-                style = MaterialTheme.typography.labelMedium,
-                color = if (wordCount == 12 && invalidCount == 0) {
-                    CashuTheme.colors.received
-                } else {
-                    MaterialTheme.colorScheme.onSurfaceVariant
-                },
-            )
-            if (wordCount > 0 && invalidCount > 0) {
-                Text(
-                    text = "· $invalidCount invalid",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-        }
+        )
+        // The install failure is a different problem from a mistyped word and
+        // keeps its own channel.
         if (errorText != null) {
             InlineNotice(text = errorText, severity = NoticeSeverity.Error)
         }
@@ -264,17 +264,16 @@ fun RestoreSeedStep(
     onClearError: () -> Unit,
     onBack: (() -> Unit)?,
     onNext: (String) -> Unit,
-    requireValidWords: Boolean = presentation == RestorePresentation.InApp,
+    onValidateChecksum: suspend (String) -> Boolean,
 ) {
-    var input by remember { mutableStateOf("") }
-    val wordCount = remember(input) {
-        input.trim().split(Regex("\\s+")).count { it.isNotBlank() }
-    }
-    val invalidCount = remember(input) { Bip39WordList.invalidWordIndices(input).size }
-    val wordsValid = invalidCount == 0
-    val canContinue = wordCount == 12 &&
-        !restoring &&
-        (!requireValidWords || wordsValid)
+    val seedState = rememberSeedPhraseEntryState()
+    val clipboard = LocalClipboardManager.current
+    val haptics = LocalHapticFeedback.current
+    val scope = rememberCoroutineScope()
+    // Per-word validity is structural now — a word cannot be committed unless it
+    // is in the list — so the old `requireValidWords` switch has nothing left to
+    // choose between. What remains is the checksum, which both hosts enforce.
+    val canContinue = seedState.isComplete && !seedState.isReviewing && !restoring
 
     val titleAlign = if (presentation == RestorePresentation.InApp) {
         Alignment.CenterHorizontally
@@ -328,13 +327,16 @@ fun RestoreSeedStep(
         }
 
         RestoreSeedStageContent(
-            input = input,
-            onInputChange = {
-                input = it
-                onClearError()
+            state = seedState,
+            onOutcome = { outcome ->
+                if (outcome != CommitOutcome.Ignored) {
+                    seedState.notice = null
+                    onClearError()
+                }
+                if (outcome == CommitOutcome.Completed) {
+                    scope.launch { runSeedChecksum(seedState, onValidateChecksum) }
+                }
             },
-            wordCount = wordCount,
-            invalidCount = invalidCount,
             errorText = errorText,
             modifier = Modifier
                 .weight(1f)
@@ -351,10 +353,25 @@ fun RestoreSeedStep(
         ) {
             PrimaryButton(
                 text = "Next",
-                onClick = { onNext(input) },
+                onClick = { onNext(seedState.phrase) },
                 enabled = canContinue,
                 loading = restoring,
             )
+            // Pasting a whole phrase is a different act from entering one, so it
+            // sits outside the card. It retires once there is anything to lose.
+            if (seedState.enteredCount == 0) {
+                GhostButton(
+                    text = SeedEntryCopy.PASTE_LINK,
+                    onClick = {
+                        haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                        scope.launch {
+                            pasteSeedPhrase(seedState, clipboard.getText()?.text, onValidateChecksum)
+                        }
+                    },
+                    enabled = !restoring,
+                    modifier = Modifier.testTag(UiTestTags.SeedPaste),
+                )
+            }
             if (onBack != null) {
                 GhostButton(text = "Back", onClick = onBack, enabled = !restoring)
             }

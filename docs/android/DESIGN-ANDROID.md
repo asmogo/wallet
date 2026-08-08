@@ -170,6 +170,19 @@ like a port, make the Android-native choice instead.
 - Bottom sheets (`ModalBottomSheet`) for choosers/pickers/inspectors; pushed
   destinations for flows. `NavigationBar` for tabs. `AlertDialog` for
   confirmation, destructive action tinted `error`.
+- Text inputs go through `CashuTextField`. **One carve-out (2026-08-08):** the
+  seed-entry card in `SeedWordEntry.kt` uses a bare `BasicTextField`, because
+  `CashuTextField`'s job is to supply the container and here the *card is* the
+  container — a second surface inside it would be a nested container.
+- The seed-entry ghost cards use **alpha and scale, never `Modifier.blur`**.
+  Skia renders blur one level differently across hosts, so a statically blurred
+  element can never pass `validateDebugScreenshotTest` on Linux CI (the goldens
+  are generated on macOS). Animated blur that settles to 0 is fine — previews
+  are never captured mid-transition.
+- **Accepted asymmetry:** iOS switches off inline predictions on the seed field
+  so the keyboard's height stays constant for the whole step. Gboard's
+  suggestion strip cannot be suppressed; `imePadding()` absorbs the difference
+  instead.
 
 ### Layout invariants (kept from the structural pass)
 - Measure, never assume, overlay heights (Home pinned header is pre-measured

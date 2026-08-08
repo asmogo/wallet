@@ -181,7 +181,8 @@ What this system explicitly rejects, pulled verbatim from docs/product/PRODUCT.m
 - Liquid Glass on iOS 26+ for primary interactive surfaces. Quiet fallbacks below.
 - Hairline `CanvasDivider` (0.5pt at `Color(.separator)`) where a single-canvas
   detail needs separation. Home and History activity rows use spacing alone.
-  No card stacks, no nested containers.
+  No card stacks, no nested containers — with one narrow, documented exception
+  for the seed cards (The Seed Card Exception, §5).
 - Motion is exponential ease-out, in the 180–350ms range. Seven named animations
   carry the full vocabulary: row stagger, badge symbol-replace, chooser cascade,
   press feedback, sheet cross-fade (in-sheet flow swap), payment-received
@@ -1197,10 +1198,31 @@ purpose:
   tap, so it is an affordance, not decoration — exactly the case the
   Glass-As-Surface Rule permits.
 
-It is one card, not a card stack, and the canvas around it stays bare. The
-Flat-By-Default Rule and the No-Shadow Absolute still apply to it in full: no
-shadow, no border, no per-word chrome inside it. The `Copy` link and the "never
-share" caution sit **outside** the card on the bare canvas.
+The canvas around it stays bare. The Flat-By-Default Rule and the No-Shadow
+Absolute still apply to it in full: no shadow, no border, no per-word chrome
+inside it. The `Copy` link and the "never share" caution sit **outside** the
+card on the bare canvas.
+
+*Amended 2026-08-08 — the entry card.* The exception now covers a second
+surface: the word-by-word **seed entry** card on `restoreInput` (and its
+Settings twin), which holds one word at a time behind up to two **empty ghost
+cards** standing for the words still to come. This is the single place in the
+app permitted anything resembling a card stack, and the carve-out is narrower
+than it looks:
+
+- The ghosts hold **nothing**. They are the *shape of what is left*, not
+  containers for content — the No-Nested-Containers rule is about content
+  inside content, and there is none here.
+- They earn their place by answering "how much more of this is there?", which
+  the rail alone answers abstractly and the deck answers physically.
+- **Alpha and scale only, never blur.** Skia renders blur one level differently
+  across hosts, so a statically-blurred ghost could never pass Compose golden
+  validation on Linux CI — and iOS has to draw the identical thing.
+- Everything else holds: no shadow, no border beyond the input hairline, no
+  per-word chrome, bare canvas around the block.
+
+Reference: Family's recovery flow. Do not generalise this to any other screen —
+if a second surface wants a stack, that is a new argument, not this one.
 
 Reference: Family's Manual Backup screen. Implemented in
 `OnboardingView.showMnemonicStage` and `OnboardingScreen.SeedPhraseReveal` — on
@@ -1426,6 +1448,21 @@ measure — see UX_SPEC.md §2.
 The indicator slot is resolved as "no indicator" (the flow branches into
 paths of different lengths, so page dots would imply a linear path that does
 not exist).
+
+"Anchored to the bottom edge" means the bottom of the **available content
+area**, which the software keyboard shrinks. `restoreInput` deliberately raises
+a keyboard on arrival (see below), and the chassis rides up with it — iOS via
+`.safeAreaInset(edge: .bottom)`, Android via `imePadding()`. The UI tests
+measure against that edge, not the window, or the invariant would read as
+broken on exactly the step that exercises it hardest.
+
+`restoreInput` is the one step that **focuses on arrival**. Word-by-word seed
+entry is keyboard-driven from the first frame, so the "land calm — don't pop
+the keyboard on arrival" rule that `restoreMints` keeps is suspended here, and
+only here. On iOS that also means all smart-substitution traits and
+`inlinePredictionType` are off — not for tidiness, but because the predictive
+bar changes the keyboard's height, which would move the CTA mid-step. Android
+cannot suppress Gboard's strip; `imePadding()` absorbs the difference.
 
 ## 7. Do's and Don'ts
 

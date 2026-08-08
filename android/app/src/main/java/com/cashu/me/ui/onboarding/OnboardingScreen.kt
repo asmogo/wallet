@@ -90,11 +90,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.sync.Mutex
-import kotlinx.coroutines.sync.withLock
 import com.cashu.me.Core.Bip39WordList
+import com.cashu.me.Core.CommitOutcome
 import com.cashu.me.Core.MnemonicInput
 import com.cashu.me.Core.NostrMintBackupService
 import com.cashu.me.Core.WalletManager
@@ -108,20 +105,28 @@ import com.cashu.me.ui.components.MintAvatar
 import com.cashu.me.ui.components.NoticeSeverity
 import com.cashu.me.ui.components.PrimaryButton
 import com.cashu.me.ui.components.materializeBlur
+import com.cashu.me.ui.mints.RecommendedMints
 import com.cashu.me.ui.restore.RestoreMintsStageContent
 import com.cashu.me.ui.restore.RestoreMintsSubhead
 import com.cashu.me.ui.restore.RestoreMintsTitleOnboarding
 import com.cashu.me.ui.restore.RestoreProgressRows
 import com.cashu.me.ui.restore.RestoreRecoveredTotal
 import com.cashu.me.ui.restore.RestoreSeedStageContent
+import com.cashu.me.ui.restore.SeedEntryCopy
+import com.cashu.me.ui.restore.pasteSeedPhrase
 import com.cashu.me.ui.restore.rememberRestoreMintsStagingState
 import com.cashu.me.ui.restore.rememberRestoreProgressState
+import com.cashu.me.ui.restore.rememberSeedPhraseEntryState
 import com.cashu.me.ui.restore.restoreSeedInstallErrorMessage
+import com.cashu.me.ui.restore.runSeedChecksum
+import com.cashu.me.ui.testing.UiTestTags
 import com.cashu.me.ui.theme.CashuTheme
 import com.cashu.me.ui.theme.rememberReducedMotion
 import com.cashu.me.ui.theme.withSlashedZero
-import com.cashu.me.ui.mints.RecommendedMints
-import com.cashu.me.ui.testing.UiTestTags
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 
 // ---------------------------------------------------------------------------
 // iOS OnboardingView parity. Source of truth: ios/CashuWallet/Views/Main/
@@ -229,7 +234,8 @@ internal fun OnboardingScreen(
     var createError by remember { mutableStateOf<String?>(null) }
     var restoring by remember { mutableStateOf(false) }
     var restoreError by remember { mutableStateOf<String?>(null) }
-    var restoreSeedInput by remember { mutableStateOf("") }
+    val seedState = rememberSeedPhraseEntryState()
+    val seedClipboard = LocalClipboardManager.current
     var seedAcknowledged by remember { mutableStateOf(false) }
     val firstMint = remember { FirstMintSelectionState() }
     // First-mint completion state (wallet installs once, then mints add sequentially).
@@ -383,7 +389,7 @@ internal fun OnboardingScreen(
                 label = "Use Seed Phrase",
                 onClick = {
                     restoreError = null
-                    restoreSeedInput = ""
+                    seedState.reset()
                     step = OnboardingStep.RestoreInput
                 },
                 style = ChassisButtonStyle.Secondary,
@@ -391,7 +397,6 @@ internal fun OnboardingScreen(
         )
 
         OnboardingStep.RestoreInput -> {
-            val wordCount = restoreSeedInput.trim().split(Regex("\\s+")).count { it.isNotBlank() }
             OnboardingChassisModel(
                 primary = ChassisAction(
                     label = "Continue",
@@ -403,7 +408,7 @@ internal fun OnboardingScreen(
                         scope.launch {
                             restoring = true
                             restoreError = null
-                            val normalized = MnemonicInput.normalize(restoreSeedInput)
+                            val normalized = MnemonicInput.normalize(seedState.phrase)
                             runCatching { walletManager.initializeRestoredWallet(normalized) }
                                 .onSuccess {
                                     restoreMintsStaging.reset()
@@ -413,9 +418,29 @@ internal fun OnboardingScreen(
                             restoring = false
                         }
                     },
-                    enabled = wordCount == 12 && !restoring,
+                    enabled = seedState.isComplete && !seedState.isReviewing && !restoring,
                     loading = restoring,
                 ),
+                // Pasting a whole phrase is a different act from entering one,
+                // so it sits where firstMint's "Skip for now" does rather than
+                // inside the card. It retires once there is anything to lose.
+                tertiary = if (seedState.enteredCount == 0) {
+                    ChassisAction(
+                        label = SeedEntryCopy.PASTE_LINK,
+                        onClick = {
+                            scope.launch {
+                                pasteSeedPhrase(seedState, seedClipboard.getText()?.text) {
+                                    walletManager.validateMnemonic(it)
+                                }
+                            }
+                        },
+                        enabled = !restoring,
+                        style = ChassisButtonStyle.Ghost,
+                        testTag = UiTestTags.SeedPaste,
+                    )
+                } else {
+                    null
+                },
             )
         }
 
@@ -628,17 +653,24 @@ internal fun OnboardingScreen(
                             )
                             OnboardingStepHeader(
                                 title = "Restore wallet.",
-                                subhead = "Enter your 12 words in order.",
+                                subhead = SeedEntryCopy.SUBHEAD,
                                 modifier = Modifier.padding(top = OnboardingMetrics.TitleGap),
                             )
                             RestoreSeedStageContent(
-                                input = restoreSeedInput,
-                                onInputChange = {
-                                    restoreSeedInput = it
-                                    restoreError = null
+                                state = seedState,
+                                onOutcome = { outcome ->
+                                    if (outcome != CommitOutcome.Ignored) {
+                                        seedState.notice = null
+                                        restoreError = null
+                                    }
+                                    if (outcome == CommitOutcome.Completed) {
+                                        scope.launch {
+                                            runSeedChecksum(seedState) {
+                                                walletManager.validateMnemonic(it)
+                                            }
+                                        }
+                                    }
                                 },
-                                wordCount = restoreSeedInput.trim().split(Regex("\\s+")).count { it.isNotBlank() },
-                                invalidCount = Bip39WordList.invalidWordIndices(restoreSeedInput).size,
                                 errorText = restoreError,
                                 modifier = Modifier
                                     .weight(1f)

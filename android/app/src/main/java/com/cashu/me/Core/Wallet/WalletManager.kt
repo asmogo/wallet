@@ -257,6 +257,18 @@ class WalletManager(
     suspend fun generateMnemonicForOnboarding(): String =
         withLoadingResult { gateway.generateMnemonic() }
 
+    /**
+     * BIP-39 checksum check, without installing anything. Seed entry needs to
+     * ask *before* committing to a restore so a mistyped word lands on the
+     * review grid rather than on an install failure. iOS twin:
+     * `WalletManager.validateMnemonic`.
+     */
+    suspend fun validateMnemonic(mnemonic: String): Boolean {
+        val normalized = MnemonicInput.normalize(mnemonic)
+        if (!MnemonicInput.hasSupportedWordCount(normalized)) return false
+        return gateway.validateMnemonic(normalized)
+    }
+
     suspend fun createNewWalletFromMnemonic(mnemonic: String) {
         val normalized = MnemonicInput.normalize(mnemonic)
         require(MnemonicInput.hasSupportedWordCount(normalized)) {

@@ -43,7 +43,10 @@ import com.cashu.me.ui.restore.RestoreMintsSubhead
 import com.cashu.me.ui.restore.RestoreMintsTitleOnboarding
 import com.cashu.me.ui.restore.RestoreProgressRows
 import com.cashu.me.ui.restore.RestoreRecoveredTotal
+import com.cashu.me.Core.SeedPhraseEntry
 import com.cashu.me.ui.restore.RestoreSeedStageContent
+import com.cashu.me.ui.restore.SeedEntryCopy
+import com.cashu.me.ui.restore.rememberSeedPhraseEntryState
 import com.cashu.me.Models.RestoreMintResult
 import com.cashu.me.ui.testing.UiTestTags
 import com.cashu.me.ui.theme.CashuTheme
@@ -278,7 +281,12 @@ fun onboardingRestoreMethodScreenshot() {
 @Composable
 fun onboardingRestoreInputScreenshot() {
     OnboardingFrame {
-        val partial = FixtureWords.take(6).joinToString(" ")
+        // Six words settled, entering the seventh with "aba" typed — the state
+        // that shows the rail part-filled, both ghosts, and the chip row.
+        val midEntry = SeedPhraseEntry(
+            words = FixtureWords.take(6) + "aba" + List(5) { "" },
+            index = 6,
+        )
         OnboardingScaffold(
             chassis = OnboardingChassisModel(
                 primary = ChassisAction("Continue", onClick = {}, enabled = false),
@@ -288,15 +296,16 @@ fun onboardingRestoreInputScreenshot() {
                 OnboardingBackButton(onBack = {}, modifier = Modifier.padding(start = 16.dp, top = 8.dp))
                 OnboardingStepHeader(
                     title = "Restore wallet.",
-                    subhead = "Enter your 12 words in order.",
+                    subhead = SeedEntryCopy.SUBHEAD,
                     modifier = Modifier.padding(top = 12.dp),
                 )
                 RestoreSeedStageContent(
-                    input = partial,
-                    onInputChange = {},
-                    wordCount = 6,
-                    invalidCount = 0,
+                    state = rememberSeedPhraseEntryState(midEntry),
+                    onOutcome = {},
                     errorText = null,
+                    // A baseline must not request focus: the preview host has no
+                    // window, and a settled frame is the point.
+                    autoFocus = false,
                     modifier = Modifier
                         .weight(1f)
                         .fillMaxWidth(),

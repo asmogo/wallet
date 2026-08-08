@@ -115,6 +115,7 @@ fun RestoreWalletScreen(
                     errorText = seedError,
                     onClearError = { seedError = null },
                     onBack = null,
+                    onValidateChecksum = { walletManager.validateMnemonic(it) },
                     onNext = { mnemonic ->
                         scope.launch {
                             restoring = true

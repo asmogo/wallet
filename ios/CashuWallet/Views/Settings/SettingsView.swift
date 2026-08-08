@@ -510,7 +510,10 @@ struct RestoreWalletView: View {
     @ObservedObject private var nostrBackupService = NostrMintBackupService.shared
 
     @State private var step: RestoreStep = .seed
-    @State private var restoreMnemonic = ""
+    @State private var seedEntry = SeedPhraseEntry()
+    /// Paste results and checksum failure. Per-word rejection is the field's own.
+    @State private var seedNotice: SeedEntryNotice?
+    @State private var seedFieldFocused = false
     @State private var isRestoringSeed = false
     @State private var seedError: String?
 
@@ -583,74 +586,49 @@ struct RestoreWalletView: View {
     }
 
     private var seedStep: some View {
-        let wordCount = normalizedWords(from: restoreMnemonic).count
-        let invalidIndices = walletManager.invalidMnemonicWords(restoreMnemonic)
-        let canContinue = wordCount == 12 && invalidIndices.isEmpty && !isRestoringSeed
+        let canContinue = seedEntry.isComplete && !seedEntry.isReviewing && !isRestoringSeed
 
+        // The same word-by-word field the onboarding step uses. This screen and
+        // that one ask for the identical thing, so they ask for it the same way.
         return VStack(spacing: 16) {
             VStack(spacing: 6) {
                 Text("Restore Wallet")
                     .font(.title.weight(.semibold))
 
-                Text("Enter your 12 words in order.")
+                Text(SeedEntryCopy.subhead)
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
             }
             .padding(.top, 12)
 
-            ZStack(alignment: .bottomTrailing) {
-                ZStack(alignment: .topLeading) {
-                    TextEditor(text: $restoreMnemonic)
-                        .font(.system(.body, design: .monospaced))
-                        .scrollContentBackground(.hidden)
-                        .textInputAutocapitalization(.never)
-                        .autocorrectionDisabled()
-                        .padding(.horizontal, 12)
-                        .padding(.top, 12)
-                        .padding(.bottom, 56)
-
-                    if restoreMnemonic.isEmpty {
-                        Text("word1 word2 word3 ...")
-                            .font(.system(.body, design: .monospaced))
-                            .foregroundStyle(.tertiary)
-                            .padding(.horizontal, 17)
-                            .padding(.vertical, 20)
-                            .allowsHitTesting(false)
-                    }
-                }
-
-                Button(action: restoreMnemonic.isEmpty ? pasteMnemonicFromClipboard : clearMnemonic) {
-                    Image(systemName: restoreMnemonic.isEmpty ? "doc.on.clipboard" : "xmark.circle.fill")
-                        .font(.title3.weight(.medium))
-                        .foregroundStyle(.secondary)
-                        .padding(14)
-                        .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel(restoreMnemonic.isEmpty ? "Paste from clipboard" : "Clear")
-                .accessibilityHint(restoreMnemonic.isEmpty ? "Pastes seed phrase from clipboard" : "Clears the entered seed phrase")
+            ScrollView {
+                SeedWordEntryField(
+                    entry: $seedEntry,
+                    isFocused: $seedFieldFocused,
+                    notice: seedNotice,
+                    onOutcome: handleSeedOutcome
+                )
+                .padding(.top, 24)
+                .padding(.bottom, ScrollFadeMetrics.band)
             }
-            .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 14))
+            .scrollDismissesKeyboard(.never)
+            .scrollBounceBehavior(.basedOnSize)
+            .scrollEdgeFade(bottom: 0)
             .frame(maxHeight: .infinity)
-            .padding(.horizontal)
-
-            HStack(spacing: 6) {
-                Text("\(wordCount) / 12 words")
-                    .font(.caption.weight(.medium))
-                    .foregroundStyle(wordCount == 12 && invalidIndices.isEmpty ? .green : .secondary)
-
-                if wordCount > 0 && !invalidIndices.isEmpty {
-                    Text("- \(invalidIndices.count) invalid")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-            }
 
             if let seedError {
                 ErrorBannerView(message: seedError, severity: .error)
                     .padding(.horizontal)
             }
+
+            Button(action: pasteMnemonicFromClipboard) {
+                Text(SeedEntryCopy.pasteLink)
+            }
+            .textLinkButton()
+            .disabled(isRestoringSeed)
+            .opacity(seedEntry.enteredCount == 0 ? 1 : 0)
+            .allowsHitTesting(seedEntry.enteredCount == 0)
 
             Button(action: initializeAndProceed) {
                 if isRestoringSeed {
@@ -666,6 +644,11 @@ struct RestoreWalletView: View {
             .padding(.bottom, 32)
         }
         .padding(.top)
+        .onAppear { seedFieldFocused = true }
+        .onDisappear { seedFieldFocused = false }
+        .onChange(of: seedEntry.isReviewing) { _, reviewing in
+            if !reviewing { seedNotice = nil }
+        }
     }
 
     private var mintStep: some View {
@@ -975,24 +958,63 @@ struct RestoreWalletView: View {
         .contentShape(Rectangle())
     }
 
-    private func pasteMnemonicFromClipboard() {
-        guard let content = UIPasteboard.general.string else { return }
-        HapticFeedback.selection()
-        restoreMnemonic = content.trimmingCharacters(in: .whitespacesAndNewlines)
-        seedError = nil
+    /// Twin of `OnboardingView.handleSeedOutcome`.
+    private func handleSeedOutcome(_ outcome: SeedCommitOutcome) {
+        if outcome != .ignored { seedNotice = nil }
+        guard outcome == .completed else { return }
+        runSeedChecksum()
     }
 
-    private func clearMnemonic() {
-        HapticFeedback.selection()
-        restoreMnemonic = ""
+    /// A checksum failure names no single word, so it hands back all twelve.
+    private func runSeedChecksum() {
+        guard seedEntry.isComplete else { return }
+        guard !walletManager.validateMnemonic(seedEntry.phrase) else {
+            seedNotice = nil
+            return
+        }
+        seedEntry.markReviewing()
+        seedFieldFocused = false
+        seedNotice = SeedEntryNotice(
+            message: SeedEntryCopy.checksumBody,
+            title: SeedEntryCopy.checksumTitle,
+            severity: .error
+        )
+        HapticFeedback.notification(.error)
+    }
+
+    private func pasteMnemonicFromClipboard() {
+        guard let content = UIPasteboard.general.string else {
+            seedNotice = SeedEntryNotice(message: SeedEntryCopy.pasteUnusable, severity: .caution)
+            return
+        }
+
+        let outcome = seedEntry.fill(from: content)
+        seedFieldFocused = true
         seedError = nil
+
+        switch outcome {
+        case .filled:
+            HapticFeedback.notification(.success)
+            seedNotice = nil
+            runSeedChecksum()
+        case .partial(let count):
+            HapticFeedback.selection()
+            seedNotice = SeedEntryNotice(message: SeedEntryCopy.pastePartial(count), severity: .caution)
+        case .invalid(let index):
+            HapticFeedback.notification(.warning)
+            seedNotice = SeedEntryNotice(message: SeedEntryCopy.pasteInvalid(at: index), severity: .caution)
+        case .unusable:
+            HapticFeedback.notification(.error)
+            seedNotice = SeedEntryNotice(message: SeedEntryCopy.pasteUnusable, severity: .caution)
+        }
     }
 
     private func initializeAndProceed() {
-        let cleanedMnemonic = normalizedWords(from: restoreMnemonic).joined(separator: " ")
+        // Already normalised: every word was committed from the wordlist.
+        let cleanedMnemonic = seedEntry.phrase
 
         guard walletManager.validateMnemonic(cleanedMnemonic) else {
-            seedError = "That seed phrase doesn't look right. Check the spelling and try again."
+            runSeedChecksum()
             return
         }
 

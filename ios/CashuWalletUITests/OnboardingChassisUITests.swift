@@ -10,13 +10,25 @@ final class OnboardingChassisUITests: UITestBase {
     func testCtasAnchoredToBottomAndBackNavigation() throws {
         let window = app.windows.firstMatch
         XCTAssertTrue(window.waitForExistence(timeout: 30))
-        let bottomBand = window.frame.height * 0.82
 
+        /// The edge the chassis anchors to. `.safeAreaInset(edge: .bottom)`
+        /// rides the software keyboard, and the seed step deliberately raises
+        /// one, so "hugs the bottom" means the bottom of the *available* area —
+        /// the window, less the keyboard when it is up.
+        func contentBottom() -> CGFloat {
+            let keyboard = app.keyboards.element
+            guard keyboard.exists, keyboard.frame.height > 0 else { return window.frame.maxY }
+            return keyboard.frame.minY
+        }
+
+        // 0.18 is the exact complement of the old window-relative 0.82, so the
+        // steps that raise no keyboard assert precisely what they always did.
         func assertBottomAnchored(_ element: XCUIElement, _ step: String) {
             XCTAssertTrue(element.waitForExistence(timeout: 10), "\(step): element should exist")
-            XCTAssertGreaterThan(
-                element.frame.maxY, bottomBand,
-                "\(step): bottom-most action should sit in the bottom band, got \(element.frame)"
+            XCTAssertLessThan(
+                contentBottom() - element.frame.maxY, window.frame.height * 0.18,
+                "\(step): bottom-most action should hug the bottom of the available area, "
+                    + "got \(element.frame) against a content bottom of \(contentBottom())"
             )
         }
 
@@ -52,7 +64,16 @@ final class OnboardingChassisUITests: UITestBase {
         )
 
         app.buttons["Use Seed Phrase"].tap()
+        // Word-by-word entry focuses on arrival, so the keyboard coming up
+        // unprompted is itself part of the contract — and it is what makes the
+        // bottom-anchoring assertion measure against the keyboard here.
+        XCTAssertTrue(
+            app.keyboards.element.waitForExistence(timeout: 10),
+            "restoreInput should focus the seed field on arrival"
+        )
         assertBottomAnchored(app.buttons["Continue"], "restoreInput")
+        // The paste link is the bottom-most action while nothing is entered.
+        assertBottomAnchored(app.buttons["onboarding-seed-paste"], "restoreInput paste link")
 
         tapWhenReady(app.buttons["onboarding-back"], timeout: 10)
         XCTAssertTrue(create.waitForExistence(timeout: 10), "restoreInput back should return to welcome")
@@ -177,16 +198,23 @@ final class OnboardingChassisUITests: UITestBase {
 
         // The canonical all-zeros BIP39 vector — twelve valid words with a good
         // checksum, so `validateMnemonic` lets the flow through.
-        let seedField = app.textViews.firstMatch
-        tapWhenReady(seedField, timeout: 10)
+        //
+        // Entry is one word at a time now: a single persistent text field whose
+        // ordinal advances on each space, so this is a `textFields` query and
+        // the phrase goes in word by word rather than as one burst.
+        let seedField = app.textFields.firstMatch
+        XCTAssertTrue(seedField.waitForExistence(timeout: 10), "The seed word field should appear")
         XCTAssertTrue(
             app.keyboards.element.waitForExistence(timeout: 10),
-            "Tapping the seed field should raise the keyboard"
+            "Seed entry focuses on arrival, so the keyboard comes up unprompted"
         )
-        seedField.typeText(
-            "abandon abandon abandon abandon abandon abandon "
-                + "abandon abandon abandon abandon abandon about"
-        )
+
+        let vector = Array(repeating: "abandon", count: 11) + ["about"]
+        for (index, word) in vector.enumerated() {
+            // No trailing space on the twelfth: a valid uncommitted last word
+            // already counts, and pressing space there would have nowhere to go.
+            seedField.typeText(index == vector.count - 1 ? word : "\(word) ")
+        }
 
         // By identifier, not label — the seed keyboard's return key is also
         // labelled "Continue".

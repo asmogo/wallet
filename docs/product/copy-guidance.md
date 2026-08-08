@@ -143,3 +143,43 @@ Rules this generalizes to:
 
 Both platforms hold these strings in one place (`RestoreMints*` constants in
 `RestoreWalletFlow.kt`; `emptyMintListNotice` in `OnboardingView.swift`).
+
+## Seed entry, word by word
+
+`restoreInput` (and its Settings twin) asks for one word at a time, so a single
+line under the card carries three different jobs. Only one can ever be on
+screen, and the precedence is fixed: **host notice → per-word rejection →
+default helper.**
+
+| State | String |
+| --- | --- |
+| Subhead | "Enter your 12 words, one at a time." |
+| Helper, entering | "Press space after each word." |
+| Helper, all twelve in | "All 12 words check out." |
+| Word refused | "Not a seed word. Check the spelling." |
+| Checksum failed | "That's not a valid seed phrase." / "One of the words is probably mistyped. Tap any word below to fix it." |
+| Pasted fewer than 12 | "Pasted N words. Enter the rest." |
+| Pasted 12, one bad | "Pasted 12 words, but word N isn't in the list." |
+| Clipboard unusable | "Nothing in the clipboard looked like a seed phrase." |
+
+Rules this generalizes to:
+
+- **Tell them what to do, not what the field is.** The helper is "Press space
+  after each word", not "Seed word 3 of 12" — the ordinal is already on the
+  card and the rail already shows the position. Copy earns its place by saying
+  something the layout cannot.
+- **An error that can't be localised must still point somewhere.** A BIP-39
+  checksum failure proves one of the twelve is wrong but never which. "That
+  seed phrase doesn't look right" (the old string) left the user with no move.
+  The replacement names the recovery — "Tap any word below to fix it" — and the
+  UI puts all twelve within reach to make that true.
+- **Say what landed, then what's left.** Paste outcomes report the count that
+  went in *and* the next action, because a partial paste looks identical to a
+  successful one until you count.
+- **Distinguish "not a word" from "wrong phrase".** The first is per-word,
+  instant, and cheap to fix; the second is about the whole phrase and needs a
+  different surface. Sharing one error string for both would tell the user the
+  wrong thing half the time.
+
+Both platforms hold these strings in one place (`SeedEntryCopy` in
+`SeedWordEntry.kt` and `SeedWordEntry.swift`).

@@ -81,7 +81,10 @@ skip path, retry affordance, and error surface stays. Notably:
 - `showMnemonic` primary stays disabled until the acknowledge checkbox is checked.
 - `firstMint` primary stays disabled with no selection and empty custom input; `Skip for now`
   stays.
-- `restoreInput` primary stays disabled below 12 valid words.
+- `restoreInput` primary stays disabled below 12 valid words. *(2026-08-08: the code
+  now actually enforces this. Both hosts previously gated on word **count** alone while
+  only Settings checked validity; word-by-word entry makes per-word validity structural —
+  a non-word cannot be committed — and the BIP-39 checksum gates the CTA on top of it.)*
 - `restoreProgress` stays forward-only, primary disabled until every mint settles.
 - `restoreInput`'s Back still returns to `welcome`, not `restoreMethod`.
 - The `.onAppear` jump straight to `iCloudRestore` when `hasIncompleteICloudRestore` stays.
@@ -188,7 +191,7 @@ Rules:
 | `showMnemonic` | The 12-word grid inside the seed card, then the `Copy` link. **No entrance animation on the grid** — this is deliberate and documented; it flickers. The "never share these words" caution is **not** in the stage: it rides the chassis accessory directly above the acknowledge row (2026-08-05), so it argues for the checkbox it sits over and can never push the CTA. The card itself is The Seed Card Exception (DESIGN.md §5) — it is the tap-to-reveal affordance, not decoration. |
 | `firstMint` | The mint list + custom-URL field (functional, scrolls, keyboard). |
 | `restoreMethod` | Header over open space (the quiet variant of the welcome piece went with it — see §4). Two buttons in the chassis. |
-| `restoreInput` | The seed `TextEditor` + word counter (functional, keyboard). |
+| `restoreInput` | *(rewritten 2026-08-08)* Word-by-word entry: a 12-tick progress rail, one card holding the current word behind up to two empty ghost cards, up to three BIP-39 completions, and a helper/notice line. Functional, and the **only step that focuses on arrival** — see DESIGN.md §6. Paste moved to a chassis tertiary link that retires once anything is entered. A checksum failure (which names no single word) swaps the card for a review grid of all twelve, each tappable back into the field. |
 | `restoreMints` | The URL field, Add/Paste/Find-my-mints chips, staged rows (functional, keyboard). The only step besides `welcome` to use the bar band's trailing help slot, and the only one to fill both slots at once: the backup lookup is the way through for most people and nothing else on screen says what it does. The scroll fades at its bottom edge (`scrollEdgeFade`) so rows dissolve into the CTA rather than cutting against it. |
 | `restoreProgress` | The live per-mint progress list — already a self-playing stage. |
 | `iCloudRestore` | State-driven: symbol → spinner → success glyph + balance. Already the closest thing to the reference. |

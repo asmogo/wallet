@@ -2051,3 +2051,44 @@ let bip39WordList: Set<String> = [
     "zone",
     "zoo"
 ]
+
+/// The same list in lexicographic order, for prefix completion. BIP-39's
+/// English list is alphabetical by construction, so this is also its canonical
+/// order — `Bip39WordListTests` pins that so a future list edit can't quietly
+/// break the binary search below. Built once on first use; only seed entry asks.
+let bip39SortedWords: [String] = bip39WordList.sorted()
+
+/// Up to `limit` words beginning with `prefix`, in wordlist order.
+///
+/// Binary-searches the prefix range rather than scanning all 2048 — this runs
+/// on every keystroke of seed entry.
+///
+/// Returns nothing below two characters on purpose: a single letter matches up
+/// to ~130 words, which is noise rather than help.
+func bip39Completions(prefix: String, limit: Int = 3) -> [String] {
+    let needle = prefix.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+    guard needle.count >= 2, limit > 0 else { return [] }
+
+    // Lower bound: the first word not ordered before `needle`. Every word with
+    // this prefix sorts at or after it, contiguously.
+    var low = 0
+    var high = bip39SortedWords.count
+    while low < high {
+        let mid = low + (high - low) / 2
+        if bip39SortedWords[mid] < needle {
+            low = mid + 1
+        } else {
+            high = mid
+        }
+    }
+
+    var matches: [String] = []
+    var index = low
+    while index < bip39SortedWords.count,
+          matches.count < limit,
+          bip39SortedWords[index].hasPrefix(needle) {
+        matches.append(bip39SortedWords[index])
+        index += 1
+    }
+    return matches
+}

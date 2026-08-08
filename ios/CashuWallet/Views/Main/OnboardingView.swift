@@ -7,7 +7,11 @@ struct OnboardingView: View {
     @ObservedObject private var nostrBackupService = NostrMintBackupService.shared
 
     @State private var currentStep: OnboardingStep = .welcome
-    @State private var restoreMnemonic = ""
+    @State private var seedEntry = SeedPhraseEntry()
+    /// Host-owned copy for the seed field: paste results and checksum failure.
+    /// Per-word rejection is the field's own business.
+    @State private var seedNotice: SeedEntryNotice?
+    @State private var seedFieldFocused = false
     @State private var isCreating = false
     @State private var isRestoring = false
     @State private var errorMessage: String?
@@ -423,12 +427,23 @@ struct OnboardingView: View {
                 primary: OnboardingChassisAction(
                     label: "Continue",
                     isLoading: isRestoring,
-                    isDisabled: restoreWordCount != 12 || isRestoring,
+                    isDisabled: !seedEntry.isComplete || seedEntry.isReviewing || isRestoring,
                     // The seed keyboard's return key is also labelled
                     // "Continue", so a label-only query matches two elements.
                     accessibilityIdentifier: "onboarding-restore-continue",
                     action: initializeAndProceed
-                )
+                ),
+                // Pasting a whole phrase is a different act from entering one,
+                // so it sits where firstMint's "Skip for now" does rather than
+                // inside the card. It retires once there is anything to lose.
+                tertiary: seedEntry.enteredCount == 0
+                    ? OnboardingChassisAction(
+                        label: SeedEntryCopy.pasteLink,
+                        isDisabled: isRestoring,
+                        accessibilityIdentifier: "onboarding-seed-paste",
+                        action: pasteMnemonicFromClipboard
+                    )
+                    : nil
             )
 
         case .restoreMints:
@@ -1369,19 +1384,8 @@ struct OnboardingView: View {
 
     // MARK: - Restore Input Stage
 
-    /// Word count of the entered seed — drives the chassis' Next button.
-    private var restoreWordCount: Int {
-        restoreMnemonic.trimmingCharacters(in: .whitespacesAndNewlines)
-            .split(separator: " ")
-            .count
-    }
-
     private var restoreInputStage: some View {
-        let wordCount = restoreWordCount
-        let invalidIndices = walletManager.invalidMnemonicWords(restoreMnemonic)
-
-        // Mnemonic input — same pattern as Receive Ecash paste screen
-        return VStack(spacing: 0) {
+        VStack(spacing: 0) {
             OnboardingBackButton { retreat(to: .welcome) }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.horizontal, OnboardingMetrics.gutter)
@@ -1390,60 +1394,31 @@ struct OnboardingView: View {
             stagger(appeared: restoreInputAppeared, index: 0) {
                 OnboardingStepHeader(
                     title: "Restore wallet.",
-                    subhead: "Enter your 12 words in order."
+                    subhead: SeedEntryCopy.subhead
                 )
             }
             .padding(.top, OnboardingMetrics.titleGap)
 
-            ZStack(alignment: .bottomTrailing) {
-                ZStack(alignment: .topLeading) {
-                    TextEditor(text: $restoreMnemonic)
-                        .font(.system(.body, design: .monospaced))
-                        .scrollContentBackground(.hidden)
-                        .textInputAutocapitalization(.never)
-                        .autocorrectionDisabled()
-                        .padding(.horizontal, 12)
-                        .padding(.top, 12)
-                        .padding(.bottom, 56)
-
-                    if restoreMnemonic.isEmpty {
-                        Text("word1 word2 word3 …")
-                            .font(.system(.body, design: .monospaced))
-                            .foregroundStyle(.tertiary)
-                            .padding(.horizontal, 17)
-                            .padding(.vertical, 20)
-                            .allowsHitTesting(false)
-                    }
+            // Scrolls because the keyboard is up for this whole step: on an SE
+            // at a large Dynamic Type size the card, chips and helper line do
+            // not fit the band above it, and clipping them would be worse than
+            // a short scroll.
+            ScrollView {
+                stagger(appeared: restoreInputAppeared, index: 1) {
+                    SeedWordEntryField(
+                        entry: $seedEntry,
+                        isFocused: $seedFieldFocused,
+                        notice: seedNotice,
+                        onOutcome: handleSeedOutcome
+                    )
                 }
-
-                Button(action: restoreMnemonic.isEmpty ? pasteMnemonicFromClipboard : { clearMnemonic() }) {
-                    Image(systemName: restoreMnemonic.isEmpty ? "doc.on.clipboard" : "xmark.circle.fill")
-                        .font(.title3.weight(.medium))
-                        .foregroundStyle(.secondary)
-                        .padding(14)
-                        .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel(restoreMnemonic.isEmpty ? "Paste from clipboard" : "Clear")
-                .accessibilityHint(restoreMnemonic.isEmpty ? "Pastes seed phrase from clipboard" : "Clears the entered seed phrase")
+                .padding(.top, 32)
+                .padding(.bottom, ScrollFadeMetrics.band)
             }
-            .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 14))
+            .scrollDismissesKeyboard(.never)
+            .scrollBounceBehavior(.basedOnSize)
+            .scrollEdgeFade(bottom: 0)
             .frame(maxHeight: .infinity)
-            .padding(.horizontal)
-            .padding(.top, 16)
-
-            HStack(spacing: 6) {
-                Text("\(wordCount) / 12 words")
-                    .font(.caption.weight(.medium))
-                    .foregroundStyle(wordCount == 12 && invalidIndices.isEmpty ? .green : .secondary)
-                    .animation(.smooth(duration: 0.2), value: wordCount == 12 && invalidIndices.isEmpty)
-                if wordCount > 0 && !invalidIndices.isEmpty {
-                    Text("· \(invalidWordsNotice(for: invalidIndices))")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-            }
-            .padding(.top, 16)
 
             if let error = errorMessage {
                 ErrorBannerView(message: error, severity: .error)
@@ -1455,36 +1430,70 @@ struct OnboardingView: View {
         .animation(.snappy, value: errorMessage)
         .onAppear {
             triggerEntrance { restoreInputAppeared = true }
+            // Word-by-word entry is keyboard-driven from the first frame. A
+            // deliberate exception to the "land calm" rule that restoreMints
+            // still keeps — there, arriving with the keyboard up would be noise.
+            seedFieldFocused = true
+        }
+        .onDisappear { seedFieldFocused = false }
+        .onChange(of: seedEntry.isReviewing) { _, reviewing in
+            // Leaving the review grid means the user is fixing a word; the
+            // checksum message that sent them there is no longer true.
+            if !reviewing { seedNotice = nil }
         }
     }
 
-    /// "2 invalid" tells the user how bad it is but not where to look. The
-    /// positions are already computed, so name them — capped at three so the
-    /// caption stays one line on the narrowest device.
-    private func invalidWordsNotice(for indices: [Int]) -> String {
-        let positions = indices.map { String($0 + 1) }
-        switch positions.count {
-        case 1:
-            return "word \(positions[0]) isn't in the list"
-        case 2:
-            return "words \(positions[0]) and \(positions[1]) aren't in the list"
-        case 3:
-            return "words \(positions[0]), \(positions[1]) and \(positions[2]) aren't in the list"
-        default:
-            return "\(positions.count) words aren't in the list"
+    /// Every commit reports back so the host can clear stale copy and run the
+    /// checksum at the only moment it can be run.
+    private func handleSeedOutcome(_ outcome: SeedCommitOutcome) {
+        if outcome != .ignored { seedNotice = nil }
+        guard outcome == .completed else { return }
+        runSeedChecksum()
+    }
+
+    /// The wordlist check is local and per-word; the BIP-39 checksum needs all
+    /// twelve and can only say "one of these is wrong", never which one. So the
+    /// failure hands the user the whole phrase to look at.
+    private func runSeedChecksum() {
+        guard seedEntry.isComplete else { return }
+        guard !walletManager.validateMnemonic(seedEntry.phrase) else {
+            seedNotice = nil
+            return
         }
+        seedEntry.markReviewing()
+        seedFieldFocused = false
+        seedNotice = SeedEntryNotice(
+            message: SeedEntryCopy.checksumBody,
+            title: SeedEntryCopy.checksumTitle,
+            severity: .error
+        )
+        HapticFeedback.notification(.error)
     }
 
     private func pasteMnemonicFromClipboard() {
-        guard let content = UIPasteboard.general.string else { return }
-        HapticFeedback.selection()
-        restoreMnemonic = content.trimmingCharacters(in: .whitespacesAndNewlines)
-    }
+        guard let content = UIPasteboard.general.string else {
+            seedNotice = SeedEntryNotice(message: SeedEntryCopy.pasteUnusable, severity: .caution)
+            return
+        }
 
-    private func clearMnemonic() {
-        HapticFeedback.selection()
-        restoreMnemonic = ""
-        errorMessage = nil
+        let outcome = seedEntry.fill(from: content)
+        seedFieldFocused = true
+
+        switch outcome {
+        case .filled:
+            HapticFeedback.notification(.success)
+            seedNotice = nil
+            runSeedChecksum()
+        case .partial(let count):
+            HapticFeedback.selection()
+            seedNotice = SeedEntryNotice(message: SeedEntryCopy.pastePartial(count), severity: .caution)
+        case .invalid(let index):
+            HapticFeedback.notification(.warning)
+            seedNotice = SeedEntryNotice(message: SeedEntryCopy.pasteInvalid(at: index), severity: .caution)
+        case .unusable:
+            HapticFeedback.notification(.error)
+            seedNotice = SeedEntryNotice(message: SeedEntryCopy.pasteUnusable, severity: .caution)
+        }
     }
 
     // MARK: - Restore Mints Stage
@@ -1947,14 +1956,13 @@ struct OnboardingView: View {
     }
 
     private func initializeAndProceed() {
-        let cleanedMnemonic = restoreMnemonic
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-            .lowercased()
-            .split(separator: " ")
-            .joined(separator: " ")
+        // Already normalised: every word was committed from the wordlist.
+        let cleanedMnemonic = seedEntry.phrase
 
         guard walletManager.validateMnemonic(cleanedMnemonic) else {
-            errorMessage = "That seed phrase doesn't look right. Check the spelling and try again."
+            // Not a banner — a checksum failure is fixable, and the review grid
+            // is where it gets fixed.
+            runSeedChecksum()
             return
         }
 
