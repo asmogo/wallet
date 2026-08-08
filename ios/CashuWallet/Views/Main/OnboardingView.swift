@@ -95,6 +95,9 @@ struct OnboardingView: View {
     @State private var firstMintAppeared = false
     @State private var restoreMethodAppeared = false
     @State private var restoreInputAppeared = false
+    /// Back was tapped on seed entry and the retreat is waiting for the
+    /// keyboard to finish dismissing. See the back button for why.
+    @State private var pendingSeedRetreat = false
     @State private var restoreMintsAppeared = false
     @State private var restoreProgressAppeared = false
     @State private var iCloudPreviewAppeared = false
@@ -183,6 +186,24 @@ struct OnboardingView: View {
             detectedICloudBackup = nil
             isDetectingICloudBackup = true
         }
+        // The moment the keyboard is actually gone — spring tail included —
+        // which is when a pending seed-entry retreat may land. See the seed
+        // stage's back button.
+        .onReceive(
+            NotificationCenter.default.publisher(for: UIResponder.keyboardDidHideNotification)
+        ) { _ in
+            completePendingSeedRetreat()
+        }
+    }
+
+    /// Runs the retreat a seed-entry back tap queued behind the keyboard
+    /// dismissal. Idempotent: the didHide notification and the fallback timer
+    /// can both arrive, and only the first may act.
+    private func completePendingSeedRetreat() {
+        guard pendingSeedRetreat else { return }
+        pendingSeedRetreat = false
+        guard currentStep == .restoreInput else { return }
+        retreat(to: .restoreMethod)
     }
 
     // MARK: - Ascii Field Layer
@@ -1381,20 +1402,27 @@ struct OnboardingView: View {
         VStack(spacing: 0) {
             OnboardingBackButton {
                 // A sequenced exit, one motion at a time (device review
-                // 2026-08-08, twice). Everything at once — 300pt of chassis
-                // travel on the keyboard's fast system curve, the buttons
-                // morphing one-into-two mid-flight, the stage cross-fading
-                // behind them — read as "buttons mash to the bottom". So:
-                // the tap drops the keyboard immediately (that is the
-                // response cue) and the chassis rides down as a stable
-                // object, Continue still Continue; only once it has landed
-                // does the stage cross-fade and the slots morph in place.
+                // 2026-08-08, three times). The tap drops the keyboard
+                // immediately — that is the response cue — and the chassis
+                // rides down with it as a stable object, Continue still
+                // Continue; only once everything has settled does the stage
+                // cross-fade and one button morph into two in place.
+                //
+                // "Settled" is keyboardDidHide, not a guessed delay: the
+                // keyboard's declared duration is 0.25s but its spring tail
+                // runs visibly longer, and a cross-fade launched into that
+                // tail lands the terrain and the growing chassis on a
+                // still-moving floor — the "crashes down" of review three.
+                // The timer below is only a fallback for the no-software-
+                // keyboard case (hardware keyboard attached), where didHide
+                // never fires.
+                //
                 // Back is one hop to the method chooser, not two to welcome
                 // (product decision, reversing the restyle brief's rule).
                 seedFieldFocused = false
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
-                    guard currentStep == .restoreInput else { return }
-                    retreat(to: .restoreMethod)
+                pendingSeedRetreat = true
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
+                    completePendingSeedRetreat()
                 }
             }
                 .frame(maxWidth: .infinity, alignment: .leading)
