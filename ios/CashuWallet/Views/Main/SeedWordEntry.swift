@@ -46,6 +46,9 @@ private enum SeedEntryMetrics {
     /// Tap target width around the 2pt rail. Still under 44pt — the adjustable
     /// accessibility action and the review grid are the compliant paths.
     static let railHitWidth: CGFloat = 24
+    /// How far beyond the rail's frame the gesture surface reaches on every
+    /// side, so a thumb doesn't need to land on a 24pt strip to engage.
+    static let railCaptureInset: CGFloat = 10
 
     static let railToCard: CGFloat = 20
     static let cardRadius: CGFloat = 14
@@ -281,43 +284,46 @@ private struct SeedWordProgressRail: View {
 
     var body: some View {
         VStack(spacing: 0) {
+            // Ticks are presentation only — every touch goes through the
+            // gesture surface below, the same shape as the Android rail.
             ForEach(0..<SeedPhraseEntry.wordCount, id: \.self) { slot in
-                Button { onSelect(slot) } label: {
-                    Capsule()
-                        .fill(tint(for: slot))
-                        .frame(
-                            width: SeedEntryMetrics.railWidth,
-                            height: slot == entry.index
-                                ? SeedEntryMetrics.tickCurrent
-                                : SeedEntryMetrics.tickResting
-                        )
-                        .frame(
-                            width: SeedEntryMetrics.railHitWidth,
-                            height: SeedEntryMetrics.railSlot
-                        )
-                        .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
+                Capsule()
+                    .fill(tint(for: slot))
+                    .frame(
+                        width: SeedEntryMetrics.railWidth,
+                        height: slot == entry.index
+                            ? SeedEntryMetrics.tickCurrent
+                            : SeedEntryMetrics.tickResting
+                    )
+                    .frame(
+                        width: SeedEntryMetrics.railHitWidth,
+                        height: SeedEntryMetrics.railSlot
+                    )
             }
         }
         .animation(.snappy(duration: 0.25), value: entry.index)
         .animation(.smooth(duration: 0.3), value: entry.isComplete)
-        // Scrub: press-and-hold, then drag to run through the words — the
-        // focused word updates live and releasing lands wherever the finger
-        // is (jumps are live, so release needs no handler). The long-press
-        // gate is what keeps this out of the way of both quick taps (which
-        // never satisfy it) and the scroll container (plain drags still
-        // scroll). The inset widens capture beyond the 2pt rail without
-        // moving the card.
-        .contentShape(Rectangle().inset(by: -10))
-        .simultaneousGesture(
-            LongPressGesture(minimumDuration: 0.25)
-                .sequenced(before: DragGesture(minimumDistance: 0, coordinateSpace: .local))
-                .onChanged { value in
-                    guard case .second(true, let drag?) = value else { return }
-                    scrub(to: drag.location.y)
-                }
-        )
+        // Tap jumps; press-and-hold then drag scrubs through the words, the
+        // focused word tracking the finger live, releasing wherever it is
+        // (jumps are live, so release needs no handler). UIKit recognizers
+        // rather than SwiftUI's LongPress→Drag sequence: inside a ScrollView
+        // the sequence loses its drag half to the scroll pan on a real device,
+        // which shipped this interaction broken once. A UILongPressGesture-
+        // Recognizer is hold-then-track as ONE recognizer, and UIScrollView
+        // arbitration does the right thing with it — holding still engages the
+        // scrub and cancels the scroll; moving early scrolls as normal. The
+        // negative padding widens capture beyond the 2pt rail without moving
+        // the card; slotAt clamps, so coordinates in the margin still land.
+        .overlay {
+            RailGestureSurface(
+                onTap: { y in
+                    onSelect(slot(at: y - SeedEntryMetrics.railCaptureInset))
+                },
+                onScrubBegan: { y in beginScrub(at: y - SeedEntryMetrics.railCaptureInset) },
+                onScrubMoved: { y in continueScrub(at: y - SeedEntryMetrics.railCaptureInset) }
+            )
+            .padding(-SeedEntryMetrics.railCaptureInset)
+        }
         // One element with an adjustable action: twelve 10pt ticks can never be
         // 44pt targets, so assistive navigation goes through the value instead.
         .accessibilityElement(children: .ignore)
@@ -332,15 +338,28 @@ private struct SeedWordProgressRail: View {
         }
     }
 
+    private func slot(at y: CGFloat) -> Int {
+        min(max(Int(y / SeedEntryMetrics.railSlot), 0), SeedPhraseEntry.wordCount - 1)
+    }
+
+    /// Engagement must always be felt: if the hold starts on the focused word
+    /// there is nothing to jump to, so the tick comes from here instead of
+    /// `onSelect`. Never both — that would double the haptic.
+    private func beginScrub(at y: CGFloat) {
+        let target = slot(at: y)
+        if target == entry.index {
+            HapticFeedback.selection()
+        } else {
+            onSelect(target)
+        }
+    }
+
     /// One `onSelect` per *word change*, not per drag sample — the parent fires
     /// a selection haptic on each call, and that is the per-word tick.
-    private func scrub(to y: CGFloat) {
-        let slot = min(
-            max(Int(y / SeedEntryMetrics.railSlot), 0),
-            SeedPhraseEntry.wordCount - 1
-        )
-        guard slot != entry.index else { return }
-        onSelect(slot)
+    private func continueScrub(at y: CGFloat) {
+        let target = slot(at: y)
+        guard target != entry.index else { return }
+        onSelect(target)
     }
 
     private func tint(for slot: Int) -> Color {
@@ -448,6 +467,69 @@ private struct SeedWordReviewGrid: View {
         }
         .padding(SeedEntryMetrics.cardPadding)
         .liquidGlassInput(in: RoundedRectangle(cornerRadius: SeedEntryMetrics.cardRadius))
+    }
+}
+
+// MARK: - Rail gesture surface
+
+/// The rail's touch handling, in UIKit because the interaction demands it:
+/// `UILongPressGestureRecognizer` is press-and-hold *then track movement* as a
+/// single recognizer, and it arbitrates correctly against the enclosing
+/// `UIScrollView` — recognizers see touches regardless of the scroll view's
+/// content-touch delays, and once the hold recognizes, the scroll pan is
+/// locked out for the rest of the touch. SwiftUI's sequenced equivalent loses
+/// its drag half to the scroll pan on a real device.
+private struct RailGestureSurface: UIViewRepresentable {
+    /// All three report a y-position in this surface's own coordinates.
+    let onTap: (CGFloat) -> Void
+    let onScrubBegan: (CGFloat) -> Void
+    let onScrubMoved: (CGFloat) -> Void
+
+    func makeUIView(context: Context) -> UIView {
+        let view = UIView()
+        view.backgroundColor = .clear
+        // Invisible to accessibility on purpose — the rail's merged SwiftUI
+        // element (label, value, adjustable action) is the assistive surface.
+        view.isAccessibilityElement = false
+
+        let tap = UITapGestureRecognizer(
+            target: context.coordinator, action: #selector(Coordinator.tapped(_:))
+        )
+        let hold = UILongPressGestureRecognizer(
+            target: context.coordinator, action: #selector(Coordinator.held(_:))
+        )
+        hold.minimumPressDuration = 0.25
+        // A resting thumb wobbles; the default 10pt fails the hold for drift
+        // that the user never perceives as movement.
+        hold.allowableMovement = 24
+        view.addGestureRecognizer(tap)
+        view.addGestureRecognizer(hold)
+        return view
+    }
+
+    func updateUIView(_ view: UIView, context: Context) {
+        context.coordinator.parent = self
+    }
+
+    func makeCoordinator() -> Coordinator { Coordinator(parent: self) }
+
+    final class Coordinator: NSObject {
+        var parent: RailGestureSurface
+
+        init(parent: RailGestureSurface) { self.parent = parent }
+
+        @objc func tapped(_ recognizer: UITapGestureRecognizer) {
+            parent.onTap(recognizer.location(in: recognizer.view).y)
+        }
+
+        @objc func held(_ recognizer: UILongPressGestureRecognizer) {
+            let y = recognizer.location(in: recognizer.view).y
+            switch recognizer.state {
+            case .began: parent.onScrubBegan(y)
+            case .changed: parent.onScrubMoved(y)
+            default: break
+            }
+        }
     }
 }
 

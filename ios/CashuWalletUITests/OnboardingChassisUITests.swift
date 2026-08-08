@@ -275,4 +275,47 @@ final class OnboardingChassisUITests: UITestBase {
             "The lookup chip should settle back to its resting label"
         )
     }
+
+    /// The rail scrubs: press-and-hold, then drag runs through the words with
+    /// the focused slot tracking the finger, and a plain tap still jumps.
+    /// Synthesized as a user actually does it — press, hold, drag — because
+    /// this interaction shipped broken once: SwiftUI's sequenced long-press →
+    /// drag loses its drag half to the ScrollView's pan on a device, which no
+    /// amount of tapping-only coverage would ever have caught.
+    func testSeedRailScrubRunsThroughTheWords() throws {
+        tapWhenReady(app.buttons["Restore Wallet"], timeout: 30)
+        tapWhenReady(app.buttons["Use Seed Phrase"], timeout: 10)
+
+        let rail = app.otherElements["Seed word progress"]
+        XCTAssertTrue(rail.waitForExistence(timeout: 10), "The rail should be one merged element")
+        XCTAssertEqual(rail.value as? String, "Word 1 of 12")
+        XCTAssertTrue(
+            app.keyboards.element.waitForExistence(timeout: 10),
+            "Seed entry focuses on arrival"
+        )
+
+        // Hold near the top tick, then drag to the bottom one. 0.6s of hold is
+        // safely past the recognizer's 0.25s gate.
+        let top = rail.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.04))
+        let bottom = rail.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.96))
+        top.press(forDuration: 0.6, thenDragTo: bottom)
+
+        let landed = NSPredicate(format: "value == 'Word 12 of 12'")
+        let scrubbed = XCTNSPredicateExpectation(predicate: landed, object: rail)
+        XCTAssertEqual(
+            XCTWaiter().wait(for: [scrubbed], timeout: 5), .completed,
+            "Scrubbing to the rail's bottom should land on the last word, got \(String(describing: rail.value))"
+        )
+        XCTAssertTrue(app.keyboards.element.exists, "The keyboard must survive a scrub")
+
+        // The tap path lives on the same surface now, so prove it separately.
+        top.tap()
+        let tapped = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "value == 'Word 1 of 12'"), object: rail
+        )
+        XCTAssertEqual(
+            XCTWaiter().wait(for: [tapped], timeout: 5), .completed,
+            "Tapping the top tick should jump back to word 1, got \(String(describing: rail.value))"
+        )
+    }
 }
