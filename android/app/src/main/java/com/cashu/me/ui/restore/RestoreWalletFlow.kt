@@ -228,18 +228,25 @@ fun RestoreSeedStageContent(
     errorText: String?,
     modifier: Modifier = Modifier,
     autoFocus: Boolean = true,
+    onPaste: (() -> Unit)? = null,
 ) {
     Column(
         modifier = modifier
             .padding(horizontal = HeaderPadding)
-            .padding(top = CashuTheme.spacing.section)
-            .verticalScroll(rememberScrollState()),
+            .verticalScroll(rememberScrollState())
+            // Inside the scroll, not outside: verticalScroll clips, and the
+            // ghost cards peek ~11dp above the card's top edge — which is the
+            // content's top edge now that the card leads its column. Padding
+            // placed after the scroll modifier becomes scrolled content and
+            // gives the ghosts headroom inside the clip.
+            .padding(top = CashuTheme.spacing.section),
         verticalArrangement = Arrangement.spacedBy(CashuTheme.spacing.comfortable),
     ) {
         SeedWordEntryField(
             state = state,
             onOutcome = onOutcome,
             autoFocus = autoFocus,
+            onPaste = onPaste,
             modifier = Modifier.fillMaxWidth(),
         )
         // The install failure is a different problem from a mistyped word and
@@ -337,6 +344,12 @@ fun RestoreSeedStep(
                     scope.launch { runSeedChecksum(seedState, onValidateChecksum) }
                 }
             },
+            onPaste = {
+                haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                scope.launch {
+                    pasteSeedPhrase(seedState, clipboard.getText()?.text, onValidateChecksum)
+                }
+            },
             errorText = errorText,
             modifier = Modifier
                 .weight(1f)
@@ -357,21 +370,6 @@ fun RestoreSeedStep(
                 enabled = canContinue,
                 loading = restoring,
             )
-            // Pasting a whole phrase is a different act from entering one, so it
-            // sits outside the card. It retires once there is anything to lose.
-            if (seedState.enteredCount == 0) {
-                GhostButton(
-                    text = SeedEntryCopy.PASTE_LINK,
-                    onClick = {
-                        haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                        scope.launch {
-                            pasteSeedPhrase(seedState, clipboard.getText()?.text, onValidateChecksum)
-                        }
-                    },
-                    enabled = !restoring,
-                    modifier = Modifier.testTag(UiTestTags.SeedPaste),
-                )
-            }
             if (onBack != null) {
                 GhostButton(text = "Back", onClick = onBack, enabled = !restoring)
             }

@@ -8,6 +8,8 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -24,6 +26,9 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.ContentPaste
+import androidx.compose.material3.Icon
 import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -38,6 +43,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.graphicsLayer
@@ -47,19 +54,20 @@ import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
-import androidx.compose.ui.focus.FocusRequester
-import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.customActions
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
-import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -71,7 +79,6 @@ import com.cashu.me.ui.testing.UiTestTags
 import com.cashu.me.ui.theme.CashuTheme
 import com.cashu.me.ui.theme.atSize
 import com.cashu.me.ui.theme.withSlashedZero
-import androidx.compose.ui.platform.testTag
 
 // ---------------------------------------------------------------------------
 // Copy
@@ -149,13 +156,13 @@ private val TickCurrent: Dp = 10.dp
 private val TickResting: Dp = 3.dp
 private val RailHitWidth: Dp = 24.dp
 private val RailToCard: Dp = 20.dp
-
-/** Everything under the card lines up with the card, not with the rail. */
-private val CardInset: Dp = RailHitWidth + RailToCard
 private val CardRadius: Dp = 14.dp
 private val CardPadding: Dp = 20.dp
 private val OrdinalWidth: Dp = 22.dp
 private val ChipRadius: Dp = 12.dp
+
+/** Matches the restore chips' glyph box in RestoreWalletFlow.kt. */
+private val ChipGlyphSize: Dp = 18.dp
 
 /** Ghost cards are alpha and scale only — a static blur can never match across
  *  screenshot-golden hosts, and iOS has to draw the identical thing. */
@@ -182,6 +189,7 @@ fun SeedWordEntryField(
     onOutcome: (CommitOutcome) -> Unit,
     modifier: Modifier = Modifier,
     autoFocus: Boolean = true,
+    onPaste: (() -> Unit)? = null,
 ) {
     val haptics = LocalHapticFeedback.current
     val keyboard = LocalSoftwareKeyboardController.current
@@ -224,7 +232,14 @@ fun SeedWordEntryField(
                 state.entry = state.entry.jump(slot)
                 state.notice = null
             }
+            Box(modifier = Modifier.padding(top = CashuTheme.spacing.default)) {
+                HelperLine(state = state, rejected = rejected)
+            }
         } else {
+            // The rail sizes this row, but chips and helper belong to the
+            // card's own column — hung below the rail's extent they landed in
+            // the scroll fade on iOS and left dead space on both platforms
+            // (device review 2026-08-08).
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically,
@@ -234,44 +249,40 @@ fun SeedWordEntryField(
                     haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                     state.entry = state.entry.jump(slot)
                 }
-                SeedWordCard(
-                    state = state,
-                    rejected = rejected,
-                    focusRequester = focusRequester,
-                    onTyped = { text -> state.entry.typed(text).let { state.entry = it.entry; apply(it.outcome) } },
-                    onCommit = { state.entry.commit().let { state.entry = it.entry; apply(it.outcome) } },
-                    onBackspaceOnEmpty = {
-                        state.entry.stepBack()?.let {
-                            state.entry = it
-                            rejected = false
-                            haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                        }
-                    },
-                )
-            }
-
-            Box(
-                modifier = Modifier
-                    .padding(top = CashuTheme.spacing.default)
-                    .padding(start = CardInset),
-            ) {
-                SeedWordSuggestions(words = state.entry.completions) { word ->
-                    // A chip goes through the same commit path as typing it,
-                    // rather than being a second way to advance.
-                    val typed = state.entry.typed(word)
-                    val committed = typed.entry.commit()
-                    state.entry = committed.entry
-                    apply(committed.outcome)
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(CashuTheme.spacing.default),
+                ) {
+                    SeedWordCard(
+                        state = state,
+                        rejected = rejected,
+                        focusRequester = focusRequester,
+                        onTyped = { text -> state.entry.typed(text).let { state.entry = it.entry; apply(it.outcome) } },
+                        onCommit = { state.entry.commit().let { state.entry = it.entry; apply(it.outcome) } },
+                        onBackspaceOnEmpty = {
+                            state.entry.stepBack()?.let {
+                                state.entry = it
+                                rejected = false
+                                haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                            }
+                        },
+                    )
+                    SeedWordChipRow(
+                        words = state.entry.completions,
+                        onPaste = if (state.enteredCount == 0) onPaste else null,
+                        onSelect = { word ->
+                            // A chip goes through the same commit path as
+                            // typing it, rather than being a second way to
+                            // advance.
+                            val typed = state.entry.typed(word)
+                            val committed = typed.entry.commit()
+                            state.entry = committed.entry
+                            apply(committed.outcome)
+                        },
+                    )
+                    HelperLine(state = state, rejected = rejected)
                 }
             }
-        }
-
-        Box(
-            modifier = Modifier
-                .padding(top = CashuTheme.spacing.default)
-                .padding(start = if (state.isReviewing) 0.dp else CardInset),
-        ) {
-            HelperLine(state = state, rejected = rejected)
         }
     }
 }
@@ -448,6 +459,34 @@ private fun SeedWordProgressRail(entry: SeedPhraseEntry, onSelect: (Int) -> Unit
     Column(
         modifier = Modifier
             .testTag(UiTestTags.SeedWordRail)
+            // Tap jumps; press-and-hold then drag scrubs through the words,
+            // the focused word updating live (jumps are live, so release
+            // needs no handler). Container-level gestures rather than
+            // per-tick clickables: the long-press gate keeps the scrub out of
+            // the way of both quick taps and the enclosing scroll, and a
+            // merged semantics node full of child click actions was mud.
+            .pointerInput(Unit) {
+                detectTapGestures { offset -> onSelect(slotAt(offset.y)) }
+            }
+            .pointerInput(Unit) {
+                var last = -1
+                detectDragGesturesAfterLongPress(
+                    onDragStart = { offset ->
+                        last = slotAt(offset.y)
+                        onSelect(last)
+                    },
+                    onDrag = { change, _ ->
+                        change.consume()
+                        val slot = slotAt(change.position.y)
+                        // One onSelect per *word change*, not per drag sample —
+                        // the caller's haptic is the per-word tick.
+                        if (slot != last) {
+                            last = slot
+                            onSelect(slot)
+                        }
+                    },
+                )
+            }
             // One element with custom actions: twelve 10dp ticks can never be
             // 48dp targets, so assistive navigation goes through the value.
             .semantics(mergeDescendants = true) {
@@ -468,8 +507,7 @@ private fun SeedWordProgressRail(entry: SeedPhraseEntry, onSelect: (Int) -> Unit
             Box(
                 modifier = Modifier
                     .width(RailHitWidth)
-                    .height(RailSlot)
-                    .clickable { onSelect(slot) },
+                    .height(RailSlot),
                 contentAlignment = Alignment.Center,
             ) {
                 Box(
@@ -484,6 +522,10 @@ private fun SeedWordProgressRail(entry: SeedPhraseEntry, onSelect: (Int) -> Unit
     }
 }
 
+/** The tick under a y-position, clamped to the rail. */
+private fun Density.slotAt(y: Float): Int =
+    (y / RailSlot.toPx()).toInt().coerceIn(0, SeedPhraseEntry.WORD_COUNT - 1)
+
 @Composable
 private fun tickTint(entry: SeedPhraseEntry, slot: Int): Color = when {
     entry.isComplete -> CashuTheme.colors.received
@@ -496,25 +538,67 @@ private fun tickTint(entry: SeedPhraseEntry, slot: Int): Color = when {
 // Suggestions
 // ---------------------------------------------------------------------------
 
-/** Up to three wordlist completions. The row keeps its height whether or not it
- *  has chips, so the card above never reflows as you type. */
+/**
+ * The row under the card, three-state: the paste chip while nothing is entered,
+ * wordlist completions while typing, reserved space otherwise. One row, one
+ * height — a hidden chip pins it in every state so the card never reflows.
+ */
 @Composable
-private fun SeedWordSuggestions(words: List<String>, onSelect: (String) -> Unit) {
-    Row(horizontalArrangement = Arrangement.spacedBy(CashuTheme.spacing.snug)) {
-        if (words.isEmpty()) {
-            // A hidden chip reserves the real row height without stating one.
-            ChipLabel(word = "placeholder", modifier = Modifier.alpha(0f).clearAndSetSemantics {})
-        } else {
-            words.forEachIndexed { index, word ->
-                ChipLabel(
-                    word = word,
-                    modifier = Modifier
-                        .testTag(UiTestTags.seedSuggestion(index))
-                        .clip(RoundedCornerShape(ChipRadius))
-                        .clickable { onSelect(word) },
-                )
+private fun SeedWordChipRow(
+    words: List<String>,
+    onPaste: (() -> Unit)?,
+    onSelect: (String) -> Unit,
+) {
+    Box(contentAlignment = Alignment.CenterStart) {
+        // A hidden chip reserves the real row height without stating one.
+        ChipLabel(word = "placeholder", modifier = Modifier.alpha(0f).clearAndSetSemantics {})
+
+        Row(horizontalArrangement = Arrangement.spacedBy(CashuTheme.spacing.snug)) {
+            when {
+                // Pasting is the most common way in, so it takes the spot the
+                // eye is already on — directly under the card — rather than a
+                // ghost link under a disabled CTA. It yields this row to the
+                // suggestions the moment typing starts.
+                onPaste != null -> PasteChip(onPaste)
+                words.isNotEmpty() -> words.forEachIndexed { index, word ->
+                    ChipLabel(
+                        word = word,
+                        modifier = Modifier
+                            .testTag(UiTestTags.seedSuggestion(index))
+                            .clip(RoundedCornerShape(ChipRadius))
+                            .clickable { onSelect(word) },
+                    )
+                }
             }
         }
+    }
+}
+
+@Composable
+private fun PasteChip(onPaste: () -> Unit) {
+    Row(
+        modifier = Modifier
+            .testTag(UiTestTags.SeedPaste)
+            .clip(RoundedCornerShape(ChipRadius))
+            .background(MaterialTheme.colorScheme.surfaceContainerHigh)
+            .clickable(onClick = onPaste)
+            .padding(horizontal = CashuTheme.spacing.default, vertical = CashuTheme.spacing.snug),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(CashuTheme.spacing.tight),
+    ) {
+        Icon(
+            imageVector = Icons.Outlined.ContentPaste,
+            contentDescription = null,
+            modifier = Modifier.size(ChipGlyphSize),
+            tint = MaterialTheme.colorScheme.onSurface,
+        )
+        Text(
+            // A control, not a wordlist word — regular UI type, mono stays
+            // reserved for the words themselves.
+            text = SeedEntryCopy.PASTE_LINK,
+            style = MaterialTheme.typography.labelLarge,
+            color = MaterialTheme.colorScheme.onSurface,
+        )
     }
 }
 

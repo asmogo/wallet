@@ -48,8 +48,6 @@ private enum SeedEntryMetrics {
     static let railHitWidth: CGFloat = 24
 
     static let railToCard: CGFloat = 20
-    /// Everything under the card lines up with the card, not with the rail.
-    static let cardInset: CGFloat = railHitWidth + railToCard
     static let cardRadius: CGFloat = 14
     static let cardPadding: CGFloat = 20
     static let ordinalWidth: CGFloat = 22
@@ -83,43 +81,48 @@ struct SeedWordEntryField: View {
     var notice: SeedEntryNotice?
     /// Fired after every commit so the host can run the checksum and set copy.
     var onOutcome: (SeedCommitOutcome) -> Void
+    /// Whole-phrase paste, offered as a chip while nothing is entered. The
+    /// clipboard/checksum logic stays with the host.
+    var onPaste: (() -> Void)? = nil
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var rejected = false
 
     var body: some View {
-        VStack(spacing: 0) {
+        Group {
             if entry.isReviewing {
-                SeedWordReviewGrid(words: entry.words) { slot in
-                    HapticFeedback.selection()
-                    entry.jump(to: slot)
-                    isFocused = true
+                VStack(alignment: .leading, spacing: 12) {
+                    SeedWordReviewGrid(words: entry.words) { slot in
+                        HapticFeedback.selection()
+                        entry.jump(to: slot)
+                        isFocused = true
+                    }
+                    helperLine
                 }
-                .padding(.horizontal, OnboardingMetrics.gutter)
             } else {
+                // The rail sizes this row, but chips and helper belong to the
+                // card's own column — hung below the rail's extent they landed
+                // inside the scroll fade and read as clipped (device review
+                // 2026-08-08).
                 HStack(alignment: .center, spacing: SeedEntryMetrics.railToCard) {
                     SeedWordProgressRail(entry: entry) { slot in
                         HapticFeedback.selection()
                         entry.jump(to: slot)
                         isFocused = true
                     }
-                    card
+                    VStack(alignment: .leading, spacing: 12) {
+                        card
+                        SeedWordChipRow(
+                            words: entry.completions,
+                            onPaste: entry.enteredCount == 0 ? onPaste : nil,
+                            onSelect: { word in commit(replacingDraftWith: word) }
+                        )
+                        helperLine
+                    }
                 }
-                .padding(.horizontal, OnboardingMetrics.gutter)
-
-                SeedWordSuggestions(words: entry.completions) { word in
-                    commit(replacingDraftWith: word)
-                }
-                .padding(.top, 12)
-                .padding(.leading, OnboardingMetrics.gutter + SeedEntryMetrics.cardInset)
-                .padding(.trailing, OnboardingMetrics.gutter)
             }
-
-            helperLine
-                .padding(.top, 12)
-                .padding(.leading, OnboardingMetrics.gutter + (entry.isReviewing ? 0 : SeedEntryMetrics.cardInset))
-                .padding(.trailing, OnboardingMetrics.gutter)
         }
+        .padding(.horizontal, OnboardingMetrics.gutter)
         .animation(reduceMotion ? nil : .snappy(duration: 0.2), value: entry.completions)
         .animation(reduceMotion ? nil : .easeInOut(duration: 0.2), value: rejected)
         .animation(reduceMotion ? nil : .easeInOut(duration: 0.26), value: entry.isReviewing)
@@ -299,6 +302,22 @@ private struct SeedWordProgressRail: View {
         }
         .animation(.snappy(duration: 0.25), value: entry.index)
         .animation(.smooth(duration: 0.3), value: entry.isComplete)
+        // Scrub: press-and-hold, then drag to run through the words — the
+        // focused word updates live and releasing lands wherever the finger
+        // is (jumps are live, so release needs no handler). The long-press
+        // gate is what keeps this out of the way of both quick taps (which
+        // never satisfy it) and the scroll container (plain drags still
+        // scroll). The inset widens capture beyond the 2pt rail without
+        // moving the card.
+        .contentShape(Rectangle().inset(by: -10))
+        .simultaneousGesture(
+            LongPressGesture(minimumDuration: 0.25)
+                .sequenced(before: DragGesture(minimumDistance: 0, coordinateSpace: .local))
+                .onChanged { value in
+                    guard case .second(true, let drag?) = value else { return }
+                    scrub(to: drag.location.y)
+                }
+        )
         // One element with an adjustable action: twelve 10pt ticks can never be
         // 44pt targets, so assistive navigation goes through the value instead.
         .accessibilityElement(children: .ignore)
@@ -313,6 +332,17 @@ private struct SeedWordProgressRail: View {
         }
     }
 
+    /// One `onSelect` per *word change*, not per drag sample — the parent fires
+    /// a selection haptic on each call, and that is the per-word tick.
+    private func scrub(to y: CGFloat) {
+        let slot = min(
+            max(Int(y / SeedEntryMetrics.railSlot), 0),
+            SeedPhraseEntry.wordCount - 1
+        )
+        guard slot != entry.index else { return }
+        onSelect(slot)
+    }
+
     private func tint(for slot: Int) -> Color {
         if entry.isComplete { return Color(.systemGreen) }
         if slot == entry.index { return .primary }
@@ -322,28 +352,52 @@ private struct SeedWordProgressRail: View {
     }
 }
 
-// MARK: - Suggestions
+// MARK: - Chip row
 
-/// Up to three wordlist completions. The row keeps its height whether or not it
-/// has chips, so the card above it never reflows as you type.
-private struct SeedWordSuggestions: View {
+/// The row under the card, three-state: the paste chip while nothing is
+/// entered, wordlist completions while typing, reserved space otherwise. One
+/// row, one height — a hidden chip pins it in every state so the card never
+/// reflows as the states swap.
+private struct SeedWordChipRow: View {
     let words: [String]
+    /// Non-nil only while the paste chip should show.
+    let onPaste: (() -> Void)?
     let onSelect: (String) -> Void
 
     var body: some View {
-        HStack(spacing: SeedEntryMetrics.chipGap) {
-            if words.isEmpty {
-                // A hidden chip reserves exactly the real row height without
-                // stating one as a constant.
-                chipLabel("placeholder").opacity(0).accessibilityHidden(true)
-            } else {
-                ForEach(words, id: \.self) { word in
-                    Button { onSelect(word) } label: { chipLabel(word) }
-                        .buttonStyle(PressableButtonStyle())
-                        .accessibilityLabel(word)
+        ZStack(alignment: .leading) {
+            // Reserves the real row height without stating one as a constant.
+            chipLabel("placeholder").opacity(0).accessibilityHidden(true)
+
+            HStack(spacing: SeedEntryMetrics.chipGap) {
+                if let onPaste {
+                    // Pasting is the most common way in, so it takes the spot
+                    // the eye is already on — directly under the card — rather
+                    // than a text link under a disabled CTA. It yields this row
+                    // to the suggestions the moment typing starts.
+                    Button(action: onPaste) {
+                        HStack(spacing: 6) {
+                            Image(systemName: "doc.on.clipboard")
+                                .font(.footnote.weight(.medium))
+                            Text(SeedEntryCopy.pasteLink)
+                                .cashuText(.textLink)
+                        }
+                        .foregroundStyle(.primary)
+                        .padding(.horizontal, SeedEntryMetrics.chipPaddingH)
+                        .padding(.vertical, SeedEntryMetrics.chipPaddingV)
+                        .background(.quaternary, in: RoundedRectangle(cornerRadius: SeedEntryMetrics.chipRadius))
+                    }
+                    .buttonStyle(PressableButtonStyle())
+                    .accessibilityIdentifier("onboarding-seed-paste")
+                } else {
+                    ForEach(words, id: \.self) { word in
+                        Button { onSelect(word) } label: { chipLabel(word) }
+                            .buttonStyle(PressableButtonStyle())
+                            .accessibilityLabel(word)
+                    }
                 }
+                Spacer(minLength: 0)
             }
-            Spacer(minLength: 0)
         }
     }
 

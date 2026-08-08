@@ -421,26 +421,10 @@ internal fun OnboardingScreen(
                     enabled = seedState.isComplete && !seedState.isReviewing && !restoring,
                     loading = restoring,
                 ),
-                // Pasting a whole phrase is a different act from entering one,
-                // so it sits where firstMint's "Skip for now" does rather than
-                // inside the card. It retires once there is anything to lose.
-                tertiary = if (seedState.enteredCount == 0) {
-                    ChassisAction(
-                        label = SeedEntryCopy.PASTE_LINK,
-                        onClick = {
-                            scope.launch {
-                                pasteSeedPhrase(seedState, seedClipboard.getText()?.text) {
-                                    walletManager.validateMnemonic(it)
-                                }
-                            }
-                        },
-                        enabled = !restoring,
-                        style = ChassisButtonStyle.Ghost,
-                        testTag = UiTestTags.SeedPaste,
-                    )
-                } else {
-                    null
-                },
+                // Paste lives in the stage's chip row, not here: as a chassis
+                // tertiary it vanished on the first keystroke and shifted
+                // Continue (device review 2026-08-08), and it buried the most
+                // common restore path under a disabled CTA.
             )
         }
 
@@ -668,6 +652,13 @@ internal fun OnboardingScreen(
                                             runSeedChecksum(seedState) {
                                                 walletManager.validateMnemonic(it)
                                             }
+                                        }
+                                    }
+                                },
+                                onPaste = {
+                                    scope.launch {
+                                        pasteSeedPhrase(seedState, seedClipboard.getText()?.text) {
+                                            walletManager.validateMnemonic(it)
                                         }
                                     }
                                 },

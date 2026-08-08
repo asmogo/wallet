@@ -1464,6 +1464,12 @@ only here. On iOS that also means all smart-substitution traits and
 bar changes the keyboard's height, which would move the CTA mid-step. Android
 cannot suppress Gboard's strip; `imePadding()` absorbs the difference.
 
+The step's progress rail carries one gesture beyond tap-to-jump: press-and-hold
+then drag scrubs through the words, the focused word updating live with one
+selection tick per word change, releasing wherever the finger is. The
+long-press gate is the whole design — quick taps never satisfy it and plain
+drags still scroll, so it adds nothing to either path's cost.
+
 ## 7. Do's and Don'ts
 
 ### Do

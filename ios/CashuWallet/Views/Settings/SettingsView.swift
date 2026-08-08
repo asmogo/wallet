@@ -607,7 +607,8 @@ struct RestoreWalletView: View {
                     entry: $seedEntry,
                     isFocused: $seedFieldFocused,
                     notice: seedNotice,
-                    onOutcome: handleSeedOutcome
+                    onOutcome: handleSeedOutcome,
+                    onPaste: pasteMnemonicFromClipboard
                 )
                 .padding(.top, 24)
                 .padding(.bottom, ScrollFadeMetrics.band)
@@ -621,14 +622,6 @@ struct RestoreWalletView: View {
                 ErrorBannerView(message: seedError, severity: .error)
                     .padding(.horizontal)
             }
-
-            Button(action: pasteMnemonicFromClipboard) {
-                Text(SeedEntryCopy.pasteLink)
-            }
-            .textLinkButton()
-            .disabled(isRestoringSeed)
-            .opacity(seedEntry.enteredCount == 0 ? 1 : 0)
-            .allowsHitTesting(seedEntry.enteredCount == 0)
 
             Button(action: initializeAndProceed) {
                 if isRestoringSeed {

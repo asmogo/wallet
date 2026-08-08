@@ -72,8 +72,12 @@ final class OnboardingChassisUITests: UITestBase {
             "restoreInput should focus the seed field on arrival"
         )
         assertBottomAnchored(app.buttons["Continue"], "restoreInput")
-        // The paste link is the bottom-most action while nothing is entered.
-        assertBottomAnchored(app.buttons["onboarding-seed-paste"], "restoreInput paste link")
+        // Paste is a chip in the stage now (directly under the word card), not
+        // a chassis action — assert it offers itself while nothing is entered.
+        XCTAssertTrue(
+            app.buttons["onboarding-seed-paste"].waitForExistence(timeout: 5),
+            "restoreInput should offer the paste chip while nothing is entered"
+        )
 
         tapWhenReady(app.buttons["onboarding-back"], timeout: 10)
         XCTAssertTrue(create.waitForExistence(timeout: 10), "restoreInput back should return to welcome")

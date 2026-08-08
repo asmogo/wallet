@@ -432,18 +432,11 @@ struct OnboardingView: View {
                     // "Continue", so a label-only query matches two elements.
                     accessibilityIdentifier: "onboarding-restore-continue",
                     action: initializeAndProceed
-                ),
-                // Pasting a whole phrase is a different act from entering one,
-                // so it sits where firstMint's "Skip for now" does rather than
-                // inside the card. It retires once there is anything to lose.
-                tertiary: seedEntry.enteredCount == 0
-                    ? OnboardingChassisAction(
-                        label: SeedEntryCopy.pasteLink,
-                        isDisabled: isRestoring,
-                        accessibilityIdentifier: "onboarding-seed-paste",
-                        action: pasteMnemonicFromClipboard
-                    )
-                    : nil
+                )
+                // Paste lives in the stage's chip row, not here: as a chassis
+                // tertiary it vanished on the first keystroke and shifted
+                // Continue (device review 2026-08-08), and it buried the most
+                // common restore path under a disabled CTA.
             )
 
         case .restoreMints:
@@ -1409,7 +1402,8 @@ struct OnboardingView: View {
                         entry: $seedEntry,
                         isFocused: $seedFieldFocused,
                         notice: seedNotice,
-                        onOutcome: handleSeedOutcome
+                        onOutcome: handleSeedOutcome,
+                        onPaste: pasteMnemonicFromClipboard
                     )
                 }
                 .padding(.top, 32)

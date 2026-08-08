@@ -302,6 +302,42 @@ fun onboardingRestoreInputScreenshot() {
                 RestoreSeedStageContent(
                     state = rememberSeedPhraseEntryState(midEntry),
                     onOutcome = {},
+                    onPaste = {},
+                    errorText = null,
+                    // A baseline must not request focus: the preview host has no
+                    // window, and a settled frame is the point.
+                    autoFocus = false,
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxWidth(),
+                )
+            }
+        }
+    }
+}
+
+/** The landing state: nothing entered, so the chip row offers paste. */
+@PreviewTest
+@Preview(name = "onboarding-restore-input-empty", widthDp = 390, heightDp = 844, showBackground = true)
+@Composable
+fun onboardingRestoreInputEmptyScreenshot() {
+    OnboardingFrame {
+        OnboardingScaffold(
+            chassis = OnboardingChassisModel(
+                primary = ChassisAction("Continue", onClick = {}, enabled = false),
+            ),
+        ) {
+            Column(Modifier.fillMaxSize()) {
+                OnboardingBackButton(onBack = {}, modifier = Modifier.padding(start = 16.dp, top = 8.dp))
+                OnboardingStepHeader(
+                    title = "Restore wallet.",
+                    subhead = SeedEntryCopy.SUBHEAD,
+                    modifier = Modifier.padding(top = 12.dp),
+                )
+                RestoreSeedStageContent(
+                    state = rememberSeedPhraseEntryState(),
+                    onOutcome = {},
+                    onPaste = {},
                     errorText = null,
                     // A baseline must not request focus: the preview host has no
                     // window, and a settled frame is the point.
