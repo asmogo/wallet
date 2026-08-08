@@ -66,6 +66,8 @@ struct ConnectMintPicker: View {
     var errorMessage: String?
     var onHeightChange: (CGFloat) -> Void = { _ in }
 
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             if context.showsHeadline {
@@ -126,7 +128,11 @@ struct ConnectMintPicker: View {
         route target: ConnectMintRoute
     ) -> some View {
         Button {
-            route = target
+            // The host swaps this face out in place; animating the route change
+            // is what makes the slide and the sheet's resize one motion.
+            withAnimation(SharedAxis.animation(reduceMotion: reduceMotion)) {
+                route = target
+            }
         } label: {
             HStack(spacing: 6) {
                 Image(systemName: systemImage)
@@ -222,10 +228,22 @@ struct SuggestedMintsSection: View {
     }
 }
 
-// MARK: - Pushed steps
+// MARK: - Steps
 
-/// Shared destination builder so the Send sheet and the standalone sheet push
-/// identical steps.
+extension ConnectMintRoute {
+    /// Titled after the link that opened it.
+    var navigationTitle: String {
+        switch self {
+        case .addCustom: "Add by URL"
+        case .discover: "Discover mints"
+        }
+    }
+}
+
+/// Shared step builder so the Send sheet and the standalone sheet show identical
+/// steps. These are swapped in place rather than pushed — see ``SharedAxis`` for
+/// why a `NavigationStack` push cannot carry a sheet whose height changes with
+/// the step. Titles are owned by the host, which needs them for its own bar.
 @ViewBuilder
 func connectMintDestination(
     _ route: ConnectMintRoute,
@@ -234,18 +252,32 @@ func connectMintDestination(
 ) -> some View {
     switch route {
     case .addCustom:
-        // Titled after the link that pushed it. The standalone Mints-tab sheet
-        // isn't reached through that link, so it keeps the form's default.
+        // The standalone Mints-tab sheet isn't reached through that link, so it
+        // keeps the form's default title; here the host supplies it.
         AddMintFormView(
-            navigationTitle: "Add by URL",
+            navigationTitle: route.navigationTitle,
             onAdded: onAdded,
             onHeightChange: onHeightChange
         )
         .containerBackground(.clear, for: .navigation)
     case .discover:
         MintDiscoveryList(onMintAdded: onAdded)
-            .navigationTitle("Discover mints")
+            .navigationTitle(route.navigationTitle)
             .navigationBarTitleDisplayMode(.inline)
+    }
+}
+
+/// The back control that replaces the push's chevron. Same glyph and placement
+/// as the system one, with the 44pt target icon-only toolbar buttons need.
+struct ConnectMintBackButton: View {
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: "chevron.backward")
+                .toolbarIconTapTarget()
+        }
+        .accessibilityLabel("Back")
     }
 }
 
@@ -266,52 +298,62 @@ struct ConnectMintSheet: View {
     /// left. Held apart, each keeps its own last-known good height and a
     /// transient measured mid-transition corrects itself.
     @State private var pickerHeight: CGFloat = 0
-    @State private var pushedHeight: CGFloat = 0
+    @State private var stepHeight: CGFloat = 0
     @State private var addMintError: String?
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
-    /// One height for the whole stack, and the sheet deliberately does *not*
-    /// re-hug each step.
-    ///
-    /// Changing height across a push or pop is what produced the sliced
-    /// shortlist: for the length of the transition UIKit lays the arriving page
-    /// out at the departing page's height, so the shortlist came back cut
-    /// through a row with ~158pt of empty sheet under it. Holding the resize
-    /// until after the slide fixed the cut but traded it for a sheet that lands,
-    /// pauses, then grows — the size change carries no meaning, it is the layout
-    /// catching up in public. One height removes both.
-    ///
-    /// `max`, not the picker's height outright, so a pushed step that outgrows
-    /// it — the URL form with an inline error — still gets the room.
-    private var contentHeight: CGFloat {
-        route == nil ? pickerHeight : max(pickerHeight, pushedHeight)
-    }
+    /// Each step hugs its own content, matching Android.
+    private var contentHeight: CGFloat { route == nil ? pickerHeight : stepHeight }
 
     var body: some View {
         NavigationStack {
-            ConnectMintPicker(
-                context: .addMint,
-                route: $route,
-                onAdd: addMint,
-                existingURLs: Set(walletManager.mints.map(\.url)),
-                discoveryAvailable: settings.useWebsockets,
-                errorMessage: addMintError,
-                onHeightChange: { pickerHeight = $0 }
-            )
-            .navigationTitle(ConnectMintContext.addMint.navigationTitle)
+            // Swapped in place, not pushed: the sheet's height changes with the
+            // step, and a push lays the arriving page out at the departing
+            // page's height for the whole transition. See `SharedAxis`.
+            ZStack {
+                if let route {
+                    connectMintDestination(
+                        route,
+                        onAdded: { dismiss() },
+                        onHeightChange: { stepHeight = $0 }
+                    )
+                    .transition(SharedAxis.transition(forward: true, reduceMotion: reduceMotion))
+                } else {
+                    ConnectMintPicker(
+                        context: .addMint,
+                        route: $route,
+                        onAdd: addMint,
+                        existingURLs: Set(walletManager.mints.map(\.url)),
+                        discoveryAvailable: settings.useWebsockets,
+                        errorMessage: addMintError,
+                        onHeightChange: { pickerHeight = $0 }
+                    )
+                    .transition(SharedAxis.transition(forward: false, reduceMotion: reduceMotion))
+                }
+            }
+            .navigationTitle(route?.navigationTitle ?? ConnectMintContext.addMint.navigationTitle)
             .navigationBarTitleDisplayMode(.inline)
-            .navigationDestination(item: $route) { route in
-                connectMintDestination(
-                    route,
-                    onAdded: { dismiss() },
-                    onHeightChange: { pushedHeight = $0 }
-                )
+            .toolbar {
+                if route != nil {
+                    ToolbarItem(placement: .topBarLeading) {
+                        ConnectMintBackButton {
+                            withAnimation(SharedAxis.animation(reduceMotion: reduceMotion)) {
+                                route = nil
+                            }
+                        }
+                    }
+                }
             }
         }
-        // The sheet hugs the shortlist and keeps that height while the URL step
-        // is pushed — the push and pop are a plain slide at a fixed size, like
-        // any navigation stack. Only discovery fills the sheet: it hosts a
-        // scrolling list and needs bounded height.
-        .contentFitDetent(contentHeight, enabled: route != .discover)
+        // Keyed on `route` so the resize is one motion with the slide rather
+        // than a second beat after it. Only discovery fills the sheet: it hosts
+        // a scrolling list and needs bounded height.
+        .contentFitDetent(
+            contentHeight,
+            enabled: route != .discover,
+            step: route,
+            stepResize: SharedAxis.duration
+        )
         .presentationDragIndicator(.visible)
         // Hugging the shortlist, this floats over the canvas and keeps the
         // system's elevated background; only the pushed full-height steps adopt

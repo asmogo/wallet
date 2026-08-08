@@ -115,17 +115,27 @@ extension View {
     ///   - navigationBar: whether the sheet hosts a `NavigationStack` with an
     ///     inline title. Pass `false` for a bare sheet, or its detent carries
     ///     44pt of chrome for a navigation bar that isn't there.
+    ///   - step: identity of the face that currently owns the height. Only
+    ///     meaningful alongside `stepResize`.
+    ///   - stepResize: how long the sheet takes to change height when `step`
+    ///     changes; `nil` (the default) snaps. A duration rather than an
+    ///     `Animation` because the modifier has to know when the move is over,
+    ///     not only how to start it.
     func contentFitDetent(
         _ contentHeight: CGFloat,
         enabled: Bool = true,
         estimate: CGFloat = ContentFitSheetMetrics.bodyEstimate,
-        navigationBar: Bool = true
+        navigationBar: Bool = true,
+        step: AnyHashable? = nil,
+        stepResize: Duration? = nil
     ) -> some View {
         modifier(ContentFitDetent(
             contentHeight: contentHeight,
             enabled: enabled,
             estimate: estimate,
-            navigationBar: navigationBar
+            navigationBar: navigationBar,
+            step: step,
+            stepResize: stepResize
         ))
     }
 
@@ -162,6 +172,55 @@ extension View {
         self
             .frame(width: 44, height: 44)
             .contentShape(Rectangle())
+    }
+}
+
+// MARK: - Shared Axis
+
+/// Material 3 shared axis X — the same spec Android's `TwoFaceScreen` uses, so a
+/// step swap reads identically on both platforms: both faces travel 30pt in one
+/// direction over 300ms while the outgoing fades out and the incoming fades in.
+///
+/// This exists because a `NavigationStack` push cannot be used where the sheet's
+/// height changes with the step. For the length of a UIKit push or pop the
+/// arriving page is laid out at the *departing* page's height, so a sheet that
+/// resizes with the transition delivers that page clipped — measured on an
+/// iPhone 17 Pro, the mint shortlist came back cut through a row with ~158pt of
+/// empty sheet under it. Holding the resize until the transition ends trades the
+/// clip for a sheet that lands, pauses, then grows. Swapping the faces in place
+/// has neither problem: the slide is ours, nothing is laid out against a stale
+/// height, and the detent animates on the same beat.
+///
+/// The cost is the interactive back-swipe, which belongs to the push being given
+/// up; callers draw a back control instead, exactly as Android does.
+enum SharedAxis {
+    static let duration: Duration = .seconds(0.3)
+    private static let slide: CGFloat = 30
+    private static let outgoingFade: TimeInterval = 0.09
+    private static let incomingFade: TimeInterval = 0.21
+
+    static func transition(forward: Bool, reduceMotion: Bool) -> AnyTransition {
+        guard !reduceMotion else { return .opacity }
+        // The fades are staged, not crossed: the outgoing face is gone in 90ms
+        // and the incoming one only starts after that. A plain symmetric
+        // cross-dissolve leaves both legible at once and the two sets of rows
+        // read as a double exposure. The travel keeps the full duration, so the
+        // motion stays continuous underneath the swap.
+        let travel = Animation.smooth(duration: 0.3)
+        let out = Animation.easeIn(duration: outgoingFade)
+        let incoming = Animation.easeOut(duration: incomingFade).delay(outgoingFade)
+        return .asymmetric(
+            insertion: .offset(x: forward ? slide : -slide).animation(travel)
+                .combined(with: .opacity.animation(incoming)),
+            removal: .offset(x: forward ? -slide : slide).animation(travel)
+                .combined(with: .opacity.animation(out))
+        )
+    }
+
+    /// Drives the swap — the content transition *and* the sheet detent moving
+    /// alongside it, so they are one motion rather than two.
+    static func animation(reduceMotion: Bool) -> Animation {
+        reduceMotion ? .easeInOut(duration: 0.2) : .smooth(duration: 0.3)
     }
 }
 
@@ -294,15 +353,39 @@ private struct ContentFitDetent: ViewModifier {
     let enabled: Bool
     let estimate: CGFloat
     let navigationBar: Bool
+    let step: AnyHashable?
+    let stepResize: Duration?
+
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     @State private var selection: PresentationDetent
+    /// The step `selection` was last chosen for, so a height change can be told
+    /// apart from a step change. See ``apply(_:)``.
+    @State private var lastStep: AnyHashable?
+    /// Each step's last-known height, and whether a step resize is in flight.
+    /// Both exist to keep ``detents`` right for the length of a move.
+    @State private var knownPerStep: [AnyHashable?: PresentationDetent] = [:]
+    @State private var moving = false
+    @State private var moves = 0
 
     @MainActor
-    init(contentHeight: CGFloat, enabled: Bool, estimate: CGFloat, navigationBar: Bool) {
+    init(
+        contentHeight: CGFloat,
+        enabled: Bool,
+        estimate: CGFloat,
+        navigationBar: Bool,
+        step: AnyHashable?,
+        stepResize: Duration?
+    ) {
         self.contentHeight = contentHeight
         self.enabled = enabled
         self.estimate = estimate
         self.navigationBar = navigationBar
+        self.step = step
+        self.stepResize = stepResize
+        // Seeded, not left nil: the first measurement to land after presentation
+        // belongs to the step the sheet opened on, not a move to a new one.
+        _lastStep = State(initialValue: step)
         // Seed with a detent the set actually contains. `.large` is not one:
         // while `enabled`, the set holds a single `.height(…)`, so a `.large`
         // seed is an invalid selection and the sheet opens full-height until
@@ -359,13 +442,55 @@ private struct ContentFitDetent: ViewModifier {
     /// Xcode, on Send's no-mints face. Keeping the old selection a member removes
     /// the race rather than narrowing it: the sheet holds its current height for
     /// that one update, then `onChange` converges it.
-    private var detents: Set<PresentationDetent> { [detent, selection] }
+    ///
+    /// Mid-resize the set additionally keeps every step's last-known height. A
+    /// selection change only animates if the set holds the height the sheet is
+    /// *currently* at for the whole animation; let a member drop the moment the
+    /// selection lands and UIKit resizes on the spot, abandoning the animation a
+    /// frame in. Measured: one intermediate height instead of twenty-plus.
+    private var detents: Set<PresentationDetent> {
+        guard stepResize != nil, moving else { return [detent, selection] }
+        return Set(knownPerStep.values).union([detent, selection])
+    }
 
     func body(content: Content) -> some View {
         content
             .presentationDetents(detents, selection: $selection)
-            .onAppear { selection = detent }
-            .onChange(of: detent) { _, newDetent in selection = newDetent }
+            .onAppear { apply(detent) }
+            .onChange(of: detent) { _, newDetent in apply(newDetent) }
+            // Keyed on the move counter so a second push/pop cancels the first
+            // one's settle instead of pruning the set out from under it.
+            .task(id: moves) {
+                guard moving, let stepResize else { return }
+                try? await Task.sleep(for: stepResize + .milliseconds(120))
+                moving = false
+            }
+    }
+
+    /// Snaps by default. A caller that opted into `stepResize` gets an animated
+    /// move, but only when the *step* changes: the height also changes as one
+    /// step's measurement settles, and that arrives while the sheet is still
+    /// sliding up, so animating it would make every content-fit sheet in the app
+    /// visibly grow as it opens.
+    private func apply(_ newDetent: PresentationDetent) {
+        defer {
+            lastStep = step
+            if stepResize != nil { knownPerStep[step] = newDetent }
+        }
+        guard let stepResize, step != lastStep, !reduceMotion else {
+            selection = newDetent
+            return
+        }
+        moving = true
+        moves += 1
+        withAnimation(.smooth(duration: stepResize.seconds)) { selection = newDetent }
+    }
+}
+
+private extension Duration {
+    /// `Animation` still speaks in seconds.
+    var seconds: Double {
+        Double(components.seconds) + Double(components.attoseconds) / 1e18
     }
 }
 

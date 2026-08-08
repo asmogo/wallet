@@ -1334,15 +1334,10 @@ struct UnifiedSendView: View {
     /// step's height and the sheet stays sized for the step just left.
     @State private var connectMintContentHeight: CGFloat = 0
 
-    /// One height across the connect-a-mint push, for the reason spelled out on
-    /// `ConnectMintSheet.contentHeight`: re-hugging each step means changing
-    /// height across a navigation transition, which either cuts the arriving
-    /// page off or makes the sheet settle and then visibly grow. `max` so a
-    /// pushed step that outgrows the input face still gets the room.
+    /// Whichever step currently owns the sheet's height — each hugs its own
+    /// content, and the resize rides the swap. See `SharedAxis`.
     private var sheetContentHeight: CGFloat {
-        connectMintRoute == nil
-            ? compactContentHeight
-            : max(compactContentHeight, connectMintContentHeight)
+        connectMintRoute == nil ? compactContentHeight : connectMintContentHeight
     }
 
     enum Step: Equatable { case input, amount, confirm, sending, sent, failed }
@@ -1383,6 +1378,16 @@ struct UnifiedSendView: View {
                         // processing → sent → failed, so PaymentStatusView owns the morph.
                         statusView(statusPhase)
                             .transition(.opacity)
+                    } else if let connectMintRoute {
+                        // Swapped in place rather than pushed: the sheet resizes
+                        // with the step, and a push lays the arriving page out at
+                        // the departing page's height. See `SharedAxis`.
+                        connectMintDestination(
+                            connectMintRoute,
+                            onAdded: { self.connectMintRoute = nil },
+                            onHeightChange: { connectMintContentHeight = $0 }
+                        )
+                        .transition(SharedAxis.transition(forward: true, reduceMotion: reduceMotion))
                     } else {
                         switch step {
                         case .input: inputContent
@@ -1401,17 +1406,18 @@ struct UnifiedSendView: View {
             .frame(maxHeight: prefersCompactSheet ? nil : .infinity, alignment: .top)
             .animation(.smooth(duration: 0.3), value: step)
             .animation(.smooth(duration: 0.3), value: locked != nil)
-            .navigationTitle("Send")
+            .navigationTitle(connectMintRoute?.navigationTitle ?? "Send")
             .navigationBarTitleDisplayMode(.inline)
-            .navigationDestination(item: $connectMintRoute) { route in
-                // Declared here rather than inside `noMintsState`: connecting a
-                // mint swaps that branch out of `inputContent`, and a destination
-                // declared inside it would be torn down mid-push.
-                connectMintDestination(
-                    route,
-                    onAdded: { connectMintRoute = nil },
-                    onHeightChange: { connectMintContentHeight = $0 }
-                )
+            .toolbar {
+                if connectMintRoute != nil {
+                    ToolbarItem(placement: .topBarLeading) {
+                        ConnectMintBackButton {
+                            withAnimation(SharedAxis.animation(reduceMotion: reduceMotion)) {
+                                connectMintRoute = nil
+                            }
+                        }
+                    }
+                }
             }
             .sheet(isPresented: $showingScanner) {
                 ScannerWrapperView(onScanned: handleScannedDestination)
@@ -1446,7 +1452,15 @@ struct UnifiedSendView: View {
         }
         // Own the sheet chrome so the detent can follow the step: compact for
         // input, `.large` + flat canvas for amount/confirm/status.
-        .contentFitDetent(sheetContentHeight, enabled: prefersCompactSheet)
+        // Keyed on the connect-a-mint step so that resize is one motion with the
+        // slide. Input → amount/confirm keeps snapping: that swap is in place
+        // and already carries its own animation.
+        .contentFitDetent(
+            sheetContentHeight,
+            enabled: prefersCompactSheet,
+            step: connectMintRoute,
+            stepResize: SharedAxis.duration
+        )
         .presentationDragIndicator(.visible)
         // A stray swipe must not tear down the flow while the melt is executing.
         .interactiveDismissDisabled(step == .sending)
