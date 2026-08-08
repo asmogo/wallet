@@ -108,8 +108,9 @@ struct SeedWordEntryField: View {
                 // inside the scroll fade and read as clipped (device review
                 // 2026-08-08).
                 HStack(alignment: .center, spacing: SeedEntryMetrics.railToCard) {
+                    // The rail owns its haptics — touch acknowledgment and
+                    // per-word ticks are its voice, not the host's.
                     SeedWordProgressRail(entry: entry) { slot in
-                        HapticFeedback.selection()
                         entry.jump(to: slot)
                         isFocused = true
                     }
@@ -317,6 +318,10 @@ private struct SeedWordProgressRail: View {
         .overlay {
             RailGestureSurface(
                 onTap: { y in
+                    // The impact is the "this is a control" hint — every touch
+                    // of the rail answers physically, even a tap on the tick
+                    // that is already focused.
+                    HapticFeedback.impact(.light)
                     onSelect(slot(at: y - SeedEntryMetrics.railCaptureInset))
                 },
                 onScrubBegan: { y in beginScrub(at: y - SeedEntryMetrics.railCaptureInset) },
@@ -342,23 +347,22 @@ private struct SeedWordProgressRail: View {
         min(max(Int(y / SeedEntryMetrics.railSlot), 0), SeedPhraseEntry.wordCount - 1)
     }
 
-    /// Engagement must always be felt: if the hold starts on the focused word
-    /// there is nothing to jump to, so the tick comes from here instead of
-    /// `onSelect`. Never both — that would double the haptic.
+    /// Two haptic voices, deliberately distinct: an *impact* when the finger
+    /// engages the rail (tap or hold) — the "you've grabbed a control" cue —
+    /// and the subtler *selection* tick for each word change while scrubbing.
+    /// One voice per event, never both.
     private func beginScrub(at y: CGFloat) {
+        HapticFeedback.impact(.light)
         let target = slot(at: y)
-        if target == entry.index {
-            HapticFeedback.selection()
-        } else {
-            onSelect(target)
-        }
+        guard target != entry.index else { return }
+        onSelect(target)
     }
 
-    /// One `onSelect` per *word change*, not per drag sample — the parent fires
-    /// a selection haptic on each call, and that is the per-word tick.
+    /// One tick per *word change*, not per drag sample.
     private func continueScrub(at y: CGFloat) {
         let target = slot(at: y)
         guard target != entry.index else { return }
+        HapticFeedback.selection()
         onSelect(target)
     }
 
@@ -498,7 +502,12 @@ private struct RailGestureSurface: UIViewRepresentable {
         let hold = UILongPressGestureRecognizer(
             target: context.coordinator, action: #selector(Coordinator.held(_:))
         )
-        hold.minimumPressDuration = 0.25
+        // 0.15s, not the 0.5s context-menu default: this is a drag-engagement
+        // affordance, and the floor is UIScrollView's own ~150ms tap-vs-scroll
+        // window. Cheap to be aggressive here — a slow tap that crosses the
+        // threshold becomes a scrub-begin at the same tick, which jumps to
+        // that word: the identical outcome the tap would have had.
+        hold.minimumPressDuration = 0.15
         // A resting thumb wobbles; the default 10pt fails the hold for drift
         // that the user never perceives as movement.
         hold.allowableMovement = 24

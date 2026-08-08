@@ -245,8 +245,9 @@ fun SeedWordEntryField(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(RailToCard),
             ) {
+                // The rail owns its haptics — touch acknowledgment and
+                // per-word ticks are its voice, not the host's.
                 SeedWordProgressRail(entry = state.entry) { slot ->
-                    haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                     state.entry = state.entry.jump(slot)
                 }
                 Column(
@@ -445,6 +446,11 @@ private fun CardHeight(): Dp {
  *  green appears only once the whole phrase is in. */
 @Composable
 private fun SeedWordProgressRail(entry: SeedPhraseEntry, onSelect: (Int) -> Unit) {
+    // Two haptic voices, deliberately distinct: ContextClick when the finger
+    // engages the rail (tap or hold) — the "you've grabbed a control" cue —
+    // and SegmentTick for each word change while scrubbing, which is exactly
+    // the discrete-segment scrub that constant was designed for.
+    val haptics = LocalHapticFeedback.current
     val jumpActions = remember(entry.index) {
         listOf(
             CustomAccessibilityAction("Previous word") {
@@ -466,22 +472,28 @@ private fun SeedWordProgressRail(entry: SeedPhraseEntry, onSelect: (Int) -> Unit
             // the way of both quick taps and the enclosing scroll, and a
             // merged semantics node full of child click actions was mud.
             .pointerInput(Unit) {
-                detectTapGestures { offset -> onSelect(slotAt(offset.y)) }
+                detectTapGestures { offset ->
+                    // The engage cue fires on every touch — the hint that this
+                    // is a control, even tapping the tick already focused.
+                    haptics.performHapticFeedback(HapticFeedbackType.ContextClick)
+                    onSelect(slotAt(offset.y))
+                }
             }
             .pointerInput(Unit) {
                 var last = -1
                 detectDragGesturesAfterLongPress(
                     onDragStart = { offset ->
+                        haptics.performHapticFeedback(HapticFeedbackType.ContextClick)
                         last = slotAt(offset.y)
                         onSelect(last)
                     },
                     onDrag = { change, _ ->
                         change.consume()
                         val slot = slotAt(change.position.y)
-                        // One onSelect per *word change*, not per drag sample —
-                        // the caller's haptic is the per-word tick.
+                        // One tick per *word change*, not per drag sample.
                         if (slot != last) {
                             last = slot
+                            haptics.performHapticFeedback(HapticFeedbackType.SegmentTick)
                             onSelect(slot)
                         }
                     },
