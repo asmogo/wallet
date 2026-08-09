@@ -88,11 +88,14 @@ struct OnboardingView: View {
     // offscreen pass. Mirrors the web's `<Reveal immediate variant="fade" slow
     // delay={480}>`.
     @State private var asciiFieldEntered = false
-    /// The mask's target extent: 1 on welcome (the field runs tall, clear
-    /// only behind the header), 0 on restoreMethod (the classic bottom band).
-    /// Steps outside the pair leave it untouched — the exit is opacity-only,
-    /// and the mask must not morph mid-fade. Welcome is the first step.
-    @State private var asciiFieldExtent: CGFloat = 1
+    /// The field's material morph: 0 on welcome (the tall terrain), 1 on
+    /// restoreMethod (the vault door — restoring is opening your vault). Each
+    /// cell's brightness lerps between the two fields through the shared
+    /// glyph ramp, riding the step transaction, so the landscape deforms into
+    /// the vault instead of crossfading. Steps outside the pair leave it
+    /// untouched — the exit is opacity-only, and the field must not morph
+    /// mid-fade. Welcome is the first step.
+    @State private var asciiFieldVaultMix: CGFloat = 0
 
     // Per-step entrance animation triggers
     @State private var welcomeAppeared = false
@@ -204,16 +207,17 @@ struct OnboardingView: View {
     private static let asciiFieldStaticTime: Double? =
         ProcessInfo.processInfo.environment["ASCII_FIELD_STATIC_TIME"].flatMap(Double.init)
 
-    /// The terrain layer, mounted once here at the root rather than inside
+    /// The field layer, mounted once here at the root rather than inside
     /// the stages. Welcome and Restore Wallet are *adjacent* steps; mounted
     /// per-stage the field would unmount and materialize-blur on that swap,
     /// and the two screens would read as two separate wallpapers that happen
-    /// to match. Hoisted, the terrain keeps drifting while its *mask* settles
-    /// between the pair's two extents — tall on welcome, the classic band on
-    /// restoreMethod — one continuous space whose visible reach is the cue
-    /// that the screen changed. Visibility is opacity only: leaving the pair
-    /// fades over the existing 0.28s step transition (the clock pauses);
-    /// returning fades back in and resumes from wall-clock.
+    /// to match. Hoisted, the field keeps its clock and its glyph grid while
+    /// its *material* morphs between the pair — welcome's tall terrain
+    /// deforms into restoreMethod's vault door and back, one continuous
+    /// space whose substance is the cue that the screen changed. Visibility
+    /// is opacity only: leaving the pair fades over the existing 0.28s step
+    /// transition (the clock pauses); returning fades back in and resumes
+    /// from wall-clock.
     ///
     /// The layer ignores the keyboard's safe area, and that is load-bearing:
     /// with the keyboard's inset in play, a raised keyboard collapses
@@ -252,25 +256,29 @@ struct OnboardingView: View {
                 headerClearance: AsciiFieldLayout.headerClearance()
             )
             let visible = resolved != nil && stepShowsAsciiField && asciiFieldEntered
-            // The driver interpolates the extent through the step transaction
-            // (SwiftUI can't animate gradient stops itself), rebuilding the
-            // mask and the renderer's cull with each frame. The layer's frame
-            // never changes — only where the mask lets the terrain show.
-            AsciiFieldMaskDriver(extent: asciiFieldExtent) { extent in
+            // The driver interpolates the morph through the step transaction
+            // (SwiftUI can't animate gradient stops or the renderer's
+            // brightness lerp itself), rebuilding the mask and the
+            // terrain→vault mix with each frame. The layer's frame never
+            // changes; the mask's clear line never moves (both modes are
+            // transparent through the header block), so the cull is constant.
+            AsciiFieldMorphDriver(vaultMix: asciiFieldVaultMix) { vaultMix in
                 AsciiFieldView(
                     staticTime: Self.asciiFieldStaticTime,
                     active: stepShowsAsciiField && !showConceptSheet && resolved != nil,
-                    topCull: layout.transparentStart(extent: extent)
+                    topCull: layout.transparentStart(extent: 1),
+                    vaultMix: Double(vaultMix),
+                    vaultCenterY: Double(layout.vaultCenterY)
                 )
-                // Clear above the extent's boundary — behind the header on
-                // welcome, down to the band top on restoreMethod — ramping to
-                // opaque; then opaque → floor across the chassis edge, so the
-                // terrain dims toward the buttons and keeps running — very
-                // subtle — behind their glass all the way to the window
-                // bottom. Continuous gradients, never stepped, so neither
-                // fade bands.
+                // Clear behind the header block on both steps, ramping to
+                // opaque — the long welcome ramp shortening to end at the
+                // vault's top edge as the morph settles; then opaque → floor
+                // across the chassis edge, so the field dims toward the
+                // buttons and keeps running — very subtle — behind their
+                // glass all the way to the window bottom. Continuous
+                // gradients, never stepped, so neither fade bands.
                 .mask {
-                    let stops = layout.maskStops(extent: extent)
+                    let stops = layout.morphedMaskStops(vaultMix: vaultMix)
                     LinearGradient(
                         stops: [
                             .init(color: .clear, location: 0),
@@ -291,9 +299,9 @@ struct OnboardingView: View {
                     )
                 }
             }
-            // Reduce Motion snaps the mask between its end states (the pair
-            // still reads differently — the resting extents differ); UI-test
-            // and static-evidence launches must never animate it.
+            // Reduce Motion snaps the morph between its end states (the pair
+            // still reads differently — terrain vs vault); UI-test and
+            // static-evidence launches must never animate it.
             .transaction { t in
                 if reduceMotion || IntegrationTestConfig.shouldDisableAnimations
                     || Self.asciiFieldStaticTime != nil {
@@ -348,7 +356,7 @@ struct OnboardingView: View {
         resetAppeared(for: step)
         withAnimation(.easeInOut(duration: 0.28)) {
             currentStep = step
-            applyAsciiFieldExtent(for: step)
+            applyAsciiFieldMorph(for: step)
         }
     }
 
@@ -356,17 +364,18 @@ struct OnboardingView: View {
         resetAppeared(for: step)
         withAnimation(.easeInOut(duration: 0.28)) {
             currentStep = step
-            applyAsciiFieldExtent(for: step)
+            applyAsciiFieldMorph(for: step)
         }
     }
 
-    /// The field's settle rides the same transaction as the step change: full
-    /// on welcome, band on restoreMethod — the one large motion that makes
-    /// the swap between the pair's otherwise identical skeletons legible.
-    private func applyAsciiFieldExtent(for step: OnboardingStep) {
+    /// The field's morph rides the same transaction as the step change:
+    /// terrain on welcome, the vault on restoreMethod — the one large motion
+    /// that makes the swap between the pair's otherwise identical skeletons
+    /// unmistakable.
+    private func applyAsciiFieldMorph(for step: OnboardingStep) {
         switch step {
-        case .welcome: asciiFieldExtent = 1
-        case .restoreMethod: asciiFieldExtent = 0
+        case .welcome: asciiFieldVaultMix = 0
+        case .restoreMethod: asciiFieldVaultMix = 1
         default: break
         }
     }

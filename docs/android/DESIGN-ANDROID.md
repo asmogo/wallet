@@ -149,11 +149,17 @@ like a port, make the Android-native choice instead.
   `transitionSpec` is untouched and plays unseen beneath it (plan 008 stays
   orthogonal); under Reduce Motion the curtain never mounts and the gate
   crossfade is the entire transition. The welcome ⇄ restoreMethod pair's
-  screen-change cue is the ASCII backdrop's **mask extent settle**
-  (`OnboardingAsciiBackdrop`): the full-window layer never moves; the
-  gradient's two top stops lerp between welcome's tall extent and restore's
-  band on `motionScheme.defaultSpatialSpec`, snapping under Reduce Motion —
-  the iOS register is the step's own `.easeInOut(0.28)` transaction.
+  screen-change cue is the ASCII backdrop's **vault morph**
+  (`OnboardingAsciiBackdrop`, 2026-08-09, superseding that morning's extent
+  settle): the full-window layer never moves; one 0…1 scalar on
+  `motionScheme.defaultSpatialSpec` lerps every cell's brightness between
+  welcome's tall terrain and restore's vault door (`AsciiFieldVault` — rings,
+  spokes, ₿ bolts, ₿ monogram stencil; parity-pinned by
+  `AsciiFieldVaultTest` against vectors from the design mock's Python) and
+  shortens the mask's opaque ramp to end at the door's top edge; the clear
+  line behind the header never moves, and the whole thing snaps under Reduce
+  Motion — the iOS register is the step's own `.easeInOut(0.28)` transaction.
+  Band mode survives in `AsciiFieldLayout` as math and tests only.
 - **Onboarding system back (2026-08-05):** `OnboardingScreen` registers a
   `BackHandler` mirroring the on-screen back buttons exactly (seed reveal →
   welcome, method chooser → welcome, seed entry → welcome, mint staging →

@@ -1407,7 +1407,7 @@ docs/android/DESIGN-ANDROID.md rather than copying the tween values:
 | CTA content change (label ⇄ label ⇄ spinner) | blur 0→2, opacity 1→0, ~160 ms ease-out | blur 2→0, opacity 0→1, ~260 ms `.smooth` (Android also scales 0.96→1) |
 | CTA slot occupancy / style | opacity alone | scale 0.96→1, blur 4→0, opacity 0→1, on the step's own `.easeInOut(0.28)` (Android: M3 `defaultSpatialSpec` height spring, blur 3) |
 | Press feedback | existing 0.97 scale, `.snappy(0.09)` down / `.snappy(0.18)` up | — |
-| ASCII field mask extent (welcome ⇄ restoreMethod) | settles full → band riding the step's own `.easeInOut(0.28)` (Android: `defaultSpatialSpec`) | grows band → full on retreat, same transaction; Reduce Motion snaps — the end states differ, so the swap stays legible without motion |
+| ASCII field vault morph (welcome ⇄ restoreMethod) | terrain deforms into the vault door riding the step's own `.easeInOut(0.28)` (Android: `defaultSpatialSpec`) — per-cell brightness lerp, never a crossfade; the mask's opaque ramp shortens to end at the door's top edge in the same scalar | vault dissolves back into terrain on retreat, same transaction; Reduce Motion snaps — the end states differ (terrain vs vault), so the swap stays legible without motion |
 
 Three notes on that table, all added by the 2026-08-06 button-morph pass:
 
@@ -1430,17 +1430,28 @@ Three notes on that table, all added by the 2026-08-06 button-morph pass:
 The welcome stage carries **no figurative ambient piece**: the note ↔ token
 morph that shipped with the restyle was cut on 2026-08-05 (user-directed) — an
 idle loop earning nothing after the first launch. What it carries instead is
-the **ASCII terrain field** as texture, and since 2026-08-09 the field is the
-pair's screen-change cue: on welcome it runs tall — clear behind the header,
-a long fade to opaque, filling the stage's slack — and on restoreMethod it
-drops to the classic bottom band (`clamp(160, 0.26·window, 300)`). The drawn
-layer is full-window on **both** steps and never moves (glyph positions are a
-function of layer size — a resizing layer would make the texture swim and
-re-hash); only the gradient mask's extent settles between the two stop-sets,
-riding the step transaction per the table above. `AsciiFieldLayout` on each
-platform is the single statement of that geometry, pinned by
-`AsciiFieldLayoutTests` / `AsciiFieldLayoutTest` and the compose
-layout-invariant test.
+the **ASCII terrain field** as texture — on welcome it runs tall: clear
+behind the header, a long fade to opaque, filling the stage's slack. Since
+2026-08-09 (second pass, same day as the extent settle it supersedes) the
+pair's screen-change cue is the field's **material**: on restoreMethod the
+terrain morphs into a **vault door** (`AsciiFieldVault` — rings, spokes, ₿
+bolts, and a ₿ monogram as a procedural brightness field through the same
+glyph ramp, its ink modulated by the live terrain field itself so the
+ridgelines keep crawling through the door's structure; the brief §4 amendment
+is the sanctioned exception that permits it). The drawn layer is full-window on **both** steps and never
+moves (glyph positions are a function of layer size — a resizing layer would
+make the texture swim and re-hash); one 0…1 morph scalar riding the step
+transaction lerps every cell's brightness terrain → vault and shortens the
+mask's opaque ramp to end at the door's top edge — the clear line behind the
+header never moves. Band mode (the old restoreMethod bottom band) survives in
+`AsciiFieldLayout` as pure math and tests; no step rests on it. The vault is
+authored at fixed size (outer ring r146, reach 157 grid units), centered in
+the free region between header clearance and chassis, and does not scale with
+the window. `AsciiFieldLayout` / `AsciiFieldVault` on each platform are the
+single statements of that geometry and material, pinned by
+`AsciiFieldLayoutTests` / `AsciiFieldLayoutTest`, the vault parity vectors
+(`AsciiFieldVaultTests` / `AsciiFieldVaultTest` — generated from the design
+mock's Python), and the compose layout-invariant test.
 
 Exits stay subtler than entrances throughout (the carve-out above). The
 layout grammar (revised by design review 2026-08-05): **every** step, welcome

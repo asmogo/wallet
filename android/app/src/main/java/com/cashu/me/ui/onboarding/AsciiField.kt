@@ -49,6 +49,9 @@ import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.testTag
 import com.cashu.me.ui.testing.UiTestTags
 import com.cashu.me.ui.theme.rememberReducedMotion
+import kotlin.math.PI
+import kotlin.math.abs
+import kotlin.math.atan2
 import kotlin.math.ceil
 import kotlin.math.cos
 import kotlin.math.exp
@@ -186,6 +189,164 @@ internal object AsciiFieldTerrain {
         val hash = (col * 31) xor (row * 17)
         val mixed = (hash xor (hash ushr 13)) * 1274126177
         return (mixed.toUInt() % 3u).toInt()
+    }
+
+    /** Continuous-brightness variants for the vault morph: the terrain→vault
+     * lerp produces fractional brightness, and rounding it first would add a
+     * second platform-sensitive rounding step for no visual gain. Threshold
+     * semantics are identical to the [Int] originals. */
+    fun pickLevel(b: Double): Int {
+        for (i in LEVEL_MIN.indices.reversed()) {
+            if (b >= LEVEL_MIN[i]) return i
+        }
+        return -1
+    }
+
+    fun displayLevel(b: Double): Int = if (b >= PEAK_BOOST_MIN) PEAK_LEVEL else pickLevel(b)
+}
+
+// ---------------------------------------------------------------------------
+// The Restore Wallet screen's material: a procedural vault door rendered
+// through the same glyph ramp and thresholds as the terrain, its ink
+// modulated by the live terrain field itself — a brightness field, not an
+// image, and never a still one. Rings, spokes, and bolts are
+// distance functions; the central ₿ monogram is a tiny hand-authored stencil
+// (a shared fixture, like the warp vectors — never an asset). The step morph
+// lerps this field against the terrain per cell, so the landscape *deforms*
+// into the vault — dots condense first, ₿ bolts last — rather than
+// crossfading like a video edit.
+//
+// This is the restyle brief's one sanctioned representational image (§4
+// exception): restoring is opening your vault, and the vault is built from
+// the field's own living material on a task screen — not an illustration
+// laid on top.
+//
+// Mirrored on iOS and pinned by AsciiFieldVaultTest (vectors generated from
+// the design mock's Python, pasted identically into both test files — if a
+// port disagrees, fix the port). All geometry in grid units (dp here, points
+// on iOS), authored at fixed size: the vault does not scale with the window,
+// it only recenters.
+// ---------------------------------------------------------------------------
+internal object AsciiFieldVault {
+    /** Heavy outer door ring. */
+    const val OUTER_RADIUS = 146.0
+    const val OUTER_WIDTH = 11.0
+    const val OUTER_BRIGHTNESS = 196.0
+
+    /** Inner ring around the wheel. */
+    const val INNER_RADIUS = 92.0
+    const val INNER_WIDTH = 9.0
+    const val INNER_BRIGHTNESS = 168.0
+
+    /** Faint dotted door face, out to just past the outer ring's center line. */
+    const val FACE_RADIUS = 152.0
+    const val FACE_BRIGHTNESS = 52.0
+
+    /** Six wheel spokes, hub → inner ring, thinning with angular distance. */
+    const val SPOKE_MIN_DISTANCE = 24.0
+    const val SPOKE_MAX_DISTANCE = 96.0
+    const val SPOKE_BRIGHTNESS = 176.0
+    const val SPOKE_ARC_WIDTH = 8.0
+
+    /** Twelve rim studs between the rings — bright enough for the ₿ boost. */
+    const val BOLT_RADIUS = 121.0
+    const val BOLT_HALF_WIDTH = 8.0
+    const val BOLT_BRIGHTNESS = 212.0
+
+    /** The monogram stencil's two ink strengths. 221, not a rounder number:
+     * at [LIVE_GAIN] 0.28 the monogram shows ₿ ~83% of the time with ~8
+     * glyph trades/sec across its cells — one point lower reads $-heavy,
+     * one higher goes static (tuned against the terrain's own liveliness). */
+    const val STENCIL_PEAK_BRIGHTNESS = 221.0
+    const val STENCIL_CURRENCY_BRIGHTNESS = 202.0
+
+    /** The living ink: the vault's brightness is modulated by the *live
+     * terrain brightness at the same cell*, so the landing screen's
+     * ridgelines keep crawling through the door's structure. The terrain's
+     * motion is its contour cliffs (the mod-spacing discontinuity), which no
+     * amount of smooth noise shimmer reproduces — borrowing the terrain
+     * field wholesale is what makes the vault move exactly like Welcome. */
+    const val LIVE_GAIN = 0.28
+    const val LIVE_PIVOT = 128.0
+
+    /** Past this distance the field is the living ink alone, whose maximum
+     * 0.28·(255−128) = 35.6 sits under the first draw threshold — nothing
+     * ever draws, so the renderer may skip the cell outright when the morph
+     * is fully settled. */
+    const val EXTENT_RADIUS = OUTER_RADIUS + OUTER_WIDTH
+
+    /** The central ₿ monogram, cell-aligned to the vault center: 2 = peak
+     * ink, 1 = currency-strength ink. Hand-authored against the real cell
+     * metrics (12×14) — edit only alongside the mock render and the parity
+     * vectors. */
+    const val STENCIL_COLS = 9
+    const val STENCIL_ROWS = 11
+    private val STENCIL_ART = listOf(
+        "....2....",
+        ".222222..",
+        ".2....22.",
+        ".2.....2.",
+        ".2....22.",
+        ".222222..",
+        ".2....22.",
+        ".2.....2.",
+        ".2....22.",
+        ".222222..",
+        "....2....",
+    )
+    private val STENCIL_BOOST: Array<DoubleArray> = Array(STENCIL_ROWS) { row ->
+        DoubleArray(STENCIL_COLS) { col ->
+            when (STENCIL_ART[row][col]) {
+                '2' -> STENCIL_PEAK_BRIGHTNESS
+                '1' -> STENCIL_CURRENCY_BRIGHTNESS
+                else -> 0.0
+            }
+        }
+    }
+
+    private fun ringProfile(d: Double, radius: Double, width: Double): Double =
+        max(0.0, 1.0 - abs(d - radius) / width)
+
+    /** Brightness at grid point (px, py) for a vault centered at
+     * (centerX, centerY). Same output domain as the terrain's brightness, so
+     * the two lerp per cell and share one glyph ramp. */
+    fun brightness(px: Double, py: Double, centerX: Double, centerY: Double, t: Double): Double {
+        val dx = px - centerX
+        val dy = py - centerY
+        val d = sqrt(dx * dx + dy * dy)
+        var b = 0.0
+        if (d < FACE_RADIUS) b = FACE_BRIGHTNESS
+        b = max(b, OUTER_BRIGHTNESS * ringProfile(d, OUTER_RADIUS, OUTER_WIDTH))
+        b = max(b, INNER_BRIGHTNESS * ringProfile(d, INNER_RADIUS, INNER_WIDTH))
+        // `ang + π` is never negative (atan2 ∈ [−π, π]), so Kotlin's
+        // truncating `%` matches Python/Swift here.
+        val ang = atan2(dy, dx)
+        if (d > SPOKE_MIN_DISTANCE && d < SPOKE_MAX_DISTANCE) {
+            val a = (ang + PI) % (PI / 3)
+            val arc = min(a, PI / 3 - a) * d
+            b = max(b, SPOKE_BRIGHTNESS * max(0.0, 1.0 - arc / SPOKE_ARC_WIDTH))
+        }
+        val a12 = (ang + PI) % (PI / 6)
+        val boltArc = min(a12, PI / 6 - a12) * BOLT_RADIUS
+        val boltD = sqrt((d - BOLT_RADIUS) * (d - BOLT_RADIUS) + boltArc * boltArc)
+        if (boltD < BOLT_HALF_WIDTH) b = max(b, BOLT_BRIGHTNESS)
+        // Stencil index rounds half toward +∞ (floor(v + 0.5)) — the same
+        // convention as `roundToInt`, spelled out so it visibly matches the
+        // Swift port, which must NOT use its half-away `.rounded()`. The
+        // parity vectors include both boundary signs to catch exactly that.
+        val col = floor(dx / AsciiFieldTerrain.CELL_W + 0.5).toInt() + STENCIL_COLS / 2
+        val row = floor(dy / AsciiFieldTerrain.CELL_H + 0.5).toInt() + STENCIL_ROWS / 2
+        if (row in 0 until STENCIL_ROWS && col in 0 until STENCIL_COLS) {
+            b = max(b, STENCIL_BOOST[row][col])
+        }
+        // Same cell→noise mapping the renderer uses for the terrain itself,
+        // so a warped vault sample rides the identical warped terrain sample.
+        val tb = AsciiFieldTerrain.brightness(
+            px / AsciiFieldTerrain.CELL_W * AsciiFieldTerrain.TERRAIN_SCALE,
+            py / AsciiFieldTerrain.CELL_H * AsciiFieldTerrain.TERRAIN_SCALE,
+            t,
+        ).toDouble()
+        return b + LIVE_GAIN * (tb - LIVE_PIVOT)
     }
 }
 
@@ -365,12 +526,13 @@ internal class AsciiFieldWarpTouch {
  * The drawn layer always spans the full window, on both steps of the pair:
  * glyph positions (and the currency hash keyed on them) are a function of
  * layer size, so a layer that resized between steps would make the whole
- * texture swim and re-hash mid-transition. What differs per step is only the
- * *mask*. Welcome runs the field tall — clear behind the header block, then a
- * long ramp to opaque — and Restore Wallet shows the classic bottom band. The
- * settle between the two stop-sets, driven by a single 0…1 extent riding the
- * stage swap, is the cue that the screen changed; the terrain itself never
- * moves and never re-hashes.
+ * texture swim and re-hash mid-transition. What differs per step is the
+ * field's *material* — Welcome's tall terrain vs Restore Wallet's vault door
+ * (see AsciiFieldVault) — plus the mask's opaque ramp, which shortens from
+ * the long welcome fade to end at the vault's top edge; both ride a single
+ * 0…1 morph on the stage swap. The clear line behind the header never moves,
+ * and the glyph grid never moves and never re-hashes. (Band mode — extent 0 —
+ * survives as pure math and its tests; no step rests on it anymore.)
  *
  * The field terminates through its mask, not through occlusion: the bottom
  * fade begins above the chassis edge and settles onto a faint floor a little
@@ -433,6 +595,13 @@ internal object AsciiFieldLayout {
         val bottomFadeStart: Float,
         /** …completing slightly past the chassis edge, behind the buttons. */
         val bottomFadeEnd: Float,
+        /** Vault mode (Restore Wallet): the ramp completes by the vault's top
+         * edge so nothing of the door is dimmed — a shorter ramp than full
+         * mode's, same clear line behind the header. */
+        val vaultOpaqueEnd: Float,
+        /** The vault's center, dp from the layer top: the middle of the empty
+         * region between the header block and the chassis. */
+        val vaultCenterY: Float,
     ) {
         /** The extent-dependent stops, lerped. Clamped because a bouncy
          * spatial spring overshoots its 0…1 target transiently. */
@@ -441,6 +610,19 @@ internal object AsciiFieldLayout {
             return MaskStops(
                 clearEnd = bandClearEnd + (fullClearEnd - bandClearEnd) * e,
                 opaqueEnd = bandOpaqueEnd + (fullOpaqueEnd - bandOpaqueEnd) * e,
+            )
+        }
+
+        /** The stops the live pair actually renders: full mode (Welcome's
+         * tall terrain) lerped toward vault mode by the morph. The clear line
+         * never moves — both modes are transparent through the header block —
+         * so the cull is constant across the whole morph. */
+        fun morphedMaskStops(vaultMix: Float): MaskStops {
+            val m = vaultMix.coerceIn(0f, 1f)
+            val full = maskStops(1f)
+            return MaskStops(
+                clearEnd = full.clearEnd,
+                opaqueEnd = full.opaqueEnd + (vaultOpaqueEnd - full.opaqueEnd) * m,
             )
         }
 
@@ -499,6 +681,12 @@ internal object AsciiFieldLayout {
         // becomes a no-op rather than inverting direction.
         val fullClearEnd = min((topInset + headerClearance) / height, bandClearEnd)
         val fullOpaqueEnd = min(fullClearEnd + FULL_FADE, bandOpaqueEnd)
+        // The vault floats in the middle of the free region. Its mask ramp
+        // must be done by the door's top edge; on cramped windows the door
+        // reaches the header clearance line and the ramp degrades to a hard
+        // edge there rather than dimming the ring.
+        val vaultCenterY = (topInset + headerClearance + height - chassisHeight) / 2
+        val vaultTop = (vaultCenterY - AsciiFieldVault.EXTENT_RADIUS.toFloat()) / height
         return Resolution(
             visibleBand = band,
             layerHeight = height,
@@ -508,6 +696,8 @@ internal object AsciiFieldLayout {
             fullOpaqueEnd = fullOpaqueEnd,
             bottomFadeStart = (height - chassisHeight - BOTTOM_FADE_REACH) / height,
             bottomFadeEnd = (height - chassisHeight + min(BOTTOM_FADE_UNDERLAP, chassisHeight)) / height,
+            vaultOpaqueEnd = max(fullClearEnd, min(vaultTop, fullOpaqueEnd)),
+            vaultCenterY = vaultCenterY,
         )
     }
 
@@ -549,11 +739,12 @@ internal object AsciiFieldLayout {
  * identity — and with it the wall clock — must survive, or a pass through a
  * suppressed layout would replay from t=0.
  *
- * @param expanded True on Welcome (mask extent 1 — the tall field), false on
- *   Restore Wallet (extent 0 — the band). The settle rides the spatial spec;
- *   Reduce Motion and frozen goldens snap between the end states. Steps
- *   outside the pair hold the last value — the exit is opacity-only, and the
- *   mask must not morph mid-fade.
+ * @param vault True on Restore Wallet (the field's brightness morphs into the
+ *   vault door — restoring is opening your vault), false on Welcome (the tall
+ *   terrain). The morph rides the spatial spec; Reduce Motion and frozen
+ *   goldens snap between the end states. Steps outside the pair hold the
+ *   last value — the exit is opacity-only, and the field must not morph
+ *   mid-fade.
  * @param chassisHeightPx Measured height of the chassis this layer runs
  *   under. Constant across the welcome/restore pair (two capsules, no
  *   accessory), so the terrain cannot shift on that swap.
@@ -561,7 +752,7 @@ internal object AsciiFieldLayout {
 @Composable
 internal fun OnboardingAsciiBackdrop(
     visible: Boolean,
-    expanded: Boolean,
+    vault: Boolean,
     conceptSheetOpen: Boolean,
     chassisHeightPx: Int,
     modifier: Modifier = Modifier,
@@ -597,20 +788,21 @@ internal fun OnboardingAsciiBackdrop(
         )
         val shouldShow = visible && resolved != null
 
-        // The mask's extent, 0 (band) … 1 (full). Initialized at the target —
-        // a frozen (staticTime) golden must show the step's resting mask on
-        // its very first frame — and animated on the spatial spec, the same
-        // register the stage swap's scale rides, so the settle and the text
-        // materialize read as one gesture. Reduce Motion snaps: the end
-        // states differ, so the step change stays legible without motion.
-        val extent = remember { Animatable(if (expanded) 1f else 0f) }
-        val maskSpec = MaterialTheme.motionScheme.defaultSpatialSpec<Float>()
-        LaunchedEffect(expanded, reducedMotion) {
-            val target = if (expanded) 1f else 0f
+        // The material morph, 0 (terrain) … 1 (vault). Initialized at the
+        // target — a frozen (staticTime) golden must show the step's resting
+        // material on its very first frame — and animated on the spatial
+        // spec, the same register the stage swap's scale rides, so the morph
+        // and the text materialize read as one gesture. Reduce Motion snaps:
+        // the end states differ (terrain vs vault), so the step change stays
+        // legible without motion.
+        val vaultMix = remember { Animatable(if (vault) 1f else 0f) }
+        val morphSpec = MaterialTheme.motionScheme.defaultSpatialSpec<Float>()
+        LaunchedEffect(vault, reducedMotion) {
+            val target = if (vault) 1f else 0f
             if (staticTime != null || reducedMotion) {
-                extent.snapTo(target)
+                vaultMix.snapTo(target)
             } else {
-                extent.animateTo(target, maskSpec)
+                vaultMix.animateTo(target, morphSpec)
             }
         }
 
@@ -647,15 +839,18 @@ internal fun OnboardingAsciiBackdrop(
             staticTime = staticTime,
             active = visible && !conceptSheetOpen && resolved != null,
             forceSynthesizedPeak = forceSynthesizedPeak,
-            extentTarget = if (expanded) 1f else 0f,
+            vaultTarget = if (vault) 1f else 0f,
+            // The morph, read in the draw scope like erosion, so each
+            // animated value repaints without recomposing.
+            vaultMix = { vaultMix.value.toDouble() },
+            vaultCenterYDp = layout.vaultCenterY,
             // Rows above the mask's fully-transparent boundary are skipped
-            // rather than computed-then-erased — Restore keeps the band's
-            // cost while Welcome pays for the tall field. A lambda read in
-            // the draw scope, like erosion, so the settle repaints without
-            // recomposing.
-            topCullDp = { layout.transparentStartDp(extent.value) },
+            // rather than computed-then-erased. The clear line sits at the
+            // header clearance on both steps of the pair, so the cull is a
+            // constant of the layout.
+            topCullDp = { layout.transparentStartDp(1f) },
             // The layer spans the whole window on both steps — the glyph
-            // grid is a function of window size alone, so the settle never
+            // grid is a function of window size alone, so the morph never
             // moves or re-hashes the texture.
             modifier = Modifier
                 .fillMaxSize()
@@ -665,18 +860,18 @@ internal fun OnboardingAsciiBackdrop(
                     // first, or DstIn would knock through to the ground.
                     compositingStrategy = CompositingStrategy.Offscreen
                 }
-                // Clear above the extent's boundary — behind the header on
-                // Welcome, down to the band top on Restore Wallet — ramping
-                // to opaque; then opaque → floor across the chassis edge, so
-                // the terrain dims toward the buttons and keeps running —
-                // very subtle — behind them all the way to the window bottom.
-                // Continuous gradients, never stepped, so neither fade bands.
-                // extent is read *here*, in the draw phase, so each animated
-                // value invalidates only the draw — no recomposition per
-                // frame of the settle.
+                // Clear behind the header block on both steps, ramping to
+                // opaque — the long Welcome ramp shortening to end at the
+                // vault's top edge as the morph settles; then opaque → floor
+                // across the chassis edge, so the field dims toward the
+                // buttons and keeps running — very subtle — behind them all
+                // the way to the window bottom. Continuous gradients, never
+                // stepped, so neither fade bands. The morph is read *here*,
+                // in the draw phase, so each animated value invalidates only
+                // the draw — no recomposition per frame.
                 .drawWithContent {
                     drawContent()
-                    val stops = layout.maskStops(extent.value)
+                    val stops = layout.morphedMaskStops(vaultMix.value)
                     drawRect(
                         brush = Brush.verticalGradient(
                             0f to Color.Transparent,
@@ -716,11 +911,20 @@ internal fun AsciiField(
     active: Boolean = true,
     forceSynthesizedPeak: Boolean = false,
     touchOverride: AsciiFieldWarpTouch? = null,
-    /** The owning step's resting mask extent (1 Welcome, 0 Restore Wallet),
-     * published through semantics so the layout compose test can assert the
-     * end state each step drives without reading animation internals. Null
-     * (the handoff curtain) publishes nothing. */
-    extentTarget: Float? = null,
+    /** The owning step's resting material (0 Welcome terrain, 1 Restore
+     * Wallet vault), published through semantics so the layout compose test
+     * can assert the end state each step drives without reading animation
+     * internals. Null (the handoff curtain) publishes nothing. */
+    vaultTarget: Float? = null,
+    /** The Welcome ↔ Restore morph, 0 (terrain) → 1 (vault): each cell's
+     * brightness lerps between the two fields, so the landscape deforms into
+     * the vault through the shared glyph ramp. A draw-scope lambda like
+     * [erosion]; at 0 the draw is byte-identical to the pure terrain — the
+     * handoff curtain and the Welcome step never set it. */
+    vaultMix: () -> Double = { 0.0 },
+    /** The vault's center, dp from the layer top (the layout's vaultCenterY);
+     * x is always the layer's midline. */
+    vaultCenterYDp: Float = 0f,
     /** Dp from the layer top that are fully transparent under the owner's
      * mask — rows above are skipped rather than computed-then-erased. A
      * draw-scope lambda like [erosion], so the settle repaints without
@@ -857,7 +1061,7 @@ internal fun AsciiField(
             }
             .clearAndSetSemantics {
                 testTag = UiTestTags.OnboardingAsciiField
-                extentTarget?.let { this[AsciiFieldExtentTargetKey] = it }
+                vaultTarget?.let { this[AsciiFieldVaultTargetKey] = it }
             },
     ) {
         val t = (staticTime ?: timeState.floatValue).toDouble()
@@ -868,14 +1072,15 @@ internal fun AsciiField(
             renderer.draw(
                 canvas.nativeCanvas, size.width, size.height, t,
                 touch.x, touch.y, warpK, erosion(), topCullDp(),
+                vaultMix(), vaultCenterYDp,
             )
         }
     }
 }
 
 /** Published by the onboarding backdrop so the layout compose test can assert
- * each step's resting mask extent without reaching into animation internals. */
-internal val AsciiFieldExtentTargetKey = SemanticsPropertyKey<Float>("AsciiFieldExtentTarget")
+ * each step's resting material without reaching into animation internals. */
+internal val AsciiFieldVaultTargetKey = SemanticsPropertyKey<Float>("AsciiFieldVaultTarget")
 
 /** Wall-clock seconds for the warp envelope — monotonic, arbitrary epoch;
  * only differences are ever used. */
@@ -951,12 +1156,17 @@ internal class AsciiFieldRenderer(
         warpK: Double = 0.0,
         erosion: Double = 0.0,
         topCullDp: Float = 0f,
+        vaultMix: Double = 0.0,
+        vaultCenterYDp: Float = 0f,
     ) {
         val cellWPx = (AsciiFieldTerrain.CELL_W * density).toFloat()
         val cellHPx = (AsciiFieldTerrain.CELL_H * density).toFloat()
         val cols = ceil(widthPx / cellWPx).toInt() + 1
         val rows = ceil(heightPx / cellHPx).toInt() + 1
         val startRow = min(rows, AsciiFieldLayout.cullStartRow(topCullDp))
+        val vaultCenterX = widthPx / density / 2.0
+        val vaultCenterY = vaultCenterYDp.toDouble()
+        val vaultReachSquared = AsciiFieldVault.EXTENT_RADIUS * AsciiFieldVault.EXTENT_RADIUS
 
         for (bucket in buckets) bucket.clear()
         for (row in startRow until rows) {
@@ -966,8 +1176,13 @@ internal class AsciiFieldRenderer(
             // both ports feed identical numbers into the shared math.
             val cyDp = (row + 0.5) * AsciiFieldTerrain.CELL_H
             for (col in 0 until cols) {
+                val cxDp = (col + 0.5) * AsciiFieldTerrain.CELL_W
                 var sampleX = (col + 0.5) * AsciiFieldTerrain.TERRAIN_SCALE
                 var sampleY = sy
+                // The vault samples on the dp grid; the warp displaces its
+                // sampling exactly as it displaces the terrain's.
+                var warpedXDp = cxDp
+                var warpedYDp = cyDp
                 if (warpK > 0) {
                     // Samples are displaced *toward* the finger: the inverse
                     // mapping moves the visible terrain away from it — a
@@ -977,7 +1192,6 @@ internal class AsciiFieldRenderer(
                     // the terrain flows around the finger as it flees. Only
                     // sampling warps; glyph positions (and the currency hash
                     // keyed on them) never move.
-                    val cxDp = (col + 0.5) * AsciiFieldTerrain.CELL_W
                     val dx = cxDp - touchX
                     val dy = cyDp - touchY
                     val d = sqrt(dx * dx + dy * dy)
@@ -987,17 +1201,39 @@ internal class AsciiFieldRenderer(
                         val cosT = cos(theta)
                         val sinT = sin(theta)
                         val inv = f / d
-                        val shiftX = (dx * cosT - dy * sinT) * inv
-                        val shiftY = (dx * sinT + dy * cosT) * inv
-                        sampleX = (cxDp - shiftX) /
+                        warpedXDp = cxDp - (dx * cosT - dy * sinT) * inv
+                        warpedYDp = cyDp - (dx * sinT + dy * cosT) * inv
+                        sampleX = warpedXDp /
                             AsciiFieldTerrain.CELL_W * AsciiFieldTerrain.TERRAIN_SCALE
-                        sampleY = (cyDp - shiftY) /
+                        sampleY = warpedYDp /
                             AsciiFieldTerrain.CELL_H * AsciiFieldTerrain.TERRAIN_SCALE
                     }
                 }
-                val level = AsciiFieldTerrain.displayLevel(
-                    AsciiFieldTerrain.brightness(sampleX, sampleY, t),
-                )
+                val level: Int
+                if (vaultMix <= 0.0) {
+                    level = AsciiFieldTerrain.displayLevel(
+                        AsciiFieldTerrain.brightness(sampleX, sampleY, t),
+                    )
+                } else if (vaultMix >= 1.0) {
+                    // Settled vault: outside its reach the field is the
+                    // living ink alone — always below the first threshold —
+                    // so the cell is skipped before any trig runs. Restore's
+                    // steady state costs roughly the door's bounding circle.
+                    val dx = warpedXDp - vaultCenterX
+                    val dy = warpedYDp - vaultCenterY
+                    if (dx * dx + dy * dy > vaultReachSquared) continue
+                    level = AsciiFieldTerrain.displayLevel(
+                        AsciiFieldVault.brightness(warpedXDp, warpedYDp, vaultCenterX, vaultCenterY, t),
+                    )
+                } else {
+                    // Mid-morph: one brightness field lerping into the other,
+                    // per cell — the glyphs never crossfade, the landscape
+                    // deforms.
+                    val terrain = AsciiFieldTerrain.brightness(sampleX, sampleY, t).toDouble()
+                    val vault =
+                        AsciiFieldVault.brightness(warpedXDp, warpedYDp, vaultCenterX, vaultCenterY, t)
+                    level = AsciiFieldTerrain.displayLevel(terrain + (vault - terrain) * vaultMix)
+                }
                 if (level < 0) continue
                 buckets[level].add(col * cellWPx + cellWPx / 2f, py)
             }

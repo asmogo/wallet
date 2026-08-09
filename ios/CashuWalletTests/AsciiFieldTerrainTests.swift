@@ -184,6 +184,121 @@ final class AsciiFieldWarpTests: XCTestCase {
     }
 }
 
+/// Parity vectors for the vault field (mirrors Android `AsciiFieldVaultTest`).
+///
+/// Like the warp, the vault has no web original: the vectors are generated
+/// from the design mock's Python (the same script that renders the approved
+/// door) and pasted identically into both platforms' tests. If a port
+/// disagrees, fix the port — never the vector. The two half-cell boundary
+/// records exist because stencil indexing must round half toward +∞
+/// (`floor(v + 0.5)`) on both platforms; Swift's `.rounded()` and a careless
+/// Kotlin port both diverge exactly there.
+final class AsciiFieldVaultTests: XCTestCase {
+    /// (px, py, t, brightness, displayLevel) at center (195, 300). The
+    /// living ink means every record carries the terrain's contribution at
+    /// that cell and moment — levels here are one frozen frame, not resting
+    /// identities (the bolt record sits between its ₿ moments, the boundary
+    /// stencil record between its peaks).
+    private let vectors: [(Double, Double, Double, Double, Int)] = [
+        (195, 154, 2.5, 178.07999999999998, 2),   // outer ring top
+        (195, 300, 2.5, 227.44, 4),               // hub: stencil peak
+        (195, 258, 2.5, 35.48, -1),               // face fill, blinked out here
+        (243, 300, 2.5, 182.99999999999977, 2),   // horizontal spoke
+        (195, 208, 2.5, 173.88, 2),               // inner ring top
+        (287, 300, 2.5, 182.99999999999955, 2),   // inner ring on the spoke axis
+        (261, 300, 2.5, 181.87999999999968, 2),   // mid-spoke
+        (247, 248, 2.5, 37.44, -1),               // off-spoke face, blinked out
+        (316, 300, 2.5, 194.64, 2),               // bolt center, between ₿ moments
+        (309, 235, 2.5, 58.72, 0),                // between bolts
+        (195, 450, 2.5, 126.40727272727273, 1),   // face edge below the wheel
+        (30, 60, 2.5, -9.24, -1),                 // far outside: living ink alone
+        (201, 307, 0.0, 38.56, -1),               // +half-cell stencil boundary
+        (189, 293, 0.0, 207.84, 3),               // −half-cell stencil boundary
+        (219, 244, 2.5, 205.32, 3),               // stencil top bar, right reach
+        (159, 300, 2.5, 202.52, 3),               // stencil left bar
+    ]
+
+    func testVaultBrightnessMatchesParityVectors() {
+        for (px, py, t, expected, level) in vectors {
+            let b = AsciiFieldVault.brightness(px: px, py: py, centerX: 195, centerY: 300, t: t)
+            XCTAssertEqual(b, expected, accuracy: 1e-6, "vault(\(px), \(py), t=\(t))")
+            XCTAssertEqual(AsciiFieldTerrain.displayLevel(b), level, "level(\(px), \(py), t=\(t))")
+        }
+    }
+
+    /// One record through the renderer's actual morph expression: terrain
+    /// (already pinned by the web vectors) lerped against the vault at
+    /// mix 0.5. Pins the lerp's shape — `terrain + (vault − terrain) · mix` —
+    /// not just its ingredients.
+    func testMorphLerpMatchesParityVector() {
+        let terrain = Double(AsciiFieldTerrain.brightness(2.3725, 3.045714285714286, 2.5))
+        XCTAssertEqual(terrain, 151, accuracy: 1e-9)
+        let vault = AsciiFieldVault.brightness(px: 219, py: 328, centerX: 195, centerY: 300, t: 2.5)
+        XCTAssertEqual(vault, 58.44, accuracy: 1e-6)
+        let mixed = terrain + (vault - terrain) * 0.5
+        XCTAssertEqual(mixed, 104.72, accuracy: 1e-6)
+        XCTAssertEqual(AsciiFieldTerrain.displayLevel(mixed), 1)
+    }
+
+    /// The continuous-brightness level overloads must agree with the `Int`
+    /// originals at every threshold edge — they are the same ramp.
+    func testContinuousLevelsMatchIntegerThresholds() {
+        for threshold in AsciiFieldTerrain.levelMin {
+            XCTAssertEqual(
+                AsciiFieldTerrain.pickLevel(Double(threshold)),
+                AsciiFieldTerrain.pickLevel(threshold)
+            )
+            XCTAssertEqual(
+                AsciiFieldTerrain.pickLevel(Double(threshold) - 0.0001),
+                AsciiFieldTerrain.pickLevel(threshold - 1)
+            )
+        }
+        XCTAssertEqual(AsciiFieldTerrain.displayLevel(207.9999), 3)
+        XCTAssertEqual(AsciiFieldTerrain.displayLevel(208.0), 4)
+        XCTAssertEqual(AsciiFieldTerrain.displayLevel(39.9999), -1)
+    }
+
+    /// The constants both ports share; retuning is a keep-in-lockstep edit of
+    /// both platform files, the mock, and these vectors.
+    func testVaultConstantsShape() {
+        XCTAssertEqual(AsciiFieldVault.outerRadius, 146)
+        XCTAssertEqual(AsciiFieldVault.outerWidth, 11)
+        XCTAssertEqual(AsciiFieldVault.outerBrightness, 196)
+        XCTAssertEqual(AsciiFieldVault.innerRadius, 92)
+        XCTAssertEqual(AsciiFieldVault.innerWidth, 9)
+        XCTAssertEqual(AsciiFieldVault.innerBrightness, 168)
+        XCTAssertEqual(AsciiFieldVault.faceRadius, 152)
+        XCTAssertEqual(AsciiFieldVault.faceBrightness, 52)
+        XCTAssertEqual(AsciiFieldVault.spokeMinDistance, 24)
+        XCTAssertEqual(AsciiFieldVault.spokeMaxDistance, 96)
+        XCTAssertEqual(AsciiFieldVault.spokeBrightness, 176)
+        XCTAssertEqual(AsciiFieldVault.spokeArcWidth, 8)
+        XCTAssertEqual(AsciiFieldVault.boltRadius, 121)
+        XCTAssertEqual(AsciiFieldVault.boltHalfWidth, 8)
+        XCTAssertEqual(AsciiFieldVault.boltBrightness, 212)
+        XCTAssertEqual(AsciiFieldVault.stencilPeakBrightness, 221)
+        XCTAssertEqual(AsciiFieldVault.stencilCurrencyBrightness, 202)
+        XCTAssertEqual(AsciiFieldVault.liveGain, 0.28)
+        XCTAssertEqual(AsciiFieldVault.livePivot, 128)
+        XCTAssertEqual(AsciiFieldVault.extentRadius, 157)
+        XCTAssertEqual(AsciiFieldVault.stencilCols, 9)
+        XCTAssertEqual(AsciiFieldVault.stencilRows, 11)
+    }
+
+    /// Beyond the vault's reach the field is the living ink alone
+    /// (`liveGain · (terrain − livePivot)`, bounded by ±35.6), which must
+    /// stay under the first draw threshold — the renderer's settled-vault
+    /// fast path skips those cells entirely and relies on this bound.
+    func testOutsideInkNeverDraws() {
+        for step in 0..<200 {
+            let px = Double(step) * 7.3
+            let py = Double(step) * 11.1 + 1400 // far outside any vault center
+            let b = AsciiFieldVault.brightness(px: px, py: py, centerX: 0, centerY: 0, t: Double(step) * 0.17)
+            XCTAssertLessThan(abs(b), 40, "outside ink exceeded the draw threshold at step \(step)")
+        }
+    }
+}
+
 /// CPU cost of one frame's terrain pass through brightness → pickLevel →
 /// bucket. The draw side is 5 batched fills on Metal; this math is the only
 /// per-frame CPU work, and it must stay far under the 33ms frame budget at
@@ -283,6 +398,60 @@ final class AsciiFieldFrameBudgetTests: XCTestCase {
         let perFrameMs = warpedPassMs(cols: 34, rows: 68)
         XCTAssertLessThan(perFrameMs, 15, "full-window warped terrain pass took \(perFrameMs)ms per frame")
         print("AsciiField full-window warped terrain pass: \(String(format: "%.3f", perFrameMs))ms per frame (34×68 cells)")
+    }
+
+    /// The renderer's vault branches, replicated: mid-morph is the worst case
+    /// (both fields per cell); the settled vault is the cheapest (the reach
+    /// check skips everything outside the door's bounding circle).
+    private func vaultPassMs(cols: Int, rows: Int, mix: Double) -> Double {
+        var buckets = [[Double]](repeating: [], count: 5)
+        let cx = Double(cols) * 12 / 2
+        let cy = Double(rows) * 14 / 2
+        let reachSquared = AsciiFieldVault.extentRadius * AsciiFieldVault.extentRadius
+        let start = CACurrentMediaTime()
+        let frames = 100
+        for frame in 0..<frames {
+            let t = Double(frame) / 30.0 * AsciiFieldTerrain.speed
+            for level in 0..<5 { buckets[level].removeAll(keepingCapacity: true) }
+            for row in 0..<rows {
+                let sy = (Double(row) + 0.5) * AsciiFieldTerrain.terrainScale
+                let py = Double(row) * 14 + 7
+                for col in 0..<cols {
+                    let px = Double(col) * 12 + 6
+                    let level: Int
+                    if mix >= 1 {
+                        let dx = px - cx
+                        let dy = py - cy
+                        if dx * dx + dy * dy > reachSquared { continue }
+                        level = AsciiFieldTerrain.displayLevel(
+                            AsciiFieldVault.brightness(px: px, py: py, centerX: cx, centerY: cy, t: t)
+                        )
+                    } else {
+                        let terrain = Double(AsciiFieldTerrain.brightness(
+                            (Double(col) + 0.5) * AsciiFieldTerrain.terrainScale, sy, t
+                        ))
+                        let vault = AsciiFieldVault.brightness(px: px, py: py, centerX: cx, centerY: cy, t: t)
+                        level = AsciiFieldTerrain.displayLevel(terrain + (vault - terrain) * mix)
+                    }
+                    if level < 0 { continue }
+                    buckets[level].append(px)
+                    buckets[level].append(py)
+                }
+            }
+        }
+        return (CACurrentMediaTime() - start) / Double(frames) * 1000
+    }
+
+    func testMorphFrameComputationWellUnderFrameBudget() {
+        let perFrameMs = vaultPassMs(cols: 34, rows: 68, mix: 0.5)
+        XCTAssertLessThan(perFrameMs, 15, "morph pass took \(perFrameMs)ms per frame")
+        print("AsciiField mid-morph pass: \(String(format: "%.3f", perFrameMs))ms per frame (34×68 cells)")
+    }
+
+    func testSettledVaultFrameComputationWellUnderFrameBudget() {
+        let perFrameMs = vaultPassMs(cols: 34, rows: 68, mix: 1)
+        XCTAssertLessThan(perFrameMs, 15, "settled vault pass took \(perFrameMs)ms per frame")
+        print("AsciiField settled vault pass: \(String(format: "%.3f", perFrameMs))ms per frame (34×68 cells)")
     }
 }
 
@@ -424,6 +593,53 @@ final class AsciiFieldLayoutTests: XCTestCase {
             XCTAssertLessThan(layout.bottomFadeStart, layout.bottomFadeEnd, "extent \(e)")
             XCTAssertLessThanOrEqual(layout.bottomFadeEnd, 1, "extent \(e)")
         }
+    }
+
+    func testVaultModePinsCenterAndOpaqueEnd() {
+        // The vault floats in the middle of the free region between the
+        // header clearance line and the chassis edge, and the mask ramp is
+        // done by the door's top edge (center − 157). Values generated from
+        // the design mock's Python alongside the vault parity vectors.
+        let layout = phoneLayout()
+        XCTAssertEqual(layout.vaultCenterY, 443.0, accuracy: 1e-6)
+        XCTAssertEqual(layout.vaultOpaqueEnd, 0.33886255924170616, accuracy: 1e-9)
+        XCTAssertEqual(layout.fullClearEnd, 0.25829383886255924, accuracy: 1e-9)
+    }
+
+    func testMorphedStopsRunFullToVaultWithAFixedClearLine() {
+        let layout = phoneLayout()
+        let full = layout.maskStops(extent: 1)
+        let atTerrain = layout.morphedMaskStops(vaultMix: 0)
+        XCTAssertEqual(atTerrain.clearEnd, full.clearEnd, accuracy: 1e-6)
+        XCTAssertEqual(atTerrain.opaqueEnd, full.opaqueEnd, accuracy: 1e-6)
+        let atVault = layout.morphedMaskStops(vaultMix: 1)
+        XCTAssertEqual(atVault.clearEnd, full.clearEnd, accuracy: 1e-6)
+        XCTAssertEqual(atVault.opaqueEnd, layout.vaultOpaqueEnd, accuracy: 1e-6)
+        // Transient overshoot clamps rather than extrapolating.
+        XCTAssertEqual(
+            layout.morphedMaskStops(vaultMix: 1.3).opaqueEnd, atVault.opaqueEnd, accuracy: 1e-6
+        )
+        XCTAssertEqual(
+            layout.morphedMaskStops(vaultMix: -0.2).opaqueEnd, atTerrain.opaqueEnd, accuracy: 1e-6
+        )
+        // The clear line never moves — the cull is constant across the morph —
+        // and the gradient's stop order survives every point of it.
+        for m in stride(from: CGFloat(0), through: 1, by: 0.25) {
+            let stops = layout.morphedMaskStops(vaultMix: m)
+            XCTAssertEqual(stops.clearEnd, full.clearEnd, accuracy: 1e-6, "mix \(m)")
+            XCTAssertLessThanOrEqual(stops.clearEnd, stops.opaqueEnd, "mix \(m)")
+            XCTAssertLessThanOrEqual(stops.opaqueEnd, layout.bottomFadeStart, "mix \(m)")
+        }
+    }
+
+    func testVaultOpaqueEndDegradesToAHardEdgeWhenTheDoorMeetsTheHeader() {
+        // Cramped-but-not-suppressed: the door's top edge reaches above the
+        // header clearance line, and the ramp collapses onto it rather than
+        // dimming the ring.
+        let layout = AsciiFieldLayout.resolve(
+            windowHeight: 700, topInset: 20, chassisInset: 250, headerClearance: 280
+        )!
+        XCTAssertEqual(layout.vaultOpaqueEnd, layout.fullClearEnd, accuracy: 1e-6)
     }
 
     func testCullStartRowSkipsOnlyFullyMaskedRows() {

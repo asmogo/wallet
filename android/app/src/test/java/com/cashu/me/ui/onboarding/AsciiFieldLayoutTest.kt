@@ -141,6 +141,50 @@ class AsciiFieldLayoutTest {
     }
 
     @Test
+    fun vaultModePinsCenterAndOpaqueEnd() {
+        // The vault floats in the middle of the free region between the
+        // header clearance line and the chassis edge, and the mask ramp is
+        // done by the door's top edge (center − 157). Values generated from
+        // the design mock's Python alongside the vault parity vectors.
+        val layout = phoneLayout()
+        assertEquals(441.0f, layout.vaultCenterY, 1e-4f)
+        assertEquals(0.33649289f, layout.vaultOpaqueEnd, 1e-6f)
+        assertEquals(0.25355450f, layout.fullClearEnd, 1e-6f)
+    }
+
+    @Test
+    fun morphedStopsRunFullToVaultWithAFixedClearLine() {
+        val layout = phoneLayout()
+        val full = layout.maskStops(1f)
+        val atTerrain = layout.morphedMaskStops(0f)
+        assertEquals(full.clearEnd, atTerrain.clearEnd, 1e-6f)
+        assertEquals(full.opaqueEnd, atTerrain.opaqueEnd, 1e-6f)
+        val atVault = layout.morphedMaskStops(1f)
+        assertEquals(full.clearEnd, atVault.clearEnd, 1e-6f)
+        assertEquals(layout.vaultOpaqueEnd, atVault.opaqueEnd, 1e-6f)
+        // Transient overshoot clamps rather than extrapolating.
+        assertEquals(atVault.opaqueEnd, layout.morphedMaskStops(1.3f).opaqueEnd, 1e-6f)
+        assertEquals(atTerrain.opaqueEnd, layout.morphedMaskStops(-0.2f).opaqueEnd, 1e-6f)
+        // The clear line never moves — the cull is constant across the morph —
+        // and the gradient's stop order survives every point of it.
+        for (m in listOf(0f, 0.25f, 0.5f, 0.75f, 1f)) {
+            val stops = layout.morphedMaskStops(m)
+            assertEquals("mix $m", full.clearEnd, stops.clearEnd, 1e-6f)
+            assertTrue("mix $m", stops.clearEnd <= stops.opaqueEnd)
+            assertTrue("mix $m", stops.opaqueEnd <= layout.bottomFadeStart)
+        }
+    }
+
+    @Test
+    fun vaultOpaqueEndDegradesToAHardEdgeWhenTheDoorMeetsTheHeader() {
+        // Cramped-but-not-suppressed: the door's top edge reaches above the
+        // header clearance line, and the ramp collapses onto it rather than
+        // dimming the ring.
+        val layout = AsciiFieldLayout.resolve(700f, 20f, 280f, 250f)!!
+        assertEquals(layout.fullClearEnd, layout.vaultOpaqueEnd, 1e-6f)
+    }
+
+    @Test
     fun cullStartRowSkipsOnlyFullyMaskedRows() {
         // No cull at zero.
         assertEquals(0, AsciiFieldLayout.cullStartRow(0f))

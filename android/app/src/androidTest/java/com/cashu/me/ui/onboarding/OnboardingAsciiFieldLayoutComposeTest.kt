@@ -23,17 +23,18 @@ import org.junit.Test
 import org.junit.runner.RunWith
 
 /**
- * The behaviors no screenshot can catch: the terrain's full-window layer is
+ * The behaviors no screenshot can catch: the field's full-window layer is
  * identical on Welcome and Restore Wallet — the layer never moves; only the
- * mask's extent differs per step — and each step drives the extent to its
- * resting end state (1 on Welcome, 0 on Restore Wallet, held outside the
- * pair). The backdrop is composed exactly as the root wires it (visible and
- * expanded derived from the step, everything else constant), the step flips
- * across the pair and out of it, and the field's bounds must never move.
+ * material morph differs per step — and each step drives the morph to its
+ * resting end state (0 terrain on Welcome, 1 vault on Restore Wallet, held
+ * outside the pair). The backdrop is composed exactly as the root wires it
+ * (visible and vault derived from the step, everything else constant), the
+ * step flips across the pair and out of it, and the field's bounds must
+ * never move.
  *
  * Steps are modeled as the booleans the backdrop actually receives; the
  * production `OnboardingStep` is private to OnboardingScreen and the mapping
- * (Welcome/RestoreMethod → visible/expanded) is one expression covered by
+ * (Welcome/RestoreMethod → visible/vault) is one expression covered by
  * review.
  */
 @RunWith(AndroidJUnit4::class)
@@ -48,21 +49,21 @@ class OnboardingAsciiFieldLayoutComposeTest {
             .fetchSemanticsNode()
             .boundsInRoot
 
-    private fun assertExtentTarget(expected: Float) {
+    private fun assertVaultTarget(expected: Float) {
         compose.onNodeWithTag(UiTestTags.OnboardingAsciiField, useUnmergedTree = true)
-            .assert(SemanticsMatcher.expectValue(AsciiFieldExtentTargetKey, expected))
+            .assert(SemanticsMatcher.expectValue(AsciiFieldVaultTargetKey, expected))
     }
 
     @Test
-    fun fieldFrameIsIdenticalAcrossTheWelcomeRestorePairAndTheExtentTracksTheStep() {
+    fun fieldFrameIsIdenticalAcrossTheWelcomeRestorePairAndTheVaultTracksTheStep() {
         var step by mutableStateOf(Step.Welcome)
         // Mirrors the root's hold-last-value wiring: only the pair writes it.
-        var expanded by mutableStateOf(true)
+        var vault by mutableStateOf(false)
         compose.setCashuContent {
             Box(Modifier.width(390.dp).height(844.dp)) {
                 OnboardingAsciiBackdrop(
                     visible = step == Step.Welcome || step == Step.RestoreMethod,
-                    expanded = expanded,
+                    vault = vault,
                     conceptSheetOpen = false,
                     chassisHeightPx = 460,
                     staticTime = 0f,
@@ -72,27 +73,27 @@ class OnboardingAsciiFieldLayoutComposeTest {
         }
         compose.waitForIdle()
         val welcomeBounds = fieldBounds()
-        assertExtentTarget(1f)
+        assertVaultTarget(0f)
 
         step = Step.RestoreMethod
-        expanded = false
+        vault = true
         compose.waitForIdle()
         assertEquals(welcomeBounds, fieldBounds())
-        assertExtentTarget(0f)
+        assertVaultTarget(1f)
 
         // Leaving the pair only fades — the frame (and the view's identity,
         // which carries the wall clock) must survive untouched, and the
-        // extent holds so the mask never morphs mid-fade.
+        // morph holds so the material never shifts mid-fade.
         step = Step.RestoreInput
         compose.waitForIdle()
         assertEquals(welcomeBounds, fieldBounds())
-        assertExtentTarget(0f)
+        assertVaultTarget(1f)
 
         step = Step.Welcome
-        expanded = true
+        vault = false
         compose.waitForIdle()
         assertEquals(welcomeBounds, fieldBounds())
-        assertExtentTarget(1f)
+        assertVaultTarget(0f)
     }
 
     @Test
@@ -106,7 +107,7 @@ class OnboardingAsciiFieldLayoutComposeTest {
             Box(Modifier.width(390.dp).height(360.dp)) {
                 OnboardingAsciiBackdrop(
                     visible = true,
-                    expanded = true,
+                    vault = false,
                     conceptSheetOpen = false,
                     chassisHeightPx = 460,
                     staticTime = 0f,

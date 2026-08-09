@@ -229,6 +229,14 @@ This is the only genuinely new visual element and the highest-risk part. It repl
 mascot. No emoji. No shadow. No brand mark that is not already in the app. It must read as
 restrained after the tenth launch, not just the first.
 
+> *Amended 2026-08-09 (user-directed): one sanctioned exception to "no illustration" — the
+> Restore Wallet step renders a **vault door** through the ASCII field's own glyph ramp
+> (`AsciiFieldVault`): rings, spokes, bolts, and a ₿ monogram as a procedural brightness
+> field in the field's living material, morphing out of the welcome terrain on the step
+> transaction. It is representational on purpose — restoring is opening your vault — and it
+> lives on a task screen, not as ambient decoration. It is the flow's only representational
+> image; nothing else may cite it as precedent.*
+
 **Available raw material in the app already:** `ActivityOrbView.swift` (with its documented
 `.linear(2).repeatForever()` pulse), the monospaced-numeral treatment, the `MintAvatarView`
 geometry, the capsule/pill language, `CanvasDivider` at 0.5 pt.

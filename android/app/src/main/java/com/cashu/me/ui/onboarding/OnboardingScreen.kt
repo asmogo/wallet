@@ -529,14 +529,14 @@ internal fun OnboardingScreen(
     // cannot shift on that swap; it only changes while the field is hidden.
     var chassisHeightPx by remember { mutableStateOf(0) }
 
-    // The backdrop's mask extent target: Welcome runs the field tall,
-    // Restore Wallet drops it to the band, and every other step holds the
+    // The backdrop's material target: Welcome runs the tall terrain, Restore
+    // Wallet morphs it into the vault door, and every other step holds the
     // last value — the pair's exit is opacity-only.
-    var asciiExpanded by remember { mutableStateOf(true) }
+    var asciiVault by remember { mutableStateOf(false) }
     LaunchedEffect(step) {
         when (step) {
-            is OnboardingStep.Welcome -> asciiExpanded = true
-            is OnboardingStep.RestoreMethod -> asciiExpanded = false
+            is OnboardingStep.Welcome -> asciiVault = false
+            is OnboardingStep.RestoreMethod -> asciiVault = true
             else -> Unit
         }
     }
@@ -547,20 +547,20 @@ internal fun OnboardingScreen(
             .testTag(UiTestTags.OnboardingRoot)
             .background(MaterialTheme.colorScheme.background),
     ) {
-        // The terrain layer, hoisted here — behind the stage switch, in front
+        // The field layer, hoisted here — behind the stage switch, in front
         // of the window ground — so the Welcome ↔ Restore Wallet swap changes
-        // the text above it and the *mask's extent*, never the terrain's
-        // glyph grid (see AsciiField.kt): tall on Welcome, the classic band
-        // on Restore Wallet, the settle between them the cue that the screen
-        // changed. Exactly these two steps show it; every other step fades it
-        // out on the stage swap's own specs, pauses the clock, and holds the
-        // last extent so the mask never morphs mid-fade. Mounted *outside*
-        // the inset padding below so the terrain's floor runs behind the nav
-        // bar to the physical screen bottom; the backdrop reads the insets
-        // itself.
+        // the text above it and the field's *material*, never its glyph grid
+        // (see AsciiField.kt): the tall terrain on Welcome deforms into the
+        // vault door on Restore Wallet, the morph between them the cue that
+        // the screen changed. Exactly these two steps show it; every other
+        // step fades it out on the stage swap's own specs, pauses the clock,
+        // and holds the last material so the field never morphs mid-fade.
+        // Mounted *outside* the inset padding below so the field's floor runs
+        // behind the nav bar to the physical screen bottom; the backdrop
+        // reads the insets itself.
         OnboardingAsciiBackdrop(
             visible = step is OnboardingStep.Welcome || step is OnboardingStep.RestoreMethod,
-            expanded = asciiExpanded,
+            vault = asciiVault,
             conceptSheetOpen = infoOpen,
             chassisHeightPx = chassisHeightPx,
             modifier = Modifier.matchParentSize(),
