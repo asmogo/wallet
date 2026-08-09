@@ -8,6 +8,15 @@ plugins {
     alias(libs.plugins.screenshot)
 }
 
+screenshotTests {
+    // References are rendered on macOS, CI renders on Linux: faint gradient
+    // bands (the scroll edge fade) round 1/255 differently between the two —
+    // a handful of pixels per image. The threshold is a percent of differing
+    // pixels, so 0.01 passes that platform jitter (worst observed: 0.0007%)
+    // while any real layout change still fails by orders of magnitude.
+    imageDifferenceThreshold = 0.01f
+}
+
 android {
     experimentalProperties["android.experimental.enableScreenshotTest"] = true
     namespace = "com.cashu.me"
