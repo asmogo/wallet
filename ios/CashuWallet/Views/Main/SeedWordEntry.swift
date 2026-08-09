@@ -9,7 +9,6 @@ import UIKit
 /// `RestoreWalletFlow.kt`.
 enum SeedEntryCopy {
     static let subhead = "Enter your 12 words, one at a time."
-    static let helper = "Press space after each word."
     static let complete = "All 12 words check out."
     static let rejected = "Not a seed word. Check the spelling."
     static let checksumTitle = "That's not a valid seed phrase."
@@ -221,10 +220,12 @@ struct SeedWordEntryField: View {
         } else if rejected {
             InlineNotice(message: SeedEntryCopy.rejected, severity: .caution)
                 .frame(maxWidth: .infinity, alignment: .leading)
-        } else {
-            Text(entry.isComplete ? SeedEntryCopy.complete : SeedEntryCopy.helper)
+        } else if entry.isComplete {
+            // Idle shows nothing — the keyboard's Next key already teaches
+            // the commit, so the line only speaks when it has news.
+            Text(SeedEntryCopy.complete)
                 .cashuText(.metadata)
-                .foregroundStyle(entry.isComplete ? Color(.systemGreen) : .secondary)
+                .foregroundStyle(Color(.systemGreen))
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
     }

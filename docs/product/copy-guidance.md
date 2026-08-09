@@ -149,13 +149,15 @@ Both platforms hold these strings in one place (`RestoreMints*` constants in
 `restoreInput` (and its Settings twin) asks for one word at a time, so a single
 line under the card carries three different jobs. Only one can ever be on
 screen, and the precedence is fixed: **host notice → per-word rejection →
-default helper.**
+completion.** While entering, the line is empty — the keyboard's Next key (and
+the space bar) already teaches the commit, so a standing instruction would be
+furniture. The line only speaks when it has news.
 
 | State | String |
 | --- | --- |
 | Subhead | "Enter your 12 words, one at a time." |
-| Helper, entering | "Press space after each word." |
-| Helper, all twelve in | "All 12 words check out." |
+| Entering | *(nothing)* |
+| All twelve in | "All 12 words check out." |
 | Word refused | "Not a seed word. Check the spelling." |
 | Checksum failed | "That's not a valid seed phrase." / "One of the words is probably mistyped. Tap any word below to fix it." |
 | Pasted fewer than 12 | "Pasted N words. Enter the rest." |
@@ -164,10 +166,12 @@ default helper.**
 
 Rules this generalizes to:
 
-- **Tell them what to do, not what the field is.** The helper is "Press space
-  after each word", not "Seed word 3 of 12" — the ordinal is already on the
-  card and the rail already shows the position. Copy earns its place by saying
-  something the layout cannot.
+- **Tell them what to do, not what the field is.** The checksum recovery line
+  is "Tap any word below to fix it", not "Seed word 3 of 12" — the ordinal is
+  already on the card and the rail already shows the position. Copy earns its
+  place by saying something the layout cannot; the old "Press space after each
+  word" helper was cut on exactly this rule once the keyboard's Next key made
+  it redundant.
 - **An error that can't be localised must still point somewhere.** A BIP-39
   checksum failure proves one of the twelve is wrong but never which. "That
   seed phrase doesn't look right" (the old string) left the user with no move.

@@ -92,7 +92,6 @@ import com.cashu.me.ui.theme.withSlashedZero
  */
 object SeedEntryCopy {
     const val SUBHEAD = "Enter your 12 words, one at a time."
-    const val HELPER = "Press space after each word."
     const val COMPLETE = "All 12 words check out."
     const val REJECTED = "Not a seed word. Check the spelling."
     const val CHECKSUM =
@@ -305,14 +304,12 @@ private fun HelperLine(state: SeedPhraseEntryState, rejected: Boolean) {
     when {
         notice != null -> InlineNotice(text = notice.text, severity = notice.severity)
         rejected -> InlineNotice(text = SeedEntryCopy.REJECTED, severity = NoticeSeverity.Caution)
-        else -> Text(
-            text = if (state.isComplete) SeedEntryCopy.COMPLETE else SeedEntryCopy.HELPER,
+        // Idle shows nothing — the keyboard's Next key already teaches the
+        // commit, so the line only speaks when it has news.
+        state.isComplete -> Text(
+            text = SeedEntryCopy.COMPLETE,
             style = MaterialTheme.typography.bodyMedium,
-            color = if (state.isComplete) {
-                CashuTheme.colors.received
-            } else {
-                MaterialTheme.colorScheme.onSurfaceVariant
-            },
+            color = CashuTheme.colors.received,
         )
     }
 }
