@@ -96,6 +96,12 @@ struct OnboardingView: View {
     /// untouched — the exit is opacity-only, and the field must not morph
     /// mid-fade. Welcome is the first step.
     @State private var asciiFieldVaultMix: CGFloat = 0
+    /// The last healthy field layout captured while the pair was on screen.
+    /// Leaving the pair drops a chassis capsule (and on the seed path raises
+    /// the keyboard), and the chassis inset feeds `vaultCenterY` — so a live
+    /// layout translates the vault door mid-fade, the "push" jank on the
+    /// restore exits. Held, the exit stays the documented opacity-only fade.
+    @State private var asciiFieldHeldLayout: AsciiFieldLayout.Resolution?
 
     // Per-step entrance animation triggers
     @State private var welcomeAppeared = false
@@ -249,13 +255,22 @@ struct OnboardingView: View {
             // Suppression (tight vertical space) hides rather than unmounts:
             // the view's identity — and with it the wall clock — must survive,
             // or a pass through a suppressed layout would replay from t=0.
-            let layout = resolved ?? AsciiFieldLayout.fallback(
+            let liveLayout = resolved ?? AsciiFieldLayout.fallback(
                 windowHeight: windowHeight,
                 topInset: geo.safeAreaInsets.top,
                 chassisInset: chassisInset,
                 headerClearance: AsciiFieldLayout.headerClearance()
             )
-            let visible = resolved != nil && stepShowsAsciiField && asciiFieldEntered
+            // Off the pair, hold the last on-screen layout: the step change
+            // that hides the field also shrinks the chassis (and raises the
+            // seed keyboard), and a live read would slide the vault and its
+            // mask through the exit fade. On the pair the live layout rules —
+            // the swap back to it happens at opacity 0, so it is invisible.
+            let layout = stepShowsAsciiField ? liveLayout : (asciiFieldHeldLayout ?? liveLayout)
+            let fieldHealthy = stepShowsAsciiField
+                ? (resolved != nil)
+                : (asciiFieldHeldLayout != nil || resolved != nil)
+            let visible = fieldHealthy && stepShowsAsciiField && asciiFieldEntered
             // The driver interpolates the morph through the step transaction
             // (SwiftUI can't animate gradient stops or the renderer's
             // brightness lerp itself), rebuilding the mask and the
@@ -315,7 +330,17 @@ struct OnboardingView: View {
             .frame(width: geo.size.width, height: layout.layerHeight)
             .offset(y: geo.size.height + chassisInset - layout.layerHeight)
             .opacity(visible ? 1 : 0)
+            .onAppear { holdAsciiFieldLayout(liveLayout) }
+            .onChange(of: liveLayout) { _, new in holdAsciiFieldLayout(new) }
         }
+    }
+
+    /// Keeps `asciiFieldHeldLayout` current while the pair is showing. Off the
+    /// pair the hold is deliberately left untouched — that freeze is what keeps
+    /// the exit fade opacity-only.
+    private func holdAsciiFieldLayout(_ layout: AsciiFieldLayout.Resolution) {
+        guard stepShowsAsciiField else { return }
+        asciiFieldHeldLayout = layout
     }
 
     /// First-launch entrance: title y-rise settles (~400ms), then a 450ms
