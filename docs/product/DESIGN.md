@@ -1407,6 +1407,7 @@ docs/android/DESIGN-ANDROID.md rather than copying the tween values:
 | CTA content change (label ⇄ label ⇄ spinner) | blur 0→2, opacity 1→0, ~160 ms ease-out | blur 2→0, opacity 0→1, ~260 ms `.smooth` (Android also scales 0.96→1) |
 | CTA slot occupancy / style | opacity alone | scale 0.96→1, blur 4→0, opacity 0→1, on the step's own `.easeInOut(0.28)` (Android: M3 `defaultSpatialSpec` height spring, blur 3) |
 | Press feedback | existing 0.97 scale, `.snappy(0.09)` down / `.snappy(0.18)` up | — |
+| ASCII field mask extent (welcome ⇄ restoreMethod) | settles full → band riding the step's own `.easeInOut(0.28)` (Android: `defaultSpatialSpec`) | grows band → full on retreat, same transaction; Reduce Motion snaps — the end states differ, so the swap stays legible without motion |
 
 Three notes on that table, all added by the 2026-08-06 button-morph pass:
 
@@ -1426,10 +1427,20 @@ Three notes on that table, all added by the 2026-08-06 button-morph pass:
   invisible spacer glyph (the device `PaymentStatusView` already uses for its
   CTA); Android's 64 dp `heightIn` covers both label and spinner already.
 
-The welcome stage carries **no ambient piece**: the note ↔ token morph that
-shipped with the restyle was cut on 2026-08-05 (user-directed) — an idle loop
-earning nothing after the first launch. The stage is title, slack, and the
-error slot above the chassis.
+The welcome stage carries **no figurative ambient piece**: the note ↔ token
+morph that shipped with the restyle was cut on 2026-08-05 (user-directed) — an
+idle loop earning nothing after the first launch. What it carries instead is
+the **ASCII terrain field** as texture, and since 2026-08-09 the field is the
+pair's screen-change cue: on welcome it runs tall — clear behind the header,
+a long fade to opaque, filling the stage's slack — and on restoreMethod it
+drops to the classic bottom band (`clamp(160, 0.26·window, 300)`). The drawn
+layer is full-window on **both** steps and never moves (glyph positions are a
+function of layer size — a resizing layer would make the texture swim and
+re-hash); only the gradient mask's extent settles between the two stop-sets,
+riding the step transaction per the table above. `AsciiFieldLayout` on each
+platform is the single statement of that geometry, pinned by
+`AsciiFieldLayoutTests` / `AsciiFieldLayoutTest` and the compose
+layout-invariant test.
 
 Exits stay subtler than entrances throughout (the carve-out above). The
 layout grammar (revised by design review 2026-08-05): **every** step, welcome

@@ -9,6 +9,8 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.test.SemanticsMatcher
+import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.unit.dp
@@ -21,15 +23,18 @@ import org.junit.Test
 import org.junit.runner.RunWith
 
 /**
- * The one behavior no screenshot can catch: the terrain's frame is identical
- * on Welcome and Restore Wallet — the whole point of hoisting the field to
- * the onboarding root. The backdrop is composed exactly as the root wires it
- * (visible derived from the step, everything else constant), the step flips
+ * The behaviors no screenshot can catch: the terrain's full-window layer is
+ * identical on Welcome and Restore Wallet — the layer never moves; only the
+ * mask's extent differs per step — and each step drives the extent to its
+ * resting end state (1 on Welcome, 0 on Restore Wallet, held outside the
+ * pair). The backdrop is composed exactly as the root wires it (visible and
+ * expanded derived from the step, everything else constant), the step flips
  * across the pair and out of it, and the field's bounds must never move.
  *
  * Steps are modeled as the booleans the backdrop actually receives; the
  * production `OnboardingStep` is private to OnboardingScreen and the mapping
- * (Welcome/RestoreMethod → visible) is one expression covered by review.
+ * (Welcome/RestoreMethod → visible/expanded) is one expression covered by
+ * review.
  */
 @RunWith(AndroidJUnit4::class)
 class OnboardingAsciiFieldLayoutComposeTest {
@@ -43,13 +48,21 @@ class OnboardingAsciiFieldLayoutComposeTest {
             .fetchSemanticsNode()
             .boundsInRoot
 
+    private fun assertExtentTarget(expected: Float) {
+        compose.onNodeWithTag(UiTestTags.OnboardingAsciiField, useUnmergedTree = true)
+            .assert(SemanticsMatcher.expectValue(AsciiFieldExtentTargetKey, expected))
+    }
+
     @Test
-    fun fieldFrameIsIdenticalAcrossTheWelcomeRestorePair() {
+    fun fieldFrameIsIdenticalAcrossTheWelcomeRestorePairAndTheExtentTracksTheStep() {
         var step by mutableStateOf(Step.Welcome)
+        // Mirrors the root's hold-last-value wiring: only the pair writes it.
+        var expanded by mutableStateOf(true)
         compose.setCashuContent {
             Box(Modifier.width(390.dp).height(844.dp)) {
                 OnboardingAsciiBackdrop(
                     visible = step == Step.Welcome || step == Step.RestoreMethod,
+                    expanded = expanded,
                     conceptSheetOpen = false,
                     chassisHeightPx = 460,
                     staticTime = 0f,
@@ -59,20 +72,27 @@ class OnboardingAsciiFieldLayoutComposeTest {
         }
         compose.waitForIdle()
         val welcomeBounds = fieldBounds()
+        assertExtentTarget(1f)
 
         step = Step.RestoreMethod
+        expanded = false
         compose.waitForIdle()
         assertEquals(welcomeBounds, fieldBounds())
+        assertExtentTarget(0f)
 
         // Leaving the pair only fades — the frame (and the view's identity,
-        // which carries the wall clock) must survive untouched.
+        // which carries the wall clock) must survive untouched, and the
+        // extent holds so the mask never morphs mid-fade.
         step = Step.RestoreInput
         compose.waitForIdle()
         assertEquals(welcomeBounds, fieldBounds())
+        assertExtentTarget(0f)
 
         step = Step.Welcome
+        expanded = true
         compose.waitForIdle()
         assertEquals(welcomeBounds, fieldBounds())
+        assertExtentTarget(1f)
     }
 
     @Test
@@ -86,6 +106,7 @@ class OnboardingAsciiFieldLayoutComposeTest {
             Box(Modifier.width(390.dp).height(360.dp)) {
                 OnboardingAsciiBackdrop(
                     visible = true,
+                    expanded = true,
                     conceptSheetOpen = false,
                     chassisHeightPx = 460,
                     staticTime = 0f,

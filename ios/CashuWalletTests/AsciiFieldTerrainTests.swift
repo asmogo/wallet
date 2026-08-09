@@ -184,15 +184,15 @@ final class AsciiFieldWarpTests: XCTestCase {
     }
 }
 
-/// CPU cost of one frame's terrain pass — every cell of a 6.1" phone's band
-/// (34 × 29 cells including the chassis underlap) through brightness →
-/// pickLevel → bucket. The draw side is 5 batched fills on Metal; this math
-/// is the only per-frame CPU work, and it must stay far under the 33ms frame
-/// budget at 30fps.
+/// CPU cost of one frame's terrain pass through brightness → pickLevel →
+/// bucket. The draw side is 5 batched fills on Metal; this math is the only
+/// per-frame CPU work, and it must stay far under the 33ms frame budget at
+/// 30fps. Two sizes are pinned: 34 × 29 cells is the culled Restore band on
+/// a 6.1" phone (chassis underlap included), and 34 × 68 is welcome's
+/// full-window field on a 6.7" phone — the largest pass the mask extent can
+/// ask for.
 final class AsciiFieldFrameBudgetTests: XCTestCase {
-    func testFrameComputationWellUnderFrameBudget() {
-        let cols = 34
-        let rows = 29
+    private func plainPassMs(cols: Int, rows: Int) -> Double {
         var buckets = [[Double]](repeating: [], count: 5)
         let start = CACurrentMediaTime()
         let frames = 100
@@ -211,20 +211,13 @@ final class AsciiFieldFrameBudgetTests: XCTestCase {
                 }
             }
         }
-        let perFrameMs = (CACurrentMediaTime() - start) / Double(frames) * 1000
-        // Debug, unoptimized, still expected ~1ms; the ceiling is generous so
-        // CI noise can't flake it while a real regression (e.g. accidental
-        // per-cell allocation) still trips.
-        XCTAssertLessThan(perFrameMs, 15, "terrain pass took \(perFrameMs)ms per frame")
-        print("AsciiField terrain pass: \(String(format: "%.3f", perFrameMs))ms per frame (\(cols)×\(rows) cells)")
+        return (CACurrentMediaTime() - start) / Double(frames) * 1000
     }
 
     /// The same pass with the lens fully open (k = 1): the warp adds a square
     /// root and a few multiplies per cell against the baseline's 45 trig
-    /// calls — pinned here so the interactive path can't regress the budget.
-    func testWarpedFrameComputationWellUnderFrameBudget() {
-        let cols = 34
-        let rows = 29
+    /// calls — pinned so the interactive path can't regress the budget.
+    private func warpedPassMs(cols: Int, rows: Int) -> Double {
         var buckets = [[Double]](repeating: [], count: 5)
         // A mid-band finger, in the grid units the renderer uses.
         let tx = 204.0
@@ -262,17 +255,43 @@ final class AsciiFieldFrameBudgetTests: XCTestCase {
                 }
             }
         }
-        let perFrameMs = (CACurrentMediaTime() - start) / Double(frames) * 1000
+        return (CACurrentMediaTime() - start) / Double(frames) * 1000
+    }
+
+    func testFrameComputationWellUnderFrameBudget() {
+        let perFrameMs = plainPassMs(cols: 34, rows: 29)
+        // Debug, unoptimized, still expected ~1ms; the ceiling is generous so
+        // CI noise can't flake it while a real regression (e.g. accidental
+        // per-cell allocation) still trips.
+        XCTAssertLessThan(perFrameMs, 15, "terrain pass took \(perFrameMs)ms per frame")
+        print("AsciiField terrain pass: \(String(format: "%.3f", perFrameMs))ms per frame (34×29 cells)")
+    }
+
+    func testWarpedFrameComputationWellUnderFrameBudget() {
+        let perFrameMs = warpedPassMs(cols: 34, rows: 29)
         XCTAssertLessThan(perFrameMs, 15, "warped terrain pass took \(perFrameMs)ms per frame")
-        print("AsciiField warped terrain pass: \(String(format: "%.3f", perFrameMs))ms per frame (\(cols)×\(rows) cells)")
+        print("AsciiField warped terrain pass: \(String(format: "%.3f", perFrameMs))ms per frame (34×29 cells)")
+    }
+
+    func testFullWindowFrameComputationWellUnderFrameBudget() {
+        let perFrameMs = plainPassMs(cols: 34, rows: 68)
+        XCTAssertLessThan(perFrameMs, 15, "full-window terrain pass took \(perFrameMs)ms per frame")
+        print("AsciiField full-window terrain pass: \(String(format: "%.3f", perFrameMs))ms per frame (34×68 cells)")
+    }
+
+    func testFullWindowWarpedFrameComputationWellUnderFrameBudget() {
+        let perFrameMs = warpedPassMs(cols: 34, rows: 68)
+        XCTAssertLessThan(perFrameMs, 15, "full-window warped terrain pass took \(perFrameMs)ms per frame")
+        print("AsciiField full-window warped terrain pass: \(String(format: "%.3f", perFrameMs))ms per frame (34×68 cells)")
     }
 }
 
-/// The band geometry contract (mirrors Android `AsciiFieldLayoutTest`): the
-/// resolved frame is a pure function of window geometry — it takes no step,
-/// no header measurement, no stage content, which is what guarantees the
-/// terrain's frame is identical on Welcome and Restore Wallet (§7c) — plus
-/// the tight-space suppression rule below the 120pt threshold (§8).
+/// The field geometry contract (mirrors Android `AsciiFieldLayoutTest`): the
+/// resolved geometry is a pure function of window geometry — it takes no
+/// step, no header measurement, no stage content, which is what guarantees
+/// the terrain's full-window layer is identical on Welcome and Restore
+/// Wallet; the mask extent is the *only* per-step input — plus the
+/// tight-space suppression rule below the 120pt threshold.
 final class AsciiFieldLayoutTests: XCTestCase {
     /// Fixed stand-in for `AsciiFieldLayout.headerClearance()` so assertions
     /// don't float with the test host's Dynamic Type setting.
@@ -280,20 +299,26 @@ final class AsciiFieldLayoutTests: XCTestCase {
     private let chassis: CGFloat = 176
     private let topInset: CGFloat = 47
 
-    func testBandClampsAgainstWindowHeight() {
-        // Portrait phone: 26% of the window, inside the clamp.
-        let phone = AsciiFieldLayout.resolve(
+    private func phoneLayout() -> AsciiFieldLayout.Resolution {
+        AsciiFieldLayout.resolve(
             windowHeight: 844, topInset: topInset, chassisInset: chassis, headerClearance: clearance
-        )
-        XCTAssertNotNil(phone)
-        XCTAssertEqual(phone!.visibleBand, 0.26 * 844, accuracy: 0.01)
-        XCTAssertEqual(phone!.layerHeight, phone!.visibleBand + chassis, accuracy: 0.01)
+        )!
+    }
+
+    func testBandClampsAgainstWindowHeightAndLayerSpansTheWindow() {
+        // Portrait phone: 26% of the window, inside the clamp; the drawn
+        // layer is the whole window — the glyph grid must not depend on the
+        // band so the mask extent can settle without the texture re-hashing.
+        let phone = phoneLayout()
+        XCTAssertEqual(phone.visibleBand, 0.26 * 844, accuracy: 0.01)
+        XCTAssertEqual(phone.layerHeight, 844, accuracy: 0.01)
 
         // Small window: the 160pt floor holds.
         let small = AsciiFieldLayout.resolve(
             windowHeight: 590, topInset: 20, chassisInset: 120, headerClearance: clearance
         )
         XCTAssertEqual(small?.visibleBand, 160)
+        XCTAssertEqual(small?.layerHeight, 590)
 
         // Tall window: the 300pt ceiling holds.
         let tall = AsciiFieldLayout.resolve(
@@ -304,7 +329,8 @@ final class AsciiFieldLayoutTests: XCTestCase {
 
     func testIdenticalInputsResolveIdentically() {
         // The welcome/restore pair share window and chassis geometry; the
-        // resolver has no other inputs, so their frames cannot differ.
+        // resolver has no other inputs, so their layers cannot differ. The
+        // steps diverge only in the extent their masks are driven to.
         let a = AsciiFieldLayout.resolve(
             windowHeight: 844, topInset: topInset, chassisInset: chassis, headerClearance: clearance
         )
@@ -340,43 +366,105 @@ final class AsciiFieldLayoutTests: XCTestCase {
         )
     }
 
-    func testMaskFadeCoversTopOfVisibleBandOnly() {
-        let layout = AsciiFieldLayout.resolve(
-            windowHeight: 844, topInset: topInset, chassisInset: chassis, headerClearance: clearance
-        )!
-        XCTAssertEqual(
-            layout.maskOpaqueFraction,
-            layout.visibleBand * 0.30 / layout.layerHeight,
-            accuracy: 1e-4
-        )
-        XCTAssertLessThan(layout.maskOpaqueFraction, 0.30)
+    func testBandModeIsTheLegacyBandGeometryInWindowCoordinates() {
+        // Extent 0 must reproduce the shipped band exactly: clear down to the
+        // band top, the web's 30%-of-band ramp, and the same bottom fade —
+        // the Restore screen is unchanged by the full-mode work.
+        let layout = phoneLayout()
+        let band = layout.visibleBand
+        let bandTop = 844 - chassis - band
+        XCTAssertEqual(layout.bandClearEnd, bandTop / 844, accuracy: 1e-4)
+        XCTAssertEqual(layout.bandOpaqueEnd, (bandTop + 0.30 * band) / 844, accuracy: 1e-4)
+        XCTAssertEqual(layout.bottomFadeStart, (844 - chassis - 48) / 844, accuracy: 1e-4)
+        XCTAssertEqual(layout.bottomFadeEnd, (844 - chassis + 40) / 844, accuracy: 1e-4)
     }
 
-    func testBottomFadeBracketsTheChassisEdge() {
+    func testFullModeClearsTheHeaderBlock() {
+        // Extent 1: fully transparent through the header clearance line, then
+        // the long 0.30-window ramp. Uncramped geometry — no clamps engage.
+        let layout = phoneLayout()
+        XCTAssertEqual(layout.fullClearEnd, (topInset + clearance) / 844, accuracy: 1e-4)
+        XCTAssertEqual(layout.fullOpaqueEnd, layout.fullClearEnd + 0.30, accuracy: 1e-4)
+        // The settle has real travel on a phone — the whole point.
+        XCTAssertLessThan(layout.fullClearEnd, layout.bandClearEnd - 0.2)
+    }
+
+    func testFullModeDegradesToBandModeWhenTheHeaderReachesTheBand() {
+        // 120 ≤ available < band: not suppressed, but the header block ends
+        // below the band top. Full mode must clamp to band mode so the settle
+        // becomes a no-op instead of inverting direction.
         let layout = AsciiFieldLayout.resolve(
-            windowHeight: 844, topInset: topInset, chassisInset: chassis, headerClearance: clearance
+            windowHeight: 700, topInset: 20, chassisInset: 250, headerClearance: 280
         )!
-        let chassisEdge = layout.visibleBand / layout.layerHeight
-        // The fade starts 48pt above the chassis edge and completes 40pt past
-        // it — the terrain dissolves toward the buttons instead of ending on
-        // a hard cut, with a small sliver continuing behind their glass.
-        XCTAssertEqual(
-            layout.bottomFadeStart,
-            (layout.visibleBand - 48) / layout.layerHeight,
-            accuracy: 1e-4
+        XCTAssertEqual(layout.fullClearEnd, layout.bandClearEnd, accuracy: 1e-6)
+        XCTAssertEqual(layout.fullOpaqueEnd, layout.bandOpaqueEnd, accuracy: 1e-6)
+        let full = layout.maskStops(extent: 1)
+        let bandStops = layout.maskStops(extent: 0)
+        XCTAssertEqual(full.clearEnd, bandStops.clearEnd, accuracy: 1e-6)
+        XCTAssertEqual(full.opaqueEnd, bandStops.opaqueEnd, accuracy: 1e-6)
+    }
+
+    func testMaskStopsLerpEndpointsClampAndStayOrdered() {
+        let layout = phoneLayout()
+        let atBand = layout.maskStops(extent: 0)
+        XCTAssertEqual(atBand.clearEnd, layout.bandClearEnd, accuracy: 1e-6)
+        XCTAssertEqual(atBand.opaqueEnd, layout.bandOpaqueEnd, accuracy: 1e-6)
+        let atFull = layout.maskStops(extent: 1)
+        XCTAssertEqual(atFull.clearEnd, layout.fullClearEnd, accuracy: 1e-6)
+        XCTAssertEqual(atFull.opaqueEnd, layout.fullOpaqueEnd, accuracy: 1e-6)
+        // A bouncy animation curve can overshoot the 0…1 target range; the
+        // stops must clamp, not extrapolate.
+        XCTAssertEqual(layout.maskStops(extent: -0.2).clearEnd, atBand.clearEnd, accuracy: 1e-6)
+        XCTAssertEqual(layout.maskStops(extent: 1.3).clearEnd, atFull.clearEnd, accuracy: 1e-6)
+        // The gradient's stop order must survive every point of the settle.
+        for e in stride(from: CGFloat(0), through: 1, by: 0.25) {
+            let stops = layout.maskStops(extent: e)
+            XCTAssertLessThan(stops.clearEnd, stops.opaqueEnd, "extent \(e)")
+            XCTAssertLessThanOrEqual(stops.opaqueEnd, layout.bottomFadeStart, "extent \(e)")
+            XCTAssertLessThan(layout.bottomFadeStart, layout.bottomFadeEnd, "extent \(e)")
+            XCTAssertLessThanOrEqual(layout.bottomFadeEnd, 1, "extent \(e)")
+        }
+    }
+
+    func testCullStartRowSkipsOnlyFullyMaskedRows() {
+        // No cull at zero.
+        XCTAssertEqual(AsciiFieldLayout.cullStartRow(transparentStart: 0), 0)
+        // Less than a cell of transparency: the slack row keeps it at zero.
+        XCTAssertEqual(AsciiFieldLayout.cullStartRow(transparentStart: 10), 0)
+        let layout = phoneLayout()
+        // Band mode on the phone fixture: the layer is 62 rows
+        // (ceil(844/14)+1); the cull leaves ~31 — the shipped band's cost,
+        // plus one slack row for ink overhang.
+        let bandCull = AsciiFieldLayout.cullStartRow(
+            transparentStart: layout.transparentStart(extent: 0)
         )
-        XCTAssertEqual(
-            layout.bottomFadeEnd,
-            (layout.visibleBand + 40) / layout.layerHeight,
-            accuracy: 1e-4
+        XCTAssertEqual(bandCull, 31)
+        // Full mode still culls the header block's rows.
+        let fullCull = AsciiFieldLayout.cullStartRow(
+            transparentStart: layout.transparentStart(extent: 1)
         )
-        XCTAssertLessThan(layout.bottomFadeStart, chassisEdge)
-        XCTAssertGreaterThan(layout.bottomFadeEnd, chassisEdge)
-        XCTAssertLessThanOrEqual(layout.bottomFadeEnd, 1)
-        // The opaque plateau between the two fades must survive.
-        XCTAssertGreaterThan(layout.bottomFadeStart, layout.maskOpaqueFraction)
+        XCTAssertEqual(fullCull, 14)
+    }
+
+    func testFallbackKeepsTheFullWindowFrame() {
+        // Suppression hides rather than unmounts, so the fallback frame must
+        // match the resolved frame — a pass through a suppressed layout (a
+        // rotation, a Dynamic Type change) must not move the layer.
+        let fallback = AsciiFieldLayout.fallback(
+            windowHeight: 844, topInset: topInset, chassisInset: chassis, headerClearance: clearance
+        )
+        XCTAssertEqual(fallback.layerHeight, phoneLayout().layerHeight)
         // A chassis shallower than the underlap clamps the fade inside it.
-        let shallow = AsciiFieldLayout.fallback(chassisInset: 24)
+        let shallow = AsciiFieldLayout.fallback(
+            windowHeight: 400, topInset: 0, chassisInset: 24, headerClearance: clearance
+        )
         XCTAssertEqual(shallow.bottomFadeEnd, 1, accuracy: 1e-4)
+        // The zero-size transient layout pass must stay finite.
+        let degenerate = AsciiFieldLayout.fallback(
+            windowHeight: 0, topInset: 0, chassisInset: 24, headerClearance: clearance
+        )
+        XCTAssertGreaterThan(degenerate.layerHeight, 0)
+        XCTAssertGreaterThanOrEqual(degenerate.bandClearEnd, 0)
+        XCTAssertLessThanOrEqual(degenerate.bottomFadeEnd, 1)
     }
 }

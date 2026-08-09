@@ -301,18 +301,23 @@ final class AsciiFieldWarpTouch {
 
 // MARK: - Layout
 
-/// Band geometry as a pure function, so the layout-invariant test can assert
+/// Field geometry as a pure function, so the layout-invariant test can assert
 /// it without composing views.
 ///
-/// The field pins to the *window* bottom and runs under the chassis. It
-/// terminates through its own mask, not through occlusion: the bottom fade
-/// begins above the chassis edge and reaches zero a little past it, so the
-/// terrain dissolves toward the buttons — with a faint sliver continuing
-/// behind their glass — instead of ending on a hard cut at the chassis top.
-/// The on-screen glyph positions are a function of window size and the
-/// (constant across the welcome/restore pair) chassis inset — never of header
-/// height, stage content, or current step — which is what lets the terrain
-/// hold perfectly still across the Welcome ↔ Restore Wallet swap.
+/// The drawn layer always spans the full window, on both steps of the pair:
+/// glyph positions (and the currency hash keyed on them) are a function of
+/// layer size, so a layer that resized between steps would make the whole
+/// texture swim and re-hash mid-transition. What differs per step is only the
+/// *mask*. Welcome runs the field tall — clear behind the header block, then
+/// a long ramp to opaque — and Restore Wallet shows the classic bottom band.
+/// The settle between the two stop-sets, driven by a single 0…1 extent riding
+/// the step transaction, is the cue that the screen changed; the terrain
+/// itself never moves and never re-hashes.
+///
+/// The field terminates through its mask, not through occlusion: the bottom
+/// fade begins above the chassis edge and settles onto a faint floor a little
+/// past it, so the terrain dissolves toward the buttons — with a sliver
+/// continuing behind their glass — instead of ending on a hard cut.
 enum AsciiFieldLayout {
     /// Web is `clamp(180px, 26vh, 320px)`; scaled slightly for phone-sized
     /// viewports.
@@ -322,10 +327,15 @@ enum AsciiFieldLayout {
     /// Below this the band would be a squashed few-row smear behind
     /// accessibility-size copy (or a landscape phone) — draw nothing instead.
     static let suppressionThreshold: CGFloat = 120
-    /// The mask ramps transparent → opaque over this fraction of the visible
+    /// Band mode ramps transparent → opaque over this fraction of the visible
     /// band (the web masks the top 30% of its fully-visible band; ours also
     /// extends under the chassis, so the fraction applies to the visible part).
     static let maskFade: CGFloat = 0.30
+    /// Full mode's ramp length as a fraction of the *window* — the same 0.30
+    /// family as `maskFade` and the handoff's `sweepEdge`, stretched over the
+    /// taller extent so the field materializes gradually below the header
+    /// instead of arriving on a visible line.
+    static let fullFade: CGFloat = 0.30
     /// The bottom fade starts this far above the chassis edge…
     static let bottomFadeReach: CGFloat = 48
     /// …and settles onto the floor opacity this far past it, so the dimming
@@ -337,25 +347,48 @@ enum AsciiFieldLayout {
     static let bottomFloorAlpha: CGFloat = 0.25
 
     struct Resolution: Equatable {
-        /// Height of the band above the chassis — the part the user sees.
+        /// Height of the band above the chassis — what Restore Wallet shows.
         var visibleBand: CGFloat
-        /// Full layer height: visible band + chassis underlap.
+        /// Full layer height — always the window height, on both steps.
         var layerHeight: CGFloat
-        /// Where the mask becomes fully opaque, as a fraction of layerHeight.
-        var maskOpaqueFraction: CGFloat
-        /// Where the bottom fade begins (fraction of layerHeight) — above the
-        /// chassis edge, so the dissolve is already underway when the terrain
-        /// meets the buttons.
+        /// Band mode (extent 0), as fractions of layerHeight: fully clear
+        /// above `bandClearEnd`, ramping to fully opaque at `bandOpaqueEnd`.
+        /// Geometrically today's band mask expressed in window coordinates.
+        var bandClearEnd: CGFloat
+        var bandOpaqueEnd: CGFloat
+        /// Full mode (extent 1): clear behind the whole header block — the
+        /// boundary sits at the header-clearance line — then the long ramp.
+        var fullClearEnd: CGFloat
+        var fullOpaqueEnd: CGFloat
+        /// The bottom fade never moves with extent — above the chassis edge,
+        /// so the dissolve is already underway when the terrain meets the
+        /// buttons…
         var bottomFadeStart: CGFloat
-        /// Where the bottom fade completes (fraction of layerHeight) —
-        /// slightly past the chassis edge, behind the buttons.
+        /// …completing slightly past the chassis edge, behind the buttons.
         var bottomFadeEnd: CGFloat
+
+        /// The two extent-dependent stops, lerped. Clamped because the
+        /// Animatable driver can overshoot transiently on a bouncy curve.
+        func maskStops(extent: CGFloat) -> (clearEnd: CGFloat, opaqueEnd: CGFloat) {
+            let e = min(max(extent, 0), 1)
+            return (
+                clearEnd: bandClearEnd + (fullClearEnd - bandClearEnd) * e,
+                opaqueEnd: bandOpaqueEnd + (fullOpaqueEnd - bandOpaqueEnd) * e
+            )
+        }
+
+        /// Points from the layer top to the current fully-transparent
+        /// boundary — everything above it is masked to nothing and cullable.
+        func transparentStart(extent: CGFloat) -> CGFloat {
+            maskStops(extent: extent).clearEnd * layerHeight
+        }
     }
 
     /// `headerClearance` is the vertical room the pair's tallest header
     /// (welcome's two-line title + subhead, at the live Dynamic Type size)
     /// needs. Using the same clearance for both steps of the pair keeps the
-    /// resolved frame identical across them — the layout-invariant contract.
+    /// resolved geometry identical across them — the layout-invariant
+    /// contract, now carried by the constant full-window layer.
     static func resolve(
         windowHeight: CGFloat,
         topInset: CGFloat,
@@ -365,28 +398,71 @@ enum AsciiFieldLayout {
         let band = min(max(minBand, bandFraction * windowHeight), maxBand)
         // The empty region between the header block and the chassis. When the
         // heavy largeTitle wraps at accessibility sizes (or the window is a
-        // landscape phone), this collapses and the band is suppressed rather
+        // landscape phone), this collapses and the field is suppressed rather
         // than squashed — the band never shrinks to fit.
         let available = windowHeight - topInset - headerClearance - chassisInset
         guard min(band, available) >= suppressionThreshold else { return nil }
-        return resolution(band: band, chassisInset: chassisInset)
+        return resolution(
+            band: band, windowHeight: windowHeight,
+            topInset: topInset, chassisInset: chassisInset,
+            headerClearance: headerClearance
+        )
     }
 
     /// The suppressed case still needs a stable frame (the view hides rather
-    /// than unmounts, to keep its wall clock), so it lays out the floor band.
-    static func fallback(chassisInset: CGFloat) -> Resolution {
-        resolution(band: minBand, chassisInset: chassisInset)
+    /// than unmounts, to keep its wall clock), so it lays out the floor band
+    /// against the same full-window layer.
+    static func fallback(
+        windowHeight: CGFloat,
+        topInset: CGFloat,
+        chassisInset: CGFloat,
+        headerClearance: CGFloat
+    ) -> Resolution {
+        resolution(
+            band: minBand, windowHeight: windowHeight,
+            topInset: topInset, chassisInset: chassisInset,
+            headerClearance: headerClearance
+        )
     }
 
-    private static func resolution(band: CGFloat, chassisInset: CGFloat) -> Resolution {
-        let layerHeight = band + chassisInset
+    private static func resolution(
+        band: CGFloat,
+        windowHeight: CGFloat,
+        topInset: CGFloat,
+        chassisInset: CGFloat,
+        headerClearance: CGFloat
+    ) -> Resolution {
+        // A transient zero-size layout pass must not divide by zero; the
+        // degenerate frame is invisible (suppressed → opacity 0) either way.
+        let height = max(windowHeight, band + chassisInset)
+        let bandTop = height - chassisInset - band
+        let bandClearEnd = bandTop / height
+        let bandOpaqueEnd = (bandTop + maskFade * band) / height
+        // Both full-mode stops clamp against their band counterparts: in a
+        // cramped-but-not-suppressed window the header block can reach below
+        // the band top, and full mode must degrade to band mode — the settle
+        // becomes a no-op rather than inverting direction.
+        let fullClearEnd = min((topInset + headerClearance) / height, bandClearEnd)
+        let fullOpaqueEnd = min(fullClearEnd + fullFade, bandOpaqueEnd)
         return Resolution(
             visibleBand: band,
-            layerHeight: layerHeight,
-            maskOpaqueFraction: (band * maskFade) / layerHeight,
-            bottomFadeStart: (band - bottomFadeReach) / layerHeight,
-            bottomFadeEnd: (band + min(bottomFadeUnderlap, chassisInset)) / layerHeight
+            layerHeight: height,
+            bandClearEnd: bandClearEnd,
+            bandOpaqueEnd: bandOpaqueEnd,
+            fullClearEnd: fullClearEnd,
+            fullOpaqueEnd: fullOpaqueEnd,
+            bottomFadeStart: (height - chassisInset - bottomFadeReach) / height,
+            bottomFadeEnd: (height - chassisInset + min(bottomFadeUnderlap, chassisInset)) / height
         )
+    }
+
+    /// First grid row worth evaluating under a mask whose fully-transparent
+    /// region ends `transparentStart` points from the layer top. One row of
+    /// slack for glyph ink overhanging its cell; everything above multiplies
+    /// to zero through the mask anyway, so culling is purely a cost move —
+    /// it changes which rows are computed, never where anything draws.
+    static func cullStartRow(transparentStart: CGFloat) -> Int {
+        max(0, Int((Double(transparentStart) / AsciiFieldTerrain.cellH).rounded(.down)) - 1)
     }
 
     /// Welcome's header at the live type size: bar band + two title lines +
@@ -397,6 +473,24 @@ enum AsciiFieldLayout {
         let title = UIFont.preferredFont(forTextStyle: .largeTitle).lineHeight
         let subhead = UIFont.preferredFont(forTextStyle: .callout).lineHeight
         return OnboardingMetrics.titleTopInset + title * 2 + 8 + subhead
+    }
+}
+
+/// SwiftUI cannot interpolate gradient stops, so the Welcome ↔ Restore settle
+/// drives this Animatable wrapper instead (the handoff's `ErosionDriver`
+/// pattern): the step transaction animates `extent`, and the content closure
+/// re-renders with each interpolated value to rebuild the mask and the cull.
+struct AsciiFieldMaskDriver<Content: View>: View, Animatable {
+    var extent: CGFloat
+    @ViewBuilder var content: (CGFloat) -> Content
+
+    var animatableData: CGFloat {
+        get { extent }
+        set { extent = newValue }
+    }
+
+    var body: some View {
+        content(extent)
     }
 }
 
@@ -453,7 +547,8 @@ struct AsciiFieldPeakGlyph {
 /// stage): Welcome and Restore Wallet are adjacent steps, and a per-stage
 /// mount would restart or re-fade the terrain on that swap — hoisted, the
 /// terrain keeps drifting and only the text above it changes, one continuous
-/// space. The parent drives visibility with opacity only.
+/// space. The parent drives visibility with opacity and shapes the visible
+/// extent with its mask; the renderer's own frame never changes.
 struct AsciiFieldView: View {
     /// Freezes the renderer at a chosen moment — deterministic goldens and
     /// the evidence strips. In post-`speed` time units, like the web's prop.
@@ -471,6 +566,11 @@ struct AsciiFieldView: View {
     /// The handoff's exit dissolve, 0 (intact) → 1 (gone). At 0 the draw is
     /// byte-identical to what it always was — the welcome band never sets it.
     var erosion: Double = 0
+    /// Points from the layer top that are fully transparent under the owner's
+    /// mask — rows above are skipped rather than computed-then-erased. The
+    /// onboarding layer passes its mask's current transparent start; the
+    /// handoff curtain leaves the default and draws every row.
+    var topCull: CGFloat = 0
 
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.scenePhase) private var scenePhase
@@ -594,8 +694,9 @@ struct AsciiFieldView: View {
         // effectively set 5 times per frame instead of ~700. The trig is not
         // the bottleneck; unbatched draw-state changes would be. Buckets are
         // reused across frames (zero per-frame allocation once warm).
+        let startRow = min(rows, AsciiFieldLayout.cullStartRow(transparentStart: topCull))
         for level in 0..<5 { cache.buckets[level].removeAll(keepingCapacity: true) }
-        for row in 0..<rows {
+        for row in startRow..<rows {
             let sy = (Double(row) + 0.5) * scale
             let py = Double(row) * cellH + cellH / 2
             for col in 0..<cols {

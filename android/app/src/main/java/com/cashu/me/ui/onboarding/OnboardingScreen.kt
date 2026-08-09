@@ -529,22 +529,38 @@ internal fun OnboardingScreen(
     // cannot shift on that swap; it only changes while the field is hidden.
     var chassisHeightPx by remember { mutableStateOf(0) }
 
+    // The backdrop's mask extent target: Welcome runs the field tall,
+    // Restore Wallet drops it to the band, and every other step holds the
+    // last value — the pair's exit is opacity-only.
+    var asciiExpanded by remember { mutableStateOf(true) }
+    LaunchedEffect(step) {
+        when (step) {
+            is OnboardingStep.Welcome -> asciiExpanded = true
+            is OnboardingStep.RestoreMethod -> asciiExpanded = false
+            else -> Unit
+        }
+    }
+
     Box(
         modifier = Modifier
             .fillMaxSize()
             .testTag(UiTestTags.OnboardingRoot)
             .background(MaterialTheme.colorScheme.background),
     ) {
-        // The terrain band, hoisted here — behind the stage switch, in front
+        // The terrain layer, hoisted here — behind the stage switch, in front
         // of the window ground — so the Welcome ↔ Restore Wallet swap changes
-        // only the text above it, never the terrain (see AsciiField.kt).
-        // Exactly these two steps show it; every other step fades it out on
-        // the stage swap's own specs and pauses the clock. Mounted *outside*
+        // the text above it and the *mask's extent*, never the terrain's
+        // glyph grid (see AsciiField.kt): tall on Welcome, the classic band
+        // on Restore Wallet, the settle between them the cue that the screen
+        // changed. Exactly these two steps show it; every other step fades it
+        // out on the stage swap's own specs, pauses the clock, and holds the
+        // last extent so the mask never morphs mid-fade. Mounted *outside*
         // the inset padding below so the terrain's floor runs behind the nav
         // bar to the physical screen bottom; the backdrop reads the insets
         // itself.
         OnboardingAsciiBackdrop(
             visible = step is OnboardingStep.Welcome || step is OnboardingStep.RestoreMethod,
+            expanded = asciiExpanded,
             conceptSheetOpen = infoOpen,
             chassisHeightPx = chassisHeightPx,
             modifier = Modifier.matchParentSize(),

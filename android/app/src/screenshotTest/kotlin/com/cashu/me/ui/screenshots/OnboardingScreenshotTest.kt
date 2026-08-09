@@ -576,6 +576,7 @@ private val FixtureChassisHeight = 176.dp
 private fun AsciiFieldFrame(
     darkTheme: Boolean = false,
     staticTime: Float = 2.5f,
+    expanded: Boolean,
     chassis: OnboardingChassisModel,
     stage: @Composable () -> Unit,
 ) {
@@ -583,6 +584,7 @@ private fun AsciiFieldFrame(
         Box(Modifier.fillMaxSize()) {
             OnboardingAsciiBackdrop(
                 visible = true,
+                expanded = expanded,
                 conceptSheetOpen = false,
                 chassisHeightPx = with(LocalDensity.current) { FixtureChassisHeight.roundToPx() },
                 staticTime = staticTime,
@@ -600,6 +602,8 @@ private fun AsciiWelcomeFrame(darkTheme: Boolean = false, staticTime: Float = 2.
     AsciiFieldFrame(
         darkTheme = darkTheme,
         staticTime = staticTime,
+        // Welcome runs the field tall (mask extent 1).
+        expanded = true,
         chassis = welcomeChassis(
             creating = false,
             retryingStartup = false,
@@ -621,6 +625,8 @@ private fun AsciiWelcomeFrame(darkTheme: Boolean = false, staticTime: Float = 2.
 private fun AsciiRestoreMethodFrame(darkTheme: Boolean = false) {
     AsciiFieldFrame(
         darkTheme = darkTheme,
+        // Restore Wallet shows the classic band (mask extent 0).
+        expanded = false,
         chassis = OnboardingChassisModel(
             primary = ChassisAction("Use Seed Phrase", onClick = {}, style = ChassisButtonStyle.Secondary),
         ),

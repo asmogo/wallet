@@ -16,8 +16,7 @@ import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.material3.MaterialTheme
@@ -30,7 +29,6 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.graphics.BlendMode
@@ -46,9 +44,9 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalInspectionMode
+import androidx.compose.ui.semantics.SemanticsPropertyKey
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.testTag
-import androidx.compose.ui.unit.dp
 import com.cashu.me.ui.testing.UiTestTags
 import com.cashu.me.ui.theme.rememberReducedMotion
 import kotlin.math.ceil
@@ -56,6 +54,7 @@ import kotlin.math.cos
 import kotlin.math.exp
 import kotlin.math.floor
 import kotlin.math.hypot
+import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.roundToInt
 import kotlin.math.sin
@@ -360,18 +359,23 @@ internal class AsciiFieldWarpTouch {
     }
 }
 
-/** Band geometry as pure math, so the layout-invariant test can assert it
+/** Field geometry as pure math, so the layout-invariant test can assert it
  * without composing views. Mirrors iOS `AsciiFieldLayout`.
  *
- * The field pins to the window bottom and runs under the chassis. It
- * terminates through its own mask, not through occlusion: the bottom fade
- * begins above the chassis edge and reaches zero a little past it, so the
- * terrain dissolves toward the buttons — a faint sliver continuing behind
- * them — instead of ending on a hard cut at the chassis top. The on-screen
- * glyph positions are a function of window size and the (constant across the
- * welcome/restore pair) chassis height — never of header height, stage
- * content, or current step — which is what lets the terrain hold perfectly
- * still across the Welcome ↔ Restore Wallet swap. */
+ * The drawn layer always spans the full window, on both steps of the pair:
+ * glyph positions (and the currency hash keyed on them) are a function of
+ * layer size, so a layer that resized between steps would make the whole
+ * texture swim and re-hash mid-transition. What differs per step is only the
+ * *mask*. Welcome runs the field tall — clear behind the header block, then a
+ * long ramp to opaque — and Restore Wallet shows the classic bottom band. The
+ * settle between the two stop-sets, driven by a single 0…1 extent riding the
+ * stage swap, is the cue that the screen changed; the terrain itself never
+ * moves and never re-hashes.
+ *
+ * The field terminates through its mask, not through occlusion: the bottom
+ * fade begins above the chassis edge and settles onto a faint floor a little
+ * past it, so the terrain dissolves toward the buttons — a faint sliver
+ * continuing behind them — instead of ending on a hard cut. */
 internal object AsciiFieldLayout {
     /** Web is `clamp(180px, 26vh, 320px)`; scaled slightly for phone-sized
      * viewports. All values dp. */
@@ -383,10 +387,16 @@ internal object AsciiFieldLayout {
      * accessibility-size copy (or a landscape phone) — draw nothing instead. */
     const val SUPPRESSION_THRESHOLD = 120f
 
-    /** The mask ramps transparent → opaque over this fraction of the visible
+    /** Band mode ramps transparent → opaque over this fraction of the visible
      * band (the web masks the top 30% of its fully-visible band; ours also
      * extends under the chassis, so the fraction applies to the visible part). */
     const val MASK_FADE = 0.30f
+
+    /** Full mode's ramp length as a fraction of the *window* — the same 0.30
+     * family as [MASK_FADE] and the handoff's SweepEdge, stretched over the
+     * taller extent so the field materializes gradually below the header
+     * instead of arriving on a visible line. */
+    const val FULL_FADE = 0.30f
 
     /** The bottom fade starts this far (dp) above the chassis edge… */
     const val BOTTOM_FADE_REACH = 48f
@@ -400,56 +410,114 @@ internal object AsciiFieldLayout {
      * buttons and the navigation bar instead of cutting out above them. */
     const val BOTTOM_FLOOR_ALPHA = 0.25f
 
+    /** The two extent-dependent mask boundaries, as fractions of layerHeight. */
+    data class MaskStops(val clearEnd: Float, val opaqueEnd: Float)
+
     data class Resolution(
-        /** Height of the band above the chassis — the part the user sees. */
+        /** Height of the band above the chassis — what Restore Wallet shows. */
         val visibleBand: Float,
-        /** Full layer height: visible band + chassis underlap. */
+        /** Full layer height — always the window height, on both steps. */
         val layerHeight: Float,
-        /** Where the mask becomes fully opaque, as a fraction of layerHeight. */
-        val maskOpaqueFraction: Float,
-        /** Where the bottom fade begins (fraction of layerHeight) — above the
-         * chassis edge, so the dissolve is already underway when the terrain
-         * meets the buttons. */
+        /** Band mode (extent 0), as fractions of layerHeight: fully clear
+         * above [bandClearEnd], ramping to fully opaque at [bandOpaqueEnd].
+         * Geometrically the shipped band mask in window coordinates. */
+        val bandClearEnd: Float,
+        val bandOpaqueEnd: Float,
+        /** Full mode (extent 1): clear behind the whole header block — the
+         * boundary sits at the header-clearance line — then the long ramp. */
+        val fullClearEnd: Float,
+        val fullOpaqueEnd: Float,
+        /** The bottom fade never moves with extent — above the chassis edge,
+         * so the dissolve is already underway when the terrain meets the
+         * buttons… */
         val bottomFadeStart: Float,
-        /** Where the bottom fade completes (fraction of layerHeight) —
-         * slightly past the chassis edge, behind the buttons. */
+        /** …completing slightly past the chassis edge, behind the buttons. */
         val bottomFadeEnd: Float,
-    )
+    ) {
+        /** The extent-dependent stops, lerped. Clamped because a bouncy
+         * spatial spring overshoots its 0…1 target transiently. */
+        fun maskStops(extent: Float): MaskStops {
+            val e = extent.coerceIn(0f, 1f)
+            return MaskStops(
+                clearEnd = bandClearEnd + (fullClearEnd - bandClearEnd) * e,
+                opaqueEnd = bandOpaqueEnd + (fullOpaqueEnd - bandOpaqueEnd) * e,
+            )
+        }
+
+        /** Dp from the layer top to the current fully-transparent boundary —
+         * everything above it is masked to nothing and cullable. */
+        fun transparentStartDp(extent: Float): Float = maskStops(extent).clearEnd * layerHeight
+    }
 
     /** [headerClearance] is the vertical room the pair's tallest header
      * (welcome's two-line title + subhead, scaled by the live fontScale)
      * needs. Using the same clearance for both steps of the pair keeps the
-     * resolved frame identical across them — the layout-invariant contract. */
+     * resolved geometry identical across them — the layout-invariant
+     * contract, now carried by the constant full-window layer. */
     fun resolve(
         windowHeight: Float,
+        topInset: Float,
         headerClearance: Float,
         chassisHeight: Float,
     ): Resolution? {
         val band = (BAND_FRACTION * windowHeight).coerceIn(MIN_BAND, MAX_BAND)
         // The empty region between the header block and the chassis. When the
         // heavy display title wraps at large font scales (or the window is a
-        // landscape phone), this collapses and the band is suppressed rather
+        // landscape phone), this collapses and the field is suppressed rather
         // than squashed — the band never shrinks to fit.
-        val available = windowHeight - headerClearance - chassisHeight
+        val available = windowHeight - topInset - headerClearance - chassisHeight
         if (min(band, available) < SUPPRESSION_THRESHOLD) return null
-        return resolution(band, chassisHeight)
+        return resolution(band, windowHeight, topInset, headerClearance, chassisHeight)
     }
 
     /** The suppressed case still needs a stable frame (the backdrop hides
      * rather than unmounts, to keep its wall clock), so it lays out the
-     * floor band. */
-    fun fallback(chassisHeight: Float): Resolution = resolution(MIN_BAND, chassisHeight)
+     * floor band against the same full-window layer. */
+    fun fallback(
+        windowHeight: Float,
+        topInset: Float,
+        headerClearance: Float,
+        chassisHeight: Float,
+    ): Resolution = resolution(MIN_BAND, windowHeight, topInset, headerClearance, chassisHeight)
 
-    private fun resolution(band: Float, chassisHeight: Float): Resolution {
-        val layerHeight = band + chassisHeight
+    private fun resolution(
+        band: Float,
+        windowHeight: Float,
+        topInset: Float,
+        headerClearance: Float,
+        chassisHeight: Float,
+    ): Resolution {
+        // A transient zero-size layout pass must not divide by zero; the
+        // degenerate frame is invisible (suppressed → alpha 0) either way.
+        val height = max(windowHeight, band + chassisHeight)
+        val bandTop = height - chassisHeight - band
+        val bandClearEnd = bandTop / height
+        val bandOpaqueEnd = (bandTop + MASK_FADE * band) / height
+        // Both full-mode stops clamp against their band counterparts: in a
+        // cramped-but-not-suppressed window the header block can reach below
+        // the band top, and full mode must degrade to band mode — the settle
+        // becomes a no-op rather than inverting direction.
+        val fullClearEnd = min((topInset + headerClearance) / height, bandClearEnd)
+        val fullOpaqueEnd = min(fullClearEnd + FULL_FADE, bandOpaqueEnd)
         return Resolution(
             visibleBand = band,
-            layerHeight = layerHeight,
-            maskOpaqueFraction = (band * MASK_FADE) / layerHeight,
-            bottomFadeStart = (band - BOTTOM_FADE_REACH) / layerHeight,
-            bottomFadeEnd = (band + min(BOTTOM_FADE_UNDERLAP, chassisHeight)) / layerHeight,
+            layerHeight = height,
+            bandClearEnd = bandClearEnd,
+            bandOpaqueEnd = bandOpaqueEnd,
+            fullClearEnd = fullClearEnd,
+            fullOpaqueEnd = fullOpaqueEnd,
+            bottomFadeStart = (height - chassisHeight - BOTTOM_FADE_REACH) / height,
+            bottomFadeEnd = (height - chassisHeight + min(BOTTOM_FADE_UNDERLAP, chassisHeight)) / height,
         )
     }
+
+    /** First grid row worth evaluating under a mask whose fully-transparent
+     * region ends [transparentStartDp] from the layer top. One row of slack
+     * for glyph ink overhanging its cell; everything above multiplies to zero
+     * through the mask anyway, so culling is purely a cost move — it changes
+     * which rows are computed, never where anything draws. */
+    fun cullStartRow(transparentStartDp: Float): Int =
+        max(0, floor(transparentStartDp / AsciiFieldTerrain.CELL_H).toInt() - 1)
 
     /** Welcome's header at the live font scale: bar band + two title lines +
      * gap + one subhead line, in dp. Tracks fontScale so the suppression rule
@@ -463,22 +531,29 @@ internal object AsciiFieldLayout {
 }
 
 /**
- * The terrain layer as the onboarding root mounts it: pinned to the bottom of
- * the (inset-padded) window, running under the chassis, masked at the top.
+ * The terrain layer as the onboarding root mounts it: a full-window field
+ * whose gradient mask decides how much of it shows.
  *
  * Mounted once at the root rather than inside the stages. Welcome and Restore
  * Wallet are *adjacent* steps; mounted per-stage the field would unmount and
  * materialize-blur on that swap, and the two screens would read as two
  * separate wallpapers that happen to match. Hoisted, the terrain keeps
- * drifting and only the text above it changes — one continuous space.
- * Visibility is opacity only: leaving the pair fades on the same motion-scheme
- * specs the stage swap itself uses (the clock pauses); returning fades back in
- * and resumes from wall-clock.
+ * drifting while its mask settles between the pair's two extents — tall on
+ * Welcome, the classic band on Restore Wallet — one continuous space whose
+ * visible reach is the cue that the screen changed. Visibility is opacity
+ * only: leaving the pair fades on the same motion-scheme specs the stage swap
+ * itself uses (the clock pauses); returning fades back in and resumes from
+ * wall-clock.
  *
  * Suppression (tight vertical space) hides rather than removes the field: its
  * identity — and with it the wall clock — must survive, or a pass through a
  * suppressed layout would replay from t=0.
  *
+ * @param expanded True on Welcome (mask extent 1 — the tall field), false on
+ *   Restore Wallet (extent 0 — the band). The settle rides the spatial spec;
+ *   Reduce Motion and frozen goldens snap between the end states. Steps
+ *   outside the pair hold the last value — the exit is opacity-only, and the
+ *   mask must not morph mid-fade.
  * @param chassisHeightPx Measured height of the chassis this layer runs
  *   under. Constant across the welcome/restore pair (two capsules, no
  *   accessory), so the terrain cannot shift on that swap.
@@ -486,6 +561,7 @@ internal object AsciiFieldLayout {
 @Composable
 internal fun OnboardingAsciiBackdrop(
     visible: Boolean,
+    expanded: Boolean,
     conceptSheetOpen: Boolean,
     chassisHeightPx: Int,
     modifier: Modifier = Modifier,
@@ -500,21 +576,43 @@ internal fun OnboardingAsciiBackdrop(
         // mounts it outside its own inset padding), so the terrain can run
         // to the physical screen bottom. The nav bar joins the chassis as
         // underlap — exactly how iOS folds the home indicator into
-        // `chassisInset` — and the status bar is subtracted back out of the
-        // resolver's window so the suppression math matches the content
-        // area. Tests compose the backdrop with zero insets and are
-        // unaffected.
+        // `chassisInset` — and the status bar goes to the resolver as the
+        // top inset, matching iOS's full-window height + explicit topInset.
+        // Tests compose the backdrop with zero insets and are unaffected.
         val statusBarDp = with(density) { WindowInsets.statusBars.getTop(this).toDp().value }
         val navBarDp = with(density) { WindowInsets.navigationBars.getBottom(this).toDp().value }
-        val windowHeightDp = with(density) { constraints.maxHeight.toDp().value } - statusBarDp
+        val windowHeightDp = with(density) { constraints.maxHeight.toDp().value }
         val chassisDp = with(density) { chassisHeightPx.toDp().value } + navBarDp
         val resolved = AsciiFieldLayout.resolve(
             windowHeight = windowHeightDp,
+            topInset = statusBarDp,
             headerClearance = AsciiFieldLayout.headerClearanceDp(density.fontScale),
             chassisHeight = chassisDp,
         )
-        val layout = resolved ?: AsciiFieldLayout.fallback(chassisHeight = chassisDp)
+        val layout = resolved ?: AsciiFieldLayout.fallback(
+            windowHeight = windowHeightDp,
+            topInset = statusBarDp,
+            headerClearance = AsciiFieldLayout.headerClearanceDp(density.fontScale),
+            chassisHeight = chassisDp,
+        )
         val shouldShow = visible && resolved != null
+
+        // The mask's extent, 0 (band) … 1 (full). Initialized at the target —
+        // a frozen (staticTime) golden must show the step's resting mask on
+        // its very first frame — and animated on the spatial spec, the same
+        // register the stage swap's scale rides, so the settle and the text
+        // materialize read as one gesture. Reduce Motion snaps: the end
+        // states differ, so the step change stays legible without motion.
+        val extent = remember { Animatable(if (expanded) 1f else 0f) }
+        val maskSpec = MaterialTheme.motionScheme.defaultSpatialSpec<Float>()
+        LaunchedEffect(expanded, reducedMotion) {
+            val target = if (expanded) 1f else 0f
+            if (staticTime != null || reducedMotion) {
+                extent.snapTo(target)
+            } else {
+                extent.animateTo(target, maskSpec)
+            }
+        }
 
         // First-launch entrance: title y-rise settles (~400ms), then a 450ms
         // delay and a 900ms easeOut fade — the field comes up like light in a
@@ -549,28 +647,41 @@ internal fun OnboardingAsciiBackdrop(
             staticTime = staticTime,
             active = visible && !conceptSheetOpen && resolved != null,
             forceSynthesizedPeak = forceSynthesizedPeak,
+            extentTarget = if (expanded) 1f else 0f,
+            // Rows above the mask's fully-transparent boundary are skipped
+            // rather than computed-then-erased — Restore keeps the band's
+            // cost while Welcome pays for the tall field. A lambda read in
+            // the draw scope, like erosion, so the settle repaints without
+            // recomposing.
+            topCullDp = { layout.transparentStartDp(extent.value) },
+            // The layer spans the whole window on both steps — the glyph
+            // grid is a function of window size alone, so the settle never
+            // moves or re-hashes the texture.
             modifier = Modifier
-                .align(Alignment.BottomCenter)
-                .fillMaxWidth()
-                .height(layout.layerHeight.dp)
+                .fillMaxSize()
                 .graphicsLayer {
                     alpha = opacity.value
                     // The top mask needs the glyphs flattened into one layer
                     // first, or DstIn would knock through to the ground.
                     compositingStrategy = CompositingStrategy.Offscreen
                 }
-                // Transparent → opaque over the visible band's top ~30%, like
-                // the web band's mask-image; then opaque → floor across the
-                // chassis edge, so the terrain dims toward the buttons and
-                // keeps running — very subtle — behind them all the way to
-                // the window bottom, instead of cutting out above them.
+                // Clear above the extent's boundary — behind the header on
+                // Welcome, down to the band top on Restore Wallet — ramping
+                // to opaque; then opaque → floor across the chassis edge, so
+                // the terrain dims toward the buttons and keeps running —
+                // very subtle — behind them all the way to the window bottom.
                 // Continuous gradients, never stepped, so neither fade bands.
+                // extent is read *here*, in the draw phase, so each animated
+                // value invalidates only the draw — no recomposition per
+                // frame of the settle.
                 .drawWithContent {
                     drawContent()
+                    val stops = layout.maskStops(extent.value)
                     drawRect(
                         brush = Brush.verticalGradient(
                             0f to Color.Transparent,
-                            layout.maskOpaqueFraction to Color.Black,
+                            stops.clearEnd to Color.Transparent,
+                            stops.opaqueEnd to Color.Black,
                             layout.bottomFadeStart to Color.Black,
                             layout.bottomFadeEnd to
                                 Color.Black.copy(alpha = AsciiFieldLayout.BOTTOM_FLOOR_ALPHA),
@@ -605,6 +716,16 @@ internal fun AsciiField(
     active: Boolean = true,
     forceSynthesizedPeak: Boolean = false,
     touchOverride: AsciiFieldWarpTouch? = null,
+    /** The owning step's resting mask extent (1 Welcome, 0 Restore Wallet),
+     * published through semantics so the layout compose test can assert the
+     * end state each step drives without reading animation internals. Null
+     * (the handoff curtain) publishes nothing. */
+    extentTarget: Float? = null,
+    /** Dp from the layer top that are fully transparent under the owner's
+     * mask — rows above are skipped rather than computed-then-erased. A
+     * draw-scope lambda like [erosion], so the settle repaints without
+     * recomposing. The handoff leaves the default and draws every row. */
+    topCullDp: () -> Float = { 0f },
     /** The handoff's exit dissolve, 0 (intact) → 1 (gone). A lambda, not a
      * value: the overlay's animation is read inside the draw scope, so a
      * dissolving field repaints without recomposing 30 times a second. At 0
@@ -734,7 +855,10 @@ internal fun AsciiField(
                     }
                 }
             }
-            .clearAndSetSemantics { testTag = UiTestTags.OnboardingAsciiField },
+            .clearAndSetSemantics {
+                testTag = UiTestTags.OnboardingAsciiField
+                extentTarget?.let { this[AsciiFieldExtentTargetKey] = it }
+            },
     ) {
         val t = (staticTime ?: timeState.floatValue).toDouble()
         val now = nowSeconds()
@@ -743,11 +867,15 @@ internal fun AsciiField(
         drawIntoCanvas { canvas ->
             renderer.draw(
                 canvas.nativeCanvas, size.width, size.height, t,
-                touch.x, touch.y, warpK, erosion(),
+                touch.x, touch.y, warpK, erosion(), topCullDp(),
             )
         }
     }
 }
+
+/** Published by the onboarding backdrop so the layout compose test can assert
+ * each step's resting mask extent without reaching into animation internals. */
+internal val AsciiFieldExtentTargetKey = SemanticsPropertyKey<Float>("AsciiFieldExtentTarget")
 
 /** Wall-clock seconds for the warp envelope — monotonic, arbitrary epoch;
  * only differences are ever used. */
@@ -822,14 +950,16 @@ internal class AsciiFieldRenderer(
         touchY: Double = 0.0,
         warpK: Double = 0.0,
         erosion: Double = 0.0,
+        topCullDp: Float = 0f,
     ) {
         val cellWPx = (AsciiFieldTerrain.CELL_W * density).toFloat()
         val cellHPx = (AsciiFieldTerrain.CELL_H * density).toFloat()
         val cols = ceil(widthPx / cellWPx).toInt() + 1
         val rows = ceil(heightPx / cellHPx).toInt() + 1
+        val startRow = min(rows, AsciiFieldLayout.cullStartRow(topCullDp))
 
         for (bucket in buckets) bucket.clear()
-        for (row in 0 until rows) {
+        for (row in startRow until rows) {
             val sy = (row + 0.5) * AsciiFieldTerrain.TERRAIN_SCALE
             val py = row * cellHPx + cellHPx / 2f
             // Cell center on the dp grid — the warp's (and iOS's) space, so

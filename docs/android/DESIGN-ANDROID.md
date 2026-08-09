@@ -148,7 +148,12 @@ like a port, make the Android-native choice instead.
   conceals, played once, never referenced by wallet code. The gate's own
   `transitionSpec` is untouched and plays unseen beneath it (plan 008 stays
   orthogonal); under Reduce Motion the curtain never mounts and the gate
-  crossfade is the entire transition.
+  crossfade is the entire transition. The welcome ⇄ restoreMethod pair's
+  screen-change cue is the ASCII backdrop's **mask extent settle**
+  (`OnboardingAsciiBackdrop`): the full-window layer never moves; the
+  gradient's two top stops lerp between welcome's tall extent and restore's
+  band on `motionScheme.defaultSpatialSpec`, snapping under Reduce Motion —
+  the iOS register is the step's own `.easeInOut(0.28)` transaction.
 - **Onboarding system back (2026-08-05):** `OnboardingScreen` registers a
   `BackHandler` mirroring the on-screen back buttons exactly (seed reveal →
   welcome, method chooser → welcome, seed entry → welcome, mint staging →
