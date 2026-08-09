@@ -1,6 +1,7 @@
 package com.cashu.me.ui.restore
 
 import androidx.compose.animation.Crossfade
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -673,7 +674,8 @@ fun RestoreMintsStageContent(
         // for anyone who can't recite their mint URLs, which is most people;
         // third-of-a-row next to Add and Paste both buried it and truncated it.
         RestoreCapsuleChip(
-            text = if (searching) "Checking for your mints…" else "Find my mints",
+            text = "Find my mints",
+            busyText = "Checking for your mints…",
             icon = Icons.Outlined.Search,
             onClick = onNostr,
             loading = searching,
@@ -834,6 +836,9 @@ private fun RestoreCapsuleChip(
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
     loading: Boolean = false,
+    /** Busy-state label. Set, both states stay resident and cross-fade in
+     * place (iOS `mintLookupChip`); unset, [text] is the only label. */
+    busyText: String? = null,
 ) {
     val contentAlpha = if (enabled) 1f else 0.38f
     Surface(
@@ -849,20 +854,49 @@ private fun RestoreCapsuleChip(
         color = MaterialTheme.colorScheme.surfaceContainerHigh,
         contentColor = MaterialTheme.colorScheme.onSurface,
     ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(vertical = 12.dp, horizontal = CashuTheme.spacing.snug),
-            horizontalArrangement = Arrangement.Center,
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            // Fixed glyph box so swapping the symbol for a spinner can't change
-            // the chip's height, and a cross-fade rather than a swap so the
-            // glyph dissolves in place. iOS twin: OnboardingView.mintLookupChip.
+        if (busyText != null) {
+            // Both states resident, so the chip's geometry is constant and a
+            // lookup starting only moves opacity — a single swapped label
+            // re-centres the row mid-animation and drags the glyph across the
+            // chip. iOS twin: OnboardingView.mintLookupChip's ZStack.
+            val idleAlpha by animateFloatAsState(
+                targetValue = if (loading) 0f else 1f,
+                label = "chip-idle",
+            )
+            val busyAlpha by animateFloatAsState(
+                targetValue = if (loading) 1f else 0f,
+                label = "chip-busy",
+            )
             Box(
-                modifier = Modifier.size(ChipGlyphSize),
+                modifier = Modifier.fillMaxWidth(),
                 contentAlignment = Alignment.Center,
             ) {
+                RestoreChipContent(
+                    text = text,
+                    contentAlpha = contentAlpha * idleAlpha,
+                ) {
+                    Icon(
+                        imageVector = icon,
+                        contentDescription = null,
+                        modifier = Modifier.size(ChipGlyphSize),
+                        tint = MaterialTheme.colorScheme.onSurface.copy(alpha = contentAlpha * idleAlpha),
+                    )
+                }
+                RestoreChipContent(
+                    text = busyText,
+                    contentAlpha = contentAlpha * busyAlpha,
+                ) {
+                    LoadingIndicator(
+                        modifier = Modifier.size(ChipGlyphSize),
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = contentAlpha * busyAlpha),
+                    )
+                }
+            }
+        } else {
+            RestoreChipContent(text = text, contentAlpha = contentAlpha) {
+                // Fixed glyph box so swapping the symbol for a spinner can't
+                // change the chip's height, and a cross-fade rather than a
+                // swap so the glyph dissolves in place.
                 Crossfade(targetState = loading, label = "chip-glyph") { busy ->
                     if (busy) {
                         LoadingIndicator(
@@ -879,15 +913,38 @@ private fun RestoreCapsuleChip(
                     }
                 }
             }
-            Spacer(Modifier.size(CashuTheme.spacing.micro))
-            Text(
-                text = text,
-                style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.SemiBold),
-                color = MaterialTheme.colorScheme.onSurface.copy(alpha = contentAlpha),
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
         }
+    }
+}
+
+@Composable
+private fun RestoreChipContent(
+    text: String,
+    contentAlpha: Float,
+    modifier: Modifier = Modifier,
+    glyph: @Composable () -> Unit,
+) {
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(vertical = 12.dp, horizontal = CashuTheme.spacing.snug),
+        horizontalArrangement = Arrangement.Center,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(
+            modifier = Modifier.size(ChipGlyphSize),
+            contentAlignment = Alignment.Center,
+        ) {
+            glyph()
+        }
+        Spacer(Modifier.size(CashuTheme.spacing.micro))
+        Text(
+            text = text,
+            style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.SemiBold),
+            color = MaterialTheme.colorScheme.onSurface.copy(alpha = contentAlpha),
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
     }
 }
 

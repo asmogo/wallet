@@ -698,22 +698,22 @@ internal fun OnboardingScreen(
                         OnboardingStep.RestoreInput -> Column(Modifier.fillMaxSize()) {
                             val restoreInputAppeared = rememberAppeared()
                             OnboardingBackButton(
-                                // A sequenced exit, one motion at a time: the
-                                // tap drops the IME immediately and the chassis
-                                // rides down as a stable object; only once it
-                                // has landed does the stage swap and the slots
-                                // morph in place. Overlapped, the travel and
-                                // the label morph read as "buttons mash to the
-                                // bottom" (device review 2026-08-08). Back is
-                                // one hop to the method chooser.
+                                // The tap answers at once with the materialize
+                                // cross-fade, and the keyboard drops concurrently
+                                // as its own system motion — the iOS exit. The
+                                // earlier sequenced version (keyboard, 250ms,
+                                // then swap) read as a dead wait followed by a
+                                // lurch; it only existed because the chassis
+                                // used to travel with the keyboard mid-morph
+                                // ("buttons mash to the bottom", device review
+                                // 2026-08-08). The backdrop is IME-blind and
+                                // holds its chassis height through the exit now,
+                                // so the dismissing keyboard merely uncovers a
+                                // stage that is already settling. Back is one
+                                // hop to the method chooser.
                                 onBack = {
                                     focusManager.clearFocus()
-                                    scope.launch {
-                                        delay(250)
-                                        if (step == OnboardingStep.RestoreInput) {
-                                            step = OnboardingStep.RestoreMethod
-                                        }
-                                    }
+                                    step = OnboardingStep.RestoreMethod
                                 },
                                 modifier = Modifier.padding(
                                     start = OnboardingMetrics.BarStartInset,
