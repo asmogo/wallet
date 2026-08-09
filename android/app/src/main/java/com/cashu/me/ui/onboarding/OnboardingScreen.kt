@@ -3,6 +3,11 @@ package com.cashu.me.ui.onboarding
 import android.os.Build
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.LinearOutSlowInEasing
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -105,7 +110,7 @@ import com.cashu.me.ui.components.InlineNotice
 import com.cashu.me.ui.components.MintAvatar
 import com.cashu.me.ui.components.NoticeSeverity
 import com.cashu.me.ui.components.PrimaryButton
-import com.cashu.me.ui.components.materializeBlur
+import com.cashu.me.ui.components.morphBlur
 import com.cashu.me.ui.mints.RecommendedMints
 import com.cashu.me.ui.restore.RestoreMintsStageContent
 import com.cashu.me.ui.restore.RestoreMintsSubhead
@@ -122,7 +127,9 @@ import com.cashu.me.ui.restore.restoreSeedInstallErrorMessage
 import com.cashu.me.ui.restore.runSeedChecksum
 import com.cashu.me.ui.testing.UiTestTags
 import com.cashu.me.ui.theme.CashuTheme
+import com.cashu.me.ui.theme.rememberAppeared
 import com.cashu.me.ui.theme.rememberReducedMotion
+import com.cashu.me.ui.theme.riseIn
 import com.cashu.me.ui.theme.withSlashedZero
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -159,6 +166,14 @@ private val SeedGridColumnGap = 12.dp
 private val SeedGridRowGap = 14.dp
 private val SeedIndexWidth = 22.dp
 private val SeedBlurRadius = 9.dp
+
+// Step-swap choreography — iOS `stepTransition` (`OnboardingView.swift`):
+// entrance 280ms starting 100ms in so it overlaps the exit's tail, exit
+// 180ms; both halves blur to 6dp (the stage's materializeBlur radius).
+private const val StageEnterMs = 280
+private const val StageEnterDelayMs = 100
+private const val StageExitMs = 180
+private val StageBlurRadius = 6.dp
 
 // Stand-in for the blur wherever it cannot run — see SeedGrid. Blurred, the
 // placeholder rows lose enough contrast for the centred reveal overlay to read
@@ -321,13 +336,17 @@ internal fun OnboardingScreen(
         rememberRestoreProgressState(walletManager, it.mintUrls)
     }
 
-    // Stage-swap motion (onboarding-restyle-brief §5, expressed per the
-    // Android charter as M3 Expressive motion-scheme springs, captured here
-    // because transitionSpec lambdas are not composable).
+    // Stage-swap motion (onboarding-restyle-brief §5) — the iOS
+    // `stepTransition` recipe verbatim: the entrance waits 100ms so it
+    // overlaps the tail of the 180ms exit, and both halves ride tween curves
+    // matching iOS `.smooth(0.28)` / `.easeOut(0.18)`.
     val reducedMotion = rememberReducedMotion()
-    val stageEnterSpec = MaterialTheme.motionScheme.defaultEffectsSpec<Float>()
-    val stageScaleSpec = MaterialTheme.motionScheme.defaultSpatialSpec<Float>()
-    val stageExitSpec = MaterialTheme.motionScheme.fastEffectsSpec<Float>()
+    val stageEnterSpec = tween<Float>(
+        durationMillis = StageEnterMs,
+        delayMillis = StageEnterDelayMs,
+        easing = FastOutSlowInEasing,
+    )
+    val stageExitSpec = tween<Float>(durationMillis = StageExitMs, easing = LinearOutSlowInEasing)
 
     val chassis: OnboardingChassisModel = when (val current = step) {
         OnboardingStep.Welcome -> welcomeChassis(
@@ -526,8 +545,17 @@ internal fun OnboardingScreen(
 
     // Chassis height feeds the ASCII backdrop's underlap. Constant across the
     // welcome/restore pair (two capsules, no accessory), so the terrain
-    // cannot shift on that swap; it only changes while the field is hidden.
+    // cannot shift on that swap.
     var chassisHeightPx by remember { mutableStateOf(0) }
+    // The pair's exit hides the field on the same gesture that drops a
+    // chassis capsule (and raises the seed keyboard), and the chassis height
+    // springs to its new value — a live read slides the vault mid-fade, the
+    // "push" jank iOS fixed in OnboardingView. The last on-screen height is
+    // held for the whole time the field is off the pair, so the exit stays
+    // the documented opacity-only fade; live tracking resumes on return, at
+    // opacity 0, where the swap is invisible.
+    val asciiFieldShowing = step is OnboardingStep.Welcome || step is OnboardingStep.RestoreMethod
+    var asciiFieldHeldChassisPx by remember { mutableStateOf<Int?>(null) }
 
     // The backdrop's material target: Welcome runs the tall terrain, Restore
     // Wallet morphs it into the vault door, and every other step holds the
@@ -559,10 +587,10 @@ internal fun OnboardingScreen(
         // behind the nav bar to the physical screen bottom; the backdrop
         // reads the insets itself.
         OnboardingAsciiBackdrop(
-            visible = step is OnboardingStep.Welcome || step is OnboardingStep.RestoreMethod,
+            visible = asciiFieldShowing,
             vault = asciiVault,
             conceptSheetOpen = infoOpen,
-            chassisHeightPx = chassisHeightPx,
+            chassisHeightPx = if (asciiFieldShowing) chassisHeightPx else (asciiFieldHeldChassisPx ?: chassisHeightPx),
             modifier = Modifier.matchParentSize(),
         )
         OnboardingScaffold(
@@ -573,16 +601,20 @@ internal fun OnboardingScreen(
                 .navigationBarsPadding()
                 .imePadding(),
             accessory = accessory,
-            chassisModifier = Modifier.onSizeChanged { chassisHeightPx = it.height },
+            chassisModifier = Modifier.onSizeChanged {
+                chassisHeightPx = it.height
+                if (asciiFieldShowing) asciiFieldHeldChassisPx = it.height
+            },
         ) {
             AnimatedContent(
                 targetState = step,
                 modifier = Modifier.fillMaxSize(),
                 // Quiet materialize — no lateral push between steps (2026-06-26
                 // iOS decision, binding product behavior). The incoming stage
-                // scales 0.96 → 1 on the expressive spatial spring while fading in
-                // and resolving from blur (the materializeBlur below); the outgoing
-                // stage just fades on the fast spec — exits subtler than entrances.
+                // scales 0.96 → 1 while fading in and resolving from blur; the
+                // outgoing stage blurs and fades faster — exits subtler than
+                // entrances, and the entrance starts 100ms in so it overlaps
+                // the exit's tail rather than queueing behind it.
                 // Reduce Motion keeps a plain crossfade.
                 transitionSpec = {
                     if (reducedMotion) {
@@ -590,25 +622,30 @@ internal fun OnboardingScreen(
                     } else {
                         (
                             fadeIn(stageEnterSpec) +
-                                scaleIn(animationSpec = stageScaleSpec, initialScale = 0.96f)
+                                scaleIn(animationSpec = stageEnterSpec, initialScale = 0.96f)
                             )
                             .togetherWith(fadeOut(stageExitSpec))
                     }
                 },
                 label = "onboarding-step",
             ) { current ->
-                // Incoming stages resolve from a 4dp blur (API 31+ and
-                // reduce-motion gated inside materializeBlur). Skipped on the
-                // initial composition so a cold launch's first frame renders sharp.
-                val enteredViaTransition = remember { transition.currentState != transition.targetState }
-                val stageModifier = if (enteredViaTransition) {
+                // The blur rides BOTH halves off the transition clock (iOS
+                // `materializeBlur(6)` on insertion and removal): without the
+                // outgoing half softening too, the swap reads as two objects
+                // overlapping instead of one resolving. On the initial
+                // composition the transition is already at Visible, so a cold
+                // launch's first frame renders sharp.
+                Box(
                     Modifier
                         .fillMaxSize()
-                        .materializeBlur()
-                } else {
-                    Modifier.fillMaxSize()
-                }
-                Box(stageModifier) {
+                        .then(
+                            morphBlur(
+                                StageBlurRadius,
+                                enterSpec = stageEnterSpec,
+                                exitSpec = stageExitSpec,
+                            ),
+                        ),
+                ) {
                     when (current) {
                         OnboardingStep.Welcome -> WelcomeStageContent(
                             startupFailure = walletState.startupFailure,
@@ -651,12 +688,15 @@ internal fun OnboardingScreen(
                             OnboardingStepHeader(
                                 title = "Restore wallet.",
                                 subhead = "Choose how to restore your wallet.",
-                                modifier = Modifier.padding(top = OnboardingMetrics.TitleGap),
+                                modifier = Modifier
+                                    .riseIn(rememberAppeared(), index = 0)
+                                    .padding(top = OnboardingMetrics.TitleGap),
                             )
                             Spacer(Modifier.weight(1f))
                         }
 
                         OnboardingStep.RestoreInput -> Column(Modifier.fillMaxSize()) {
+                            val restoreInputAppeared = rememberAppeared()
                             OnboardingBackButton(
                                 // A sequenced exit, one motion at a time: the
                                 // tap drops the IME immediately and the chassis
@@ -683,7 +723,9 @@ internal fun OnboardingScreen(
                             OnboardingStepHeader(
                                 title = "Restore wallet.",
                                 subhead = SeedEntryCopy.SUBHEAD,
-                                modifier = Modifier.padding(top = OnboardingMetrics.TitleGap),
+                                modifier = Modifier
+                                    .riseIn(restoreInputAppeared, index = 0)
+                                    .padding(top = OnboardingMetrics.TitleGap),
                             )
                             RestoreSeedStageContent(
                                 state = seedState,
@@ -709,6 +751,7 @@ internal fun OnboardingScreen(
                                 },
                                 errorText = restoreError,
                                 modifier = Modifier
+                                    .riseIn(restoreInputAppeared, index = 1)
                                     .weight(1f)
                                     .fillMaxWidth(),
                             )
@@ -745,7 +788,9 @@ internal fun OnboardingScreen(
                             OnboardingStepHeader(
                                 title = RestoreMintsTitleOnboarding,
                                 subhead = RestoreMintsSubhead,
-                                modifier = Modifier.padding(top = OnboardingMetrics.TitleGap),
+                                modifier = Modifier
+                                    .riseIn(rememberAppeared(), index = 0)
+                                    .padding(top = OnboardingMetrics.TitleGap),
                             )
                             RestoreMintsStageContent(
                                 input = restoreMintsStaging.input,
@@ -774,10 +819,12 @@ internal fun OnboardingScreen(
                             OnboardingStepHeader(
                                 title = "Restoring wallet.",
                                 subhead = progressState?.subhead,
-                                modifier = Modifier.padding(
-                                    top = OnboardingMetrics.TitleTopInset,
-                                    bottom = CashuTheme.spacing.default,
-                                ),
+                                modifier = Modifier
+                                    .riseIn(rememberAppeared(), index = 0)
+                                    .padding(
+                                        top = OnboardingMetrics.TitleTopInset,
+                                        bottom = CashuTheme.spacing.default,
+                                    ),
                             )
                             if (progressState != null && progressState.totalRecovered > 0L) {
                                 // Money value — monospaced digits + no roll (Numbers
@@ -885,7 +932,9 @@ internal fun WelcomeStageContent(
         OnboardingStepHeader(
             title = "Private cash.\nIn your pocket.",
             subhead = "An ecash wallet for Bitcoin and Lightning.",
-            modifier = Modifier.padding(top = OnboardingMetrics.TitleGap),
+            modifier = Modifier
+                .riseIn(rememberAppeared(), index = 0)
+                .padding(top = OnboardingMetrics.TitleGap),
         )
         Spacer(Modifier.weight(1f))
         if (startupFailure != null) {
@@ -1165,7 +1214,9 @@ internal fun ShowMnemonicStageContent(
         OnboardingStepHeader(
             title = "Your seed phrase.",
             subhead = "Write these 12 words down in order. This is the only way to recover your wallet.",
-            modifier = Modifier.padding(top = OnboardingMetrics.TitleGap),
+            modifier = Modifier
+                .riseIn(rememberAppeared(), index = 0)
+                .padding(top = OnboardingMetrics.TitleGap),
         )
         // The seed grid deliberately gets NO entrance motion: any motion on
         // this block reads as a flicker on first paint, and recomposition
@@ -1339,7 +1390,16 @@ internal fun SeedPhraseReveal(
 @Composable
 private fun SeedGrid(words: List<String>, revealed: Boolean) {
     val canBlur = !LocalInspectionMode.current && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
-    val blurred = !revealed && canBlur
+    // The reveal is a ramp, not a cut: the radius animates 9 → 0 on reveal
+    // (and back on hide), so the placeholder → real-word swap lands under a
+    // still-heavy blur and resolves — iOS `.blur(radius:)` on `.snappy`.
+    // First composition initializes at the target, so a hidden grid never
+    // passes through radius 0.
+    val blurRadius by animateFloatAsState(
+        targetValue = if (!revealed && canBlur) SeedBlurRadius.value else 0f,
+        animationSpec = spring(stiffness = Spring.StiffnessMedium),
+        label = "seed-reveal-blur",
+    )
     val fade = if (!revealed && !canBlur) SeedUnblurredAlpha else 1f
     val indexStyle = MaterialTheme.typography.bodySmall.copy(fontFamily = CashuTheme.fonts.mono).withSlashedZero()
     val wordStyle = MaterialTheme.typography.bodyMedium.copy(
@@ -1361,7 +1421,7 @@ private fun SeedGrid(words: List<String>, revealed: Boolean) {
                     }
                 },
             )
-            .then(if (blurred) Modifier.blur(SeedBlurRadius) else Modifier),
+            .then(if (blurRadius > 0.05f) Modifier.blur(blurRadius.dp) else Modifier),
         verticalArrangement = Arrangement.spacedBy(SeedGridRowGap),
     ) {
         words.chunked(3).forEachIndexed { rowIndex, rowWords ->
@@ -1439,7 +1499,9 @@ internal fun FirstMintStageContent(
         OnboardingStepHeader(
             title = "Pick your first mint.",
             subhead = "Mints issue your ecash and redeem it for Bitcoin. Add more anytime in Settings.",
-            modifier = Modifier.padding(top = OnboardingMetrics.TitleGap),
+            modifier = Modifier
+                .riseIn(rememberAppeared(), index = 0)
+                .padding(top = OnboardingMetrics.TitleGap),
         )
         FirstMintList(
             state = state,

@@ -165,20 +165,46 @@ fun OnboardingChassis(
     // opaque ground here would cut it off at the chassis edge. The scaffold
     // stacks the chassis below the stage, so nothing ever scrolls under it —
     // unlike iOS, whose safe-area-inset chassis needs a conditional ground.
+    //
+    // Accessory occupancy rides the same fade + size-spring pair as the slots
+    // below it: iOS cross-fades the accessory in place while the chassis
+    // height animates on the step transaction; a bare `if` here snapped it in
+    // and jumped the stack. The snapshot keeps the outgoing accessory visible
+    // through its fade-out, mirroring ChassisSlot's.
+    val reducedMotion = rememberReducedMotion()
+    val accessoryEnterSpec = MaterialTheme.motionScheme.defaultEffectsSpec<Float>()
+    val accessoryExitSpec = MaterialTheme.motionScheme.fastEffectsSpec<Float>()
+    val accessorySizeSpec = MaterialTheme.motionScheme.defaultSpatialSpec<IntSize>()
+    var accessorySnapshot by remember { mutableStateOf(accessory) }
+    if (accessory != null) accessorySnapshot = accessory
     Column(modifier = modifier.fillMaxWidth()) {
         // Indicator slot — resolved as "no indicator" (brief §3): the flow
         // branches into paths of different lengths, so page dots would imply
         // a linear path that doesn't exist. The stage carries the sense of
         // place; the slot stays here for the record.
 
-        if (accessory != null) {
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = HeaderPadding)
-                    .padding(top = CashuTheme.spacing.comfortable),
-            ) {
-                accessory()
+        AnimatedContent(
+            targetState = accessory != null,
+            transitionSpec = {
+                fadeIn(accessoryEnterSpec)
+                    .togetherWith(fadeOut(accessoryExitSpec))
+                    .using(
+                        if (reducedMotion) null else SizeTransform(clip = false) { _, _ -> accessorySizeSpec },
+                    )
+            },
+            contentAlignment = Alignment.BottomCenter,
+            label = "chassis-accessory",
+        ) { present ->
+            val shown = if (present) accessory else accessorySnapshot
+            if (shown != null) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = HeaderPadding)
+                        .padding(top = CashuTheme.spacing.comfortable),
+                ) {
+                    shown()
+                }
             }
         }
 

@@ -233,13 +233,19 @@ fun RestoreSeedStageContent(
     Column(
         modifier = modifier
             .padding(horizontal = HeaderPadding)
+            // iOS restore-input twin (`.scrollEdgeFade(bottom: 0)`): the
+            // keyboard is up for this whole step, so content dissolves into
+            // the chassis edge instead of cutting against it. Before the
+            // scroll modifier so the layer wraps the scroll clip.
+            .scrollEdgeFade(bottom = 0.dp)
             .verticalScroll(rememberScrollState())
             // Inside the scroll, not outside: verticalScroll clips, and the
             // ghost cards peek ~11dp above the card's top edge — which is the
             // content's top edge now that the card leads its column. Padding
             // placed after the scroll modifier becomes scrolled content and
-            // gives the ghosts headroom inside the clip.
-            .padding(top = CashuTheme.spacing.section),
+            // gives the ghosts headroom inside the clip. The bottom band lets
+            // the last row scroll clear of the fade.
+            .padding(top = CashuTheme.spacing.section, bottom = ScrollFadeBand),
         verticalArrangement = Arrangement.spacedBy(CashuTheme.spacing.comfortable),
     ) {
         SeedWordEntryField(

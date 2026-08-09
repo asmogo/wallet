@@ -1,11 +1,12 @@
 package com.cashu.me.ui.theme
 
 import android.database.ContentObserver
+import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import android.provider.Settings
 import androidx.compose.animation.core.FastOutSlowInEasing
-import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -15,8 +16,12 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.BlurEffect
+import androidx.compose.ui.graphics.TileMode
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalInspectionMode
 import androidx.compose.ui.unit.dp
 
 /**
@@ -67,20 +72,24 @@ object CashuMotion {
  * the composition.
  */
 /**
- * iOS onboarding entrance-stagger twin: content blocks rise 12dp into place,
- * 400ms, [CashuMotion.StaggerStepMs] per index. No opacity — the step
- * crossfade owns the fade, and doubling it flickers (binding onboarding
- * decision); no blur — `Modifier.blur` is API 31+ and the rise carries the
- * effect alone. Reduce-motion renders the resting state.
+ * iOS onboarding entrance-stagger twin (`OnboardingView.stagger`): content
+ * blocks rise 12dp into place while sharpening from a 3dp blur, 400ms,
+ * [CashuMotion.StaggerStepMs] per index. No opacity — the step crossfade owns
+ * the fade, and doubling it flickers (binding onboarding decision). The blur
+ * needs API 31; below that the rise carries the effect alone — the same
+ * degradation `materializeBlur` accepts. Reduce-motion renders the resting
+ * state, and inspection mode (Studio previews, screenshot baselines) freezes
+ * at the resting state so goldens stay deterministic — the same freeze the
+ * hidden-seed grid applies to its blur.
  *
  * Promoted from OnboardingScreen.kt so every onboarding stage (including the
  * restore branch) can share one cascade primitive.
  */
 @Composable
 fun Modifier.riseIn(appeared: Boolean, index: Int): Modifier {
-    if (rememberReducedMotion()) return this
-    val rise by animateDpAsState(
-        targetValue = if (appeared) 0.dp else 12.dp,
+    if (rememberReducedMotion() || LocalInspectionMode.current) return this
+    val progress by animateFloatAsState(
+        targetValue = if (appeared) 1f else 0f,
         animationSpec = tween(
             durationMillis = 400,
             delayMillis = index * CashuMotion.StaggerStepMs,
@@ -88,7 +97,19 @@ fun Modifier.riseIn(appeared: Boolean, index: Int): Modifier {
         ),
         label = "rise-in-$index",
     )
-    return this.graphicsLayer { translationY = rise.toPx() }
+    val density = LocalDensity.current
+    val risePx = with(density) { 12.dp.toPx() }
+    val blurPx = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+        with(density) { 3.dp.toPx() }
+    } else {
+        0f
+    }
+    return this.graphicsLayer {
+        val remaining = 1f - progress
+        translationY = risePx * remaining
+        val radius = blurPx * remaining
+        renderEffect = if (radius > 0.05f) BlurEffect(radius, radius, TileMode.Decal) else null
+    }
 }
 
 /** One-shot entrance trigger for [riseIn] call sites. */

@@ -3,6 +3,7 @@ package com.cashu.me.ui.components
 import android.os.Build
 import androidx.compose.animation.AnimatedVisibilityScope
 import androidx.compose.animation.EnterExitState
+import androidx.compose.animation.core.FiniteAnimationSpec
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.animateFloatAsState
@@ -84,15 +85,25 @@ fun Modifier.materializeBlur(): Modifier {
  * `RenderEffect` requires API 31; below that (and under reduce-motion) this is
  * a no-op and the paired fade/scale carries the morph alone — the same
  * degradation `materializeBlur` and `Modifier.riseIn` already accept.
+ *
+ * The radius rides a medium spring by default; call sites mirroring a timed
+ * iOS transition (the onboarding step swap) pass explicit enter/exit specs so
+ * the blur settles on the same clock as the fade it masks.
  */
 @Composable
-fun AnimatedVisibilityScope.morphBlur(radius: Dp = MorphBlurRadius): Modifier {
+fun AnimatedVisibilityScope.morphBlur(
+    radius: Dp = MorphBlurRadius,
+    enterSpec: FiniteAnimationSpec<Float> = spring(stiffness = Spring.StiffnessMedium),
+    exitSpec: FiniteAnimationSpec<Float> = enterSpec,
+): Modifier {
     if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S || rememberReducedMotion()) {
         return Modifier
     }
     val density = LocalDensity.current
     val radiusPx by transition.animateFloat(
-        transitionSpec = { spring(stiffness = Spring.StiffnessMedium) },
+        transitionSpec = {
+            if (targetState == EnterExitState.Visible) enterSpec else exitSpec
+        },
         label = "morph-blur",
     ) { state ->
         if (state == EnterExitState.Visible) 0f else with(density) { radius.toPx() }
