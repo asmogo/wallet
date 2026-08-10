@@ -9,7 +9,7 @@ import UIKit
 /// `RestoreWalletFlow.kt`.
 enum SeedEntryCopy {
     static let subhead = "Enter your 12 words, one at a time."
-    static let complete = "All 12 words check out."
+    static let complete = "All 12 words verified."
     static let rejected = "Not a seed word. Check the spelling."
     static let checksumTitle = "That's not a valid seed phrase."
     static let checksumBody = "One of the words is probably mistyped. Tap any word below to fix it."

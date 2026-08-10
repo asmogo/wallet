@@ -92,7 +92,7 @@ import com.cashu.me.ui.theme.withSlashedZero
  */
 object SeedEntryCopy {
     const val SUBHEAD = "Enter your 12 words, one at a time."
-    const val COMPLETE = "All 12 words check out."
+    const val COMPLETE = "All 12 words verified."
     const val REJECTED = "Not a seed word. Check the spelling."
     const val CHECKSUM =
         "That's not a valid seed phrase. One of the words is probably mistyped. " +

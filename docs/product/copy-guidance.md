@@ -157,7 +157,7 @@ furniture. The line only speaks when it has news.
 | --- | --- |
 | Subhead | "Enter your 12 words, one at a time." |
 | Entering | *(nothing)* |
-| All twelve in | "All 12 words check out." |
+| All twelve in | "All 12 words verified." |
 | Word refused | "Not a seed word. Check the spelling." |
 | Checksum failed | "That's not a valid seed phrase." / "One of the words is probably mistyped. Tap any word below to fix it." |
 | Pasted fewer than 12 | "Pasted N words. Enter the rest." |
