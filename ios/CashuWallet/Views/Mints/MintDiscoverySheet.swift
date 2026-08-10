@@ -212,7 +212,7 @@ struct MintDiscoveryList: View {
                 addStates[mint.url] = nil
             } catch {
                 withAnimation(reduceMotion ? nil : .smooth(duration: 0.3)) {
-                    addStates[mint.url] = .failed("Couldn't connect to that mint. Try another.")
+                    addStates[mint.url] = .failed(error.userFacingWalletMessage)
                 }
                 HapticFeedback.notification(.error)
             }
@@ -240,7 +240,7 @@ struct MintDiscoverySheet: View {
     var body: some View {
         NavigationStack {
             MintDiscoveryList(onMintAdded: onMintAdded)
-                .navigationTitle("Discover Mints")
+                .navigationTitle("Discover mints")
                 .navigationBarTitleDisplayMode(.inline)
                 .toolbar {
                     ToolbarItem(placement: .topBarTrailing) {

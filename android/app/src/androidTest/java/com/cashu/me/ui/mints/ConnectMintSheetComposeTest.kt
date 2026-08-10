@@ -45,7 +45,7 @@ class ConnectMintSheetComposeTest {
     fun sendContextExplainsWhyTheFlowStalled() {
         setFace(ConnectMintContext.Send)
 
-        compose.onNodeWithText("Connect a mint first").assertIsDisplayed()
+        compose.onNodeWithText("Add a mint first").assertIsDisplayed()
         compose.onNodeWithText(
             "Mints issue the ecash you send and receive. Add one to get started.",
         ).assertIsDisplayed()
@@ -58,7 +58,7 @@ class ConnectMintSheetComposeTest {
         // stacked titles.
         setFace(ConnectMintContext.AddMint)
 
-        compose.onNodeWithText("Connect a mint first").assertDoesNotExist()
+        compose.onNodeWithText("Add a mint first").assertDoesNotExist()
         compose.onNodeWithText(
             "Mints issue the ecash you send and receive. Add one to get started.",
         ).assertIsDisplayed()

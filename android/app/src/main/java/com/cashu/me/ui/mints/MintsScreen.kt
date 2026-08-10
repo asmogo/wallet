@@ -210,12 +210,6 @@ fun MintsScreen(
             walletManager = walletManager,
             initialUrl = addMintInitialUrl,
             allowCleartextLocalTestMints = allowCleartextLocalTestMints,
-            onScan = {
-                // Camera overlays render under dialog windows — yield the sheet
-                // first; a successful scan reopens via scannedMintUrl.
-                addMintOpen = false
-                onScan()
-            },
             onDismiss = { addMintOpen = false },
         )
     }
@@ -228,7 +222,7 @@ fun MintsScreen(
         ) {
             Column(modifier = Modifier.fillMaxWidth()) {
                 Text(
-                    text = "Discover Mints",
+                    text = "Discover mints",
                     style = MaterialTheme.typography.titleMedium,
                     color = MaterialTheme.colorScheme.onSurface,
                     modifier = Modifier.padding(

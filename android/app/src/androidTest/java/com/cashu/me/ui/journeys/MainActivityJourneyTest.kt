@@ -88,14 +88,14 @@ class MainActivityJourneyTest {
             // connect-a-mint surface instead of the button sitting dead.
             .tapTag(UiTestTags.WalletSend)
             .awaitTag(UiTestTags.ConnectMintSheet)
-            .awaitText("Connect a mint first")
-            // "Add custom mint URL" pushes a step inside the same sheet…
+            .awaitText("Add a mint first")
+            // "Add by URL" pushes a step inside the same sheet…
             .tapTag(UiTestTags.ConnectMintAddCustom)
             .awaitTag(UiTestTags.AddMintUrl)
-            .assertTextDoesNotExist("Connect a mint first")
+            .assertTextDoesNotExist("Add a mint first")
             // …so back unwinds to the picker before the sheet sees it.
             .pressSystemBack()
-            .awaitText("Connect a mint first")
+            .awaitText("Add a mint first")
             .pressSystemBack()
             .assertTagDoesNotExist(UiTestTags.ConnectMintSheet)
             .awaitTag(UiTestTags.WalletScreen)
@@ -112,9 +112,9 @@ class MainActivityJourneyTest {
             .tapText("Add mint")
             .awaitTag(UiTestTags.ConnectMintSheet)
             .awaitText("Mints issue the ecash you send and receive. Add one to get started.")
-            // The CTA and the sheet title already say "Add Mint"; a third
+            // The CTA and the sheet title already say "Add mint"; a third
             // restatement is exactly the header stacking this redesign removed.
-            .assertTextDoesNotExist("Connect a mint first")
+            .assertTextDoesNotExist("Add a mint first")
     }
 
     @Test

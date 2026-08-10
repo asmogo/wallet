@@ -837,7 +837,7 @@ struct OnboardingView: View {
                     }) {
                         HStack(spacing: 6) {
                             Image(systemName: "plus")
-                            Text("Add custom mint URL")
+                            Text("Add by URL")
                         }
                         .padding(.vertical, 14)
                         .frame(maxWidth: .infinity)

@@ -72,14 +72,17 @@ enum class ConnectMintContext {
     internal val pickerTitle: String
         get() = when (this) {
             Send -> "Send"
-            AddMint -> "Add Mint"
+            AddMint -> "Add mint"
         }
 
     internal val showsHeadline: Boolean
         get() = this == Send
 
     internal companion object {
-        const val HEADLINE = "Connect a mint first"
+        // The app says "add" everywhere else — CTAs, row a11y labels, the submit
+        // button — so the headline says it too rather than introducing "connect"
+        // as a second verb for the same act.
+        const val HEADLINE = "Add a mint first"
         const val SUBTITLE =
             "Mints issue the ecash you send and receive. Add one to get started."
     }
@@ -100,9 +103,6 @@ private val SuggestedRowTextGap = 2.dp
  *
  * The surface owns its own [SheetHeader] so it can swap the title and reveal a
  * back chevron when a step is pushed — hosts must not draw one above it.
- *
- * Camera overlays sit under dialog windows, so [onScanMintUrl] must dismiss the
- * host sheet before opening the scanner; the result returns via [initialCustomUrl].
  */
 @Composable
 fun ConnectMintSheetContent(
@@ -110,12 +110,9 @@ fun ConnectMintSheetContent(
     settingsManager: SettingsManager,
     mintDiscoveryManager: MintDiscoveryManager,
     context: ConnectMintContext,
-    onScanMintUrl: () -> Unit,
     onMintAdded: () -> Unit,
     modifier: Modifier = Modifier,
     allowCleartextLocalTestMints: Boolean = false,
-    prefilledMintUrl: String? = null,
-    onPrefilledMintUrlConsumed: () -> Unit = {},
 ) {
     val walletState by walletManager.state.collectAsState()
     val settings by settingsManager.state.collectAsState()
@@ -125,12 +122,6 @@ fun ConnectMintSheetContent(
     var step by remember { mutableStateOf(ConnectMintStep.Picker) }
     var quickAddError by remember { mutableStateOf<String?>(null) }
     var isQuickAdding by remember { mutableStateOf(false) }
-
-    // A scan lands back here with a URL: reopen straight onto the form the user
-    // left, prefilled, instead of dropping them on the picker.
-    LaunchedEffect(prefilledMintUrl) {
-        if (!prefilledMintUrl.isNullOrBlank()) step = ConnectMintStep.AddCustom
-    }
 
     fun goBack() {
         when (connectMintBackAction(onPickerStep = step == ConnectMintStep.Picker)) {
@@ -170,8 +161,9 @@ fun ConnectMintSheetContent(
         SheetHeader(
             title = when (step) {
                 ConnectMintStep.Picker -> context.pickerTitle
-                ConnectMintStep.AddCustom -> "Add Mint"
-                ConnectMintStep.Discover -> "Discover Mints"
+                // The pushed step is titled after the link that opened it.
+                ConnectMintStep.AddCustom -> "Add by URL"
+                ConnectMintStep.Discover -> "Discover mints"
             },
             navigationIcon = Icons.AutoMirrored.Outlined.ArrowBack.takeIf {
                 step != ConnectMintStep.Picker
@@ -206,12 +198,7 @@ fun ConnectMintSheetContent(
 
                 ConnectMintStep.AddCustom -> AddMintFormBody(
                     walletManager = walletManager,
-                    initialUrl = prefilledMintUrl.orEmpty(),
                     allowCleartextLocalTestMints = allowCleartextLocalTestMints,
-                    onScan = {
-                        onPrefilledMintUrlConsumed()
-                        onScanMintUrl()
-                    },
                     onAdded = onMintAdded,
                     modifier = Modifier
                         .padding(horizontal = CashuTheme.spacing.loose)
@@ -275,7 +262,9 @@ internal fun SuggestedMintsFace(
         if (suggested.isNotEmpty()) {
             Spacer(Modifier.height(CashuTheme.spacing.section))
             SectionHeader(
-                text = "Suggested mints",
+                // Not "Suggested": the disclaimer two lines up says this wallet
+                // isn't affiliated with any mint, and suggesting implies it is.
+                text = "Known mints",
                 contentPadding = PaddingValues(bottom = CashuTheme.spacing.snug),
             )
             suggested.forEachIndexed { index, mint ->
@@ -295,7 +284,10 @@ internal fun SuggestedMintsFace(
         Spacer(Modifier.height(CashuTheme.spacing.loose))
         Column(verticalArrangement = Arrangement.spacedBy(CashuTheme.spacing.default)) {
             GhostButton(
-                text = "Add custom mint URL",
+                // Verb + object, matching "Discover mints" beside it. "Custom" is
+                // an implementation label, and "URL" is already said by the step
+                // it opens.
+                text = "Add by URL",
                 onClick = onAddCustom,
                 leadingIcon = Icons.Outlined.Add,
                 modifier = Modifier

@@ -14,13 +14,16 @@ enum ConnectMintContext {
     var navigationTitle: String {
         switch self {
         case .send: "Send"
-        case .addMint: "Add Mint"
+        case .addMint: "Add mint"
         }
     }
 
     var showsHeadline: Bool { self == .send }
 
-    static let headline = "Connect a mint first"
+    // The app says "add" everywhere else — CTAs, row a11y labels, the submit
+    // button — so the headline says it too rather than introducing "connect" as
+    // a second verb for the same act.
+    static let headline = "Add a mint first"
     static let subtitle = "Mints issue the ecash you send and receive. Add one to get started."
 }
 
@@ -63,6 +66,8 @@ struct ConnectMintPicker: View {
     var errorMessage: String?
     var onHeightChange: (CGFloat) -> Void = { _ in }
 
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             if context.showsHeadline {
@@ -87,8 +92,11 @@ struct ConnectMintPicker: View {
             // 44pt hit targets; stacking them with plain spacing would leave
             // ~20pt-tall taps.
             VStack(spacing: 0) {
+                // Verb + object, matching "Discover mints" below it. "Custom" is
+                // an implementation label, and "URL" is already said by the step
+                // it opens.
                 footerLink(
-                    title: "Add custom mint URL",
+                    title: "Add by URL",
                     systemImage: "plus",
                     route: .addCustom
                 )
@@ -120,7 +128,11 @@ struct ConnectMintPicker: View {
         route target: ConnectMintRoute
     ) -> some View {
         Button {
-            route = target
+            // The host swaps this face out in place; animating the route change
+            // is what makes the slide and the sheet's resize one motion.
+            withAnimation(SharedAxis.animation(reduceMotion: reduceMotion)) {
+                route = target
+            }
         } label: {
             HStack(spacing: 6) {
                 Image(systemName: systemImage)
@@ -134,7 +146,7 @@ struct ConnectMintPicker: View {
     }
 }
 
-// MARK: - Suggested mints
+// MARK: - Known mints
 
 /// Quick-add rows for known public mints, filtered against what the wallet
 /// already has. Rows sit on the bare canvas.
@@ -150,7 +162,10 @@ struct SuggestedMintsSection: View {
     var body: some View {
         if !available.isEmpty {
             VStack(alignment: .leading, spacing: 0) {
-                Text("Suggested mints")
+                // Not "Suggested": the disclaimer on the pushed step says this
+                // wallet isn't affiliated with any mint, and suggesting implies
+                // it is.
+                Text("Known mints")
                     .cashuText(.overline)
                     .foregroundStyle(.secondary)
                     .padding(.bottom, ConnectMintMetrics.sectionToRows)
@@ -213,10 +228,22 @@ struct SuggestedMintsSection: View {
     }
 }
 
-// MARK: - Pushed steps
+// MARK: - Steps
 
-/// Shared destination builder so the Send sheet and the standalone sheet push
-/// identical steps.
+extension ConnectMintRoute {
+    /// Titled after the link that opened it.
+    var navigationTitle: String {
+        switch self {
+        case .addCustom: "Add by URL"
+        case .discover: "Discover mints"
+        }
+    }
+}
+
+/// Shared step builder so the Send sheet and the standalone sheet show identical
+/// steps. These are swapped in place rather than pushed — see ``SharedAxis`` for
+/// why a `NavigationStack` push cannot carry a sheet whose height changes with
+/// the step. Titles are owned by the host, which needs them for its own bar.
 @ViewBuilder
 func connectMintDestination(
     _ route: ConnectMintRoute,
@@ -225,11 +252,32 @@ func connectMintDestination(
 ) -> some View {
     switch route {
     case .addCustom:
-        AddMintFormView(onAdded: onAdded, onHeightChange: onHeightChange)
+        // The standalone Mints-tab sheet isn't reached through that link, so it
+        // keeps the form's default title; here the host supplies it.
+        AddMintFormView(
+            navigationTitle: route.navigationTitle,
+            onAdded: onAdded,
+            onHeightChange: onHeightChange
+        )
+        .containerBackground(.clear, for: .navigation)
     case .discover:
         MintDiscoveryList(onMintAdded: onAdded)
-            .navigationTitle("Discover Mints")
+            .navigationTitle(route.navigationTitle)
             .navigationBarTitleDisplayMode(.inline)
+    }
+}
+
+/// The back control that replaces the push's chevron. Same glyph and placement
+/// as the system one, with the 44pt target icon-only toolbar buttons need.
+struct ConnectMintBackButton: View {
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: "chevron.backward")
+                .toolbarIconTapTarget()
+        }
+        .accessibilityLabel("Back")
     }
 }
 
@@ -243,39 +291,69 @@ struct ConnectMintSheet: View {
     @ObservedObject private var settings = SettingsManager.shared
 
     @State private var route: ConnectMintRoute?
-    @State private var contentHeight: CGFloat = 0
+    /// A store per step, never one shared value. `contentFitMeasured` only
+    /// reports when its measurement *changes*, and the picker settles back to the
+    /// height it already had, so a shared value would have nothing to fire and
+    /// undo the pushed step's — the sheet would stay sized for the step just
+    /// left. Held apart, each keeps its own last-known good height and a
+    /// transient measured mid-transition corrects itself.
+    @State private var pickerHeight: CGFloat = 0
+    @State private var stepHeight: CGFloat = 0
     @State private var addMintError: String?
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    /// Each step hugs its own content, matching Android.
+    private var contentHeight: CGFloat { route == nil ? pickerHeight : stepHeight }
 
     var body: some View {
         NavigationStack {
-            ConnectMintPicker(
-                context: .addMint,
-                route: $route,
-                onAdd: addMint,
-                existingURLs: Set(walletManager.mints.map(\.url)),
-                discoveryAvailable: settings.useWebsockets,
-                errorMessage: addMintError,
-                onHeightChange: { newHeight in
-                    // Ignore re-measures from the off-screen picker while a step
-                    // is pushed — the pushed view reports its own height.
-                    guard route == nil else { return }
-                    contentHeight = newHeight
+            // Swapped in place, not pushed: the sheet's height changes with the
+            // step, and a push lays the arriving page out at the departing
+            // page's height for the whole transition. See `SharedAxis`.
+            ZStack {
+                if let route {
+                    connectMintDestination(
+                        route,
+                        onAdded: { dismiss() },
+                        onHeightChange: { stepHeight = $0 }
+                    )
+                    .transition(SharedAxis.transition(forward: true, reduceMotion: reduceMotion))
+                } else {
+                    ConnectMintPicker(
+                        context: .addMint,
+                        route: $route,
+                        onAdd: addMint,
+                        existingURLs: Set(walletManager.mints.map(\.url)),
+                        discoveryAvailable: settings.useWebsockets,
+                        errorMessage: addMintError,
+                        onHeightChange: { pickerHeight = $0 }
+                    )
+                    .transition(SharedAxis.transition(forward: false, reduceMotion: reduceMotion))
                 }
-            )
-            .navigationTitle(ConnectMintContext.addMint.navigationTitle)
+            }
+            .navigationTitle(route?.navigationTitle ?? ConnectMintContext.addMint.navigationTitle)
             .navigationBarTitleDisplayMode(.inline)
-            .navigationDestination(item: $route) { route in
-                connectMintDestination(
-                    route,
-                    onAdded: { dismiss() },
-                    onHeightChange: { contentHeight = $0 }
-                )
+            .toolbar {
+                if route != nil {
+                    ToolbarItem(placement: .topBarLeading) {
+                        ConnectMintBackButton {
+                            withAnimation(SharedAxis.animation(reduceMotion: reduceMotion)) {
+                                route = nil
+                            }
+                        }
+                    }
+                }
             }
         }
-        // Both the shortlist and the pushed URL step hug their content, matching
-        // Android. Only discovery fills the sheet — it hosts a scrolling list and
-        // needs bounded height.
-        .contentFitDetent(contentHeight, enabled: route != .discover)
+        // Keyed on `route` so the resize is one motion with the slide rather
+        // than a second beat after it. Only discovery fills the sheet: it hosts
+        // a scrolling list and needs bounded height.
+        .contentFitDetent(
+            contentHeight,
+            enabled: route != .discover,
+            step: route,
+            stepResize: SharedAxis.duration
+        )
         .presentationDragIndicator(.visible)
         // Hugging the shortlist, this floats over the canvas and keeps the
         // system's elevated background; only the pushed full-height steps adopt
@@ -291,7 +369,9 @@ struct ConnectMintSheet: View {
                 try await walletManager.addMint(url: url)
                 dismiss()
             } catch {
-                addMintError = "Couldn't connect to that mint. Try another."
+                // Same mapper Android's quick-add uses. The old string blamed
+                // this wallet's own shortlist for what is usually the network.
+                addMintError = error.userFacingWalletMessage
             }
         }
     }

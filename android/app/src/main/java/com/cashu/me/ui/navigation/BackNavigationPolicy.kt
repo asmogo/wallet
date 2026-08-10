@@ -25,7 +25,7 @@ enum class ConnectMintBackAction {
 }
 
 /**
- * The connect-a-mint sheet pushes "Add custom mint URL" and "Discover mints" as
+ * The connect-a-mint sheet pushes "Add by URL" and "Discover mints" as
  * in-sheet steps, so back unwinds to the picker before the host sheet sees it.
  */
 fun connectMintBackAction(onPickerStep: Boolean): ConnectMintBackAction =

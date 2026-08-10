@@ -274,10 +274,6 @@ private fun AuthenticatedShell(container: AppContainer) {
     val flowHandoff = remember { WalletFlowHandoffCoordinator() }
     var pendingSendScan by remember { mutableStateOf<String?>(null) }
     var pendingMintScan by remember { mutableStateOf<String?>(null) }
-    // Kept apart from pendingMintScan so a scan started inside the connect-a-mint
-    // sheet can't also trip the Mints tab's add-mint reopen.
-    var pendingConnectMintScan by remember { mutableStateOf<String?>(null) }
-    var mintScanReturnFlow by remember { mutableStateOf<WalletFlow?>(null) }
     // P2PK key scanned for Send Ecash's lock, plus the entry state parked while
     // the sheet yields to the camera — both restored when the flow reopens.
     var pendingP2pkScan by remember { mutableStateOf<String?>(null) }
@@ -403,11 +399,8 @@ private fun AuthenticatedShell(container: AppContainer) {
         val target = scannerTarget
         scannerTarget = null
         // Canceling a P2PK key scan returns to the Send Ecash sheet it yielded
-        // from (the parked draft restores the entry state). An abandoned mint
-        // scan instead drops the flow we would have replayed, rather than
-        // reopening the sheet on the next unrelated scan.
+        // from (the parked draft restores the entry state).
         if (target == ScannerTarget.P2pkLock) openPaymentFlow(WalletFlow.SendEcash)
-        mintScanReturnFlow = null
     }
 
     Box(modifier = Modifier.fillMaxSize()) {
@@ -468,13 +461,6 @@ private fun AuthenticatedShell(container: AppContainer) {
                         onMint = {
                             pendingMintScan = it
                             navController.navigateToTab(TopTab.Mints)
-                        },
-                        // Scan launched from a connect-a-mint URL step: reopen the
-                        // flow that yielded the window, prefilled.
-                        onConnectMint = {
-                            pendingConnectMintScan = it
-                            activeFlow = mintScanReturnFlow ?: WalletFlow.ConnectMint
-                            mintScanReturnFlow = null
                         },
                         // A key scanned for the ecash lock reopens Send Ecash;
                         // the sheet judges validity on return (its single
@@ -551,10 +537,6 @@ private fun AuthenticatedShell(container: AppContainer) {
             flowHandoff.completeDismissal { destination ->
                 when (destination) {
                     is FlowHandoffDestination.Scanner -> scannerTarget = destination.target
-                    is FlowHandoffDestination.MintScanner -> {
-                        mintScanReturnFlow = destination.returnTo
-                        scannerTarget = ScannerTarget.ConnectMint
-                    }
                     is FlowHandoffDestination.ReceiveDetail -> openReceiveDetail(destination.token)
                     is FlowHandoffDestination.NavRoute -> navController.navigate(destination.route)
                     is FlowHandoffDestination.NavTab -> navController.navigateToTab(destination.tab)
@@ -634,18 +616,8 @@ private fun AuthenticatedShell(container: AppContainer) {
                 onReceive = { activeFlow = WalletFlow.ReceiveEcash },
                 prefilledPayload = pendingSendScan,
                 onPrefilledConsumed = { pendingSendScan = null },
-                // The no-mints face hosts its own add-mint URL step, which needs
-                // the camera — same sheet-yields-first handoff as the main scan.
                 mintDiscoveryManager = container.mintDiscoveryManager,
                 allowCleartextLocalTestMints = container.runtimePolicy.allowCleartextLocalTestMints,
-                prefilledMintUrl = pendingConnectMintScan,
-                onPrefilledMintUrlConsumed = { pendingConnectMintScan = null },
-                onScanMintUrl = {
-                    flowHandoff.request(
-                        FlowHandoffDestination.MintScanner(returnTo = WalletFlow.Send),
-                        close,
-                    )
-                },
                 onDismissLockChanged = { flowDismissLocked = it },
             )
 
@@ -687,14 +659,6 @@ private fun AuthenticatedShell(container: AppContainer) {
                 mintDiscoveryManager = container.mintDiscoveryManager,
                 context = ConnectMintContext.AddMint,
                 allowCleartextLocalTestMints = container.runtimePolicy.allowCleartextLocalTestMints,
-                prefilledMintUrl = pendingConnectMintScan,
-                onPrefilledMintUrlConsumed = { pendingConnectMintScan = null },
-                onScanMintUrl = {
-                    flowHandoff.request(
-                        FlowHandoffDestination.MintScanner(returnTo = WalletFlow.ConnectMint),
-                        close,
-                    )
-                },
                 // The CTA was singular ("Add mint") — one mint satisfies it.
                 onMintAdded = close,
             )
@@ -748,7 +712,7 @@ private fun LoadingScreen() {
     }
 }
 
-internal enum class ScannerTarget { Auto, P2pkLock, ConnectMint }
+internal enum class ScannerTarget { Auto, P2pkLock }
 
 private fun routeScannedPayload(
     target: ScannerTarget,
@@ -756,15 +720,10 @@ private fun routeScannedPayload(
     onReceiveDetail: (String) -> Unit,
     onSend: (String) -> Unit,
     onMint: (String) -> Unit,
-    onConnectMint: (String) -> Unit,
     onP2pkKey: (String) -> Unit,
 ) {
     val trimmed = payload.trim()
     when (target) {
-        ScannerTarget.ConnectMint -> {
-            onConnectMint(trimmed)
-            return
-        }
         ScannerTarget.P2pkLock -> {
             onP2pkKey(trimmed)
             return

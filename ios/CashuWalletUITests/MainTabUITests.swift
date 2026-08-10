@@ -18,21 +18,21 @@ final class MainTabUITests: UITestBase {
         tapWhenReady(addMint)
 
         XCTAssertTrue(
-            app.navigationBars["Add Mint"].waitForExistence(timeout: 5),
+            app.navigationBars["Add mint"].waitForExistence(timeout: 5),
             "The Wallet empty-state CTA should open mint setup directly"
         )
         XCTAssertTrue(
-            app.staticTexts["SUGGESTED MINTS"].waitForExistence(timeout: 5),
+            app.staticTexts["KNOWN MINTS"].waitForExistence(timeout: 5),
             "Mint setup should lead with the curated shortlist, not a URL field"
         )
-        // The CTA and the sheet title already say "Add Mint"; a third restatement
+        // The CTA and the sheet title already say "Add mint"; a third restatement
         // is exactly the header stacking this surface removed.
         XCTAssertFalse(
-            app.staticTexts["Connect a mint first"].exists,
+            app.staticTexts["Add a mint first"].exists,
             "The headline is for the Send context, where the title says 'Send'"
         )
 
-        tapWhenReady(app.buttons["Add custom mint URL"])
+        tapWhenReady(app.buttons["Add by URL"])
 
         XCTAssertTrue(
             app.textFields["mints-add-url-field"].waitForExistence(timeout: 5),
@@ -52,22 +52,22 @@ final class MainTabUITests: UITestBase {
             "The Send sheet keeps its own title"
         )
         XCTAssertTrue(
-            app.staticTexts["Connect a mint first"].waitForExistence(timeout: 5),
+            app.staticTexts["Add a mint first"].waitForExistence(timeout: 5),
             "The Send context explains why the flow stalled"
         )
 
-        tapWhenReady(app.buttons["Add custom mint URL"])
+        tapWhenReady(app.buttons["Add by URL"])
 
         XCTAssertTrue(
-            app.navigationBars["Add Mint"].waitForExistence(timeout: 5),
+            app.navigationBars["Add by URL"].waitForExistence(timeout: 5),
             "Custom URL entry pushes inside the Send sheet"
         )
         XCTAssertTrue(app.textFields["mints-add-url-field"].waitForExistence(timeout: 5))
 
-        app.navigationBars["Add Mint"].buttons.element(boundBy: 0).tap()
+        app.navigationBars["Add by URL"].buttons.element(boundBy: 0).tap()
 
         XCTAssertTrue(
-            app.staticTexts["Connect a mint first"].waitForExistence(timeout: 5),
+            app.staticTexts["Add a mint first"].waitForExistence(timeout: 5),
             "Back should return to the picker, not dismiss the sheet"
         )
     }
@@ -105,7 +105,7 @@ final class MainTabUITests: UITestBase {
         )
         XCTAssertTrue(
             app.buttons["mints-add-button"].waitForExistence(timeout: 5),
-            "Mints tab should show the Add Mint button when no mint is configured"
+            "Mints tab should show the Add mint button when no mint is configured"
         )
 
         tapTab("Wallet")
