@@ -21,11 +21,7 @@ class WalletJourneyRobot(
     private val compose: ComposeTestRule,
 ) {
     fun awaitTag(tag: String, timeoutMillis: Long = DefaultTimeout): WalletJourneyRobot {
-        compose.waitUntil(timeoutMillis) {
-            compose.onAllNodes(hasTestTag(tag), useUnmergedTree = true)
-                .fetchSemanticsNodes()
-                .isNotEmpty()
-        }
+        await(hasTestTag(tag), timeoutMillis)
         compose.onNodeWithTag(tag, useUnmergedTree = true).assertIsDisplayed()
         return this
     }
@@ -156,7 +152,7 @@ class WalletJourneyRobot(
     fun completeCreateWalletToFirstMint(): WalletJourneyRobot {
         awaitTag(com.cashu.me.ui.testing.UiTestTags.OnboardingRoot)
             .tapTag(com.cashu.me.ui.testing.UiTestTags.CreateWallet)
-            .awaitText("Your Seed", substring = true)
+            .awaitText("Your seed phrase", substring = true)
             .tapTag(com.cashu.me.ui.testing.UiTestTags.RevealSeed)
             .awaitTag(com.cashu.me.ui.testing.UiTestTags.SeedPhrase)
             .tapTag(com.cashu.me.ui.testing.UiTestTags.AcknowledgeSeed)
@@ -166,10 +162,16 @@ class WalletJourneyRobot(
     }
 
     private fun await(matcher: SemanticsMatcher, timeoutMillis: Long) {
+        // Displayed, not merely present: during a step swap both stages sit
+        // in the semantics tree, and a node that is still clipped or scaled
+        // by the running transition fails the assertIsDisplayed that follows
+        // every await. waitUntil pumps the clock, so polling for displayed
+        // lets the transition run out instead of racing it.
         compose.waitUntil(timeoutMillis) {
-            compose.onAllNodes(matcher, useUnmergedTree = true)
-                .fetchSemanticsNodes()
-                .isNotEmpty()
+            val nodes = compose.onAllNodes(matcher, useUnmergedTree = true)
+            nodes.fetchSemanticsNodes().indices.any { index ->
+                runCatching { nodes[index].assertIsDisplayed() }.isSuccess
+            }
         }
     }
 

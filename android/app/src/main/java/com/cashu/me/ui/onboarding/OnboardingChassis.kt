@@ -195,7 +195,12 @@ fun OnboardingChassis(
             contentAlignment = Alignment.BottomCenter,
             label = "chassis-accessory",
         ) { present ->
-            val shown = if (present) accessory else accessorySnapshot
+            // The snapshot exists only to carry the exit: during the fade-out
+            // the incoming `present == false` content must render NOTHING, or
+            // the ghost accessory squats in the chassis forever (its height
+            // included), squashing the stage above it — the same guard
+            // ChassisSlot's settled-empty case needs.
+            val shown = if (present) (accessory ?: accessorySnapshot) else null
             if (shown != null) {
                 Box(
                     modifier = Modifier
