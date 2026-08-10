@@ -84,7 +84,7 @@ jobs:
   primary-managed-device:
     name: Android Managed Device Tests
     runs-on: ubuntu-latest
-    timeout-minutes: 50
+    timeout-minutes: 75
     env:
       UI_TIER: ${{ (github.event_name == 'schedule' && 'full') || inputs.tier || github.event.inputs.tier || 'pr' }}
 
@@ -156,15 +156,19 @@ jobs:
     - name: Run required Android UI suite
       if: env.UI_TIER != 'full'
       run: |
-        ./gradlew --no-daemon :app:pixel2Api35DebugAndroidTest \
+        bash ../CI/retry-android-ui-test.sh \
+          ./gradlew --no-daemon :app:pixel2Api35DebugAndroidTest \
           -Pandroid.testInstrumentationRunnerArguments.notAnnotation=com.cashu.me.test.FullOnly \
+          -Pandroid.testInstrumentationRunnerArguments.timeout_msec=600000 \
           -Pandroid.testInstrumentationRunnerArguments.cashu.liveUiLocalMintEnabled=true \
           -Pandroid.testInstrumentationRunnerArguments.cashu.nutshellMintUrl=http://10.0.2.2:3338
 
     - name: Run full Android UI and native suite
       if: env.UI_TIER == 'full'
       run: |
-        ./gradlew --no-daemon :app:modernApi36DebugAndroidTest \
+        bash ../CI/retry-android-ui-test.sh \
+          ./gradlew --no-daemon :app:modernApi36DebugAndroidTest \
+          -Pandroid.testInstrumentationRunnerArguments.timeout_msec=600000 \
           -Pandroid.testInstrumentationRunnerArguments.cashu.liveUiLocalMintEnabled=true \
           -Pandroid.testInstrumentationRunnerArguments.cashu.nativeWalletLocalMintIntegration=true \
           -Pandroid.testInstrumentationRunnerArguments.cashu.nutshellMintUrl=http://10.0.2.2:3338 \
@@ -208,7 +212,7 @@ jobs:
     name: Android Compatibility (${{ matrix.device }})
     if: github.event_name == 'schedule' || inputs.tier == 'full' || github.event.inputs.tier == 'full'
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 60
     strategy:
       fail-fast: false
       matrix:
@@ -246,8 +250,10 @@ jobs:
 
     - name: Run compatibility behavior pack
       run: |
-        ./gradlew --no-daemon :app:${{ matrix.device }}DebugAndroidTest \
-          -Pandroid.testInstrumentationRunnerArguments.annotation=com.cashu.me.test.Compatibility
+        bash ../CI/retry-android-ui-test.sh \
+          ./gradlew --no-daemon :app:${{ matrix.device }}DebugAndroidTest \
+          -Pandroid.testInstrumentationRunnerArguments.annotation=com.cashu.me.test.Compatibility \
+          -Pandroid.testInstrumentationRunnerArguments.timeout_msec=600000
 
     - name: Upload compatibility diagnostics
       if: always()

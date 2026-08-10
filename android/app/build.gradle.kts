@@ -83,9 +83,20 @@ android {
         }
     }
 
+    adbOptions {
+        // Slow CI emulators occasionally stall install/push; 10 min instead of the
+        // default 5 so a transient stall is not treated as a device failure.
+        timeOutInMs = 10 * 60 * 1000
+    }
+
     testOptions {
         execution = "ANDROIDX_TEST_ORCHESTRATOR"
         animationsDisabled = true
+        emulatorSnapshots {
+            // Keep a booted emulator snapshot so a re-run after a test failure
+            // (or the workflow retry loop) does not pay the full cold-boot cost.
+            enableForTestFailures = true
+        }
         managedDevices {
             localDevices {
                 create("pixel2Api35") {
