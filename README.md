@@ -12,8 +12,8 @@ iOS on the first row, Android on the second — same journey on both platforms:
 
 | Onboarding | Wallet | Receive | Send |
 | :---: | :---: | :---: | :---: |
-| ![iOS onboarding](docs/screenshots/ios/01-welcome.png) | ![iOS wallet](docs/screenshots/ios/06-wallet-home.png) | ![iOS payment received](docs/screenshots/ios/05-payment-received.png) | ![iOS send amount](docs/screenshots/ios/08-send-amount.png) |
-| ![Android onboarding](docs/screenshots/android/01-welcome.png) | ![Android wallet](docs/screenshots/android/06-wallet-home.png) | ![Android payment received](docs/screenshots/android/05-payment-received.png) | ![Android send amount](docs/screenshots/android/08-send-amount.png) |
+| <img src="docs/screenshots/ios/01-welcome.png" alt="iOS onboarding" width="220"> | <img src="docs/screenshots/ios/06-wallet-home.png" alt="iOS wallet" width="220"> | <img src="docs/screenshots/ios/05-payment-received.png" alt="iOS payment received" width="220"> | <img src="docs/screenshots/ios/08-send-amount.png" alt="iOS send amount" width="220"> |
+| <img src="docs/screenshots/android/01-welcome.png" alt="Android onboarding" width="220"> | <img src="docs/screenshots/android/06-wallet-home.png" alt="Android wallet" width="220"> | <img src="docs/screenshots/android/05-payment-received.png" alt="Android payment received" width="220"> | <img src="docs/screenshots/android/08-send-amount.png" alt="Android send amount" width="220"> |
 
 The full capture set for both platforms — onboarding through settings — lives
 in [`docs/screenshots/`](docs/screenshots/). All shots show a test wallet
