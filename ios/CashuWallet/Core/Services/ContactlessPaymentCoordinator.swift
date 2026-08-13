@@ -1,3 +1,6 @@
+// CoreNFC is iOS-only: Macs have no NFC radio. The whole file compiles out
+// on macOS, and the call sites are guarded to match.
+#if canImport(CoreNFC)
 import CoreNFC
 import Foundation
 
@@ -108,3 +111,4 @@ final class ContactlessPaymentCoordinator {
         }
     }
 }
+#endif

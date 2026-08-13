@@ -1,4 +1,9 @@
 import SwiftUI
+#if canImport(UIKit)
+import UIKit
+#else
+import AppKit
+#endif
 
 // MARK: - Severity
 
@@ -292,6 +297,7 @@ private struct BottomSheetBackdropModifier: ViewModifier {
     }
 }
 
+#if os(iOS)
 private struct BottomSheetDismissalObserver: UIViewControllerRepresentable {
     let onDismissalStateChanged: (Bool) -> Void
 
@@ -435,6 +441,18 @@ private struct BottomSheetDismissalObserver: UIViewControllerRepresentable {
         }
     }
 }
+#else
+/// AppKit updates a sheet binding as its dismissal starts, so the extra UIKit
+/// presentation-controller bridge is unnecessary on macOS.
+private struct BottomSheetDismissalObserver: View {
+    let onDismissalStateChanged: (Bool) -> Void
+
+    var body: some View {
+        Color.clear
+            .onAppear { onDismissalStateChanged(false) }
+    }
+}
+#endif
 
 // MARK: - Confirmation toast (the transient success channel)
 
@@ -480,7 +498,11 @@ private final class ConfirmationToastPresenter: ObservableObject {
     @Published private(set) var toast: ConfirmationToastMessage?
 
     private var dismissTask: Task<Void, Never>?
+    #if os(iOS)
     private var overlayWindow: ConfirmationToastWindow?
+    #else
+    private var overlayWindow: NSPanel?
+    #endif
 
     private init() {}
 
@@ -488,7 +510,7 @@ private final class ConfirmationToastPresenter: ObservableObject {
         ensureOverlayWindow()
         dismissTask?.cancel()
 
-        let animation: Animation? = UIAccessibility.isReduceMotionEnabled
+        let animation: Animation? = reduceMotionEnabled
             ? nil
             : .spring(response: 0.38, dampingFraction: 0.9)
         withAnimation(animation) {
@@ -499,13 +521,22 @@ private final class ConfirmationToastPresenter: ObservableObject {
         dismissTask = Task { [weak self] in
             try? await Task.sleep(for: .seconds(2.2))
             guard !Task.isCancelled, let self else { return }
-            withAnimation(UIAccessibility.isReduceMotionEnabled ? nil : .easeOut(duration: 0.14)) {
+            withAnimation(self.reduceMotionEnabled ? nil : .easeOut(duration: 0.14)) {
                 self.toast = nil
             }
         }
     }
 
+    private var reduceMotionEnabled: Bool {
+        #if os(iOS)
+        UIAccessibility.isReduceMotionEnabled
+        #else
+        NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
+        #endif
+    }
+
     private func ensureOverlayWindow() {
+        #if os(iOS)
         guard let windowScene = UIApplication.shared.connectedScenes
             .compactMap({ $0 as? UIWindowScene })
             .first(where: { $0.activationState == .foregroundActive })
@@ -528,9 +559,47 @@ private final class ConfirmationToastPresenter: ObservableObject {
         window.rootViewController = hostingController
         window.isHidden = false
         overlayWindow = window
+        #else
+        if let overlayWindow {
+            positionMacOverlay(overlayWindow)
+            overlayWindow.orderFrontRegardless()
+            return
+        }
+
+        let size = NSSize(width: 420, height: 84)
+        let window = NSPanel(
+            contentRect: NSRect(origin: .zero, size: size),
+            styleMask: [.borderless, .nonactivatingPanel],
+            backing: .buffered,
+            defer: false
+        )
+        window.backgroundColor = .clear
+        window.isOpaque = false
+        window.hasShadow = false
+        window.ignoresMouseEvents = true
+        window.level = .floating
+        window.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
+        window.contentView = NSHostingView(
+            rootView: ConfirmationToastOverlay(presenter: self)
+                .frame(width: size.width, height: size.height)
+        )
+        positionMacOverlay(window)
+        window.orderFrontRegardless()
+        overlayWindow = window
+        #endif
     }
+
+    #if os(macOS)
+    private func positionMacOverlay(_ window: NSWindow) {
+        guard let visibleFrame = (NSApp.keyWindow?.screen ?? NSScreen.main)?.visibleFrame else { return }
+        let x = visibleFrame.midX - window.frame.width / 2
+        let y = visibleFrame.maxY - window.frame.height - 8
+        window.setFrameOrigin(NSPoint(x: x, y: y))
+    }
+    #endif
 }
 
+#if os(iOS)
 private final class ConfirmationToastWindow: UIWindow {
     override var canBecomeKey: Bool { false }
 
@@ -538,9 +607,11 @@ private final class ConfirmationToastWindow: UIWindow {
         nil
     }
 }
+#endif
 
 private struct ConfirmationToastOverlay: View {
     @ObservedObject var presenter: ConfirmationToastPresenter
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         ZStack(alignment: .top) {
@@ -551,7 +622,7 @@ private struct ConfirmationToastOverlay: View {
                     .padding(.horizontal, 24)
                     .padding(.top, 8)
                     .transition(
-                        UIAccessibility.isReduceMotionEnabled
+                        reduceMotion
                             ? .opacity
                             : .asymmetric(
                                 insertion: .move(edge: .top).combined(with: .opacity),

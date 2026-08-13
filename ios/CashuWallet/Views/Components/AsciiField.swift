@@ -1,5 +1,7 @@
 import SwiftUI
+#if canImport(UIKit)
 import UIKit
+#endif
 
 // MARK: - Ascii Field
 /// The onboarding terrain band, ported from the cashu.space hero

@@ -1,5 +1,7 @@
 import SwiftUI
+#if canImport(UIKit)
 import UIKit
+#endif
 
 // MARK: - Copy
 
@@ -494,6 +496,7 @@ private struct SeedWordReviewGrid: View {
 /// content-touch delays, and once the hold recognizes, the scroll pan is
 /// locked out for the rest of the touch. SwiftUI's sequenced equivalent loses
 /// its drag half to the scroll pan on a real device.
+#if os(iOS)
 private struct RailGestureSurface: UIViewRepresentable {
     /// All three report a y-position in this surface's own coordinates.
     let onTap: (CGFloat) -> Void
@@ -677,3 +680,79 @@ private final class BackspaceReportingTextField: UITextField {
         super.deleteBackward()
     }
 }
+#else
+/// Mouse/trackpad version of the rail surface. A spatial click selects a word;
+/// click-drag scrubs immediately, matching the direct-manipulation convention
+/// on macOS without borrowing UIKit gesture recognizers.
+private struct RailGestureSurface: View {
+    let onTap: (CGFloat) -> Void
+    let onScrubBegan: (CGFloat) -> Void
+    let onScrubMoved: (CGFloat) -> Void
+
+    @State private var isScrubbing = false
+
+    var body: some View {
+        Color.clear
+            .contentShape(Rectangle())
+            .gesture(
+                SpatialTapGesture()
+                    .onEnded { value in
+                        onTap(value.location.y)
+                    }
+            )
+            .simultaneousGesture(
+                DragGesture(minimumDistance: 4)
+                    .onChanged { value in
+                        if isScrubbing {
+                            onScrubMoved(value.location.y)
+                        } else {
+                            isScrubbing = true
+                            onScrubBegan(value.startLocation.y)
+                        }
+                    }
+                    .onEnded { _ in
+                        isScrubbing = false
+                    }
+            )
+    }
+}
+
+/// Native SwiftUI text field for macOS. Hardware keyboards do not need the
+/// iOS keyboard-management hooks, while `onKeyPress` supplies the empty-field
+/// backspace behavior used to step to the preceding seed word.
+private struct SeedWordTextField: View {
+    @Binding var text: String
+    let placeholder: String
+    let isLastWord: Bool
+    @Binding var isFocused: Bool
+    let onCommit: () -> Void
+    let onBackspaceOnEmpty: () -> Void
+
+    @FocusState private var fieldFocused: Bool
+
+    var body: some View {
+        TextField(placeholder, text: $text)
+            .textFieldStyle(.plain)
+            .font(.system(.title3, design: .monospaced).weight(.medium))
+            .autocorrectionDisabled()
+            .focused($fieldFocused)
+            .onSubmit(onCommit)
+            .onKeyPress(.delete) {
+                guard text.isEmpty else { return .ignored }
+                onBackspaceOnEmpty()
+                return .handled
+            }
+            .onAppear {
+                fieldFocused = isFocused
+            }
+            .onChange(of: isFocused) { _, newValue in
+                fieldFocused = newValue
+            }
+            .onChange(of: fieldFocused) { _, newValue in
+                if isFocused != newValue {
+                    isFocused = newValue
+                }
+            }
+    }
+}
+#endif

@@ -1,5 +1,7 @@
 import SwiftUI
+#if canImport(UIKit)
 import UIKit
+#endif
 
 /// URL entry for connecting a mint, without a `NavigationStack` of its own — the
 /// host supplies one. Used standalone by `AddMintSheet` (Mints list) and as the

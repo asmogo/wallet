@@ -1,5 +1,7 @@
 import SwiftUI
+#if canImport(CoreNFC)
 import CoreNFC
+#endif
 
 struct SendView: View {
     @Environment(\.dismiss) private var dismiss
@@ -1518,7 +1520,7 @@ struct UnifiedSendView: View {
     // MARK: Send-method actions
 
     private var sendMethodList: some View {
-        let tapAvailable = NFCNDEFReaderSession.readingAvailable
+        let tapAvailable = ContactlessPayments.isAvailable
 
         return VStack(spacing: 12) {
             MethodActionRow(
@@ -4445,6 +4447,7 @@ struct MethodPickerSheet: View {
 
 // MARK: - Share Sheet
 
+#if os(iOS)
 struct ShareSheet: UIViewControllerRepresentable {
     let items: [Any]
 
@@ -4469,6 +4472,78 @@ struct CashuTokenShareSheet: UIViewControllerRepresentable {
 
     func updateUIViewController(_ uiViewController: UIActivityViewController, context: Context) {}
 }
+#else
+
+/// macOS share surface.
+///
+/// `UIActivityViewController` has no drop-in AppKit equivalent that works
+/// inside a SwiftUI sheet — `NSSharingServicePicker` needs a view to anchor to,
+/// which a sheet does not usefully provide. `ShareLink` is the supported
+/// SwiftUI route to the same services, so the sheet shows the payload, a
+/// ShareLink, and a copy button: the two things anyone actually reaches for.
+private struct MacShareSheetBody: View {
+    let text: String
+    @Environment(\.dismiss) private var dismiss
+    @State private var didCopy = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            Text("Share")
+                .font(.headline)
+
+            ScrollView {
+                Text(text)
+                    .font(.system(.footnote, design: .monospaced))
+                    .textSelection(.enabled)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .frame(maxHeight: 160)
+
+            HStack(spacing: 12) {
+                ShareLink(item: text) {
+                    Label("Share…", systemImage: "square.and.arrow.up")
+                }
+
+                Button {
+                    UIPasteboard.general.string = text
+                    didCopy = true
+                } label: {
+                    Label(didCopy ? "Copied" : "Copy", systemImage: didCopy ? "checkmark" : "doc.on.doc")
+                }
+
+                Spacer()
+
+                Button("Done") { dismiss() }
+                    .keyboardShortcut(.defaultAction)
+            }
+        }
+        .padding(20)
+        .frame(width: 360)
+    }
+}
+
+struct ShareSheet: View {
+    let items: [Any]
+
+    /// Only strings are ever passed in — tokens, invoices, payment requests.
+    private var text: String {
+        items.map { String(describing: $0) }.joined(separator: "\n")
+    }
+
+    var body: some View {
+        MacShareSheetBody(text: text)
+    }
+}
+
+/// Share surface that formats cashu tokens with the cashu: URL scheme
+struct CashuTokenShareSheet: View {
+    let token: String
+
+    var body: some View {
+        MacShareSheetBody(text: "cashu:\(token)")
+    }
+}
+#endif
 
 #Preview {
     SendView()
