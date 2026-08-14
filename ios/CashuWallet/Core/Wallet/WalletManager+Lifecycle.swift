@@ -111,10 +111,18 @@ extension WalletManager {
                 // Opening WalletRepository is synchronous inside the CDK FFI
                 // and may load wallets/fetch mint metadata. Keep the main actor
                 // free while SwiftUI renders the cached balance and history.
+                //
+                // iCloud KVS sync is unrelated to the repository open, but on a
+                // fully-cold process it's the first touch of the daemon since
+                // launch and can stall on its IPC handshake. Run it as its own
+                // task instead of sequencing it before the repository open, so
+                // it never gates isRuntimeReady.
                 let directoryName = walletDatabaseDirectoryName
                 let databaseFilename = walletDatabaseFilename
-                let runtime = try await Task.detached(priority: .userInitiated) {
+                Task.detached(priority: .utility) {
                     NSUbiquitousKeyValueStore.default.synchronize()
+                }
+                let runtime = try await Task.detached(priority: .userInitiated) {
                     Cdk.initLogging(level: "info")
                     return try Self.prepareLaunchRuntime(
                         mnemonic: storedMnemonic,
