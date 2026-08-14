@@ -1558,7 +1558,7 @@ private fun FirstMintList(
             // `.textLinkButton()`; GhostButton is that style's analog, so the
             // two stay centered and share press feedback on both platforms.
             GhostButton(
-                text = "Add custom mint URL",
+                text = "Add by URL",
                 onClick = { state.customInputOpen = true },
                 enabled = !busy,
                 leadingIcon = Icons.Outlined.Add,

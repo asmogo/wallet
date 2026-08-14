@@ -60,12 +60,6 @@ sealed interface WalletFlow {
 internal sealed interface FlowHandoffDestination {
     data class Scanner(val target: ScannerTarget) : FlowHandoffDestination
 
-    /**
-     * Scan a mint URL from a flow's add-mint step. [returnTo] is replayed once
-     * the scan resolves, so the user lands back on the step they left rather
-     * than on whichever surface the payload would otherwise route to.
-     */
-    data class MintScanner(val returnTo: WalletFlow) : FlowHandoffDestination
     data class ReceiveDetail(val token: String) : FlowHandoffDestination
     data class NavRoute(val route: String) : FlowHandoffDestination
     data class NavTab(val tab: TopTab) : FlowHandoffDestination

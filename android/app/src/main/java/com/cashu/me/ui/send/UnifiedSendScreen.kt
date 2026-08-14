@@ -150,12 +150,9 @@ fun UnifiedSendScreen(
     onSendEcash: () -> Unit,
     onOpenReceiveToken: (String) -> Unit,
     onReceive: () -> Unit,
-    onScanMintUrl: () -> Unit,
     allowCleartextLocalTestMints: Boolean = false,
     prefilledPayload: String? = null,
     onPrefilledConsumed: () -> Unit = {},
-    prefilledMintUrl: String? = null,
-    onPrefilledMintUrlConsumed: () -> Unit = {},
     onDismissLockChanged: (Boolean) -> Unit = {},
 ) {
     val walletState by walletManager.state.collectAsState()
@@ -521,9 +518,6 @@ fun UnifiedSendScreen(
                     mintDiscoveryManager = mintDiscoveryManager,
                     context = ConnectMintContext.Send,
                     allowCleartextLocalTestMints = allowCleartextLocalTestMints,
-                    prefilledMintUrl = prefilledMintUrl,
-                    onPrefilledMintUrlConsumed = onPrefilledMintUrlConsumed,
-                    onScanMintUrl = onScanMintUrl,
                     onMintAdded = {},
                 )
             } else {

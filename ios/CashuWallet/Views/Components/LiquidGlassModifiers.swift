@@ -50,7 +50,7 @@ extension View {
     }
 
     /// Canonical borderless text-link button for tertiary actions
-    /// ("Skip", "What is ecash?", "Copy", "Add custom mint URL"). The single
+    /// ("Skip", "What is ecash?", "Copy", "Add by URL"). The single
     /// text-link vocabulary in the app — see `TextLinkButtonStyle`.
     func textLinkButton() -> some View {
         self.buttonStyle(TextLinkButtonStyle())
@@ -99,14 +99,7 @@ extension View {
     ///
     /// Never hang `.onGeometryChange` off a bare view to drive a detent.
     func contentFitMeasured(_ onHeight: @escaping (CGFloat) -> Void) -> some View {
-        ScrollView {
-            self.onGeometryChange(for: CGFloat.self) { proxy in
-                proxy.size.height
-            } action: { newHeight in
-                onHeight(newHeight)
-            }
-        }
-        .scrollBounceBehavior(.basedOnSize)
+        modifier(ContentFitMeasure(onHeight: onHeight))
     }
 
     /// Sizes a sheet to the height reported by ``contentFitMeasured(_:)``.
@@ -122,17 +115,27 @@ extension View {
     ///   - navigationBar: whether the sheet hosts a `NavigationStack` with an
     ///     inline title. Pass `false` for a bare sheet, or its detent carries
     ///     44pt of chrome for a navigation bar that isn't there.
+    ///   - step: identity of the face that currently owns the height. Only
+    ///     meaningful alongside `stepResize`.
+    ///   - stepResize: how long the sheet takes to change height when `step`
+    ///     changes; `nil` (the default) snaps. A duration rather than an
+    ///     `Animation` because the modifier has to know when the move is over,
+    ///     not only how to start it.
     func contentFitDetent(
         _ contentHeight: CGFloat,
         enabled: Bool = true,
         estimate: CGFloat = ContentFitSheetMetrics.bodyEstimate,
-        navigationBar: Bool = true
+        navigationBar: Bool = true,
+        step: AnyHashable? = nil,
+        stepResize: Duration? = nil
     ) -> some View {
         modifier(ContentFitDetent(
             contentHeight: contentHeight,
             enabled: enabled,
             estimate: estimate,
-            navigationBar: navigationBar
+            navigationBar: navigationBar,
+            step: step,
+            stepResize: stepResize
         ))
     }
 
@@ -253,6 +256,55 @@ extension View {
     }
 }
 
+// MARK: - Shared Axis
+
+/// Material 3 shared axis X — the same spec Android's `TwoFaceScreen` uses, so a
+/// step swap reads identically on both platforms: both faces travel 30pt in one
+/// direction over 300ms while the outgoing fades out and the incoming fades in.
+///
+/// This exists because a `NavigationStack` push cannot be used where the sheet's
+/// height changes with the step. For the length of a UIKit push or pop the
+/// arriving page is laid out at the *departing* page's height, so a sheet that
+/// resizes with the transition delivers that page clipped — measured on an
+/// iPhone 17 Pro, the mint shortlist came back cut through a row with ~158pt of
+/// empty sheet under it. Holding the resize until the transition ends trades the
+/// clip for a sheet that lands, pauses, then grows. Swapping the faces in place
+/// has neither problem: the slide is ours, nothing is laid out against a stale
+/// height, and the detent animates on the same beat.
+///
+/// The cost is the interactive back-swipe, which belongs to the push being given
+/// up; callers draw a back control instead, exactly as Android does.
+enum SharedAxis {
+    static let duration: Duration = .seconds(0.3)
+    private static let slide: CGFloat = 30
+    private static let outgoingFade: TimeInterval = 0.09
+    private static let incomingFade: TimeInterval = 0.21
+
+    static func transition(forward: Bool, reduceMotion: Bool) -> AnyTransition {
+        guard !reduceMotion else { return .opacity }
+        // The fades are staged, not crossed: the outgoing face is gone in 90ms
+        // and the incoming one only starts after that. A plain symmetric
+        // cross-dissolve leaves both legible at once and the two sets of rows
+        // read as a double exposure. The travel keeps the full duration, so the
+        // motion stays continuous underneath the swap.
+        let travel = Animation.smooth(duration: 0.3)
+        let out = Animation.easeIn(duration: outgoingFade)
+        let incoming = Animation.easeOut(duration: incomingFade).delay(outgoingFade)
+        return .asymmetric(
+            insertion: .offset(x: forward ? slide : -slide).animation(travel)
+                .combined(with: .opacity.animation(incoming)),
+            removal: .offset(x: forward ? -slide : slide).animation(travel)
+                .combined(with: .opacity.animation(out))
+        )
+    }
+
+    /// Drives the swap — the content transition *and* the sheet detent moving
+    /// alongside it, so they are one motion rather than two.
+    static func animation(reduceMotion: Bool) -> Animation {
+        reduceMotion ? .easeInOut(duration: 0.2) : .smooth(duration: 0.3)
+    }
+}
+
 // MARK: - Screen Entry Fade
 
 /// A subtle opacity-only entrance for a screen's content. Because it carries its
@@ -305,6 +357,64 @@ private struct CanvasSheetBackground: ViewModifier {
     }
 }
 
+// MARK: - Content-Fit Sheet Measurement
+
+/// Reports the body's ideal height, but only from a layout pass that has actually
+/// happened. See ``View/contentFitMeasured(_:)``.
+///
+/// The first pass after a sheet is presented reports garbage. Measured on an
+/// iPhone 17 Pro presenting Send's no-mints face: the content comes back
+/// **139.7 × 1032.3** while the enclosing `ScrollView` is still **139.7 × 0** —
+/// the sheet has no laid-out geometry yet, so the body is measured at a third of
+/// its real width, every line of text wraps about three times over, and the ideal
+/// height is nearly triple the truth. The real pass, 402 × 368.3, lands
+/// immediately after.
+///
+/// Passed straight through, that first number sets the detent to
+/// `min(1032 + chrome, 90% of the screen)` — a full-height sheet with the content
+/// stranded at the top, the exact bug this file's detent machinery kept being
+/// blamed for. Recovery then depends on the corrected measurement arriving *and*
+/// UIKit honouring it; a simulator wins that, a device need not.
+///
+/// So nothing is published until the container has a real height, and the last
+/// measurement is re-published when it gets one. Gating on the container rather
+/// than on the number itself keeps genuinely tall content — accessibility text
+/// sizes — free to exceed the screen and scroll, which is what the ceiling in
+/// ``ContentFitSheetMetrics/maxScreenFraction`` is for.
+private struct ContentFitMeasure: ViewModifier {
+    let onHeight: (CGFloat) -> Void
+
+    @State private var bodyHeight: CGFloat = 0
+    @State private var containerHeight: CGFloat = 0
+
+    func body(content: Content) -> some View {
+        ScrollView {
+            content.onGeometryChange(for: CGFloat.self) { proxy in
+                proxy.size.height
+            } action: { newHeight in
+                bodyHeight = newHeight
+                publish()
+            }
+        }
+        .scrollBounceBehavior(.basedOnSize)
+        // Fires *after* the body's own measurement on the pass that gives the
+        // sheet its geometry, which is why the republish here is load-bearing:
+        // the real body height is already known by then and would otherwise
+        // never be reported.
+        .onGeometryChange(for: CGFloat.self) { proxy in
+            proxy.size.height
+        } action: { newHeight in
+            containerHeight = newHeight
+            publish()
+        }
+    }
+
+    private func publish() {
+        guard containerHeight > 0, bodyHeight > 0 else { return }
+        onHeight(bodyHeight)
+    }
+}
+
 // MARK: - Content-Fit Sheet Detent
 
 /// Pins the sheet to the newest computed height.
@@ -324,10 +434,61 @@ private struct ContentFitDetent: ViewModifier {
     let enabled: Bool
     let estimate: CGFloat
     let navigationBar: Bool
+    let step: AnyHashable?
+    let stepResize: Duration?
 
-    @State private var selection: PresentationDetent = .large
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
-    private var detent: PresentationDetent {
+    @State private var selection: PresentationDetent
+    /// The step `selection` was last chosen for, so a height change can be told
+    /// apart from a step change. See ``apply(_:)``.
+    @State private var lastStep: AnyHashable?
+    /// Each step's last-known height, and whether a step resize is in flight.
+    /// Both exist to keep ``detents`` right for the length of a move.
+    @State private var knownPerStep: [AnyHashable?: PresentationDetent] = [:]
+    @State private var moving = false
+    @State private var moves = 0
+
+    @MainActor
+    init(
+        contentHeight: CGFloat,
+        enabled: Bool,
+        estimate: CGFloat,
+        navigationBar: Bool,
+        step: AnyHashable?,
+        stepResize: Duration?
+    ) {
+        self.contentHeight = contentHeight
+        self.enabled = enabled
+        self.estimate = estimate
+        self.navigationBar = navigationBar
+        self.step = step
+        self.stepResize = stepResize
+        // Seeded, not left nil: the first measurement to land after presentation
+        // belongs to the step the sheet opened on, not a move to a new one.
+        _lastStep = State(initialValue: step)
+        // Seed with a detent the set actually contains. `.large` is not one:
+        // while `enabled`, the set holds a single `.height(…)`, so a `.large`
+        // seed is an invalid selection and the sheet opens full-height until
+        // `onAppear` replaces it. That is a race — the simulator usually wins
+        // it, a device often loses — and losing it is what put the Send sheet's
+        // no-mints face on a full-height sheet with its content stranded at the
+        // top.
+        _selection = State(initialValue: Self.detent(
+            for: contentHeight,
+            enabled: enabled,
+            estimate: estimate,
+            navigationBar: navigationBar
+        ))
+    }
+
+    @MainActor
+    private static func detent(
+        for contentHeight: CGFloat,
+        enabled: Bool,
+        estimate: CGFloat,
+        navigationBar: Bool
+    ) -> PresentationDetent {
         guard enabled else { return .large }
         return .height(ContentFitSheetMetrics.detentHeight(
             for: contentHeight,
@@ -336,18 +497,88 @@ private struct ContentFitDetent: ViewModifier {
         ))
     }
 
+    private var detent: PresentationDetent {
+        Self.detent(
+            for: contentHeight,
+            enabled: enabled,
+            estimate: estimate,
+            navigationBar: navigationBar
+        )
+    }
+
+    /// The height being moved to, plus the one currently selected.
+    ///
+    /// At rest those are the same value, so this is a one-element set and the
+    /// sheet is not user-draggable. They differ for exactly one update — a new
+    /// measurement lands, `body` re-runs with the new `detent`, and `onChange`
+    /// has not yet moved `selection` onto it — and that single update is the
+    /// whole bug: a `selection` the set does not contain is invalid, and UIKit
+    /// answers an invalid selection by opening the sheet **full height**.
+    ///
+    /// Seeding `selection` in `init` (see there) narrowed that window but cannot
+    /// close it, because the set is recomputed from the live `contentHeight`
+    /// while `selection` is frozen at the value from first construction. Whether
+    /// the window is ever observed is pure timing — the same commit that never
+    /// reproduced under XCUITest on a simulator reproduced every launch from
+    /// Xcode, on Send's no-mints face. Keeping the old selection a member removes
+    /// the race rather than narrowing it: the sheet holds its current height for
+    /// that one update, then `onChange` converges it.
+    ///
+    /// Mid-resize the set additionally keeps every step's last-known height. A
+    /// selection change only animates if the set holds the height the sheet is
+    /// *currently* at for the whole animation; let a member drop the moment the
+    /// selection lands and UIKit resizes on the spot, abandoning the animation a
+    /// frame in. Measured: one intermediate height instead of twenty-plus.
+    private var detents: Set<PresentationDetent> {
+        guard stepResize != nil, moving else { return [detent, selection] }
+        return Set(knownPerStep.values).union([detent, selection])
+    }
+
     func body(content: Content) -> some View {
         content
-            .presentationDetents([detent], selection: $selection)
-            .onAppear { selection = detent }
-            .onChange(of: detent) { _, newDetent in selection = newDetent }
+            .presentationDetents(detents, selection: $selection)
+            .onAppear { apply(detent) }
+            .onChange(of: detent) { _, newDetent in apply(newDetent) }
+            // Keyed on the move counter so a second push/pop cancels the first
+            // one's settle instead of pruning the set out from under it.
+            .task(id: moves) {
+                guard moving, let stepResize else { return }
+                try? await Task.sleep(for: stepResize + .milliseconds(120))
+                moving = false
+            }
+    }
+
+    /// Snaps by default. A caller that opted into `stepResize` gets an animated
+    /// move, but only when the *step* changes: the height also changes as one
+    /// step's measurement settles, and that arrives while the sheet is still
+    /// sliding up, so animating it would make every content-fit sheet in the app
+    /// visibly grow as it opens.
+    private func apply(_ newDetent: PresentationDetent) {
+        defer {
+            lastStep = step
+            if stepResize != nil { knownPerStep[step] = newDetent }
+        }
+        guard let stepResize, step != lastStep, !reduceMotion else {
+            selection = newDetent
+            return
+        }
+        moving = true
+        moves += 1
+        withAnimation(.smooth(duration: stepResize.seconds)) { selection = newDetent }
+    }
+}
+
+private extension Duration {
+    /// `Animation` still speaks in seconds.
+    var seconds: Double {
+        Double(components.seconds) + Double(components.attoseconds) / 1e18
     }
 }
 
 // MARK: - Content-Fit Sheet Metrics
 
 /// The one place the content-fit sheet arithmetic lives. Every partial-height
-/// sheet in the app — Send's compact input, Receive, Add Mint, connect-a-mint,
+/// sheet in the app — Send's compact input, Receive, Add mint, connect-a-mint,
 /// onboarding's "What is ecash?" — hugs its content through
 /// ``View/contentFitMeasured(_:)`` +
 /// ``View/contentFitDetent(_:enabled:estimate:navigationBar:)``.
@@ -544,11 +775,11 @@ struct FullWidthCapsuleButtonStyle: ButtonStyle {
 // MARK: - Text Link Button Style
 
 /// Borderless, text-only tertiary action ("Skip", "What is ecash?", "Copy",
-/// "Add custom mint URL"). The single canonical style for plain text links —
+/// "Add by URL"). The single canonical style for plain text links —
 /// `.subheadline.weight(.medium)`, `.secondary`, with a press-dim and disabled
 /// fade that match the rest of the button family. Layout (full-width, padding,
 /// optional leading SF Symbol) stays at the call site, since text links vary
-/// from inline ("Copy") to full-width ("Add custom mint URL").
+/// from inline ("Copy") to full-width ("Add by URL").
 struct TextLinkButtonStyle: ButtonStyle {
     @Environment(\.isEnabled) private var isEnabled
 

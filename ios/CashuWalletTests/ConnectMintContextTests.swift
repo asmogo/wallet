@@ -14,12 +14,12 @@ final class ConnectMintContextTests: XCTestCase {
     func testAddMintContextDropsTheRedundantHeadline() {
         // The CTA said "Add mint" and so does the title — a third restatement is
         // the header stacking this redesign removed.
-        XCTAssertEqual(ConnectMintContext.addMint.navigationTitle, "Add Mint")
+        XCTAssertEqual(ConnectMintContext.addMint.navigationTitle, "Add mint")
         XCTAssertFalse(ConnectMintContext.addMint.showsHeadline)
     }
 
     func testCopyIsSharedAcrossBothEntryPoints() {
-        XCTAssertEqual(ConnectMintContext.headline, "Connect a mint first")
+        XCTAssertEqual(ConnectMintContext.headline, "Add a mint first")
         XCTAssertEqual(
             ConnectMintContext.subtitle,
             "Mints issue the ecash you send and receive. Add one to get started."
@@ -28,7 +28,7 @@ final class ConnectMintContextTests: XCTestCase {
 
     func testCuratedShortlistIsNonEmptyAndUsesHTTPS() {
         // The picker's whole value is recognition over recall; an empty list
-        // would silently degrade it to a bare "Add custom mint URL" link.
+        // would silently degrade it to a bare "Add by URL" link.
         XCTAssertFalse(RecommendedMint.suggested.isEmpty)
         for mint in RecommendedMint.suggested {
             XCTAssertTrue(

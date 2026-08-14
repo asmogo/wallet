@@ -5,6 +5,10 @@ import UIKit
 /// host supplies one. Used standalone by `AddMintSheet` (Mints list) and as the
 /// pushed step of `ConnectMintPicker`.
 struct AddMintFormView: View {
+    /// Inline title for the host's navigation bar. The connect-a-mint picker
+    /// pushes this as "Add by URL" — the link that opened it — while the
+    /// standalone Mints-tab sheet keeps the plain name.
+    var navigationTitle: String
     /// Called after the mint is connected. Standalone hosts dismiss; the
     /// connect-a-mint picker pops back or closes depending on where it was opened.
     var onAdded: () -> Void
@@ -17,14 +21,15 @@ struct AddMintFormView: View {
     @State private var mintUrl = ""
     @State private var isAdding = false
     @State private var errorMessage: String?
-    @State private var showingScanner = false
     @FocusState private var urlFieldFocused: Bool
 
     init(
         initialUrl: String = "",
+        navigationTitle: String = "Add mint",
         onAdded: @escaping () -> Void,
         onHeightChange: @escaping (CGFloat) -> Void = { _ in }
     ) {
+        self.navigationTitle = navigationTitle
         self.onAdded = onAdded
         self.onHeightChange = onHeightChange
         _mintUrl = State(initialValue: initialUrl)
@@ -36,8 +41,17 @@ struct AddMintFormView: View {
         // second visual system inside one sheet, and its greedy height forces the
         // host to `.large`, stranding the buttons under a band of dead space.
         VStack(alignment: .leading, spacing: 0) {
+            // A persistent label, not a placeholder doing double duty: the old
+            // "Mint URL (https://…)" vanished the moment they typed, taking the
+            // VoiceOver label with it. Android's floating label already does this.
+            Text("Mint URL")
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+                .padding(.bottom, 6)
+
             HStack(spacing: 10) {
-                TextField("Mint URL (https://…)", text: $mintUrl)
+                TextField("https://…", text: $mintUrl)
+                    .accessibilityLabel("Mint URL")
                     .textInputAutocapitalization(.never)
                     .autocorrectionDisabled()
                     .keyboardType(.URL)
@@ -50,22 +64,45 @@ struct AddMintFormView: View {
                     }
                     .accessibilityIdentifier("mints-add-url-field")
 
-                Button(action: openScanner) {
-                    Image(systemName: "viewfinder")
-                        .font(.body.weight(.semibold))
-                        .foregroundStyle(.secondary)
+                // Paste ↔ Clear, the same trailing face as the Receive and Send
+                // inputs — and the same bare secondary glyph the scanner button
+                // used to be. `PasteButton` would suppress iOS's "pasted from …"
+                // banner, but it only renders as a filled capsule, which shouts
+                // in a field whose whole job is to stay quiet.
+                if mintUrl.isEmpty {
+                    Button(action: pasteFromClipboard) {
+                        Image(systemName: "doc.on.clipboard")
+                            .font(.body.weight(.semibold))
+                            .foregroundStyle(.secondary)
+                    }
+                    .buttonStyle(.borderless)
+                    .disabled(isAdding)
+                    .accessibilityLabel("Paste")
+                    .accessibilityHint("Pastes a mint URL from the clipboard")
+                    .accessibilityIdentifier("mints-add-paste-button")
+                } else {
+                    Button {
+                        mintUrl = ""
+                        errorMessage = nil
+                    } label: {
+                        Image(systemName: "xmark.circle.fill")
+                            .font(.body)
+                            .foregroundStyle(.secondary)
+                    }
+                    .buttonStyle(.borderless)
+                    .disabled(isAdding)
+                    .accessibilityLabel("Clear")
+                    .accessibilityIdentifier("mints-add-clear-button")
                 }
-                .buttonStyle(.borderless)
-                .disabled(isAdding)
-                .accessibilityLabel("Scan QR Code")
-                .accessibilityHint("Opens the camera to scan a mint URL")
-                .accessibilityIdentifier("mints-add-scan-button")
             }
+            .animation(.smooth(duration: 0.2), value: mintUrl.isEmpty)
             .padding(.horizontal, 16)
             .padding(.vertical, 14)
             .background(.quaternary.opacity(0.5), in: RoundedRectangle(cornerRadius: 12))
 
-            Text("Enter the URL of a Cashu mint to connect to it. This wallet is not affiliated with any mint.")
+            // The label and placeholder already say "enter a mint URL"; the only
+            // load-bearing sentence here is the trust one.
+            Text("Mints are run by third parties; this wallet isn't affiliated with any of them. Only add a mint you trust.")
                 .font(.footnote)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
@@ -81,7 +118,7 @@ struct AddMintFormView: View {
                     if isAdding {
                         ProgressView().tint(.primary)
                     } else {
-                        Text("Add Mint")
+                        Text("Add mint")
                     }
                 }
             }
@@ -90,46 +127,32 @@ struct AddMintFormView: View {
             .accessibilityIdentifier("mints-add-submit-button")
             .padding(.top, 24)
 
-            Button("Paste URL from Clipboard", action: pasteFromClipboard)
-                .textLinkButton()
-                .frame(maxWidth: .infinity)
-                .disabled(isAdding)
-                .padding(.top, 12)
         }
         .padding(.horizontal, 20)
         .padding(.top, 8)
         .padding(.bottom, 16)
         .contentFitMeasured { onHeightChange($0) }
-        .navigationTitle("Add Mint")
+        .navigationTitle(navigationTitle)
         .navigationBarTitleDisplayMode(.inline)
-        // Sheet, not fullScreenCover — the one presentation kind every
-        // value-returning scanner uses.
-        .sheet(isPresented: $showingScanner) {
-            ScannerWrapperView(
-                onScanned: handleScannedMintUrl,
-                promptText: "Scan a mint URL"
-            )
-            .environmentObject(walletManager)
-            .canvasSheetBackground()
-        }
     }
 
     private var canSubmit: Bool {
         !mintUrl.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !isAdding
     }
 
-    private func openScanner() {
-        urlFieldFocused = false
-        HapticFeedback.selection()
-        showingScanner = true
-    }
-
-    private func handleScannedMintUrl(_ raw: String) {
-        if let normalized = Self.normalizedMintUrl(from: raw) {
+    /// Empty and "held something, but not a mint URL" are different mistakes
+    /// with different fixes, so they read as different messages.
+    private func pasteFromClipboard() {
+        guard let clipboardContent = UIPasteboard.general.string,
+              !clipboardContent.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            errorMessage = "Clipboard is empty."
+            return
+        }
+        if let normalized = Self.normalizedMintUrl(from: clipboardContent) {
             mintUrl = normalized
             errorMessage = nil
         } else {
-            errorMessage = "No valid mint URL found in QR code."
+            errorMessage = "No mint URL in your clipboard. Copy the mint's address, then paste."
         }
     }
 
@@ -152,21 +175,7 @@ struct AddMintFormView: View {
         }
     }
 
-    private func pasteFromClipboard() {
-        guard let clipboardContent = UIPasteboard.general.string,
-              !clipboardContent.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-            errorMessage = "Clipboard is empty."
-            return
-        }
-        if let normalized = Self.normalizedMintUrl(from: clipboardContent) {
-            mintUrl = normalized
-            errorMessage = nil
-        } else {
-            errorMessage = "No valid mint URL found in clipboard."
-        }
-    }
-
-    /// Pulls the first plausible mint URL from free-form paste/scan text.
+    /// Pulls the first plausible mint URL from free-form pasted text.
     private static func normalizedMintUrl(from raw: String) -> String? {
         let separators = CharacterSet.whitespacesAndNewlines.union(CharacterSet(charactersIn: ",;"))
         let candidates = raw.components(separatedBy: separators).filter { !$0.isEmpty }

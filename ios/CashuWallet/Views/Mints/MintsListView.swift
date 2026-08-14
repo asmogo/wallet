@@ -23,14 +23,14 @@ struct MintsListView: View {
                     Button {
                         showAddMintSheet = true
                     } label: {
-                        actionRow(title: "Add Mint", systemImage: "plus")
+                        actionRow(title: "Add mint", systemImage: "plus")
                     }
                     .accessibilityIdentifier("mints-add-button")
 
                     Button {
                         showDiscoverySheet = true
                     } label: {
-                        actionRow(title: "Discover Mints", systemImage: "magnifyingglass")
+                        actionRow(title: "Discover mints", systemImage: "magnifyingglass")
                     }
                 }
             }

@@ -1,5 +1,11 @@
 package com.cashu.me.ui.mints
 
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
@@ -9,7 +15,7 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.QrCodeScanner
+import androidx.compose.material.icons.outlined.Cancel
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -48,14 +54,13 @@ import com.cashu.me.ui.testing.UiTestTags
  * [AddMintSheet] (Mints tab) and as the pushed step of
  * [ConnectMintSheetContent].
  *
- * Camera overlays sit under dialog windows, so [onScan] must dismiss the host
- * sheet before opening the scanner; a successful scan comes back through
- * [initialUrl].
+ * There is no scanner here: the home scanner already answers a mint QR by
+ * putting the URL on the clipboard, so the field's paste affordance is the
+ * second half of that gesture. A scanned URL can still arrive via [initialUrl].
  */
 @Composable
 fun AddMintFormBody(
     walletManager: WalletManager,
-    onScan: () -> Unit,
     onAdded: () -> Unit,
     modifier: Modifier = Modifier,
     initialUrl: String = "",
@@ -70,12 +75,19 @@ fun AddMintFormBody(
     var isAdding by remember { mutableStateOf(false) }
 
     fun pasteFromClipboard() {
-        val candidate = clipboard.getText()?.text?.let { mintUrlCandidates(it).firstOrNull() }
-        if (candidate == null) {
-            error = "No valid mint URL in clipboard."
-        } else {
-            url = candidate
-            error = null
+        val clipboardText = clipboard.getText()?.text
+        val candidate = clipboardText?.let { mintUrlCandidates(it).firstOrNull() }
+        when {
+            // The affordance only shows when the clipboard holds something, so
+            // this branch is a guard against the clipboard changing underneath
+            // rather than a case the user can normally reach.
+            clipboardText.isNullOrBlank() -> error = "Clipboard is empty."
+            candidate == null ->
+                error = "No mint URL in your clipboard. Copy the mint's address, then paste."
+            else -> {
+                url = candidate
+                error = null
+            }
         }
     }
 
@@ -85,7 +97,9 @@ fun AddMintFormBody(
             allowCleartextLocalTestMints = allowCleartextLocalTestMints,
         )
         if (normalized == null) {
-            error = "Enter a valid HTTPS mint URL."
+            // Names the requirement, which no earlier copy does — the field's
+            // placeholder is the only other place https:// appears.
+            error = "That doesn't look like a mint address. Mint URLs start with https://."
             return
         }
         error = null
@@ -123,19 +137,50 @@ fun AddMintFormBody(
             keyboardOptions = KeyboardOptions(
                 capitalization = KeyboardCapitalization.None,
             ),
-            trailingIcon = {
-                IconButton(onClick = onScan) {
-                    Icon(
-                        imageVector = Icons.Outlined.QrCodeScanner,
-                        contentDescription = "Scan",
-                    )
+            // Paste ↔ Clear cross-fade, identical to the Receive and Send input
+            // faces — a mint URL is pasted like any other payload. The slot is
+            // absent entirely when there is nothing to paste and nothing to
+            // clear, rather than sitting there dead.
+            trailingIcon = if (url.isNotBlank() || clipboard.hasText()) {
+                {
+                    AnimatedContent(
+                        targetState = url.isNotBlank(),
+                        transitionSpec = {
+                            fadeIn(spring(stiffness = Spring.StiffnessMedium))
+                                .togetherWith(fadeOut(spring(stiffness = Spring.StiffnessMedium)))
+                        },
+                        label = "mint-url-trailing",
+                    ) { hasInput ->
+                        if (hasInput) {
+                            IconButton(
+                                onClick = {
+                                    url = ""
+                                    error = null
+                                },
+                                modifier = Modifier.testTag(UiTestTags.AddMintClear),
+                            ) {
+                                Icon(Icons.Outlined.Cancel, contentDescription = "Clear")
+                            }
+                        } else {
+                            GhostButton(
+                                text = "Paste",
+                                onClick = ::pasteFromClipboard,
+                                enabled = !isAdding,
+                                modifier = Modifier.testTag(UiTestTags.AddMintPaste),
+                            )
+                        }
+                    }
                 }
+            } else {
+                null
             },
         )
 
         Text(
-            text = "Enter the URL of a Cashu mint to connect to it. " +
-                "This wallet is not affiliated with any mint.",
+            // The label and placeholder already say "enter a mint URL"; the only
+            // load-bearing sentence here is the trust one.
+            text = "Mints are run by third parties; this wallet isn't affiliated " +
+                "with any of them. Only add a mint you trust.",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
@@ -148,12 +193,6 @@ fun AddMintFormBody(
             enabled = url.isNotBlank() && !isAdding,
             loading = isAdding,
             modifier = Modifier.testTag(UiTestTags.AddMintSubmit),
-        )
-        GhostButton(
-            text = "Paste URL from clipboard",
-            onClick = ::pasteFromClipboard,
-            enabled = !isAdding,
-            modifier = Modifier.fillMaxWidth(),
         )
     }
 }
@@ -169,7 +208,6 @@ fun AddMintSheet(
     walletManager: WalletManager,
     initialUrl: String = "",
     allowCleartextLocalTestMints: Boolean = false,
-    onScan: () -> Unit,
     onDismiss: () -> Unit,
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
@@ -187,13 +225,14 @@ fun AddMintSheet(
                 .padding(bottom = CashuTheme.spacing.comfortable),
             verticalArrangement = Arrangement.spacedBy(CashuTheme.spacing.snug),
         ) {
-            FlowSheetTitle(title = "Add Mint")
+            // Reached from the Mints tab, not through the "Add by URL" link, so
+            // this one keeps the plain name.
+            FlowSheetTitle(title = "Add mint")
 
             AddMintFormBody(
                 walletManager = walletManager,
                 initialUrl = initialUrl,
                 allowCleartextLocalTestMints = allowCleartextLocalTestMints,
-                onScan = onScan,
                 onAdded = onDismiss,
             )
         }
