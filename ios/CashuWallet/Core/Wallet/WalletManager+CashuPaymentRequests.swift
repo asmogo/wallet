@@ -225,7 +225,9 @@ extension WalletManager {
                 defaultFailureOutcome: .ambiguousFailure
             ) {
                 let wallet = try await walletRepository.getWallet(mintUrl: MintUrl(url: mintURL), unit: .sat)
-                let keysets = try await wallet.refreshKeysets()
+                let keysets = try await wallet.keysets(policy: .refresh).map {
+                    KeySetInfo(id: $0.id, unit: $0.unit, active: $0.active ?? false, inputFeePpk: $0.inputFeePpk)
+                }
                 let active = keysets.first(where: { $0.active }) ?? keysets.first
                 return active?.inputFeePpk
             }

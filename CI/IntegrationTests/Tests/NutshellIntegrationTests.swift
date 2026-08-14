@@ -21,7 +21,7 @@ class MintIntegrationTestSuite: IntegrationTestBase {
     }
 
     func runGetMintKeysets() async throws {
-        let keysets = try await wallet.getMintKeysets(filter: .active)
+        let keysets = try await wallet.keysets(policy: nil).filter { $0.active ?? false }
         XCTAssertFalse(keysets.isEmpty, "\(mintName) mint should have at least one active keyset")
         for keyset in keysets {
             XCTAssertEqual(keyset.unit, .sat, "Keyset unit should be sat")

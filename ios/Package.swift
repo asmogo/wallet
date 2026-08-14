@@ -14,7 +14,10 @@ let package = Package(
         ),
     ],
     dependencies: [
-        .package(url: "https://github.com/cashubtc/cdk-swift", exact: "0.17.3-rc.0")
+        // Local development: cdk-swift checkout whose Rust FFI is built from
+        // the cdk workspace worktree at ../cdk-nostr-ffi (cdk-nostr based FFI:
+        // Nostr keys, NIP-44, NIP-17 inbox).
+        .package(path: "../../cdk-swift")
     ],
     targets: [
         .target(

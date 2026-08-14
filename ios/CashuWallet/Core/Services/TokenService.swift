@@ -264,7 +264,9 @@ class TokenService: ObservableObject {
         // trap checkTokenSpendable documents for checkProofsSpent.
         let proofs: [Proof]
         do {
-            let keysets = try await wallet.getMintKeysets(filter: .all)
+            let keysets = try await wallet.keysets(policy: nil).map {
+                KeySetInfo(id: $0.id, unit: $0.unit, active: $0.active ?? false, inputFeePpk: $0.inputFeePpk)
+            }
             proofs = try token.proofs(mintKeysets: keysets)
         } catch {
             proofs = try token.proofsSimple()
@@ -317,7 +319,9 @@ class TokenService: ObservableObject {
         let tokenUnit = tokenObj.unit() ?? .sat
 
         let wallet = try await repo.getWallet(mintUrl: mintUrlObj, unit: tokenUnit)
-        let keysets = try await wallet.getMintKeysets(filter: .all)
+        let keysets = try await wallet.keysets(policy: nil).map {
+            KeySetInfo(id: $0.id, unit: $0.unit, active: $0.active ?? false, inputFeePpk: $0.inputFeePpk)
+        }
         let proofs = try tokenObj.proofs(mintKeysets: keysets)
         let spentStates = try await wallet.checkProofsSpent(proofs: proofs)
 

@@ -1,5 +1,5 @@
 import SwiftUI
-import P256K
+import Cdk
 
 // MARK: - Settings Manager
 
@@ -318,19 +318,12 @@ class SettingsManager: ObservableObject {
     }
 
     private func generateRandomPrivateKeyBytes() throws -> [UInt8] {
-        for _ in 0..<10 {
-            var randomBytes = [UInt8](repeating: 0, count: 32)
-            let status = SecRandomCopyBytes(kSecRandomDefault, randomBytes.count, &randomBytes)
-            guard status == errSecSuccess else {
-                throw SettingsFeatureError.randomGenerationFailed
-            }
-
-            if (try? P256K.Schnorr.PrivateKey(dataRepresentation: randomBytes)) != nil {
-                return randomBytes
-            }
+        // The CDK FFI generates a valid secp256k1 secret key
+        let privateKeyHex = nostrGenerateSecretKey()
+        guard let bytes = Data(hexString: privateKeyHex) else {
+            throw SettingsFeatureError.randomGenerationFailed
         }
-
-        throw SettingsFeatureError.randomGenerationFailed
+        return Array(bytes)
     }
 
     private func createP2PKKey(privateKeyBytes: [UInt8]) throws -> P2PKKey {
@@ -338,19 +331,17 @@ class SettingsManager: ObservableObject {
             throw SettingsFeatureError.invalidNsec
         }
 
-        let privateKey = try P256K.Schnorr.PrivateKey(dataRepresentation: privateKeyBytes)
-        let privateKeyHex = privateKey.dataRepresentation.map { String(format: "%02x", $0) }.joined()
-        let publicKeyHex = privateKey.xonly.bytes.map { String(format: "%02x", $0) }.joined()
+        let privateKeyHex = privateKeyBytes.map { String(format: "%02x", $0) }.joined()
+        // Derives the x-only public key via the CDK FFI (also validates the key)
+        let publicKeyHex = try nostrGetPubkey(nostrSecretKey: privateKeyHex)
         let p2pkPublicKey = "02\(publicKeyHex)"
 
         return P2PKKey(publicKey: p2pkPublicKey, privateKey: privateKeyHex, used: false, usedCount: 0)
     }
 
     private func generateKeypairHex() throws -> (privateKeyHex: String, publicKeyHex: String) {
-        let privateKeyBytes = try generateRandomPrivateKeyBytes()
-        let privateKey = try P256K.Schnorr.PrivateKey(dataRepresentation: privateKeyBytes)
-        let privateKeyHex = privateKey.dataRepresentation.map { String(format: "%02x", $0) }.joined()
-        let publicKeyHex = privateKey.xonly.bytes.map { String(format: "%02x", $0) }.joined()
+        let privateKeyHex = nostrGenerateSecretKey()
+        let publicKeyHex = try nostrGetPubkey(nostrSecretKey: privateKeyHex)
         return (privateKeyHex: privateKeyHex, publicKeyHex: publicKeyHex)
     }
 

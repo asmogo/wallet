@@ -42,7 +42,6 @@
 		6A8EC94A2F2590000058C21B /* PriceService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6A8EC94B2F2590000058C21B /* PriceService.swift */; };
 		6A8EC94C2F25A0000058C21B /* NostrService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6A8EC94D2F25A0000058C21B /* NostrService.swift */; };
 		6A8EC94E2F25A0000058C21B /* NPCService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6A8EC94F2F25A0000058C21B /* NPCService.swift */; };
-		6A8EC95B2F26983E0058C21B /* P256K in Frameworks */ = {isa = PBXBuildFile; productRef = 6A8EC95A2F26983E0058C21B /* P256K */; };
 		720E47A62FEC721E00E02CD0 /* Cdk in Frameworks */ = {isa = PBXBuildFile; productRef = 720E47A52FEC721E00E02CD0 /* Cdk */; };
 		72AF0EF32FEF2165001AD6AC /* Sentry in Frameworks */ = {isa = PBXBuildFile; productRef = AACC000000000002 /* Sentry */; };
 		72AF0EF52FEF2300001AD6AC /* SentryService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 72AF0EF42FEF2300001AD6AC /* SentryService.swift */; };
@@ -57,9 +56,6 @@
 		AB00000000000001 /* CashuRequest.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC00000000000001 /* CashuRequest.swift */; };
 		AB00000000000002 /* CashuRequestStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC00000000000002 /* CashuRequestStore.swift */; };
 		AB00000000000003 /* PaymentRequestBuilder.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC00000000000003 /* PaymentRequestBuilder.swift */; };
-		AB00000000000004 /* NIP44.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC00000000000004 /* NIP44.swift */; };
-		AB00000000000005 /* NIP17.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC00000000000005 /* NIP17.swift */; };
-		AB00000000000006 /* NostrInboxClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC00000000000006 /* NostrInboxClient.swift */; };
 		AB00000000000007 /* CashuRequestListener.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC00000000000007 /* CashuRequestListener.swift */; };
 		AB00000000000008 /* CashuRequestDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC00000000000008 /* CashuRequestDetailView.swift */; };
 		AB0000000000000A /* CashuRequestMintPickerSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC0000000000000A /* CashuRequestMintPickerSheet.swift */; };
@@ -227,9 +223,6 @@
 		AC00000000000001 /* CashuRequest.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CashuRequest.swift; sourceTree = "<group>"; };
 		AC00000000000002 /* CashuRequestStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CashuRequestStore.swift; sourceTree = "<group>"; };
 		AC00000000000003 /* PaymentRequestBuilder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PaymentRequestBuilder.swift; sourceTree = "<group>"; };
-		AC00000000000004 /* NIP44.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NIP44.swift; sourceTree = "<group>"; };
-		AC00000000000005 /* NIP17.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NIP17.swift; sourceTree = "<group>"; };
-		AC00000000000006 /* NostrInboxClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NostrInboxClient.swift; sourceTree = "<group>"; };
 		AC00000000000007 /* CashuRequestListener.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CashuRequestListener.swift; sourceTree = "<group>"; };
 		AC00000000000008 /* CashuRequestDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CashuRequestDetailView.swift; sourceTree = "<group>"; };
 		AC0000000000000A /* CashuRequestMintPickerSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CashuRequestMintPickerSheet.swift; sourceTree = "<group>"; };
@@ -335,7 +328,6 @@
 				72AF0EF32FEF2165001AD6AC /* Sentry in Frameworks */,
 				720E47A62FEC721E00E02CD0 /* Cdk in Frameworks */,
 				6A8EC93F2F256F350058C21B /* URKit in Frameworks */,
-				6A8EC95B2F26983E0058C21B /* P256K in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -463,9 +455,6 @@
 				DD00000000000013 /* HapticFeedback.swift */,
 				F400000000000006 /* PaymentRequestDecoder.swift */,
 				AC00000000000003 /* PaymentRequestBuilder.swift */,
-				AC00000000000004 /* NIP44.swift */,
-				AC00000000000005 /* NIP17.swift */,
-				AC00000000000006 /* NostrInboxClient.swift */,
 				AC0000000000000C /* NostrMintBackupService.swift */,
 				AC00000000000007 /* CashuRequestListener.swift */,
 			);
@@ -798,7 +787,6 @@
 			name = CashuWallet;
 			packageProductDependencies = (
 				6A8EC93E2F256F350058C21B /* URKit */,
-				6A8EC95A2F26983E0058C21B /* P256K */,
 				720E47A52FEC721E00E02CD0 /* Cdk */,
 				AACC000000000002 /* Sentry */,
 			);
@@ -876,8 +864,7 @@
 			mainGroup = 4000000000000000;
 			packageReferences = (
 				6A8EC93D2F256F350058C21B /* XCRemoteSwiftPackageReference "URKit" */,
-				7200000000000002 /* XCRemoteSwiftPackageReference "swift-secp256k1" */,
-				720E47A42FEC721E00E02CD0 /* XCRemoteSwiftPackageReference "cdk-swift" */,
+				720E47A42FEC721E00E02CD0 /* XCLocalSwiftPackageReference "cdk-swift" */,
 				AACC000000000001 /* XCRemoteSwiftPackageReference "sentry-cocoa" */,
 			);
 			productRefGroup = 4100000000000002 /* Products */;
@@ -1072,9 +1059,6 @@
 				F300000000000004 /* ClipboardPaymentChip.swift in Sources */,
 				F300000000000006 /* PaymentRequestDecoder.swift in Sources */,
 				AB00000000000003 /* PaymentRequestBuilder.swift in Sources */,
-				AB00000000000004 /* NIP44.swift in Sources */,
-				AB00000000000005 /* NIP17.swift in Sources */,
-				AB00000000000006 /* NostrInboxClient.swift in Sources */,
 				AB0000000000000C /* NostrMintBackupService.swift in Sources */,
 				AB00000000000007 /* CashuRequestListener.swift in Sources */,
 				AB00000000000008 /* CashuRequestDetailView.swift in Sources */,
@@ -1428,21 +1412,9 @@
 				minimumVersion = 15.1.0;
 			};
 		};
-		7200000000000002 /* XCRemoteSwiftPackageReference "swift-secp256k1" */ = {
-			isa = XCRemoteSwiftPackageReference;
-			repositoryURL = "https://github.com/21-DOT-DEV/swift-secp256k1.git";
-			requirement = {
-				kind = upToNextMajorVersion;
-				minimumVersion = 0.18.0;
-			};
-		};
-		720E47A42FEC721E00E02CD0 /* XCRemoteSwiftPackageReference "cdk-swift" */ = {
-			isa = XCRemoteSwiftPackageReference;
-			repositoryURL = "https://github.com/cashubtc/cdk-swift";
-			requirement = {
-				kind = exactVersion;
-				version = "0.17.3-rc.0";
-			};
+		720E47A42FEC721E00E02CD0 /* XCLocalSwiftPackageReference "cdk-swift" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = ../../cdk-swift;
 		};
 		AACC000000000001 /* XCRemoteSwiftPackageReference "sentry-cocoa" */ = {
 			isa = XCRemoteSwiftPackageReference;
@@ -1460,14 +1432,9 @@
 			package = 6A8EC93D2F256F350058C21B /* XCRemoteSwiftPackageReference "URKit" */;
 			productName = URKit;
 		};
-		6A8EC95A2F26983E0058C21B /* P256K */ = {
-			isa = XCSwiftPackageProductDependency;
-			package = 7200000000000002 /* XCRemoteSwiftPackageReference "swift-secp256k1" */;
-			productName = P256K;
-		};
 		720E47A52FEC721E00E02CD0 /* Cdk */ = {
 			isa = XCSwiftPackageProductDependency;
-			package = 720E47A42FEC721E00E02CD0 /* XCRemoteSwiftPackageReference "cdk-swift" */;
+			package = 720E47A42FEC721E00E02CD0 /* XCLocalSwiftPackageReference "cdk-swift" */;
 			productName = Cdk;
 		};
 		AACC000000000002 /* Sentry */ = {
@@ -1477,7 +1444,7 @@
 		};
 		E118F77A2062DDD58C0A6DA3 /* Cdk */ = {
 			isa = XCSwiftPackageProductDependency;
-			package = 720E47A42FEC721E00E02CD0 /* XCRemoteSwiftPackageReference "cdk-swift" */;
+			package = 720E47A42FEC721E00E02CD0 /* XCLocalSwiftPackageReference "cdk-swift" */;
 			productName = Cdk;
 		};
 /* End XCSwiftPackageProductDependency section */

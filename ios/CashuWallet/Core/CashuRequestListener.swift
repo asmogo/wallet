@@ -1,9 +1,11 @@
 import Foundation
 import SwiftUI
+import Cdk
 
 /// NUT-18 receive-side listener. Foreground-only: opens a NIP-17 relay subscription
-/// at app launch, decrypts gift wraps, parses PaymentRequestPayload from the inner
-/// rumor, and forwards to the auto-claim path in WalletManager.
+/// at app launch (via the CDK FFI `NostrInbox`, which owns relay connections and
+/// gift-wrap unwrapping), parses PaymentRequestPayload from the inner rumor, and
+/// forwards to the auto-claim path in WalletManager.
 ///
 /// Payments that can't claim silently (auto-claim off, or the mint isn't
 /// tracked yet) are persisted as `PendingReceiveToken`s — the same store the
@@ -20,7 +22,7 @@ final class CashuRequestListener: ObservableObject {
     /// pending-receive store and stays claimable from History.
     @Published private(set) var heldForApproval: PendingReceiveToken?
 
-    private var client: NostrInboxClient?
+    private var inbox: Cdk.NostrInbox?
     private weak var walletManager: WalletManager?
 
     // Gift wraps are fetched over a generous fixed lookback window. NIP-59
@@ -49,8 +51,7 @@ final class CashuRequestListener: ObservableObject {
         let nostr = NostrService.shared
         guard nostr.isInitialized,
               !nostr.publicKeyHex.isEmpty,
-              let privHex = nostr.getPrivateKeyHex(),
-              let privateKey = Data(hex: privHex) else {
+              let privHex = nostr.getPrivateKeyHex() else {
             AppLogger.wallet.error("CashuRequestListener: NostrService not initialized")
             return
         }
@@ -62,28 +63,35 @@ final class CashuRequestListener: ObservableObject {
             return
         }
         loadProcessedIds()
-        let since = Int64(Date().timeIntervalSince1970 - lookbackWindow)
+        let since = UInt64(Date().timeIntervalSince1970 - lookbackWindow)
 
         let pubkeyHex = nostr.publicKeyHex
-        let client = NostrInboxClient(
-            pubkeyHex: pubkeyHex,
-            relays: relays,
-            since: since
-        ) { [weak self] event in
-            await self?.handle(event: event, recipientPrivateKey: privateKey)
+        do {
+            let inbox = try Cdk.NostrInbox(
+                nostrSecretKey: privHex,
+                relays: relays,
+                since: since
+            )
+            let listener = InboxListenerBridge { [weak self] event in
+                Task { @MainActor in
+                    await self?.handle(event: event)
+                }
+            }
+            try await inbox.start(listener: listener)
+            self.inbox = inbox
+            isRunning = true
+            AppLogger.wallet.notice(
+                "CashuRequestListener: started relays=\(relays.count, privacy: .public) pubkey=\(WalletOperationCoordinator.privacySafeIdentifier(pubkeyHex), privacy: .public) since=\(since, privacy: .public)"
+            )
+        } catch {
+            AppLogger.wallet.error("CashuRequestListener: failed to start inbox error_type=\(String(reflecting: type(of: error)), privacy: .public)")
         }
-        self.client = client
-        await client.start()
-        isRunning = true
-        AppLogger.wallet.notice(
-            "CashuRequestListener: started relays=\(relays.count, privacy: .public) pubkey=\(WalletOperationCoordinator.privacySafeIdentifier(pubkeyHex), privacy: .public) since=\(since, privacy: .public)"
-        )
     }
 
     func stop() async {
-        guard let client else { return }
-        await client.stop()
-        self.client = nil
+        guard let inbox else { return }
+        inbox.stop()
+        self.inbox = nil
         isRunning = false
     }
 
@@ -91,46 +99,37 @@ final class CashuRequestListener: ObservableObject {
     /// the previous wallet's Nostr inbox; a new wallet has a new keypair, and a
     /// re-restored seed should re-attempt claims rather than skip them.
     func resetForWalletBoundary() {
-        let oldClient = client
-        client = nil
+        let oldInbox = inbox
+        inbox = nil
         isRunning = false
         processedIds = []
         processedOrder = []
         heldForApproval = nil
         UserDefaults.standard.removeObject(forKey: processedIdsKey)
-        Task { await oldClient?.stop() }
+        if let oldInbox {
+            oldInbox.stop()
+        }
     }
 
     // MARK: - Event handling
 
-    private func handle(event: NostrIncomingEvent, recipientPrivateKey: Data) async {
-        guard event.kind == 1059 else { return }
-        guard !processedIds.contains(event.id) else { return }
+    private func handle(event: NostrInboxEvent) async {
+        guard !processedIds.contains(event.wrapId) else { return }
         AppLogger.wallet.notice(
-            "CashuRequestListener: gift wrap received event=\(WalletOperationCoordinator.privacySafeIdentifier(event.id), privacy: .public) created_at=\(event.createdAt, privacy: .public)"
+            "CashuRequestListener: gift wrap received event=\(WalletOperationCoordinator.privacySafeIdentifier(event.wrapId), privacy: .public) created_at=\(event.wrapCreatedAt, privacy: .public)"
         )
 
-        let rumor: NostrRumor
-        do {
-            rumor = try NIP17.unwrap(giftWrap: event, recipientPrivateKey: recipientPrivateKey)
-        } catch {
-            // Not encrypted for us (or an unrelated DM) — it can never succeed,
-            // so mark it handled and stop reconsidering it.
-            AppLogger.wallet.notice(
-                "CashuRequestListener: NIP-17 unwrap failed event=\(WalletOperationCoordinator.privacySafeIdentifier(event.id), privacy: .public) error_type=\(String(reflecting: type(of: error)), privacy: .public)"
-            )
-            markProcessed(event.id)
+        // The FFI has already unwrapped the gift wrap (both NIP-44 layers) and
+        // verified the seal; only kind-14 rumors carry payment request payloads.
+        guard event.rumorKind == 14 else {
+            markProcessed(event.wrapId)
             return
         }
-        guard rumor.kind == 14 else {
-            markProcessed(event.id)
-            return
-        }
-        switch await tryClaim(rumorContent: rumor.content, eventId: event.id) {
+        switch await tryClaim(rumorContent: event.rumorContent, eventId: event.wrapId) {
         case .claimed, .unclaimable, .held:
             // .held: the payment is persisted in the pending-receive store —
             // that store owns it now, so the relay event is done.
-            markProcessed(event.id)
+            markProcessed(event.wrapId)
         case .transientFailure:
             break  // leave unmarked so a later run retries
         }
@@ -366,5 +365,20 @@ final class CashuRequestListener: ObservableObject {
         if let memo { token["memo"] = memo }
         guard let data = try? JSONSerialization.data(withJSONObject: token) else { return nil }
         return "cashuA" + Base64URL.encode(data)
+    }
+}
+
+/// Bridges the CDK FFI callback (invoked on the Rust relay-pump thread) to the
+/// MainActor listener. The closure must be non-blocking, so events are handed
+/// off via `Task`.
+private final class InboxListenerBridge: NostrInboxListener, @unchecked Sendable {
+    private let handler: @Sendable (NostrInboxEvent) -> Void
+
+    init(handler: @escaping @Sendable (NostrInboxEvent) -> Void) {
+        self.handler = handler
+    }
+
+    func onEvent(event: NostrInboxEvent) {
+        handler(event)
     }
 }
