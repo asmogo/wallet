@@ -1,5 +1,7 @@
 package com.cashu.me.ui.restore
 
+import androidx.compose.animation.Crossfade
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -19,17 +21,18 @@ import androidx.compose.material.icons.filled.Cancel
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.RemoveCircleOutline
 import androidx.compose.material.icons.outlined.Add
-import androidx.compose.material.icons.outlined.CellTower
 import androidx.compose.material.icons.outlined.ContentPaste
+import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LoadingIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.Stable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateMapOf
@@ -40,9 +43,12 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.hapticfeedback.HapticFeedback
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.ClipboardManager
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
@@ -53,7 +59,9 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.cashu.me.Core.Bip39WordList
+import com.cashu.me.Core.CommitOutcome
 import com.cashu.me.Core.NostrMintBackupService
+import com.cashu.me.Core.PasteOutcome
 import com.cashu.me.Core.Wallet.userFacingWalletMessage
 import com.cashu.me.Core.WalletManager
 import com.cashu.me.Core.mintUrlCandidates
@@ -66,21 +74,54 @@ import com.cashu.me.ui.components.InlineNotice
 import com.cashu.me.ui.components.MintAvatar
 import com.cashu.me.ui.components.NoticeSeverity
 import com.cashu.me.ui.components.PrimaryButton
-import com.cashu.me.ui.components.SecondaryButton
+import com.cashu.me.ui.components.ScrollFadeBand
+import com.cashu.me.ui.components.scrollEdgeFade
+import com.cashu.me.ui.testing.UiTestTags
 import com.cashu.me.ui.theme.CapsuleShape
 import com.cashu.me.ui.theme.CashuTheme
 import com.cashu.me.ui.theme.withMonoDigits
 import com.cashu.me.ui.theme.withSlashedZero
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 
 // iOS restore twin: OnboardingView seed branch + Settings RestoreWalletView.
 // Shared seed → mints → progress phases with quiet crossfades owned by callers.
+//
+// Each step is split into a stateless stage body (*StageContent / *Rows) plus a
+// state holder (remember*State), so the onboarding chassis can host the
+// headline/subhead/CTAs while Settings → Restore keeps the classic inline
+// header+footer layout through the unchanged *Step wrappers below.
 
 private val HeaderPadding = 28.dp
 private val CtaPadding = 24.dp
 private val BottomPadding = 24.dp
 private val MintAvatarSize = 36.dp
 private val ProgressSpinnerSize = 18.dp
+private val ChipGlyphSize = 18.dp
+
+// Mint-staging copy. Hoisted because the subhead alone had four call sites
+// (both hosts here, the onboarding stage, and the screenshot baseline) and they
+// had already started drifting. iOS twin: OnboardingView.restoreMintsStage.
+//
+// Name the reason this step exists at all. Without it the screen reads as
+// busywork, and the user has no way to know the seed alone can't find their
+// money. The second sentence names both routes forward, because the backup
+// lookup no longer runs itself.
+internal const val RestoreMintsTitleOnboarding = "Add your mints."
+internal const val RestoreMintsTitleInApp = "Add your mints"
+internal const val RestoreMintsSubhead =
+    "Your seed phrase doesn't record which mints you used. " +
+        "Find them from a backup, or add them yourself."
+
+// The list is empty far more often than not, and the disabled primary never
+// says why. These three lines are the only place that explains the wait and the
+// way out. The landing line carries the most weight: it is where everyone now
+// arrives, so it has to name the button rather than describe the situation.
+internal const val RestoreMintsEmptyLanding =
+    "Tap Find my mints to look for a backup of your mint list, or add them above."
+internal const val RestoreMintsEmptySearching = "Checking for a backup of your mint list…"
+internal const val RestoreMintsEmptyNoBackup =
+    "No backup found. Add the mints you used before, then restore."
 
 /** Layout chrome for onboarding (large heavy titles) vs in-app settings. */
 enum class RestorePresentation {
@@ -126,6 +167,104 @@ private fun restoreTitleStyle(presentation: RestorePresentation): TextStyle =
 // ---------------------------------------------------------------------------
 
 /**
+ * The BIP-39 checksum, run at the only moment it can be: once all twelve words
+ * are in. It says one of them is wrong but never which, so a failure hands the
+ * whole phrase back on the review grid. iOS twin: `runSeedChecksum`.
+ */
+internal suspend fun runSeedChecksum(
+    state: SeedPhraseEntryState,
+    validate: suspend (String) -> Boolean,
+) {
+    if (!state.isComplete) return
+    if (validate(state.phrase)) {
+        state.notice = null
+        return
+    }
+    state.markReviewing()
+    state.notice = SeedEntryNotice(SeedEntryCopy.CHECKSUM, NoticeSeverity.Error)
+}
+
+/** Fill every slot from the clipboard. iOS twin: `pasteMnemonicFromClipboard`. */
+internal suspend fun pasteSeedPhrase(
+    state: SeedPhraseEntryState,
+    clipboardText: String?,
+    validate: suspend (String) -> Boolean,
+) {
+    if (clipboardText.isNullOrBlank()) {
+        state.notice = SeedEntryNotice(SeedEntryCopy.PASTE_UNUSABLE, NoticeSeverity.Caution)
+        return
+    }
+    val result = state.entry.fill(clipboardText)
+    state.entry = result.entry
+    when (val outcome = result.outcome) {
+        PasteOutcome.Filled -> {
+            state.notice = null
+            runSeedChecksum(state, validate)
+        }
+        is PasteOutcome.Partial ->
+            state.notice = SeedEntryNotice(
+                SeedEntryCopy.pastePartial(outcome.count),
+                NoticeSeverity.Caution,
+            )
+        is PasteOutcome.Invalid ->
+            state.notice = SeedEntryNotice(
+                SeedEntryCopy.pasteInvalid(outcome.index),
+                NoticeSeverity.Caution,
+            )
+        PasteOutcome.Unusable ->
+            state.notice = SeedEntryNotice(SeedEntryCopy.PASTE_UNUSABLE, NoticeSeverity.Caution)
+    }
+}
+
+/**
+ * The live seed-entry stage: one word at a time, validated as it lands, with a
+ * progress rail and wordlist completions. Stateless — the caller owns the
+ * [SeedPhraseEntryState]. Shared by the onboarding chassis host and the
+ * Settings wrapper, because both ask for exactly the same thing.
+ */
+@Composable
+fun RestoreSeedStageContent(
+    state: SeedPhraseEntryState,
+    onOutcome: (CommitOutcome) -> Unit,
+    errorText: String?,
+    modifier: Modifier = Modifier,
+    autoFocus: Boolean = true,
+    onPaste: (() -> Unit)? = null,
+) {
+    Column(
+        modifier = modifier
+            .padding(horizontal = HeaderPadding)
+            // iOS restore-input twin (`.scrollEdgeFade(bottom: 0)`): the
+            // keyboard is up for this whole step, so content dissolves into
+            // the chassis edge instead of cutting against it. Before the
+            // scroll modifier so the layer wraps the scroll clip.
+            .scrollEdgeFade(bottom = 0.dp)
+            .verticalScroll(rememberScrollState())
+            // Inside the scroll, not outside: verticalScroll clips, and the
+            // ghost cards peek ~11dp above the card's top edge — which is the
+            // content's top edge now that the card leads its column. Padding
+            // placed after the scroll modifier becomes scrolled content and
+            // gives the ghosts headroom inside the clip. The bottom band lets
+            // the last row scroll clear of the fade.
+            .padding(top = CashuTheme.spacing.section, bottom = ScrollFadeBand),
+        verticalArrangement = Arrangement.spacedBy(CashuTheme.spacing.comfortable),
+    ) {
+        SeedWordEntryField(
+            state = state,
+            onOutcome = onOutcome,
+            autoFocus = autoFocus,
+            onPaste = onPaste,
+            modifier = Modifier.fillMaxWidth(),
+        )
+        // The install failure is a different problem from a mistyped word and
+        // keeps its own channel.
+        if (errorText != null) {
+            InlineNotice(text = errorText, severity = NoticeSeverity.Error)
+        }
+    }
+}
+
+/**
  * Seed-entry step shared by onboarding and Settings → Restore.
  *
  * iOS: monospaced editor, paste/clear corner control, live word counter,
@@ -139,19 +278,16 @@ fun RestoreSeedStep(
     onClearError: () -> Unit,
     onBack: (() -> Unit)?,
     onNext: (String) -> Unit,
-    requireValidWords: Boolean = presentation == RestorePresentation.InApp,
+    onValidateChecksum: suspend (String) -> Boolean,
 ) {
+    val seedState = rememberSeedPhraseEntryState()
     val clipboard = LocalClipboardManager.current
     val haptics = LocalHapticFeedback.current
-    var input by remember { mutableStateOf("") }
-    val wordCount = remember(input) {
-        input.trim().split(Regex("\\s+")).count { it.isNotBlank() }
-    }
-    val invalidCount = remember(input) { Bip39WordList.invalidWordIndices(input).size }
-    val wordsValid = invalidCount == 0
-    val canContinue = wordCount == 12 &&
-        !restoring &&
-        (!requireValidWords || wordsValid)
+    val scope = rememberCoroutineScope()
+    // Per-word validity is structural now — a word cannot be committed unless it
+    // is in the list — so the old `requireValidWords` switch has nothing left to
+    // choose between. What remains is the checksum, which both hosts enforce.
+    val canContinue = seedState.isComplete && !seedState.isReviewing && !restoring
 
     val titleAlign = if (presentation == RestorePresentation.InApp) {
         Alignment.CenterHorizontally
@@ -166,7 +302,7 @@ fun RestoreSeedStep(
     val title = if (presentation == RestorePresentation.InApp) {
         "Restore Wallet"
     } else {
-        "Restore Wallet."
+        "Restore wallet."
     }
 
     Column(modifier = Modifier.fillMaxSize()) {
@@ -204,84 +340,28 @@ fun RestoreSeedStep(
             )
         }
 
-        Column(
+        RestoreSeedStageContent(
+            state = seedState,
+            onOutcome = { outcome ->
+                if (outcome != CommitOutcome.Ignored) {
+                    seedState.notice = null
+                    onClearError()
+                }
+                if (outcome == CommitOutcome.Completed) {
+                    scope.launch { runSeedChecksum(seedState, onValidateChecksum) }
+                }
+            },
+            onPaste = {
+                haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                scope.launch {
+                    pasteSeedPhrase(seedState, clipboard.getText()?.text, onValidateChecksum)
+                }
+            },
+            errorText = errorText,
             modifier = Modifier
                 .weight(1f)
-                .fillMaxWidth()
-                .padding(horizontal = HeaderPadding)
-                .padding(top = CashuTheme.spacing.section),
-            verticalArrangement = Arrangement.spacedBy(CashuTheme.spacing.comfortable),
-        ) {
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .weight(1f),
-            ) {
-                CashuTextField(
-                    value = input,
-                    onValueChange = {
-                        input = it
-                        onClearError()
-                    },
-                    modifier = Modifier.fillMaxSize(),
-                    placeholder = "word1 word2 word3 …",
-                    textStyle = MaterialTheme.typography.bodyMedium.copy(fontFamily = CashuTheme.fonts.mono).withSlashedZero(),
-                    isError = errorText != null || (wordCount >= 12 && invalidCount > 0),
-                    keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.None),
-                )
-                IconButton(
-                    onClick = {
-                        haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                        if (input.isBlank()) {
-                            clipboard.getText()?.text?.let {
-                                input = it.trim()
-                                onClearError()
-                            }
-                        } else {
-                            input = ""
-                            onClearError()
-                        }
-                    },
-                    modifier = Modifier
-                        .align(Alignment.BottomEnd)
-                        .padding(CashuTheme.spacing.micro),
-                ) {
-                    IconSwap(
-                        icon = if (input.isBlank()) Icons.Outlined.ContentPaste else Icons.Filled.Cancel,
-                        contentDescription = if (input.isBlank()) "Paste from clipboard" else "Clear",
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-            }
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(
-                    CashuTheme.spacing.micro,
-                    Alignment.CenterHorizontally,
-                ),
-            ) {
-                Text(
-                    text = "$wordCount / 12 words",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = if (wordCount == 12 && wordsValid) {
-                        CashuTheme.colors.received
-                    } else {
-                        MaterialTheme.colorScheme.onSurfaceVariant
-                    },
-                )
-                if (wordCount > 0 && invalidCount > 0) {
-                    Text(
-                        text = "· $invalidCount invalid",
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-            }
-            if (errorText != null) {
-                InlineNotice(text = errorText, severity = NoticeSeverity.Error)
-            }
-        }
+                .fillMaxWidth(),
+        )
 
         Column(
             modifier = Modifier
@@ -293,7 +373,7 @@ fun RestoreSeedStep(
         ) {
             PrimaryButton(
                 text = "Next",
-                onClick = { onNext(input) },
+                onClick = { onNext(seedState.phrase) },
                 enabled = canContinue,
                 loading = restoring,
             )
@@ -309,40 +389,46 @@ fun RestoreSeedStep(
 // ---------------------------------------------------------------------------
 
 /**
- * Mint staging step — Add / Paste / Nostr capsule chips; CTA requires ≥1 mint
- * (iOS both onboarding and Settings restore).
+ * The mint-staging state machine — input parsing, dedupe, previews, clipboard
+ * and Nostr-backup ingestion — shared by the onboarding chassis host and the
+ * Settings → Restore wrapper.
  */
-@Composable
-fun RestoreMintsStep(
-    presentation: RestorePresentation,
-    walletManager: WalletManager,
-    nostrMintBackupService: NostrMintBackupService,
-    onBack: () -> Unit,
-    onRestore: (List<String>, Map<String, MintInfo>) -> Unit,
-    showBottomBack: Boolean = presentation == RestorePresentation.Onboarding,
+@Stable
+class RestoreMintsStagingState internal constructor(
+    private val scope: CoroutineScope,
+    private val walletManager: WalletManager,
+    private val nostrMintBackupService: NostrMintBackupService,
+    private val clipboard: ClipboardManager,
+    private val haptics: HapticFeedback,
 ) {
-    val scope = rememberCoroutineScope()
-    val haptics = LocalHapticFeedback.current
-    val clipboard = LocalClipboardManager.current
-    val backupState by nostrMintBackupService.state.collectAsState()
-    var input by remember { mutableStateOf("") }
-    var staged by remember { mutableStateOf<List<String>>(emptyList()) }
-    val previews = remember { mutableStateMapOf<String, MintInfo>() }
-    var notice by remember { mutableStateOf<String?>(null) }
-    var noticeSeverity by remember { mutableStateOf(NoticeSeverity.Info) }
+    var input by mutableStateOf("")
+        private set
+    var staged by mutableStateOf<List<String>>(emptyList())
+        private set
+    val previews = mutableStateMapOf<String, MintInfo>()
+    var notice by mutableStateOf<String?>(null)
+        private set
+    var noticeSeverity by mutableStateOf(NoticeSeverity.Info)
+        private set
 
-    fun setNotice(message: String?, severity: NoticeSeverity = NoticeSeverity.Info) {
+    fun updateInput(value: String) {
+        input = value
+        notice = null
+    }
+
+    private fun setNotice(message: String?, severity: NoticeSeverity = NoticeSeverity.Info) {
         notice = message
         noticeSeverity = severity
     }
 
-    fun stageUrl(raw: String, showDuplicate: Boolean, showInvalid: Boolean): Boolean {
+    private fun stageUrl(raw: String, showDuplicate: Boolean, showInvalid: Boolean): Boolean {
         val normalized = normalizeMintUrl(raw) ?: run {
-            if (showInvalid) setNotice("That doesn't look like a mint URL.", NoticeSeverity.Error)
+            if (showInvalid) setNotice("That doesn't look like a mint URL.", NoticeSeverity.Caution)
             return false
         }
         if (staged.any { it.equals(normalized, ignoreCase = true) }) {
-            if (showDuplicate) setNotice("That mint is already staged.")
+            // "staged" is our word, not the user's.
+            if (showDuplicate) setNotice("This mint is already in the list.", NoticeSeverity.Caution)
             return false
         }
         staged = staged + normalized
@@ -368,7 +454,7 @@ fun RestoreMintsStep(
             if (stageUrl(candidate, showDuplicate = false, showInvalid = false)) added++
         }
         when {
-            added == 0 -> setNotice("No new mint URLs to add.")
+            added == 0 -> setNotice("No new mints to add.")
             added == 1 -> {
                 haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                 setNotice(null)
@@ -409,10 +495,13 @@ fun RestoreMintsStep(
         when {
             added == 0 && invalid > 0 ->
                 setNotice("Nothing in the clipboard looked like a mint URL.", NoticeSeverity.Error)
-            added == 0 -> setNotice("No new mint URLs to add.")
+            added == 0 -> setNotice("No new mints to add.")
             invalid > 0 -> {
                 haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                setNotice("Added $added mint${if (added == 1) "" else "s"}. Skipped $invalid invalid.")
+                setNotice(
+                    "Added $added mint${if (added == 1) "" else "s"}. " +
+                        "Skipped $invalid that didn't look like a mint URL.",
+                )
             }
             else -> {
                 haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
@@ -421,7 +510,29 @@ fun RestoreMintsStep(
         }
     }
 
+    /// True once a lookup has finished, however it finished — drives the
+    /// empty-state line's "no backup found" wording.
+    var backupSearchCompleted by mutableStateOf(false)
+        private set
+
+    /**
+     * Look up the encrypted mint-list backup for this seed on the user's relays
+     * and stage every mint it contains.
+     *
+     * Only ever runs from an explicit tap. It used to fire on arrival, on the
+     * grounds that publishing is on by default so most people have a list
+     * waiting — but the step opens by telling the user their seed phrase doesn't
+     * record which mints they used, and then a dozen of their mints appeared
+     * anyway. The user has no way to see the lookup happen, so the screen read
+     * as contradicting itself, or as the wallet knowing more about them than
+     * they agreed to. The lookup is still one tap away; the tap is now theirs,
+     * which is what makes the result explicable.
+     */
     fun searchNostrBackup() {
+        // The chip stops taking taps while a lookup is in flight, but that is a
+        // view-layer courtesy; refuse re-entry here so a second call can never
+        // double-stage the same backup.
+        if (nostrMintBackupService.state.value.isSearching) return
         scope.launch {
             runCatching { nostrMintBackupService.fetchBackedUpMintUrls() }
                 .onSuccess { urls ->
@@ -430,19 +541,194 @@ fun RestoreMintsStep(
                     for (url in normalized) {
                         if (stageUrl(url, showDuplicate = false, showInvalid = false)) added++
                     }
-                    setNotice(
-                        when {
-                            normalized.isEmpty() -> "No Nostr mint backup found on your relays."
-                            added == 0 -> "Backup found — its mints are already in the list."
-                            else -> "Added $added mint${if (added == 1) "" else "s"} from your Nostr backup."
-                        },
-                    )
+                    when {
+                        added > 0 ->
+                            setNotice("Added $added mint${if (added == 1) "" else "s"} from your backup.")
+                        // When the list is empty the empty-state line is on
+                        // screen already saying this — speak here only when it
+                        // isn't.
+                        normalized.isEmpty() ->
+                            if (staged.isNotEmpty()) {
+                                setNotice("No backup of your mint list found.", NoticeSeverity.Caution)
+                            }
+                        else -> setNotice("Backup found. Its mints are already in the list.")
+                    }
+                    backupSearchCompleted = true
                 }
                 .onFailure {
-                    setNotice(it.message ?: "Could not search your relays.", NoticeSeverity.Error)
+                    backupSearchCompleted = true
+                    // Through the shared mapper, never the raw message — a
+                    // relay failure here surfaced as a raw CDK FFI dump.
+                    setNotice(it.userFacingWalletMessage, NoticeSeverity.Error)
                 }
         }
     }
+
+    fun remove(url: String) {
+        staged = staged.filterNot { it == url }
+        previews.remove(url)
+    }
+
+    fun reset() {
+        input = ""
+        staged = emptyList()
+        previews.clear()
+        notice = null
+        noticeSeverity = NoticeSeverity.Info
+        // Clear the searched flag too, or returning to this step lands on "No
+        // backup found" instead of the line that names the button — a dead
+        // screen with no way forward.
+        backupSearchCompleted = false
+    }
+}
+
+@Composable
+fun rememberRestoreMintsStagingState(
+    walletManager: WalletManager,
+    nostrMintBackupService: NostrMintBackupService,
+): RestoreMintsStagingState {
+    val scope = rememberCoroutineScope()
+    val clipboard = LocalClipboardManager.current
+    val haptics = LocalHapticFeedback.current
+    return remember(walletManager, nostrMintBackupService) {
+        RestoreMintsStagingState(scope, walletManager, nostrMintBackupService, clipboard, haptics)
+    }
+}
+
+/**
+ * The live mint-staging stage: URL field, Add/Paste/Nostr capsule chips, notice,
+ * and the staged-mint rows, in one scrolling column. Stateless — pair it with
+ * [RestoreMintsStagingState] (or preview it with plain values).
+ */
+@Composable
+fun RestoreMintsStageContent(
+    input: String,
+    staged: List<String>,
+    previews: Map<String, MintInfo>,
+    notice: String?,
+    noticeSeverity: NoticeSeverity,
+    searching: Boolean,
+    onInputChange: (String) -> Unit,
+    onAdd: () -> Unit,
+    onPaste: () -> Unit,
+    onNostr: () -> Unit,
+    onRemove: (String) -> Unit,
+    modifier: Modifier = Modifier,
+    backupSearchCompleted: Boolean = false,
+) {
+    Column(
+        modifier = modifier
+            // The chassis is a sibling below this stage rather than an overlay,
+            // so the stage's own bottom edge is the clip line — hence a zero
+            // inset, not a chassis-height one. iOS insets by the chassis
+            // because its content really does run underneath. No top fade: the
+            // whole stage scrolls as one unit, so the first thing in the
+            // container is the URL field sitting flush at the top edge, and a
+            // top mask would permanently dim it.
+            .scrollEdgeFade(bottom = 0.dp)
+            .verticalScroll(rememberScrollState())
+            .padding(horizontal = HeaderPadding)
+            // Bottom clearance equal to the fade band, so scrolling to the end
+            // parks the last row clear of the gradient instead of leaving it
+            // permanently dimmed.
+            .padding(bottom = ScrollFadeBand),
+        verticalArrangement = Arrangement.spacedBy(CashuTheme.spacing.default),
+    ) {
+        CashuTextField(
+            value = input,
+            onValueChange = onInputChange,
+            modifier = Modifier.fillMaxWidth(),
+            placeholder = "mint.example.com",
+            textStyle = MaterialTheme.typography.bodyMedium,
+            singleLine = true,
+            keyboardOptions = KeyboardOptions(
+                capitalization = KeyboardCapitalization.None,
+                keyboardType = KeyboardType.Uri,
+                imeAction = ImeAction.Done,
+            ),
+            keyboardActions = KeyboardActions(onDone = { onAdd() }),
+        )
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(CashuTheme.spacing.tight),
+        ) {
+            RestoreCapsuleChip(
+                text = "Add",
+                icon = Icons.Outlined.Add,
+                onClick = onAdd,
+                enabled = input.isNotBlank(),
+                modifier = Modifier.weight(1f),
+            )
+            RestoreCapsuleChip(
+                text = "Paste",
+                icon = Icons.Outlined.ContentPaste,
+                onClick = onPaste,
+                modifier = Modifier.weight(1f),
+            )
+        }
+
+        // "Nostr" named the transport, not the outcome. The user doesn't need
+        // to know where their mint list is kept — only that we can go and look
+        // for it. It gets its own row because it is the way through this step
+        // for anyone who can't recite their mint URLs, which is most people;
+        // third-of-a-row next to Add and Paste both buried it and truncated it.
+        RestoreCapsuleChip(
+            text = "Find my mints",
+            busyText = "Checking for your mints…",
+            icon = Icons.Outlined.Search,
+            onClick = onNostr,
+            loading = searching,
+            modifier = Modifier.fillMaxWidth(),
+        )
+
+        if (notice != null) {
+            InlineNotice(text = notice, severity = noticeSeverity)
+        }
+
+        if (staged.isNotEmpty()) {
+            Column(modifier = Modifier.fillMaxWidth()) {
+                staged.forEach { url ->
+                    StagedMintRow(
+                        url = url,
+                        preview = previews[url],
+                        onRemove = { onRemove(url) },
+                    )
+                }
+            }
+        } else {
+            Text(
+                text = when {
+                    searching -> RestoreMintsEmptySearching
+                    backupSearchCompleted -> RestoreMintsEmptyNoBackup
+                    else -> RestoreMintsEmptyLanding
+                },
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                textAlign = TextAlign.Center,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = CashuTheme.spacing.default),
+            )
+        }
+    }
+}
+
+/**
+ * Mint staging step — Add / Paste / Nostr capsule chips; CTA requires ≥1 mint
+ * (iOS both onboarding and Settings restore).
+ */
+@Composable
+fun RestoreMintsStep(
+    presentation: RestorePresentation,
+    walletManager: WalletManager,
+    nostrMintBackupService: NostrMintBackupService,
+    onBack: () -> Unit,
+    onRestore: (List<String>, Map<String, MintInfo>) -> Unit,
+    showBottomBack: Boolean = presentation == RestorePresentation.Onboarding,
+) {
+    val staging = rememberRestoreMintsStagingState(walletManager, nostrMintBackupService)
+    val backupState by nostrMintBackupService.state.collectAsState()
 
     val titleAlign = if (presentation == RestorePresentation.InApp) {
         Alignment.CenterHorizontally
@@ -454,13 +740,14 @@ fun RestoreMintsStep(
     } else {
         TextAlign.Start
     }
+    // Onboarding renders its own header via OnboardingStepHeader and only calls
+    // RestoreMintsStageContent, so that arm is unreachable in production today.
+    // It stays keyed off the shared consts rather than being deleted here — the
+    // whole RestorePresentation split is dead across every Restore*Step and is
+    // worth removing in one pass, not piecemeal.
     val (title, subtitle) = when (presentation) {
-        RestorePresentation.Onboarding ->
-            "Recover Funds." to
-                "Add the mints you used before to recover funds from this seed."
-        RestorePresentation.InApp ->
-            "Restore Funds" to
-                "Add the mints you used before to recover funds from this seed."
+        RestorePresentation.Onboarding -> RestoreMintsTitleOnboarding to RestoreMintsSubhead
+        RestorePresentation.InApp -> RestoreMintsTitleInApp to RestoreMintsSubhead
     }
 
     Column(modifier = Modifier.fillMaxSize()) {
@@ -493,76 +780,23 @@ fun RestoreMintsStep(
             )
         }
 
-        Column(
+        RestoreMintsStageContent(
+            input = staging.input,
+            staged = staging.staged,
+            previews = staging.previews,
+            notice = staging.notice,
+            noticeSeverity = staging.noticeSeverity,
+            searching = backupState.isSearching,
+            onInputChange = staging::updateInput,
+            onAdd = staging::addInput,
+            onPaste = staging::pasteFromClipboard,
+            onNostr = staging::searchNostrBackup,
+            onRemove = staging::remove,
             modifier = Modifier
                 .weight(1f)
-                .verticalScroll(rememberScrollState())
-                .padding(horizontal = HeaderPadding),
-            verticalArrangement = Arrangement.spacedBy(CashuTheme.spacing.default),
-        ) {
-            CashuTextField(
-                value = input,
-                onValueChange = {
-                    input = it
-                    notice = null
-                },
-                modifier = Modifier.fillMaxWidth(),
-                placeholder = "mint.example.com",
-                textStyle = MaterialTheme.typography.bodyMedium,
-                singleLine = true,
-                keyboardOptions = KeyboardOptions(
-                    capitalization = KeyboardCapitalization.None,
-                    keyboardType = KeyboardType.Uri,
-                    imeAction = ImeAction.Done,
-                ),
-                keyboardActions = KeyboardActions(onDone = { addInput() }),
-            )
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(CashuTheme.spacing.tight),
-            ) {
-                RestoreCapsuleChip(
-                    text = "Add",
-                    icon = Icons.Outlined.Add,
-                    onClick = ::addInput,
-                    enabled = input.isNotBlank(),
-                    modifier = Modifier.weight(1f),
-                )
-                RestoreCapsuleChip(
-                    text = "Paste",
-                    icon = Icons.Outlined.ContentPaste,
-                    onClick = ::pasteFromClipboard,
-                    modifier = Modifier.weight(1f),
-                )
-                RestoreCapsuleChip(
-                    text = if (backupState.isSearching) "Searching…" else "Nostr",
-                    icon = Icons.Outlined.CellTower,
-                    onClick = ::searchNostrBackup,
-                    enabled = !backupState.isSearching,
-                    modifier = Modifier.weight(1f),
-                )
-            }
-
-            if (notice != null) {
-                InlineNotice(text = notice!!, severity = noticeSeverity)
-            }
-
-            if (staged.isNotEmpty()) {
-                Column(modifier = Modifier.fillMaxWidth()) {
-                    staged.forEachIndexed { index, url ->
-                        StagedMintRow(
-                            url = url,
-                            preview = previews[url],
-                            onRemove = {
-                                staged = staged.filterNot { it == url }
-                                previews.remove(url)
-                            },
-                        )
-                    }
-                }
-            }
-        }
+                .fillMaxWidth(),
+            backupSearchCompleted = staging.backupSearchCompleted,
+        )
 
         Column(
             modifier = Modifier
@@ -573,20 +807,19 @@ fun RestoreMintsStep(
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             PrimaryButton(
-                text = if (staged.isEmpty()) {
+                text = if (staging.staged.isEmpty()) {
                     "Restore"
                 } else {
-                    "Restore from ${staged.size} mint${if (staged.size == 1) "" else "s"}"
+                    "Restore from ${staging.staged.size} mint${if (staging.staged.size == 1) "" else "s"}"
                 },
-                onClick = { onRestore(staged, previews.toMap()) },
-                enabled = staged.isNotEmpty(),
+                onClick = { onRestore(staging.staged, staging.previews.toMap()) },
+                enabled = staging.staged.isNotEmpty(),
             )
             if (showBottomBack) {
                 GhostButton(
                     text = "Back",
                     onClick = {
-                        staged = emptyList()
-                        notice = null
+                        staging.reset()
                         onBack()
                     },
                 )
@@ -602,38 +835,116 @@ private fun RestoreCapsuleChip(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
+    loading: Boolean = false,
+    /** Busy-state label. Set, both states stay resident and cross-fade in
+     * place (iOS `mintLookupChip`); unset, [text] is the only label. */
+    busyText: String? = null,
 ) {
     val contentAlpha = if (enabled) 1f else 0.38f
     Surface(
-        onClick = onClick,
+        // Working is not the same as disabled. Passing `enabled = false` while a
+        // lookup runs drops the content to 0.38 alpha, and a spinner in a greyed
+        // capsule looks broken rather than busy — the spinner is already the
+        // busy signal. Swallow the click instead and keep the chip at full
+        // strength. Re-entry is refused in the state holder regardless.
+        onClick = { if (!loading) onClick() },
         enabled = enabled,
         modifier = modifier,
         shape = CapsuleShape,
         color = MaterialTheme.colorScheme.surfaceContainerHigh,
         contentColor = MaterialTheme.colorScheme.onSurface,
     ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(vertical = 12.dp, horizontal = CashuTheme.spacing.snug),
-            horizontalArrangement = Arrangement.Center,
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Icon(
-                imageVector = icon,
-                contentDescription = null,
-                modifier = Modifier.size(18.dp),
-                tint = MaterialTheme.colorScheme.onSurface.copy(alpha = contentAlpha),
+        if (busyText != null) {
+            // Both states resident, so the chip's geometry is constant and a
+            // lookup starting only moves opacity — a single swapped label
+            // re-centres the row mid-animation and drags the glyph across the
+            // chip. iOS twin: OnboardingView.mintLookupChip's ZStack.
+            val idleAlpha by animateFloatAsState(
+                targetValue = if (loading) 0f else 1f,
+                label = "chip-idle",
             )
-            Spacer(Modifier.size(CashuTheme.spacing.micro))
-            Text(
-                text = text,
-                style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.SemiBold),
-                color = MaterialTheme.colorScheme.onSurface.copy(alpha = contentAlpha),
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
+            val busyAlpha by animateFloatAsState(
+                targetValue = if (loading) 1f else 0f,
+                label = "chip-busy",
             )
+            Box(
+                modifier = Modifier.fillMaxWidth(),
+                contentAlignment = Alignment.Center,
+            ) {
+                RestoreChipContent(
+                    text = text,
+                    contentAlpha = contentAlpha * idleAlpha,
+                ) {
+                    Icon(
+                        imageVector = icon,
+                        contentDescription = null,
+                        modifier = Modifier.size(ChipGlyphSize),
+                        tint = MaterialTheme.colorScheme.onSurface.copy(alpha = contentAlpha * idleAlpha),
+                    )
+                }
+                RestoreChipContent(
+                    text = busyText,
+                    contentAlpha = contentAlpha * busyAlpha,
+                ) {
+                    LoadingIndicator(
+                        modifier = Modifier.size(ChipGlyphSize),
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = contentAlpha * busyAlpha),
+                    )
+                }
+            }
+        } else {
+            RestoreChipContent(text = text, contentAlpha = contentAlpha) {
+                // Fixed glyph box so swapping the symbol for a spinner can't
+                // change the chip's height, and a cross-fade rather than a
+                // swap so the glyph dissolves in place.
+                Crossfade(targetState = loading, label = "chip-glyph") { busy ->
+                    if (busy) {
+                        LoadingIndicator(
+                            modifier = Modifier.size(ChipGlyphSize),
+                            color = MaterialTheme.colorScheme.onSurface,
+                        )
+                    } else {
+                        Icon(
+                            imageVector = icon,
+                            contentDescription = null,
+                            modifier = Modifier.size(ChipGlyphSize),
+                            tint = MaterialTheme.colorScheme.onSurface.copy(alpha = contentAlpha),
+                        )
+                    }
+                }
+            }
         }
+    }
+}
+
+@Composable
+private fun RestoreChipContent(
+    text: String,
+    contentAlpha: Float,
+    modifier: Modifier = Modifier,
+    glyph: @Composable () -> Unit,
+) {
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(vertical = 12.dp, horizontal = CashuTheme.spacing.snug),
+        horizontalArrangement = Arrangement.Center,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(
+            modifier = Modifier.size(ChipGlyphSize),
+            contentAlignment = Alignment.Center,
+        ) {
+            glyph()
+        }
+        Spacer(Modifier.size(CashuTheme.spacing.micro))
+        Text(
+            text = text,
+            style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.SemiBold),
+            color = MaterialTheme.colorScheme.onSurface.copy(alpha = contentAlpha),
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
     }
 }
 
@@ -691,6 +1002,144 @@ private fun StagedMintRow(
 // ---------------------------------------------------------------------------
 
 /**
+ * The per-mint restore state machine. Restores start as soon as the state is
+ * remembered (via [rememberRestoreProgressState]) and the flow is forward-only.
+ */
+@Stable
+class RestoreProgressState internal constructor(
+    private val scope: CoroutineScope,
+    private val walletManager: WalletManager,
+    val mintUrls: List<String>,
+) {
+    val phases = mutableStateMapOf<String, RestoreMintPhase>().apply {
+        mintUrls.forEach { put(it, RestoreMintPhase.Pending) }
+    }
+    var finishing by mutableStateOf(false)
+
+    val allSettled: Boolean
+        get() = mintUrls.isEmpty() || (
+            phases.size == mintUrls.size &&
+                phases.values.all {
+                    it is RestoreMintPhase.Recovered || it is RestoreMintPhase.Failed
+                }
+            )
+
+    val totalRecovered: Long
+        get() = phases.values.sumOf { phase ->
+            (phase as? RestoreMintPhase.Recovered)?.result?.unspent ?: 0L
+        }
+
+    val subhead: String
+        get() = when {
+            !allSettled -> "Checking your mints…"
+            totalRecovered > 0L -> "Here's what we restored."
+            // Zero back is the outcome the user fears most. Name the one cause
+            // they can still act on instead of leaving them to guess.
+            else -> "No funds on these mints. If you used others, go back and add them."
+        }
+
+    internal suspend fun restoreMint(url: String) {
+        phases[url] = RestoreMintPhase.Restoring
+        runCatching { walletManager.restoreFromMint(url) }
+            .onSuccess { phases[url] = RestoreMintPhase.Recovered(it) }
+            .onFailure {
+                phases[url] = restoreMintFailurePhase(it)
+            }
+    }
+
+    internal suspend fun restoreAll() {
+        mintUrls.forEach { url -> restoreMint(url) }
+    }
+
+    fun retry(url: String) {
+        scope.launch { restoreMint(url) }
+    }
+}
+
+@Composable
+fun rememberRestoreProgressState(
+    walletManager: WalletManager,
+    mintUrls: List<String>,
+): RestoreProgressState {
+    val scope = rememberCoroutineScope()
+    val state = remember(walletManager, mintUrls) {
+        RestoreProgressState(scope, walletManager, mintUrls)
+    }
+    LaunchedEffect(state) { state.restoreAll() }
+    return state
+}
+
+/** The green recovered-sats total (monospaced digits — Numbers Are Sacred). */
+@Composable
+fun RestoreRecoveredTotal(
+    totalRecovered: Long,
+    modifier: Modifier = Modifier,
+    centered: Boolean = false,
+) {
+    Row(
+        horizontalArrangement = Arrangement.spacedBy(CashuTheme.spacing.micro),
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = if (centered) modifier.fillMaxWidth() else modifier,
+    ) {
+        if (centered) {
+            Spacer(Modifier.weight(1f))
+        }
+        Icon(
+            imageVector = Icons.Filled.CheckCircle,
+            contentDescription = null,
+            tint = CashuTheme.colors.received,
+            modifier = Modifier.size(18.dp),
+        )
+        Text(
+            text = "Recovered: $totalRecovered sats",
+            style = MaterialTheme.typography.bodyMedium
+                .copy(fontWeight = FontWeight.SemiBold)
+                .withMonoDigits(),
+            color = CashuTheme.colors.received,
+        )
+        if (centered) {
+            Spacer(Modifier.weight(1f))
+        }
+    }
+}
+
+/** The scrolling per-mint progress rows. Stateless — the caller owns phases. */
+@Composable
+fun RestoreProgressRows(
+    mintUrls: List<String>,
+    phases: Map<String, RestoreMintPhase>,
+    previews: Map<String, MintInfo>,
+    onRetry: (String) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Column(
+        modifier = modifier
+            // Both edges, unlike the staging step: this list scrolls
+            // unattended while mints settle, so rows cross both boundaries
+            // with nobody driving. The recovered total is pinned above and the
+            // CTA below, and rows were cutting dead against each.
+            .scrollEdgeFade(top = 0.dp, bottom = 0.dp)
+            .verticalScroll(rememberScrollState())
+            .padding(horizontal = HeaderPadding)
+            // Clearance equal to the fade band at both ends. A static edge mask
+            // can't tell "scrolled past" from "this is the end", so without this
+            // the first and last rows sit inside the gradient and render dimmed
+            // at rest — a defect, not a hint. Padded, the extremes park clear of
+            // the band and only genuinely-clipped rows dissolve.
+            .padding(vertical = ScrollFadeBand),
+    ) {
+        mintUrls.forEach { url ->
+            RestoreProgressRow(
+                url = url,
+                phase = phases[url] ?: RestoreMintPhase.Pending,
+                preview = previews[url],
+                onRetry = { onRetry(url) },
+            )
+        }
+    }
+}
+
+/**
  * Per-mint restore progress + results. Forward-only once entered (no back CTA).
  * Primary action is **Continue** once every mint has settled (iOS).
  */
@@ -702,41 +1151,7 @@ fun RestoreProgressStep(
     stagedPreviews: Map<String, MintInfo> = emptyMap(),
     onContinue: () -> Unit,
 ) {
-    val phases = remember(mintUrls) {
-        mutableStateMapOf<String, RestoreMintPhase>().apply {
-            mintUrls.forEach { put(it, RestoreMintPhase.Pending) }
-        }
-    }
-    val scope = rememberCoroutineScope()
-    var finishing by remember { mutableStateOf(false) }
-
-    suspend fun restoreMint(url: String) {
-        phases[url] = RestoreMintPhase.Restoring
-        runCatching { walletManager.restoreFromMint(url) }
-            .onSuccess { phases[url] = RestoreMintPhase.Recovered(it) }
-            .onFailure {
-                phases[url] = restoreMintFailurePhase(it)
-            }
-    }
-
-    LaunchedEffect(mintUrls) {
-        mintUrls.forEach { url -> restoreMint(url) }
-    }
-
-    val allSettled = mintUrls.isEmpty() || (
-        phases.size == mintUrls.size &&
-            phases.values.all {
-                it is RestoreMintPhase.Recovered || it is RestoreMintPhase.Failed
-            }
-        )
-    val totalRecovered = phases.values.sumOf { phase ->
-        (phase as? RestoreMintPhase.Recovered)?.result?.unspent ?: 0L
-    }
-    val subhead = when {
-        !allSettled -> "Recovering funds from your mints…"
-        totalRecovered > 0L -> "Here's what we recovered."
-        else -> "No funds found on these mints."
-    }
+    val state = rememberRestoreProgressState(walletManager, mintUrls)
 
     val titleAlign = if (presentation == RestorePresentation.InApp) {
         Alignment.CenterHorizontally
@@ -749,9 +1164,9 @@ fun RestoreProgressStep(
         TextAlign.Start
     }
     val title = when (presentation) {
-        RestorePresentation.Onboarding -> "Recover Funds."
+        RestorePresentation.Onboarding -> "Restoring wallet."
         RestorePresentation.InApp ->
-            if (allSettled) "Restore Complete" else "Restoring…"
+            if (state.allSettled) "Restore complete" else "Restoring…"
     }
 
     Column(modifier = Modifier.fillMaxSize()) {
@@ -773,7 +1188,7 @@ fun RestoreProgressStep(
                 autoSize = if (presentation == RestorePresentation.Onboarding) OnboardingTitleAutoSize else null,
             )
             Text(
-                text = subhead,
+                text = state.subhead,
                 style = if (presentation == RestorePresentation.InApp) {
                     MaterialTheme.typography.bodyMedium
                 } else {
@@ -782,54 +1197,23 @@ fun RestoreProgressStep(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 textAlign = titleTextAlign,
             )
-            if (totalRecovered > 0L) {
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(CashuTheme.spacing.micro),
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = if (presentation == RestorePresentation.InApp) {
-                        Modifier.fillMaxWidth()
-                    } else {
-                        Modifier
-                    },
-                ) {
-                    if (presentation == RestorePresentation.InApp) {
-                        Spacer(Modifier.weight(1f))
-                    }
-                    Icon(
-                        imageVector = Icons.Filled.CheckCircle,
-                        contentDescription = null,
-                        tint = CashuTheme.colors.received,
-                        modifier = Modifier.size(18.dp),
-                    )
-                    Text(
-                        text = "Recovered: $totalRecovered sats",
-                        style = MaterialTheme.typography.bodyMedium
-                            .copy(fontWeight = FontWeight.SemiBold)
-                            .withMonoDigits(),
-                        color = CashuTheme.colors.received,
-                    )
-                    if (presentation == RestorePresentation.InApp) {
-                        Spacer(Modifier.weight(1f))
-                    }
-                }
-            }
-        }
-
-        Column(
-            modifier = Modifier
-                .weight(1f)
-                .verticalScroll(rememberScrollState())
-                .padding(horizontal = HeaderPadding),
-        ) {
-            mintUrls.forEachIndexed { index, url ->
-                RestoreProgressRow(
-                    url = url,
-                    phase = phases[url] ?: RestoreMintPhase.Pending,
-                    preview = stagedPreviews[url],
-                    onRetry = { scope.launch { restoreMint(url) } },
+            if (state.totalRecovered > 0L) {
+                RestoreRecoveredTotal(
+                    totalRecovered = state.totalRecovered,
+                    centered = presentation == RestorePresentation.InApp,
                 )
             }
         }
+
+        RestoreProgressRows(
+            mintUrls = mintUrls,
+            phases = state.phases,
+            previews = stagedPreviews,
+            onRetry = state::retry,
+            modifier = Modifier
+                .weight(1f)
+                .fillMaxWidth(),
+        )
 
         Column(
             modifier = Modifier
@@ -841,11 +1225,11 @@ fun RestoreProgressStep(
             PrimaryButton(
                 text = "Continue",
                 onClick = {
-                    finishing = true
+                    state.finishing = true
                     onContinue()
                 },
-                enabled = allSettled && !finishing,
-                loading = finishing,
+                enabled = state.allSettled && !state.finishing,
+                loading = state.finishing,
                 colors = ButtonDefaults.filledTonalButtonColors(),
             )
         }
@@ -909,9 +1293,11 @@ private fun RestoreProgressRow(
 
         when (phase) {
             RestoreMintPhase.Pending, RestoreMintPhase.Restoring -> {
-                CircularProgressIndicator(
+                // Expressive loader per DESIGN-ANDROID.md §1 — the classic
+                // circular spinner is reserved for nothing.
+                LoadingIndicator(
                     modifier = Modifier.size(ProgressSpinnerSize),
-                    strokeWidth = 2.dp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
             is RestoreMintPhase.Recovered -> {
@@ -960,51 +1346,6 @@ private fun RestoreProgressRow(
 }
 
 // ---------------------------------------------------------------------------
-// Method chooser (onboarding only — Android has no iCloud twin)
-// ---------------------------------------------------------------------------
-
-@Composable
-fun RestoreMethodStep(
-    onBack: () -> Unit,
-    onSeedPhrase: () -> Unit,
-) {
-    Column(modifier = Modifier.fillMaxSize()) {
-        Spacer(Modifier.weight(1f))
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = HeaderPadding),
-            verticalArrangement = Arrangement.spacedBy(CashuTheme.spacing.default),
-        ) {
-            Text(
-                text = "Restore Wallet",
-                style = restoreOnboardingTitleStyle(),
-                color = MaterialTheme.colorScheme.onSurface,
-            )
-            Text(
-                text = "Choose how to recover your wallet.",
-                style = MaterialTheme.typography.bodyLarge,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
-        Spacer(Modifier.weight(1f))
-        Column(
-            modifier = Modifier
-                .padding(horizontal = CtaPadding)
-                .padding(bottom = BottomPadding),
-            verticalArrangement = Arrangement.spacedBy(CashuTheme.spacing.tight),
-            horizontalAlignment = Alignment.CenterHorizontally,
-        ) {
-            SecondaryButton(
-                text = "Use Seed Phrase",
-                onClick = onSeedPhrase,
-            )
-            GhostButton(text = "Back", onClick = onBack)
-        }
-    }
-}
-
-// ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
 
@@ -1017,7 +1358,7 @@ fun restoreSeedInstallErrorMessage(error: Throwable): String {
     return if (looksInvalid) {
         "That seed phrase doesn't look right. Check the spelling and try again."
     } else {
-        "Couldn't open the wallet. ${error.message ?: "Try again."}"
+        "Couldn't restore the wallet. ${error.message ?: "Try again."}"
     }
 }
 

@@ -181,7 +181,8 @@ What this system explicitly rejects, pulled verbatim from docs/product/PRODUCT.m
 - Liquid Glass on iOS 26+ for primary interactive surfaces. Quiet fallbacks below.
 - Hairline `CanvasDivider` (0.5pt at `Color(.separator)`) where a single-canvas
   detail needs separation. Home and History activity rows use spacing alone.
-  No card stacks, no nested containers.
+  No card stacks, no nested containers — with one narrow, documented exception
+  for the seed cards (The Seed Card Exception, §5).
 - Motion is exponential ease-out, in the 180–350ms range. Seven named animations
   carry the full vocabulary: row stagger, badge symbol-replace, chooser cascade,
   press feedback, sheet cross-fade (in-sheet flow swap), payment-received
@@ -624,8 +625,11 @@ double demotion that pushes it under the legibility line. `caption` and
   the wallet balance and the recovered-amount counter. Tabular figures, animated
   digit-by-digit on change. The single most important typographic moment in the
   app. `MainWalletView.swift:93`, `AnimatedBalanceView.swift`.
-- **Title** (`.title.weight(.heavy)` / `.weight(.semibold)`): onboarding hero
-  headings only. `OnboardingView.swift:128, 258`.
+- **Onboarding Hero** (`.largeTitle.weight(.heavy)` + `.tracking(-0.5)`): one
+  treatment for every step's title, welcome included — all of them the top
+  `OnboardingStepHeader` in `OnboardingChassis.swift`.
+- **Title** (`.title.weight(.heavy)` / `.weight(.semibold)`): the "What is
+  ecash?" concept-sheet heading. `OnboardingView.swift` (`conceptSheet`).
 - **Title3** (`.title3.weight(.medium)`): in-flow section heads such as the
   send/receive transaction-type label, and in-body modal headings.
   `MainWalletView.swift:165`. Note: navigation-bar titles — including the
@@ -637,11 +641,12 @@ double demotion that pushes it under the legibility line. `caption` and
   `glassButton()` / `FullWidthCapsuleButtonStyle`), history row title.
 - **Body** (`.body`): default for prose, settings rows, detail values.
 - **Text Link** (`.subheadline.weight(.medium)`, `.secondary`): borderless
-  tertiary actions — "Skip" / "Skip for now", "What is ecash?", "Copy" /
-  "Copied", "Add custom mint URL". Always applied via `.textLinkButton()`
+  tertiary actions — "Skip" / "Skip for now", "Copy" / "Copied",
+  "Add custom mint URL". Always applied via `.textLinkButton()`
   (`TextLinkButtonStyle`), never hand-rolled per site.
 - **Callout** (`.callout`): supporting descriptive text under hero headings,
-  e.g. "An ecash wallet for Bitcoin and Lightning." `OnboardingView.swift:135`.
+  e.g. "An ecash wallet for Bitcoin and Lightning." — the onboarding chassis
+  subhead slot (`OnboardingChassis.swift`).
 - **Caption Emphasis** (`.caption.weight(.semibold)`, tracking `0.06em`,
   uppercase): history section headers ("TODAY", "YESTERDAY", "THIS WEEK").
   `HistoryView.swift:140`.
@@ -763,7 +768,7 @@ right tool for the job.
   (full-width, padding, an optional leading SF Symbol like the "+" on "Add
   custom mint URL") stays at the call site, since text links range from inline
   ("Copy") to full-width ("Skip", "Add custom mint URL"). Used for "Skip" /
-  "Skip for now", "What is ecash?", "Copy", and "Add custom mint URL". Defined
+  "Skip for now", "Copy", and "Add custom mint URL". Defined
   in `ios/CashuWallet/Views/Components/LiquidGlassModifiers.swift`.
 - **Utility — `.buttonStyle(.plain)`** with a bare SF Symbol (no text label),
   often wrapped in `.liquidGlass(in: Capsule(), interactive: true)` when the
@@ -1098,7 +1103,7 @@ copy, and disabled state** — never from a parallel button vocabulary. A
 they are siblings, not parent-and-child.
 
 **The Text-Link Rule.** A borderless, text-only tertiary action ("Skip",
-"What is ecash?", "Copy", "Add custom mint URL") always goes through
+"Copy", "Add custom mint URL") always goes through
 `.textLinkButton()` — `.subheadline.weight(.medium)`, `.secondary`. Never
 hand-roll the font/color on a `.buttonStyle(.plain)` text link; that is how
 "Skip for now" drifted to `.footnote` while its twins stayed `.subheadline`.
@@ -1154,6 +1159,77 @@ Figure Rule (`.monospacedDigit()` +
 and fiat sub-line, non-sat pages show the amount in its own currency (no fiat
 conversion — eur is already fiat).
 
+**The Bar-Band Rule (2026-08-05).** Onboarding draws no navigation bar, but every
+step reserves the same 44 pt band below the status bar, with two positions:
+**leading = back** (`OnboardingBackButton`) and **trailing = help**
+(`OnboardingInfoButton`, `?`, opening the ecash concept sheet). Neither position
+is ever repurposed for anything but one circular glyph, and a step may leave
+either empty. Welcome is the only step with the help glyph today.
+
+This is why "What is ecash?" is **not** a chassis text link: as a tertiary it made
+Welcome the only three-slot step, so the button stack visibly changed height the
+moment you left it. In the bar band the chassis holds a steady two buttons, and
+the title lands on the same line on every step either way
+(`barTopInset + barHeight + titleGap` == `titleTopInset`). On iOS both
+affordances are built from the same private `OnboardingBarButton` so they land on
+identical geometry.
+
+**Bar-band icons must set their content color explicitly.** The onboarding canvas
+is painted with a background modifier, not a `Surface` — and only a `Surface`
+provides an ambient content color. An icon that inherits the ambient value gets
+the framework default (**black**) and disappears on the dark canvas. On Android
+pass `IconButtonDefaults.iconButtonColors(contentColor = colorScheme.onSurface)`;
+on iOS `.foregroundStyle(.primary)` already resolves per appearance. The Android
+screenshot frame deliberately mirrors production here (background modifier, no
+`Surface`) — wrapping previews in a `Surface` made them render correct while the
+real app was black-on-black, which is exactly how this shipped unnoticed.
+
+**The Seed Card Exception (2026-08-05).** The onboarding seed step
+(`showMnemonic`) renders its 12 words inside a single container: Liquid Glass on
+iOS 26+ / `.quaternary` below (`.liquidGlass(in: RoundedRectangle(cornerRadius:
+14))`), `surfaceContainerHigh` at `RoundedCornerShape(14.dp)` on Android. This is
+the **only** screen permitted a content container, and the carve-out is narrow on
+purpose:
+
+- The phrase is **one object the user must act on**, not screen content. Bare
+  words on the canvas read as output; a container reads as a thing to handle.
+- The card is **load-bearing for the gesture**. Tap-to-reveal previously targeted
+  an invisible rectangle with no edges. The container is what tells you where to
+  tap, so it is an affordance, not decoration — exactly the case the
+  Glass-As-Surface Rule permits.
+
+The canvas around it stays bare. The Flat-By-Default Rule and the No-Shadow
+Absolute still apply to it in full: no shadow, no border, no per-word chrome
+inside it. The `Copy` link and the "never share" caution sit **outside** the
+card on the bare canvas.
+
+*Amended 2026-08-08 — the entry card.* The exception now covers a second
+surface: the word-by-word **seed entry** card on `restoreInput` (and its
+Settings twin), which holds one word at a time behind up to two **empty ghost
+cards** standing for the words still to come. This is the single place in the
+app permitted anything resembling a card stack, and the carve-out is narrower
+than it looks:
+
+- The ghosts hold **nothing**. They are the *shape of what is left*, not
+  containers for content — the No-Nested-Containers rule is about content
+  inside content, and there is none here.
+- They earn their place by answering "how much more of this is there?", which
+  the rail alone answers abstractly and the deck answers physically.
+- **Alpha and scale only, never blur.** Skia renders blur one level differently
+  across hosts, so a statically-blurred ghost could never pass Compose golden
+  validation on Linux CI — and iOS has to draw the identical thing.
+- Everything else holds: no shadow, no border beyond the input hairline, no
+  per-word chrome, bare canvas around the block.
+
+Reference: Family's recovery flow. Do not generalise this to any other screen —
+if a second surface wants a stack, that is a new argument, not this one.
+
+Reference: Family's Manual Backup screen. Implemented in
+`OnboardingView.showMnemonicStage` and `OnboardingScreen.SeedPhraseReveal` — on
+Android the surface is drawn *inside* `SeedPhraseReveal` (clip + background
+before the clickable, inner padding after) so the whole card is the tap target
+and the screenshot previews cannot drift from production.
+
 **The Share-At-Top Rule.** Any sheet that displays a shareable QR artifact —
 Lightning Invoice (`ReceiveLightningView`), Cashu Request
 (`CashuRequestDetailView`), generated ecash token (`SendView`), historical
@@ -1196,6 +1272,14 @@ code must be).
    (`.snappy(0.09)`), springs back to 1.0 on release (`.snappy(0.18)`).
    Color/opacity unchanged. Apply only where the glass surface doesn't
    already carry feedback; `glassButton()` ships its own pressed opacity drop.
+   *Amended 2026-08-06:* the asymmetry is the point — feedback belongs on
+   touch-**down** and must feel immediate, while the release is the system
+   responding and can settle. `FullWidthCapsuleButtonStyle` and
+   `TextLinkButtonStyle` had been shipping a symmetric `.snappy(0.18)` and now
+   share the same 0.09-down / 0.18-up pair. Android states the identical ratio
+   in its own measure (`fastSpatialSpec` down / `defaultSpatialSpec` up for
+   scale; the effects pair for text-link opacity, which must not carry
+   overshoot).
 5. **Sheet cross-fade** — in-sheet flow swap, e.g. the home sheet's
    `.sheet(item:)` content morphing between `WalletSheet` cases (Send → Send
    Ecash, Receive → Bitcoin) or a flow flipping between two faces of one task.
@@ -1253,6 +1337,160 @@ curve or a delight beat):*
   timing). Never on a money value (Numbers Are Sacred), never ambient, always
   dropped under `accessibilityReduceMotion`. Bounce stays reserved for the one
   celebration beat: a failure or historical-review glyph never bounces.
+  (`AnyTransition.materializeBlur` lives in `LiquidGlassModifiers.swift`; the
+  onboarding exemption below additionally rides it on stage and headline
+  entrances — pre-wallet only.)
+- **Blur as a cross-fade *mask*** *(added 2026-08-06 — onboarding button-morph
+  pass; **onboarding exemption only**, see below).* Distinct from the entrance
+  modifier above: a 1.5–4 pt blur may ride **both halves** of a button's content
+  or slot cross-fade (label↔label, label↔spinner, slot↔slot). The rationale is
+  perceptual, not decorative — in an unmasked cross-fade the eye resolves the
+  outgoing and incoming states as two distinct objects overlapping, so the
+  change reads as a *replacement*. Blurred, they blend and it reads as one
+  object *transforming*, which is what a morph is supposed to be. Because it is
+  a mask, the usual "exits subtler than entrances" rule does not strip the blur
+  from the outgoing half — a mask on one half only does nothing; the exit is
+  instead made subtler by being *shorter* (~160 ms vs ~260 ms) and carrying no
+  scale. Radii stay small: this must never be legible as an effect. Primitives:
+  `AnyTransition.materializeBlur(radius:)` (iOS, already existed) and
+  `AnimatedVisibilityScope.morphBlur(radius:)` (Android, `Materialize.kt` — the
+  entrance-only `Modifier.materializeBlur()` cannot blur a child on its way out).
+  Both no-op under reduce motion; Android additionally no-ops below API 31.
+
+  **Reach differs by platform, and the asymmetry is deliberate rather than an
+  oversight.** On iOS the morph lives entirely in `OnboardingChassis.swift`, so
+  it is genuinely pre-wallet-only and stays barred inside the wallet proper
+  until deliberately propagated. On Android it lives in the shared
+  `PrimaryButton` / `GhostButton` (`ui/components/Buttons.kt`) and therefore
+  reaches every CTA in the app. That is the correct call: the thing being fixed
+  there is a **label→spinner hard cut**, which is a defect wherever it appears,
+  and gating a component's own internal correctness behind a call-site flag
+  would be worse than the inconsistency it avoids. Android's wallet-proper CTAs
+  consequently gain the blur mask early; iOS's do not until the propagation
+  pass, and until then the two platforms' non-onboarding CTAs are knowingly a
+  half-step apart.
+
+**Onboarding exemption** *(added 2026-08-05 — onboarding restyle,
+docs/product/onboarding-restyle-brief.md, user-directed):* pre-wallet
+onboarding surfaces — `OnboardingView`, `OnboardingChassis`, i.e. everything
+before `completeOnboarding()` /
+`completeRestore()` hands off to the wallet — are **exempt from the
+seven-named-animation budget**. Nothing defined under this exemption may be
+reused inside the wallet proper. The exemption's terminal beat is the **ASCII
+handoff** (`OnboardingHandoff.swift` / `OnboardingHandoff.kt`): a full-screen
+terrain curtain that sweeps down over the last onboarding screen, flips the
+root gate at full cover, blooms once at center, then **erodes**: the opaque
+scrim clears early so the wallet stands behind a terrain that is still there,
+and the glyphs then dissolve level by level (`AsciiFieldTerrain.erosionAlpha`,
+mirrored and pinned by `AsciiFieldErosionTests`) — the faint dotted plain
+thins first, the contour ridgelines hold, and the ₿ peaks are the last things
+over the balance. Nothing translates and no edge travels: a moving plane reads
+as a slide and a moving edge reads as a wipe, and the last beat of onboarding
+is neither. The only motion is the field's own drift and the bloom's release
+swirl
+— onboarding-owned, mounted at the app root only so it survives the teardown
+it conceals, played exactly once, never referenced by wallet code. The wallet
+composes beneath it with no entrance animation of its own. Two rules survive the exemption unchanged:
+**Numbers Are Sacred** (the restored balance and the recovered-sats total keep
+`.monospacedDigit()` + `.contentTransition(.numericText())`; no count-up, no
+odometer, no roll) and **Reduce Motion** (every onboarding animation honors
+`accessibilityReduceMotion` / `rememberReducedMotion()`; reduced-motion paths
+are opacity-or-nothing). The shared cross-platform spec — Android expresses
+the same intent with M3 Expressive motion-scheme springs per
+docs/android/DESIGN-ANDROID.md rather than copying the tween values:
+
+| Element | Out | In |
+| --- | --- | --- |
+| Stage swap | blur 0→6, opacity 1→0, ~180 ms ease-out | scale 0.96→1, blur 6→0, opacity 0→1, ~280 ms `.smooth`; overlaps the tail of *out* by ~80 ms |
+| Element cascade inside a stage | — | 70 ms stride, reusing `stagger` (iOS) / `Modifier.riseIn` (Android) |
+| Chassis container | never animates | never animates |
+| CTA content change (label ⇄ label ⇄ spinner) | blur 0→2, opacity 1→0, ~160 ms ease-out | blur 2→0, opacity 0→1, ~260 ms `.smooth` (Android also scales 0.96→1) |
+| CTA slot occupancy / style | opacity alone | scale 0.96→1, blur 4→0, opacity 0→1, on the step's own `.easeInOut(0.28)` (Android: M3 `defaultSpatialSpec` height spring, blur 3) |
+| Press feedback | existing 0.97 scale, `.snappy(0.09)` down / `.snappy(0.18)` up | — |
+| ASCII field vault morph (welcome ⇄ restoreMethod) | terrain deforms into the vault door riding the step's own `.easeInOut(0.28)` (Android: `defaultSpatialSpec`) — per-cell brightness lerp, never a crossfade; the mask's opaque ramp shortens to end at the door's top edge in the same scalar | vault dissolves back into terrain on retreat, same transaction; Reduce Motion snaps — the end states differ (terrain vs vault), so the swap stays legible without motion |
+
+Three notes on that table, all added by the 2026-08-06 button-morph pass:
+
+- **"Chassis container never animates" means the container.** Its padding,
+  background, and position are fixed. The *slots inside it* do animate their
+  height — that is how the stack grows upward from its fixed bottom edge as a
+  step's action set changes, and Android has always done it
+  (`SizeTransform` in `OnboardingChassis.kt`). iOS previously had no slot
+  transition at all and snapped; it now matches.
+- **"CTA content change" is one transition, not two.** Label→label and
+  label→spinner are the same morph: iOS keys a `CapsuleContent` enum, Android
+  uses a nullable label (`null` == loading) as the `AnimatedContent` target.
+  Branching the spinner *outside* the animation — which is what Android shipped
+  until now — produces a hard cut, and it was the single most visible snap in
+  the flow.
+- **The CTA never resizes mid-morph.** iOS reserves the footprint with an
+  invisible spacer glyph (the device `PaymentStatusView` already uses for its
+  CTA); Android's 64 dp `heightIn` covers both label and spinner already.
+
+The welcome stage carries **no figurative ambient piece**: the note ↔ token
+morph that shipped with the restyle was cut on 2026-08-05 (user-directed) — an
+idle loop earning nothing after the first launch. What it carries instead is
+the **ASCII terrain field** as texture — on welcome it runs tall: clear
+behind the header, a long fade to opaque, filling the stage's slack. Since
+2026-08-09 (second pass, same day as the extent settle it supersedes) the
+pair's screen-change cue is the field's **material**: on restoreMethod the
+terrain morphs into a **vault door** (`AsciiFieldVault` — rings, spokes, ₿
+bolts, and a ₿ monogram as a procedural brightness field through the same
+glyph ramp, its ink modulated by the live terrain field itself so the
+ridgelines keep crawling through the door's structure; the brief §4 amendment
+is the sanctioned exception that permits it). The drawn layer is full-window on **both** steps and never
+moves (glyph positions are a function of layer size — a resizing layer would
+make the texture swim and re-hash); one 0…1 morph scalar riding the step
+transaction lerps every cell's brightness terrain → vault and shortens the
+mask's opaque ramp to end at the door's top edge — the clear line behind the
+header never moves. Band mode (the old restoreMethod bottom band) survives in
+`AsciiFieldLayout` as pure math and tests; no step rests on it. The vault is
+authored at fixed size (outer ring r146, reach 157 grid units), centered in
+the free region between header clearance and chassis, and does not scale with
+the window. `AsciiFieldLayout` / `AsciiFieldVault` on each platform are the
+single statements of that geometry and material, pinned by
+`AsciiFieldLayoutTests` / `AsciiFieldLayoutTest`, the vault parity vectors
+(`AsciiFieldVaultTests` / `AsciiFieldVaultTest` — generated from the design
+mock's Python), and the compose layout-invariant test.
+
+Exits stay subtler than entrances throughout (the carve-out above). The
+layout grammar (revised by design review 2026-08-05): **every** step, welcome
+included, titles itself at the top (`OnboardingStepHeader`, riding the stage
+swap) with its actions anchored to the bottom edge and a circular Liquid Glass
+back button
+(`OnboardingBackButton`, `.quaternary` pre-26) wherever a retreat exists.
+Every step's title lands on the same line whether or not it has a retreat:
+the back button fills a bar band below the safe area, and a step without one
+(the terminal restore screens) **reserves that band** instead of riding up
+against the status bar — the title has to stay put across the stage swap.
+`OnboardingMetrics` (`OnboardingChassis.swift`) is the only place that
+geometry is stated; no step hand-rolls its own top spacing, and no stage
+re-applies the header's gutter. Android states the same rule in its own
+measure — see UX_SPEC.md §2.
+The indicator slot is resolved as "no indicator" (the flow branches into
+paths of different lengths, so page dots would imply a linear path that does
+not exist).
+
+"Anchored to the bottom edge" means the bottom of the **available content
+area**, which the software keyboard shrinks. `restoreInput` deliberately raises
+a keyboard on arrival (see below), and the chassis rides up with it — iOS via
+`.safeAreaInset(edge: .bottom)`, Android via `imePadding()`. The UI tests
+measure against that edge, not the window, or the invariant would read as
+broken on exactly the step that exercises it hardest.
+
+`restoreInput` is the one step that **focuses on arrival**. Word-by-word seed
+entry is keyboard-driven from the first frame, so the "land calm — don't pop
+the keyboard on arrival" rule that `restoreMints` keeps is suspended here, and
+only here. On iOS that also means all smart-substitution traits and
+`inlinePredictionType` are off — not for tidiness, but because the predictive
+bar changes the keyboard's height, which would move the CTA mid-step. Android
+cannot suppress Gboard's strip; `imePadding()` absorbs the difference.
+
+The step's progress rail carries one gesture beyond tap-to-jump: press-and-hold
+then drag scrubs through the words, the focused word updating live with one
+selection tick per word change, releasing wherever the finger is. The
+long-press gate is the whole design — quick taps never satisfy it and plain
+drags still scroll, so it adds nothing to either path's cost.
 
 ## 7. Do's and Don'ts
 
@@ -1322,6 +1560,9 @@ curve or a delight beat):*
   *The mint card row on home is a horizontally-scrolling row of Liquid Glass
   tiles, not a container wrapping content — the canvas underneath is still
   bare, and the transactions list below sits on it directly.*
+  *The onboarding seed phrase is the one screen with a content container — see
+  The Seed Card Exception in §5. It earns it because the card is the
+  tap-to-reveal affordance, not decoration. Do not generalize it.*
 - **Don't** introduce a display font, a serif pairing, or a custom-loaded
   `.otf` **on iOS**. SF system styles only — see §3 for why this is an
   iOS-specific rule and why Android's Geist carve-out (2026-08-03,

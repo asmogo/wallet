@@ -11,6 +11,8 @@ object UiTestTags {
     const val ScannerRoot = "cashu.scanner"
     const val OnboardingRoot = "cashu.onboarding"
     const val CreateWallet = "cashu.onboarding.create"
+    const val OnboardingInfo = "cashu.onboarding.info"
+    const val OnboardingMintBackupInfo = "cashu.onboarding.mint.backup.info"
     const val RetryWalletStartup = "cashu.onboarding.startup.retry"
     const val RevealSeed = "cashu.onboarding.seed.reveal"
     const val SeedPhrase = "cashu.onboarding.seed.phrase"
@@ -21,6 +23,11 @@ object UiTestTags {
     const val CustomMintUrl = "cashu.onboarding.mint.url"
     const val ContinueWithMint = "cashu.onboarding.mint.continue"
     const val SkipMint = "cashu.onboarding.mint.skip"
+    const val OnboardingAsciiField = "cashu.onboarding.asciifield"
+    const val SeedWordField = "cashu.restore.seed.word"
+    const val SeedWordRail = "cashu.restore.seed.rail"
+    const val SeedWordReview = "cashu.restore.seed.review"
+    const val SeedPaste = "cashu.restore.seed.paste"
 
     const val WalletScreen = "cashu.screen.wallet"
     const val WalletScan = "cashu.wallet.scan"
@@ -54,6 +61,8 @@ const val P2pkRecipientConfirmation = "cashu.send.ecash.p2pk-recipient"
     const val ConnectMintDiscover = "cashu.connect-mint.discover"
     const val HistorySearch = "cashu.history.search"
     const val HistoryCheckTokenStatus = "cashu.history.check-token-status"
+
+    fun seedSuggestion(index: Int): String = "cashu.restore.seed.suggestion.$index"
 
     fun mintRow(url: String): String = "cashu.mint.${url.hashCode().toUInt().toString(16)}"
 

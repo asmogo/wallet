@@ -37,7 +37,6 @@ struct MainWalletView: View {
     @AppStorage("homeBalanceUnit") private var storedHomeUnit: String = "sat"
 
     private let recentRowCap = 5
-    private let scrollFadeBand: CGFloat = 24
     /// Hero height (primary + status). Same whether single-unit or pager.
     ///
     /// Derived from the resolved type metrics rather than being a constant. It
@@ -93,7 +92,8 @@ struct MainWalletView: View {
                 recentContent
             }
             .scrollIndicators(.hidden)
-            .mask(scrollFadeMask)
+            // Rows dissolve into the pinned top section as they scroll up.
+            .scrollEdgeFade(top: topInsetHeight)
             .refreshable {
                 await walletManager.syncPendingMintQuotes(force: true)
                 await walletManager.checkAllPendingTokens()
@@ -181,27 +181,6 @@ struct MainWalletView: View {
                 .padding(.top, 16)
                 .padding(.horizontal, 16)
                 .padding(.bottom, 16)
-        }
-    }
-
-    // Fades scroll content to clear under the fixed top section so rows
-    // visibly dissolve as they approach the buttons.
-    private var scrollFadeMask: some View {
-        GeometryReader { proxy in
-            let total = max(proxy.size.height, 1)
-            let inset = max(topInsetHeight, 1)
-            let clearEnd = min(inset / total, 1)
-            let opaqueAt = min((inset + scrollFadeBand) / total, 1)
-            LinearGradient(
-                stops: [
-                    .init(color: .clear, location: 0),
-                    .init(color: .clear, location: clearEnd),
-                    .init(color: .black, location: opaqueAt),
-                    .init(color: .black, location: 1)
-                ],
-                startPoint: .top,
-                endPoint: .bottom
-            )
         }
     }
 

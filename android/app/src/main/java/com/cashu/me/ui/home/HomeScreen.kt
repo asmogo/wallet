@@ -46,12 +46,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.draw.drawWithCache
-import androidx.compose.ui.graphics.BlendMode
-import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.CompositingStrategy
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.SubcomposeLayout
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
@@ -89,6 +83,7 @@ import com.cashu.me.ui.components.GhostButton
 import com.cashu.me.ui.components.MintChip
 import com.cashu.me.ui.components.PrimaryButton
 import com.cashu.me.ui.components.SectionHeader
+import com.cashu.me.ui.components.scrollEdgeFade
 import com.cashu.me.ui.components.TransactionRow
 import com.cashu.me.ui.components.TransactionRowModel
 import com.cashu.me.ui.components.ToolbarIcon
@@ -292,25 +287,7 @@ fun HomeScreen(
             LazyColumn(
                 modifier = Modifier
                     .fillMaxSize()
-                    .graphicsLayer {
-                        compositingStrategy = CompositingStrategy.Offscreen
-                    }
-                    .drawWithCache {
-                        val fadeBandPx = FADE_BAND_HEIGHT.toPx()
-                        val total = size.height.coerceAtLeast(1f)
-                        val clearEnd = (pinnedTopPx / total).coerceIn(0f, 1f)
-                        val opaqueAt = ((pinnedTopPx + fadeBandPx) / total).coerceIn(0f, 1f)
-                        val brush = Brush.verticalGradient(
-                            0f to Color.Transparent,
-                            clearEnd to Color.Transparent,
-                            opaqueAt to Color.Black,
-                            1f to Color.Black,
-                        )
-                        onDrawWithContent {
-                            drawContent()
-                            drawRect(brush = brush, blendMode = BlendMode.DstIn)
-                        }
-                    },
+                    .scrollEdgeFade(top = pinnedTopDp),
                 contentPadding = PaddingValues(
                     top = pinnedTopDp + CashuTheme.spacing.snug,
                     bottom = CashuTheme.spacing.section,
@@ -396,9 +373,6 @@ fun HomeScreen(
     }
 }
 
-// iOS scrollFadeBand: rows dissolve over a 24pt band beneath the measured
-// pinned-header bottom edge (MainWalletView.scrollFadeBand = 24).
-private val FADE_BAND_HEIGHT = 24.dp
 // Floor for the empty-state slot when the pinned header dominates the viewport
 // (large font scales); keeps the tray glyph + copy visible and scrollable.
 private val EMPTY_STATE_MIN_HEIGHT = 240.dp

@@ -84,11 +84,29 @@ final class NostrMintBackupService: ObservableObject {
         isSearching = true
         defer { isSearching = false }
 
-        let backup = try await walletRepository.fetchMintBackup(
-            relays: relays,
-            options: RestoreOptions(timeoutSecs: 4)
-        )
-        return backup.mints.map(\.url)
+        do {
+            let backup = try await walletRepository.fetchMintBackup(
+                relays: relays,
+                options: RestoreOptions(timeoutSecs: 4)
+            )
+            return backup.mints.map(\.url)
+        } catch let error as FfiError {
+            // CDK reports "no backup published for this seed" as an error
+            // rather than an empty result. Fold it into the documented empty
+            // return so call sites keep a single friendly "nothing found"
+            // path instead of surfacing a raw FFI dump.
+            if Self.isNoBackupFound(error) { return [] }
+            throw error
+        }
+    }
+
+    private static func isNoBackupFound(_ error: FfiError) -> Bool {
+        let message: String
+        switch error {
+        case .Cdk(_, let errorMessage): message = errorMessage
+        case .Internal(let errorMessage): message = errorMessage
+        }
+        return message.lowercased().contains("no backup event found")
     }
 
     func resetForWalletBoundary() {

@@ -61,20 +61,51 @@ Contactless).
 
 ## 2. Onboarding
 
-A multi-step host displaying one step at a time with horizontal slide-through-fade transitions. No bottom nav. No `TopAppBar` except where noted.
+*(Rewritten 2026-08-05 to match shipped code — `ui/onboarding/OnboardingScreen.kt`
++ `OnboardingChassis.kt` + `ui/restore/RestoreWalletFlow.kt`.)*
 
-| Step | Purpose | Primary actions | Key elements |
-|------|---------|------------------|---------------|
-| **Welcome** | First-launch landing | "Create Wallet" (filled `Button`), "I have a seed phrase" (`TextButton`), "What is ecash?" (opens info sheet) | Centered hero: small caption "CASHU" (letter-spaced), title "Private cash. In your pocket." |
-| **Show mnemonic** | Display generated 12-word seed | "Copy & Back Up" (`FilledTonalButton`), "Continue" | 12 numbered words in a 2-column grid. Long-press to copy whole phrase. Warning supporting text: "Anyone with these words can spend your wallet." |
-| **Verify mnemonic** | Quiz user on 3 random positions | "Verify" (disabled until all 3 filled) | Three `OutlinedTextField`s labeled by word position ("Word 4", "Word 8", "Word 11"). Error supporting text on mismatch. |
-| **First mint** | Pick the wallet's first mint | "Continue" (disabled until selection) | Recommended mints as selectable cards (radio-style). Or "Use custom mint URL" expands an `OutlinedTextField`. |
-| **Restore input** | Paste seed for restore path | "Restore" (disabled until 12 valid BIP39 words) | Multi-line `OutlinedTextField` for seed phrase. Inline word-count chip ("11 / 12"). |
-| **Restore mints** | Show discovered mints from seed | "Restore selected" + "Skip for now" | List of mints found via NIP-60 discovery; each has a "Restore" `FilledTonalButton`. Shows balance found per mint as it loads. |
+One host (`OnboardingScreen`) built on the restyle's chassis grammar
+(docs/product/onboarding-restyle-brief.md §3, revised by design review
+2026-08-05): the **welcome step** carries its headline and subhead in the
+bottom action block above its CTAs; **every other step** titles itself at the
+top (`OnboardingStepHeader` — title + supporting copy, with an M3
+`ArrowBack` icon button above it wherever a retreat exists) and pins its
+actions to the bottom edge (`OnboardingChassis` — no reserved slots, a lone
+primary hugs the bottom). The stage between owns all vertical slack. Every
+step's title lands on the same line whether or not it has a retreat: the
+icon button fills a bar band (M3's minimum touch target) below the status
+bar, and `RestoreProgress` — which has no retreat — **reserves that band**
+instead of riding up against the status bar, so the title stays put across
+the stage swap. `OnboardingMetrics` (`OnboardingChassis.kt`) is the only
+place that geometry is stated; no step hand-rolls its own top spacing. iOS
+states the same rule in its own measure (its navigation-bar band, DESIGN.md
+§6) — same grammar, native metric on each platform, not a shared number. Steps
+swap with a quiet materialize (fade + 0.96→1 scale on expressive springs,
+blur-resolve on API 31+); the chassis never animates, only its content
+cross-fades in place. No horizontal push (binding cross-platform decision),
+no page indicator (the flow branches, so dots would imply a linear path that
+doesn't exist), no bottom nav, no `TopAppBar`. System back mirrors the
+on-screen back buttons and only those.
 
-Information sheet "What is ecash?" — a `ModalBottomSheet` with two paragraphs and a "Got it" button.
+Flow: `Welcome → ShowMnemonic → FirstMint → done`, or
+`Welcome → RestoreMethod → RestoreInput → RestoreMints → RestoreProgress → done`.
 
-**Done state** triggers `walletManager.completeOnboarding()` → app re-evaluates the gate and renders `WalletScaffold`.
+| Step | Top + stage | Bottom actions |
+|------|-------------|----------------|
+| **Welcome** | "Private cash. / In your pocket." header + subhead, on the same line as every other step's title; a `?` `OnboardingInfoButton` in the bar band's trailing slot (opposite where other steps put Back), opening the concept sheet; startup-failure recovery + create errors pin above the actions | `PrimaryButton` "Create Wallet" (filled-tonal) / `SecondaryButton` "Restore Wallet" — two slots only |
+| **ShowMnemonic** | Back → Welcome; "Your Seed Phrase." header + warning line; 12-word 3-column grid — masked (`"••••••"` + blur on API 31+, real words never composed) until tap-to-reveal — and a Copy ghost with clear separation | acknowledge row in the accessory slot gates "I've Saved My Seed Phrase" |
+| **FirstMint** | "Pick your first mint." header; multi-select recommended-mint rows, "Add custom mint URL" expands a `CashuTextField`, inline notices | "Continue" (disabled with no selection and empty input) / "Skip for now" |
+| **RestoreMethod** | Back → Welcome; "Restore Wallet" header over open space | "Use Seed Phrase" (Secondary styling — Android has no iCloud twin, iOS's chooser has two options) |
+| **RestoreInput** | Back → RestoreMethod (matching iOS, one hop); "Restore wallet." header; word-by-word entry — 12-tick progress rail (tap to jump, press-and-hold + drag to scrub with a haptic tick per word), one word card behind up to two empty ghost cards, a chip row under the card ("Paste seed phrase" chip while empty, up to three BIP-39 completions while typing), helper/notice line. Focuses on arrival. Checksum failure swaps the card for a tappable review grid of all twelve | "Continue" (onboarding) / "Next" (Settings), disabled until 12 valid words with a good checksum |
+| **RestoreMints** | Back → RestoreInput (clears staged list); "Recover Funds." header; URL field, Add / Paste / Nostr capsule chips, staged mint rows | "Restore from N mints" (disabled until ≥1 staged) |
+| **RestoreProgress** | "Recover Funds." header (no back — forward-only); recovered-sats total (mono digits, no roll) + live per-mint rows with expressive loaders and Retry | "Continue" (disabled until every mint settles) |
+
+Information sheet "What is ecash?" — a `ModalBottomSheet` (hidden/expanded
+detents only) with three bearer-cash beats and a "Got it" button.
+
+**Done state** triggers `walletManager.completeOnboarding()` (create path,
+also reachable via "Skip for now") or `walletManager.completeRestore()`
+(restore path) → app re-evaluates the gate and renders `WalletScaffold`.
 
 ---
 

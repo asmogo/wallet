@@ -139,6 +139,87 @@ extension View {
         ))
     }
 
+    /// Dissolves scroll content into the chrome at one or both edges, so rows
+    /// fade out as they approach a pinned header or CTA instead of cutting
+    /// against it.
+    ///
+    /// `top` / `bottom` are the distances from each edge at which the content is
+    /// still fully clear — pass the measured height of whatever chrome sits
+    /// there. The `band` above/below that inset is the gradient itself. `nil`
+    /// leaves that edge alone, which is why `0` has to stay meaningful: it means
+    /// "fade right at the container's own edge", the case where the chrome is a
+    /// sibling rather than an overlay.
+    ///
+    /// One mask with one stop list, never two stacked masks — overlapping masks
+    /// multiply their alpha and the shared band comes out twice as dark as
+    /// either edge alone. Android mirrors this in `Modifier.scrollEdgeFade`.
+    func scrollEdgeFade(
+        top: CGFloat? = nil,
+        bottom: CGFloat? = nil,
+        band: CGFloat = ScrollFadeMetrics.band
+    ) -> some View {
+        mask {
+            GeometryReader { proxy in
+                LinearGradient(
+                    stops: ScrollFadeMetrics.stops(
+                        total: proxy.size.height,
+                        top: top,
+                        bottom: bottom,
+                        band: band
+                    ),
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+            }
+        }
+    }
+
+}
+
+// MARK: - Scroll Edge Fade
+
+enum ScrollFadeMetrics {
+    /// Distance over which content dissolves. Android holds the same value in
+    /// `ScrollEdgeFade.kt` — the two fades are meant to be indistinguishable, so
+    /// this number only ever moves in both places at once.
+    static let band: CGFloat = 24
+
+    /// Mask stops for ``SwiftUI/View/scrollEdgeFade(top:bottom:band:)``.
+    ///
+    /// Locations are forced non-decreasing on the way out. On a short container
+    /// the two bands can otherwise cross, and a `LinearGradient` handed
+    /// out-of-order stops renders a hard seam rather than clamping.
+    static func stops(
+        total rawTotal: CGFloat,
+        top: CGFloat?,
+        bottom: CGFloat?,
+        band: CGFloat
+    ) -> [Gradient.Stop] {
+        let total = max(rawTotal, 1)
+        var stops: [Gradient.Stop] = []
+
+        if let top {
+            stops.append(.init(color: .clear, location: 0))
+            stops.append(.init(color: .clear, location: top / total))
+            stops.append(.init(color: .black, location: (top + band) / total))
+        } else {
+            stops.append(.init(color: .black, location: 0))
+        }
+
+        if let bottom {
+            stops.append(.init(color: .black, location: 1 - (bottom + band) / total))
+            stops.append(.init(color: .clear, location: 1 - bottom / total))
+            stops.append(.init(color: .clear, location: 1))
+        } else {
+            stops.append(.init(color: .black, location: 1))
+        }
+
+        var highWater: CGFloat = 0
+        return stops.map { stop in
+            highWater = max(highWater, min(max(stop.location, 0), 1))
+            return .init(color: stop.color, location: highWater)
+        }
+    }
 }
 
 // MARK: - Sheet Close Button
@@ -536,7 +617,17 @@ enum ContentFitSheetMetrics {
     ) -> CGFloat {
         let body = contentHeight > 0 ? contentHeight : estimate
         let window = activeWindow
-        let wanted = body + chrome(hasNavigationBar: hasNavigationBar) + (window?.safeAreaInsets.bottom ?? 0)
+        let bottomInset: CGFloat
+        if #available(iOS 26, *) {
+            // iOS 26's floating glass sheets already rest above the home
+            // indicator, so the window's bottom inset no longer applies to
+            // sheet content — folding it in lands as dead space under the
+            // sheet's own bottom padding (visible under onboarding's "Got it").
+            bottomInset = 0
+        } else {
+            bottomInset = window?.safeAreaInsets.bottom ?? 0
+        }
+        let wanted = body + chrome(hasNavigationBar: hasNavigationBar) + bottomInset
         // Read the ceiling from the *screen*, never from the sheet's own
         // geometry — the latter would reintroduce the feedback loop this whole
         // mechanism exists to avoid.
@@ -671,7 +762,13 @@ struct FullWidthCapsuleButtonStyle: ButtonStyle {
             }
         }
         .opacity(isEnabled ? (configuration.isPressed ? 0.85 : 1) : 0.4)
-        .animation(.snappy(duration: 0.18), value: configuration.isPressed)
+        // Asymmetric, matching PressableButtonStyle: feedback belongs on
+        // touch-down and has to feel immediate, while the release is the system
+        // responding and can settle.
+        .animation(
+            .snappy(duration: configuration.isPressed ? 0.09 : 0.18),
+            value: configuration.isPressed
+        )
     }
 }
 
@@ -692,6 +789,38 @@ struct TextLinkButtonStyle: ButtonStyle {
             .foregroundStyle(.secondary)
             .contentShape(Rectangle())
             .opacity(isEnabled ? (configuration.isPressed ? 0.6 : 1) : 0.4)
-            .animation(.snappy(duration: 0.18), value: configuration.isPressed)
+            .animation(
+                .snappy(duration: configuration.isPressed ? 0.09 : 0.18),
+                value: configuration.isPressed
+            )
+    }
+}
+
+// MARK: - Materialize transition (DESIGN.md §6 carve-out)
+
+extension AnyTransition {
+    /// Blur-to-sharp "materialize": content resolves from blur → sharp as it
+    /// enters, riding whatever curve the caller animates with. It makes an
+    /// element come *into focus* rather than merely scaling in. DESIGN.md §6
+    /// carve-out — confirmation glyphs plus the onboarding stage and headline
+    /// swaps (pre-wallet exemption), never money values; callers gate it
+    /// behind `!reduceMotion` (this composes only onto non-reduce-motion
+    /// branches).
+    static var materializeBlur: AnyTransition { materializeBlur(radius: 4) }
+
+    /// Parameterized variant: onboarding's stage swap enters at radius 6 and
+    /// its chassis headline at 3 (onboarding-restyle-brief §5).
+    static func materializeBlur(radius: CGFloat) -> AnyTransition {
+        .modifier(
+            active: BlurMaterializeModifier(radius: radius),
+            identity: BlurMaterializeModifier(radius: 0)
+        )
+    }
+}
+
+private struct BlurMaterializeModifier: ViewModifier {
+    let radius: CGFloat
+    func body(content: Content) -> some View {
+        content.blur(radius: radius)
     }
 }

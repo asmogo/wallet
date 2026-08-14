@@ -2,11 +2,16 @@ import SwiftUI
 
 struct OnboardingView: View {
     @EnvironmentObject var walletManager: WalletManager
+    @EnvironmentObject var handoff: OnboardingHandoffCoordinator
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @ObservedObject private var nostrBackupService = NostrMintBackupService.shared
 
     @State private var currentStep: OnboardingStep = .welcome
-    @State private var restoreMnemonic = ""
+    @State private var seedEntry = SeedPhraseEntry()
+    /// Host-owned copy for the seed field: paste results and checksum failure.
+    /// Per-word rejection is the field's own business.
+    @State private var seedNotice: SeedEntryNotice?
+    @State private var seedFieldFocused = false
     @State private var isCreating = false
     @State private var isRestoring = false
     @State private var errorMessage: String?
@@ -15,6 +20,11 @@ struct OnboardingView: View {
     @State private var mintUrlInput = ""
     @State private var mintsToRestore: [String] = []
     @State private var restoreMintError: String?
+    @State private var mintBackupSearchCompleted = false
+    @State private var showMintBackupSheet = false
+    /// Measured height of `mintBackupSheet` — same content-fit pair as
+    /// `conceptSheet`, so the sheet hugs its copy instead of sitting at `.medium`.
+    @State private var mintBackupSheetHeight: CGFloat = 0
     @FocusState private var mintFieldFocused: Bool
 
     // Dedicated restore/results screen (forward-only): a snapshot of the staged
@@ -67,8 +77,31 @@ struct OnboardingView: View {
     @State private var isDetectingICloudBackup = true
     @State private var iCloudRestorePhase = ICloudRestorePhase.preview
     // Staged exit on the success screen: chrome recedes while the balance hero
-    // holds, then `completeRestore()` hands off to the ContentView crossfade.
+    // holds, then the ASCII handoff curtain sweeps down over what remains.
     @State private var isCompleting = false
+
+    // ASCII terrain band entrance (first launch of onboarding only): the title
+    // y-rise settles at ~400ms, then this flips at 450ms under a 900ms easeOut
+    // so the field comes up like light in a room — a slow plain fade, not a
+    // materialize. It's a texture, not an object; a blur on already-soft 12pt
+    // glyphs behind a gradient mask reads as nothing while costing a full
+    // offscreen pass. Mirrors the web's `<Reveal immediate variant="fade" slow
+    // delay={480}>`.
+    @State private var asciiFieldEntered = false
+    /// The field's material morph: 0 on welcome (the tall terrain), 1 on
+    /// restoreMethod (the vault door — restoring is opening your vault). Each
+    /// cell's brightness lerps between the two fields through the shared
+    /// glyph ramp, riding the step transaction, so the landscape deforms into
+    /// the vault instead of crossfading. Steps outside the pair leave it
+    /// untouched — the exit is opacity-only, and the field must not morph
+    /// mid-fade. Welcome is the first step.
+    @State private var asciiFieldVaultMix: CGFloat = 0
+    /// The last healthy field layout captured while the pair was on screen.
+    /// Leaving the pair drops a chassis capsule (and on the seed path raises
+    /// the keyboard), and the chassis inset feeds `vaultCenterY` — so a live
+    /// layout translates the vault door mid-fade, the "push" jank on the
+    /// restore exits. Held, the exit stays the documented opacity-only fade.
+    @State private var asciiFieldHeldLayout: AsciiFieldLayout.Resolution?
 
     // Per-step entrance animation triggers
     @State private var welcomeAppeared = false
@@ -99,35 +132,65 @@ struct OnboardingView: View {
         ZStack {
             switch currentStep {
             case .welcome:
-                welcomeView
+                welcomeStage
                     .transition(stepTransition)
             case .showMnemonic:
-                showMnemonicView
+                showMnemonicStage
                     .transition(stepTransition)
             case .firstMint:
-                firstMintView
+                firstMintStage
                     .transition(stepTransition)
             case .restoreMethod:
-                restoreMethodView
+                restoreMethodStage
                     .transition(stepTransition)
             case .restoreInput:
-                restoreInputView
+                restoreInputStage
                     .transition(stepTransition)
             case .restoreMints:
-                restoreMintsView
+                restoreMintsStage
                     .transition(stepTransition)
             case .restoreProgress:
-                restoreProgressView
+                restoreProgressStage
                     .transition(stepTransition)
             case .iCloudRestore:
-                iCloudRestoreView
+                iCloudStage
                     .transition(stepTransition)
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        // Behind the stage switch, in front of the window ground — error
+        // banners and stage content render over it.
+        .background { asciiFieldLayer }
+        .safeAreaInset(edge: .bottom) {
+            // The chassis container never animates (brief §3) — only its text
+            // and labels cross-fade in place, choreographed inside
+            // OnboardingChassisView with value-scoped animations.
+            OnboardingChassisView(model: chassisModel) {
+                chassisAccessory
+            }
+            // The chassis ground: solid on scrolling steps (content must not
+            // bleed under the CTAs), clear on the ASCII-field pair so the
+            // terrain's bottom fade continues faintly behind the glass
+            // buttons. Driven by opacity, not a style swap, so it dissolves
+            // inside the same 0.28s transaction as the field itself when the
+            // pair is entered or left.
+            .background {
+                Rectangle()
+                    .fill(.background)
+                    .opacity(stepShowsAsciiField ? 0 : 1)
+                    .ignoresSafeArea()
             }
         }
         .sheet(isPresented: $showConceptSheet) {
             conceptSheet
         }
+        // A second sibling sheet rather than an enum-driven one: the two belong
+        // to different steps and are never both true.
+        .sheet(isPresented: $showMintBackupSheet) {
+            mintBackupSheet
+        }
         .onAppear {
+            startAsciiFieldEntrance()
             guard walletManager.hasIncompleteICloudRestore else { return }
             currentStep = .iCloudRestore
             iCloudRestorePhase = .preview
@@ -136,15 +199,189 @@ struct OnboardingView: View {
         }
     }
 
-    // Quiet crossfade between steps — no lateral slide. A horizontal push read
-    // as jarring here; the per-element stagger inside each step supplies enough
-    // sense of arrival. Fits the "System Utility" restraint.
-    private var stepTransition: AnyTransition { .opacity }
+    // MARK: - Ascii Field Layer
+
+    /// The two adjacent steps that share the terrain. Nothing else gets it —
+    /// not seed, not first-mint, not the restore substeps.
+    private var stepShowsAsciiField: Bool {
+        currentStep == .welcome || currentStep == .restoreMethod
+    }
+
+    /// Deterministic-evidence hook: launching with
+    /// `ASCII_FIELD_STATIC_TIME=2.5` freezes the band at that moment (the
+    /// docs/screenshots strips). Absent in normal launches.
+    private static let asciiFieldStaticTime: Double? =
+        ProcessInfo.processInfo.environment["ASCII_FIELD_STATIC_TIME"].flatMap(Double.init)
+
+    /// The field layer, mounted once here at the root rather than inside
+    /// the stages. Welcome and Restore Wallet are *adjacent* steps; mounted
+    /// per-stage the field would unmount and materialize-blur on that swap,
+    /// and the two screens would read as two separate wallpapers that happen
+    /// to match. Hoisted, the field keeps its clock and its glyph grid while
+    /// its *material* morphs between the pair — welcome's tall terrain
+    /// deforms into restoreMethod's vault door and back, one continuous
+    /// space whose substance is the cue that the screen changed. Visibility
+    /// is opacity only: leaving the pair fades over the existing 0.28s step
+    /// transition (the clock pauses); returning fades back in and resumes
+    /// from wall-clock.
+    ///
+    /// The layer ignores the keyboard's safe area, and that is load-bearing:
+    /// with the keyboard's inset in play, a raised keyboard collapses
+    /// `available` in `AsciiFieldLayout.resolve` to nil, so on the seed-entry
+    /// retreat the terrain sat suppressed through the whole cross-fade and
+    /// then popped to full opacity the frame the keyboard finished — outside
+    /// any transaction. Keyboard-blind, the floor is laid out in its resting
+    /// position at all times; a dismissing keyboard merely uncovers it while
+    /// its opacity rides the step transition like everything else.
+    private var asciiFieldLayer: some View {
+        asciiFieldLayerContent
+            .ignoresSafeArea(.keyboard)
+    }
+
+    private var asciiFieldLayerContent: some View {
+        GeometryReader { geo in
+            // `safeAreaInset` extends the bottom safe area by the chassis
+            // height, so the inset read here is chassis + home indicator —
+            // exactly the underlap the layer needs to run beneath the
+            // chassis' opaque background and terminate with no visible edge.
+            let chassisInset = geo.safeAreaInsets.bottom
+            let windowHeight = geo.size.height + geo.safeAreaInsets.top + chassisInset
+            let resolved = AsciiFieldLayout.resolve(
+                windowHeight: windowHeight,
+                topInset: geo.safeAreaInsets.top,
+                chassisInset: chassisInset,
+                headerClearance: AsciiFieldLayout.headerClearance()
+            )
+            // Suppression (tight vertical space) hides rather than unmounts:
+            // the view's identity — and with it the wall clock — must survive,
+            // or a pass through a suppressed layout would replay from t=0.
+            let liveLayout = resolved ?? AsciiFieldLayout.fallback(
+                windowHeight: windowHeight,
+                topInset: geo.safeAreaInsets.top,
+                chassisInset: chassisInset,
+                headerClearance: AsciiFieldLayout.headerClearance()
+            )
+            // Off the pair, hold the last on-screen layout: the step change
+            // that hides the field also shrinks the chassis (and raises the
+            // seed keyboard), and a live read would slide the vault and its
+            // mask through the exit fade. On the pair the live layout rules —
+            // the swap back to it happens at opacity 0, so it is invisible.
+            let layout = stepShowsAsciiField ? liveLayout : (asciiFieldHeldLayout ?? liveLayout)
+            let fieldHealthy = stepShowsAsciiField
+                ? (resolved != nil)
+                : (asciiFieldHeldLayout != nil || resolved != nil)
+            let visible = fieldHealthy && stepShowsAsciiField && asciiFieldEntered
+            // The driver interpolates the morph through the step transaction
+            // (SwiftUI can't animate gradient stops or the renderer's
+            // brightness lerp itself), rebuilding the mask and the
+            // terrain→vault mix with each frame. The layer's frame never
+            // changes; the mask's clear line never moves (both modes are
+            // transparent through the header block), so the cull is constant.
+            AsciiFieldMorphDriver(vaultMix: asciiFieldVaultMix) { vaultMix in
+                AsciiFieldView(
+                    staticTime: Self.asciiFieldStaticTime,
+                    active: stepShowsAsciiField && !showConceptSheet && resolved != nil,
+                    topCull: layout.transparentStart(extent: 1),
+                    vaultMix: Double(vaultMix),
+                    vaultCenterY: Double(layout.vaultCenterY)
+                )
+                // Clear behind the header block on both steps, ramping to
+                // opaque — the long welcome ramp shortening to end at the
+                // vault's top edge as the morph settles; then opaque → floor
+                // across the chassis edge, so the field dims toward the
+                // buttons and keeps running — very subtle — behind their
+                // glass all the way to the window bottom. Continuous
+                // gradients, never stepped, so neither fade bands.
+                .mask {
+                    let stops = layout.morphedMaskStops(vaultMix: vaultMix)
+                    LinearGradient(
+                        stops: [
+                            .init(color: .clear, location: 0),
+                            .init(color: .clear, location: stops.clearEnd),
+                            .init(color: .black, location: stops.opaqueEnd),
+                            .init(color: .black, location: layout.bottomFadeStart),
+                            .init(
+                                color: .black.opacity(AsciiFieldLayout.bottomFloorAlpha),
+                                location: layout.bottomFadeEnd
+                            ),
+                            .init(
+                                color: .black.opacity(AsciiFieldLayout.bottomFloorAlpha),
+                                location: 1
+                            ),
+                        ],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
+                }
+            }
+            // Reduce Motion snaps the morph between its end states (the pair
+            // still reads differently — terrain vs vault); UI-test and
+            // static-evidence launches must never animate it.
+            .transaction { t in
+                if reduceMotion || IntegrationTestConfig.shouldDisableAnimations
+                    || Self.asciiFieldStaticTime != nil {
+                    t.animation = nil
+                }
+            }
+            // The layer spans the whole window through the extended safe
+            // area (this offset is exactly -topInset), so the terrain's
+            // glyph grid is a function of window size alone — never of
+            // header height, stage content, or current step.
+            .frame(width: geo.size.width, height: layout.layerHeight)
+            .offset(y: geo.size.height + chassisInset - layout.layerHeight)
+            .opacity(visible ? 1 : 0)
+            .onAppear { holdAsciiFieldLayout(liveLayout) }
+            .onChange(of: liveLayout) { _, new in holdAsciiFieldLayout(new) }
+        }
+    }
+
+    /// Keeps `asciiFieldHeldLayout` current while the pair is showing. Off the
+    /// pair the hold is deliberately left untouched — that freeze is what keeps
+    /// the exit fade opacity-only.
+    private func holdAsciiFieldLayout(_ layout: AsciiFieldLayout.Resolution) {
+        guard stepShowsAsciiField else { return }
+        asciiFieldHeldLayout = layout
+    }
+
+    /// First-launch entrance: title y-rise settles (~400ms), then a 450ms
+    /// delay and a 900ms easeOut fade. Under Reduce Motion the field is
+    /// simply present — full opacity, no fade.
+    private func startAsciiFieldEntrance() {
+        guard !asciiFieldEntered else { return }
+        if reduceMotion || Self.asciiFieldStaticTime != nil {
+            asciiFieldEntered = true
+            return
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) {
+            withAnimation(.easeOut(duration: 0.9)) {
+                asciiFieldEntered = true
+            }
+        }
+    }
+
+    // Quiet materialize between steps — no lateral slide. A horizontal push
+    // read as jarring here; the incoming stage scales 0.96 → 1 while resolving
+    // from blur (onboarding-restyle-brief §5), the outgoing stage just blurs
+    // and fades (exits subtler than entrances). The entrance overlaps the tail
+    // of the exit by ~80 ms. Reduce Motion is a plain crossfade.
+    private var stepTransition: AnyTransition {
+        guard !reduceMotion else { return .opacity }
+        return .asymmetric(
+            insertion: AnyTransition.scale(scale: 0.96)
+                .combined(with: .materializeBlur(radius: 6))
+                .combined(with: .opacity)
+                .animation(.smooth(duration: 0.28).delay(0.10)),
+            removal: AnyTransition.materializeBlur(radius: 6)
+                .combined(with: .opacity)
+                .animation(.easeOut(duration: 0.18))
+        )
+    }
 
     private func advance(to step: OnboardingStep) {
         resetAppeared(for: step)
         withAnimation(.easeInOut(duration: 0.28)) {
             currentStep = step
+            applyAsciiFieldMorph(for: step)
         }
     }
 
@@ -152,6 +389,19 @@ struct OnboardingView: View {
         resetAppeared(for: step)
         withAnimation(.easeInOut(duration: 0.28)) {
             currentStep = step
+            applyAsciiFieldMorph(for: step)
+        }
+    }
+
+    /// The field's morph rides the same transaction as the step change:
+    /// terrain on welcome, the vault on restoreMethod — the one large motion
+    /// that makes the swap between the pair's otherwise identical skeletons
+    /// unmistakable.
+    private func applyAsciiFieldMorph(for step: OnboardingStep) {
+        switch step {
+        case .welcome: asciiFieldVaultMix = 0
+        case .restoreMethod: asciiFieldVaultMix = 1
+        default: break
         }
     }
 
@@ -187,34 +437,253 @@ struct OnboardingView: View {
             .animation(.smooth(duration: 0.4).delay(Double(index) * 0.07), value: appeared)
     }
 
-    // MARK: - Welcome View
+    // MARK: - Chassis
 
-    private var welcomeView: some View {
+    /// Per-step chassis content. Every button, label, disabled rule, and
+    /// accessibility identifier moved here verbatim from the old inline CTA
+    /// stacks — the chassis changes where actions live, never what they do.
+    private var chassisModel: OnboardingChassisModel {
+        switch currentStep {
+        case .welcome:
+            return OnboardingChassisModel(
+                primary: OnboardingChassisAction(
+                    label: "Create Wallet",
+                    isLoading: isCreating,
+                    isDisabled: isCreating,
+                    accessibilityIdentifier: "onboarding-create-wallet",
+                    action: createWallet
+                ),
+                secondary: OnboardingChassisAction(
+                    label: "Restore Wallet",
+                    isDisabled: isCreating,
+                    action: {
+                        HapticFeedback.selection()
+                        advance(to: .restoreMethod)
+                    }
+                )
+            )
+
+        case .showMnemonic:
+            return OnboardingChassisModel(
+                primary: OnboardingChassisAction(
+                    label: "I've Saved My Seed Phrase",
+                    isDisabled: !seedAcknowledged,
+                    accessibilityIdentifier: "onboarding-saved-seed",
+                    action: {
+                        HapticFeedback.selection()
+                        advance(to: .firstMint)
+                    }
+                )
+            )
+
+        case .firstMint:
+            return OnboardingChassisModel(
+                primary: OnboardingChassisAction(
+                    label: "Continue",
+                    isLoading: isAddingFirstMints,
+                    isDisabled: (selectedMintUrls.isEmpty && customMintInput.isEmpty) || isAddingFirstMints,
+                    accessibilityIdentifier: "onboarding-continue",
+                    action: continueFromFirstMint
+                ),
+                tertiary: OnboardingChassisAction(
+                    label: "Skip for now",
+                    isDisabled: isAddingFirstMints,
+                    accessibilityIdentifier: "onboarding-skip-mint",
+                    action: skipFirstMint
+                )
+            )
+
+        case .restoreMethod:
+            return OnboardingChassisModel(
+                primary: OnboardingChassisAction(
+                    label: "Restore from iCloud",
+                    action: {
+                        HapticFeedback.selection()
+                        isDetectingICloudBackup = true
+                        detectedICloudBackup = nil
+                        advance(to: .iCloudRestore)
+                    }
+                ),
+                secondary: OnboardingChassisAction(
+                    label: "Use Seed Phrase",
+                    action: {
+                        HapticFeedback.selection()
+                        advance(to: .restoreInput)
+                    }
+                )
+            )
+
+        case .restoreInput:
+            return OnboardingChassisModel(
+                primary: OnboardingChassisAction(
+                    label: "Continue",
+                    isLoading: isRestoring,
+                    isDisabled: !seedEntry.isComplete || seedEntry.isReviewing || isRestoring,
+                    // The seed keyboard's return key is also labelled
+                    // "Continue", so a label-only query matches two elements.
+                    accessibilityIdentifier: "onboarding-restore-continue",
+                    action: initializeAndProceed
+                )
+                // Paste lives in the stage's chip row, not here: as a chassis
+                // tertiary it vanished on the first keystroke and shifted
+                // Continue (device review 2026-08-08), and it buried the most
+                // common restore path under a disabled CTA.
+            )
+
+        case .restoreMints:
+            return OnboardingChassisModel(
+                primary: OnboardingChassisAction(
+                    label: mintsToRestore.isEmpty
+                        ? "Restore"
+                        : "Restore from \(mintsToRestore.count) mint\(mintsToRestore.count == 1 ? "" : "s")",
+                    isDisabled: mintsToRestore.isEmpty,
+                    // Stable handle for the label, which is the only readout of
+                    // how many mints got staged.
+                    accessibilityIdentifier: "onboarding-restore-mints",
+                    action: startRestoreFlow
+                )
+            )
+
+        case .restoreProgress:
+            // Forward-only — Continue enables once every mint has settled.
+            return OnboardingChassisModel(
+                primary: OnboardingChassisAction(
+                    label: "Continue",
+                    isDisabled: !restoreAllSettled,
+                    action: finishRestore
+                )
+            )
+
+        case .iCloudRestore:
+            switch iCloudRestorePhase {
+            case .preview:
+                // No backup is not a dead end. The seed phrase is the way
+                // through, so the primary becomes that route rather than a
+                // permanently disabled "Restore Wallet".
+                if case .notFound = iCloudPreviewState {
+                    return OnboardingChassisModel(
+                        primary: OnboardingChassisAction(
+                            label: "Use Seed Phrase Instead",
+                            action: {
+                                HapticFeedback.selection()
+                                advance(to: .restoreInput)
+                            }
+                        )
+                    )
+                }
+                return OnboardingChassisModel(
+                    primary: OnboardingChassisAction(
+                        label: "Restore Wallet",
+                        isDisabled: isDetectingICloudBackup || detectedICloudBackup == nil,
+                        action: runICloudRestore
+                    )
+                )
+            case .restoring:
+                // No actions while restoring — the stage's spinner carries it.
+                return OnboardingChassisModel()
+            case .success:
+                return OnboardingChassisModel(
+                    primary: OnboardingChassisAction(
+                        label: "Open Wallet",
+                        isDisabled: isCompleting,
+                        action: openRestoredWallet
+                    ),
+                    contentOpacity: isCompleting ? 0 : 1
+                )
+            }
+        }
+    }
+
+    /// The seed-acknowledge row is the one control that must sit adjacent to
+    /// the primary it gates — it rides the chassis accessory slot, above the
+    /// primary so it can never move the button. The "never share" warning sits
+    /// with it for the same reason: pinned here it argues for the checkbox
+    /// directly below it and can never push the CTA around.
+    @ViewBuilder
+    private var chassisAccessory: some View {
+        if currentStep == .showMnemonic {
+            VStack(spacing: 20) {
+                seedWarningNotice
+                seedAcknowledgeRow
+            }
+        }
+    }
+
+    /// Mirrors the acknowledge row's geometry — icon column, gap, and text
+    /// style all match — so the two read as one aligned block. Deliberately a
+    /// triangle, not a check-shield: a shield reads as "you're protected",
+    /// which is the opposite of what this sentence says.
+    private var seedWarningNotice: some View {
+        HStack(spacing: 12) {
+            Image(systemName: "exclamationmark.triangle.fill")
+                .font(.title3)
+            Text("Never share these words with anyone.")
+                .font(.subheadline)
+                .multilineTextAlignment(.leading)
+            Spacer(minLength: 0)
+        }
+        .foregroundStyle(.orange)
+        .accessibilityElement(children: .combine)
+    }
+
+    private var seedAcknowledgeRow: some View {
+        Button(action: {
+            HapticFeedback.selection()
+            withAnimation(.snappy) { seedAcknowledged.toggle() }
+        }) {
+            HStack(spacing: 12) {
+                Image(systemName: seedAcknowledged ? "checkmark.circle.fill" : "circle")
+                    .font(.title3)
+                    .foregroundStyle(seedAcknowledged ? Color.primary : Color.secondary)
+                    .contentTransition(.symbolEffect(.replace))
+                    // Value-scoped so the checkbox flip stays animated
+                    // under the chassis' step-change shield.
+                    .animation(.snappy, value: seedAcknowledged)
+                Text("I've written down my seed phrase and stored it safely.")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.leading)
+                Spacer(minLength: 0)
+            }
+        }
+        .buttonStyle(.plain)
+        .accessibilityIdentifier("onboarding-ack-seed")
+    }
+
+    // MARK: - Welcome Stage
+
+    private var welcomeStage: some View {
         VStack(spacing: 0) {
-            Spacer()
+            // "What is ecash?" lives here rather than in the chassis: as a
+            // tertiary text link it made welcome the only 3-slot step, so the
+            // button stack changed height the moment you left it. It sits in
+            // the bar band's trailing slot — opposite where other steps put
+            // Back — so the band reads the same everywhere and the chassis
+            // holds a steady two buttons.
+            OnboardingInfoButton {
+                HapticFeedback.selection()
+                showConceptSheet = true
+            }
+            .frame(maxWidth: .infinity, alignment: .trailing)
+            .padding(.horizontal, OnboardingMetrics.gutter)
+            .padding(.top, OnboardingMetrics.barTopInset)
 
             stagger(appeared: welcomeAppeared, index: 0) {
-                VStack(alignment: .leading, spacing: 14) {
-                    // The only headline that keeps a hardcoded break. Left to
-                    // wrap naturally it wraps after "In" — "Private cash. In" /
-                    // "your pocket." — splitting the second sentence. Breaking
-                    // at the sentence boundary is the deliberate exception.
-                    Text("Private cash.\nIn your pocket.")
-                        .font(.largeTitle.weight(.heavy))
-                        .tracking(-0.5)
-                        .foregroundStyle(.primary)
-                        .fixedSize(horizontal: false, vertical: true)
-
-                    Text("An ecash wallet for Bitcoin and Lightning.")
-                        .font(.callout)
-                        .foregroundStyle(.secondary)
-                        .padding(.top, 4)
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.horizontal, 28)
+                // The only title that keeps a hardcoded break. Left to wrap
+                // naturally it wraps after "In" — "Private cash. In" / "your
+                // pocket." — splitting the second sentence. Breaking at the
+                // sentence boundary is the deliberate exception.
+                OnboardingStepHeader(
+                    title: "Private cash.\nIn your pocket.",
+                    subhead: "An ecash wallet for Bitcoin and Lightning."
+                )
             }
+            // Welcome now draws a bar button like every other step, so it uses
+            // the same barTopInset + barHeight + titleGap stack instead of
+            // titleTopInset — the title lands on the identical line either way.
+            .padding(.top, OnboardingMetrics.titleGap)
 
-            Spacer()
+            Spacer(minLength: 0)
 
             if let error = walletManager.errorMessage {
                 ErrorBannerView(message: "Couldn't start the wallet. \(error)", severity: .error)
@@ -229,44 +698,8 @@ struct OnboardingView: View {
                     .padding(.bottom, 8)
                     .transition(reduceMotion ? .opacity : .opacity.combined(with: .move(edge: .top)))
             }
-
-            stagger(appeared: welcomeAppeared, index: 1) {
-                VStack(spacing: 12) {
-                    Button(action: createWallet) {
-                        Group {
-                            if isCreating {
-                                ProgressView().tint(.primary)
-                            } else {
-                                Text("Create Wallet")
-                            }
-                        }
-                    }
-                    .glassButton()
-                    .disabled(isCreating)
-                    .accessibilityIdentifier("onboarding-create-wallet")
-
-                    Button(action: {
-                        HapticFeedback.selection()
-                        advance(to: .restoreMethod)
-                    }) {
-                        Text("Restore Wallet")
-                    }
-                    .glassButton()
-                    .disabled(isCreating)
-
-                    Button(action: {
-                        HapticFeedback.selection()
-                        showConceptSheet = true
-                    }) {
-                        Text("What is ecash?")
-                            .padding(.top, 4)
-                    }
-                    .textLinkButton()
-                }
-                .padding(.horizontal, 24)
-                .padding(.bottom, 40)
-            }
         }
+        .frame(maxWidth: .infinity)
         .animation(.snappy, value: errorMessage)
         .animation(.snappy, value: walletManager.errorMessage)
         .onAppear {
@@ -318,75 +751,85 @@ struct OnboardingView: View {
         .presentationDragIndicator(.visible)
     }
 
-    // MARK: - Restore Method Chooser
+    // MARK: - Mint Backup Sheet
 
-    private var restoreMethodView: some View {
+    /// What "Find my mints" actually does. The chip deliberately names the
+    /// outcome rather than the transport, but this sheet is the one place the
+    /// user has explicitly asked how it works, and withholding the mechanism
+    /// there is the same opacity that made the old automatic lookup feel like
+    /// the wallet knew too much. Beat one matches the Settings copy almost word
+    /// for word (`NostrSettingsSection`), so the two surfaces corroborate each
+    /// other and a curious user can find the toggle. Beat two is why the button
+    /// is safe to press. Beat three pre-answers the empty-handed outcome.
+    private var mintBackupSheet: some View {
+        VStack(alignment: .leading, spacing: 20) {
+            Text("Your mint list can be backed up.")
+                .font(.title.weight(.heavy))
+                .tracking(-0.3)
+                .lineSpacing(-1)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.top, 8)
+
+            VStack(alignment: .leading, spacing: 16) {
+                Text("Your wallet publishes an encrypted list of the mints you use to your Nostr relays. Only your seed phrase can open it.")
+                Text("Find my mints looks that list up and stages every mint in it. Nothing is restored until you tap Restore.")
+                Text("If you never published a list, nothing turns up. Add your mints by hand instead.")
+            }
+            .font(.callout)
+            .foregroundStyle(.secondary)
+            .fixedSize(horizontal: false, vertical: true)
+
+            Button(action: {
+                HapticFeedback.selection()
+                showMintBackupSheet = false
+            }) {
+                Text("Got it")
+            }
+            .glassButton()
+            .padding(.top, 4)
+        }
+        .padding(28)
+        .contentFitMeasured { mintBackupSheetHeight = $0 }
+        .contentFitDetent(mintBackupSheetHeight, estimate: 360, navigationBar: false)
+        .presentationDragIndicator(.visible)
+    }
+
+    // MARK: - Restore Method Stage
+
+    private var restoreMethodStage: some View {
         VStack(spacing: 0) {
-            Spacer()
+            OnboardingBackButton { retreat(to: .welcome) }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, OnboardingMetrics.gutter)
+                .padding(.top, OnboardingMetrics.barTopInset)
 
             stagger(appeared: restoreMethodAppeared, index: 0) {
-                VStack(alignment: .leading, spacing: 14) {
-                    Text("Restore Wallet")
-                        .font(.largeTitle.weight(.heavy))
-                        .tracking(-0.5)
-                        .foregroundStyle(.primary)
-
-                    Text("Choose how to recover your wallet.")
-                        .font(.callout)
-                        .foregroundStyle(.secondary)
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.horizontal, 28)
+                OnboardingStepHeader(
+                    title: "Restore wallet.",
+                    subhead: "Choose how to restore your wallet."
+                )
             }
+            .padding(.top, OnboardingMetrics.titleGap)
 
-            Spacer()
-
-            stagger(appeared: restoreMethodAppeared, index: 1) {
-                VStack(spacing: 12) {
-                    Button(action: {
-                        HapticFeedback.selection()
-                        isDetectingICloudBackup = true
-                        detectedICloudBackup = nil
-                        advance(to: .iCloudRestore)
-                    }) {
-                        Text("Restore from iCloud")
-                    }
-                    .glassButton()
-
-                    Button(action: {
-                        HapticFeedback.selection()
-                        advance(to: .restoreInput)
-                    }) {
-                        Text("Use Seed Phrase")
-                    }
-                    .glassButton()
-
-                    Button(action: { retreat(to: .welcome) }) {
-                        Text("Back")
-                    }
-                    .textLinkButton()
-                    .padding(.top, 4)
-                }
-                .padding(.horizontal, 24)
-                .padding(.bottom, 40)
-            }
+            Spacer(minLength: 0)
         }
+        .frame(maxWidth: .infinity)
         .onAppear {
             triggerEntrance { restoreMethodAppeared = true }
         }
     }
 
-    // MARK: - iCloud Restore View
+    // MARK: - iCloud Restore Stage
 
-    private var iCloudRestoreView: some View {
+    private var iCloudStage: some View {
         Group {
             switch iCloudRestorePhase {
             case .preview:
-                iCloudRestorePreviewView
+                iCloudPreviewStage
             case .restoring:
-                iCloudRestoringView
+                iCloudRestoringStage
             case .success:
-                iCloudRestoreSuccessView
+                iCloudSuccessStage
             }
         }
         .animation(.easeInOut(duration: 0.3), value: iCloudRestorePhase)
@@ -423,31 +866,31 @@ struct OnboardingView: View {
 
     private var iCloudPreviewTitle: String {
         switch iCloudPreviewState {
-        case .detecting: return "Checking\niCloud…"
-        case .found: return "Wallet found\nin iCloud."
-        case .notFound: return "No backup\nin iCloud."
+        case .detecting: return "Checking iCloud…"
+        case .found: return "Wallet found in iCloud."
+        case .notFound: return "No backup in iCloud."
         }
     }
 
-    private var iCloudRestorePreviewView: some View {
+    private var iCloudPreviewStage: some View {
         VStack(spacing: 0) {
-            Spacer()
+            OnboardingBackButton { retreat(to: .restoreMethod) }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, OnboardingMetrics.gutter)
+                .padding(.top, OnboardingMetrics.barTopInset)
 
             stagger(appeared: iCloudPreviewAppeared, index: 0) {
                 VStack(alignment: .leading, spacing: 14) {
+                    // Header reflects detection state — no longer a hardcoded
+                    // "Wallet found" that contradicts a "no backup" body.
+                    OnboardingStepHeader(title: iCloudPreviewTitle)
+
                     Image(systemName: iCloudPreviewIcon)
                         .font(.largeTitle)
                         .foregroundStyle(.secondary)
-                        .padding(.bottom, 4)
+                        .padding(.horizontal, 28)
+                        .padding(.top, 10)
                         .contentTransition(.symbolEffect(.replace))
-
-                    // Header reflects detection state — no longer a hardcoded
-                    // "Wallet found" that contradicts a "no backup" body.
-                    Text(iCloudPreviewTitle)
-                        .font(.largeTitle.weight(.heavy))
-                        .tracking(-0.5)
-                        .foregroundStyle(.primary)
-                        .fixedSize(horizontal: false, vertical: true)
 
                     Group {
                         switch iCloudPreviewState {
@@ -459,142 +902,132 @@ struct OnboardingView: View {
                         case .found(let backup):
                             VStack(alignment: .leading, spacing: 4) {
                                 Text(backup.timestamp.formatted(date: .abbreviated, time: .shortened))
+                                // A backup written before any mint was added
+                                // carries the seed alone. Say so plainly — the
+                                // wallet lands empty and Settings is the only
+                                // place to add mints afterwards.
                                 Text(backup.mintURLs.isEmpty
-                                     ? "Seed backup — add mints after"
+                                     ? "Seed only. No mints saved."
                                      : "\(backup.mintURLs.count) mint\(backup.mintURLs.count == 1 ? "" : "s")")
                             }
                         case .notFound:
-                            Text("No backup found. Make sure you're signed in to the same Apple ID with iCloud Keychain enabled.")
+                            Text("Make sure you're signed in to the same Apple ID with iCloud Keychain enabled. Otherwise, restore with your seed phrase.")
                                 .fixedSize(horizontal: false, vertical: true)
                         }
                     }
                     .font(.callout)
                     .foregroundStyle(.secondary)
-                    .padding(.top, 4)
+                    .padding(.horizontal, 28)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.horizontal, 28)
             }
+            .padding(.top, OnboardingMetrics.titleGap)
 
             Spacer()
 
-            stagger(appeared: iCloudPreviewAppeared, index: 1) {
-                VStack(spacing: 12) {
-                    if let error = errorMessage {
-                        ErrorBannerView(message: error, severity: .error)
-                            .padding(.horizontal)
-                            .transition(reduceMotion ? .opacity : .opacity.combined(with: .move(edge: .top)))
-                    }
-
-                    Button(action: runICloudRestore) {
-                        Text("Restore Wallet")
-                    }
-                    .glassButton()
-                    .disabled(isDetectingICloudBackup || detectedICloudBackup == nil)
-
-                    Button(action: { retreat(to: .restoreMethod) }) {
-                        Text("Back")
-                    }
-                    .textLinkButton()
-                    .padding(.top, 4)
-                }
-                .padding(.horizontal, 24)
-                .padding(.bottom, 40)
+            if let error = errorMessage {
+                ErrorBannerView(message: error, severity: .error)
+                    .padding(.horizontal)
+                    .padding(.bottom, 8)
+                    .transition(reduceMotion ? .opacity : .opacity.combined(with: .move(edge: .top)))
             }
         }
+        .frame(maxWidth: .infinity)
         .animation(.snappy, value: errorMessage)
         .onAppear {
             triggerEntrance { iCloudPreviewAppeared = true }
         }
     }
 
-    private var iCloudRestoringView: some View {
+    private var iCloudRestoringStage: some View {
         let mintCount = detectedICloudBackup?.mintURLs.count ?? 0
-        return VStack(spacing: 20) {
-            Spacer()
+        return VStack(spacing: 0) {
+            OnboardingStepHeader(
+                title: "Restoring wallet.",
+                // A seed-only backup has no mints to scan, so naming a count
+                // of zero here would read as a failure mid-flight.
+                subhead: mintCount == 0
+                    ? "Restoring your seed…"
+                    : "Restoring your funds from \(mintCount) mint\(mintCount == 1 ? "" : "s")…"
+            )
+            .padding(.top, OnboardingMetrics.titleTopInset)
 
+            Spacer()
             ProgressView()
                 .scaleEffect(1.5)
-
-            VStack(spacing: 8) {
-                Text("Restoring Wallet")
-                    .font(.title2.weight(.semibold))
-
-                Text("Recovering your funds from \(mintCount) mint\(mintCount == 1 ? "" : "s")…")
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
-                    .multilineTextAlignment(.center)
-            }
-
             Spacer()
         }
-        .padding(.horizontal, 28)
+        .frame(maxWidth: .infinity)
     }
 
-    private var iCloudRestoreSuccessView: some View {
-        // A centered terminal "done" moment: the recovered balance is the hero,
-        // rendered identically to the wallet's balance so it appears to stay put
-        // through the crossfade into the wallet. Everything else recedes on exit.
-        let count = detectedICloudBackup?.mintURLs.count ?? 0
-        return VStack(spacing: 0) {
-            Spacer()
-
-            VStack(spacing: 16) {
-                Image(systemName: "checkmark.circle.fill")
-                    .font(.system(size: 56))
-                    .foregroundStyle(.green)
-                    // One hero gesture: the symbol bounce. Scale floor raised to
-                    // 0.85 (Emil's "never below 0.9-ish") so it settles rather
-                    // than pops. Reduce Motion gets a plain fade, no bounce.
-                    .symbolEffect(.bounce, value: reduceMotion ? false : iCloudRestorePhase == .success)
-                    .transition(reduceMotion ? .opacity : .scale(scale: 0.85).combined(with: .opacity))
-                    .opacity(isCompleting ? 0 : 1)
-
-                Text("Wallet Restored")
-                    .font(.title.weight(.heavy))
-                    .tracking(-0.4)
-                    .foregroundStyle(.primary)
-                    .opacity(isCompleting ? 0 : 1)
-
-                // Hero — echoes MainWalletView's balance treatment exactly; the
-                // one element held at full opacity so it carries the handoff.
-                Text(SettingsManager.shared.formatBalanceWithUnit(walletManager.balance))
-                    .font(.system(size: 44, weight: .bold))
-                    .monospacedDigit()
-                    .minimumScaleFactor(0.5)
-                    .lineLimit(1)
-                    .contentTransition(.numericText(value: Double(walletManager.balance)))
-                    .foregroundStyle(.primary)
-
-                Group {
-                    if walletManager.balance > 0 && count > 0 {
-                        Text("across \(count) mint\(count == 1 ? "" : "s")")
-                    } else {
-                        Text("Your funds are ready.")
-                    }
-                }
-                .font(.callout)
-                .foregroundStyle(.secondary)
-                .opacity(isCompleting ? 0 : 1)
-            }
-            .frame(maxWidth: .infinity)
-            .padding(.horizontal, 28)
-
-            Spacer()
-
-            Button(action: openRestoredWallet) {
-                Text("Open Wallet")
-            }
-            .glassButton()
-            .padding(.horizontal, 24)
-            .padding(.bottom, 40)
-            .opacity(isCompleting ? 0 : 1)
+    /// Three genuinely different outcomes hide behind one success screen, and
+    /// only one of them is "your money is back". A seed-only backup lands in an
+    /// empty wallet with no mints, and a mint-carrying backup can still restore
+    /// to zero — neither may claim the funds are ready.
+    private func iCloudSuccessSubhead(mintCount: Int) -> String {
+        if mintCount == 0 {
+            return "Add your mints in Settings to recover any funds."
         }
+        if walletManager.balance > 0 {
+            return "Across \(mintCount) mint\(mintCount == 1 ? "" : "s")."
+        }
+        return "No funds on your \(mintCount) mint\(mintCount == 1 ? "" : "s")."
+    }
+
+    private var iCloudSuccessStage: some View {
+        // A centered terminal "done" moment: the recovered balance is the hero,
+        // rendered identically to the wallet's balance. Everything else recedes
+        // on exit; the ASCII handoff curtain then sweeps down over what's left.
+        let count = detectedICloudBackup?.mintURLs.count ?? 0
+        return VStack(spacing: 16) {
+            OnboardingStepHeader(
+                title: "Wallet restored.",
+                subhead: iCloudSuccessSubhead(mintCount: count)
+            )
+            .padding(.top, OnboardingMetrics.titleTopInset)
+            .opacity(isCompleting ? 0 : 1)
+
+            Spacer()
+
+            // Hero — echoes MainWalletView's balance treatment exactly; the
+            // one element held at full opacity while the chrome recedes,
+            // until the curtain covers it.
+            Text(SettingsManager.shared.formatBalanceWithUnit(walletManager.balance))
+                .font(.system(size: 44, weight: .bold))
+                .monospacedDigit()
+                .minimumScaleFactor(0.5)
+                .lineLimit(1)
+                .contentTransition(.numericText(value: Double(walletManager.balance)))
+                .foregroundStyle(.primary)
+                // Gutter belongs to the elements that need it — the header
+                // carries its own, and stacking a second one indented the
+                // title to 56 pt.
+                .padding(.horizontal, OnboardingMetrics.gutter)
+
+            Image(systemName: "checkmark.circle.fill")
+                .font(.system(size: 56))
+                .foregroundStyle(.green)
+                // One hero gesture: the symbol bounce. Scale floor raised to
+                // 0.85 (Emil's "never below 0.9-ish") so it settles rather
+                // than pops. Reduce Motion gets a plain fade, no bounce.
+                .symbolEffect(.bounce, value: reduceMotion ? false : iCloudRestorePhase == .success)
+                .transition(reduceMotion ? .opacity : .scale(scale: 0.85).combined(with: .opacity))
+                .opacity(isCompleting ? 0 : 1)
+
+            Spacer()
+        }
+        .frame(maxWidth: .infinity)
     }
 
     private func runICloudRestore() {
         guard detectedICloudBackup != nil else { return }
-        iCloudRestorePhase = .restoring
+        // This is the one place chassis *occupancy* changes without a step
+        // change — `.restoring` empties the stack entirely. It has to ride the
+        // same transaction `advance`/`retreat` use, or the slot's transition has
+        // nothing to animate against and the button snaps away.
+        withAnimation(.easeInOut(duration: 0.28)) {
+            iCloudRestorePhase = .restoring
+        }
         errorMessage = nil
         Task { @MainActor in
             do {
@@ -604,7 +1037,9 @@ struct OnboardingView: View {
                 }
                 HapticFeedback.notification(.success)
             } catch {
-                iCloudRestorePhase = .preview
+                withAnimation(.easeInOut(duration: 0.28)) {
+                    iCloudRestorePhase = .preview
+                }
                 errorMessage = error.userFacingWalletMessage
             }
         }
@@ -614,152 +1049,161 @@ struct OnboardingView: View {
         guard !isCompleting else { return }
         HapticFeedback.selection()
 
-        // Reduce Motion: skip the staged exit entirely; ContentView still
-        // crossfades (opacity is vestibular-safe).
+        // Reduce Motion: skip the staged exit entirely; the coordinator also
+        // skips the curtain, so ContentView's plain crossfade is the whole
+        // transition (opacity is vestibular-safe).
         if reduceMotion {
-            Task { @MainActor in await walletManager.completeRestore() }
+            handoff.begin(reduceMotion: true) { await walletManager.completeRestore() }
             return
         }
 
-        // Chrome recedes while the balance hero holds, a brief settle, then the
-        // handoff flips `needsOnboarding` and ContentView dissolves to the wallet.
+        // Chrome recedes while the balance hero holds; the curtain sweeps down
+        // over both and the handoff flips `needsOnboarding` at full cover.
         withAnimation(.easeOut(duration: 0.22)) { isCompleting = true }
-        Task { @MainActor in
-            try? await Task.sleep(for: .milliseconds(240))
-            await walletManager.completeRestore()
-        }
+        handoff.begin(reduceMotion: false) { await walletManager.completeRestore() }
     }
 
-    // MARK: - Show Mnemonic View
+    // MARK: - Show Mnemonic Stage
 
-    private var showMnemonicView: some View {
+    private var showMnemonicStage: some View {
         VStack(spacing: 0) {
-            Spacer()
-
-            stagger(appeared: mnemonicAppeared, index: 0) {
-                VStack(alignment: .leading, spacing: 14) {
-                    Text("Your Seed Phrase.")
-                        .font(.largeTitle.weight(.heavy))
-                        .tracking(-0.5)
-                        .foregroundStyle(.primary)
-                        .fixedSize(horizontal: false, vertical: true)
-
-                    Text("Write these 12 words down in order. This is the only way to recover your wallet.")
-                        .font(.callout)
-                        .foregroundStyle(.secondary)
-
-                    Label("Never share these words with anyone", systemImage: "exclamationmark.triangle.fill")
-                        .font(.caption.weight(.medium))
-                        .foregroundStyle(.orange)
-                        .padding(.top, 2)
-                }
+            OnboardingBackButton { retreat(to: .welcome) }
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.horizontal, 28)
+                .padding(.horizontal, OnboardingMetrics.gutter)
+                .padding(.top, OnboardingMetrics.barTopInset)
+
+            // Title + subhead only, like every sibling step. The "never share"
+            // warning used to sit here; it now rides the chassis accessory
+            // directly above the acknowledge row it argues for.
+            stagger(appeared: mnemonicAppeared, index: 0) {
+                OnboardingStepHeader(
+                    title: "Your seed phrase.",
+                    subhead: "Write these 12 words down in order. This is the only way to recover your wallet."
+                )
             }
+            .padding(.top, OnboardingMetrics.titleGap)
 
             // The seed grid deliberately gets NO stagger entrance: any offset/
             // blur ramp on this block reads as a flicker on first paint, and
             // re-composition mid-entrance restarts it. The step crossfade owns
             // its appearance; the tap-to-reveal animation is untouched.
-            VStack(spacing: 12) {
-                // Mnemonic words — plain on canvas, blurred until revealed
-                ZStack {
-                    mnemonicWordsGrid(words: mnemonicWords)
-                        // Hide the seed at the CONTENT level, not just visually.
-                        // A bare `.blur` is animatable, and on this screen's
-                        // entrance transition SwiftUI ramps the radius up from its
-                        // identity (0 = fully legible), briefly exposing the phrase
-                        // before it settles at 9 — the "flicker" users reported.
-                        // Redaction can't be defeated by an animation: while
-                        // unrevealed the real characters are never drawn, so no
-                        // animation timing can leak them. The blur stays purely for
-                        // the reveal aesthetic and animates 9 → 0 on tap; the
-                        // simultaneous un-redact is masked under that blur.
-                        .redacted(reason: seedRevealed ? [] : .placeholder)
-                        .blur(radius: seedRevealed ? 0 : 9)
-                        .allowsHitTesting(seedRevealed)
-                        // Keep the secret words out of the accessibility tree
-                        // until revealed — otherwise VoiceOver reads all 12
-                        // aloud while they're still blurred on screen.
-                        .accessibilityHidden(!seedRevealed)
+            ZStack {
+                // While hidden, the real words are never put into the view at
+                // all — masked strings stand in, exactly like Android's
+                // "••••••" placeholders.
+                //
+                // `.redacted` stops the words being *drawn*, but a `Text` still
+                // publishes its own string to the accessibility tree, and
+                // `.accessibilityHidden` does not reliably reach the lazily
+                // created children of a `LazyVGrid`. VoiceOver could therefore
+                // read all 12 words aloud while they sat blurred on screen.
+                // Substituting the content is the only version of "hidden" that
+                // VoiceOver honours too. As a bonus the uniform mask width
+                // stops the redaction bars leaking each word's length.
+                mnemonicWordsGrid(
+                    words: seedRevealed
+                        ? mnemonicWords
+                        : Array(repeating: "••••••", count: mnemonicWords.count)
+                )
+                    // A bare `.blur` is animatable, and on this screen's
+                    // entrance transition SwiftUI ramps the radius up from its
+                    // identity (0 = fully legible), briefly exposing the phrase
+                    // before it settles at 9 — the "flicker" users reported.
+                    // Redaction can't be defeated by an animation: while
+                    // unrevealed the real characters are never drawn, so no
+                    // animation timing can leak them. The blur stays purely for
+                    // the reveal aesthetic and animates 9 → 0 on tap; the
+                    // simultaneous un-redact is masked under that blur.
+                    .redacted(reason: seedRevealed ? [] : .placeholder)
+                    .blur(radius: seedRevealed ? 0 : 9)
+                    .allowsHitTesting(seedRevealed)
+                    // Keep the secret words out of the accessibility tree
+                    // until revealed — otherwise VoiceOver reads all 12
+                    // aloud while they're still blurred on screen.
+                    .accessibilityHidden(!seedRevealed)
 
-                    if !seedRevealed {
-                        VStack(spacing: 6) {
-                            Image(systemName: "eye")
-                                .font(.title3)
-                            Text("Tap to reveal")
-                                .font(.subheadline)
-                        }
-                        .foregroundStyle(.secondary)
-                        .accessibilityElement(children: .ignore)
-                        .accessibilityLabel("Reveal seed phrase")
-                        .accessibilityHint("Shows your 12-word recovery phrase")
-                        .accessibilityAddTraits(.isButton)
-                        .accessibilityAction(.default, revealSeed)
+                if !seedRevealed {
+                    VStack(spacing: 6) {
+                        Image(systemName: "eye")
+                            .font(.title3)
+                        Text("Tap to reveal")
+                            .font(.subheadline)
                     }
+                    .foregroundStyle(.secondary)
+                    .accessibilityElement(children: .ignore)
+                    .accessibilityLabel("Reveal seed phrase")
+                    .accessibilityHint("Shows your 12-word recovery phrase")
+                    .accessibilityAddTraits(.isButton)
+                    .accessibilityAction(.default, toggleSeedReveal)
                 }
-                .contentShape(Rectangle())
-                .onTapGesture(perform: revealSeed)
-                .padding(.horizontal, 28)
+            }
+            // Tapping a revealed card hides it again — the phrase should be
+            // easy to put away once it's been written down, not stuck on
+            // screen for the rest of the step. The label tracks the state so
+            // VoiceOver announces the action it will actually perform.
+            .accessibilityAction(
+                named: seedRevealed ? "Hide seed phrase" : "Reveal seed phrase",
+                toggleSeedReveal
+            )
+            // The Seed Card Exception (DESIGN.md §5): the phrase is a single
+            // object you act on, not screen content, so it earns a container.
+            // The card is also what gives tap-to-reveal a visible edge — the
+            // gesture used to target an invisible rectangle.
+            .padding(20)
+            .frame(maxWidth: .infinity)
+            .liquidGlass(in: RoundedRectangle(cornerRadius: 14))
+            // Must match the card's shape, not a bare rect, so the hit area is
+            // exactly the surface the user can see.
+            .contentShape(RoundedRectangle(cornerRadius: 14))
+            .onTapGesture(perform: toggleSeedReveal)
+            .padding(.horizontal, OnboardingMetrics.gutter)
+            .padding(.top, 24)
 
-                Button(action: copyMnemonic) {
+            Button(action: copyMnemonic) {
+                HStack(spacing: 6) {
+                    Image(systemName: seedCopied ? "checkmark" : "doc.on.doc")
+                        .contentTransition(.symbolEffect(.replace))
                     Text(seedCopied ? "Copied" : "Copy")
                         .contentTransition(.opacity)
                 }
-                .textLinkButton()
+                .animation(.snappy, value: seedCopied)
             }
-            .padding(.top, 24)
+            .textLinkButton()
+            .frame(maxWidth: .infinity)
+            // The card edge already separates the link from the words, so this
+            // is less than the 20 the bare grid needed.
+            .padding(.top, 16)
 
-            Spacer()
-
-            stagger(appeared: mnemonicAppeared, index: 2) {
-                VStack(spacing: 16) {
-                    Button(action: {
-                        HapticFeedback.selection()
-                        withAnimation(.snappy) { seedAcknowledged.toggle() }
-                    }) {
-                        HStack(spacing: 12) {
-                            Image(systemName: seedAcknowledged ? "checkmark.circle.fill" : "circle")
-                                .font(.title3)
-                                .foregroundStyle(seedAcknowledged ? Color.primary : Color.secondary)
-                                .contentTransition(.symbolEffect(.replace))
-                            Text("I've written down my seed phrase and stored it safely.")
-                                .font(.subheadline)
-                                .foregroundStyle(.secondary)
-                                .multilineTextAlignment(.leading)
-                            Spacer(minLength: 0)
-                        }
-                    }
-                    .buttonStyle(.plain)
-                    .padding(.horizontal, 4)
-                    .accessibilityIdentifier("onboarding-ack-seed")
-
-                    Button(action: {
-                        HapticFeedback.selection()
-                        advance(to: .firstMint)
-                    }) {
-                        Text("I've Saved My Seed Phrase")
-                    }
-                    .glassButton()
-                    .disabled(!seedAcknowledged)
-                    .accessibilityIdentifier("onboarding-saved-seed")
-                    .animation(.easeOut(duration: 0.2), value: seedAcknowledged)
-                }
-                .padding(.horizontal, 24)
-                .padding(.bottom, 40)
-            }
+            Spacer(minLength: 0)
         }
         .onAppear {
             mnemonicWords = walletManager.getMnemonicWords()
+            // Every entry to this step starts hidden and unacknowledged.
+            // These three are @State on the root, so without this a back-out
+            // to Welcome and a second Create Wallet would re-enter with the
+            // phrase still revealed — and, worse, with the CTA already armed
+            // over words the user hasn't looked at this time. Resetting here
+            // rather than in `createWallet()` covers every entry path.
+            //
+            // Android gets the same reset for free: `seedAcknowledged` is
+            // cleared in the Welcome chassis' onCreate, and `revealed` /
+            // `copied` are `remember` state that dies with the stage
+            // composable (OnboardingScreen.kt).
+            seedRevealed = false
+            seedAcknowledged = false
+            seedCopied = false
             triggerEntrance { mnemonicAppeared = true }
         }
     }
 
-    private func revealSeed() {
-        guard !seedRevealed else { return }
+    /// Tapping the card toggles the phrase. Hiding is safe in the same way
+    /// revealing is: `.redacted` flips instantly so the real characters stop
+    /// being drawn on the same frame, and only the blur ramps — there is no
+    /// window where the words sit unblurred.
+    private func toggleSeedReveal() {
         HapticFeedback.selection()
         withAnimation(.snappy(duration: 0.25)) {
-            seedRevealed = true
+            seedRevealed.toggle()
         }
     }
 
@@ -773,9 +1217,10 @@ struct OnboardingView: View {
     }
 
     private func mnemonicWordsGrid(words: [String]) -> some View {
-        // Family-style: plain words on the canvas, monospaced, with the
-        // number in tertiary. The seed phrase deserves quiet treatment — no
-        // glass material per word, no busy backgrounds.
+        // Monospaced words with the number in tertiary. The card around the
+        // whole grid carries the containment (see The Seed Card Exception),
+        // so the words themselves stay quiet — no per-word material, no
+        // per-word background.
         LazyVGrid(columns: [GridItem(.flexible(), spacing: 12), GridItem(.flexible(), spacing: 12), GridItem(.flexible(), spacing: 12)], spacing: 14) {
             ForEach(Array(words.enumerated()), id: \.offset) { index, word in
                 HStack(spacing: 6) {
@@ -794,110 +1239,85 @@ struct OnboardingView: View {
         }
     }
 
-    // MARK: - First Mint View
+    // MARK: - First Mint Stage
 
-    private var firstMintView: some View {
-        VStack(spacing: 16) {
+    private var firstMintStage: some View {
+        VStack(spacing: 0) {
+            OnboardingBackButton {
+                guard !isAddingFirstMints else { return }
+                retreat(to: .showMnemonic)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, OnboardingMetrics.gutter)
+            .padding(.top, OnboardingMetrics.barTopInset)
+
             stagger(appeared: firstMintAppeared, index: 0) {
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("Pick your first mint.")
-                        .font(.largeTitle.weight(.heavy))
-                        .tracking(-0.5)
-                        .fixedSize(horizontal: false, vertical: true)
-
-                    Text("Mints issue your ecash and redeem it for Bitcoin. Add more anytime in Settings.")
-                        .font(.callout)
-                        .foregroundStyle(.secondary)
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.horizontal, 28)
-                .padding(.top, 8)
+                OnboardingStepHeader(
+                    title: "Pick your first mint.",
+                    subhead: "Mints issue your ecash and redeem it for Bitcoin. Add more anytime in Settings."
+                )
             }
+            .padding(.top, OnboardingMetrics.titleGap)
 
-            ScrollView {
-                VStack(spacing: 0) {
-                    let allRows: [String] = recommendedMints.map(\.url) + customMintUrls
-
-                    ForEach(Array(allRows.enumerated()), id: \.element) { index, url in
-                        firstMintRow(url: url)
-                    }
-                }
-                .padding(.horizontal, 28)
-                .padding(.top, 12)
-
-                if showCustomMintInput {
-                    customMintInputRow
-                        .padding(.horizontal, 28)
-                        .padding(.top, 12)
-                        .transition(reduceMotion ? .opacity : .opacity.combined(with: .move(edge: .top)))
-                } else {
-                    Button(action: {
-                        HapticFeedback.selection()
-                        withAnimation(.snappy) { showCustomMintInput = true }
-                    }) {
-                        HStack(spacing: 6) {
-                            Image(systemName: "plus")
-                            Text("Add by URL")
-                        }
-                        .padding(.vertical, 14)
-                        .frame(maxWidth: .infinity)
-                    }
-                    .textLinkButton()
-                    .padding(.top, 4)
-                    .accessibilityIdentifier("onboarding-add-custom-mint")
-                }
-
-                if let error = firstMintError {
-                    InlineNotice(message: error, severity: firstMintSeverity)
-                        .padding(.horizontal, 28)
-                        .padding(.top, 8)
-                        .transition(reduceMotion ? .opacity : .opacity.combined(with: .move(edge: .top)))
-                }
-
-                if let current = currentAddingMint, isAddingFirstMints {
-                    HStack(spacing: 8) {
-                        ProgressView().controlSize(.small)
-                        Text("Connecting to \(shortenUrl(current))…")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-                    .padding(.top, 8)
-                }
-            }
-
-            Spacer(minLength: 0)
-
-            stagger(appeared: firstMintAppeared, index: 1) {
-                VStack(spacing: 10) {
-                    Button(action: continueFromFirstMint) {
-                        Group {
-                            if isAddingFirstMints {
-                                ProgressView().tint(.primary)
-                            } else {
-                                Text("Continue")
-                            }
-                        }
-                    }
-                    .glassButton()
-                    .disabled((selectedMintUrls.isEmpty && customMintInput.isEmpty) || isAddingFirstMints)
-                    .animation(.easeOut(duration: 0.2), value: selectedMintUrls.isEmpty && customMintInput.isEmpty)
-                    .accessibilityIdentifier("onboarding-continue")
-
-                    Button(action: skipFirstMint) {
-                        Text("Skip for now")
-                            .padding(.top, 2)
-                    }
-                    .textLinkButton()
-                    .disabled(isAddingFirstMints)
-                    .accessibilityIdentifier("onboarding-skip-mint")
-                }
-                .padding(.horizontal, 24)
-                .padding(.bottom, 32)
-            }
+            firstMintList
+                .padding(.top, 16)
         }
         .animation(.snappy, value: firstMintError)
         .onAppear {
             triggerEntrance { firstMintAppeared = true }
+        }
+    }
+
+    private var firstMintList: some View {
+        ScrollView {
+            VStack(spacing: 0) {
+                let allRows: [String] = recommendedMints.map(\.url) + customMintUrls
+
+                ForEach(Array(allRows.enumerated()), id: \.element) { index, url in
+                    firstMintRow(url: url)
+                }
+            }
+            .padding(.horizontal, 28)
+            .padding(.top, 12)
+
+            if showCustomMintInput {
+                customMintInputRow
+                    .padding(.horizontal, 28)
+                    .padding(.top, 12)
+                    .transition(reduceMotion ? .opacity : .opacity.combined(with: .move(edge: .top)))
+            } else {
+                Button(action: {
+                    HapticFeedback.selection()
+                    withAnimation(.snappy) { showCustomMintInput = true }
+                }) {
+                    HStack(spacing: 6) {
+                        Image(systemName: "plus")
+                        Text("Add by URL")
+                    }
+                    .padding(.vertical, 14)
+                    .frame(maxWidth: .infinity)
+                }
+                .textLinkButton()
+                .padding(.top, 4)
+                .accessibilityIdentifier("onboarding-add-custom-mint")
+            }
+
+            if let error = firstMintError {
+                InlineNotice(message: error, severity: firstMintSeverity)
+                    .padding(.horizontal, 28)
+                    .padding(.top, 8)
+                    .transition(reduceMotion ? .opacity : .opacity.combined(with: .move(edge: .top)))
+            }
+
+            if let current = currentAddingMint, isAddingFirstMints {
+                HStack(spacing: 8) {
+                    ProgressView().controlSize(.small)
+                    Text("Connecting to \(shortenUrl(current))…")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                .padding(.top, 8)
+            }
         }
     }
 
@@ -951,24 +1371,19 @@ struct OnboardingView: View {
     }
 
     private var customMintInputRow: some View {
+        // Styled to read as the same control as the Recover-funds mint field
+        // (`restoreMintsList`): system font, standard placeholder, 14pt
+        // corner. It used to be monospaced with a hand-rolled placeholder
+        // overlay — a URL you type is input like any other, not code.
         HStack(spacing: 10) {
-            TextField("", text: $customMintInput)
+            TextField("mint.example.com", text: $customMintInput)
                 .textInputAutocapitalization(.never)
                 .autocorrectionDisabled()
                 .keyboardType(.URL)
                 .submitLabel(.done)
                 .onSubmit(commitCustomMintInput)
-                .font(.system(.subheadline, design: .monospaced))
                 .foregroundStyle(.primary)
                 .tint(.primary)
-                .overlay(alignment: .leading) {
-                    if customMintInput.isEmpty {
-                        Text("https://mint.example.com")
-                            .font(.system(.subheadline, design: .monospaced))
-                            .foregroundStyle(.tertiary)
-                            .allowsHitTesting(false)
-                    }
-                }
                 .accessibilityIdentifier("onboarding-custom-mint-field")
 
             Button(action: commitCustomMintInput) {
@@ -982,9 +1397,9 @@ struct OnboardingView: View {
             .accessibilityHint(customMintInput.isEmpty ? "Pastes mint URL from clipboard" : "Adds mint to restore list")
             .accessibilityIdentifier("onboarding-commit-custom-mint")
         }
-        .padding(.vertical, 12)
+        .padding(.vertical, 14)
         .padding(.horizontal, 14)
-        .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 12))
+        .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 14))
     }
 
     private func commitCustomMintInput() {
@@ -1051,247 +1466,188 @@ struct OnboardingView: View {
         finishOnboarding()
     }
 
-    // MARK: - Restore Input View
+    // MARK: - Restore Input Stage
 
-    private var restoreInputView: some View {
-        let wordCount = restoreMnemonic.trimmingCharacters(in: .whitespacesAndNewlines)
-            .split(separator: " ")
-            .count
-        let invalidIndices = walletManager.invalidMnemonicWords(restoreMnemonic)
-
-        return VStack(spacing: 16) {
-            stagger(appeared: restoreInputAppeared, index: 0) {
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("Restore Wallet.")
-                        .font(.largeTitle.weight(.heavy))
-                        .tracking(-0.5)
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.7)
-
-                    Text("Enter your 12 words in order.")
-                        .font(.callout)
-                        .foregroundStyle(.secondary)
-                }
+    private var restoreInputStage: some View {
+        VStack(spacing: 0) {
+            OnboardingBackButton {
+                // The same exit as every other step: the tap answers at once
+                // with the 0.28s materialize cross-fade, and the keyboard
+                // drops concurrently as its own system motion. Three earlier
+                // passes tried to *sequence* keyboard-then-cross-fade and each
+                // read as a dead wait followed by a lurch; the sequencing was
+                // only ever needed because the terrain's layout used to move
+                // with the keyboard's safe area. Now that the floor is
+                // keyboard-blind (see `asciiFieldLayer`), the dismissing
+                // keyboard simply uncovers a stage that is already settling,
+                // which is how every stock iOS pop-with-keyboard behaves.
+                //
+                // Back is one hop to the method chooser, not two to welcome
+                // (product decision, reversing the restyle brief's rule).
+                seedFieldFocused = false
+                retreat(to: .restoreMethod)
+            }
                 .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, OnboardingMetrics.gutter)
+                .padding(.top, OnboardingMetrics.barTopInset)
+
+            stagger(appeared: restoreInputAppeared, index: 0) {
+                OnboardingStepHeader(
+                    title: "Restore wallet.",
+                    subhead: SeedEntryCopy.subhead
+                )
             }
-            .padding(.top, 8)
+            .padding(.top, OnboardingMetrics.titleGap)
 
-            // Mnemonic input — same pattern as Receive Ecash paste screen
-            ZStack(alignment: .bottomTrailing) {
-                ZStack(alignment: .topLeading) {
-                    TextEditor(text: $restoreMnemonic)
-                        .font(.system(.body, design: .monospaced))
-                        .scrollContentBackground(.hidden)
-                        .textInputAutocapitalization(.never)
-                        .autocorrectionDisabled()
-                        .padding(.horizontal, 12)
-                        .padding(.top, 12)
-                        .padding(.bottom, 56)
-
-                    if restoreMnemonic.isEmpty {
-                        Text("word1 word2 word3 …")
-                            .font(.system(.body, design: .monospaced))
-                            .foregroundStyle(.tertiary)
-                            .padding(.horizontal, 17)
-                            .padding(.vertical, 20)
-                            .allowsHitTesting(false)
-                    }
+            // Scrolls because the keyboard is up for this whole step: on an SE
+            // at a large Dynamic Type size the card, chips and helper line do
+            // not fit the band above it, and clipping them would be worse than
+            // a short scroll.
+            ScrollView {
+                stagger(appeared: restoreInputAppeared, index: 1) {
+                    SeedWordEntryField(
+                        entry: $seedEntry,
+                        isFocused: $seedFieldFocused,
+                        notice: seedNotice,
+                        onOutcome: handleSeedOutcome,
+                        onPaste: pasteMnemonicFromClipboard
+                    )
                 }
-
-                Button(action: restoreMnemonic.isEmpty ? pasteMnemonicFromClipboard : { clearMnemonic() }) {
-                    Image(systemName: restoreMnemonic.isEmpty ? "doc.on.clipboard" : "xmark.circle.fill")
-                        .font(.title3.weight(.medium))
-                        .foregroundStyle(.secondary)
-                        .padding(14)
-                        .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel(restoreMnemonic.isEmpty ? "Paste from clipboard" : "Clear")
-                .accessibilityHint(restoreMnemonic.isEmpty ? "Pastes seed phrase from clipboard" : "Clears the entered seed phrase")
+                .padding(.top, 32)
+                .padding(.bottom, ScrollFadeMetrics.band)
             }
-            .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 14))
+            .scrollDismissesKeyboard(.never)
+            .scrollBounceBehavior(.basedOnSize)
+            .scrollEdgeFade(bottom: 0)
             .frame(maxHeight: .infinity)
-            .padding(.horizontal)
-
-            HStack(spacing: 6) {
-                Text("\(wordCount) / 12 words")
-                    .font(.caption.weight(.medium))
-                    .foregroundStyle(wordCount == 12 && invalidIndices.isEmpty ? .green : .secondary)
-                    .animation(.smooth(duration: 0.2), value: wordCount == 12 && invalidIndices.isEmpty)
-                if wordCount > 0 && !invalidIndices.isEmpty {
-                    Text("· \(invalidIndices.count) invalid")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-            }
 
             if let error = errorMessage {
                 ErrorBannerView(message: error, severity: .error)
                     .padding(.horizontal)
+                    .padding(.top, 16)
                     .transition(reduceMotion ? .opacity : .opacity.combined(with: .move(edge: .top)))
             }
-
-            stagger(appeared: restoreInputAppeared, index: 1) {
-                VStack(spacing: 12) {
-                    Button(action: initializeAndProceed) {
-                        Group {
-                            if isRestoring {
-                                ProgressView().tint(.primary)
-                            } else {
-                                Text("Next")
-                            }
-                        }
-                    }
-                    .glassButton()
-                    .disabled(wordCount != 12 || isRestoring)
-                    .padding(.horizontal)
-
-                    Button(action: { retreat(to: .welcome) }) {
-                        Text("Back")
-                    }
-                    .textLinkButton()
-                    .padding(.bottom, 32)
-                }
-            }
         }
-        .padding(.top)
         .animation(.snappy, value: errorMessage)
         .onAppear {
             triggerEntrance { restoreInputAppeared = true }
+            // Word-by-word entry is keyboard-driven, so the field autofocuses —
+            // a deliberate exception to the "land calm" rule that restoreMints
+            // still keeps. Immediately, not after a settle delay: the keyboard
+            // rises alongside the stage materialize the way it rides a stock
+            // push (becomeFirstResponder in viewWillAppear). The "two fighting
+            // motions" of the earlier device review were the terrain reacting
+            // to the keyboard's safe area, fixed at the root; the delayed
+            // variant answered the tap twice, seconds apart.
+            seedFieldFocused = true
         }
+        .onDisappear { seedFieldFocused = false }
+        .onChange(of: seedEntry.isReviewing) { _, reviewing in
+            // Leaving the review grid means the user is fixing a word; the
+            // checksum message that sent them there is no longer true.
+            if !reviewing { seedNotice = nil }
+        }
+    }
+
+    /// Every commit reports back so the host can clear stale copy and run the
+    /// checksum at the only moment it can be run.
+    private func handleSeedOutcome(_ outcome: SeedCommitOutcome) {
+        if outcome != .ignored { seedNotice = nil }
+        guard outcome == .completed else { return }
+        runSeedChecksum()
+    }
+
+    /// The wordlist check is local and per-word; the BIP-39 checksum needs all
+    /// twelve and can only say "one of these is wrong", never which one. So the
+    /// failure hands the user the whole phrase to look at.
+    private func runSeedChecksum() {
+        guard seedEntry.isComplete else { return }
+        guard !walletManager.validateMnemonic(seedEntry.phrase) else {
+            seedNotice = nil
+            return
+        }
+        seedEntry.markReviewing()
+        seedFieldFocused = false
+        seedNotice = SeedEntryNotice(
+            message: SeedEntryCopy.checksumBody,
+            title: SeedEntryCopy.checksumTitle,
+            severity: .error
+        )
+        HapticFeedback.notification(.error)
     }
 
     private func pasteMnemonicFromClipboard() {
-        guard let content = UIPasteboard.general.string else { return }
-        HapticFeedback.selection()
-        restoreMnemonic = content.trimmingCharacters(in: .whitespacesAndNewlines)
-    }
-
-    private func clearMnemonic() {
-        HapticFeedback.selection()
-        restoreMnemonic = ""
-        errorMessage = nil
-    }
-
-    // MARK: - Restore Mints View
-
-    private var restoreMintsView: some View {
-        VStack(spacing: 0) {
-            // Fixed header — sits at the top safe area and never scrolls under the
-            // status bar, no matter how tall the list or whether the keyboard is up.
-            stagger(appeared: restoreMintsAppeared, index: 0) {
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("Recover Funds.")
-                        .font(.largeTitle.weight(.heavy))
-                        .tracking(-0.5)
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.7)
-
-                    Text("Add the mints you used before to recover funds from this seed.")
-                        .font(.callout)
-                        .foregroundStyle(.secondary)
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.horizontal)
-            }
-            .padding(.top, 8)
-            .padding(.bottom, 16)
-
-            // Scrollable body — input + the staged mints the user has added.
-            ScrollView {
-                VStack(spacing: 20) {
-                    TextField("mint.example.com", text: $mintUrlInput)
-                        .textInputAutocapitalization(.never)
-                        .autocorrectionDisabled()
-                        .keyboardType(.URL)
-                        .textContentType(.URL)
-                        .focused($mintFieldFocused)
-                        .onSubmit(addMintUrl)
-                        .padding(.horizontal, 14)
-                        .padding(.vertical, 14)
-                        .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 14))
-                        .padding(.horizontal)
-
-                    HStack(spacing: 8) {
-                        Button(action: addMintUrl) {
-                            restoreCapsuleChip("Add", systemImage: "plus")
-                        }
-                        .buttonStyle(.plain)
-                        .disabled(mintUrlInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                        .opacity(mintUrlInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? 0.4 : 1)
-
-                        Button(action: pasteMintUrlsFromClipboard) {
-                            restoreCapsuleChip("Paste", systemImage: "doc.on.clipboard")
-                        }
-                        .buttonStyle(.plain)
-                        .accessibilityLabel("Paste mint URLs from clipboard")
-
-                        Button(action: searchNostrMintBackups) {
-                            restoreCapsuleChip(
-                                nostrBackupService.isSearching ? "Searching…" : "Nostr",
-                                systemImage: "antenna.radiowaves.left.and.right"
-                            )
-                        }
-                        .buttonStyle(.plain)
-                        .disabled(nostrBackupService.isSearching)
-                        .opacity(nostrBackupService.isSearching ? 0.4 : 1)
-                        .accessibilityLabel("Find mints from your Nostr backup")
-                    }
-                    .padding(.horizontal)
-
-                    // Staged mints — the list that gets restored. Each shows its host.
-                    if !mintsToRestore.isEmpty {
-                        VStack(spacing: 0) {
-                            ForEach(Array(mintsToRestore.enumerated()), id: \.element) { index, url in
-                                stagedMintRow(url: url)
-                            }
-                        }
-                        .padding(.horizontal)
-                    }
-
-                    // Mint-list notice (success / advisory / error)
-                    if let error = restoreMintError {
-                        InlineNotice(message: error, severity: restoreMintSeverity)
-                            .padding(.horizontal)
-                            .transition(reduceMotion ? .opacity : .opacity.combined(with: .move(edge: .top)))
-                    }
-                }
-                .padding(.bottom, 8)
-            }
-            .scrollDismissesKeyboard(.interactively)
-            // Tap anywhere off the field dismisses the keyboard. Guarded so the
-            // first tap that focuses the field isn't immediately revoked.
-            .simultaneousGesture(
-                TapGesture().onEnded {
-                    if mintFieldFocused { mintFieldFocused = false }
-                }
-            )
+        guard let content = UIPasteboard.general.string else {
+            seedNotice = SeedEntryNotice(message: SeedEntryCopy.pasteUnusable, severity: .caution)
+            return
         }
-        // Pinned footer — one Restore CTA (enabled once a mint is staged) + Back.
-        .safeAreaInset(edge: .bottom) {
-            VStack(spacing: 12) {
-                Button(action: startRestoreFlow) {
-                    Text(mintsToRestore.isEmpty
-                         ? "Restore"
-                         : "Restore from \(mintsToRestore.count) Mint\(mintsToRestore.count == 1 ? "" : "s")")
-                }
-                .glassButton()
-                .disabled(mintsToRestore.isEmpty)
-                .padding(.horizontal)
 
-                Button(action: {
+        let outcome = seedEntry.fill(from: content)
+        seedFieldFocused = true
+
+        switch outcome {
+        case .filled:
+            HapticFeedback.notification(.success)
+            seedNotice = nil
+            runSeedChecksum()
+        case .partial(let count):
+            HapticFeedback.selection()
+            seedNotice = SeedEntryNotice(message: SeedEntryCopy.pastePartial(count), severity: .caution)
+        case .invalid(let index):
+            HapticFeedback.notification(.warning)
+            seedNotice = SeedEntryNotice(message: SeedEntryCopy.pasteInvalid(at: index), severity: .caution)
+        case .unusable:
+            HapticFeedback.notification(.error)
+            seedNotice = SeedEntryNotice(message: SeedEntryCopy.pasteUnusable, severity: .caution)
+        }
+    }
+
+    // MARK: - Restore Mints Stage
+
+    private var restoreMintsStage: some View {
+        VStack(spacing: 0) {
+            // Both bar-band slots are occupied here: Back leading, and help
+            // trailing because "Find my mints" is the way through this step for
+            // most people and nothing else on screen says what it does.
+            HStack(spacing: 0) {
+                OnboardingBackButton {
                     mintsToRestore.removeAll()
                     restoreMintError = nil
+                    // Clear the searched flag too, or returning to this step
+                    // lands on "No backup found" instead of the line that names
+                    // the button — a dead screen with no way forward.
+                    mintBackupSearchCompleted = false
                     retreat(to: .restoreInput)
-                }) {
-                    Text("Back")
                 }
-                .textLinkButton()
+
+                Spacer(minLength: 0)
+
+                OnboardingInfoButton(
+                    accessibilityLabel: "What does Find my mints do?",
+                    accessibilityIdentifier: "onboarding-mint-backup-info"
+                ) {
+                    HapticFeedback.selection()
+                    showMintBackupSheet = true
+                }
             }
-            .padding(.horizontal)
-            .padding(.top, 8)
-            .padding(.bottom, 12)
-            .background(.background)
+            .padding(.horizontal, OnboardingMetrics.gutter)
+            .padding(.top, OnboardingMetrics.barTopInset)
+
+            stagger(appeared: restoreMintsAppeared, index: 0) {
+                OnboardingStepHeader(
+                    title: "Add your mints.",
+                    // Name the reason this step exists at all. Without it the
+                    // screen reads as busywork, and the user has no way to know
+                    // the seed alone can't find their money. The second
+                    // sentence names both routes forward, because the backup
+                    // lookup no longer runs itself.
+                    subhead: "Your seed phrase doesn't record which mints you used. Find them from a backup, or add them yourself."
+                )
+            }
+            .padding(.top, OnboardingMetrics.titleGap)
+
+            restoreMintsList
+                .padding(.top, 16)
         }
         .animation(.snappy, value: restoreMintError)
         .animation(.snappy, value: mintsToRestore.isEmpty)
@@ -1303,17 +1659,185 @@ struct OnboardingView: View {
         }
     }
 
+    private var restoreMintsList: some View {
+        // Scrollable body — input + the staged mints the user has added.
+        ScrollView {
+            VStack(spacing: 20) {
+                TextField("mint.example.com", text: $mintUrlInput)
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+                    .keyboardType(.URL)
+                    .textContentType(.URL)
+                    .focused($mintFieldFocused)
+                    .onSubmit(addMintUrl)
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 14)
+                    .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 14))
+                    .padding(.horizontal)
+
+                HStack(spacing: 8) {
+                    Button(action: addMintUrl) {
+                        restoreCapsuleChip("Add", systemImage: "plus")
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(mintUrlInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    .opacity(mintUrlInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? 0.4 : 1)
+
+                    Button(action: pasteMintUrlsFromClipboard) {
+                        restoreCapsuleChip("Paste", systemImage: "doc.on.clipboard")
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Paste mint URLs from clipboard")
+
+                }
+                .padding(.horizontal)
+
+                // "Nostr" named the transport, not the outcome. The user
+                // doesn't need to know where their mint list is kept — only
+                // that we can go and look for it. It gets its own row because
+                // it is the way through this step for anyone who can't recite
+                // their mint URLs, which is most people; third-of-a-row next
+                // to Add and Paste both buried it and truncated it.
+                Button(action: searchMintBackup) {
+                    mintLookupChip
+                }
+                .buttonStyle(.plain)
+                // Hit testing, not `.disabled`: a disabled plain Button dims its
+                // whole label, glass included, so the pill washed out from
+                // 221 to 237 and the spinner sat in a greyed-out capsule looking
+                // broken rather than busy. The spinner is the busy signal; the
+                // chip should stay at full strength behind it. Re-entry is
+                // refused in `searchMintBackup` itself, so this is presentation
+                // only.
+                .allowsHitTesting(!nostrBackupService.isSearching)
+                // No `accessibilityLabel` override — it used to read "Check for
+                // a backup of your mint list", which is not what the button
+                // says. Voice Control matches spoken words against the label,
+                // so "tap Find my mints" missed the one control that is now the
+                // way through this step. The visible text is the label; the
+                // explanation belongs in the hint.
+                .accessibilityHint("Checks your relays for a backup of your mint list")
+                .padding(.horizontal)
+
+                // Staged mints — the list that gets restored. Each shows its host.
+                if !mintsToRestore.isEmpty {
+                    VStack(spacing: 0) {
+                        ForEach(Array(mintsToRestore.enumerated()), id: \.element) { index, url in
+                            stagedMintRow(url: url)
+                        }
+                    }
+                    .padding(.horizontal)
+                } else {
+                    // The list is empty far more often than not, and the
+                    // disabled primary never says why. This is the only place
+                    // that explains the wait and the way out.
+                    Text(emptyMintListNotice)
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.center)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .frame(maxWidth: .infinity)
+                        .padding(.horizontal, 32)
+                        .padding(.top, 8)
+                        .transition(.opacity)
+                }
+
+                // Mint-list notice (success / advisory / error)
+                if let error = restoreMintError {
+                    InlineNotice(message: error, severity: restoreMintSeverity)
+                        .padding(.horizontal)
+                        .transition(reduceMotion ? .opacity : .opacity.combined(with: .move(edge: .top)))
+                }
+            }
+            .padding(.top, 8)
+            // Bottom clearance equal to the fade band, so scrolling to the end
+            // parks the last row clear of the gradient instead of leaving it
+            // permanently dimmed.
+            .padding(.bottom, ScrollFadeMetrics.band)
+        }
+        .scrollDismissesKeyboard(.interactively)
+        // Zero inset, not a chassis-height one: `safeAreaInset` on the root
+        // *reduces* the region the stage lays out in, so this ScrollView's own
+        // bottom edge already sits at the chassis top and nothing runs
+        // underneath. Insetting by the chassis floated the band a chassis-height
+        // up the screen, which is what shipped and looked broken. No top fade:
+        // the whole stage scrolls as one unit, so the first thing in the
+        // container is the URL field, and a top mask would dim it at rest.
+        .scrollEdgeFade(bottom: 0)
+        // Tap anywhere off the field dismisses the keyboard. Guarded so the
+        // first tap that focuses the field isn't immediately revoked.
+        .simultaneousGesture(
+            TapGesture().onEnded {
+                if mintFieldFocused { mintFieldFocused = false }
+            }
+        )
+    }
+
     /// Inline Liquid-Glass capsule chip (Add / Paste) for the restore flow.
     /// Non-interactive glass so taps land on the plain Button label; falls back
     /// to `.quaternary` below iOS 26.
     private func restoreCapsuleChip(_ title: String, systemImage: String) -> some View {
-        Label(title, systemImage: systemImage)
-            .font(.subheadline.weight(.semibold))
-            .foregroundStyle(.primary)
+        restoreChipLabel(title) { Image(systemName: systemImage) }
             .frame(maxWidth: .infinity)
             .padding(.vertical, 12)
             .liquidGlass(in: Capsule())
             .contentShape(Capsule())
+    }
+
+    /// A chip's inner label, without the glass. Kept as a `Label` (rather than a
+    /// hand-rolled HStack) so a chip with a custom glyph lays out identically to
+    /// the plain `systemImage` ones — same icon/title spacing, same Dynamic Type
+    /// behaviour. The glyph box is fixed so swapping the symbol for a spinner
+    /// can't change the chip's height.
+    private func restoreChipLabel<Glyph: View>(
+        _ title: String,
+        @ViewBuilder glyph: () -> Glyph
+    ) -> some View {
+        Label {
+            Text(title)
+        } icon: {
+            glyph().frame(width: 16, height: 16)
+        }
+        .font(.subheadline.weight(.semibold))
+        .foregroundStyle(.primary)
+    }
+
+    /// The backup-lookup chip, which is the way through this step and therefore
+    /// the one chip that has a working state.
+    ///
+    /// Both states are always mounted and cross-faded, rather than one `Label`
+    /// whose title and icon change. That is not a stylistic choice: the stage
+    /// carries `.animation(.snappy, value: mintsToRestore.isEmpty)`, so the
+    /// moment a lookup stages its mints the whole subtree animates — and a
+    /// single `Label` reverting to a shorter title re-centres its row, which
+    /// dragged the magnifying glass across the chip. With both states resident
+    /// the chip's geometry is constant, so that blanket animation has nothing
+    /// to slide and only the opacity moves.
+    private var mintLookupChip: some View {
+        let searching = nostrBackupService.isSearching
+        return ZStack {
+            restoreChipLabel("Find my mints") {
+                Image(systemName: "magnifyingglass")
+            }
+            .opacity(searching ? 0 : 1)
+
+            restoreChipLabel("Checking for your mints…") {
+                // The system spinner, at the size Apple uses inline in a
+                // control. No dimming behind it — a button showing a spinner is
+                // already saying it is busy, and a 40% spinner just looks broken.
+                ProgressView().controlSize(.small)
+            }
+            .opacity(searching ? 1 : 0)
+        }
+        .animation(.smooth(duration: 0.2), value: searching)
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 12)
+        .liquidGlass(in: Capsule())
+        .contentShape(Capsule())
+        // One glass capsule around both states. Two stacked chips would double
+        // the glass wherever they overlap mid-fade.
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(searching ? "Checking for your mints" : "Find my mints")
     }
 
     // MARK: - Staged Mint Row (add screen)
@@ -1377,42 +1901,37 @@ struct OnboardingView: View {
     }
 
     private var restoreSubhead: String {
-        if !restoreAllSettled { return "Recovering funds from your mints…" }
-        return restoreTotalRecovered > 0
-            ? "Here's what we recovered."
-            : "No funds found on these mints."
+        if !restoreAllSettled { return "Checking your mints…" }
+        if restoreTotalRecovered > 0 { return "Here's what we restored." }
+        // Zero back is the outcome the user fears most. Name the one cause
+        // they can still act on instead of leaving them to guess.
+        return "No funds on these mints. If you used others, go back and add them."
     }
 
-    private var restoreProgressView: some View {
+    private var restoreProgressStage: some View {
         VStack(spacing: 0) {
             stagger(appeared: restoreProgressAppeared, index: 0) {
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("Recover Funds.")
-                        .font(.largeTitle.weight(.heavy))
-                        .tracking(-0.5)
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.7)
-
-                    Text(restoreSubhead)
-                        .font(.callout)
-                        .foregroundStyle(.secondary)
-
-                    if restoreTotalRecovered > 0 {
-                        Label("Recovered: \(restoreTotalRecovered) sats", systemImage: "checkmark.circle.fill")
-                            .font(.subheadline.weight(.semibold))
-                            .monospacedDigit()
-                            .foregroundStyle(.green)
-                            .contentTransition(.numericText(value: Double(restoreTotalRecovered)))
-                            .padding(.top, 2)
-                    }
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.horizontal)
+                OnboardingStepHeader(
+                    title: "Restoring wallet.",
+                    subhead: restoreSubhead
+                )
             }
-            .padding(.top, 8)
-            .padding(.bottom, 16)
-            .animation(.snappy, value: restoreTotalRecovered)
-            .animation(.snappy, value: restoreAllSettled)
+            .padding(.top, OnboardingMetrics.titleTopInset)
+            .padding(.bottom, 12)
+
+            // The recovered total is a money value — it keeps its monospaced
+            // digits and numeric content transition (Numbers Are Sacred).
+            if restoreTotalRecovered > 0 {
+                Label("Recovered: \(restoreTotalRecovered) sats", systemImage: "checkmark.circle.fill")
+                    .font(.subheadline.weight(.semibold))
+                    .monospacedDigit()
+                    .foregroundStyle(.green)
+                    .contentTransition(.numericText(value: Double(restoreTotalRecovered)))
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal)
+                    .padding(.top, 8)
+                    .padding(.bottom, 12)
+            }
 
             ScrollViewReader { proxy in
                 ScrollView {
@@ -1423,29 +1942,29 @@ struct OnboardingView: View {
                         }
                     }
                     .padding(.horizontal)
-                    .padding(.bottom, 8)
+                    // Clearance equal to the fade band at both ends. A static
+                    // edge mask can't tell "scrolled past" from "this is the
+                    // end", so without this the first and last rows sit inside
+                    // the gradient and render dimmed at rest — which is a
+                    // defect, not a hint. Padded, the extremes park clear of
+                    // the band and only genuinely-clipped rows dissolve.
+                    .padding(.vertical, ScrollFadeMetrics.band)
                 }
                 .onChange(of: currentRestoringUrl) { _, active in
                     guard let active else { return }
                     withAnimation(.snappy) { proxy.scrollTo(active, anchor: .center) }
                 }
+                // Both edges here, unlike the staging step: this list
+                // auto-scrolls to whichever mint is working, so rows cross both
+                // boundaries unattended. The recovered-total line is pinned
+                // above and the chassis below, and rows were cutting dead
+                // against each.
+                .scrollEdgeFade(top: 0, bottom: 0)
             }
         }
-        .safeAreaInset(edge: .bottom) {
-            // Forward-only — Continue enables once every mint has settled.
-            VStack(spacing: 12) {
-                Button(action: finishRestore) {
-                    Text("Continue")
-                }
-                .glassButton()
-                .disabled(!restoreAllSettled)
-                .padding(.horizontal)
-            }
-            .padding(.horizontal)
-            .padding(.top, 8)
-            .padding(.bottom, 12)
-            .background(.background)
-        }
+        .padding(.top, 8)
+        .animation(.snappy, value: restoreTotalRecovered)
+        .animation(.snappy, value: restoreAllSettled)
         .onAppear {
             triggerEntrance { restoreProgressAppeared = true }
         }
@@ -1543,14 +2062,13 @@ struct OnboardingView: View {
     }
 
     private func initializeAndProceed() {
-        let cleanedMnemonic = restoreMnemonic
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-            .lowercased()
-            .split(separator: " ")
-            .joined(separator: " ")
+        // Already normalised: every word was committed from the wordlist.
+        let cleanedMnemonic = seedEntry.phrase
 
         guard walletManager.validateMnemonic(cleanedMnemonic) else {
-            errorMessage = "That seed phrase doesn't look right. Check the spelling and try again."
+            // Not a banner — a checksum failure is fixable, and the review grid
+            // is where it gets fixed.
+            runSeedChecksum()
             return
         }
 
@@ -1562,7 +2080,7 @@ struct OnboardingView: View {
                 try await walletManager.initializeRestoredWallet(mnemonic: cleanedMnemonic)
                 advance(to: .restoreMints)
             } catch {
-                errorMessage = "Couldn't open the wallet. \(error.userFacingWalletMessage)"
+                errorMessage = "Couldn't restore the wallet. \(error.userFacingWalletMessage)"
             }
             isRestoring = false
         }
@@ -1600,9 +2118,9 @@ struct OnboardingView: View {
         }
 
         if addedCount == 0 {
-            setRestoreMintNotice(invalidCount > 0 ? "Nothing in the clipboard looked like a mint URL." : "No new mint URLs to add.")
+            setRestoreMintNotice(invalidCount > 0 ? "Nothing in the clipboard looked like a mint URL." : "No new mints to add.")
         } else if invalidCount > 0 {
-            setRestoreMintNotice("Added \(addedCount) mint URL\(addedCount == 1 ? "" : "s"). Skipped \(invalidCount) that didn't look like a mint URL.")
+            setRestoreMintNotice("Added \(addedCount) mint\(addedCount == 1 ? "" : "s"). Skipped \(invalidCount) that didn't look like a mint URL.")
         } else {
             restoreMintError = nil
         }
@@ -1610,7 +2128,20 @@ struct OnboardingView: View {
 
     /// Look up the encrypted mint-list backup for this seed on the user's
     /// relays (NUT-27, fetched by cdk) and stage every mint it contains.
-    private func searchNostrMintBackups() {
+    ///
+    /// Only ever runs from an explicit tap. It used to fire on arrival, on the
+    /// grounds that publishing is on by default so most people have a list
+    /// waiting — but the step opens by telling the user their seed phrase
+    /// doesn't record which mints they used, and then a dozen of their mints
+    /// appeared anyway. The user has no way to see the lookup happen, so the
+    /// screen read as contradicting itself, or as the wallet knowing more about
+    /// them than they agreed to. The lookup is still one tap away; the tap is
+    /// now theirs, which is what makes the result explicable.
+    private func searchMintBackup() {
+        // The chip stops taking taps while a lookup is in flight, but that is a
+        // view-layer courtesy; refuse re-entry here so a second call can never
+        // double-stage the same backup.
+        guard !nostrBackupService.isSearching else { return }
         HapticFeedback.selection()
 
         Task { @MainActor in
@@ -1620,17 +2151,44 @@ struct OnboardingView: View {
                 for url in urls where addMintUrlToRestoreList(url, showDuplicateError: false, showValidationError: false) {
                     addedCount += 1
                 }
-                if urls.isEmpty {
-                    setRestoreMintNotice("No Nostr mint backup found on your relays.", severity: .caution)
-                } else if addedCount == 0 {
-                    setRestoreMintNotice("Backup found — its mints are already in the list.")
+                if addedCount > 0 {
+                    setRestoreMintNotice("Added \(addedCount) mint\(addedCount == 1 ? "" : "s") from your backup.")
+                } else if urls.isEmpty {
+                    // When the list is empty the empty-state line is on screen
+                    // already saying this — speak here only when it isn't.
+                    if !mintsToRestore.isEmpty {
+                        setRestoreMintNotice("No backup of your mint list found.", severity: .caution)
+                    }
                 } else {
-                    setRestoreMintNotice("Added \(addedCount) mint\(addedCount == 1 ? "" : "s") from your Nostr backup.")
+                    setRestoreMintNotice("Backup found. Its mints are already in the list.")
                 }
+                mintBackupSearchCompleted = true
             } catch {
-                setRestoreMintNotice(error.localizedDescription, severity: .error)
+                mintBackupSearchCompleted = true
+                AppLogger.wallet.error("Mint backup lookup failed: \(error)")
+                // Through the shared mapper, never `localizedDescription` —
+                // a relay failure here surfaced as a raw CDK FFI dump.
+                setRestoreMintNotice(error.userFacingWalletMessage, severity: .error)
             }
         }
+    }
+
+    /// Fills the blank where the staged list will go. It has three jobs: say
+    /// the wallet is looking, say what turned up, and name the manual route
+    /// when nothing did.
+    ///
+    /// The landing line carries the most weight now that the lookup is manual:
+    /// it is where everyone arrives, so it names the button rather than
+    /// describing the situation. Android twin: `RestoreMintsEmpty*` in
+    /// `RestoreWalletFlow.kt`.
+    private var emptyMintListNotice: String {
+        if nostrBackupService.isSearching {
+            return "Checking for a backup of your mint list…"
+        }
+        if mintBackupSearchCompleted {
+            return "No backup found. Add the mints you used before, then restore."
+        }
+        return "Tap Find my mints to look for a backup of your mint list, or add them above."
     }
 
     @discardableResult
@@ -1725,18 +2283,21 @@ struct OnboardingView: View {
     }
 
     private func finishRestore() {
-        Task {
+        handoff.begin(reduceMotion: reduceMotion) {
             await walletManager.completeRestore()
         }
     }
 
     private func finishOnboarding() {
-        // Onboarding complete - wallet is ready
-        walletManager.completeOnboarding()
+        // Onboarding complete — the handoff curtain flips the gate at full cover.
+        handoff.begin(reduceMotion: reduceMotion) {
+            walletManager.completeOnboarding()
+        }
     }
 }
 
 #Preview {
     OnboardingView()
         .environmentObject(WalletManager())
+        .environmentObject(OnboardingHandoffCoordinator())
 }

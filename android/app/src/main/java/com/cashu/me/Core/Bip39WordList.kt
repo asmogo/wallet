@@ -153,6 +153,48 @@ object Bip39WordList {
         JOINED.split(' ').filter { it.isNotBlank() }.toSet()
     }
 
+    /**
+     * The same list in wordlist order, for prefix completion. BIP-39 English is
+     * alphabetical by construction, so this is also lexicographic order —
+     * `Bip39WordListTest` pins that so a future list edit can't quietly break
+     * the binary search in [completions]. iOS twin: `bip39SortedWords`.
+     */
+    val sorted: List<String> by lazy {
+        JOINED.split(' ').filter { it.isNotBlank() }
+    }
+
+    /**
+     * Up to [limit] words beginning with [prefix], in wordlist order.
+     *
+     * Binary-searches the prefix range rather than scanning all 2048 — this runs
+     * on every keystroke of seed entry.
+     *
+     * Returns nothing below two characters on purpose: a single letter matches
+     * up to ~130 words, which is noise rather than help. iOS twin:
+     * `bip39Completions(prefix:limit:)`.
+     */
+    fun completions(prefix: String, limit: Int = 3): List<String> {
+        val needle = prefix.trim().lowercase()
+        if (needle.length < 2 || limit <= 0) return emptyList()
+
+        // Lower bound: the first word not ordered before `needle`. Every word
+        // with this prefix sorts at or after it, contiguously.
+        var low = 0
+        var high = sorted.size
+        while (low < high) {
+            val mid = (low + high) ushr 1
+            if (sorted[mid] < needle) low = mid + 1 else high = mid
+        }
+
+        val matches = ArrayList<String>(limit)
+        var index = low
+        while (index < sorted.size && matches.size < limit && sorted[index].startsWith(needle)) {
+            matches.add(sorted[index])
+            index++
+        }
+        return matches
+    }
+
     /** iOS `normalizeMnemonic`: trim, lowercase, collapse all whitespace runs. */
     fun normalize(phrase: String): String =
         phrase.trim().lowercase().split(Regex("\\s+")).filter { it.isNotBlank() }.joinToString(" ")

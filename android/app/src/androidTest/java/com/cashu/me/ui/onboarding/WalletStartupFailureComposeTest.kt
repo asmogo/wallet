@@ -27,16 +27,24 @@ class WalletStartupFailureComposeTest {
         )
 
         compose.setCashuContent {
-            WelcomeFace(
-                creating = false,
-                errorText = null,
-                startupFailure = failure,
-                retryingStartup = false,
-                onRetryStartup = { retries += 1 },
-                onCreate = {},
-                onRestore = {},
-                onInfo = {},
-            )
+            // The production frame: welcome chassis + stage, exactly as
+            // OnboardingScreen composes them.
+            OnboardingScaffold(
+                chassis = welcomeChassis(
+                    creating = false,
+                    retryingStartup = false,
+                    onCreate = {},
+                    onRestore = {},
+                ),
+            ) {
+                WelcomeStageContent(
+                    startupFailure = failure,
+                    retryingStartup = false,
+                    errorText = null,
+                    onRetryStartup = { retries += 1 },
+                    onInfo = {},
+                )
+            }
         }
 
         compose.onNodeWithText(failure.message).assertIsDisplayed()

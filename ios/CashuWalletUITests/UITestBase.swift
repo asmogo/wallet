@@ -95,6 +95,15 @@ class UITestBase: XCTestCase {
 
         let field = app.textFields["onboarding-custom-mint-field"]
         tapWhenReady(field)
+        // The row slides in under `withAnimation(.snappy)`, so a tap can land
+        // before the responder chain catches up and `typeText` throws "neither
+        // element nor any descendant has keyboard focus" — hittable is not the
+        // same claim as focused. The keyboard is the observable proof that
+        // focus actually arrived.
+        XCTAssertTrue(
+            app.keyboards.element.waitForExistence(timeout: 10),
+            "Tapping the mint field should raise the keyboard"
+        )
         field.typeText(mintURL)
         let done = app.keyboards.buttons["Done"]
         tapWhenReady(done, message: "URL keyboard should expose a Done button")

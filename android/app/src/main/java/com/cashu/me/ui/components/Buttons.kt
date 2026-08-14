@@ -1,11 +1,14 @@
 package com.cashu.me.ui.components
 
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.SizeTransform
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
@@ -45,6 +48,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.cashu.me.ui.theme.CashuTheme
@@ -69,12 +73,41 @@ private const val PressedScale = 0.97f
 private const val TextLinkPressedAlpha = 0.6f
 private const val DestructiveActionStateDescription = "Destructive action"
 
+// Content arriving into a CTA grows in from just under full size — never from
+// zero, which reads as a pop rather than as the label resolving into place.
+private const val MorphInitialScale = 0.96f
+
+// Text links get a lighter cross-fade mask than the CTA's 18sp label.
+private val GhostLabelMorphBlur = 1.5.dp
+
+/**
+ * Press-scale feedback, **asymmetric on purpose**.
+ *
+ * A spring carries no direction, so the asymmetry lives in *which spec is
+ * selected on the press edge* — `animateFloatAsState` re-reads `animationSpec`
+ * when it re-targets. Feedback belongs on pointer-down and has to feel instant;
+ * the release is the system responding and can settle. iOS states the same
+ * ratio literally, as `.snappy(0.09)` down / `.snappy(0.18)` up in
+ * `PressableButtonStyle`.
+ *
+ * **Effects specs, deliberately, even though scale is nominally spatial.**
+ * Expressive's spatial springs are under-damped (`fastSpatial` is 0.6/800,
+ * `defaultSpatial` 0.8/380), and a press must not overshoot — DESIGN.md §6
+ * classes a press as a *state flip*, not a reflow, and bans bounce; apple-design
+ * reserves overshoot for gestures that actually carried momentum, which a
+ * finger-down does not. The effects pair is the only critically-damped one in
+ * the scheme: `fastEffects` 1.0/3800 down, `defaultEffects` 1.0/1600 up — the
+ * latter being the `StiffnessMedium` (1500) this replaces, now named rather
+ * than coincidental.
+ */
 @Composable
 private fun rememberPressScale(interactionSource: MutableInteractionSource): Float {
     val pressed by interactionSource.collectIsPressedAsState()
+    val compress = MaterialTheme.motionScheme.fastEffectsSpec<Float>()
+    val release = MaterialTheme.motionScheme.defaultEffectsSpec<Float>()
     val scale by animateFloatAsState(
         targetValue = if (pressed) PressedScale else 1f,
-        animationSpec = spring(stiffness = Spring.StiffnessMedium),
+        animationSpec = if (pressed) compress else release,
         label = "press-scale",
     )
     return scale
@@ -82,14 +115,17 @@ private fun rememberPressScale(interactionSource: MutableInteractionSource): Flo
 
 /**
  * Pressed-opacity feedback for text-style buttons — the iOS
- * `TextLinkButtonStyle` (opacity 0.6 while pressed) on a medium spring.
+ * `TextLinkButtonStyle` (opacity 0.6 while pressed), asymmetric for the same
+ * reason as [rememberPressScale], and on the same critically-damped pair.
  */
 @Composable
 private fun rememberPressAlpha(interactionSource: MutableInteractionSource): Float {
     val pressed by interactionSource.collectIsPressedAsState()
+    val dim = MaterialTheme.motionScheme.fastEffectsSpec<Float>()
+    val restore = MaterialTheme.motionScheme.defaultEffectsSpec<Float>()
     val alpha by animateFloatAsState(
         targetValue = if (pressed) TextLinkPressedAlpha else 1f,
-        animationSpec = spring(stiffness = Spring.StiffnessMedium),
+        animationSpec = if (pressed) dim else restore,
         label = "press-alpha",
     )
     return alpha
@@ -128,6 +164,30 @@ fun PrimaryButton(
 ) {
     val interactionSource = remember { MutableInteractionSource() }
     val scale = rememberPressScale(interactionSource)
+    // Resolve the enabled/disabled pair first, then ease the two resolved colors:
+    // a CTA that keeps its slot across a step change (the onboarding chassis keys
+    // its slot cross-fade on style, not on colors) would otherwise hard-cut its
+    // fill under the cross-fading label. Baking `active` in is why the disabled
+    // entries can carry the same animated values.
+    val active = enabled && !loading
+    val target = colors ?: neutralActionButtonColors()
+    val container by animateColorAsState(
+        targetValue = if (active) target.containerColor else target.disabledContainerColor,
+        animationSpec = spring(stiffness = Spring.StiffnessMedium),
+        label = "primary-button-container",
+    )
+    val content by animateColorAsState(
+        targetValue = if (active) target.contentColor else target.disabledContentColor,
+        animationSpec = spring(stiffness = Spring.StiffnessMedium),
+        label = "primary-button-content",
+    )
+    // AnimatedContent's transitionSpec lambda is not composable, so the
+    // motion-scheme specs are captured here (same device as the onboarding
+    // stage swap in OnboardingScreen.kt).
+    val morphEnterSpec = MaterialTheme.motionScheme.defaultEffectsSpec<Float>()
+    val morphScaleSpec = MaterialTheme.motionScheme.defaultSpatialSpec<Float>()
+    val morphExitSpec = MaterialTheme.motionScheme.fastEffectsSpec<Float>()
+    val morphSizeSpec = MaterialTheme.motionScheme.defaultSpatialSpec<IntSize>()
     Button(
         onClick = onClick,
         modifier = modifier
@@ -137,28 +197,55 @@ fun PrimaryButton(
                 scaleX = scale
                 scaleY = scale
             },
-        enabled = enabled && !loading,
+        enabled = active,
         interactionSource = interactionSource,
-        colors = colors ?: neutralActionButtonColors(),
+        colors = ButtonColors(container, content, container, content),
         contentPadding = PaddingValues(horizontal = CashuTheme.spacing.section, vertical = ButtonContentVertical),
     ) {
         Box(contentAlignment = Alignment.Center) {
-            if (loading) {
-                LoadingIndicator(
-                    modifier = Modifier.size(ButtonProgressSize),
-                    color = LocalContentColor.current,
-                )
-            } else {
-                AnimatedContent(
-                    targetState = text,
-                    transitionSpec = {
-                        fadeIn(spring(stiffness = Spring.StiffnessMedium))
-                            .togetherWith(fadeOut(spring(stiffness = Spring.StiffnessMedium)))
-                    },
-                    label = "primary-button-text",
-                ) { current ->
+            // The spinner is a morph *target*, not a branch outside the
+            // animation — a `if (loading)` wrapper around this AnimatedContent
+            // hard-cut the label away, which was the one place the CTA visibly
+            // snapped. `null` means loading, so label→spinner and label→label
+            // are the same transition.
+            AnimatedContent(
+                targetState = if (loading) null else text,
+                transitionSpec = {
+                    (
+                        fadeIn(morphEnterSpec) +
+                            scaleIn(
+                                animationSpec = morphScaleSpec,
+                                initialScale = MorphInitialScale,
+                            )
+                        )
+                        // Exits stay subtler than entrances (DESIGN.md §6):
+                        // the outgoing half only fades, and on the fast spec.
+                        .togetherWith(fadeOut(morphExitSpec))
+                        // clip = false: the default clipping size animation
+                        // shears a wide outgoing label mid-fade. Center: the
+                        // Box above only centers this node, not its children,
+                        // so TopStart would slide both labels sideways as the
+                        // box springs between the two label widths. The size
+                        // spring is stated rather than left to Compose's
+                        // built-in default, so the CTA rides the app's own
+                        // curve identity.
+                        .using(SizeTransform(clip = false) { _, _ -> morphSizeSpec })
+                },
+                contentAlignment = Alignment.Center,
+                label = "primary-button-content",
+            ) { current ->
+                // Blur mask: both halves soften toward each other so the swap
+                // reads as one object transforming rather than two overlapping.
+                val morph = morphBlur()
+                if (current == null) {
+                    LoadingIndicator(
+                        modifier = Modifier.size(ButtonProgressSize).then(morph),
+                        color = LocalContentColor.current,
+                    )
+                } else {
                     Text(
                         text = current,
+                        modifier = morph,
                         style = CashuTheme.type.buttonLabel,
                     )
                 }
@@ -208,9 +295,14 @@ fun GhostButton(
     trailingIcon: ImageVector? = null,
     textStyle: TextStyle = MaterialTheme.typography.labelLarge,
     contentColor: Color = Color.Unspecified,
+    animatedLabel: Boolean = false,
 ) {
     val interactionSource = remember { MutableInteractionSource() }
     val alpha = rememberPressAlpha(interactionSource)
+    // Captured outside the non-composable transitionSpec lambda (see PrimaryButton).
+    val morphEnterSpec = MaterialTheme.motionScheme.defaultEffectsSpec<Float>()
+    val morphExitSpec = MaterialTheme.motionScheme.fastEffectsSpec<Float>()
+    val morphSizeSpec = MaterialTheme.motionScheme.defaultSpatialSpec<IntSize>()
     TextButton(
         onClick = onClick,
         modifier = modifier.graphicsLayer { this.alpha = alpha },
@@ -230,7 +322,34 @@ fun GhostButton(
             )
             Spacer(Modifier.width(CashuTheme.spacing.tight))
         }
-        Text(text = text, style = textStyle)
+        if (animatedLabel) {
+            // Opt-in in-place label cross-fade (the onboarding chassis'
+            // tertiary slot swaps "What is ecash?" ↔ "Back" ↔ "Skip for now").
+            // clip = false: the default clipping size animation would crop a
+            // wide outgoing label mid-fade. Center: the default TopStart would
+            // still walk both labels sideways while the box springs between the
+            // two widths and the parent re-centers it every frame.
+            AnimatedContent(
+                targetState = text,
+                transitionSpec = {
+                    // No scale on the way in — a text link growing into place
+                    // reads fussy at this size; the blur mask below does the
+                    // work on its own. Exit fades on the fast spec (subtler
+                    // than the entrance, DESIGN.md §6).
+                    fadeIn(morphEnterSpec)
+                        .togetherWith(fadeOut(morphExitSpec))
+                        .using(SizeTransform(clip = false) { _, _ -> morphSizeSpec })
+                },
+                contentAlignment = Alignment.Center,
+                label = "ghost-button-text",
+            ) { current ->
+                // Softer mask than the CTA's — a subheadline needs less
+                // bridging than an 18sp label.
+                Text(text = current, modifier = morphBlur(GhostLabelMorphBlur), style = textStyle)
+            }
+        } else {
+            Text(text = text, style = textStyle)
+        }
         if (trailingIcon != null) {
             Spacer(Modifier.width(CashuTheme.spacing.micro))
             Icon(

@@ -80,9 +80,18 @@ like a port, make the Android-native choice instead.
   `CircularProgressIndicator`), `IconSwap` (glyph replacement ≙ iOS
   `.symbolEffect(.replace)`), `rememberBounceScale` (one-shot bounce ≙
   `.symbolEffect(.bounce)`), `Modifier.materializeBlur()` (blur-to-sharp
-  success materialize, API 31+ only), `SkeletonValue` (redacted-style
+  success materialize, API 31+ only), `AnimatedVisibilityScope.morphBlur()`
+  (cross-fade mask — see below), `SkeletonValue` (redacted-style
   fill-in for pending quote values, no shimmer). Reuse these instead of
   re-deriving per screen.
+- **Cross-fade masking** (`morphBlur`, `Materialize.kt`, added 2026-08-06): a
+  small blur riding **both** halves of an `AnimatedContent` swap, so the eye
+  reads one object transforming instead of two overlapping. `materializeBlur`
+  cannot do this — it is a one-shot `LaunchedEffect` and so can only blur the
+  incoming child — hence the sibling. Used on `PrimaryButton` / `GhostButton`
+  labels (2 / 1.5 dp) and the onboarding chassis slot (3 dp). API 31+ and
+  reduce-motion gated; below either, the plain cross-fade still carries the
+  change. Rationale in `docs/product/DESIGN.md` §6.
 - **Navigation**: shared-axis X (slide + fade) for push/pop; fade-through for
   tab switches (`CashuNavHost.kt`). Predictive back is enabled
   (`android:enableOnBackInvokedCallback`).
@@ -98,7 +107,12 @@ like a port, make the Android-native choice instead.
   from *history* stays inline/persistent — it's reusable and multi-payment.
 - **Touch responds physically**: CTAs and number-pad keys spring-scale on press
   (`Buttons.kt`, `NumberPad.kt`); text buttons dim to 0.6 while pressed
-  (iOS `TextLinkButtonStyle`).
+  (iOS `TextLinkButtonStyle`). The response is **asymmetric** — a spring carries
+  no direction, so the spec is selected on the press edge instead:
+  `fastEffectsSpec` compressing, `defaultEffectsSpec` releasing. *Effects*, not
+  spatial, even for scale: Expressive's spatial springs are under-damped
+  (0.6–0.8) and a press must not overshoot — it is a state flip, not a reflow,
+  and no gesture momentum preceded it.
 - Lists animate placement (`Modifier.animateItem()` — History, Home recent,
   Mint discovery), reveals expand/shrink, page dots stretch into pills.
 - **Numbers are quiet**: `AmountText` cross-fades the whole string on change
@@ -111,6 +125,48 @@ like a port, make the Android-native choice instead.
   cascades) render their resting state when system animations are off.
   `rememberReducedMotion()` is reactive — it observes
   `ANIMATOR_DURATION_SCALE` and updates mid-session.
+- **Onboarding exemption (2026-08-05, onboarding restyle, user-directed):**
+  pre-wallet onboarding surfaces (`ui/onboarding/` — the chassis and stages,
+  everything before `completeOnboarding()`/`completeRestore()`)
+  carry their own motion spec, shared with iOS via the table in
+  `docs/product/DESIGN.md` §6 and expressed here as motion-scheme springs
+  (`motionScheme.defaultEffectsSpec/defaultSpatialSpec/fastEffectsSpec`), the
+  gated `Modifier.materializeBlur()`, and `Modifier.riseIn` (70 ms
+  `CashuMotion.StaggerStepMs` stride). **Nothing defined under this exemption
+  may be reused inside the wallet proper.** Numbers stay quiet (the
+  recovered-sats total keeps mono digits, no roll) and every onboarding
+  animation is `rememberReducedMotion()`-gated to opacity-or-nothing. The
+  exemption's terminal beat is the ASCII handoff (`OnboardingHandoff.kt`): a
+  full-screen terrain curtain over the last onboarding screen that flips the
+  app gate at full cover, then erodes: the scrim clears early so the wallet
+  stands behind a terrain still substantially there, and the glyphs dissolve
+  level by level (`AsciiFieldTerrain.erosionAlpha`, mirrored on iOS and pinned
+  by `AsciiFieldErosionTest`) — faint plain first, ₿ peaks last. Nothing
+  translates and no edge travels; the only motion is the field's own drift and
+  the bloom's release swirl — onboarding-owned,
+  hosted above the gate in `CashuApp` only so it survives the teardown it
+  conceals, played once, never referenced by wallet code. The gate's own
+  `transitionSpec` is untouched and plays unseen beneath it (plan 008 stays
+  orthogonal); under Reduce Motion the curtain never mounts and the gate
+  crossfade is the entire transition. The welcome ⇄ restoreMethod pair's
+  screen-change cue is the ASCII backdrop's **vault morph**
+  (`OnboardingAsciiBackdrop`, 2026-08-09, superseding that morning's extent
+  settle): the full-window layer never moves; one 0…1 scalar on
+  `motionScheme.defaultSpatialSpec` lerps every cell's brightness between
+  welcome's tall terrain and restore's vault door (`AsciiFieldVault` — rings,
+  spokes, ₿ bolts, ₿ monogram stencil; parity-pinned by
+  `AsciiFieldVaultTest` against vectors from the design mock's Python) and
+  shortens the mask's opaque ramp to end at the door's top edge; the clear
+  line behind the header never moves, and the whole thing snaps under Reduce
+  Motion — the iOS register is the step's own `.easeInOut(0.28)` transaction.
+  Band mode survives in `AsciiFieldLayout` as math and tests only.
+- **Onboarding system back (2026-08-05):** `OnboardingScreen` registers a
+  `BackHandler` mirroring the on-screen back buttons exactly (seed reveal →
+  welcome, method chooser → welcome, seed entry → welcome, mint staging →
+  seed entry with the staged list cleared). Retreat-capable steps show an M3
+  `ArrowBack` icon button (`OnboardingBackButton`) above their header; steps
+  with no back affordance keep the platform default. Closes the gap where
+  system back exited the app from every onboarding step.
 
 ### Components — expressive first
 - Loaders are the expressive `LoadingIndicator` / `LinearWavyProgressIndicator`
@@ -125,6 +181,19 @@ like a port, make the Android-native choice instead.
 - Bottom sheets (`ModalBottomSheet`) for choosers/pickers/inspectors; pushed
   destinations for flows. `NavigationBar` for tabs. `AlertDialog` for
   confirmation, destructive action tinted `error`.
+- Text inputs go through `CashuTextField`. **One carve-out (2026-08-08):** the
+  seed-entry card in `SeedWordEntry.kt` uses a bare `BasicTextField`, because
+  `CashuTextField`'s job is to supply the container and here the *card is* the
+  container — a second surface inside it would be a nested container.
+- The seed-entry ghost cards use **alpha and scale, never `Modifier.blur`**.
+  Skia renders blur one level differently across hosts, so a statically blurred
+  element can never pass `validateDebugScreenshotTest` on Linux CI (the goldens
+  are generated on macOS). Animated blur that settles to 0 is fine — previews
+  are never captured mid-transition.
+- **Accepted asymmetry:** iOS switches off inline predictions on the seed field
+  so the keyboard's height stays constant for the whole step. Gboard's
+  suggestion strip cannot be suppressed; `imePadding()` absorbs the difference
+  instead.
 
 ### Layout invariants (kept from the structural pass)
 - Measure, never assume, overlay heights (Home pinned header is pre-measured
