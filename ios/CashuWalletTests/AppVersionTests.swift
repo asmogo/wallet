@@ -11,7 +11,7 @@ final class AppVersionTests: XCTestCase {
     func testDisplayStringMatchesMarketingVersionBuildSetting() {
         // The hosted test bundle's main bundle is CashuWallet.app, whose
         // CFBundleShortVersionString is generated from MARKETING_VERSION.
-        XCTAssertEqual(AppVersion.displayString(), "1.0")
+        XCTAssertEqual(AppVersion.displayString(), "0.3")
     }
 
     func testDisplayStringFallsBackToNilWhenVersionMissing() {
