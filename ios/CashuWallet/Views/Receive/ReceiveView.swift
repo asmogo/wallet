@@ -32,6 +32,7 @@ struct UnifiedReceiveView: View {
     @State private var route: ReceiveRoute?
     @State private var showingScanner = false
     @State private var autoRouteTask: Task<Void, Never>?
+    @State private var clipboardCheckTask: Task<Void, Never>?
 
     /// Measured height of the input body (field + methods). Drives a content-fit
     /// detent so the buttons stay thumb-reachable — same technique as
@@ -70,9 +71,11 @@ struct UnifiedReceiveView: View {
                         currentInput: tokenInput,
                         clipboardText: { UIPasteboard.general.string }
                     ) else { return }
-                    tokenInput = token
+                    clipboardCheckTask = Task { @MainActor in
+                        await autoPasteClipboardToken(token)
+                    }
                 }
-                .onDisappear { autoRouteTask?.cancel() }
+                .onDisappear { autoRouteTask?.cancel(); clipboardCheckTask?.cancel() }
         }
         .contentFitDetent(compactContentHeight)
         .presentationDragIndicator(.visible)
@@ -90,6 +93,37 @@ struct UnifiedReceiveView: View {
               currentInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
               let clipboardText = clipboardText() else { return nil }
         return TokenParser.normalizedToken(from: clipboardText)
+    }
+
+    /// Whether an auto-pasted clipboard token should fill the input (and
+    /// thereby auto-route to the claim page). Only a *confirmed-spent* token
+    /// is suppressed — when the spent check can't run (offline, unreachable
+    /// mint, undecodable token) we paste anyway and let the claim page
+    /// surface its own error. Mirrors Android `shouldAutoPasteClipboardToken`.
+    static func shouldAutoPasteClipboardToken(spent: Bool?) -> Bool {
+        spent != true
+    }
+
+    /// Auto-pasting skips this sheet via the typed-input auto-route, so gate
+    /// it on a NUT-07 spent check: a spent token would otherwise hijack every
+    /// Receive tap just to fail on the claim page. Show a hint instead and
+    /// leave the field empty so something else can be received.
+    @MainActor
+    private func autoPasteClipboardToken(_ token: String) async {
+        let spent: Bool?
+        if let mintUrl = TokenParser.mintUrl(from: token) {
+            spent = try? await walletManager.checkTokenSpent(token: token, mintUrl: mintUrl)
+        } else {
+            spent = nil
+        }
+        // Don't clobber input the user typed while the check was in flight.
+        guard !Task.isCancelled,
+              tokenInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+        if Self.shouldAutoPasteClipboardToken(spent: spent) {
+            tokenInput = token
+        } else {
+            inputHint = "The token in your clipboard was already redeemed."
+        }
     }
 
     // MARK: Input step

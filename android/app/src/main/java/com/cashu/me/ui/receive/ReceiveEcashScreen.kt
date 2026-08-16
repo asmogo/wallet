@@ -76,6 +76,15 @@ internal fun automaticReceiveClipboardToken(
 }
 
 /**
+ * Whether an auto-pasted clipboard token should fill the input (and thereby
+ * auto-route to the claim page). Only a *confirmed-spent* token is
+ * suppressed — when the spent check can't run (offline, unreachable mint,
+ * undecodable token) we paste anyway and let the claim page surface its own
+ * error. Mirrors iOS `UnifiedReceiveView.shouldAutoPasteClipboardToken`.
+ */
+internal fun shouldAutoPasteClipboardToken(spent: Boolean?): Boolean = spent != true
+
+/**
  * The Receive surface — the mirror of [com.cashu.me.ui.send.UnifiedSendScreen]'s
  * input face so Send and Receive read as one system: a paste field ("Paste a
  * Cashu token") over a Scan · Ecash · Bitcoin ways-to-receive row.
@@ -167,12 +176,29 @@ fun ReceiveEcashScreen(
     }
 
     LaunchedEffect(Unit) {
-        automaticReceiveClipboardToken(
+        val clipboardToken = automaticReceiveClipboardToken(
             enabled = allowAutomaticClipboardRead && settings.autoPasteEcashReceive,
             currentInput = input,
             prefilledPayload = prefilledPayload,
             clipboardText = { clipboard.getText()?.text },
-        )?.let { input = it }
+        ) ?: return@LaunchedEffect
+        // Auto-pasting skips this sheet via the typed-input auto-route, so gate
+        // it on a NUT-07 spent check: a spent token would otherwise hijack
+        // every Receive tap just to fail on the claim page. Show a hint instead
+        // and leave the field empty so something else can be received.
+        val mintUrl = TokenParser.mintUrl(clipboardToken)
+        val spent: Boolean? = if (mintUrl != null) {
+            runCatching { walletManager.checkTokenSpent(clipboardToken, mintUrl) }.getOrNull()
+        } else {
+            null
+        }
+        // Don't clobber input the user typed while the check was in flight.
+        if (input.isNotBlank()) return@LaunchedEffect
+        if (shouldAutoPasteClipboardToken(spent)) {
+            input = clipboardToken
+        } else {
+            inputHint = "The token in your clipboard was already redeemed."
+        }
     }
 
     // Typing settles for a beat before routing; paste/scan advance immediately.

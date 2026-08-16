@@ -46,6 +46,17 @@ object TokenParser {
         return runCatching { decoded.p2pkPubkeys() }.getOrDefault(emptyList())
     }
 
+    /**
+     * Decode only the token's mint URL — enough to scope a NUT-07 spent check
+     * without expanding proofs (`proofsSimple()` can fail for IDv2 keysets even
+     * though the token itself is valid).
+     */
+    fun mintUrl(from: String): String? {
+        val token = extractToken(from) ?: return null
+        val decoded = runCatching { CdkToken.decode(token) }.getOrNull() ?: return null
+        return runCatching { decoded.mintUrl().url }.getOrNull()
+    }
+
     private fun stripCashuScheme(token: String): String = when {
         token.startsWith("cashu://", ignoreCase = true) -> token.drop("cashu://".length)
         token.startsWith("cashu:", ignoreCase = true) -> token.drop("cashu:".length)
