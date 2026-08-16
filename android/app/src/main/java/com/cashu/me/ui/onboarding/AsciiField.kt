@@ -1,5 +1,6 @@
 package com.cashu.me.ui.onboarding
 
+import android.app.ActivityManager
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
@@ -968,7 +969,14 @@ internal fun AsciiField(
     // still frame; leaving the step pair or opening the concept sheet stops
     // the clockwork. Backgrounding pauses for free — withFrameNanos simply
     // stops being serviced while the choreographer is idle.
-    val clockRuns = staticTime == null && !reducedMotion && !powerSave && active
+    //
+    // Instrumented runs freeze the ambient clock too, the same way Reduce
+    // Motion and battery saver do: the field is decoration, and a 30fps
+    // full-window software render held across a whole journey suite kept
+    // killing the CI emulator mid-run. One still frame keeps layout,
+    // goldens, and the handoff intact.
+    val testHarness = remember { !inspectionMode && isRunningInTestHarness() }
+    val clockRuns = staticTime == null && !reducedMotion && !powerSave && !testHarness && active
 
     // Wall-clock zero. Time is always derived from the monotonic clock —
     // never a frame counter — so a pause/resume never rewinds or replays;
@@ -1085,6 +1093,13 @@ internal val AsciiFieldVaultTargetKey = SemanticsPropertyKey<Float>("AsciiFieldV
 /** Wall-clock seconds for the warp envelope — monotonic, arbitrary epoch;
  * only differences are ever used. */
 private fun nowSeconds(): Double = System.nanoTime() / 1e9
+
+/** True while the process runs under instrumentation. The ambient field
+ * clock freezes there exactly like it does for Reduce Motion and battery
+ * saver — the motion is decoration, and holding a 30fps full-window
+ * software render across a whole journey suite kept killing the CI
+ * emulator mid-run. */
+internal fun isRunningInTestHarness(): Boolean = ActivityManager.isRunningInTestHarness()
 
 /**
  * Paints, glyph metrics, and reusable buckets — everything the frame loop

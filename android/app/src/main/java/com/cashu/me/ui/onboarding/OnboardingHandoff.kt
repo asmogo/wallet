@@ -262,10 +262,12 @@ internal fun OnboardingHandoffHost(controller: OnboardingHandoffController) {
 
             delay(BloomDelayMs.toLong())
             // Bloom only when the field's frame clock can render it — under
-            // battery saver the press would sit invisible and release stale.
+            // battery saver or instrumentation (the clock freezes for both,
+            // see AsciiField) the press would sit invisible and release stale.
             val powerSave = (context.getSystemService(Context.POWER_SERVICE) as? PowerManager)
                 ?.isPowerSaveMode == true
-            if (!powerSave) session.touch.press(centerXDp, centerYDp, nowSeconds())
+            val canBloom = !powerSave && !isRunningInTestHarness()
+            if (canBloom) session.touch.press(centerXDp, centerYDp, nowSeconds())
 
             delay(HoldMs.toLong())
             // Linear driver on purpose: every stage of the exit carries its
@@ -274,7 +276,7 @@ internal fun OnboardingHandoffHost(controller: OnboardingHandoffController) {
             launch { erosion.animateTo(1f, tween(ErosionMs, easing = LinearEasing)) }
 
             delay(ReleaseDelayMs.toLong())
-            if (!powerSave) session.touch.release(nowSeconds())
+            if (canBloom) session.touch.release(nowSeconds())
 
             delay((ErosionMs - ReleaseDelayMs).toLong())
             controller.end()
