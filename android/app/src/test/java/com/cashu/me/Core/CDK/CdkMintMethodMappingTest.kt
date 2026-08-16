@@ -82,6 +82,7 @@ class CdkMintMethodMappingTest {
         CdkMintMethodSettings(
             method = method,
             unit = unit,
+            methodName = null,
             minAmount = null,
             maxAmount = null,
             description = null,
@@ -91,6 +92,7 @@ class CdkMintMethodMappingTest {
         CdkMeltMethodSettings(
             method = method,
             unit = unit,
+            methodName = null,
             minAmount = null,
             maxAmount = null,
             amountless = null,

@@ -25,7 +25,7 @@ struct TransactionDetailView: View {
     /// After a mint, CDK replaces the pending quote-id row with a new transaction
     /// id that still carries `quoteId` — follow that so status flips in place.
     private var transaction: WalletTransaction {
-        walletManager.transactions.resolveForDetail(
+        walletManager.transactions.liveDetail(
             openId: seed.id,
             openQuoteId: seed.quoteId ?? seed.id
         ) ?? seed
@@ -50,17 +50,13 @@ struct TransactionDetailView: View {
         return nil
     }
 
-    private var pendingSentToken: PendingToken? {
-        pendingSentTokenFor(
-            transaction: transaction,
-            pendingTokens: walletManager.pendingTokens
-        )
-    }
-
+    /// A pending (unclaimed) sent token offers a one-off status probe when
+    /// automatic checks are disabled. CDK tracks the lifecycle; the app only
+    /// triggers `checkSendStatus` for the row's saga.
     private var offersManualClaimCheck: Bool {
         shouldOfferManualClaimCheck(
             automaticChecksEnabled: settings.checkSentTokens,
-            pendingToken: pendingSentToken
+            transaction: transaction
         )
     }
 
@@ -204,8 +200,8 @@ struct TransactionDetailView: View {
                             .accessibilityHint("Copies the \(qrContentAccessibilityLabel) to clipboard")
                         }
 
-                        if offersManualClaimCheck, let pendingToken = pendingSentToken {
-                            Button(action: { startManualClaimCheck(pendingToken) }) {
+                        if offersManualClaimCheck {
+                            Button(action: { startManualClaimCheck() }) {
                                 if isCheckingClaim {
                                     ProgressView()
                                 } else {
@@ -509,7 +505,7 @@ struct TransactionDetailView: View {
         }
     }
 
-    private func startManualClaimCheck(_ pendingToken: PendingToken) {
+    private func startManualClaimCheck() {
         manualClaimCheckTask?.cancel()
         manualClaimCheckTask = Task {
             isCheckingClaim = true
@@ -518,7 +514,7 @@ struct TransactionDetailView: View {
 
             do {
                 let outcome = try await runPendingTokenClaimCheck {
-                    try await walletManager.checkPendingTokenStatus(pendingToken: pendingToken)
+                    try await walletManager.checkPendingTokenStatus(transaction: transaction)
                 }
                 guard !Task.isCancelled else { return }
 

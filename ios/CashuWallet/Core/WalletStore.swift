@@ -28,14 +28,6 @@ final class WalletStore {
         set(balances, forKey: StorageKeys.balancesByUnit)
     }
 
-    func loadPendingTokens() -> [PendingToken] {
-        value(forKey: StorageKeys.pendingTokens, legacyKeys: [StorageKeys.Legacy.pendingTokens]) ?? []
-    }
-
-    func savePendingTokens(_ tokens: [PendingToken]) {
-        set(tokens, forKey: StorageKeys.pendingTokens)
-    }
-
     func loadPendingReceiveTokens() -> [PendingReceiveToken] {
         value(
             forKey: StorageKeys.pendingReceiveTokens,
@@ -45,14 +37,6 @@ final class WalletStore {
 
     func savePendingReceiveTokens(_ tokens: [PendingReceiveToken]) {
         set(tokens, forKey: StorageKeys.pendingReceiveTokens)
-    }
-
-    func loadClaimedTokens() -> [ClaimedToken] {
-        value(forKey: StorageKeys.claimedTokens, legacyKeys: [StorageKeys.Legacy.claimedTokens]) ?? []
-    }
-
-    func saveClaimedTokens(_ tokens: [ClaimedToken]) {
-        set(tokens, forKey: StorageKeys.claimedTokens)
     }
 
     func loadSavedTokens() -> [String: String] {
@@ -72,24 +56,6 @@ final class WalletStore {
 
     func savePaymentPreimages(_ preimages: [String: String]) {
         set(preimages, forKey: StorageKeys.paymentPreimages)
-    }
-
-    func loadMeltQuoteFees() -> [String: UInt64] {
-        value(forKey: StorageKeys.meltQuoteFees) ?? [:]
-    }
-
-    func saveMeltQuoteFees(_ fees: [String: UInt64]) {
-        set(fees, forKey: StorageKeys.meltQuoteFees)
-    }
-
-    /// Melt quotes a mint accepted for asynchronous (NUT-05) settlement that we
-    /// haven't observed in a terminal state yet. Keyed by quote ID → mint URL.
-    func loadPendingMeltQuotes() -> [String: String] {
-        value(forKey: StorageKeys.pendingMeltQuotes) ?? [:]
-    }
-
-    func savePendingMeltQuotes(_ quotes: [String: String]) {
-        set(quotes, forKey: StorageKeys.pendingMeltQuotes)
     }
 
     func loadMintQuoteTimestamps() -> [String: TimeInterval] {
@@ -124,6 +90,13 @@ final class WalletStore {
     func removeAllWalletData() {
         remove(keys: StorageKeys.walletDataKeys + StorageKeys.walletDataLegacyKeys)
         remove(keys: storage.keys(withPrefix: StorageKeys.walletDataPrefix))
+    }
+
+    /// One-way cleanup for stores obsoleted by the CDK 0.18 transaction
+    /// lifecycle upgrade (local pending/claimed send records, async-melt
+    /// tracking, melt fee notes, the old transaction cache). Idempotent.
+    func purgeRetiredKeys() {
+        remove(keys: StorageKeys.Retired.all)
     }
 
     private func value<T: Codable>(forKey key: String, legacyKeys: [String] = []) -> T? {

@@ -39,21 +39,16 @@ extension WalletManager {
             }
         }
         let tokenMintURL = recoveryMintURL ?? ""
-        
-        // Save pending token for tracking
-        let tokenId = UUID().uuidString
-        let pendingToken = PendingToken(
-            tokenId: tokenId,
-            token: result.token,
-            amount: amount,
-            fee: result.fee,
-            date: Date(),
-            mintUrl: tokenMintURL,
-            memo: memo,
-            unit: unit
-        )
-        transactionService.savePendingToken(pendingToken)
-        
+
+        // Keep the token string under its (stable, saga-derived) CDK
+        // transaction id so History can re-display it and claim checks can
+        // resolve the send operation. Lifecycle state lives in CDK itself.
+        if let transactionId = result.transactionId {
+            transactionService.saveToken(txId: transactionId, token: result.token)
+        } else {
+            AppLogger.wallet.warning("send completed without a transaction id resource=\(WalletOperationCoordinator.privacySafeIdentifier(tokenMintURL), privacy: .public)")
+        }
+
         await refreshBalance()
         await loadTransactions()
         SentryService.breadcrumb("Token sent", category: "wallet.token")
@@ -219,24 +214,7 @@ extension WalletManager {
         }
     }
 
-    // MARK: - Pending Token Operations (Delegate to TransactionService)
-
-    func savePendingToken(_ pendingToken: PendingToken) {
-        transactionService.savePendingToken(pendingToken)
-    }
-
-    func loadPendingTokens() {
-        transactionService.loadPendingTokens()
-    }
-
-    func removePendingToken(tokenId: String) {
-        transactionService.removePendingToken(tokenId: tokenId)
-    }
-
-    func markTokenAsClaimed(token: String) async {
-        transactionService.markTokenAsClaimed(token: token)
-        await loadTransactions()
-    }
+    // MARK: - Pending Receive Token Operations (Delegate to TransactionService)
 
     func savePendingReceiveToken(_ token: PendingReceiveToken) {
         transactionService.savePendingReceiveToken(token)
@@ -270,10 +248,6 @@ extension WalletManager {
         return amount
     }
 
-    func loadClaimedTokens() {
-        transactionService.loadClaimedTokens()
-    }
-
     // MARK: - Token Status Checks
 
     func checkTokenSpendable(token: String, mintUrl: String? = nil) async -> Bool {
@@ -298,47 +272,135 @@ extension WalletManager {
     }
 
     @discardableResult
-    func checkPendingTokenStatus(pendingToken: PendingToken) async throws -> Bool {
-        let isSpent = try await checkTokenSpent(
-            token: pendingToken.token,
-            mintUrl: pendingToken.mintUrl
-        )
-        if isSpent {
-            transactionService.markTokenAsClaimed(token: pendingToken.token)
+    func checkPendingTokenStatus(transaction: WalletTransaction) async throws -> Bool {
+        guard let sagaId = transaction.sagaId else {
+            // App-synthesized rows carry no operation; fall back to a direct
+            // proof-state probe against the mint.
+            guard let token = transaction.token, let mintUrl = transaction.mintUrl else {
+                return false
+            }
+            return try await checkTokenSpent(token: token, mintUrl: mintUrl)
+        }
+        let mintUrl = transaction.mintUrl ?? activeMint?.url ?? ""
+        let claimed = try await operationCoordinator.perform(
+            kind: .tokenStatus,
+            resourceID: mintUrl
+        ) {
+            let unit = PaymentRequestDecoder.currencyUnit(from: transaction.unit)
+            let wallet = try await self.walletRepository?.getWallet(
+                mintUrl: MintUrl(url: mintUrl),
+                unit: unit
+            )
+            guard let wallet else { throw WalletError.notInitialized }
+            return try await wallet.checkSendStatus(operationId: sagaId)
+        }
+        if claimed {
             await loadTransactions()
         }
-        return isSpent
+        return claimed
+    }
+
+    /// Manual claim check for a just-created send, where the caller only holds
+    /// the token string (Send flow success screen).
+    @discardableResult
+    func checkSentTokenClaim(token: String, mintUrl: String, unit: String = "sat") async throws -> Bool {
+        try await operationCoordinator.perform(kind: .tokenStatus, resourceID: mintUrl) {
+            if let txId = self.transactionService.transactionId(forToken: token),
+               let operationId = SagaTransactionId.operationId(fromTransactionIdHex: txId),
+               let wallet = try? await self.walletRepository?.getWallet(
+                   mintUrl: MintUrl(url: mintUrl),
+                   unit: PaymentRequestDecoder.currencyUnit(from: unit)
+               ),
+               let claimed = try? await wallet.checkSendStatus(operationId: operationId) {
+                return claimed
+            }
+            // The token predates transaction-id-keyed storage (or came from
+            // elsewhere): probe the proofs directly.
+            return try await self.tokenService.checkTokenSpent(token: token, mintUrl: mintUrl)
+        }
+    }
+
+    /// Reclaim an unclaimed sent token: CDK swaps the proofs back and marks the
+    /// transaction failed/revoked, so no local bookkeeping remains.
+    func reclaimPendingSend(transaction: WalletTransaction) async throws -> UInt64 {
+        guard let sagaId = transaction.sagaId else {
+            throw WalletError.notInitialized
+        }
+        let mintUrl = transaction.mintUrl ?? activeMint?.url ?? ""
+        let amount = try await operationCoordinator.perform(
+            kind: .send,
+            resourceID: mintUrl,
+            protectsBackgroundExecution: true
+        ) {
+            let unit = PaymentRequestDecoder.currencyUnit(from: transaction.unit)
+            let wallet = try await self.walletRepository?.getWallet(
+                mintUrl: MintUrl(url: mintUrl),
+                unit: unit
+            )
+            guard let wallet else { throw WalletError.notInitialized }
+            return try await wallet.revokeSend(operationId: sagaId).value
+        }
+        await refreshBalance()
+        await loadTransactions()
+        return amount
     }
 
     func checkAllPendingTokens() async {
-        // MainWalletView already loads history after the cached shell appears.
-        // Avoid a second all-mint transaction pass on the common empty queue.
-        guard !pendingTokens.isEmpty else { return }
+        guard let repo = walletRepository else { return }
 
         do {
             try await operationCoordinator.performIfIdle(kind: .pendingTokenCheck) {
-                for token in self.pendingTokens {
-                    do {
-                        let isSpent = try await self.tokenService.checkTokenSpent(
-                            token: token.token,
-                            mintUrl: token.mintUrl
-                        )
-                        if isSpent {
-                            self.transactionService.markTokenAsClaimed(token: token.token)
-                        }
-                    } catch is CancellationError {
-                        return
-                    } catch {
-                        AppLogger.wallet.error(
-                            "pending token status check failed error_type=\(String(reflecting: type(of: error)), privacy: .public)"
-                        )
-                    }
+                var claimedAny = false
+                var foundPending = false
 
-                    if await self.operationCoordinator.hasWaitingUserOperation() {
-                        break
+                for mintUrlString in self.trackedMintUrlsForWalletAccess() {
+                    let units = TransactionService.walletUnits(
+                        advertisedUnits: self.mints.first(where: { $0.url == mintUrlString })?.units ?? ["sat"]
+                    )
+                    for unitString in units {
+                        guard !Task.isCancelled else { return }
+                        do {
+                            let wallet = try await repo.getWallet(
+                                mintUrl: MintUrl(url: mintUrlString),
+                                unit: PaymentRequestDecoder.currencyUnit(from: unitString)
+                            )
+                            for operationId in try await wallet.getPendingSends() {
+                                foundPending = true
+                                do {
+                                    // CDK flips the transaction to completed
+                                    // when the mint reports the proofs spent.
+                                    if try await wallet.checkSendStatus(operationId: operationId) {
+                                        claimedAny = true
+                                    }
+                                } catch is CancellationError {
+                                    return
+                                } catch {
+                                    AppLogger.wallet.error(
+                                        "pending send status check failed error_type=\(String(reflecting: type(of: error)), privacy: .public)"
+                                    )
+                                }
+
+                                if await self.operationCoordinator.hasWaitingUserOperation() {
+                                    break
+                                }
+                            }
+                        } catch is CancellationError {
+                            return
+                        } catch {
+                            AppLogger.wallet.error(
+                                "pending send maintenance failed resource=\(WalletOperationCoordinator.privacySafeIdentifier(mintUrlString), privacy: .public) error_type=\(String(reflecting: type(of: error)), privacy: .public)"
+                            )
+                        }
                     }
                 }
-                await self.loadTransactionsAssumingWalletOperationLease()
+
+                // No local rows to merge anymore: only a claim changes history.
+                if claimedAny {
+                    await self.refreshBalanceAssumingWalletOperationLease()
+                    await self.loadTransactionsAssumingWalletOperationLease()
+                } else if foundPending {
+                    await self.loadTransactionsAssumingWalletOperationLease()
+                }
             }
         } catch is CancellationError {
             return

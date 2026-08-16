@@ -1,9 +1,6 @@
 import SwiftUI
 import AVFoundation
 import Cdk
-#if canImport(URKit)
-import URKit
-#endif
 
 class ScannerViewModel: ObservableObject {
     @Published var scanProgress: Double = 0
@@ -16,59 +13,47 @@ class ScannerViewModel: ObservableObject {
     // anything. Genuine failures raise this explicitly.
     @Published var noticeSeverity: ErrorSeverity = .caution
 
-    #if canImport(URKit)
-    private var decoder = URDecoder()
-    #endif
+    /// NUT-16 animated-QR decoder from CDK: fountain-coded `ur:bytes` frames
+    /// arrive in any order and reassemble into a Cashu token.
+    private var decoder = TokenUrDecoder()
 
     func reset() {
-        #if canImport(URKit)
-        decoder = URDecoder()
-        #endif
+        decoder = TokenUrDecoder()
         scanProgress = 0
         isScanning = true
         errorMessage = nil
         noticeSeverity = .caution
     }
-    
+
     func processFragment(_ fragment: String) -> String? {
-        #if canImport(URKit)
-        decoder.receivePart(fragment)
-        
-        DispatchQueue.main.async {
-            self.scanProgress = self.decoder.estimatedPercentComplete
-        }
-        
-        if decoder.result != nil {
-            guard let result = try? decoder.result?.get() else {
-                return nil
+        do {
+            try decoder.receive(part: fragment)
+        } catch {
+            DispatchQueue.main.async {
+                self.errorMessage = "Couldn't read that animated QR frame."
             }
-            
-     
-            
-            // Fallback: Try .bytes/.text just in case older version
-            if case let .bytes(bytesArray) = result.cbor {
-                let data = Data(bytesArray)
-                return String(data: data, encoding: .utf8)
-            }
-            
-            if case let .text(text) = result.cbor {
-                return text
-            }
-            
             return nil
         }
-        return nil
-        #else
+
         DispatchQueue.main.async {
-            self.errorMessage = "URKit module missing. Cannot scan animated QR."
+            let total = self.decoder.fragmentCount()
+            if total > 0, let resolved = self.decoder.resolvedFragmentCount() {
+                self.scanProgress = min(Double(resolved) / Double(total), 0.99)
+            }
         }
-        return nil
-        #endif
+
+        guard decoder.complete() else { return nil }
+
+        do {
+            guard let token = try decoder.token() else { return nil }
+            return try token.encode()
+        } catch {
+            DispatchQueue.main.async {
+                self.errorMessage = "That animated QR doesn't contain a Cashu token."
+            }
+            return nil
+        }
     }
-    
-    #if canImport(URKit)
-    // No manual extraction needed when using URKit's CBOR type
-    #endif
 }
 
 private enum CameraAuthorizationState: Equatable {

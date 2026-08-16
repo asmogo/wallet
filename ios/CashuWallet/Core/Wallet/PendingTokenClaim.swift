@@ -25,33 +25,19 @@ func runPendingTokenClaimCheck(
     }
 }
 
-/// Resolve the local pending-token record behind a History row.
-///
-/// CDK transaction IDs can replace the local token ID during History merging,
-/// so the encoded token is the stable first choice and the ID is a legacy
-/// fallback.
-func pendingSentTokenFor(
-    transaction: WalletTransaction,
-    pendingTokens: [PendingToken]
-) -> PendingToken? {
-    guard transaction.type == .outgoing,
-          transaction.kind == .ecash,
-          transaction.status == .pending,
-          transaction.isPendingToken else {
-        return nil
-    }
-
-    if let token = transaction.token,
-       let matchingToken = pendingTokens.first(where: { $0.token == token }) {
-        return matchingToken
-    }
-
-    return pendingTokens.first(where: { $0.tokenId == transaction.id })
+/// A History row is a pending sent token when CDK reports the outgoing ecash
+/// transaction as still pending (unclaimed). CDK 0.18 owns this lifecycle
+/// state; the attached token string lets the detail view re-present it.
+func isPendingSentToken(_ transaction: WalletTransaction) -> Bool {
+    transaction.type == .outgoing
+        && transaction.kind == .ecash
+        && transaction.status == .pending
+        && transaction.token != nil
 }
 
 func shouldOfferManualClaimCheck(
     automaticChecksEnabled: Bool,
-    pendingToken: PendingToken?
+    transaction: WalletTransaction
 ) -> Bool {
-    !automaticChecksEnabled && pendingToken != nil
+    !automaticChecksEnabled && isPendingSentToken(transaction)
 }

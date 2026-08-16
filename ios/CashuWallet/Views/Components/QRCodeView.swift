@@ -1,8 +1,6 @@
 import SwiftUI
 import CoreImage.CIFilterBuiltins
-#if canImport(URKit)
-import URKit
-#endif
+import Cdk
 
 // MARK: - QR Speed/Size Settings
 
@@ -81,15 +79,13 @@ struct QRCodeView: View {
     // Local settings per QR instance
     @State private var speed: QRSpeed = .fast
     @State private var size: QRSize = .large
-    
+
     @State private var currentQRCodeString: String = ""
     @State private var currentPartIndex: Int = 0
     @State private var totalParts: Int = 0
     @State private var timer: Timer?
-    
-    #if canImport(URKit)
-    @State private var encoder: UREncoder?
-    #endif
+
+    @State private var encoder: TokenUrEncoder?
     
     var body: some View {
         VStack(spacing: 8) {
@@ -186,79 +182,50 @@ struct QRCodeView: View {
     }
     
     // MARK: - Encoder Logic
-    
+
     private func prepareEncoder() {
         stopTimer()
 
         // Static-only mode short-circuits UR encoding entirely so scanners
         // receive a single standard QR frame.
         if staticOnly {
+            encoder = nil
             currentQRCodeString = content
             totalParts = 1
             return
         }
 
-        #if canImport(URKit)
         let chunkSize = size.chunkSize
 
-        if content.count > chunkSize {
-            // Encode as UR for animated QR
-            let data = Data(content.utf8)
-            
-            do {
-                let cbor = CBOR.bytes(data)
-                let ur = try UR(type: "bytes", cbor: cbor)
-                encoder = UREncoder(ur, maxFragmentLen: chunkSize)
-                
-                // Set initial part
-                if let part = encoder?.nextPart() {
-                    currentQRCodeString = part
-                    // Parse "ur:bytes/1-X/..." to get total parts
-                    if let parts = part.components(separatedBy: "/").dropFirst().first?.components(separatedBy: "-"),
-                       parts.count == 2,
-                       let total = Int(parts[1]) {
-                        totalParts = total
-                        currentPartIndex = 1
-                    }
-                }
-                
-                startTimer()
-            } catch {
-                print("UR Encoding failed: \(error)")
-                // Fallback to static
-                encoder = nil
-                currentQRCodeString = content
-                totalParts = 1
-            }
+        // NUT-16 animated frames come from CDK's own fountain encoder. Only
+        // Cashu tokens animate: anything else (invoices, addresses, request
+        // strings) is a standardized static payload, and non-token content
+        // simply doesn't fit the NUT-16 envelope.
+        if content.count > chunkSize,
+           let token = try? Token.decode(encodedToken: content),
+           let urEncoder = try? token.urEncoder(maxFragmentLength: UInt32(chunkSize)),
+           !urEncoder.isSingleFragment() {
+            encoder = urEncoder
+            totalParts = Int(urEncoder.fragmentCount())
+            currentPartIndex = 1
+            currentQRCodeString = (try? urEncoder.nextPart()) ?? content
+            startTimer()
         } else {
             encoder = nil
             currentQRCodeString = content
             totalParts = 1
         }
-        #else
-        // Fallback if URKit missing
-        currentQRCodeString = content
-        totalParts = 1
-        #endif
     }
-    
+
     private func startTimer() {
-        #if canImport(URKit)
         guard encoder != nil else { return }
-        
+
         timer = Timer.scheduledTimer(withTimeInterval: speed.interval, repeats: true) { _ in
-            if let part = encoder?.nextPart() {
+            if let part = try? encoder?.nextPart() {
                 currentQRCodeString = part
-                // Parse seq num for UI (1-based index)
-                if let seqStr = part.components(separatedBy: "/").dropFirst().first?.components(separatedBy: "-").first,
-                   let seq = Int(seqStr) {
-                    currentPartIndex = seq
-                } else {
-                    currentPartIndex = (currentPartIndex % totalParts) + 1
-                }
+                currentPartIndex = Int(encoder?.currentIndex() ?? 0)
             }
         }
-        #endif
     }
     
     private func restartTimer() {

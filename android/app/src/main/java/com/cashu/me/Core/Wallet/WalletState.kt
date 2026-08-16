@@ -1,9 +1,7 @@
 package com.cashu.me.Core
 
-import com.cashu.me.Models.ClaimedToken
 import com.cashu.me.Models.MintInfo
 import com.cashu.me.Models.PendingReceiveToken
-import com.cashu.me.Models.PendingToken
 import com.cashu.me.Models.WalletTransaction
 
 /**
@@ -48,9 +46,7 @@ data class WalletState(
     val mints: List<MintInfo> = emptyList(),
     val activeMint: MintInfo? = null,
     val transactions: List<WalletTransaction> = emptyList(),
-    val pendingTokens: List<PendingToken> = emptyList(),
     val pendingReceiveTokens: List<PendingReceiveToken> = emptyList(),
-    val claimedTokens: List<ClaimedToken> = emptyList(),
     val transactionUpdateVersion: Long = 0,
 ) {
     /** True when any unit — sat or not — holds a spendable balance. */

@@ -27,9 +27,11 @@ struct WalletTransaction: Identifiable {
 
     /// Mint account unit for `amount` ("sat", "usd", "eur", or custom).
     var unit: String = "sat"
-    
-    /// Whether this is from pending storage vs. completed transactions
-    var isPendingToken: Bool = false
+
+    /// CDK wallet-saga (operation) id backing this transaction, when the row
+    /// came from CDK. Pending sent tokens use it for `checkSendStatus` /
+    /// `revokeSend`; nil for app-synthesized rows (quotes, held receives).
+    var sagaId: String? = nil
 
     /// Incoming ecash the user hasn't claimed yet (a "Receive Later" token or
     /// a NUT-18 payment held for approval). Rows with this flag open the
@@ -63,7 +65,7 @@ struct WalletTransaction: Identifiable {
     var mintQuoteIdForStatusRefresh: String? {
         guard type == .incoming else { return nil }
         guard kind == .lightning || kind == .onchain else { return nil }
-        guard !isPendingToken, !isPendingReceiveToken else { return nil }
+        guard !isPendingReceiveToken else { return nil }
         guard invoice != nil else { return nil }
         guard status == .pending || status == .expired else { return nil }
         return quoteId ?? id
@@ -139,6 +141,19 @@ struct WalletTransaction: Identifiable {
     }
 }
 
+extension Array where Element == WalletTransaction {
+    /// Resolve the live row for a detail screen opened with `openId` (and the
+    /// open-time `openQuoteId`). Pending quote rows use `id == quoteId`; once
+    /// minting starts CDK replaces them with a saga-derived transaction id that
+    /// still carries `quoteId`, so fall back to the quoteId to keep following
+    /// the row as it flips Pending → Completed in place. Rows are newest-first,
+    /// so a reusable offer resolves to its latest payment.
+    func liveDetail(openId: String, openQuoteId: String? = nil) -> WalletTransaction? {
+        first(where: { $0.id == openId })
+            ?? first(where: { $0.quoteId != nil && $0.quoteId == openQuoteId })
+    }
+}
+
 /// Home is a compact settled-ledger view, not an operational queue. Generated
 /// receive artifacts and every non-completed state remain available in History.
 enum HomeActivity {
@@ -153,5 +168,37 @@ enum HomeActivity {
             .map { $0 }
     }
 }
+
+/// CDK derives the transaction id of a saga-managed operation from the
+/// operation (UUID) id: the id's dash-free ASCII form becomes the 32 id bytes,
+/// which the FFI then hex-encodes. Reproduced locally because the FFI helper
+/// (`TransactionId.from_saga_id`) is not exported to the bindings.
+enum SagaTransactionId {
+    /// Operation (saga) UUID string → CDK transaction id hex.
+    static func transactionIdHex(operationId: String) -> String? {
+        let simple = operationId.lowercased().replacingOccurrences(of: "-", with: "")
+        guard simple.count == 32, simple.allSatisfy({ $0.isHexDigit }) else { return nil }
+        return Data(simple.utf8).map { String(format: "%02x", $0) }.joined()
+    }
+
+    /// CDK transaction id hex → operation (saga) UUID string, as accepted by
+    /// `checkSendStatus` / `revokeSend` (UUID parsing tolerates the simple form).
+    static func operationId(fromTransactionIdHex txId: String) -> String? {
+        var bytes = [UInt8]()
+        bytes.reserveCapacity(txId.count / 2)
+        var index = txId.startIndex
+        while index < txId.endIndex {
+            let next = txId.index(index, offsetBy: 2, limitedBy: txId.endIndex) ?? txId.endIndex
+            guard let byte = UInt8(txId[index..<next], radix: 16) else { return nil }
+            bytes.append(byte)
+            index = next
+        }
+        guard bytes.count == 32 else { return nil }
+        let simple = String(decoding: bytes, as: UTF8.self)
+        guard simple.count == 32, simple.allSatisfy({ $0.isHexDigit }) else { return nil }
+        return simple
+    }
+}
+
 
 /// Result of a send tokens operation - includes token string and fee paid

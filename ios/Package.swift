@@ -14,7 +14,7 @@ let package = Package(
         ),
     ],
     dependencies: [
-        .package(url: "https://github.com/cashubtc/cdk-swift", exact: "0.17.3-rc.0")
+        .package(url: "https://github.com/cashubtc/cdk-swift", exact: "0.18.0-rc.0")
     ],
     targets: [
         .target(

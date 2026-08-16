@@ -4,32 +4,34 @@ import Cdk
 // MARK: - Transaction Service
 
 /// Service responsible for transaction history and token persistence.
-/// Handles loading, saving, and managing transaction records and pending tokens.
+///
+/// CDK 0.18 tracks the full transaction lifecycle (pending / completed /
+/// failed) in its own store, including in-flight sends, melts, and mints, so
+/// history is a thin projection over `wallet.listTransactions()`. The only
+/// rows still synthesized app-side are unpaid/expired Lightning invoices and
+/// on-chain quotes (a quote exists before any transaction does) and incoming
+/// ecash held for user approval ("Receive Later" / NUT-18).
 @MainActor
 class TransactionService: ObservableObject {
-    
+
     // MARK: - Published Properties
-    
+
     /// All wallet transactions (incoming/outgoing)
     @Published var transactions: [WalletTransaction] = []
-    
-    /// Pending tokens that have been sent but not yet claimed by recipient
-    @Published var pendingTokens: [PendingToken] = []
-    
+
     /// Pending tokens that have been received but not yet claimed by user
     @Published var pendingReceiveTokens: [PendingReceiveToken] = []
-    
+
     // MARK: - Private Properties
-    
-    private var claimedTokens: [ClaimedToken] = []
+
     private let walletRepository: () -> WalletRepository?
     private let walletDatabase: () -> WalletSqliteDatabase?
     private let getTrackedMintUrls: () -> [String]
     private let getUnitsForMint: (String) -> [String]
     private let walletStore: WalletStore
-    
+
     // MARK: - Initialization
-    
+
     init(
         walletRepository: @escaping () -> WalletRepository?,
         walletDatabase: @escaping () -> WalletSqliteDatabase?,
@@ -43,22 +45,23 @@ class TransactionService: ObservableObject {
         self.getUnitsForMint = getUnitsForMint
         self.walletStore = walletStore
     }
-    
+
     // MARK: - Transaction Loading
-    
+
     /// Load transaction history from all mints
     func loadTransactions(includeRemoteObservations: Bool = true) async {
         guard let repo = walletRepository() else { return }
-        
-        // Load pending and claimed tokens from storage
-        loadCachedState()
+
+        loadPendingReceiveTokens()
         var mintQuoteTimestamps = loadMintQuoteTimestamps()
-        
-        // Get transactions from tracked wallets
+
+        // Get transactions from tracked wallets. CDK persists every send,
+        // receive, mint, and melt with a stable saga-derived id and a native
+        // lifecycle status, so rows map one-to-one without local merging.
         var allTransactions: [WalletTransaction] = []
-        var completedQuoteIds: Set<String> = []
+        var quoteIdsWithTransactions: Set<String> = []
         let trackedMintUrls = Set(getTrackedMintUrls().filter { !$0.isEmpty })
-        
+
         for mintUrlString in trackedMintUrls {
             for unitString in Self.walletUnits(advertisedUnits: getUnitsForMint(mintUrlString)) {
                 do {
@@ -66,9 +69,9 @@ class TransactionService: ObservableObject {
                     let currencyUnit = PaymentRequestDecoder.currencyUnit(from: unitString)
                     let wallet = try await repo.getWallet(mintUrl: mintUrl, unit: currencyUnit)
                     let txs = try await wallet.listTransactions(direction: nil)
-                    let walletTxs: [WalletTransaction] = txs.map { tx in
+                    var walletTxs: [WalletTransaction] = txs.map { tx in
                         if let quoteId = tx.quoteId {
-                            completedQuoteIds.insert(quoteId)
+                            quoteIdsWithTransactions.insert(quoteId)
                         }
 
                         let paymentMethod = tx.paymentMethod.flatMap(PaymentMethodKind.from)
@@ -84,8 +87,6 @@ class TransactionService: ObservableObject {
                         }
 
                         let storedToken = kind == .ecash ? self.getToken(txId: tx.id.hex) : nil
-                        let storedPaymentProof = tx.paymentProof
-                            ?? tx.quoteId.flatMap { self.getPreimage(quoteId: $0) }
 
                         var walletTransaction = WalletTransaction(
                             id: tx.id.hex,
@@ -94,17 +95,32 @@ class TransactionService: ObservableObject {
                             kind: kind,
                             date: Date(timeIntervalSince1970: TimeInterval(tx.timestamp)),
                             memo: tx.memo,
-                            status: .completed,
+                            status: WalletTransaction.TransactionStatus(tx.status),
                             mintUrl: tx.mintUrl.url,
-                            preimage: storedPaymentProof,
+                            preimage: tx.paymentProof,
                             token: storedToken,
                             invoice: tx.paymentRequest
                         )
 
                         walletTransaction.fee = tx.fee.value
                         walletTransaction.quoteId = tx.quoteId
+                        walletTransaction.sagaId = tx.sagaId
                         walletTransaction.unit = PaymentRequestDecoder.unitDescription(currencyUnit)
                         return walletTransaction
+                    }
+                    // A sent token's string survives in the send saga until the
+                    // token is claimed. Backfill rows that predate the
+                    // transaction-id-keyed token store (e.g. sends recorded by
+                    // an older app version) straight from the saga.
+                    for index in walletTxs.indices
+                        where walletTxs[index].kind == .ecash
+                            && walletTxs[index].type == .outgoing
+                            && walletTxs[index].status == .pending
+                            && walletTxs[index].token == nil {
+                        guard let sagaId = walletTxs[index].sagaId,
+                              let token = await self.sendTokenFromSaga(operationId: sagaId) else { continue }
+                        walletTxs[index].token = token
+                        self.saveToken(txId: walletTxs[index].id, token: token)
                     }
                     allTransactions.append(contentsOf: walletTxs)
                 } catch {
@@ -120,33 +136,23 @@ class TransactionService: ObservableObject {
 
         if let walletDatabase = walletDatabase() {
             do {
+                // A Lightning invoice / on-chain quote exists before CDK creates
+                // any transaction for it (that happens once minting starts), so
+                // unpaid and paid-not-yet-minted quotes still get synthesized
+                // rows. Quotes that already have a transaction are skipped.
                 let pendingMintQuotes = try await walletDatabase.getUnissuedMintQuotes()
                 let pendingQuoteTransactions = await pendingTransactions(
                     from: pendingMintQuotes,
                     trackedMintUrls: trackedMintUrls,
-                    completedQuoteIds: completedQuoteIds,
+                    quoteIdsWithTransactions: quoteIdsWithTransactions,
                     timestamps: &mintQuoteTimestamps,
                     includeRemoteObservations: includeRemoteObservations
                 )
                 allTransactions.append(contentsOf: pendingQuoteTransactions)
-
-                let meltQuotes = try await walletDatabase.getMeltQuotes()
-                let meltQuoteTransactions = meltTransactions(
-                    from: meltQuotes,
-                    trackedMintUrls: trackedMintUrls,
-                    completedQuoteIds: completedQuoteIds,
-                    timestamps: &mintQuoteTimestamps
-                )
-                allTransactions.append(contentsOf: meltQuoteTransactions)
             } catch {
                 AppLogger.wallet.error("Failed to load stored payment quotes: \(error)")
             }
         }
-
-        // Merge locally-tracked sent tokens (pending + claimed) into the
-        // matching CDK outgoing-ecash rows instead of emitting separate rows,
-        // which previously produced a duplicate "Ecash sent" entry per send.
-        mergeSentTokens(into: &allTransactions)
 
         // Unclaimed incoming ecash ("Receive Later" tokens and NUT-18 payments
         // held for approval) has no CDK counterpart until it's claimed, so each
@@ -175,7 +181,7 @@ class TransactionService: ObservableObject {
 
         // Sort by date descending (newest first)
         transactions = allTransactions.sorted { $0.date > $1.date }
-        
+
         // Post notification that transactions were updated
         NotificationCenter.default.post(name: .cashuTransactionsUpdated, object: nil)
     }
@@ -196,140 +202,63 @@ class TransactionService: ObservableObject {
         return units
     }
 
-    /// Fold locally-tracked sent ecash tokens into the CDK transaction rows.
-    ///
-    /// CDK already records every send as its own outgoing-ecash transaction.
-    /// The local `PendingToken`/`ClaimedToken` store exists only to carry the
-    /// token string (for re-display/reclaim) and the unclaimed/claimed state,
-    /// so emitting it as a separate row duplicated each "Ecash sent" entry.
-    ///
-    /// Each token is matched to a CDK row one-to-one by (mint, amount),
-    /// choosing the closest timestamp so repeated identical sends still line
-    /// up. A pending match flips its row to `.pending` and attaches the token
-    /// string; a claimed match just attaches the token. Any token with no CDK
-    /// counterpart (older data, or a send CDK didn't record) is appended as
-    /// its own row so nothing is lost.
-    func mergeSentTokens(into transactions: inout [WalletTransaction]) {
-        func normalizedMint(_ url: String?) -> String {
-            var s = (url ?? "").trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-            while s.hasSuffix("/") { s.removeLast() }
-            return s
-        }
-
-        // Indices of CDK outgoing-ecash rows still available to match.
-        var available: Set<Int> = Set(transactions.indices.filter {
-            transactions[$0].kind == .ecash && transactions[$0].type == .outgoing
-        })
-
-        func claimMatch(mintUrl: String, unit: String, amount: UInt64, date: Date) -> Int? {
-            let target = normalizedMint(mintUrl)
-            let best = available
-                .filter {
-                    transactions[$0].amount == amount &&
-                    transactions[$0].unit.caseInsensitiveCompare(unit) == .orderedSame &&
-                    normalizedMint(transactions[$0].mintUrl) == target
-                }
-                .min {
-                    abs(transactions[$0].date.timeIntervalSince(date)) <
-                    abs(transactions[$1].date.timeIntervalSince(date))
-                }
-            if let best { available.remove(best) }
-            return best
-        }
-
-        var leftovers: [WalletTransaction] = []
-
-        for pendingToken in pendingTokens {
-            if let idx = claimMatch(
-                mintUrl: pendingToken.mintUrl,
-                unit: pendingToken.unit,
-                amount: pendingToken.amount,
-                date: pendingToken.date
-            ) {
-                transactions[idx].status = .pending
-                transactions[idx].isPendingToken = true
-                if transactions[idx].token == nil { transactions[idx].token = pendingToken.token }
-                if transactions[idx].fee == 0 { transactions[idx].fee = pendingToken.fee }
-            } else {
-                var pendingTx = WalletTransaction(
-                    id: pendingToken.tokenId,
-                    amount: pendingToken.amount,
-                    type: .outgoing,
-                    kind: .ecash,
-                    date: pendingToken.date,
-                    memo: pendingToken.memo,
-                    status: .pending,
-                    mintUrl: pendingToken.mintUrl,
-                    token: pendingToken.token,
-                    isPendingToken: true
-                )
-                pendingTx.fee = pendingToken.fee
-                pendingTx.unit = pendingToken.unit
-                leftovers.append(pendingTx)
-            }
-        }
-
-        for claimedToken in claimedTokens {
-            if let idx = claimMatch(
-                mintUrl: claimedToken.mintUrl,
-                unit: claimedToken.unit,
-                amount: claimedToken.amount,
-                date: claimedToken.date
-            ) {
-                if transactions[idx].token == nil { transactions[idx].token = claimedToken.token }
-                if transactions[idx].fee == 0 { transactions[idx].fee = claimedToken.fee }
-            } else {
-                var claimedTx = WalletTransaction(
-                    id: claimedToken.tokenId,
-                    amount: claimedToken.amount,
-                    type: .outgoing,
-                    kind: .ecash,
-                    date: claimedToken.date,
-                    memo: claimedToken.memo,
-                    status: .completed,
-                    mintUrl: claimedToken.mintUrl,
-                    token: claimedToken.token
-                )
-                claimedTx.fee = claimedToken.fee
-                claimedTx.unit = claimedToken.unit
-                leftovers.append(claimedTx)
-            }
-        }
-
-        transactions.append(contentsOf: leftovers)
-    }
-
     func loadCachedState() {
-        loadPendingTokens()
         loadPendingReceiveTokens()
-        loadClaimedTokens()
     }
 
     func clearState() {
         transactions = []
-        pendingTokens = []
         pendingReceiveTokens = []
-        claimedTokens = []
         NotificationCenter.default.post(name: .cashuTransactionsUpdated, object: nil)
     }
-    
+
     // MARK: - Token Persistence
-    
-    /// Save a token string for later retrieval
+
+    /// Save a token string for later retrieval (re-displaying a sent token,
+    /// reclaiming it, or the receive-side receipt copy).
     func saveToken(txId: String, token: String) {
         var tokens = walletStore.loadSavedTokens()
         tokens[txId] = token
         walletStore.saveSavedTokens(tokens)
     }
-    
+
     /// Get a stored token by transaction ID
     func getToken(txId: String) -> String? {
         walletStore.loadSavedTokens()[txId]
     }
-    
-    // MARK: - Preimage Persistence
 
-    /// Save a Lightning payment preimage (proof of payment)
+    /// Look up the transaction id under which a token string was stored.
+    func transactionId(forToken token: String) -> String? {
+        walletStore.loadSavedTokens().first(where: { $0.value == token })?.key
+    }
+
+    /// Extract the encoded token from a send saga's persisted JSON
+    /// (`data.kind == "send"` sagas carry the token until claim).
+    private func sendTokenFromSaga(operationId: String) async -> String? {
+        guard let sagaJSON = try? await walletDatabase()?.getSaga(id: operationId),
+              let data = sagaJSON.data(using: .utf8),
+              let saga = try? JSONDecoder().decode(SagaTokenPayload.self, from: data),
+              saga.data.kind == "send" else {
+            return nil
+        }
+        return saga.data.data.token
+    }
+
+    private struct SagaTokenPayload: Decodable {
+        struct OperationData: Decodable {
+            struct Body: Decodable { let token: String? }
+            let kind: String
+            let data: Body
+        }
+        let data: OperationData
+    }
+
+    // MARK: - Preimage Persistence (on-chain observations)
+
+    /// Save a Lightning payment preimage or on-chain txid (proof of payment).
+    /// Lightning preimages come from CDK transactions directly; this store now
+    /// only carries on-chain explorer observations for quotes without a CDK
+    /// transaction yet.
     func savePreimage(quoteId: String, preimage: String) {
         var preimages = walletStore.loadPaymentPreimages()
         preimages[quoteId] = preimage
@@ -341,74 +270,8 @@ class TransactionService: ObservableObject {
         walletStore.loadPaymentPreimages()[quoteId]
     }
 
-    /// Save the actual fee paid for a completed melt quote.
-    func saveMeltFeePaid(quoteId: String, feePaid: UInt64) {
-        var fees = walletStore.loadMeltQuoteFees()
-        fees[quoteId] = feePaid
-        walletStore.saveMeltQuoteFees(fees)
-    }
-
-    /// Get a stored actual fee by quote ID.
-    func getMeltFeePaid(quoteId: String) -> UInt64? {
-        walletStore.loadMeltQuoteFees()[quoteId]
-    }
-
-    // MARK: - Pending Token Management (Outgoing)
-    
-    /// Save a pending token (when sending ecash)
-    /// Uses index-based replacement to avoid non-atomic removeAll+append
-    func savePendingToken(_ pendingToken: PendingToken) {
-        if let existingIndex = pendingTokens.firstIndex(where: { $0.tokenId == pendingToken.tokenId }) {
-            pendingTokens[existingIndex] = pendingToken
-        } else {
-            pendingTokens.append(pendingToken)
-        }
-        persistPendingTokens()
-    }
-    
-    /// Load pending tokens from storage
-    func loadPendingTokens() {
-        pendingTokens = walletStore.loadPendingTokens()
-    }
-    
-    /// Persist pending tokens to storage
-    private func persistPendingTokens() {
-        walletStore.savePendingTokens(pendingTokens)
-    }
-    
-    /// Remove a pending token (when claimed or confirmed spent)
-    func removePendingToken(tokenId: String) {
-        pendingTokens.removeAll { $0.tokenId == tokenId }
-        persistPendingTokens()
-    }
-    
-    /// Mark a token as claimed - move from pending to claimed storage
-    func markTokenAsClaimed(token: String) {
-        // Find the pending token by its token string
-        if let pendingToken = pendingTokens.first(where: { $0.token == token }) {
-            // Create a claimed token entry with fee
-            let claimedToken = ClaimedToken(
-                tokenId: pendingToken.tokenId,
-                token: pendingToken.token,
-                amount: pendingToken.amount,
-                fee: pendingToken.fee,
-                date: pendingToken.date,
-                mintUrl: pendingToken.mintUrl,
-                memo: pendingToken.memo,
-                claimedDate: Date(),
-                unit: pendingToken.unit
-            )
-            
-            // Add to claimed tokens
-            saveClaimedToken(claimedToken)
-            
-            // Remove from pending list
-            removePendingToken(tokenId: pendingToken.tokenId)
-        }
-    }
-    
     // MARK: - Pending Receive Token Management (Incoming)
-    
+
     /// Save a token for later claiming.
     /// Uses index-based replacement to avoid non-atomic removeAll+append, and
     /// de-duplicates by token string so parking the same ecash repeatedly
@@ -433,50 +296,27 @@ class TransactionService: ObservableObject {
         }
         persistPendingReceiveTokens()
     }
-    
+
     /// Load pending receive tokens from storage
     func loadPendingReceiveTokens() {
         pendingReceiveTokens = walletStore.loadPendingReceiveTokens()
     }
-    
+
     /// Persist pending receive tokens to storage
     private func persistPendingReceiveTokens() {
         walletStore.savePendingReceiveTokens(pendingReceiveTokens)
     }
-    
+
     /// Remove a pending receive token (after claiming)
     func removePendingReceiveToken(tokenId: String) {
         pendingReceiveTokens.removeAll { $0.tokenId == tokenId }
         persistPendingReceiveTokens()
     }
-    
-    // MARK: - Claimed Token Management
-    
-    /// Save a claimed token
-    /// Uses index-based replacement to avoid non-atomic removeAll+append
-    private func saveClaimedToken(_ claimedToken: ClaimedToken) {
-        if let existingIndex = claimedTokens.firstIndex(where: { $0.tokenId == claimedToken.tokenId }) {
-            claimedTokens[existingIndex] = claimedToken
-        } else {
-            claimedTokens.append(claimedToken)
-        }
-        persistClaimedTokens()
-    }
-    
-    /// Load claimed tokens from storage
-    func loadClaimedTokens() {
-        claimedTokens = walletStore.loadClaimedTokens()
-    }
-    
-    /// Persist claimed tokens to storage
-    private func persistClaimedTokens() {
-        walletStore.saveClaimedTokens(claimedTokens)
-    }
 
     private func pendingTransactions(
         from quotes: [MintQuote],
         trackedMintUrls: Set<String>,
-        completedQuoteIds: Set<String>,
+        quoteIdsWithTransactions: Set<String>,
         timestamps: inout [String: TimeInterval],
         includeRemoteObservations: Bool
     ) async -> [WalletTransaction] {
@@ -492,14 +332,12 @@ class TransactionService: ObservableObject {
                 continue
             }
 
-            // CDK's `getUnissuedMintQuotes()` always returns every BOLT12 quote
-            // (`amount_issued = 0 OR payment_method = 'bolt12'`) because offers
-            // are reusable. If CDK already surfaced the issued payment through
-            // `wallet.listTransactions()`, skip the quote-backed fallback.
-            if paymentMethod == .bolt12,
-               quote.amountPaid.value > 0,
-               quote.amountIssued.value >= quote.amountPaid.value,
-               completedQuoteIds.contains(quote.id) {
+            // Once CDK has a transaction for this quote — pending while a mint
+            // is in flight, completed afterwards — the CDK row is authoritative
+            // and the quote-backed row would only duplicate it. (BOLT12 offers
+            // always stay in `getUnissuedMintQuotes()` because the SQL filter is
+            // `amount_issued = 0 OR payment_method = 'bolt12'`.)
+            if quoteIdsWithTransactions.contains(quote.id) {
                 continue
             }
 
@@ -523,8 +361,17 @@ class TransactionService: ObservableObject {
                 continue
             }
 
-            let timestamp = timestamps[quote.id] ?? Date().timeIntervalSince1970
-            timestamps[quote.id] = timestamp
+            // CDK 0.18 quotes carry `updatedAt` (creation time for an untouched
+            // quote). The local first-seen map only backfills legacy rows that
+            // predate the column.
+            let timestamp: TimeInterval
+            if quote.updatedAt > 0 {
+                timestamp = TimeInterval(quote.updatedAt)
+            } else {
+                let firstSeen = timestamps[quote.id] ?? Date().timeIntervalSince1970
+                timestamps[quote.id] = firstSeen
+                timestamp = firstSeen
+            }
             let createdAt = Date(timeIntervalSince1970: timestamp)
             // A paid-but-unissued quote stays Pending even past expiry: the
             // invoice settled, and NUT-04 lets the wallet mint it afterwards.
@@ -582,68 +429,6 @@ class TransactionService: ObservableObject {
         return transactions
     }
 
-    private func meltTransactions(
-        from quotes: [MeltQuote],
-        trackedMintUrls: Set<String>,
-        completedQuoteIds: Set<String>,
-        timestamps: inout [String: TimeInterval]
-    ) -> [WalletTransaction] {
-        var transactions: [WalletTransaction] = []
-
-        // Melts the app accepted for async NUT-05 settlement. CDK's wallet saga
-        // does not persist `Pending` to the local melt_quote row (it leaves
-        // pending-durability to the caller), so an in-flight async melt stays
-        // stored as `.unpaid`. Without this set those rows would be dropped
-        // below and never surface in History while settlement is pending.
-        let pendingMeltQuoteIds = Set(walletStore.loadPendingMeltQuotes().keys)
-
-        for quote in quotes {
-            guard let mintUrl = quote.mintUrl,
-                  trackedMintUrls.contains(mintUrl.url),
-                  !completedQuoteIds.contains(quote.id),
-                  let paymentMethod = PaymentMethodKind.from(quote.paymentMethod) else {
-                continue
-            }
-
-            let status: WalletTransaction.TransactionStatus
-            switch quote.state {
-            case .paid, .issued:
-                status = .completed
-            case .pending:
-                status = .pending
-            case .unpaid:
-                // Only surface an unpaid quote the app is tracking as an
-                // async-accepted melt; a genuinely unpaid quote stays hidden.
-                guard pendingMeltQuoteIds.contains(quote.id) else {
-                    continue
-                }
-                status = .pending
-            }
-
-            let timestamp = timestamps[quote.id] ?? Date().timeIntervalSince1970
-            timestamps[quote.id] = timestamp
-
-            var transaction = WalletTransaction(
-                id: quote.id,
-                amount: quote.amount.value,
-                type: .outgoing,
-                kind: paymentMethod == .onchain ? .onchain : .lightning,
-                date: Date(timeIntervalSince1970: timestamp),
-                memo: nil,
-                status: status,
-                mintUrl: mintUrl.url,
-                preimage: quote.paymentProof ?? getPreimage(quoteId: quote.id),
-                token: nil,
-                invoice: quote.request
-            )
-            transaction.fee = getMeltFeePaid(quoteId: quote.id) ?? quote.feeReserve.value
-            transaction.quoteId = quote.id
-            transactions.append(transaction)
-        }
-
-        return transactions
-    }
-
     private func loadMintQuoteTimestamps() -> [String: TimeInterval] {
         walletStore.loadMintQuoteTimestamps()
     }
@@ -661,5 +446,18 @@ class TransactionService: ObservableObject {
         let prunedTimestamps = timestamps.filter { pendingQuoteIDs.contains($0.key) }
 
         walletStore.saveMintQuoteTimestamps(prunedTimestamps)
+    }
+}
+
+extension WalletTransaction.TransactionStatus {
+    /// Project CDK's native transaction lifecycle onto the app's row status.
+    /// `.expired` has no CDK counterpart; it is synthesized for unpaid invoices
+    /// past their expiry.
+    init(_ status: Cdk.TransactionStatus) {
+        switch status {
+        case .pending: self = .pending
+        case .completed: self = .completed
+        case .failed: self = .failed
+        }
     }
 }

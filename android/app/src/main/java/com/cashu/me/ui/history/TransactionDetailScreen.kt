@@ -54,8 +54,7 @@ import com.cashu.me.Core.Protocols.CurrencyAmount
 import com.cashu.me.Core.Protocols.CurrencyRegistry
 import com.cashu.me.Core.OnchainExplorer
 import com.cashu.me.Core.ReceiveConfirmationOwner
-import com.cashu.me.Core.pendingSentTokenFor
-import com.cashu.me.Core.resolveTransactionForDetail
+import com.cashu.me.Core.isPendingSentToken
 import com.cashu.me.Core.runPendingTokenClaimCheck
 import com.cashu.me.Core.SettingsManager
 import com.cashu.me.Core.shouldOfferManualClaimCheck
@@ -65,6 +64,7 @@ import com.cashu.me.Models.TransactionKind
 import com.cashu.me.Models.TransactionStatus
 import com.cashu.me.Models.TransactionType
 import com.cashu.me.Models.WalletTransaction
+import com.cashu.me.Models.liveDetail
 import com.cashu.me.ui.components.AmountText
 import com.cashu.me.ui.components.DetailActionFooter
 import com.cashu.me.ui.components.EmptyState
@@ -104,8 +104,7 @@ fun TransactionDetailScreen(
     // detail can follow Pending → Completed without flashing "not found".
     var openSnapshot by remember(transactionId) { mutableStateOf<WalletTransaction?>(null) }
     val resolved = remember(walletState.transactions, transactionId, openSnapshot) {
-        resolveTransactionForDetail(
-            transactions = walletState.transactions,
+        walletState.transactions.liveDetail(
             openId = transactionId,
             openQuoteId = openSnapshot?.quoteId ?: openSnapshot?.id,
         )
@@ -132,10 +131,9 @@ fun TransactionDetailScreen(
     // Keyed only on transactionId so a successful mint → Completed transition
     // does not cancel the in-flight check.
     LaunchedEffect(transactionId) {
-        val quoteId = resolveTransactionForDetail(
-            transactions = walletManager.state.value.transactions,
-            openId = transactionId,
-        )?.mintQuoteIdForStatusRefresh
+        val quoteId = walletManager.state.value.transactions
+            .liveDetail(openId = transactionId)
+            ?.mintQuoteIdForStatusRefresh
             ?: return@LaunchedEffect
         runCatching {
             walletManager.refreshPendingMintQuote(
@@ -195,14 +193,13 @@ fun TransactionDetailScreen(
 
         val explorerUrl = remember(transaction) { transaction.explorerUrl() }
         val pendingReceiveToken = transaction.token?.takeIf {
-            transaction.isPendingToken &&
+            transaction.isPendingReceiveToken &&
                 transaction.type == TransactionType.Incoming &&
                 transaction.status == TransactionStatus.Pending
         }
-        val pendingSentToken = pendingSentTokenFor(transaction, walletState.pendingTokens)
         val offersManualClaimCheck = shouldOfferManualClaimCheck(
             automaticChecksEnabled = settings.checkSentTokens,
-            pendingToken = pendingSentToken,
+            transaction = transaction,
         )
         val hasPrimaryAction =
             (pendingReceiveToken != null && onClaimReceiveToken != null) ||
@@ -331,7 +328,7 @@ fun TransactionDetailScreen(
                                 colors = neutralActionButtonColors(),
                             )
                         }
-                        if (offersManualClaimCheck && pendingSentToken != null) {
+                        if (offersManualClaimCheck) {
                             if (copyableContent != null) {
                                 Spacer(Modifier.height(CashuTheme.spacing.tight))
                             }
@@ -343,7 +340,7 @@ fun TransactionDetailScreen(
                                     scope.launch {
                                         try {
                                             manualCheckResult = runPendingTokenClaimCheck {
-                                                walletManager.checkPendingTokenStatus(pendingSentToken)
+                                                walletManager.checkPendingTokenStatus(transaction)
                                             }
                                         } finally {
                                             checkingClaim = false

@@ -3,61 +3,10 @@ import Foundation
 struct SendTokenResult {
     let token: String
     let fee: UInt64
-}
-
-/// Pending token entry - stored when user sends ecash
-struct PendingToken: Codable, Identifiable {
-    var id: String { tokenId }
-    let tokenId: String
-    let token: String
-    let amount: UInt64
-    let fee: UInt64
-    let date: Date
-    let mintUrl: String
-    let memo: String?
-    /// Mint account unit for `amount` and `fee` ("sat", "usd", "eur", or custom).
-    let unit: String
-
-    init(
-        tokenId: String,
-        token: String,
-        amount: UInt64,
-        fee: UInt64,
-        date: Date,
-        mintUrl: String,
-        memo: String?,
-        unit: String = "sat"
-    ) {
-        self.tokenId = tokenId
-        self.token = token
-        self.amount = amount
-        self.fee = fee
-        self.date = date
-        self.mintUrl = mintUrl
-        self.memo = memo
-        self.unit = unit
-    }
-
-    private enum CodingKeys: String, CodingKey {
-        case tokenId, token, amount, fee, date, mintUrl, memo, unit
-    }
-
-    init(from decoder: Decoder) throws {
-        let container = try decoder.container(keyedBy: CodingKeys.self)
-        tokenId = try container.decode(String.self, forKey: .tokenId)
-        token = try container.decode(String.self, forKey: .token)
-        amount = try container.decode(UInt64.self, forKey: .amount)
-        fee = try container.decode(UInt64.self, forKey: .fee)
-        date = try container.decode(Date.self, forKey: .date)
-        mintUrl = try container.decode(String.self, forKey: .mintUrl)
-        memo = try container.decodeIfPresent(String.self, forKey: .memo)
-        // Existing installs have no stored unit. Recover it without expanding
-        // proofs so IDv2 tokens migrate correctly; truly undecodable legacy
-        // records retain the historical sat default.
-        unit = try container.decodeIfPresent(String.self, forKey: .unit)
-            ?? TokenParser.unit(from: token)
-            ?? "sat"
-    }
+    /// CDK transaction id (saga-derived) recorded for this send, when known.
+    /// The token string is stored under this id so History can re-display it
+    /// and claim checks can resolve the operation via `TransactionId.fromSagaId`.
+    var transactionId: String? = nil
 }
 
 /// Pending receive token entry — stored when the user chooses "Receive Later",
@@ -131,62 +80,6 @@ struct PendingReceiveToken: Codable, Identifiable, Equatable {
         try container.encode(mintUrl, forKey: .mintUrl)
         try container.encodeIfPresent(cashuRequestId, forKey: .cashuRequestId)
         try container.encodeIfPresent(memo, forKey: .memo)
-    }
-}
-
-/// Claimed token entry - stored when a sent token is claimed by recipient
-struct ClaimedToken: Codable, Identifiable {
-    var id: String { tokenId }
-    let tokenId: String
-    let token: String
-    let amount: UInt64
-    let fee: UInt64
-    let date: Date
-    let mintUrl: String
-    let memo: String?
-    let claimedDate: Date
-    /// Mint account unit for `amount` and `fee` ("sat", "usd", "eur", or custom).
-    let unit: String
-
-    init(
-        tokenId: String,
-        token: String,
-        amount: UInt64,
-        fee: UInt64,
-        date: Date,
-        mintUrl: String,
-        memo: String?,
-        claimedDate: Date,
-        unit: String = "sat"
-    ) {
-        self.tokenId = tokenId
-        self.token = token
-        self.amount = amount
-        self.fee = fee
-        self.date = date
-        self.mintUrl = mintUrl
-        self.memo = memo
-        self.claimedDate = claimedDate
-        self.unit = unit
-    }
-
-    private enum CodingKeys: String, CodingKey {
-        case tokenId, token, amount, fee, date, mintUrl, memo, claimedDate, unit
-    }
-
-    init(from decoder: Decoder) throws {
-        let container = try decoder.container(keyedBy: CodingKeys.self)
-        tokenId = try container.decode(String.self, forKey: .tokenId)
-        token = try container.decode(String.self, forKey: .token)
-        amount = try container.decode(UInt64.self, forKey: .amount)
-        fee = try container.decode(UInt64.self, forKey: .fee)
-        date = try container.decode(Date.self, forKey: .date)
-        mintUrl = try container.decode(String.self, forKey: .mintUrl)
-        memo = try container.decodeIfPresent(String.self, forKey: .memo)
-        claimedDate = try container.decode(Date.self, forKey: .claimedDate)
-        unit = try container.decodeIfPresent(String.self, forKey: .unit)
-            ?? TokenParser.unit(from: token)
-            ?? "sat"
     }
 }
 

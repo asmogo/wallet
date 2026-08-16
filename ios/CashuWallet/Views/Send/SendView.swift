@@ -1053,15 +1053,10 @@ struct SendView: View {
     }
 
     private func checkGeneratedTokenClaim(token: String, mintUrl: String) async throws -> Bool {
-        if let pendingToken = walletManager.pendingTokens.first(where: { $0.token == token }) {
-            return try await walletManager.checkPendingTokenStatus(pendingToken: pendingToken)
-        }
-
-        let isSpent = try await walletManager.checkTokenSpent(token: token, mintUrl: mintUrl)
-        if isSpent {
-            await walletManager.markTokenAsClaimed(token: token)
-        }
-        return isSpent
+        // CDK flips the send transaction to completed when the mint reports the
+        // proofs spent; the token-string probe covers tokens this install did
+        // not send itself.
+        try await walletManager.checkSentTokenClaim(token: token, mintUrl: mintUrl)
     }
 
     private func announceClaimCheckResult(_ outcome: PendingTokenClaimCheckResult) {

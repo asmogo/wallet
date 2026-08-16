@@ -1,43 +1,21 @@
 package com.cashu.me.Core
 
-import com.gorunjinian.bcur.Cbor
-import com.gorunjinian.bcur.UR
-import com.gorunjinian.bcur.UREncoder
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
-import org.junit.Assert.assertTrue
 import org.junit.Test
 
+/**
+ * Host-side coverage for the NUT-16 decoder wrapper. The full encode/decode
+ * round-trip needs the CDK native library and is exercised on-device in
+ * `AnimatedUrDecoderInstrumentedTest`.
+ */
 class AnimatedUrDecoderTest {
     @Test
-    fun decodesSinglePartBytesUr() {
-        val payload = "cashu-test-token"
-        val ur = UR("bytes", Cbor.wrapInByteString(payload.toByteArray()))
-        val part = UREncoder.encode(ur)
+    fun rejectsNonUrContentWithoutTouchingNativeCode() {
+        val update = AnimatedUrDecoder().receivePart("cashuAnotaur")
 
-        val update = AnimatedUrDecoder().receivePart(part)
-
-        assertEquals(payload, update.content)
-        assertEquals(1f, update.progress)
-        assertNull(update.errorMessage)
-    }
-
-    @Test
-    fun reassemblesMultipartBytesUr() {
-        val payload = "cashuA" + "0123456789abcdef".repeat(40)
-        val ur = UR("bytes", Cbor.wrapInByteString(payload.toByteArray()))
-        val encoder = UREncoder(ur, maxFragmentLen = 80)
-        val decoder = AnimatedUrDecoder()
-
-        var decoded: String? = null
-        repeat(20) {
-            val update = decoder.receivePart(encoder.nextPart())
-            assertNull(update.errorMessage)
-            assertTrue(update.progress in 0f..1f)
-            decoded = update.content ?: decoded
-            if (decoded != null) return@repeat
-        }
-
-        assertEquals(payload, decoded)
+        assertNull(update.content)
+        assertEquals("Not a UR fragment.", update.errorMessage)
+        assertEquals(0f, update.progress)
     }
 }

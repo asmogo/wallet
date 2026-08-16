@@ -1,6 +1,5 @@
 package com.cashu.me.Core
 
-import com.cashu.me.Models.PendingToken
 import com.cashu.me.Models.TransactionKind
 import com.cashu.me.Models.TransactionStatus
 import com.cashu.me.Models.TransactionType
@@ -15,38 +14,36 @@ import org.junit.Test
 
 class PendingTokenClaimTest {
     @Test
-    fun manualCheckIsOnlyOfferedForPendingTokenWhenAutomaticChecksAreDisabled() {
-        val pending = pendingToken()
+    fun manualCheckIsOnlyOfferedForPendingSentTokenWhenAutomaticChecksAreDisabled() {
+        val pending = pendingTransaction(token = "cashuBpending")
 
         assertTrue(shouldOfferManualClaimCheck(automaticChecksEnabled = false, pending))
         assertFalse(shouldOfferManualClaimCheck(automaticChecksEnabled = true, pending))
-        assertFalse(shouldOfferManualClaimCheck(automaticChecksEnabled = false, pendingToken = null))
-    }
-
-    @Test
-    fun resolvesMergedHistoryRowByEncodedTokenWhenCdkReplacesItsId() {
-        val pending = pendingToken()
-        val mergedRow = pendingTransaction(id = "cdk-transaction-id", token = pending.token)
-
-        assertEquals(pending, pendingSentTokenFor(mergedRow, listOf(pending)))
-    }
-
-    @Test
-    fun doesNotResolveIncomingOrCompletedEcashRows() {
-        val pending = pendingToken()
-
-        assertEquals(
-            null,
-            pendingSentTokenFor(
-                pendingTransaction(token = pending.token).copy(type = TransactionType.Incoming),
-                listOf(pending),
+        assertFalse(
+            shouldOfferManualClaimCheck(
+                automaticChecksEnabled = false,
+                transaction = pending.copy(status = TransactionStatus.Completed),
             ),
         )
-        assertEquals(
-            null,
-            pendingSentTokenFor(
-                pendingTransaction(token = pending.token).copy(status = TransactionStatus.Completed),
-                listOf(pending),
+    }
+
+    @Test
+    fun isPendingSentTokenMatchesOnlyUnclaimedOutgoingEcash() {
+        assertTrue(isPendingSentToken(pendingTransaction(token = "cashuBpending")))
+
+        // Without the token string the row is not actionable (no QR/Copy).
+        assertFalse(isPendingSentToken(pendingTransaction(token = null)))
+        assertFalse(
+            isPendingSentToken(pendingTransaction(token = "cashuBpending").copy(type = TransactionType.Incoming)),
+        )
+        assertFalse(
+            isPendingSentToken(
+                pendingTransaction(token = "cashuBpending").copy(status = TransactionStatus.Completed),
+            ),
+        )
+        assertFalse(
+            isPendingSentToken(
+                pendingTransaction(token = "cashuBpending").copy(kind = TransactionKind.Lightning),
             ),
         )
     }
@@ -76,18 +73,9 @@ class PendingTokenClaimTest {
         }
     }
 
-    private fun pendingToken() = PendingToken(
-        tokenId = "local-pending-id",
-        token = "cashuBpending",
-        amount = 42,
-        fee = 1,
-        dateEpochMillis = 100,
-        mintUrl = "https://mint.example.com",
-    )
-
     private fun pendingTransaction(
-        id: String = "local-pending-id",
-        token: String,
+        id: String = "cdk-transaction-id",
+        token: String?,
     ) = WalletTransaction(
         id = id,
         amount = 42,
@@ -97,6 +85,6 @@ class PendingTokenClaimTest {
         status = TransactionStatus.Pending,
         mintUrl = "https://mint.example.com",
         token = token,
-        isPendingToken = true,
+        sagaId = "operation-id",
     )
 }

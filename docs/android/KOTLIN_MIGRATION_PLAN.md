@@ -888,7 +888,7 @@ Progress column:
 
 - [ ] CDK Kotlin API names and availability may not match cdk-swift one-to-one. Resolve in Phase 0 and keep the gateway as the compatibility layer.
 - [ ] CDK Kotlin newest indexed release may lag CDK core. Decide whether to pin stable, RC, or wait for a binding release matching the Swift feature set.
-- [x] Animated QR/UR is not a CDK core feature; Android now uses `com.gorunjinian:bcur-kotlin` for Swift-compatible BC-UR encode/decode behavior.
+- [x] ~~Animated QR/UR is not a CDK core feature~~ Superseded: CDK 0.18 added NUT-16 animated QR tokens with FFI bindings (`Token.urEncoder` / `TokenUrDecoder`). Both apps now use CDK for UR encode/decode; the interim `com.gorunjinian:bcur-kotlin` (Android) and URKit (iOS) dependencies were removed in the 0.18 upgrade.
 - [ ] Android secp256k1/Schnorr key generation must exactly match P2PK/Nostr expectations. Verify library output against Swift fixtures.
 - [ ] NFC behavior is hardware-dependent and must be verified on physical devices.
 - [ ] Android clipboard privacy differs from iOS. Auto-paste should be permission-aware and minimally invasive.

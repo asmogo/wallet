@@ -84,6 +84,12 @@ final class TransactionServiceTests: XCTestCase {
         XCTAssertEqual(service.getToken(txId: "b"), "cashuAbbb")
     }
 
+    func testTransactionIdLookupByTokenString() {
+        XCTAssertNil(service.transactionId(forToken: "cashuAmissing"))
+        service.saveToken(txId: "tx1", token: "cashuAtoken123")
+        XCTAssertEqual(service.transactionId(forToken: "cashuAtoken123"), "tx1")
+    }
+
     // MARK: - Preimage (quoteId ↔ preimage)
 
     func testGetPreimageNilByDefault() {
@@ -102,217 +108,52 @@ final class TransactionServiceTests: XCTestCase {
         XCTAssertEqual(service.getPreimage(quoteId: "q2"), "pre2")
     }
 
-    // MARK: - Melt quote fees
-
-    func testGetMeltFeePaidNilByDefault() {
-        XCTAssertNil(service.getMeltFeePaid(quoteId: "nonexistent"))
-    }
-
-    func testSaveAndGetMeltFeePaid() {
-        service.saveMeltFeePaid(quoteId: "melt1", feePaid: 3)
-        XCTAssertEqual(service.getMeltFeePaid(quoteId: "melt1"), 3)
-    }
-
-    func testMeltFeeZeroIsStoredDistinctlyFromMissing() {
-        service.saveMeltFeePaid(quoteId: "free", feePaid: 0)
-        XCTAssertEqual(service.getMeltFeePaid(quoteId: "free"), 0)
-    }
-
-    // MARK: - Pending Tokens (savePendingToken / removePendingToken)
-
-    func testPendingTokensEmptyInitially() {
-        XCTAssertTrue(service.pendingTokens.isEmpty)
-    }
-
-    func testSavePendingTokenAppendsNewEntry() {
-        service.savePendingToken(pendingToken(id: "p1", amount: 10))
-        XCTAssertEqual(service.pendingTokens.count, 1)
-        XCTAssertEqual(service.pendingTokens[0].tokenId, "p1")
-    }
-
-    func testSavePendingTokenUpdatesExisting() {
-        let initial = pendingToken(id: "p1", amount: 10)
-        let updated = PendingToken(
-            tokenId: "p1", token: "cashuAupdated",
-            amount: 20, fee: 1, date: Date(),
-            mintUrl: "https://mint.example.com", memo: "updated"
-        )
-        service.savePendingToken(initial)
-        service.savePendingToken(updated)
-        XCTAssertEqual(service.pendingTokens.count, 1)
-        XCTAssertEqual(service.pendingTokens[0].amount, 20)
-    }
-
-    func testRemovePendingTokenByID() {
-        service.savePendingToken(pendingToken(id: "a", amount: 10))
-        service.savePendingToken(pendingToken(id: "b", amount: 20))
-        service.removePendingToken(tokenId: "a")
-        XCTAssertEqual(service.pendingTokens.count, 1)
-        XCTAssertEqual(service.pendingTokens[0].tokenId, "b")
-    }
-
-    func testRemoveNonExistentTokenIDIsNoop() {
-        service.savePendingToken(pendingToken(id: "x", amount: 5))
-        service.removePendingToken(tokenId: "nonexistent")
-        XCTAssertEqual(service.pendingTokens.count, 1)
-    }
-
-    // MARK: - markTokenAsClaimed state machine
-
-    func testMarkTokenAsClaimedMovesFromPendingToClaimed() {
-        let token = pendingToken(id: "c1", amount: 21)
-        service.savePendingToken(token)
-        service.markTokenAsClaimed(token: token.token)
-
-        XCTAssertTrue(service.pendingTokens.isEmpty, "Pending list should be empty after claim")
-    }
-
-    func testMergePendingUSDTokenIntoMatchingRowDoesNotCreateSatDuplicate() {
-        let date = Date()
-        let pending = PendingToken(
-            tokenId: "usd-pending",
-            token: "not-needed-for-unit-matching",
-            amount: 10,
-            fee: 1,
-            date: date,
-            mintUrl: "https://mint.example.com",
-            memo: nil,
-            unit: "usd"
-        )
-        service.savePendingToken(pending)
-
-        var transaction = WalletTransaction(
-            id: "cdk-usd-send",
-            amount: 10,
-            type: .outgoing,
-            kind: .ecash,
-            date: date,
-            memo: nil,
-            status: .completed,
-            mintUrl: "https://mint.example.com"
-        )
-        transaction.unit = "usd"
-        var transactions = [transaction]
-
-        service.mergeSentTokens(into: &transactions)
-
-        XCTAssertEqual(transactions.count, 1)
-        XCTAssertEqual(transactions[0].unit, "usd")
-        XCTAssertEqual(transactions[0].status, .pending)
-        XCTAssertTrue(transactions[0].isPendingToken)
-        XCTAssertEqual(transactions[0].token, pending.token)
-    }
-
-    func testClaimedUSDTokenKeepsUnitWhenMerged() {
-        let date = Date()
-        let pending = PendingToken(
-            tokenId: "usd-claimed",
-            token: "claimed-usd-token",
-            amount: 25,
-            fee: 2,
-            date: date,
-            mintUrl: "https://mint.example.com",
-            memo: nil,
-            unit: "usd"
-        )
-        service.savePendingToken(pending)
-        service.markTokenAsClaimed(token: pending.token)
-
-        var transaction = WalletTransaction(
-            id: "cdk-usd-claimed",
-            amount: 25,
-            type: .outgoing,
-            kind: .ecash,
-            date: date,
-            memo: nil,
-            status: .completed,
-            mintUrl: "https://mint.example.com"
-        )
-        transaction.unit = "usd"
-        var transactions = [transaction]
-
-        service.mergeSentTokens(into: &transactions)
-
-        XCTAssertEqual(transactions.count, 1)
-        XCTAssertEqual(transactions[0].unit, "usd")
-        XCTAssertEqual(transactions[0].status, .completed)
-        XCTAssertEqual(transactions[0].token, pending.token)
-    }
-
-    func testMarkTokenAsClaimedNonexistentIsNoop() {
-        service.savePendingToken(pendingToken(id: "d1", amount: 5))
-        service.markTokenAsClaimed(token: "cashuAsome-other-token")
-        XCTAssertEqual(service.pendingTokens.count, 1, "Unrelated pending token should remain")
-    }
-
-    // MARK: - Manual pending-token claim checks
+    // MARK: - Manual pending-send claim checks
 
     func testManualClaimCheckIsOnlyOfferedWhenAutomaticChecksAreDisabled() {
-        let pending = pendingToken(id: "manual", amount: 42)
+        var pending = transaction(id: "manual", status: .pending, date: Date())
+        pending.token = "cashuAtokenmanual"
+        pending.sagaId = "operation-id"
 
         XCTAssertTrue(
             shouldOfferManualClaimCheck(
                 automaticChecksEnabled: false,
-                pendingToken: pending
+                transaction: pending
             )
         )
         XCTAssertFalse(
             shouldOfferManualClaimCheck(
                 automaticChecksEnabled: true,
-                pendingToken: pending
+                transaction: pending
             )
         )
+
+        let completed = transaction(id: "settled", status: .completed, date: Date())
         XCTAssertFalse(
             shouldOfferManualClaimCheck(
                 automaticChecksEnabled: false,
-                pendingToken: nil
+                transaction: completed
             )
         )
     }
 
-    func testPendingSentTokenResolvesMergedHistoryRowByEncodedToken() {
-        let pending = pendingToken(id: "local-pending-id", amount: 42)
-        var mergedRow = transaction(
-            id: "cdk-transaction-id",
-            status: .pending,
-            date: pending.date
-        )
-        mergedRow.isPendingToken = true
-        mergedRow.token = pending.token
+    func testIsPendingSentTokenMatchesOnlyUnclaimedOutgoingEcash() {
+        var pending = transaction(id: "p", status: .pending, date: Date())
+        pending.token = "cashuAtokenp"
+        XCTAssertTrue(isPendingSentToken(pending))
 
-        let resolved = pendingSentTokenFor(
-            transaction: mergedRow,
-            pendingTokens: [pending]
-        )
+        // Without the token string the row is not actionable (no QR/Copy).
+        var tokenless = transaction(id: "t", status: .pending, date: Date())
+        tokenless.sagaId = "operation-id"
+        XCTAssertFalse(isPendingSentToken(tokenless))
 
-        XCTAssertEqual(resolved?.tokenId, pending.tokenId)
-    }
+        var incoming = transaction(id: "i", status: .pending, date: Date(), type: .incoming)
+        incoming.token = "cashuAtokeni"
+        XCTAssertFalse(isPendingSentToken(incoming))
 
-    func testPendingSentTokenRejectsIncomingAndCompletedRows() {
-        let pending = pendingToken(id: "local-pending-id", amount: 42)
-        var incoming = transaction(
-            id: pending.tokenId,
-            status: .pending,
-            date: pending.date,
-            type: .incoming
-        )
-        incoming.isPendingToken = true
-        incoming.token = pending.token
-
-        var completed = transaction(
-            id: pending.tokenId,
-            status: .completed,
-            date: pending.date
-        )
-        completed.isPendingToken = true
-        completed.token = pending.token
-
-        XCTAssertNil(
-            pendingSentTokenFor(transaction: incoming, pendingTokens: [pending])
-        )
-        XCTAssertNil(
-            pendingSentTokenFor(transaction: completed, pendingTokens: [pending])
-        )
+        var claimed = transaction(id: "c", status: .completed, date: Date())
+        claimed.token = "cashuAtokenc"
+        XCTAssertFalse(isPendingSentToken(claimed))
     }
 
     func testPendingTokenClaimCheckDistinguishesAllOutcomes() async throws {
@@ -391,10 +232,8 @@ final class TransactionServiceTests: XCTestCase {
     // MARK: - clearState
 
     func testClearStateEmptiesAllCollections() {
-        service.savePendingToken(pendingToken(id: "p", amount: 1))
         service.savePendingReceiveToken(receiveToken(id: "r", amount: 2))
         service.clearState()
-        XCTAssertTrue(service.pendingTokens.isEmpty)
         XCTAssertTrue(service.pendingReceiveTokens.isEmpty)
         XCTAssertTrue(service.transactions.isEmpty)
     }
@@ -410,6 +249,51 @@ final class TransactionServiceTests: XCTestCase {
         XCTAssertEqual(
             TransactionService.walletUnits(advertisedUnits: [" SAT ", "usd", "USD", " "]),
             ["sat", "usd"]
+        )
+    }
+
+    // MARK: - Detail lookup (quote-row → transaction-row follow)
+
+    func testLiveDetailPrefersExactIdMatch() {
+        let open = transaction(id: "quote-1", status: .pending, date: Date())
+        let other = WalletTransaction(
+            id: "cdk-9", amount: 1, type: .incoming, kind: .lightning,
+            date: Date(), memo: nil, status: .completed
+        )
+
+        XCTAssertEqual([other, open].liveDetail(openId: "quote-1")?.id, "quote-1")
+    }
+
+    func testLiveDetailFallsBackToQuoteIdAfterMintSwap() {
+        // The pending row's id was the quote id; after minting, only the CDK
+        // transaction (saga-derived id, same quoteId) remains.
+        var completed = transaction(id: "cdk-9", status: .completed, date: Date())
+        completed.quoteId = "quote-1"
+        let unrelated = transaction(id: "other", status: .completed, date: Date())
+
+        let resolved = [unrelated, completed].liveDetail(openId: "quote-1", openQuoteId: "quote-1")
+
+        XCTAssertEqual(resolved?.id, "cdk-9")
+    }
+
+    func testLiveDetailResolvesReusableOfferToNewestPayment() {
+        // Rows are stored newest-first; several payments share one offer's
+        // quoteId, so the fallback yields the latest one.
+        var newer = transaction(id: "cdk-2", status: .completed, date: Date())
+        newer.quoteId = "offer"
+        var older = transaction(id: "cdk-1", status: .completed, date: Date(timeIntervalSince1970: 100))
+        older.quoteId = "offer"
+
+        XCTAssertEqual(
+            [newer, older].liveDetail(openId: "offer", openQuoteId: "offer")?.id,
+            "cdk-2"
+        )
+    }
+
+    func testLiveDetailReturnsNilWhenNothingMatches() {
+        XCTAssertNil(
+            [transaction(id: "a", status: .completed, date: Date())]
+                .liveDetail(openId: "missing", openQuoteId: "also-missing")
         )
     }
 
@@ -476,19 +360,6 @@ final class TransactionServiceTests: XCTestCase {
             date: date,
             memo: nil,
             status: status
-        )
-    }
-
-    private func pendingToken(id: String, amount: UInt64) -> PendingToken {
-        PendingToken(
-            tokenId: id,
-            token: "cashuAtoken\(id)",
-            amount: amount,
-            fee: 0,
-            date: Date(),
-            mintUrl: "https://mint.example.com",
-            memo: nil,
-            unit: "sat"
         )
     }
 

@@ -125,37 +125,6 @@ class CashuRequestStoreTest {
     }
 
     @Test
-    fun reusableBolt12TransactionsKeepEachPaymentDuringHistoryMerge() {
-        val transactions = listOf(
-            quoteTransaction(id = "tx-a", amount = 21, date = 100, quoteId = "quote-a"),
-            quoteTransaction(id = "tx-b", amount = 34, date = 200, quoteId = "quote-a"),
-            quoteTransaction(id = "tx-a", amount = 21, date = 100, quoteId = "quote-a"),
-        )
-
-        val merged = deduplicateWalletTransactions(
-            transactions = transactions,
-            reusableBolt12QuoteIds = setOf("quote-a"),
-        )
-
-        assertEquals(listOf("tx-a", "tx-b"), merged.map { it.id })
-    }
-
-    @Test
-    fun oneShotQuoteTransactionsRemainDeduplicatedByQuoteId() {
-        val transactions = listOf(
-            quoteTransaction(id = "tx-a", amount = 21, date = 100, quoteId = "quote-a"),
-            quoteTransaction(id = "tx-b", amount = 34, date = 200, quoteId = "quote-a"),
-        )
-
-        val merged = deduplicateWalletTransactions(
-            transactions = transactions,
-            reusableBolt12QuoteIds = emptySet(),
-        )
-
-        assertEquals(listOf("tx-a"), merged.map { it.id })
-    }
-
-    @Test
     fun updateDeleteResetAndReloadPersistConsistentState() {
         val persistence = MemoryCashuRequestPersistence()
         val store = CashuRequestStore(persistence)

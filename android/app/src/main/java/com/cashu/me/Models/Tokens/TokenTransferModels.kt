@@ -6,22 +6,11 @@ import kotlinx.serialization.Serializable
 data class SendTokenResult(
     val token: String,
     val fee: Long,
+    /** CDK transaction id (saga-derived) recorded for this send, when known.
+     * The token string is stored under this id so History can re-display it
+     * and claim checks can resolve the operation. */
+    val transactionId: String? = null,
 )
-
-@Serializable
-data class PendingToken(
-    val tokenId: String,
-    val token: String,
-    val amount: Long,
-    val fee: Long,
-    val dateEpochMillis: Long,
-    val mintUrl: String,
-    val memo: String? = null,
-    // Amount is denominated in this unit (a $5.00 token stores 500, unit "usd").
-    val unit: String = "sat",
-) {
-    val id: String get() = tokenId
-}
 
 @Serializable
 data class PendingReceiveToken(
@@ -37,19 +26,4 @@ data class PendingReceiveToken(
 ) {
     val id: String get() = tokenId
     val isCashuRequestPayment: Boolean get() = cashuRequestId != null || processedId != null
-}
-
-@Serializable
-data class ClaimedToken(
-    val tokenId: String,
-    val token: String,
-    val amount: Long,
-    val fee: Long,
-    val dateEpochMillis: Long,
-    val mintUrl: String,
-    val memo: String? = null,
-    val claimedDateEpochMillis: Long,
-    val unit: String = "sat",
-) {
-    val id: String get() = tokenId
 }

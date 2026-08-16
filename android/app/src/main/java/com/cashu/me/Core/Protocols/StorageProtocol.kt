@@ -48,14 +48,10 @@ object StorageKeys {
     const val walletMints = "wallet.mints"
     const val walletActiveMintUrl = "wallet.activeMintUrl"
     const val walletBalancesByUnit = "wallet.balancesByUnit"
-    const val walletPendingTokens = "wallet.pendingTokens"
     const val walletPendingReceiveTokens = "wallet.pendingReceiveTokens"
-    const val walletClaimedTokens = "wallet.claimedTokens"
     const val walletTransactions = "wallet.transactions"
     const val walletSavedTokens = "wallet.savedTokens"
     const val walletPaymentPreimages = "wallet.paymentPreimages"
-    const val walletMeltQuoteFees = "wallet.meltQuoteFees"
-    const val walletPendingMeltQuotes = "wallet.pendingMeltQuotes"
     const val walletMintQuoteTimestamps = "wallet.mintQuoteTimestamps"
     const val walletProcessedNPCQuotes = "wallet.processedNPCQuotes"
     const val walletProcessedCashuRequests = "wallet.processedCashuRequests"
@@ -63,6 +59,15 @@ object StorageKeys {
     const val cashuRequests = "cashuRequests.v1"
     const val cashuRequestsCurrentId = "cashuRequests.currentId.v1"
     const val cashuRequestsProcessedNip17Ids = "cashuRequests.processedNIP17Ids.v1"
+
+    // Retired by the CDK 0.18 upgrade: pending/claimed send tracking, async-melt
+    // tracking, and melt fee records — CDK now owns pending-transaction
+    // lifecycle state. They stay on the boundary wipe list so wallet deletion
+    // still covers installs that never ran the purge.
+    const val retiredWalletPendingTokens = "wallet.pendingTokens"
+    const val retiredWalletClaimedTokens = "wallet.claimedTokens"
+    const val retiredWalletMeltQuoteFees = "wallet.meltQuoteFees"
+    const val retiredWalletPendingMeltQuotes = "wallet.pendingMeltQuotes"
 
     const val settingsUseBitcoinSymbol = "settings.useBitcoinSymbol"
     const val settingsShowFiatBalance = "settings.showFiatBalance"
@@ -121,18 +126,21 @@ object StorageKeys {
     const val legacySettingsNwcConnections = "settings.nwcConnections"
     const val legacySecureNwcPrefix = "settings.nwc."
 
+    val retiredWalletKeys = setOf(
+        retiredWalletPendingTokens,
+        retiredWalletClaimedTokens,
+        retiredWalletMeltQuoteFees,
+        retiredWalletPendingMeltQuotes,
+    )
+
     val walletBoundaryKeys = setOf(
         walletMints,
         walletActiveMintUrl,
         walletBalancesByUnit,
-        walletPendingTokens,
         walletPendingReceiveTokens,
-        walletClaimedTokens,
         walletTransactions,
         walletSavedTokens,
         walletPaymentPreimages,
-        walletMeltQuoteFees,
-        walletPendingMeltQuotes,
         walletMintQuoteTimestamps,
         walletProcessedNPCQuotes,
         walletProcessedCashuRequests,
@@ -147,5 +155,5 @@ object StorageKeys {
         nwcEnabled,
         nwcSelectedMint,
         nwcBudgetSats,
-    )
+    ) + retiredWalletKeys
 }

@@ -5,6 +5,8 @@ import com.cashu.me.Core.CDK.CdkGatewayUnavailable
 import com.cashu.me.Core.CDK.ForeignNfcSettlement
 import org.cashudevkit.Amount
 import org.cashudevkit.CurrencyUnit
+import org.cashudevkit.KeySetInfo
+import org.cashudevkit.KeysetLoadPolicy
 import org.cashudevkit.MeltConfirmOptions
 import org.cashudevkit.PaymentMethod
 import org.cashudevkit.QuoteState
@@ -42,7 +44,9 @@ internal suspend fun settleForeignNfcTokenWithCdk(
         WalletConfig(targetProofCount = 10u),
     )
     try {
-        val keysets = tempWallet.refreshKeysets()
+        val keysets = tempWallet.keysets(KeysetLoadPolicy.REFRESH).map {
+            KeySetInfo(id = it.id, unit = it.unit, active = it.active ?: false, inputFeePpk = it.inputFeePpk)
+        }
         val proofs = token.proofs(keysets)
         require(proofs.isNotEmpty()) { "The foreign-mint token contains no proofs." }
 

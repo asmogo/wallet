@@ -27,10 +27,9 @@ import androidx.compose.ui.unit.dp
 import com.google.zxing.BarcodeFormat
 import com.google.zxing.EncodeHintType
 import com.google.zxing.qrcode.QRCodeWriter
-import com.gorunjinian.bcur.Cbor
-import com.gorunjinian.bcur.UR
-import com.gorunjinian.bcur.UREncoder
 import kotlinx.coroutines.delay
+import org.cashudevkit.Token as CdkToken
+import org.cashudevkit.TokenUrEncoder
 
 enum class QRSpeed(val label: String, val intervalMillis: Long) {
     Fast("F", 100),
@@ -59,7 +58,7 @@ enum class QRSize(val label: String, val chunkSize: Int) {
 internal data class QRFrameSequence(
     val firstFrame: String,
     val totalParts: Int,
-    val encoder: UREncoder?,
+    val encoder: TokenUrEncoder?,
 )
 
 @Composable
@@ -81,7 +80,7 @@ fun QRCodeView(
         val encoder = sequence.encoder ?: return@LaunchedEffect
         while (true) {
             delay(speed.intervalMillis)
-            frame = encoder.nextPart()
+            frame = runCatching { encoder.nextPart() }.getOrDefault(frame)
         }
     }
 
@@ -139,6 +138,12 @@ private fun QRControlsRow(
     }
 }
 
+/**
+ * NUT-16 animated frames come from CDK's own fountain encoder. Only Cashu
+ * tokens animate: anything else (invoices, addresses, request strings) is a
+ * standardized static payload, and non-token content simply doesn't fit the
+ * NUT-16 envelope — those fall back to a single static frame.
+ */
 internal fun qrFrameSequence(
     content: String,
     staticOnly: Boolean,
@@ -148,25 +153,18 @@ internal fun qrFrameSequence(
         return QRFrameSequence(firstFrame = content, totalParts = 1, encoder = null)
     }
     return runCatching {
-        val cbor = Cbor.wrapInByteString(content.toByteArray(Charsets.UTF_8))
-        val encoder = UREncoder(UR("bytes", cbor), maxFragmentLen = chunkSize)
-        val firstFrame = encoder.nextPart()
+        val encoder = CdkToken.decode(content).urEncoder(maxFragmentLength = chunkSize.toUInt())
+        if (encoder.isSingleFragment()) {
+            return QRFrameSequence(firstFrame = content, totalParts = 1, encoder = null)
+        }
         QRFrameSequence(
-            firstFrame = firstFrame,
-            totalParts = totalParts(firstFrame),
+            firstFrame = encoder.nextPart(),
+            totalParts = encoder.fragmentCount().toInt().coerceAtLeast(1),
             encoder = encoder,
         )
     }.getOrElse {
         QRFrameSequence(firstFrame = content, totalParts = 1, encoder = null)
     }
-}
-
-private fun totalParts(frame: String): Int {
-    val pieces = frame.lowercase().split("/")
-    if (pieces.size < 3) return 1
-    val sequence = pieces[1].split("-")
-    if (sequence.size != 2) return 1
-    return sequence[1].toIntOrNull()?.coerceAtLeast(1) ?: 1
 }
 
 private fun qrBitmap(content: String, size: Int = 768): Bitmap {
