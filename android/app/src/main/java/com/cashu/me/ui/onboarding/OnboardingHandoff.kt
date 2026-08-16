@@ -31,6 +31,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import com.cashu.me.App.UiTestRuntime
 import com.cashu.me.ui.theme.rememberReducedMotion
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.delay
@@ -266,7 +267,7 @@ internal fun OnboardingHandoffHost(controller: OnboardingHandoffController) {
             // see AsciiField) the press would sit invisible and release stale.
             val powerSave = (context.getSystemService(Context.POWER_SERVICE) as? PowerManager)
                 ?.isPowerSaveMode == true
-            val canBloom = !powerSave && !isRunningInTestHarness()
+            val canBloom = !powerSave && !UiTestRuntime.active
             if (canBloom) session.touch.press(centerXDp, centerYDp, nowSeconds())
 
             delay(HoldMs.toLong())

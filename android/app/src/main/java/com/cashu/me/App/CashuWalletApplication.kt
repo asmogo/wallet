@@ -55,3 +55,13 @@ open class CashuWalletApplication : Application() {
         mutableContainer.value = container
     }
 }
+
+/** True only in processes running the debug-only UiTestApplication the
+ * instrumentation runner installs — i.e. instrumented UI runs. Decorative
+ * ambient motion (the onboarding ASCII field's clock) freezes there the
+ * same way it does for Reduce Motion and battery saver, sparing the CI
+ * emulator's software GPU. The production manifest always installs
+ * [CashuWalletApplication], so this stays false outside tests. */
+internal object UiTestRuntime {
+    @Volatile var active = false
+}
