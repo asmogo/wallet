@@ -181,6 +181,16 @@ struct ScannerWrapperView: View {
                             },
                             onFailure: { error in
                                 cameraFailureMessage = error
+                            },
+                            onAppear: {
+                                // A visible scanner must be an armed scanner.
+                                // The camera surface can (re)appear without a
+                                // fresh model — a cancelled interactive sheet
+                                // dismissal, a stacked cover closing, or SwiftUI
+                                // reusing retained sheet state — and without this
+                                // reset the preview looks live while `isScanning`
+                                // stays false and every scan is silently dropped.
+                                scannerModel.reset()
                             }
                         )
                         .ignoresSafeArea()
@@ -1204,37 +1214,48 @@ struct CashuPaymentRequestPayView: View {
 struct LegacyQRScannerView: UIViewControllerRepresentable {
     var onResult: (String) -> Void
     var onFailure: (String) -> Void
-    
+    /// Fires every time the camera surface (re)appears — including the cases
+    /// SwiftUI can't see: cancelled interactive dismissals and stacked covers
+    /// closing. Callers use it to re-arm scan intake.
+    var onAppear: () -> Void
+
     func makeUIViewController(context: Context) -> QRScannerViewController {
         let controller = QRScannerViewController()
         controller.delegate = context.coordinator
         return controller
     }
-    
+
     func updateUIViewController(_ uiViewController: QRScannerViewController, context: Context) {
         context.coordinator.onResult = onResult
         context.coordinator.onFailure = onFailure
+        context.coordinator.onAppear = onAppear
     }
-    
+
     func makeCoordinator() -> Coordinator {
-        Coordinator(onResult: onResult, onFailure: onFailure)
+        Coordinator(onResult: onResult, onFailure: onFailure, onAppear: onAppear)
     }
-    
+
     class Coordinator: NSObject, QRScannerViewControllerDelegate {
         var onResult: (String) -> Void
         var onFailure: (String) -> Void
-        
-        init(onResult: @escaping (String) -> Void, onFailure: @escaping (String) -> Void) {
+        var onAppear: () -> Void
+
+        init(onResult: @escaping (String) -> Void, onFailure: @escaping (String) -> Void, onAppear: @escaping () -> Void) {
             self.onResult = onResult
             self.onFailure = onFailure
+            self.onAppear = onAppear
         }
-        
+
         func didFound(code: String) {
             onResult(code)
         }
-        
+
         func didFail(error: String) {
             onFailure(error)
+        }
+
+        func scannerDidAppear() {
+            onAppear()
         }
     }
 }
@@ -1242,6 +1263,7 @@ struct LegacyQRScannerView: UIViewControllerRepresentable {
 protocol QRScannerViewControllerDelegate: AnyObject {
     func didFound(code: String)
     func didFail(error: String)
+    func scannerDidAppear()
 }
 
 class QRScannerViewController: UIViewController, AVCaptureMetadataOutputObjectsDelegate {
@@ -1322,6 +1344,12 @@ class QRScannerViewController: UIViewController, AVCaptureMetadataOutputObjectsD
     
     override func viewWillAppear(_ animated: Bool) {
         super.viewWillAppear(animated)
+
+        // Re-arm intake on every (re)appearance: a consumed scan sets
+        // `isScanning = false`, and appearances that don't rebuild the view
+        // (cancelled interactive dismissal, a stacked cover closing, a reused
+        // sheet) would otherwise leave a live camera that silently drops scans.
+        delegate?.scannerDidAppear()
 
         // A cancelled interactive sheet dismissal fires viewWillDisappear (which
         // stops the session) and then viewWillAppear without reloading the view,

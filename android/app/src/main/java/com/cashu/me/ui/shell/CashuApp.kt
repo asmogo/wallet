@@ -397,6 +397,14 @@ private fun AuthenticatedShell(container: AppContainer) {
     }
 
     val activeScannerTarget = scannerTarget
+    // One id per scanner opening. The scanner overlay's exit animation keeps the
+    // composable alive briefly, so a fast reopen can reuse that composition —
+    // the id keys its one-shot scan state back to fresh (iOS viewWillAppear
+    // re-arm parity).
+    var scannerSessionId by remember { mutableStateOf(0) }
+    LaunchedEffect(activeScannerTarget) {
+        if (activeScannerTarget != null) scannerSessionId += 1
+    }
     // The shell stays mounted; camera surfaces animate over it (slide-up + fade)
     // instead of replacing it with a one-frame cut.
     var lastScannerTarget by remember { mutableStateOf(ScannerTarget.Auto) }
@@ -454,6 +462,7 @@ private fun AuthenticatedShell(container: AppContainer) {
                     container.runtimePolicy.useDeterministicCameraPermission,
                 promptText = if (scanningP2pkKey) LockEcashCopy.ScanPrompt else ScannerDefaultPrompt,
                 quickActions = if (scanningP2pkKey) p2pkQuickActions else emptyList(),
+                sessionId = scannerSessionId,
                 onScanned = { payload ->
                     scannerTarget = null
                     routeScannedPayload(
