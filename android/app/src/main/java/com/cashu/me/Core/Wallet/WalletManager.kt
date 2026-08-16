@@ -40,9 +40,10 @@ import com.cashu.me.Models.MintInfo
 import com.cashu.me.Models.MintQuoteInfo
 import com.cashu.me.Models.PaymentMethodKind
 import com.cashu.me.Models.PendingReceiveToken
-import com.cashu.me.Models.PendingToken
 import com.cashu.me.Models.RestoreMintResult
+import com.cashu.me.Models.SagaTransactionId
 import com.cashu.me.Models.SendTokenResult
+import com.cashu.me.Models.WalletTransaction
 import org.bouncycastle.crypto.digests.SHA512Digest
 import org.bouncycastle.crypto.generators.PKCS5S2ParametersGenerator
 import org.bouncycastle.crypto.params.KeyParameter
@@ -104,9 +105,9 @@ class WalletManager(
     private val lastMintQuoteSyncAtMs = AtomicLong(0L)
 
     // In-process waiters for melts a mint accepted asynchronously (NUT-05),
-    // keyed by quote ID. These die with the process; `walletStore`'s
-    // pending-melt-quote record plus [syncPendingMeltQuotes] are the relaunch
-    // backstop (iOS WalletManager+PendingMelts parity).
+    // keyed by quote ID. These die with the process; CDK's durable melt sagas
+    // plus [syncPendingMeltQuotes] are the relaunch backstop (iOS
+    // WalletManager+PendingMelts parity).
     private val pendingMeltWaiters = mutableMapOf<String, Job>()
 
     // Foreground quote poll (started/stopped on ProcessLifecycle ON_START/ON_STOP
@@ -152,6 +153,7 @@ class WalletManager(
                         val mnemonic = checkNotNull(secureStorage.loadString(StorageKeys.secureWalletMnemonic)) {
                             "Stored wallet seed could not be decrypted."
                         }
+                        walletStore.purgeRetiredKeys()
                         openWalletRepositoryWithRecovery(mnemonic)
                         deriveNostrKey(mnemonic)
                     }
@@ -617,17 +619,13 @@ class WalletManager(
     /**
      * Silent single-quote check + mint if paid. Used by Receive (per-quote
      * poll) and transaction detail open — must not flip the global loading
-     * flag (passive UX). Forced past unpaid backoff (brief debounce only).
+     * flag (passive UX).
      */
     suspend fun refreshPendingMintQuote(
         quoteId: String,
         confirmationOwner: ReceiveConfirmationOwner,
     ): Boolean {
-        val result = mintQuoteSyncService.syncPendingMintQuote(
-            quoteId,
-            allowPendingOnchainMintAttempt = true,
-            force = true,
-        )
+        val result = mintQuoteSyncService.syncPendingMintQuote(quoteId)
         if (result.minted) refreshBalance()
         loadTransactions()
         result.receivedAmount?.let { amount ->
@@ -650,68 +648,42 @@ class WalletManager(
     }
 
     /**
-     * Re-check unissued mint quotes against their mints and mint the paid ones.
+     * Check every tracked wallet for paid-but-unissued mint quotes and mint
+     * them (CDK 0.18 `mintUnissuedQuotes`): each quote's NUT-04 counters are
+     * refreshed with the mint and only the outstanding delta is minted, which
+     * covers reusable BOLT12 offers without any local heuristics.
      * Silent by design (iOS parity): must never flip the global loading flag.
      *
-     * @param force when false (poll / startup / History open), per-quote
-     *   exponential backoff applies and at most
-     *   [MintQuoteCheckBackoff.MAX_PASSIVE_CHECKS_PER_PASS] quotes are checked
-     *   per pass. when true (pull-to-refresh), every quote is eligible subject
-     *   only to a short per-quote debounce.
+     * @param force when false (poll / startup / History open), the pass only
+     *   runs when the gateway lane is idle enough; when true (pull-to-refresh),
+     *   it preempts cooldown gating (explicit user intent).
      */
     suspend fun syncPendingMintQuotes(force: Boolean = false): Int {
         // Coarse in-flight guard: collapse overlapping triggers into one pass.
         if (!isSyncingMintQuotes.compareAndSet(false, true)) return 0
         lastMintQuoteSyncAtMs.set(System.currentTimeMillis())
         try {
-            val pendingQuotes = try {
-                gateway.listUnissuedMintQuotes()
-            } catch (error: CancellationException) {
-                throw error
-            } catch (error: Throwable) {
-                AppLogger.wallet.error("Failed to list unissued mint quotes", error)
-                emptyList()
-            }
-            val now = System.currentTimeMillis()
-            val ordered = pendingQuotes
-                .filter { quote ->
-                    MintQuoteCheckBackoff.shouldCheck(
-                        mintQuoteSyncService.throttleEntry(quote.id),
-                        now,
-                        force,
-                    )
+            var mintedWallets = 0
+            transactionUnitsByMint(mutableState.value.mints).forEach { (mintUrl, units) ->
+                units.forEach { unit ->
+                    val minted = runCatching { gateway.mintUnissuedQuotes(mintUrl, unit) }
+                        .onFailure { AppLogger.wallet.error("Unissued quote sweep failed for $mintUrl ($unit)", it) }
+                        .getOrDefault(0L)
+                    if (minted > 0) {
+                        mintedWallets += 1
+                        // Home receive beat for a background-settled payment
+                        // (e.g. a BOLT12 offer paid from another wallet).
+                        publishReceivedPayment(
+                            amount = minted,
+                            unit = unit,
+                            confirmationOwner = ReceiveConfirmationOwner.Home,
+                        )
+                    }
                 }
-                .sortedBy { quote ->
-                    mintQuoteSyncService.throttleEntry(quote.id)?.lastCheckedAtMs ?: 0L
-                }
-            val toCheck = if (force) {
-                ordered
-            } else {
-                ordered.take(MintQuoteCheckBackoff.MAX_PASSIVE_CHECKS_PER_PASS)
             }
-            var mintedCount = 0
-            val receivedPayments = mutableListOf<MintQuoteSyncResult>()
-            toCheck.forEach { quote ->
-                val result = mintQuoteSyncService.syncPendingMintQuote(
-                    quote.id,
-                    allowPendingOnchainMintAttempt = false,
-                    force = force,
-                )
-                if (result.minted) {
-                    mintedCount += 1
-                }
-                if (result.receivedAmount != null) receivedPayments += result
-            }
-            if (mintedCount > 0) refreshBalance()
+            if (mintedWallets > 0) refreshBalance()
             loadTransactions()
-            receivedPayments.forEach { result ->
-                publishReceivedPayment(
-                    amount = checkNotNull(result.receivedAmount),
-                    unit = result.unit,
-                    confirmationOwner = ReceiveConfirmationOwner.Home,
-                )
-            }
-            return mintedCount
+            return mintedWallets
         } finally {
             isSyncingMintQuotes.set(false)
         }
@@ -761,13 +733,11 @@ class WalletManager(
             val pendingMelt = confirmation.pendingMelt
             if (pendingMelt != null) {
                 // Mint accepted the payment for asynchronous NUT-05 settlement
-                // (the usual case for on-chain melts). Remember the quote so a
-                // relaunch can pick it back up, then wait for it in the
-                // background. Bookkeeping (preimage/fee) lands when it settles.
-                rememberPendingMeltQuote(quoteId, result.mintUrl)
+                // (the usual case for on-chain melts). CDK persists the melt as
+                // a Pending transaction backed by a durable saga, so no local
+                // bookkeeping is needed; the in-process waiter below completes
+                // the fast path and startup/foreground recovery the slow one.
                 watchPendingMelt(pendingMelt, quoteId)
-            } else {
-                transactionLoader.saveMeltPaymentMetadata(quoteId, result)
             }
             refreshBalance()
             loadTransactions()
@@ -777,25 +747,20 @@ class WalletManager(
     // MARK: - Asynchronous melt settlement (NUT-05, iOS WalletManager+PendingMelts parity)
 
     /**
-     * Wait in the background for an async-accepted melt and finish the
-     * bookkeeping when it settles. One waiter per quote; the waiter dies with
-     * the process and [syncPendingMeltQuotes] takes over after relaunch.
+     * Wait in the background for an async-accepted melt. One waiter per quote;
+     * the waiter dies with the process and [syncPendingMeltQuotes] takes over
+     * after relaunch. Settlement facts (preimage, actual fee) persist on the
+     * CDK transaction itself — no app-side metadata to write.
      */
     private fun watchPendingMelt(pendingMelt: PendingMelt, quoteId: String) {
         if (pendingMeltWaiters[quoteId]?.isActive == true) return
         pendingMeltWaiters[quoteId] = scope.launch {
             try {
-                val finalized = withContext(Dispatchers.IO) { pendingMelt.wait() }
-                if (finalized.state == CdkQuoteState.PAID) {
-                    recordFinalizedMelt(quoteId, finalized.preimage, finalized.feePaid.value.toLong())
-                }
-                // A non-paid terminal state means the payment failed and the
-                // saga already compensated (proofs returned).
-                forgetPendingMeltQuote(quoteId)
+                withContext(Dispatchers.IO) { pendingMelt.wait() }
                 refreshBalance()
                 loadTransactions()
             } catch (error: Throwable) {
-                // Leave the quote tracked — syncPendingMeltQuotes retries later.
+                // Recovery polling retries the reconciliation later.
                 AppLogger.wallet.error("Pending melt wait failed for quote $quoteId", error)
             } finally {
                 pendingMeltWaiters.remove(quoteId)
@@ -804,65 +769,27 @@ class WalletManager(
     }
 
     /**
-     * Poll mints for melts still recorded as pending — e.g. after a relaunch
-     * killed the in-process waiter. Cheap no-op when nothing is tracked.
-     * `checkMeltQuoteStatus` completes the underlying wallet saga (releasing
-     * change / compensating proofs) when the mint reports a terminal state.
+     * Reconcile melts still recorded as pending — e.g. after a relaunch killed
+     * the in-process waiter. CDK's saga recovery re-checks in-flight melts
+     * with their mints and flips the transactions to completed/failed when
+     * settlement resolves. Cheap no-op when no saga is incomplete.
      */
     suspend fun syncPendingMeltQuotes() {
-        val tracked = walletStore.loadPendingMeltQuotes()
-        if (tracked.isEmpty() || !mutableState.value.isRuntimeReady) return
+        if (!mutableState.value.isRuntimeReady) return
 
         var settledAny = false
-        for ((quoteId, mintUrl) in tracked) {
-            // An in-process waiter owns this quote's completion.
-            if (pendingMeltWaiters[quoteId]?.isActive == true) continue
-            try {
-                val quote = gateway.checkMeltQuoteStatus(quoteId, mintUrl)
-                when (quote.state) {
-                    MeltQuoteState.Paid -> {
-                        recordFinalizedMelt(quoteId, quote.paymentProof, null)
-                        forgetPendingMeltQuote(quoteId)
-                        settledAny = true
-                    }
-                    MeltQuoteState.Unpaid, MeltQuoteState.Failed -> {
-                        // Once a mint has accepted async processing, a fall back
-                        // to unpaid/failed is terminal: the payment failed and
-                        // the saga compensated (proofs returned).
-                        forgetPendingMeltQuote(quoteId)
-                        settledAny = true
-                    }
-                    MeltQuoteState.Pending, MeltQuoteState.Unknown -> Unit
+        mutableState.value.mints.forEach { mint ->
+            runCatching { gateway.recoverIncompleteSagas(mint.url) }
+                .onSuccess { report ->
+                    if (report.recovered > 0 || report.compensated > 0) settledAny = true
                 }
-            } catch (error: Throwable) {
-                AppLogger.wallet.error("Pending melt status check failed for quote $quoteId", error)
-            }
+                .onFailure { AppLogger.wallet.error("Pending melt reconciliation failed for ${mint.url}", it) }
         }
 
         if (settledAny) {
             refreshBalance()
             loadTransactions()
         }
-    }
-
-    // Persist the durable facts of a settled melt (payment proof, actual fee).
-    private fun recordFinalizedMelt(quoteId: String, preimage: String?, feePaid: Long?) {
-        preimage?.let {
-            walletStore.savePaymentPreimages(walletStore.loadPaymentPreimages() + (quoteId to it))
-        }
-        feePaid?.let {
-            walletStore.saveMeltQuoteFees(walletStore.loadMeltQuoteFees() + (quoteId to it))
-        }
-    }
-
-    private fun rememberPendingMeltQuote(quoteId: String, mintUrl: String) {
-        walletStore.savePendingMeltQuotes(walletStore.loadPendingMeltQuotes() + (quoteId to mintUrl))
-    }
-
-    private fun forgetPendingMeltQuote(quoteId: String) {
-        val tracked = walletStore.loadPendingMeltQuotes()
-        if (quoteId !in tracked) return
-        walletStore.savePendingMeltQuotes(tracked - quoteId)
     }
 
     // MARK: - Foreground quote polling
@@ -952,18 +879,13 @@ class WalletManager(
                 // swapped into the outgoing token (iOS TokenService parity).
                 settingsManager.allP2PKSigningKeyHexes(),
             )
-            val pending = PendingToken(
-                tokenId = UUID.randomUUID().toString(),
-                token = result.token,
-                amount = amount,
-                fee = result.fee,
-                dateEpochMillis = System.currentTimeMillis(),
-                mintUrl = selectedMint,
-                memo = memo,
-                unit = unit,
-            )
+            // Keep the token string under its (stable, saga-derived) CDK
+            // transaction id so History can re-display it and claim checks can
+            // resolve the send operation. Lifecycle state lives in CDK itself.
+            result.transactionId?.let { transactionId ->
+                walletStore.saveSavedTokens(walletStore.loadSavedTokens() + (transactionId to result.token))
+            }
             normalizedP2PKPubkey?.let(settingsManager::markP2PKKeyUsed)
-            walletStore.savePendingTokens(walletStore.loadPendingTokens() + pending)
             refreshBalance()
             loadTransactions()
             result
@@ -1120,63 +1042,87 @@ class WalletManager(
         return amount
     }
 
-    fun removePendingToken(tokenId: String) {
-        val updated = walletStore.loadPendingTokens().filterNot { it.tokenId == tokenId }
-        walletStore.savePendingTokens(updated)
-        update { copy(pendingTokens = updated) }
-    }
-
-    suspend fun checkPendingTokenStatus(pendingToken: PendingToken): Boolean =
+    suspend fun checkPendingTokenStatus(transaction: WalletTransaction): Boolean =
         withLoadingResult {
-            val claimed = gateway.checkTokenSpendable(pendingToken.token, pendingToken.mintUrl)
+            val claimed = checkPendingSendClaimInternal(transaction)
             if (claimed) {
-                val mutation = transactionLoader.markPendingTokenClaimed(pendingToken)
-                update {
-                    copy(
-                        pendingTokens = mutation.pendingTokens,
-                        claimedTokens = mutation.claimedTokens,
-                    )
-                }
+                refreshBalance()
                 loadTransactions()
             }
             claimed
         }
 
+    private suspend fun checkPendingSendClaimInternal(transaction: WalletTransaction): Boolean {
+        val mintUrl = transaction.mintUrl ?: return false
+        val sagaId = transaction.sagaId
+        if (sagaId != null) {
+            return gateway.checkPendingSendClaimed(mintUrl, sagaId, transaction.unit)
+        }
+        // App-synthesized rows carry no operation; fall back to a direct
+        // proof-state probe against the mint.
+        val token = transaction.token ?: return false
+        return gateway.checkTokenSpendable(token, mintUrl)
+    }
+
+    /** Manual claim check for a just-created send, where the caller only holds
+     * the token string (Send flow success screen). iOS parity. */
+    suspend fun checkSentTokenClaim(token: String, mintUrl: String, unit: String = "sat"): Boolean =
+        withLoadingResult {
+            val txId = walletStore.loadSavedTokens().entries.firstOrNull { it.value == token }?.key
+            val operationId = txId?.let(SagaTransactionId::operationId)
+            if (operationId != null) {
+                return@withLoadingResult runCatching {
+                    gateway.checkPendingSendClaimed(mintUrl, operationId, unit)
+                }.getOrDefault(false)
+            }
+            // The token predates transaction-id-keyed storage (or came from
+            // elsewhere): probe the proofs directly.
+            gateway.checkTokenSpendable(token, mintUrl)
+        }
+
     suspend fun checkAllPendingTokens(): Int {
-        // Cached transactions are already published by loadCachedState().
-        // Avoid locking the CDK gateway for a full all-mint history pass when
-        // startup has no outgoing tokens whose spent state needs checking.
-        val pendingTokens = walletStore.loadPendingTokens()
-        if (pendingTokens.isEmpty()) return 0
+        if (!mutableState.value.isRuntimeReady) return 0
 
         return withLoadingResult {
             var claimedCount = 0
-            pendingTokens.forEach { token ->
-                val claimed = runCatching { gateway.checkTokenSpendable(token.token, token.mintUrl) }
-                    .getOrDefault(false)
-                if (claimed) {
-                    val mutation = transactionLoader.markPendingTokenClaimed(token)
-                    update {
-                        copy(
-                            pendingTokens = mutation.pendingTokens,
-                            claimedTokens = mutation.claimedTokens,
-                        )
+            var foundPending = false
+            transactionUnitsByMint(mutableState.value.mints).forEach { (mintUrl, units) ->
+                units.forEach { unit ->
+                    gateway.listPendingSendOperationIds(mintUrl, unit).forEach { operationId ->
+                        foundPending = true
+                        val claimed = runCatching {
+                            gateway.checkPendingSendClaimed(mintUrl, operationId, unit)
+                        }.getOrDefault(false)
+                        if (claimed) claimedCount += 1
                     }
-                    claimedCount += 1
                 }
             }
-            loadTransactions()
+            // No local rows to merge anymore: only a claim changes history.
+            if (claimedCount > 0) {
+                refreshBalance()
+                loadTransactions()
+            } else if (foundPending) {
+                loadTransactions()
+            }
             claimedCount
         }
     }
 
-    suspend fun reclaimPendingToken(pendingToken: PendingToken): Long {
-        // Reclaiming our own unspent outgoing token restores balance, but is
-        // not an incoming payment and must not publish a Home receive beat.
-        val amount = receiveTokens(pendingToken.token, confirmationOwner = null)
-        removePendingToken(pendingToken.tokenId)
-        loadTransactions()
-        return amount
+    /**
+     * Reclaim an unclaimed sent token: CDK swaps the proofs back and marks the
+     * transaction failed/revoked, so no local bookkeeping remains.
+     */
+    suspend fun reclaimPendingSend(transaction: WalletTransaction): Long {
+        val sagaId = transaction.sagaId
+            ?: throw IllegalStateException("Transaction has no send operation to revoke.")
+        val mintUrl = transaction.mintUrl
+            ?: throw IllegalStateException("Transaction has no mint to revoke from.")
+        return withLoadingResult {
+            val amount = gateway.revokePendingSend(mintUrl, sagaId, transaction.unit)
+            refreshBalance()
+            loadTransactions()
+            amount
+        }
     }
 
     suspend fun calculateReceiveFee(tokenString: String): Long = gateway.calculateReceiveFee(tokenString)
@@ -1227,9 +1173,7 @@ class WalletManager(
         update {
             copy(
                 transactions = result.transactions,
-                pendingTokens = result.pendingTokens,
                 pendingReceiveTokens = result.pendingReceiveTokens,
-                claimedTokens = result.claimedTokens,
                 transactionUpdateVersion = nextTransactionUpdateVersion(transactionUpdateVersion),
             )
         }
@@ -1353,13 +1297,8 @@ class WalletManager(
             this["sat"] = cachedBalance
         }
         val active = activeMintFrom(mints)
-        val preimages = walletStore.loadPaymentPreimages()
-        val meltFees = walletStore.loadMeltQuoteFees()
         val transactions = walletStore.loadTransactions()
-            .map { it.withStoredMeltMetadata(preimages, meltFees) }
-        val pendingTokens = walletStore.loadPendingTokens()
         val pendingReceiveTokens = walletStore.loadPendingReceiveTokens()
-        val claimedTokens = walletStore.loadClaimedTokens()
         processedNPCQuotes = walletStore.loadProcessedNPCQuotes().toMutableSet()
         update {
             copy(
@@ -1372,9 +1311,7 @@ class WalletManager(
                 mints = mints,
                 activeMint = active,
                 transactions = transactions,
-                pendingTokens = pendingTokens,
                 pendingReceiveTokens = pendingReceiveTokens,
-                claimedTokens = claimedTokens,
             )
         }
     }

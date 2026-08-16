@@ -89,14 +89,9 @@ enum StorageKeys {
     static let mints = "wallet.mints"
     static let activeMintUrl = "wallet.activeMintUrl"
     static let balancesByUnit = "wallet.balancesByUnit"
-    static let pendingTokens = "wallet.pendingTokens"
     static let pendingReceiveTokens = "wallet.pendingReceiveTokens"
-    static let claimedTokens = "wallet.claimedTokens"
-    static let transactions = "wallet.transactions"
     static let savedTokens = "wallet.savedTokens"
     static let paymentPreimages = "wallet.paymentPreimages"
-    static let meltQuoteFees = "wallet.meltQuoteFees"
-    static let pendingMeltQuotes = "wallet.pendingMeltQuotes"
     static let mintQuoteTimestamps = "wallet.mintQuoteTimestamps"
     static let mintKeysetRefreshTimestamps = "wallet.mintKeysetRefreshTimestamps"
     static let processedNPCQuotes = "wallet.processedNPCQuotes"
@@ -133,6 +128,30 @@ enum StorageKeys {
     static let amountDisplayPrimary = "settings.amountDisplayPrimary"
     static let appLockEnabled = "settings.appLockEnabled"
     static let sentryEnabled = "settings.sentryEnabled"
+
+    /// Keys retired by the CDK 0.18 upgrade: pending/claimed send tracking,
+    /// async-melt tracking, melt fee records, and the long-vestigial
+    /// transaction cache. CDK now owns pending-transaction lifecycle state, so
+    /// these stores are dead weight (and hold token strings at rest). They stay
+    /// on the wipe lists so wallet deletion still covers installs that never
+    /// ran the purge.
+    enum Retired {
+        static let pendingTokens = "wallet.pendingTokens"
+        static let claimedTokens = "wallet.claimedTokens"
+        static let transactions = "wallet.transactions"
+        static let meltQuoteFees = "wallet.meltQuoteFees"
+        static let pendingMeltQuotes = "wallet.pendingMeltQuotes"
+
+        static let all = [
+            pendingTokens,
+            claimedTokens,
+            transactions,
+            meltQuoteFees,
+            pendingMeltQuotes,
+            Legacy.pendingTokens,
+            Legacy.claimedTokens
+        ]
+    }
 
     enum Legacy {
         static let mints = "savedMints"
@@ -200,21 +219,21 @@ enum StorageKeys {
         mints,
         activeMintUrl,
         balancesByUnit,
-        pendingTokens,
         pendingReceiveTokens,
-        claimedTokens,
-        transactions,
         savedTokens,
         paymentPreimages,
-        meltQuoteFees,
-        pendingMeltQuotes,
         mintQuoteTimestamps,
         mintKeysetRefreshTimestamps,
         processedNPCQuotes,
         nostrMintBackupLastBackupDate,
         cashuRequests,
         cashuRequestsCurrentId,
-        cashuRequestsProcessedNIP17Ids
+        cashuRequestsProcessedNIP17Ids,
+        Retired.pendingTokens,
+        Retired.claimedTokens,
+        Retired.transactions,
+        Retired.meltQuoteFees,
+        Retired.pendingMeltQuotes
     ]
 
     static let walletDataLegacyKeys = [

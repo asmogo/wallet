@@ -179,6 +179,7 @@ extension WalletManager {
         db = runtime.db
         walletRepository = runtime.repository
         NostrMintBackupService.shared.walletRepository = runtime.repository
+        walletStore.purgeRetiredKeys()
         processedQuotes = Set(walletStore.loadProcessedNPCQuotes())
         initializeNostrKeypairLocally(mnemonic: mnemonic)
         setupNPCQuoteListener()
@@ -482,8 +483,6 @@ extension WalletManager {
         pendingBalance = 0
         activeUnit = "sat"
         errorMessage = nil
-        mintQuoteSyncsInFlight.removeAll()
-        mintQuoteCheckThrottle.removeAll()
         npcQuotesInFlight.removeAll()
         processedQuotes.removeAll()
         mintService.clearState()
@@ -997,7 +996,7 @@ extension WalletManager {
         }
 
         do {
-            let keysets = try await wallet.refreshKeysets()
+            let keysets = try await wallet.keysets(policy: .refresh)
             AppLogger.wallet.info(
                 "refreshed keysets count=\(keysets.count, privacy: .public) resource=\(WalletOperationCoordinator.privacySafeIdentifier(mintUrl), privacy: .public)"
             )

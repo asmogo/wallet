@@ -11,17 +11,17 @@ import com.cashu.me.Models.WalletTransaction
 internal fun pendingMintQuoteTransactions(
     quotes: List<MintQuoteInfo>,
     trackedMintUrls: Set<String>,
-    completedQuoteIds: Set<String>,
+    quoteIdsWithTransactions: Set<String>,
     timestamps: MutableMap<String, Long>,
     nowEpochMillis: Long,
 ): List<WalletTransaction> =
     quotes.mapNotNull { quote ->
         val mintUrl = quote.mintUrl?.takeIf { it in trackedMintUrls } ?: return@mapNotNull null
-        if (quote.paymentMethod == PaymentMethodKind.Bolt12 &&
-            quote.amountPaid > 0 &&
-            quote.amountIssued >= quote.amountPaid &&
-            quote.id in completedQuoteIds
-        ) {
+        // Once CDK has a transaction for this quote — pending while a mint is
+        // in flight, completed afterwards — the CDK row is authoritative and
+        // the quote-backed row would only duplicate it. (BOLT12 offers always
+        // stay in the unissued list: `amount_issued = 0 OR method = 'bolt12'`.)
+        if (quote.id in quoteIdsWithTransactions) {
             return@mapNotNull null
         }
 
@@ -31,7 +31,14 @@ internal fun pendingMintQuoteTransactions(
             ?: return@mapNotNull null
         if (amount <= 0) return@mapNotNull null
 
-        val timestamp = timestamps.getOrPut(quote.id) { nowEpochMillis }
+        // CDK 0.18 quotes carry `updatedAt` (creation time for an untouched
+        // quote); the local first-seen map only backfills legacy rows that
+        // predate the column.
+        val timestamp = if (quote.updatedAtEpochSeconds > 0) {
+            quote.updatedAtEpochSeconds * 1000
+        } else {
+            timestamps.getOrPut(quote.id) { nowEpochMillis }
+        }
         // A paid-but-unissued quote stays Pending even past expiry: the invoice
         // settled, and NUT-04 lets the wallet mint it after the invoice expires.
         val isPaid = quote.state == MintQuoteState.Paid ||

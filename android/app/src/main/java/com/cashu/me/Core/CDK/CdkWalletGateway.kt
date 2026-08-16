@@ -81,6 +81,35 @@ interface CdkWalletGateway {
     suspend fun checkTokenSpendable(token: String, mintUrl: String): Boolean
     suspend fun listTransactions(unitsByMint: Map<String, List<String>>): List<WalletTransaction>
     suspend fun payCashuPaymentRequest(encoded: String, customAmountSats: Long?, preferredMintURL: String?)
+
+    /**
+     * CDK 0.18 send lifecycle: operation ids of outgoing sends whose token is
+     * still unclaimed (their transactions read as Pending).
+     */
+    suspend fun listPendingSendOperationIds(mintUrl: String, unit: String = "sat"): List<String>
+
+    /**
+     * Ask the mint whether a pending send's token was claimed; CDK flips its
+     * transaction to Completed when it was. Returns the claim state.
+     */
+    suspend fun checkPendingSendClaimed(mintUrl: String, operationId: String, unit: String = "sat"): Boolean
+
+    /**
+     * Revoke an unclaimed send: CDK swaps the proofs back and marks the
+     * transaction Failed. Returns the recovered amount in [unit] base units.
+     */
+    suspend fun revokePendingSend(mintUrl: String, operationId: String, unit: String = "sat"): Long
+
+    /**
+     * CDK 0.18: refresh every unissued mint quote of one wallet against its
+     * mint and mint the outstanding (paid, not yet issued) amounts — including
+     /// reusable BOLT12 offers. Returns the total newly minted in [unit] base units.
+     */
+    suspend fun mintUnissuedQuotes(mintUrl: String, unit: String = "sat"): Long
+
+    /** Extract the encoded token a send saga persists until the token is
+     * claimed; null for non-send or already-finalized operations. */
+    suspend fun pendingSendTokenFromSaga(operationId: String): String?
 }
 
 data class ForeignNfcSettlement(
@@ -96,8 +125,8 @@ data class ForeignNfcSettlement(
  * Settled synchronously for most Lightning payments; carries a `PendingMelt`
  * handle when the mint accepted asynchronous (NUT-05) settlement, which
  * on-chain melts typically do. The handle's `wait()` completes when the mint
- * reaches a terminal state; it dies with the process, so WalletManager also
- * persists the quote and re-checks it via `syncPendingMeltQuotes()`.
+ * reaches a terminal state; it dies with the process, after which CDK's
+ * durable saga (surfaced as a Pending transaction) is the reconciliation path.
  */
 data class MeltConfirmation(
     val result: MeltPaymentResult,

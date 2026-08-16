@@ -40,6 +40,10 @@ playground.xcworkspace
 .build/
 .swiftpm/
 **/xcshareddata/swiftpm/Package.resolved
+# The app workspace pin file is the iOS CI dependency-cache key (see
+# ios-tests.yml), so it must be committed for the cache to invalidate on
+# dependency bumps.
+!ios/CashuWallet.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved
 
 # CocoaPods
 #

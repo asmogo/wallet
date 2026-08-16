@@ -8,10 +8,8 @@ import kotlinx.serialization.builtins.serializer
 import kotlinx.serialization.json.Json
 import com.cashu.me.Core.Protocols.StorageKeys
 import com.cashu.me.Models.CashuRequest
-import com.cashu.me.Models.ClaimedToken
 import com.cashu.me.Models.MintInfo
 import com.cashu.me.Models.PendingReceiveToken
-import com.cashu.me.Models.PendingToken
 import com.cashu.me.Models.WalletTransaction
 
 class WalletStore(
@@ -33,15 +31,15 @@ class WalletStore(
     fun saveBalancesByUnit(balances: Map<String, Long>) =
         saveMap(StorageKeys.walletBalancesByUnit, Long.serializer(), balances)
 
-    fun loadPendingTokens(): List<PendingToken> = loadList(StorageKeys.walletPendingTokens, PendingToken.serializer())
-    fun savePendingTokens(tokens: List<PendingToken>) = saveList(StorageKeys.walletPendingTokens, PendingToken.serializer(), tokens)
-
     fun loadPendingReceiveTokens(): List<PendingReceiveToken> = loadList(StorageKeys.walletPendingReceiveTokens, PendingReceiveToken.serializer())
     fun savePendingReceiveTokens(tokens: List<PendingReceiveToken>) =
         saveList(StorageKeys.walletPendingReceiveTokens, PendingReceiveToken.serializer(), tokens)
 
-    fun loadClaimedTokens(): List<ClaimedToken> = loadList(StorageKeys.walletClaimedTokens, ClaimedToken.serializer())
-    fun saveClaimedTokens(tokens: List<ClaimedToken>) = saveList(StorageKeys.walletClaimedTokens, ClaimedToken.serializer(), tokens)
+    /** txId → encoded token (re-display/reclaim of sent tokens, receive receipts). */
+    fun loadSavedTokens(): Map<String, String> =
+        loadMap(StorageKeys.walletSavedTokens, String.serializer())
+    fun saveSavedTokens(tokens: Map<String, String>) =
+        saveMap(StorageKeys.walletSavedTokens, String.serializer(), tokens)
 
     fun loadTransactions(): List<WalletTransaction> = loadList(StorageKeys.walletTransactions, WalletTransaction.serializer())
     fun saveTransactions(transactions: List<WalletTransaction>) =
@@ -52,23 +50,10 @@ class WalletStore(
     fun savePaymentPreimages(preimages: Map<String, String>) =
         saveMap(StorageKeys.walletPaymentPreimages, String.serializer(), preimages)
 
-    fun loadMeltQuoteFees(): Map<String, Long> =
-        loadMap(StorageKeys.walletMeltQuoteFees, Long.serializer())
-    fun saveMeltQuoteFees(fees: Map<String, Long>) =
-        saveMap(StorageKeys.walletMeltQuoteFees, Long.serializer(), fees)
-
     fun loadMintQuoteTimestamps(): Map<String, Long> =
         loadMap(StorageKeys.walletMintQuoteTimestamps, Long.serializer())
     fun saveMintQuoteTimestamps(timestamps: Map<String, Long>) =
         saveMap(StorageKeys.walletMintQuoteTimestamps, Long.serializer(), timestamps)
-
-    // Melt quotes a mint accepted for asynchronous (NUT-05) settlement that we
-    // still owe completion bookkeeping, keyed by quote ID with the paying
-    // mint's URL as value (iOS WalletStore parity).
-    fun loadPendingMeltQuotes(): Map<String, String> =
-        loadMap(StorageKeys.walletPendingMeltQuotes, String.serializer())
-    fun savePendingMeltQuotes(quotes: Map<String, String>) =
-        saveMap(StorageKeys.walletPendingMeltQuotes, String.serializer(), quotes)
 
     fun loadProcessedNPCQuotes(): List<String> = loadList(StorageKeys.walletProcessedNPCQuotes, String.serializer())
     fun saveProcessedNPCQuotes(quotes: List<String>) =
@@ -107,6 +92,15 @@ class WalletStore(
     fun removeAllWalletData() {
         store.removeKeys(StorageKeys.walletBoundaryKeys)
         store.removePrefix(listOf(StorageKeys.walletDataPrefix, StorageKeys.npcDataPrefix))
+    }
+
+    /**
+     * One-way cleanup for stores obsoleted by the CDK 0.18 transaction
+     * lifecycle upgrade (local pending/claimed send records, async-melt
+     * tracking, melt fee notes). Idempotent.
+     */
+    fun purgeRetiredKeys() {
+        store.removeKeys(StorageKeys.retiredWalletKeys)
     }
 
     private fun <T> loadList(key: String, serializer: KSerializer<T>): List<T> {

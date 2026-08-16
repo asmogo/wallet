@@ -19,9 +19,17 @@ data class WalletTransaction(
     val fee: Long = 0,
     /** Mint account unit for [amount] and [fee] (sat, usd, eur, or custom). */
     val unit: String = "sat",
-    val isPendingToken: Boolean = false,
+    /**
+     * CDK wallet-saga (operation) id backing this transaction, when the row
+     * came from CDK. Pending sent tokens use it for claim checks / revoke;
+     * null for app-synthesized rows (quotes, held receives).
+     */
+    val sagaId: String? = null,
     val quoteId: String? = null,
     val cashuRequestId: String? = null,
+    /** Incoming ecash held for user approval ("Receive later" / NUT-18). Opens
+     * the claim flow instead of a plain receipt. iOS parity. */
+    val isPendingReceiveToken: Boolean = false,
     /** BOLT11 mint quote still awaiting payment — titles the row "Lightning invoice". */
     val isUnpaidInvoice: Boolean = false,
 ) {
@@ -42,7 +50,6 @@ data class WalletTransaction(
         get() {
             if (type != TransactionType.Incoming) return null
             if (kind != TransactionKind.Lightning && kind != TransactionKind.Onchain) return null
-            if (isPendingToken) return null
             if (invoice == null) return null
             if (status != TransactionStatus.Pending && status != TransactionStatus.Expired) return null
             return quoteId ?: id
@@ -84,3 +91,18 @@ enum class TransactionStatus {
             Expired -> "Expired"
         }
 }
+
+/**
+ * Resolve the live row for a detail screen opened with [openId] (and the
+ * open-time [openQuoteId]). Pending quote rows use `id == quoteId`; once
+ * minting starts CDK replaces them with a saga-derived transaction id that
+ * still carries `quoteId`, so fall back to the quoteId to keep following the
+ * row as it flips Pending → Completed in place. Rows are newest-first, so a
+ * reusable offer resolves to its latest payment. iOS `liveDetail` parity.
+ */
+internal fun List<WalletTransaction>.liveDetail(
+    openId: String,
+    openQuoteId: String? = null,
+): WalletTransaction? =
+    firstOrNull { it.id == openId }
+        ?: firstOrNull { it.quoteId != null && it.quoteId == openQuoteId }

@@ -216,9 +216,7 @@ fun HistoryScreen(
                         walletManager.syncPendingMintQuotes(force = true)
                         walletManager.syncPendingMeltQuotes()
                         walletManager.loadTransactions()
-                        if (walletState.pendingTokens.isNotEmpty()) {
-                            walletManager.checkAllPendingTokens()
-                        }
+                        walletManager.checkAllPendingTokens()
                     }
                     refreshing = false
                 }

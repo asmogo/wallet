@@ -53,18 +53,13 @@ class WalletManager: ObservableObject {
     /// result without triggering a second write.
     var lastICloudBackupOutcome: ICloudBackupOutcome? = nil
 
-    var mintQuoteSyncsInFlight: Set<String> = []
-
-    /// Throttle state for passive mint-quote syncs (opening History, app
+    /// Cooldown gate for passive mint-quote syncs (opening History, app
     /// foreground, the foreground poll). Collapses overlapping triggers and
     /// rate-limits how often we re-poll the mint so reusable BOLT12 offers
     /// don't hammer it. Kept equal to `pendingQuotePollInterval` (Android
     /// parity) so the poll drives one sync pass per interval.
-    var isSyncingMintQuotes = false
     var lastMintQuoteSyncAt: Date?
     let mintQuoteSyncCooldown: TimeInterval = 5
-    /// Per-quote passive-check backoff (Android `MintQuoteCheckBackoff` parity).
-    var mintQuoteCheckThrottle: [String: MintQuoteCheckBackoff.Entry] = [:]
 
     /// Foreground quote poll (started/stopped on scenePhase changes). Re-checks
     /// pending mint + melt quotes while the app is active so a payment lands
@@ -134,12 +129,7 @@ class WalletManager: ObservableObject {
     var transactions: [WalletTransaction] {
         transactionService.transactions
     }
-    
-    /// Pending tokens (sent but not yet claimed)
-    var pendingTokens: [PendingToken] {
-        transactionService.pendingTokens
-    }
-    
+
     /// Pending receive tokens
     var pendingReceiveTokens: [PendingReceiveToken] {
         transactionService.pendingReceiveTokens

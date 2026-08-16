@@ -6,8 +6,8 @@ extension WalletManager {
     /// foreground, the foreground poll). Skips when a sync ran within
     /// `mintQuoteSyncCooldown`, so a paid offer settles on its own without
     /// re-polling the mint on every tab switch. Pull-to-refresh calls
-    /// `syncPendingMintQuotes(force: true)` to bypass pass cooldown (explicit
-    /// user intent). Per-quote exponential backoff still applies unless forced.
+    /// `syncPendingMintQuotes(force: true)` to bypass the cooldown (explicit
+    /// user intent).
     func syncPendingMintQuotesIfStale() async {
         if let last = lastMintQuoteSyncAt,
            Date().timeIntervalSince(last) < mintQuoteSyncCooldown {
@@ -18,8 +18,7 @@ extension WalletManager {
 
     /// Silent single-quote check + mint if paid. Used when opening a pending
     /// Lightning / on-chain receive in transaction detail (Android
-    /// `refreshPendingMintQuote` parity). Forced past unpaid backoff (brief
-    /// debounce only). Does not touch the global loading flag.
+    /// `refreshPendingMintQuote` parity). Does not touch the global loading flag.
     @discardableResult
     func refreshPendingMintQuote(quoteId: String) async -> Bool {
         do {
@@ -27,11 +26,7 @@ extension WalletManager {
                 kind: .mintQuote,
                 resourceID: quoteId
             ) {
-                let minted = await self.syncPendingMintQuote(
-                    quoteId: quoteId,
-                    allowPendingOnchainMintAttempt: true,
-                    force: true
-                )
+                let minted = await self.mintQuoteIfPaid(quoteId: quoteId)
                 if minted {
                     await self.refreshBalanceAssumingWalletOperationLease()
                 }
@@ -51,7 +46,7 @@ extension WalletManager {
     /// waiting for pull-to-refresh. The mint sync stays cooldown-gated (the
     /// poll interval equals `mintQuoteSyncCooldown`, so this never exceeds one
     /// pass per interval); the melt sync is a cheap no-op unless a NUT-05
-    /// async melt is tracked and its in-process waiter died.
+    /// async melt is in flight and its in-process waiter died.
     /// Started/stopped from `CashuWalletApp` on scenePhase (Android parity).
     func startPendingQuoteForegroundPolling() {
         guard pendingQuotePollTask == nil else { return }
@@ -71,17 +66,17 @@ extension WalletManager {
         pendingQuotePollTask = nil
     }
 
-    /// Re-check unissued mint quotes against their mints and mint the paid ones.
-    /// - Parameter force: when `false` (poll / startup / History open), per-quote
-    ///   exponential backoff applies and at most
-    ///   `MintQuoteCheckBackoff.maxPassiveChecksPerPass` quotes are checked per
-    ///   pass. When `true` (pull-to-refresh), every quote is eligible subject
-    ///   only to a short per-quote debounce.
+    /// Check every tracked wallet for paid-but-unissued mint quotes and mint
+    /// them. CDK 0.18's `mintUnissuedQuotes()` refreshes each quote's NUT-04
+    /// counters with the mint and mints only the outstanding delta, which
+    /// covers reusable BOLT12 offers without any local heuristics.
+    /// - Parameter force: `false` (poll / startup / History open) only runs
+    ///   when the repository lane is idle; `true` (pull-to-refresh) preempts.
     func syncPendingMintQuotes(force: Bool = false) async {
         if force {
             do {
                 try await operationCoordinator.perform(kind: .quotePoll) {
-                    await self.syncPendingMintQuotesAssumingWalletOperationLease(force: true)
+                    await self.mintUnissuedQuotesAcrossWallets()
                 }
             } catch {
                 // Explicit refresh cancellation is expected when its view exits.
@@ -91,65 +86,43 @@ extension WalletManager {
 
         do {
             try await operationCoordinator.performIfIdle(kind: .quotePoll) {
-                await self.syncPendingMintQuotesAssumingWalletOperationLease(force: false)
+                await self.mintUnissuedQuotesAcrossWallets()
             }
         } catch {
             // Passive maintenance is best effort and will run again next tick.
         }
     }
 
-    private func syncPendingMintQuotesAssumingWalletOperationLease(force: Bool) async {
-        // Coarse in-flight guard: collapse overlapping triggers into one pass.
-        guard !isSyncingMintQuotes else { return }
-        isSyncingMintQuotes = true
+    private func mintUnissuedQuotesAcrossWallets() async {
+        guard let repo = walletRepository else { return }
         lastMintQuoteSyncAt = Date()
-        defer { isSyncingMintQuotes = false }
-
-        guard let db else {
-            await loadTransactionsAssumingWalletOperationLease()
-            return
-        }
 
         var mintedAny = false
-        let now = Date()
-
-        do {
-            let pendingQuotes = try await db.getUnissuedMintQuotes()
-            let ordered = pendingQuotes
-                .filter { quote in
-                    MintQuoteCheckBackoff.shouldCheck(
-                        entry: mintQuoteCheckThrottle[quote.id],
-                        now: now,
-                        force: force
+        for mintUrlString in trackedMintUrlsForWalletAccess() {
+            let units = TransactionService.walletUnits(
+                advertisedUnits: self.mints.first(where: { $0.url == mintUrlString })?.units ?? ["sat"]
+            )
+            for unitString in units {
+                guard !Task.isCancelled else { return }
+                do {
+                    let wallet = try await repo.getWallet(
+                        mintUrl: MintUrl(url: mintUrlString),
+                        unit: PaymentRequestDecoder.currencyUnit(from: unitString)
+                    )
+                    let minted = try await wallet.mintUnissuedQuotes()
+                    mintedAny = mintedAny || minted.value > 0
+                } catch is CancellationError {
+                    return
+                } catch {
+                    AppLogger.wallet.error(
+                        "unissued quote sweep failed resource=\(WalletOperationCoordinator.privacySafeIdentifier(mintUrlString), privacy: .public) error_type=\(String(reflecting: type(of: error)), privacy: .public)"
                     )
                 }
-                .sorted { lhs, rhs in
-                    let left = mintQuoteCheckThrottle[lhs.id]?.lastCheckedAt ?? .distantPast
-                    let right = mintQuoteCheckThrottle[rhs.id]?.lastCheckedAt ?? .distantPast
-                    return left < right
-                }
-            let toCheck = force
-                ? ordered
-                : Array(ordered.prefix(MintQuoteCheckBackoff.maxPassiveChecksPerPass))
 
-            for quote in toCheck {
-                let minted = await syncPendingMintQuote(
-                    quoteId: quote.id,
-                    allowPendingOnchainMintAttempt: false,
-                    force: force
-                )
-                mintedAny = mintedAny || minted
-
-                // A poll that was already running when the user acted yields
-                // after the current quote instead of scanning the whole queue.
-                if !force, await operationCoordinator.hasWaitingUserOperation() {
+                if await operationCoordinator.hasWaitingUserOperation() {
                     break
                 }
             }
-        } catch {
-            AppLogger.wallet.error(
-                "pending mint quote sync failed error_type=\(String(reflecting: type(of: error)), privacy: .public)"
-            )
         }
 
         if mintedAny {
@@ -159,11 +132,43 @@ extension WalletManager {
         await loadTransactionsAssumingWalletOperationLease()
     }
 
-    func reclaimPendingToken(pendingToken: PendingToken) async throws -> UInt64 {
-        let amount = try await receiveTokens(tokenString: pendingToken.token)
-        transactionService.removePendingToken(tokenId: pendingToken.tokenId)
-        await loadTransactions()
-        return amount
+    /// Check one quote with its mint and mint it when an unpaid amount is
+    /// outstanding. The NUT-04 `amountPaid`/`amountIssued` counters make this
+    /// correct for reusable BOLT12 offers too: fully-issued offers mint 0.
+    @discardableResult
+    private func mintQuoteIfPaid(quoteId: String) async -> Bool {
+        do {
+            _ = try await lightningService.checkMintQuote(quoteId: quoteId)
+        } catch {
+            AppLogger.wallet.error(
+                "pending quote refresh failed resource=\(WalletOperationCoordinator.privacySafeIdentifier(quoteId), privacy: .public) error_type=\(String(reflecting: type(of: error)), privacy: .public)"
+            )
+            return false
+        }
+
+        let storedQuote: MintQuote??
+        do {
+            storedQuote = try await db?.getMintQuote(quoteId: quoteId)
+        } catch {
+            storedQuote = nil
+        }
+        guard let quote = storedQuote ?? nil,
+              quote.amountPaid.value > quote.amountIssued.value else {
+            return false
+        }
+
+        do {
+            _ = try await lightningService.mintTokens(quoteId: quoteId)
+            return true
+        } catch {
+            if isAlreadyIssuedMintError(error) {
+                return true
+            }
+            AppLogger.wallet.error(
+                "pending quote mint failed resource=\(WalletOperationCoordinator.privacySafeIdentifier(quoteId), privacy: .public) error_type=\(String(reflecting: type(of: error)), privacy: .public)"
+            )
+            return false
+        }
     }
 
     // MARK: - Transaction History
@@ -205,116 +210,6 @@ extension WalletManager {
             guard let quoteId = tx.quoteId, ownedQuoteIds.contains(quoteId) else { continue }
             store.attachPayment(quoteId: quoteId, transactionId: tx.id, amount: tx.amount)
         }
-    }
-
-    @discardableResult
-    private func syncPendingMintQuote(
-        quoteId: String,
-        allowPendingOnchainMintAttempt: Bool,
-        force: Bool = false
-    ) async -> Bool {
-        let now = Date()
-        let prior = mintQuoteCheckThrottle[quoteId]
-        guard MintQuoteCheckBackoff.shouldCheck(entry: prior, now: now, force: force) else {
-            return false
-        }
-
-        guard !mintQuoteSyncsInFlight.contains(quoteId) else {
-            return false
-        }
-
-        mintQuoteSyncsInFlight.insert(quoteId)
-        defer {
-            mintQuoteSyncsInFlight.remove(quoteId)
-        }
-
-        do {
-            let updatedQuote = try await lightningService.checkMintQuote(quoteId: quoteId)
-
-            guard updatedQuote.state == .paid
-                || updatedQuote.state == .issued
-                || (allowPendingOnchainMintAttempt && updatedQuote.paymentMethod == .onchain) else {
-                mintQuoteCheckThrottle[quoteId] = MintQuoteCheckBackoff.afterUnpaidOrError(
-                    entry: prior,
-                    now: now
-                )
-                return false
-            }
-
-            // BOLT12 quotes always appear in `getUnissuedMintQuotes()` because
-            // CDK's SQL filter is `amount_issued = 0 OR payment_method = 'bolt12'`.
-            // Skip them when nothing new has been paid since the last issuance,
-            // otherwise every history refresh would re-trigger `mint_bolt12` and
-            // could spawn duplicate transactions on any local/mint state drift.
-            if updatedQuote.paymentMethod == .bolt12, let db {
-                let storedQuote = try? await db.getMintQuote(quoteId: quoteId)
-                if let storedQuote,
-                   storedQuote.amountPaid.value > 0,
-                   storedQuote.amountIssued.value >= storedQuote.amountPaid.value {
-                    mintQuoteCheckThrottle[quoteId] = MintQuoteCheckBackoff.afterUnpaidOrError(
-                        entry: prior,
-                        now: now
-                    )
-                    return false
-                }
-            }
-
-            do {
-                _ = try await lightningService.mintTokens(quoteId: quoteId)
-                mintQuoteCheckThrottle[quoteId] = MintQuoteCheckBackoff.afterMintedOrSettled(now: now)
-                return true
-            } catch {
-                if isAlreadyIssuedMintError(error) {
-                    mintQuoteCheckThrottle[quoteId] = MintQuoteCheckBackoff.afterMintedOrSettled(now: now)
-                    return true
-                }
-
-                if updatedQuote.paymentMethod == .onchain, updatedQuote.state == .pending {
-                    mintQuoteCheckThrottle[quoteId] = MintQuoteCheckBackoff.afterUnpaidOrError(
-                        entry: prior,
-                        now: now
-                    )
-                    return false
-                }
-
-                await captureWalletFailureDiagnostics(kind: .mint, quoteID: quoteId)
-                await recoverWalletStateAfterFailureAssumingWalletOperationLease(
-                    kind: .mint,
-                    preferredMintURL: nil
-                )
-                await captureWalletFailureDiagnostics(kind: .mint, quoteID: quoteId)
-                AppLogger.wallet.error(
-                    "pending quote mint failed resource=\(WalletOperationCoordinator.privacySafeIdentifier(quoteId), privacy: .public) error_type=\(String(reflecting: type(of: error)), privacy: .public)"
-                )
-                mintQuoteCheckThrottle[quoteId] = MintQuoteCheckBackoff.afterUnpaidOrError(
-                    entry: prior,
-                    now: now
-                )
-                return false
-            }
-        } catch {
-            mintQuoteCheckThrottle[quoteId] = MintQuoteCheckBackoff.afterUnpaidOrError(
-                entry: prior,
-                now: now
-            )
-            if isMissingQuoteError(error) {
-                return false
-            }
-            AppLogger.wallet.error(
-                "pending quote refresh failed resource=\(WalletOperationCoordinator.privacySafeIdentifier(quoteId), privacy: .public) error_type=\(String(reflecting: type(of: error)), privacy: .public)"
-            )
-            return false
-        }
-    }
-
-    private func isMissingQuoteError(_ error: Error) -> Bool {
-        if let walletError = error as? WalletError,
-           case .networkError(let message) = walletError,
-           message.localizedCaseInsensitiveContains("not found") {
-            return true
-        }
-
-        return String(describing: error).localizedCaseInsensitiveContains("not found")
     }
 
     func isAlreadyIssuedMintError(_ error: Error) -> Bool {

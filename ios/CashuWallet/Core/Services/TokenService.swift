@@ -113,6 +113,10 @@ class TokenService: ObservableObject {
 
         let token = try await prepared.confirm(memo: memo)
         let tokenString = token.encode()
+        // CDK 0.18 records the send as a Pending transaction whose id derives
+        // from the send saga's operation id, so it can be computed here without
+        // a store round-trip.
+        let transactionId = SagaTransactionId.transactionIdHex(operationId: prepared.operationId())
 
         if let normalizedP2PKPubkey,
            SettingsManager.shared.p2pkKeys.contains(where: {
@@ -120,8 +124,8 @@ class TokenService: ObservableObject {
            }) {
             SettingsManager.shared.markP2PKKeyUsed(publicKey: normalizedP2PKPubkey)
         }
-        
-        return SendTokenResult(token: tokenString, fee: fee)
+
+        return SendTokenResult(token: tokenString, fee: fee, transactionId: transactionId)
     }
     
     // MARK: - Receive Operations
@@ -264,7 +268,7 @@ class TokenService: ObservableObject {
         // trap checkTokenSpendable documents for checkProofsSpent.
         let proofs: [Proof]
         do {
-            let keysets = try await wallet.getMintKeysets(filter: .all)
+            let keysets = try await wallet.keysets(policy: nil).map { $0.info }
             proofs = try token.proofs(mintKeysets: keysets)
         } catch {
             proofs = try token.proofsSimple()
@@ -317,7 +321,7 @@ class TokenService: ObservableObject {
         let tokenUnit = tokenObj.unit() ?? .sat
 
         let wallet = try await repo.getWallet(mintUrl: mintUrlObj, unit: tokenUnit)
-        let keysets = try await wallet.getMintKeysets(filter: .all)
+        let keysets = try await wallet.keysets(policy: nil).map { $0.info }
         let proofs = try tokenObj.proofs(mintKeysets: keysets)
         let spentStates = try await wallet.checkProofsSpent(proofs: proofs)
 
@@ -390,5 +394,12 @@ enum TokenServiceError: LocalizedError {
         case .missingP2PKSigningKey:
             return "This ecash is locked to a key you don't hold. Add the matching key in Settings → Locked Ecash to receive it."
         }
+    }
+}
+
+extension KeySet {
+    /// `Token.proofs(mintKeysets:)` still takes the legacy info projection.
+    var info: KeySetInfo {
+        KeySetInfo(id: id, unit: unit, active: active ?? false, inputFeePpk: inputFeePpk)
     }
 }

@@ -144,7 +144,6 @@ dependencies {
     implementation(libs.mlkit.barcode.scanning)
     implementation(libs.okhttp)
     implementation(libs.bcprov)
-    implementation(libs.bcur.kotlin)
     implementation(libs.cdk.android)
     implementation(libs.coil.compose)
     implementation(libs.sentry.android)

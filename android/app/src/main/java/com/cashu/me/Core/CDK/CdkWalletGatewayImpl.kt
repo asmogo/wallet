@@ -28,6 +28,7 @@ import com.cashu.me.Models.MintSoftware
 import com.cashu.me.Models.NutSupport
 import com.cashu.me.Models.PaymentMethodKind
 import com.cashu.me.Models.RestoreMintResult
+import com.cashu.me.Models.SagaTransactionId
 import com.cashu.me.Models.SendTokenResult
 import com.cashu.me.Models.TransactionKind
 import com.cashu.me.Models.TransactionStatus
@@ -58,6 +59,7 @@ import org.cashudevkit.SpendingConditions as CdkSpendingConditions
 import org.cashudevkit.Token as CdkToken
 import org.cashudevkit.Transaction as CdkTransaction
 import org.cashudevkit.TransactionDirection as CdkTransactionDirection
+import org.cashudevkit.TransactionStatus as CdkTransactionStatus
 import org.cashudevkit.Wallet as CdkWallet
 import org.cashudevkit.WalletRepository as CdkWalletRepository
 import org.cashudevkit.WalletSqliteDatabase as CdkWalletSqliteDatabase
@@ -69,6 +71,10 @@ import org.cashudevkit.initLogging
 import org.cashudevkit.mnemonicToEntropy
 import org.cashudevkit.nwcDeriveServiceSecretKeyFromSeed
 import org.cashudevkit.proofsTotalAmount
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
+
+private val sagaJsonFormat = kotlinx.serialization.json.Json { ignoreUnknownKeys = true }
 
 class CdkWalletGatewayImpl : WalletGateway {
     private var database: CdkWalletSqliteDatabase? = null
@@ -482,7 +488,13 @@ class CdkWalletGatewayImpl : WalletGateway {
         val prepared = walletFor(mintUrl, cdkUnit).prepareSend(amount.toCdkAmount(), sendOptions)
         val fee = prepared.fee().value.toLong()
         val token = prepared.confirm(memo)
-        SendTokenResult(token = token.encode(), fee = fee)
+        // CDK 0.18 records the send as a Pending transaction whose id derives
+        // from the send saga's operation id, computable without a store read.
+        SendTokenResult(
+            token = token.encode(),
+            fee = fee,
+            transactionId = SagaTransactionId.transactionIdHex(prepared.operationId()),
+        )
     }
 
     override suspend fun receiveEcashToken(tokenString: String, p2pkSigningKeys: List<String>): Long = cdkCall {
@@ -549,7 +561,7 @@ class CdkWalletGatewayImpl : WalletGateway {
         // up, which would fail the whole preview to 0 — the review screen then
         // shows the token's gross value as if the redeem were free.
         val proofs = runCatching {
-            token.proofs(wallet.getMintKeysets(org.cashudevkit.KeysetFilter.ALL))
+            token.proofs(wallet.keysets(null).map { it.toKeySetInfo() })
         }.getOrElse { token.proofsSimple() }
         if (proofs.isEmpty()) return@cdkCall 0
         // NUT-02 fee: sum each input's fee_ppk, then one ceil over the total.
@@ -605,7 +617,7 @@ class CdkWalletGatewayImpl : WalletGateway {
         // Errors must propagate, not coerce to false — false means "unspent",
         // and callers treat it as a definitive claim-state answer.
         val proofs = runCatching {
-            tokenObj.proofs(wallet.getMintKeysets(org.cashudevkit.KeysetFilter.ALL))
+            tokenObj.proofs(wallet.keysets(null).map { it.toKeySetInfo() })
         }.getOrElse { tokenObj.proofsSimple() }
         val states = wallet.checkProofsSpent(proofs)
         states.any { it }
@@ -642,6 +654,31 @@ class CdkWalletGatewayImpl : WalletGateway {
             ?: candidateMints.firstOrNull()
             ?: firstWallet().mintUrl().url
         walletFor(mintUrl).payRequest(request, if (request.amount() == null) amount else null)
+    }
+
+    override suspend fun listPendingSendOperationIds(mintUrl: String, unit: String): List<String> = cdkCall {
+        runCatching { walletFor(mintUrl, cdkUnit(unit)).getPendingSends() }.getOrDefault(emptyList())
+    }
+
+    override suspend fun checkPendingSendClaimed(mintUrl: String, operationId: String, unit: String): Boolean = cdkCall {
+        walletFor(mintUrl, cdkUnit(unit)).checkSendStatus(operationId)
+    }
+
+    override suspend fun revokePendingSend(mintUrl: String, operationId: String, unit: String): Long = cdkCall {
+        walletFor(mintUrl, cdkUnit(unit)).revokeSend(operationId).value.toLong()
+    }
+
+    override suspend fun mintUnissuedQuotes(mintUrl: String, unit: String): Long = cdkCall {
+        walletFor(mintUrl, cdkUnit(unit)).mintUnissuedQuotes().value.toLong()
+    }
+
+    override suspend fun pendingSendTokenFromSaga(operationId: String): String? = cdkCall {
+        val sagaJson = runCatching { database?.getSaga(operationId) }.getOrNull() ?: return@cdkCall null
+        runCatching {
+            val data = sagaJsonFormat.parseToJsonElement(sagaJson).jsonObject["data"]?.jsonObject
+            if (data?.get("kind")?.jsonPrimitive?.content != "send") return@cdkCall null
+            data["data"]?.jsonObject?.get("token")?.jsonPrimitive?.content
+        }.getOrNull()
     }
 
     private suspend fun <T> cdkCall(block: suspend () -> T): T =
@@ -795,6 +832,7 @@ class CdkWalletGatewayImpl : WalletGateway {
             mintUrl = mintUrl.url,
             amountPaid = paid,
             amountIssued = issued,
+            updatedAtEpochSeconds = updatedAt.toLong(),
             unit = unit.toDomainUnit(),
         )
     }
@@ -812,6 +850,7 @@ class CdkWalletGatewayImpl : WalletGateway {
             mintUrl = CdkMintUrl(mintUrl),
             amountIssued = if (state == CdkQuoteState.ISSUED) amountValue ?: CdkAmount(0uL) else CdkAmount(0uL),
             amountPaid = if (isPaid || state == CdkQuoteState.ISSUED) amountValue ?: CdkAmount(0uL) else CdkAmount(0uL),
+            updatedAt = 0uL,
             estimatedBlocks = null,
             paymentMethod = CdkPaymentMethod.Bolt11,
             secretKey = null,
@@ -899,15 +938,32 @@ class CdkWalletGatewayImpl : WalletGateway {
             },
             dateEpochMillis = timestamp.toLong() * 1000,
             memo = memo,
-            status = TransactionStatus.Completed,
+            // CDK 0.18 owns the lifecycle: pending while a send is unclaimed /
+            // a mint or melt is in flight, failed when failed or revoked.
+            status = status.toDomain(),
             mintUrl = mintUrl.url,
             preimage = paymentProof,
             invoice = paymentRequest,
             fee = fee.value.toLong(),
             unit = unit,
+            sagaId = sagaId,
             quoteId = quoteId,
         )
     }
+
+    private fun CdkTransactionStatus.toDomain(): TransactionStatus = when (this) {
+        CdkTransactionStatus.PENDING -> TransactionStatus.Pending
+        CdkTransactionStatus.COMPLETED -> TransactionStatus.Completed
+        CdkTransactionStatus.FAILED -> TransactionStatus.Failed
+    }
+
+    private fun org.cashudevkit.KeySet.toKeySetInfo(): org.cashudevkit.KeySetInfo =
+        org.cashudevkit.KeySetInfo(
+            id = id,
+            unit = unit,
+            active = active ?: false,
+            inputFeePpk = inputFeePpk,
+        )
 
     private fun requirePositiveAmount(amountSats: Long?, message: String): Long {
         require(amountSats != null && amountSats > 0) { message }

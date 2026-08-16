@@ -1,11 +1,13 @@
 package com.cashu.me.Views.Components
 
-import com.cashu.me.Core.AnimatedUrDecoder
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
-import org.junit.Assert.assertTrue
 import org.junit.Test
 
+/**
+ * Host-side QR frame tests. The animated (NUT-16) path needs the CDK native
+ * library and is exercised on-device in `QRCodeViewInstrumentedTest`.
+ */
 class QRCodeViewTest {
     @Test
     fun staticOnlyKeepsPayloadUnchanged() {
@@ -21,23 +23,32 @@ class QRCodeViewTest {
     }
 
     @Test
-    fun longPayloadUsesAnimatedBytesUrFrames() {
-        val content = "cashuA" + "abcdef0123456789".repeat(30)
+    fun shortPayloadStaysASingleStaticFrame() {
+        val content = "cashuAshort"
+        val sequence = qrFrameSequence(
+            content = content,
+            staticOnly = false,
+            chunkSize = QRSize.Large.chunkSize,
+        )
+
+        assertEquals(content, sequence.firstFrame)
+        assertEquals(1, sequence.totalParts)
+        assertNull(sequence.encoder)
+    }
+
+    @Test
+    fun longNonTokenPayloadFallsBackToStatic() {
+        // NUT-16 envelopes only carry Cashu tokens; a long non-token string
+        // (no valid token encoding) must not be UR-fragmented.
+        val content = "lnbc1" + "abcdef0123456789".repeat(30)
         val sequence = qrFrameSequence(
             content = content,
             staticOnly = false,
             chunkSize = QRSize.Small.chunkSize,
         )
 
-        assertTrue(sequence.firstFrame.startsWith("ur:bytes/", ignoreCase = true))
-        assertTrue(sequence.totalParts > 1)
-
-        val decoder = AnimatedUrDecoder()
-        var decoded = decoder.receivePart(sequence.firstFrame).content
-        repeat(sequence.totalParts + 8) {
-            decoded = decoded ?: decoder.receivePart(sequence.encoder!!.nextPart()).content
-        }
-
-        assertEquals(content, decoded)
+        assertEquals(content, sequence.firstFrame)
+        assertEquals(1, sequence.totalParts)
+        assertNull(sequence.encoder)
     }
 }

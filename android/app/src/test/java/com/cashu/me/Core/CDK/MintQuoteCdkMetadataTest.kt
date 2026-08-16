@@ -126,6 +126,7 @@ class MintQuoteCdkMetadataTest {
         mintUrl = CdkMintUrl("https://mint.example.com"),
         amountIssued = amountIssued,
         amountPaid = amountPaid,
+        updatedAt = 0uL,
         estimatedBlocks = estimatedBlocks,
         paymentMethod = paymentMethod,
         secretKey = secretKey,

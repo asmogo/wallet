@@ -1,8 +1,6 @@
 package com.cashu.me.Core
 
-import com.gorunjinian.bcur.Cbor
-import com.gorunjinian.bcur.ResultType
-import com.gorunjinian.bcur.URDecoder
+import org.cashudevkit.TokenUrDecoder
 
 data class AnimatedUrDecodeUpdate(
     val content: String?,
@@ -10,15 +8,22 @@ data class AnimatedUrDecodeUpdate(
     val errorMessage: String? = null,
 )
 
+/**
+ * Reassembles a Cashu token from scanned NUT-16 animated-QR frames
+ * (`ur:bytes/…`). Thin wrapper over CDK's fountain-code decoder: frames can
+ * arrive in any order and enough of them recover the token.
+ *
+ * The native decoder is created lazily so rejecting non-UR content never
+ * touches the CDK library.
+ */
 class AnimatedUrDecoder {
-    private var decoder = URDecoder()
-    private val seenSequenceNumbers = mutableSetOf<Int>()
-    private var expectedSequenceCount: Int? = null
+    private var decoder: TokenUrDecoder? = null
+
+    private fun activeDecoder(): TokenUrDecoder =
+        decoder ?: TokenUrDecoder().also { decoder = it }
 
     fun reset() {
-        decoder = URDecoder()
-        seenSequenceNumbers.clear()
-        expectedSequenceCount = null
+        decoder = null
     }
 
     fun receivePart(part: String): AnimatedUrDecodeUpdate {
@@ -27,21 +32,17 @@ class AnimatedUrDecoder {
             return AnimatedUrDecodeUpdate(content = null, progress = progress(), errorMessage = "Not a UR fragment.")
         }
 
-        parseSequence(trimmed)?.let { sequence ->
-            expectedSequenceCount = sequence.count
-            seenSequenceNumbers += sequence.number
-        }
-
         return runCatching {
-            decoder.receivePart(trimmed)
-            val result = decoder.result
-            if (result?.type == ResultType.SUCCESS) {
-                val ur = result.ur ?: return@runCatching AnimatedUrDecodeUpdate(null, progress())
-                val decoded = when {
-                    ur.type.equals("bytes", ignoreCase = true) -> Cbor.unwrapByteString(ur.cborData)
-                    else -> ur.cborData
-                }.toString(Charsets.UTF_8)
-                AnimatedUrDecodeUpdate(content = decoded, progress = 1f)
+            val active = activeDecoder()
+            active.receive(trimmed)
+            if (active.complete()) {
+                val token = active.token()
+                    ?: return@runCatching AnimatedUrDecodeUpdate(
+                        content = null,
+                        progress = progress(),
+                        errorMessage = "Unable to decode animated QR.",
+                    )
+                AnimatedUrDecodeUpdate(content = token.encode(), progress = 1f)
             } else {
                 AnimatedUrDecodeUpdate(content = null, progress = progress())
             }
@@ -55,21 +56,12 @@ class AnimatedUrDecoder {
     }
 
     private fun progress(): Float {
-        val total = expectedSequenceCount ?: return 0f
+        val active = decoder ?: return 0f
+        val total = active.fragmentCount().toInt()
         if (total <= 0) return 0f
-        return (seenSequenceNumbers.size.toFloat() / total.toFloat()).coerceIn(0f, 0.99f)
+        // Fountain parts count fragments recovered via the code too, so this
+        // tracks real decode progress rather than just distinct frames seen.
+        val resolved = active.resolvedFragmentCount()?.toInt() ?: return 0f
+        return (resolved.toFloat() / total.toFloat()).coerceIn(0f, 0.99f)
     }
-
-    private fun parseSequence(part: String): UrSequence? {
-        val pieces = part.lowercase().split("/")
-        if (pieces.size < 3) return null
-        val sequence = pieces[1].split("-")
-        if (sequence.size != 2) return null
-        val number = sequence[0].toIntOrNull() ?: return null
-        val count = sequence[1].toIntOrNull() ?: return null
-        if (number <= 0 || count <= 0) return null
-        return UrSequence(number, count)
-    }
-
-    private data class UrSequence(val number: Int, val count: Int)
 }

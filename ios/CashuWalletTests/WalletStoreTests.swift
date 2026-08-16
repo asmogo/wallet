@@ -86,39 +86,6 @@ final class WalletStoreTests: XCTestCase {
         XCTAssertNil(store.activeMintURL)
     }
 
-    // MARK: - Pending Tokens (Outgoing)
-
-    func testLoadPendingTokensEmptyByDefault() {
-        XCTAssertTrue(store.loadPendingTokens().isEmpty)
-    }
-
-    func testSaveAndLoadPendingToken() {
-        let token = PendingToken(
-            tokenId: "id1",
-            token: "cashuAtoken",
-            amount: 21,
-            fee: 1,
-            date: Date(),
-            mintUrl: "https://mint.example.com",
-            memo: nil,
-            unit: "usd"
-        )
-        store.savePendingTokens([token])
-        let loaded = store.loadPendingTokens()
-        XCTAssertEqual(loaded.count, 1)
-        XCTAssertEqual(loaded[0].tokenId, "id1")
-        XCTAssertEqual(loaded[0].amount, 21)
-        XCTAssertEqual(loaded[0].unit, "usd")
-    }
-
-    func testSavePendingTokensPreservesMultiple() {
-        store.savePendingTokens([
-            pendingToken(id: "a", amount: 10),
-            pendingToken(id: "b", amount: 20),
-        ])
-        XCTAssertEqual(store.loadPendingTokens().count, 2)
-    }
-
     // MARK: - Pending Receive Tokens (Incoming)
 
     func testLoadPendingReceiveTokensEmptyByDefault() {
@@ -137,69 +104,6 @@ final class WalletStoreTests: XCTestCase {
         let loaded = store.loadPendingReceiveTokens()
         XCTAssertEqual(loaded.count, 1)
         XCTAssertEqual(loaded[0].tokenId, "recv1")
-    }
-
-    // MARK: - Claimed Tokens
-
-    func testLoadClaimedTokensEmptyByDefault() {
-        XCTAssertTrue(store.loadClaimedTokens().isEmpty)
-    }
-
-    func testSaveAndLoadClaimedTokens() {
-        let claimed = ClaimedToken(
-            tokenId: "claimed1",
-            token: "cashuAtoken",
-            amount: 30,
-            fee: 1,
-            date: Date(),
-            mintUrl: "https://mint.example.com",
-            memo: "test",
-            claimedDate: Date(),
-            unit: "eur"
-        )
-        store.saveClaimedTokens([claimed])
-        let loaded = store.loadClaimedTokens()
-        XCTAssertEqual(loaded.count, 1)
-        XCTAssertEqual(loaded[0].tokenId, "claimed1")
-        XCTAssertEqual(loaded[0].amount, 30)
-        XCTAssertEqual(loaded[0].unit, "eur")
-    }
-
-    func testLegacyPendingTokenWithoutUnitDefaultsToSatWhenTokenIsUndecodable() throws {
-        let json = """
-        {
-          "tokenId": "legacy",
-          "token": "legacy-token",
-          "amount": 10,
-          "fee": 0,
-          "date": 0,
-          "mintUrl": "https://mint.example.com"
-        }
-        """
-
-        let decoded = try JSONDecoder().decode(PendingToken.self, from: Data(json.utf8))
-
-        XCTAssertEqual(decoded.unit, "sat")
-    }
-
-    func testLegacyPendingTokenWithoutUnitRecoversUnitFromToken() throws {
-        // NUT-00 V3 token for {"token":[],"unit":"usd"}. It has no proofs on
-        // purpose: unit migration must not depend on proof expansion.
-        let token = "cashuAeyJ0b2tlbiI6W10sInVuaXQiOiJ1c2QifQ=="
-        let json = """
-        {
-          "tokenId": "legacy-usd",
-          "token": "\(token)",
-          "amount": 10,
-          "fee": 0,
-          "date": 0,
-          "mintUrl": "https://mint.example.com"
-        }
-        """
-
-        let decoded = try JSONDecoder().decode(PendingToken.self, from: Data(json.utf8))
-
-        XCTAssertEqual(decoded.unit, "usd")
     }
 
     // MARK: - Saved Tokens (txId → encoded token)
@@ -222,19 +126,6 @@ final class WalletStoreTests: XCTestCase {
     func testSaveAndLoadPreimage() {
         store.savePaymentPreimages(["quoteId1": "deadbeef"])
         XCTAssertEqual(store.loadPaymentPreimages()["quoteId1"], "deadbeef")
-    }
-
-    // MARK: - Melt Quote Fees
-
-    func testMeltQuoteFeesEmptyByDefault() {
-        XCTAssertTrue(store.loadMeltQuoteFees().isEmpty)
-    }
-
-    func testSaveAndLoadMeltQuoteFees() {
-        store.saveMeltQuoteFees(["q1": 5, "q2": 10])
-        let loaded = store.loadMeltQuoteFees()
-        XCTAssertEqual(loaded["q1"], 5)
-        XCTAssertEqual(loaded["q2"], 10)
     }
 
     // MARK: - Mint Quote Timestamps
@@ -367,10 +258,30 @@ final class WalletStoreTests: XCTestCase {
         XCTAssertTrue(store.loadBalancesByUnit().isEmpty)
     }
 
-    func testRemoveAllWalletDataClearsPendingTokens() {
-        store.savePendingTokens([pendingToken(id: "x", amount: 1)])
-        store.removeAllWalletData()
-        XCTAssertTrue(store.loadPendingTokens().isEmpty)
+    func testRemoveAllWalletDataClearsRetiredPendingTokenKeys() {
+        let storage = InMemoryStorage()
+        try! storage.set(["token"], forKey: StorageKeys.Retired.pendingTokens)
+        try! storage.set(["token"], forKey: StorageKeys.Retired.claimedTokens)
+
+        WalletStore(storage: storage).removeAllWalletData()
+
+        XCTAssertFalse(storage.exists(forKey: StorageKeys.Retired.pendingTokens))
+        XCTAssertFalse(storage.exists(forKey: StorageKeys.Retired.claimedTokens))
+    }
+
+    func testPurgeRetiredKeysRemovesCDK17Stores() {
+        let storage = InMemoryStorage()
+        for key in StorageKeys.Retired.all {
+            try! storage.set("x", forKey: key)
+        }
+        try! storage.set("keep", forKey: StorageKeys.savedTokens)
+
+        WalletStore(storage: storage).purgeRetiredKeys()
+
+        for key in StorageKeys.Retired.all {
+            XCTAssertFalse(storage.exists(forKey: key), "\(key) should be purged")
+        }
+        XCTAssertTrue(storage.exists(forKey: StorageKeys.savedTokens))
     }
 
     func testRemoveAllWalletDataClearsPreimages() {
@@ -417,34 +328,10 @@ final class WalletStoreTests: XCTestCase {
         XCTAssertEqual(loaded[0].url, "https://legacy.example.com")
     }
 
-    func testLegacyPendingTokensMigratesOnLoad() {
-        let legacyStorage = InMemoryStorage()
-        let token = pendingToken(id: "legacy1", amount: 99)
-        try! legacyStorage.set([token], forKey: StorageKeys.Legacy.pendingTokens)
-
-        let storeWithLegacy = WalletStore(storage: legacyStorage)
-        let loaded = storeWithLegacy.loadPendingTokens()
-        XCTAssertEqual(loaded.count, 1)
-        XCTAssertEqual(loaded[0].tokenId, "legacy1")
-    }
-
     // MARK: - Helpers
 
     private func mint(_ url: String, name: String) -> MintInfo {
         MintInfo(url: url, name: name, description: nil, isActive: true, balance: 0)
-    }
-
-    private func pendingToken(id: String, amount: UInt64) -> PendingToken {
-        PendingToken(
-            tokenId: id,
-            token: "cashuAtoken\(id)",
-            amount: amount,
-            fee: 0,
-            date: Date(),
-            mintUrl: "https://mint.example.com",
-            memo: nil,
-            unit: "sat"
-        )
     }
 }
 

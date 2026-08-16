@@ -26,6 +26,9 @@ data class MintQuoteInfo(
     val mintUrl: String? = null,
     val amountPaid: Long = 0,
     val amountIssued: Long = 0,
+    /** Last update timestamp (creation time for an untouched quote). 0 for
+     * rows stored before CDK 0.18. */
+    val updatedAtEpochSeconds: Long = 0,
     // Unit the quote mints into; poll/redeem must resolve the same-unit wallet.
     val unit: String = "sat",
 ) {

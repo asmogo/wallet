@@ -20,7 +20,7 @@ class PendingMintQuoteTransactionsTest {
         val rows = pendingMintQuoteTransactions(
             quotes = listOf(quote(id = "quote-1", amount = 21, unit = "usd")),
             trackedMintUrls = setOf(MintUrl),
-            completedQuoteIds = emptySet(),
+            quoteIdsWithTransactions = emptySet(),
             timestamps = timestamps,
             nowEpochMillis = 1_700_000_000_000,
         )
@@ -41,7 +41,7 @@ class PendingMintQuoteTransactionsTest {
         val secondRows = pendingMintQuoteTransactions(
             quotes = listOf(quote(id = "quote-1", amount = 21, unit = "usd")),
             trackedMintUrls = setOf(MintUrl),
-            completedQuoteIds = emptySet(),
+            quoteIdsWithTransactions = emptySet(),
             timestamps = timestamps,
             nowEpochMillis = 1_800_000_000_000,
         )
@@ -60,7 +60,7 @@ class PendingMintQuoteTransactionsTest {
                 ),
             ),
             trackedMintUrls = setOf(MintUrl),
-            completedQuoteIds = emptySet(),
+            quoteIdsWithTransactions = emptySet(),
             timestamps = mutableMapOf(),
             nowEpochMillis = 1,
         )
@@ -78,7 +78,7 @@ class PendingMintQuoteTransactionsTest {
         fun rowFor(quote: MintQuoteInfo) = pendingMintQuoteTransactions(
             quotes = listOf(quote),
             trackedMintUrls = setOf(MintUrl),
-            completedQuoteIds = emptySet(),
+            quoteIdsWithTransactions = emptySet(),
             timestamps = mutableMapOf(),
             nowEpochMillis = nowMillis,
         ).single()
@@ -118,12 +118,53 @@ class PendingMintQuoteTransactionsTest {
                 ),
             ),
             trackedMintUrls = setOf(MintUrl),
-            completedQuoteIds = setOf("bolt12-quote"),
+            quoteIdsWithTransactions = setOf("bolt12-quote"),
             timestamps = mutableMapOf(),
             nowEpochMillis = 1,
         )
 
         assertTrue(rows.isEmpty())
+    }
+
+    @Test
+    fun suppressesAnyQuoteOnceCdkOwnsATransactionForIt() {
+        // An in-flight mint surfaces a Pending CDK transaction carrying the
+        // quote id; the quote-backed row would only duplicate it.
+        val rows = pendingMintQuoteTransactions(
+            quotes = listOf(
+                quote(
+                    id = "bolt11-quote",
+                    method = PaymentMethodKind.Bolt11,
+                    state = MintQuoteState.Paid,
+                    amountPaid = 21,
+                ),
+            ),
+            trackedMintUrls = setOf(MintUrl),
+            quoteIdsWithTransactions = setOf("bolt11-quote"),
+            timestamps = mutableMapOf(),
+            nowEpochMillis = 1,
+        )
+
+        assertTrue(rows.isEmpty())
+    }
+
+    @Test
+    fun prefersCdkUpdatedAtOverLocalFirstSeenTimestamps() {
+        val timestamps = mutableMapOf<String, Long>()
+
+        val rows = pendingMintQuoteTransactions(
+            quotes = listOf(
+                quote(id = "quote-1", amount = 21).copy(updatedAtEpochSeconds = 1_600_000_000),
+            ),
+            trackedMintUrls = setOf(MintUrl),
+            quoteIdsWithTransactions = emptySet(),
+            timestamps = timestamps,
+            nowEpochMillis = 1_700_000_000_000,
+        )
+
+        assertEquals(1_600_000_000_000L, rows.single().dateEpochMillis)
+        // A quote with a CDK timestamp never touches the local fallback map.
+        assertTrue(timestamps.isEmpty())
     }
 
     @Test

@@ -1318,20 +1318,8 @@ private suspend fun checkGeneratedTokenClaim(
     token: String,
     mintUrl: String,
 ): PendingTokenClaimCheckResult = runPendingTokenClaimCheck {
-    val walletState = walletManager.state.value
-    when {
-        walletState.claimedTokens.any { it.token == token } -> true
-        else -> {
-            val pending = walletState.pendingTokens.firstOrNull { it.token == token }
-            if (pending != null) {
-                // This path both checks the mint and moves the local History
-                // record from Pending to Claimed when a proof is spent.
-                walletManager.checkPendingTokenStatus(pending)
-            } else {
-                // Defensive fallback for a legacy/generated token with no local
-                // pending record. New sends always take the tracked path above.
-                walletManager.checkTokenSpent(token, mintUrl)
-            }
-        }
-    }
+    // CDK flips the send transaction to completed when the mint reports the
+    // proofs spent; the token-string probe covers tokens this install did not
+    // send itself (iOS SendView parity).
+    walletManager.checkSentTokenClaim(token, mintUrl)
 }

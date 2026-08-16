@@ -187,20 +187,19 @@ extension WalletManager {
                 }
             }
         } catch let recoveryError as MeltPaymentRecoveryError {
-            if let unresolved = recoveryError.unresolvedQuote {
-                rememberPendingMeltQuote(quoteId: unresolved.id, mintUrl: unresolved.mintURL)
-            }
+            // CDK persists the melt saga and its Pending transaction, so an
+            // unresolved outcome needs no local record: startup recovery and
+            // the foreground poll reconcile it.
             throw recoveryError
         }
         let result = confirmation.result
         if result.settlement == .pending {
             // Mint accepted the payment for asynchronous NUT-05 settlement (the
-            // usual case for on-chain melts). Remember the quote so serialized
-            // foreground/startup polling can reconcile it, including after relaunch.
-            rememberPendingMeltQuote(quoteId: quoteId, mintUrl: result.mintUrl)
+            // usual case for on-chain melts). CDK tracks the pending
+            // transaction; the coordinated foreground poll and startup recovery
+            // drive terminal reconciliation, including after relaunch.
             SentryService.breadcrumb("Melt accepted for async settlement", category: "wallet.lightning")
         } else {
-            recordFinalizedMelt(quoteId: quoteId, preimage: result.preimage, feePaid: result.feePaid)
             SentryService.breadcrumb("Lightning payment sent", category: "wallet.lightning")
         }
         await refreshBalance()

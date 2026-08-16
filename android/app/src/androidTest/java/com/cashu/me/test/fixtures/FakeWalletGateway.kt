@@ -351,6 +351,16 @@ class FakeWalletGateway(
         unitsByMint: Map<String, List<String>>,
     ): List<WalletTransaction> = transactions.toList()
 
+    override suspend fun listPendingSendOperationIds(mintUrl: String, unit: String): List<String> = emptyList()
+
+    override suspend fun checkPendingSendClaimed(mintUrl: String, operationId: String, unit: String): Boolean = false
+
+    override suspend fun revokePendingSend(mintUrl: String, operationId: String, unit: String): Long = 0
+
+    override suspend fun mintUnissuedQuotes(mintUrl: String, unit: String): Long = 0
+
+    override suspend fun pendingSendTokenFromSaga(operationId: String): String? = null
+
     override suspend fun payCashuPaymentRequest(
         encoded: String,
         customAmountSats: Long?,
