@@ -51,6 +51,16 @@ final class ReceiveAutoPasteTests: XCTestCase {
             )
         )
     }
+
+    /// Only a confirmed-spent clipboard token suppresses the auto-paste (and
+    /// thereby the auto-route to the claim page). When the NUT-07 check can't
+    /// run — offline, unreachable mint, undecodable token — the token is
+    /// pasted anyway and the claim page surfaces its own error.
+    func testOnlyConfirmedSpentClipboardTokenSkipsAutoPaste() {
+        XCTAssertFalse(UnifiedReceiveView.shouldAutoPasteClipboardToken(spent: true))
+        XCTAssertTrue(UnifiedReceiveView.shouldAutoPasteClipboardToken(spent: false))
+        XCTAssertTrue(UnifiedReceiveView.shouldAutoPasteClipboardToken(spent: nil))
+    }
 }
 
 final class ReceiveTokenMemoReviewTests: XCTestCase {

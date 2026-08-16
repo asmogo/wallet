@@ -58,4 +58,17 @@ class ReceiveAutoPasteTest {
         )
         assertEquals(false, clipboardRead)
     }
+
+    /**
+     * Only a confirmed-spent clipboard token suppresses the auto-paste (and
+     * thereby the auto-route to the claim page). When the NUT-07 check can't
+     * run — offline, unreachable mint, undecodable token — the token is pasted
+     * anyway and the claim page surfaces its own error.
+     */
+    @Test
+    fun onlyConfirmedSpentClipboardTokenSkipsAutoPaste() {
+        assertEquals(false, shouldAutoPasteClipboardToken(spent = true))
+        assertEquals(true, shouldAutoPasteClipboardToken(spent = false))
+        assertEquals(true, shouldAutoPasteClipboardToken(spent = null))
+    }
 }

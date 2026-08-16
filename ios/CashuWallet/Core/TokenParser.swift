@@ -39,6 +39,18 @@ enum TokenParser {
         )
     }
 
+    /// Decode only the token's mint URL — enough to scope a NUT-07 spent
+    /// check without expanding proofs (`proofsSimple()` can fail for IDv2
+    /// keysets even though the token itself is valid).
+    static func mintUrl(from tokenString: String) -> String? {
+        guard let normalized = normalizedToken(from: tokenString),
+              let token = try? Token.decode(encodedToken: normalized),
+              let mint = try? token.mintUrl().url else {
+            return nil
+        }
+        return mint
+    }
+
     /// Decode only the token's mint account unit. Unlike `tokenInfo(from:)`,
     /// this deliberately does not expand proofs: `proofsSimple()` can fail for
     /// IDv2 keysets even though the token itself and its unit are valid.
