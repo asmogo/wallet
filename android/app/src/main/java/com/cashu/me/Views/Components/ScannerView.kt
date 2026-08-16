@@ -104,6 +104,12 @@ fun ScannerView(
     useDeterministicPermission: Boolean = false,
     promptText: String = ScannerDefaultPrompt,
     quickActions: List<ScannerQuickAction> = emptyList(),
+    // Bumped by the host every time the scanner opens. The exit animation keeps
+    // this composable in composition, so a reopen that reverses that exit would
+    // otherwise resurrect `completedScan = true` — a live camera that silently
+    // drops every scan. Keying the scan state to the opening guarantees a
+    // visible scanner is always an armed scanner.
+    sessionId: Int = 0,
 ) {
     val context = LocalContext.current
     val activity = remember(context) { context.findActivity() }
@@ -119,10 +125,10 @@ fun ScannerView(
         )
     }
     var cameraError by remember { mutableStateOf<String?>(null) }
-    var completedScan by remember { mutableStateOf(false) }
-    var animatedProgress by remember { mutableStateOf(0f) }
-    var animatedError by remember { mutableStateOf<String?>(null) }
-    val animatedUrDecoder = remember { AnimatedUrDecoder() }
+    var completedScan by remember(sessionId) { mutableStateOf(false) }
+    var animatedProgress by remember(sessionId) { mutableStateOf(0f) }
+    var animatedError by remember(sessionId) { mutableStateOf<String?>(null) }
+    val animatedUrDecoder = remember(sessionId) { AnimatedUrDecoder() }
     val permissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         cameraPermissionState = cameraPermissionResultState(
             granted = granted,
