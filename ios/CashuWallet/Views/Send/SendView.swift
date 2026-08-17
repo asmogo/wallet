@@ -1100,13 +1100,16 @@ struct MintAmountSelectorRow: View {
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
+                    // The spacer lives inside the button so it absorbs the row's
+                    // spare width and the content shape below stretches over it —
+                    // outside the button it was a dead zone that swallowed taps
+                    // (Android's MintSelectorRow opens the picker on the same area).
+                    Spacer(minLength: 8)
                 }
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
             .accessibilityLabel("Paying mint: \(mint.name), \(balanceText)")
-
-            Spacer(minLength: 8)
 
             Button(action: onUseMax) {
                 Text("Send Max")
