@@ -518,6 +518,11 @@ struct ReceiveLightningView: View {
             }
             .padding(12)
             .liquidGlass(in: RoundedRectangle(cornerRadius: 12), interactive: true)
+            // The glass pill is drawn across the whole padded frame, but neither
+            // the glass nor the fallback background expands the hit area — without
+            // an explicit content shape only the glyphs respond, leaving the
+            // pill's middle and edges dead.
+            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .accessibilityElement(children: .combine)
