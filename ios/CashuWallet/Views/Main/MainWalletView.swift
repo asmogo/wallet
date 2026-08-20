@@ -755,9 +755,9 @@ struct MainWalletView: View {
             .presentationDetents([.large])
             .canvasSheetBackground()
         case .sendEcash:
-            // Swapped into the sheet from Send's method row. The chevron steps
-            // back to Send; X / swipe-down abandons to the wallet.
-            SendView(onBack: { navigationManager.activeWalletSheet = .send(prefill: nil) })
+            // Swapped into the sheet from Send's method row, so there is no
+            // stack to pop: X and swipe-down both abandon to the wallet.
+            SendView()
                 .environmentObject(walletManager)
                 .presentationDetents([.large])
                 .canvasSheetBackground()

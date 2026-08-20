@@ -644,7 +644,6 @@ private fun AuthenticatedShell(container: AppContainer) {
                 walletManager = container.walletManager,
                 settingsManager = container.settingsManager,
                 priceService = container.priceService,
-                onBack = { activeFlow = WalletFlow.Send },
                 onClose = close,
                 // The camera renders in the activity window, underneath this
                 // sheet's dialog window — park the entry state and yield the

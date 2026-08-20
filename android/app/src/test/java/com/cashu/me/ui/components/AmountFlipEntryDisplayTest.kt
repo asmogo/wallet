@@ -56,7 +56,8 @@ class AmountFlipEntryDisplayTest {
         )
 
         assertEquals(AmountDisplayPrimary.Fiat, display.effectivePrimary)
-        assertEquals("$0.00", display.primary)
+        // Whole-number-first: an untouched pad has no fraction to show yet.
+        assertEquals("$0", display.primary)
         assertEquals("0 sat", display.secondary)
     }
 

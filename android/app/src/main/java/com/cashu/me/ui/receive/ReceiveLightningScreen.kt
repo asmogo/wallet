@@ -1061,7 +1061,6 @@ private fun InputFace(
                 entryRaw = amount,
                 isSat = false,
                 unit = unit,
-                decimals = decimals,
                 useBitcoinSymbol = useBitcoinSymbol,
                 formatter = formatter,
             )
@@ -1427,7 +1426,6 @@ private fun ReusableAmountEditSheet(
                     entryRaw = amount,
                     isSat = false,
                     unit = unit,
-                    decimals = entryContext.entryDecimals,
                     useBitcoinSymbol = useBitcoinSymbol,
                     formatter = formatter,
                 )

@@ -202,7 +202,6 @@ fun SendEcashScreen(
     walletManager: WalletManager,
     settingsManager: SettingsManager,
     priceService: com.cashu.me.Core.PriceService,
-    onBack: () -> Unit,
     onClose: () -> Unit,
     onScanP2pk: (SendEcashDraft) -> Unit = {},
     initialDraft: SendEcashDraft? = null,
@@ -327,10 +326,10 @@ fun SendEcashScreen(
     // Generation counts as money-in-motion: block sheet dismissal.
     LaunchedEffect(sending) { onDismissLockChanged(sending) }
 
-// Dismissal contract: system back = swipe = abandon to the wallet, so the
-    // sheet handles it. The header chevron owns internal step-back (Generated →
-    // Input → Send, and Failure → Input). Swallow back only while a token is
-    // being generated.
+    // Dismissal contract: system back = swipe = abandon to the wallet, so the
+    // sheet handles it. The header owns internal step-back (Generated → Input,
+    // Failure → Input) and shows a close on Input itself, which has nowhere to
+    // step back to. Swallow back only while a token is being generated.
     BackHandler(enabled = sending) {}
 
     Column(
@@ -344,11 +343,18 @@ fun SendEcashScreen(
                 is SendFace.Generated -> "Pending Ecash"
                 is SendFace.Failure -> "Send Ecash"
             },
-            navigationIcon = Icons.AutoMirrored.Outlined.ArrowBack,
-            navigationContentDescription = "Back",
+            // Input has no parent step — leaving it lands on the wallet — so it
+            // gets a close. The result faces really do step back, and keep the
+            // arrow. The glyph matches what the control does.
+            navigationIcon = if (face == SendFace.Input) {
+                Icons.Outlined.Close
+            } else {
+                Icons.AutoMirrored.Outlined.ArrowBack
+            },
+            navigationContentDescription = if (face == SendFace.Input) "Close" else "Back",
             onNavigationClick = {
                 when (face) {
-                    SendFace.Input -> onBack()
+                    SendFace.Input -> onClose()
                     is SendFace.Generated -> face = SendFace.Input
                     is SendFace.Failure -> face = SendFace.Input
                 }
@@ -589,7 +595,6 @@ private fun InputFace(
     val insufficient = !balanceLoading && amountValue > 0 && amountValue > mintBalance
     BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
         val compactHeight = maxHeight < 600.dp
-        val noticeVisible = insufficient || errorText != null
         Column(
             modifier = Modifier
                 .fillMaxSize()
@@ -612,12 +617,6 @@ private fun InputFace(
             )
         }
 
-        // iOS SendView: mint row on top, amount vertically centered between
-        // spacers, keypad pinned below. On compact sheets a visible notice
-        // receives the upper flexible space so it cannot be clipped.
-        if (!noticeVisible) {
-            Spacer(Modifier.weight(1f, fill = true))
-        }
         val amountColor by animateColorAsState(
             targetValue = if (insufficient) {
                 MaterialTheme.colorScheme.onSurfaceVariant
@@ -627,31 +626,38 @@ private fun InputFace(
             animationSpec = spring(stiffness = Spring.StiffnessMedium),
             label = "amount-color",
         )
-        AmountEntryHero(
-            entryRaw = amount,
-            isSat = isSat,
-            unit = unit,
-            decimals = decimals,
-            useBitcoinSymbol = useBitcoinSymbol,
-            formatter = formatter,
-            fiatCurrencyCode = fiatCurrencyCode,
-            color = amountColor,
-        )
-
-        confirmedP2pkPubkey?.let { pubkey ->
-            P2pkRecipientConfirmation(
-                confirmedPubkey = pubkey,
-                recipientIsPrimaryKey = p2pkRecipientIsPrimaryKey,
-                onEditRecipient = onEditP2pkRecipient,
-                onRemoveRecipient = onRemoveP2pkRecipient,
-            )
-        }
-
         val reduceMotion = rememberReducedMotion()
-        Box(modifier = Modifier.weight(1f, fill = true).fillMaxWidth()) {
+        // One flexible cell between the mint row and the keypad: the amount
+        // centered in it, the notice *overlaid* at its bottom (iOS SendView's
+        // ZStack). As siblings the notice pushed the amount upward the instant
+        // it appeared — a jump you now hit on the first over-balance keystroke.
+        Box(
+            modifier = Modifier.weight(1f, fill = true).fillMaxWidth(),
+            contentAlignment = Alignment.Center,
+        ) {
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                AmountEntryHero(
+                    entryRaw = amount,
+                    isSat = isSat,
+                    unit = unit,
+                    useBitcoinSymbol = useBitcoinSymbol,
+                    formatter = formatter,
+                    fiatCurrencyCode = fiatCurrencyCode,
+                    color = amountColor,
+                )
+
+                confirmedP2pkPubkey?.let { pubkey ->
+                    P2pkRecipientConfirmation(
+                        confirmedPubkey = pubkey,
+                        recipientIsPrimaryKey = p2pkRecipientIsPrimaryKey,
+                        onEditRecipient = onEditP2pkRecipient,
+                        onRemoveRecipient = onRemoveP2pkRecipient,
+                    )
+                }
+            }
+
             // Fade+scale warning (iOS .transition(.opacity.combined(with: .scale))),
-            // reduce-motion collapses to a plain fade. Drawn at the bottom of the
-            // flexible gap so the amount above stays pinned.
+            // reduce-motion collapses to a plain fade.
             Column(
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
@@ -670,16 +676,14 @@ private fun InputFace(
                     },
                     exit = fadeOut(spring(stiffness = Spring.StiffnessMedium)),
                 ) {
-                    // iOS SendView: tinted caution InlineNotice with balance detail.
-                    val mintName = activeMint?.name
+                    // No detail line: the balance is already on the mint row
+                    // directly above, so restating it here just adds a second
+                    // line of text over the keypad (iOS SendView parity).
                     InlineNotice(
                         text = "Insufficient balance",
                         severity = NoticeSeverity.Caution,
-                        detail = if (!compactHeight && mintName != null) {
-                            "You have $balanceText in $mintName."
-                        } else {
-                            null
-                        },
+                        showsContainer = false,
+                        centered = true,
                         modifier = Modifier.padding(bottom = CashuTheme.spacing.snug),
                     )
                 }

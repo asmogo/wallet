@@ -226,9 +226,9 @@ internal fun AmountFormatter.entryDisplayText(
     } else {
         null
     }
-    val primaryRaw = entryRaw.ifEmpty {
-        if (effective == AmountDisplayPrimary.Fiat) "0.00" else "0"
-    }
+    // Whole-number-first entry: an untouched pad is "0" in both units. The
+    // secondary line below is a settled amount, so it keeps its full fraction.
+    val primaryRaw = entryRaw.ifEmpty { "0" }
     return when (effective) {
         AmountDisplayPrimary.Fiat -> AmountDisplayText(
             primary = entryFiatDisplay(primaryRaw, currencyCode),

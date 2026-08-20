@@ -19,7 +19,6 @@ import com.cashu.me.ui.theme.AmountScale
  * @param entryRaw the raw typed amount ("" before the first keypress)
  * @param isSat    true for a sat wallet; false routes through the unit code
  * @param unit     effective unit code for non-sat mints (e.g. "USD")
- * @param decimals fractional places for the empty-state placeholder
  * @param fiatCurrencyCode applies the saved fiat symbol instead of a mint-unit suffix
  * @param color    dims to `onSurfaceVariant` on insufficient balance (Send Ecash)
  */
@@ -28,17 +27,14 @@ fun AmountEntryHero(
     entryRaw: String,
     isSat: Boolean,
     unit: String,
-    decimals: Int,
     useBitcoinSymbol: Boolean,
     formatter: AmountFormatter,
     fiatCurrencyCode: String? = null,
     color: Color = MaterialTheme.colorScheme.onSurface,
 ) {
-    val raw = when {
-        entryRaw.isNotEmpty() -> entryRaw
-        decimals > 0 -> "0." + "0".repeat(decimals)
-        else -> "0"
-    }
+    // Entry is whole-number-first, so an untouched pad reads "0" in every unit —
+    // the fraction only exists once the user presses the decimal key.
+    val raw = entryRaw.ifEmpty { "0" }
     AmountHero(
         parts = if (fiatCurrencyCode != null) {
             formatter.entryFiatParts(raw, fiatCurrencyCode)

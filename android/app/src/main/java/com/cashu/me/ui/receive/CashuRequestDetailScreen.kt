@@ -636,7 +636,6 @@ private fun CashuRequestAmountEditSheet(
                 entryRaw = amount,
                 isSat = isSat,
                 unit = unit,
-                decimals = decimals,
                 useBitcoinSymbol = useBitcoinSymbol,
                 formatter = formatter,
             )

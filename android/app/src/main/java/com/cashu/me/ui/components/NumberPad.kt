@@ -32,6 +32,7 @@ import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
+import com.cashu.me.Core.AmountFormatter
 import com.cashu.me.Core.UnitAmountEntry
 import com.cashu.me.ui.theme.CashuTheme
 
@@ -44,10 +45,11 @@ private val KeyHeight = 48.dp
 
 /**
  * Minimal numeric keypad for amount entry — no background boxes, just numbers
- * with opacity-based press feedback (iOS-style). With [decimals] == 0 the output
- * is the plain digit-only String; with decimals > 0 keys route through
- * [UnitAmountEntry]'s minor-unit accumulator ("5" → "0.05" → "0.50" → "5.00")
- * for unit-native fiat-ecash entry. Long-press delete clears all.
+ * with opacity-based press feedback (iOS-style). Digits type left-to-right, so
+ * "21" is twenty-one whole units; see [UnitAmountEntry]. With [decimals] > 0 the
+ * bottom-left slot carries a decimal key that arms the fraction ("21." →
+ * "21.50"); with decimals == 0 there is no fraction to enter, so the slot stays
+ * the blank spacer it has always been. Long-press delete clears all.
  */
 @Composable
 fun NumberPad(
@@ -56,11 +58,15 @@ fun NumberPad(
     modifier: Modifier = Modifier,
     decimals: Int = 0,
 ) {
+    // Labelled with the locale's separator; the raw string stays canonical.
+    val separatorKey = remember(decimals) {
+        if (decimals > 0) AmountFormatter.decimalSeparator() else ""
+    }
     val rows = listOf(
         listOf("1", "2", "3"),
         listOf("4", "5", "6"),
         listOf("7", "8", "9"),
-        listOf("", "0", "delete"),
+        listOf(separatorKey, "0", "delete"),
     )
     Column(
         modifier = modifier.fillMaxWidth(),
@@ -74,12 +80,24 @@ fun NumberPad(
                 row.forEach { key ->
                     when (key) {
                         "" -> Box(modifier = Modifier.weight(1f).height(KeyHeight))
+                        separatorKey -> NumberPadKey(
+                            modifier = Modifier.weight(1f),
+                            contentDescription = "Decimal point",
+                            onClick = {
+                                onAmountChange(UnitAmountEntry.appendSeparator(amount, decimals))
+                            },
+                        ) {
+                            Text(
+                                text = key,
+                                style = MaterialTheme.typography.headlineSmall,
+                            )
+                        }
                         "delete" -> NumberPadKey(
                             modifier = Modifier.weight(1f),
                             contentDescription = "Delete. Long press to clear.",
                             onClick = {
                                 if (amount.isNotEmpty()) {
-                                    onAmountChange(UnitAmountEntry.backspace(amount, decimals))
+                                    onAmountChange(UnitAmountEntry.backspace(amount))
                                 }
                             },
                             onLongClick = {

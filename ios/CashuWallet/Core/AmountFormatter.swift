@@ -192,16 +192,38 @@ enum AmountFormatter {
 
     // MARK: - Live amount entry (sats or fiat)
     //
-    // The keypad writes a single `amountString`; what it *means* depends on the
-    // active entry unit. In sats mode it's an integer; in fiat mode it's a
-    // locale-formatted decimal (cents) that converts to sats at the live price.
-    // These helpers are the single source of truth for that pipeline so every
-    // entry screen stays thin.
+    // The keypad writes a single `amountString` that types left-to-right like a
+    // normal number: digits build the integer part ("2" -> "21") and the decimal
+    // key arms the fraction ("21." -> "21.50"). "21" is therefore twenty-one
+    // whole units, never twenty-one minor units. What the string *means* depends
+    // on the active entry unit — sats in sats mode, the user's fiat in fiat mode
+    // — and these helpers are the single source of truth for that pipeline so
+    // every entry screen stays thin.
+    //
+    // Fiat is just a two-decimal unit, so it delegates to the `decimals:`
+    // helpers below rather than carrying a second copy of the accumulator
+    // (mirrors Android BitcoinAmountEntry -> UnitAmountEntry).
 
-    /// The locale's decimal separator ("," or "."), used as the keypad's
-    /// fiat-only decimal key and when parsing/formatting typed fiat.
+    /// Fraction digits in a typed fiat amount.
+    private static let fiatDecimals = 2
+
+    /// The locale's decimal separator ("," or "."), shown on the keypad's
+    /// decimal key and when rendering a partially typed amount.
     static var decimalSeparator: String {
         Locale.current.decimalSeparator ?? "."
+    }
+
+    /// The separator stored *inside* a raw entry string, on every locale, so a
+    /// raw means the same thing on any device and matches Android byte for byte.
+    /// Localization happens at display time.
+    static let entrySeparator = "."
+
+    /// Fraction digits the keypad offers for a display-flip entry unit.
+    static func entryDecimals(for unit: AmountDisplayPrimary) -> Int {
+        switch unit {
+        case .sats: return 0
+        case .fiat: return fiatDecimals
+        }
     }
 
     /// Locale-aware grouping for the integer part of a typed fiat amount.
@@ -217,45 +239,10 @@ enum AmountFormatter {
     static func entrySats(raw: String, unit: AmountDisplayPrimary) -> UInt64 {
         switch unit {
         case .sats:
-            return UInt64(raw) ?? 0
+            return entryBaseUnits(raw: raw, decimals: 0)
         case .fiat:
-            return PriceService.shared.fiatToSats(parseFiat(raw))
-        }
-    }
-
-    /// Append a keypad digit under entry rules. Sats mode is an integer append
-    /// that collapses a lone leading zero. Fiat mode is a cents accumulator:
-    /// the digit shifts in at the right (cents), so the value is always a
-    /// complete two-decimal amount and a pre-filled/converted figure stays
-    /// editable (there is no decimal key in fiat mode). Returns the new raw
-    /// string (unchanged if the key is rejected, so the caller can skip the
-    /// haptic).
-    static func entryAppend(_ key: String, to raw: String, unit: AmountDisplayPrimary) -> String {
-        guard key.count == 1, let ch = key.first, ch.isNumber else { return raw }
-
-        switch unit {
-        case .sats:
-            // Integer part — collapse a lone leading zero ("0" + "5" -> "5").
-            return raw == "0" ? key : raw + key
-        case .fiat:
-            let cents = parseFiatCents(raw)
-            guard cents < maxFiatCents else { return raw }
-            let updated = cents * 10 + UInt64(ch.wholeNumberValue ?? 0)
-            return updated == 0 ? "" : centsToFiatString(updated)
-        }
-    }
-
-    /// Remove the last keypad input. Sats drops the trailing digit; fiat shifts
-    /// the cents accumulator right by one (14.54 -> 1.45 -> 0.14 -> ""). Returns
-    /// the new raw string (unchanged if empty, so the caller can skip the haptic).
-    static func entryBackspace(_ raw: String, unit: AmountDisplayPrimary) -> String {
-        guard !raw.isEmpty else { return raw }
-        switch unit {
-        case .sats:
-            return String(raw.dropLast())
-        case .fiat:
-            let cents = parseFiatCents(raw) / 10
-            return cents == 0 ? "" : centsToFiatString(cents)
+            let cents = entryBaseUnits(raw: raw, decimals: fiatDecimals)
+            return PriceService.shared.fiatToSats(Double(cents) / 100)
         }
     }
 
@@ -263,64 +250,110 @@ enum AmountFormatter {
     //
     // A mint *account* unit (sat, eur, usd, or a custom string) is entered
     // directly in that unit — no BTC-price conversion. `decimals` comes from the
-    // unit's `Currency` (0 for sat/custom, 2 for usd/eur). `decimals == 0` is an
-    // integer append; `decimals > 0` is a minor-unit accumulator (digits shift
-    // in from the right), mirroring the fiat cents keypad but yielding the
-    // unit's own base amount instead of converting to sats.
+    // unit's `Currency` (0 for sat/custom, 2 for usd/eur), and is what decides
+    // whether the keypad renders a decimal key at all.
+    //
+    // Raw grammar (the separator is always `entrySeparator`):
+    //
+    //     raw  := "" | INT | INT "." | INT "." FRAC
+    //     INT  := "0" | [1-9][0-9]{0,11}
+    //     FRAC := [0-9]{0,decimals}
+    //
+    // The trailing "." *is* the "fraction armed" state, so a screen needs no
+    // extra flag beyond the raw String it already holds.
 
     /// The integer base-unit value of a typed string for a unit with `decimals`
-    /// fraction digits ("5.00", 2 → 500; "500", 0 → 500).
+    /// fraction digits ("21", 2 -> 2100; "21.5", 2 -> 2150; "500", 0 -> 500).
     static func entryBaseUnits(raw: String, decimals: Int) -> UInt64 {
-        guard decimals > 0 else { return UInt64(raw) ?? 0 }
-        return UInt64(raw.filter { $0.isNumber }) ?? 0
+        guard !raw.isEmpty else { return 0 }
+        let places = clampDecimals(decimals)
+        let ceiling = maxBaseUnits(decimals: places)
+        let parts = raw.split(
+            separator: Character(entrySeparator),
+            omittingEmptySubsequences: false
+        )
+        let wholeDigits = String((parts.first ?? "").filter(\.isNumber)).drop { $0 == "0" }
+        // An over-long raw can only arrive pre-seeded; clamp rather than letting
+        // the parse fail into a silent zero.
+        guard wholeDigits.count <= maxIntegerDigits else { return ceiling }
+        let whole = UInt64(wholeDigits) ?? 0
+        guard places > 0 else { return Swift.min(whole, ceiling) }
+
+        let typed = parts.count > 1 ? String(parts[1].filter(\.isNumber)) : ""
+        let padded = String((typed + String(repeating: "0", count: places)).prefix(places))
+        let value = whole * pow10(places) + (UInt64(padded) ?? 0)
+        return Swift.min(value, ceiling)
     }
 
-    /// Append a keypad digit for direct unit entry. Integer units collapse a
-    /// lone leading zero; fractional units accumulate minor units from the right.
-    /// Returns the unchanged string when the key is rejected (so the caller can
-    /// skip the haptic).
+    /// Append a keypad digit. Digits build the integer part left-to-right; once
+    /// the fraction is armed they fill it, up to the unit's precision. Returns
+    /// the unchanged string when the key is rejected (so the caller can skip the
+    /// haptic).
     static func entryAppendUnit(_ key: String, to raw: String, decimals: Int) -> String {
         guard key.count == 1, let ch = key.first, ch.isNumber else { return raw }
-        guard decimals > 0 else {
-            return raw == "0" ? key : raw + key
+        if let separator = raw.firstIndex(of: Character(entrySeparator)) {
+            // Fraction armed: fill it to `decimals` digits, then stop.
+            let typed = raw.distance(from: raw.index(after: separator), to: raw.endIndex)
+            guard typed < clampDecimals(decimals) else { return raw }
+            return raw + key
         }
-        let minor = entryBaseUnits(raw: raw, decimals: decimals)
-        guard minor < maxMinorUnits else { return raw }
-        let updated = minor * 10 + UInt64(ch.wholeNumberValue ?? 0)
-        return updated == 0 ? "" : minorUnitString(updated, decimals: decimals)
+        // Integer part — a lone leading zero is replaced, never extended.
+        guard raw != "0", !raw.isEmpty else { return key }
+        guard raw.count < maxIntegerDigits else { return raw }
+        return raw + key
     }
 
-    /// Remove the last keypad input for direct unit entry (mirrors `entryBackspace`).
-    static func entryBackspaceUnit(_ raw: String, decimals: Int) -> String {
-        guard !raw.isEmpty else { return raw }
-        guard decimals > 0 else { return String(raw.dropLast()) }
-        let minor = entryBaseUnits(raw: raw, decimals: decimals) / 10
-        return minor == 0 ? "" : minorUnitString(minor, decimals: decimals)
+    /// Arm the fraction. Inert for a 0-decimal unit (which renders no decimal
+    /// key) and for a raw that already carries a separator; on an empty pad it
+    /// opens with a leading zero, so "." "5" reads as "0.5".
+    static func entryAppendSeparatorUnit(_ raw: String, decimals: Int) -> String {
+        guard clampDecimals(decimals) > 0 else { return raw }
+        guard !raw.contains(entrySeparator) else { return raw }
+        guard !raw.isEmpty else { return "0" + entrySeparator }
+        return raw + entrySeparator
     }
 
-    /// The typed-entry string for a base-unit amount in a unit with `decimals`
-    /// fraction digits — the inverse of `entryBaseUnits` (500, 2 → "5.00").
+    /// Remove the last keypad input. A plain character drop, so the separator
+    /// falls off in its turn: "21.5" -> "21." -> "21" -> "2" -> "".
+    static func entryBackspaceUnit(_ raw: String) -> String {
+        String(raw.dropLast())
+    }
+
+    /// The typed-entry string for a base-unit amount — the inverse of
+    /// `entryBaseUnits`, in minimal form so a seeded whole amount looks like
+    /// something the user could have typed (600, 2 -> "6"; 610, 2 -> "6.10").
     /// Empty for a zero amount so the keypad shows its placeholder.
     static func entryString(baseUnits: UInt64, decimals: Int) -> String {
         guard baseUnits > 0 else { return "" }
-        return minorUnitString(baseUnits, decimals: decimals)
+        let places = clampDecimals(decimals)
+        guard places > 0 else { return String(baseUnits) }
+        let scale = pow10(places)
+        let whole = baseUnits / scale
+        let fraction = baseUnits % scale
+        guard fraction > 0 else { return String(whole) }
+        let padded = String(format: "%0\(places)d", Int(fraction))
+        return "\(whole)\(entrySeparator)\(padded)"
     }
 
-    /// Ceiling on the minor-unit accumulator, matching the fiat entry cap so a
-    /// held key can't run past sane bounds.
-    private static let maxMinorUnits: UInt64 = 99_999_999_999
+    /// The largest amount the entry grammar can express for a unit.
+    static func maxBaseUnits(decimals: Int) -> UInt64 {
+        pow10(maxIntegerDigits + clampDecimals(decimals)) - 1
+    }
 
-    /// A locale-separated string with `decimals` fraction digits for a minor-unit
-    /// integer (1454, 2 → "14.54"); no grouping/symbol — those are added at
-    /// display time via the unit's `Currency`.
-    private static func minorUnitString(_ minor: UInt64, decimals: Int) -> String {
-        guard decimals > 0 else { return String(minor) }
-        var divisor: UInt64 = 1
-        for _ in 0..<decimals { divisor *= 10 }
-        let intPart = minor / divisor
-        let fracPart = Int(minor % divisor)
-        let frac = String(format: "%0\(decimals)d", fracPart)
-        return "\(intPart)\(decimalSeparator)\(frac)"
+    /// Ceiling on the integer part, so a held key can't run past sane bounds.
+    private static let maxIntegerDigits = 12
+
+    /// Keeps `10^(maxIntegerDigits + decimals)` inside `UInt64` for any unit.
+    private static let maxDecimals = 6
+
+    private static func clampDecimals(_ decimals: Int) -> Int {
+        Swift.min(Swift.max(decimals, 0), maxDecimals)
+    }
+
+    private static func pow10(_ exponent: Int) -> UInt64 {
+        var value: UInt64 = 1
+        for _ in 0..<exponent { value *= 10 }
+        return value
     }
 
     /// Re-express a typed string when the entry unit flips, preserving the
@@ -345,7 +378,7 @@ enum AmountFormatter {
     static func entryPrimary(raw: String, unit: AmountDisplayPrimary, useBitcoinSymbol: Bool) -> String {
         switch unit {
         case .sats:
-            return sats(UInt64(raw) ?? 0, useBitcoinSymbol: useBitcoinSymbol)
+            return sats(entryBaseUnits(raw: raw, decimals: 0), useBitcoinSymbol: useBitcoinSymbol)
         case .fiat:
             return wrapWithCurrencySymbol(partialFiatNumber(raw))
         }
@@ -360,7 +393,7 @@ enum AmountFormatter {
     ) -> AmountParts {
         switch unit {
         case .sats:
-            return satsParts(UInt64(raw) ?? 0, useBitcoinSymbol: useBitcoinSymbol)
+            return satsParts(entryBaseUnits(raw: raw, decimals: 0), useBitcoinSymbol: useBitcoinSymbol)
         case .fiat:
             return AmountParts(
                 value: partialFiatNumber(raw),
@@ -372,49 +405,32 @@ enum AmountFormatter {
     /// The numerals of a partially typed fiat amount, grouped but unwrapped.
     /// Partial-aware: a trailing separator and trailing zeros render exactly as
     /// typed, so the hero doesn't jump while the user is still keying.
+    /// Raw always carries the canonical `entrySeparator`; the locale's separator
+    /// is applied here, at display time. Reading and writing the same character
+    /// would collide on comma-decimal locales, where the integer grouping of
+    /// 1234 is itself "1.234".
     private static func partialFiatNumber(_ raw: String) -> String {
-        let sep = decimalSeparator
-        let parts = raw.split(separator: Character(sep), omittingEmptySubsequences: false)
+        let parts = raw.split(
+            separator: Character(entrySeparator),
+            omittingEmptySubsequences: false
+        )
         let intRaw = parts.first.map(String.init) ?? ""
-        let intValue = UInt64(intRaw) ?? 0
+        let intValue = entryBaseUnits(raw: intRaw, decimals: 0)
         let groupedInt = fiatGroupingFormatter.string(from: NSNumber(value: intValue)) ?? "\(intValue)"
 
-        guard raw.contains(sep) else { return groupedInt }
+        guard raw.contains(entrySeparator) else { return groupedInt }
         let fracRaw = parts.count > 1 ? String(parts[1]) : ""
-        return groupedInt + sep + fracRaw
+        return groupedInt + decimalSeparator + fracRaw
     }
 
     // MARK: - Fiat parsing / formatting helpers
 
-    /// Ceiling on the integer part of a typed fiat amount (~$1B), so the cents
-    /// accumulator can't run away past sane bounds.
-    private static let maxFiatCents: UInt64 = 99_999_999_999
-
-    /// Parse a typed fiat string (locale separator) into a `Double`.
-    private static func parseFiat(_ raw: String) -> Double {
-        guard !raw.isEmpty else { return 0 }
-        var normalized = raw.replacingOccurrences(of: decimalSeparator, with: ".")
-        if normalized.hasSuffix(".") { normalized.removeLast() }
-        return Double(normalized) ?? 0
-    }
-
-    /// Integer cents in a typed fiat string ("14.54" -> 1454).
-    private static func parseFiatCents(_ raw: String) -> UInt64 {
-        UInt64(raw.filter { $0.isNumber }) ?? 0
-    }
-
-    /// A locale-separated two-decimal fiat string (1454 -> "14.54"); no
-    /// grouping or symbol — those are added at display time.
-    private static func centsToFiatString(_ cents: UInt64) -> String {
-        "\(cents / 100)\(decimalSeparator)\(String(format: "%02d", cents % 100))"
-    }
-
-    /// A raw entry string (locale separator, two decimals, no grouping/symbol)
-    /// for a fiat value — used when converting sats -> fiat on a flip.
+    /// A raw entry string for a fiat value — used when converting sats -> fiat
+    /// on a flip. Minimal form, so a round figure seeds as "16", not "16.00".
     private static func fiatEntryString(_ fiat: Double) -> String {
         let cents = (fiat * 100).rounded()
         guard cents.isFinite, cents > 0, cents < Double(UInt64.max) else { return "" }
-        return centsToFiatString(UInt64(cents))
+        return entryString(baseUnits: UInt64(cents), decimals: fiatDecimals)
     }
 
     /// Wrap a partial numeric entry with the canonical currency prefix/suffix.

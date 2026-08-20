@@ -361,6 +361,10 @@ final class MultiUnitSupportTests: XCTestCase {
     }
 
     // MARK: - Unit-native amount entry
+    //
+    // Whole-number-first. These vectors are mirrored verbatim in the Android
+    // suite (UnitAmountEntryTest) — the raw string is the contract between the
+    // two platforms, so they must agree.
 
     func testEntryBaseUnitsTwoDecimals() {
         XCTAssertEqual(AmountFormatter.entryBaseUnits(raw: "5.00", decimals: 2), 500)
@@ -371,38 +375,121 @@ final class MultiUnitSupportTests: XCTestCase {
         XCTAssertEqual(AmountFormatter.entryBaseUnits(raw: "500", decimals: 0), 500)
     }
 
-    func testCentsAccumulatorBuildsUpFromRight() {
-        // Digits shift in from the right: 5 → 0.05 → 0.50 → 5.00 (= 500 cents).
+    /// The regression this whole change exists for: "21" is $21, not $0.21.
+    func testDigitsBuildTheIntegerPartLeftToRight() {
         var raw = ""
-        for key in ["5", "0", "0"] {
-            raw = AmountFormatter.entryAppendUnit(key, to: raw, decimals: 2)
-        }
-        XCTAssertEqual(AmountFormatter.entryBaseUnits(raw: raw, decimals: 2), 500)
+        raw = AmountFormatter.entryAppendUnit("2", to: raw, decimals: 2)
+        XCTAssertEqual(raw, "2")
+        raw = AmountFormatter.entryAppendUnit("1", to: raw, decimals: 2)
+        XCTAssertEqual(raw, "21")
+        XCTAssertEqual(AmountFormatter.entryBaseUnits(raw: raw, decimals: 2), 2100)
+    }
+
+    func testSeparatorArmsTheFraction() {
+        var raw = AmountFormatter.entryAppendUnit("2", to: "", decimals: 2)
+        raw = AmountFormatter.entryAppendUnit("1", to: raw, decimals: 2)
+        raw = AmountFormatter.entryAppendSeparatorUnit(raw, decimals: 2)
+        XCTAssertEqual(raw, "21.")
+        XCTAssertEqual(AmountFormatter.entryBaseUnits(raw: raw, decimals: 2), 2100)
+        raw = AmountFormatter.entryAppendUnit("5", to: raw, decimals: 2)
+        XCTAssertEqual(raw, "21.5")
+        XCTAssertEqual(AmountFormatter.entryBaseUnits(raw: raw, decimals: 2), 2150)
+        raw = AmountFormatter.entryAppendUnit("0", to: raw, decimals: 2)
+        XCTAssertEqual(raw, "21.50")
+        XCTAssertEqual(AmountFormatter.entryBaseUnits(raw: raw, decimals: 2), 2150)
+    }
+
+    func testSeparatorOnAnEmptyPadOpensWithALeadingZero() {
+        let raw = AmountFormatter.entryAppendSeparatorUnit("", decimals: 2)
+        XCTAssertEqual(raw, "0.")
+        XCTAssertEqual(AmountFormatter.entryBaseUnits(raw: raw, decimals: 2), 0)
+        XCTAssertEqual(
+            AmountFormatter.entryBaseUnits(
+                raw: AmountFormatter.entryAppendUnit("5", to: raw, decimals: 2),
+                decimals: 2
+            ),
+            50
+        )
+    }
+
+    func testSeparatorIsInertWhenItCannotApply() {
+        // Already armed.
+        XCTAssertEqual(AmountFormatter.entryAppendSeparatorUnit("21.5", decimals: 2), "21.5")
+        // No fraction exists for a 0-decimal unit, and no key is rendered for it.
+        XCTAssertEqual(AmountFormatter.entryAppendSeparatorUnit("21", decimals: 0), "21")
+    }
+
+    func testFractionStopsAtTheUnitsPrecision() {
+        XCTAssertEqual(AmountFormatter.entryAppendUnit("7", to: "21.50", decimals: 2), "21.50")
     }
 
     func testIntegerAppendCollapsesLeadingZero() {
         XCTAssertEqual(AmountFormatter.entryAppendUnit("5", to: "0", decimals: 0), "5")
+        XCTAssertEqual(AmountFormatter.entryAppendUnit("5", to: "", decimals: 2), "5")
     }
 
-    func testBackspaceUnitShiftsCentsRight() {
-        var raw = ""
-        for key in ["5", "0", "0"] {   // 5.00
-            raw = AmountFormatter.entryAppendUnit(key, to: raw, decimals: 2)
-        }
-        raw = AmountFormatter.entryBackspaceUnit(raw, decimals: 2)   // → 0.50
-        XCTAssertEqual(AmountFormatter.entryBaseUnits(raw: raw, decimals: 2), 50)
+    func testBackspaceDropsCharactersIncludingTheSeparator() {
+        XCTAssertEqual(AmountFormatter.entryBackspaceUnit("21.50"), "21.5")
+        XCTAssertEqual(AmountFormatter.entryBackspaceUnit("21.5"), "21.")
+        XCTAssertEqual(AmountFormatter.entryBackspaceUnit("21."), "21")
+        XCTAssertEqual(AmountFormatter.entryBackspaceUnit("21"), "2")
+        XCTAssertEqual(AmountFormatter.entryBackspaceUnit("2"), "")
+    }
+
+    func testEntryStringSeedsInMinimalForm() {
+        XCTAssertEqual(AmountFormatter.entryString(baseUnits: 0, decimals: 2), "")
+        XCTAssertEqual(AmountFormatter.entryString(baseUnits: 600, decimals: 2), "6")
+        XCTAssertEqual(AmountFormatter.entryString(baseUnits: 610, decimals: 2), "6.10")
+        XCTAssertEqual(AmountFormatter.entryString(baseUnits: 617, decimals: 2), "6.17")
+        XCTAssertEqual(AmountFormatter.entryString(baseUnits: 9, decimals: 2), "0.09")
+        XCTAssertEqual(AmountFormatter.entryString(baseUnits: 1234, decimals: 0), "1234")
     }
 
     func testEntryStringRoundTrips() {
-        XCTAssertEqual(
-            AmountFormatter.entryBaseUnits(
-                raw: AmountFormatter.entryString(baseUnits: 500, decimals: 2),
-                decimals: 2
-            ),
-            500
-        )
+        for value: UInt64 in [1, 9, 600, 610, 617, 2150, 99_999_999_999] {
+            XCTAssertEqual(
+                AmountFormatter.entryBaseUnits(
+                    raw: AmountFormatter.entryString(baseUnits: value, decimals: 2),
+                    decimals: 2
+                ),
+                value
+            )
+        }
+        // A seeded whole and its padded twin are the same amount.
+        XCTAssertEqual(AmountFormatter.entryBaseUnits(raw: "6", decimals: 2), 600)
+        XCTAssertEqual(AmountFormatter.entryBaseUnits(raw: "6.00", decimals: 2), 600)
         XCTAssertEqual(AmountFormatter.entryString(baseUnits: 500, decimals: 0), "500")
-        XCTAssertEqual(AmountFormatter.entryString(baseUnits: 0, decimals: 2), "")
+    }
+
+    func testIntegerPartStopsAtTwelveDigits() {
+        let maxed = "999999999999"
+        XCTAssertEqual(AmountFormatter.entryAppendUnit("9", to: maxed, decimals: 2), maxed)
+        XCTAssertEqual(AmountFormatter.entryAppendUnit("9", to: maxed, decimals: 0), maxed)
+        // Still extendable into the fraction.
+        XCTAssertEqual(
+            AmountFormatter.entryAppendUnit("9", to: "999999999999.", decimals: 2),
+            "999999999999.9"
+        )
+    }
+
+    /// An over-long raw can only arrive pre-seeded; it must clamp rather than
+    /// parse-fail into a silent zero. Sat entry had no cap at all before this.
+    func testOversizedRawClampsInsteadOfCollapsingToZero() {
+        XCTAssertEqual(
+            AmountFormatter.entryBaseUnits(raw: "99999999999999999999", decimals: 2),
+            99_999_999_999_999
+        )
+        XCTAssertEqual(
+            AmountFormatter.entryBaseUnits(raw: "99999999999999999999", decimals: 0),
+            999_999_999_999
+        )
+    }
+
+    func testNonDigitKeysAreIgnored() {
+        XCTAssertEqual(AmountFormatter.entryAppendUnit("x", to: "5.00", decimals: 2), "5.00")
+        XCTAssertEqual(AmountFormatter.entryAppendUnit("x", to: "500", decimals: 0), "500")
+        // The separator has its own entry point; it is not a digit.
+        XCTAssertEqual(AmountFormatter.entryAppendUnit(".", to: "500", decimals: 2), "500")
     }
 
     func testUSDDisplayUsesLeadingBareDollarSymbol() {
