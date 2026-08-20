@@ -71,8 +71,9 @@ class NostrService: ObservableObject {
     
     // MARK: - Key Derivation
     
-    /// Derive Nostr keypair from wallet seed
-    /// Uses first 32 bytes of seed as private key (same as cashu.me)
+    /// Derive Nostr keypair from the wallet's NIP-06 secret key
+    /// The caller passes the NIP-06-derived secret key (m/44'/1237'/0'/0/0
+    /// from the BIP39 seed); the first 32 bytes are used as the private key.
     func deriveKeypair(from seed: Data) throws {
         guard seed.count >= 32 else {
             throw NostrError.invalidSeed
