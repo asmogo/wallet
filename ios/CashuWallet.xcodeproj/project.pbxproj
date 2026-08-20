@@ -73,6 +73,7 @@
 		AV00000000000001 /* AppVersion.swift in Sources */ = {isa = PBXBuildFile; fileRef = AV00000000000011 /* AppVersion.swift */; };
 		AV00000000000002 /* AppVersionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AV00000000000012 /* AppVersionTests.swift */; };
 		TG00000000000002 /* TypographyGuardTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = TG00000000000012 /* TypographyGuardTests.swift */; };
+		WE00000000000002 /* WalletErrorMessageTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = WE00000000000012 /* WalletErrorMessageTests.swift */; };
 		SE00000000000003 /* SeedPhraseEntryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = SE00000000000013 /* SeedPhraseEntryTests.swift */; };
 		B1790D26812303E8F31BC782 /* AmountLockup.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4F131731BE27EACCD69C8AFA /* AmountLockup.swift */; };
 		BB00000000000001 /* MintService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000011 /* MintService.swift */; };
@@ -249,6 +250,7 @@
 		AV00000000000011 /* AppVersion.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppVersion.swift; sourceTree = "<group>"; };
 		AV00000000000012 /* AppVersionTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = AppVersionTests.swift; path = CashuWalletTests/AppVersionTests.swift; sourceTree = "<group>"; };
 		TG00000000000012 /* TypographyGuardTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = TypographyGuardTests.swift; path = CashuWalletTests/TypographyGuardTests.swift; sourceTree = "<group>"; };
+		WE00000000000012 /* WalletErrorMessageTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = WalletErrorMessageTests.swift; path = CashuWalletTests/WalletErrorMessageTests.swift; sourceTree = "<group>"; };
 		SE00000000000013 /* SeedPhraseEntryTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = SeedPhraseEntryTests.swift; path = CashuWalletTests/SeedPhraseEntryTests.swift; sourceTree = "<group>"; };
 		BB00000000000011 /* MintService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MintService.swift; sourceTree = "<group>"; };
 		BB00000000000012 /* TransactionService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TransactionService.swift; sourceTree = "<group>"; };
@@ -396,6 +398,7 @@
 				T1B000000000000F /* HistorySearchTests.swift */,
 				AV00000000000012 /* AppVersionTests.swift */,
 				TG00000000000012 /* TypographyGuardTests.swift */,
+				WE00000000000012 /* WalletErrorMessageTests.swift */,
 				SE00000000000013 /* SeedPhraseEntryTests.swift */,
 				T1B000000000000F /* HistorySearchTests.swift */,
 				T1B0000000000010 /* WalletSurfaceCoordinatorTests.swift */,
@@ -978,6 +981,7 @@
 				T2B000000000000F /* HistorySearchTests.swift in Sources */,
 				AV00000000000002 /* AppVersionTests.swift in Sources */,
 				TG00000000000002 /* TypographyGuardTests.swift in Sources */,
+				WE00000000000002 /* WalletErrorMessageTests.swift in Sources */,
 				SE00000000000003 /* SeedPhraseEntryTests.swift in Sources */,
 				T2B000000000000F /* HistorySearchTests.swift in Sources */,
 				T2B0000000000010 /* WalletSurfaceCoordinatorTests.swift in Sources */,
