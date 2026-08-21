@@ -96,7 +96,10 @@ class CashuRequestStore(
                 amount = amount,
                 unit = unit,
                 mints = mints,
-                memo = memo?.takeIf { it.isNotBlank() },
+                // Quote-level metadata is immutable (BOLT12 offers can't change
+                // their description), so a null memo means "unknown here" and
+                // must not wipe the previously stored one.
+                memo = memo?.takeIf { it.isNotBlank() } ?: existing?.memo,
                 createdAtEpochMillis = existing?.createdAtEpochMillis ?: System.currentTimeMillis(),
                 quoteId = quoteId,
                 quoteKind = quoteKind,

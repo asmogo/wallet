@@ -556,22 +556,47 @@ class WalletManager(
         return gateway.fetchMintInfo(normalized)
     }
 
-    override suspend fun createMintQuote(amount: Long?, method: PaymentMethodKind, unit: String): MintQuoteInfo {
+    override suspend fun createMintQuote(amount: Long?, method: PaymentMethodKind, unit: String, description: String?): MintQuoteInfo {
         val active = mutableState.value.activeMint ?: throw IllegalStateException("No active mint.")
         return withLoadingResult {
-            gateway.createMintQuote(amount, method, active.url, unit).also {
+            gateway.createMintQuote(amount, method, active.url, unit, description).also {
                 mintQuoteSyncService.rememberMintQuoteTimestamp(it.id)
+            }.let { quote ->
+                // CDK drops the description from the returned quote (write-only),
+                // so re-attach it for callers that persist or display it (iOS
+                // `info.description` parity). Offers are immutable, so this
+                // matches what was embedded.
+                if (method == PaymentMethodKind.Bolt12) quote.copy(description = description) else quote
             }
         }
     }
 
-    /** Returns the active mint's reusable amountless BOLT12 offer, if present. */
-    suspend fun existingAmountlessBolt12Offer(unit: String): MintQuoteInfo? {
+    /**
+     * Returns the active mint's reusable amountless BOLT12 offer matching
+     * [description] (null → the plain, description-less offer). CDK never
+     * returns the offer description, so the match joins quotes with the
+     * locally stored quote-intent memos keyed by quote id.
+     */
+    suspend fun existingAmountlessBolt12Offer(unit: String, description: String? = null): MintQuoteInfo? {
         val activeMint = mutableState.value.activeMint ?: return null
+        val memosByQuoteId = LinkedHashMap<String, String?>()
+        cashuRequestStore.state.value.requests.forEach { request ->
+            // First-wins matches offer immutability (iOS `uniquingKeysWith`
+            // parity) — a quote's memo is set once and never changes.
+            request.quoteId?.let { memosByQuoteId.putIfAbsent(it, request.memo) }
+        }
+        val quotes = gateway.listUnissuedMintQuotes().map { quote ->
+            if (quote.paymentMethod == PaymentMethodKind.Bolt12) {
+                quote.copy(description = memosByQuoteId[quote.id])
+            } else {
+                quote
+            }
+        }
         return findExistingAmountlessBolt12Offer(
-            quotes = gateway.listUnissuedMintQuotes(),
+            quotes = quotes,
             mintUrl = activeMint.url,
             unit = unit,
+            description = description,
         )
     }
 

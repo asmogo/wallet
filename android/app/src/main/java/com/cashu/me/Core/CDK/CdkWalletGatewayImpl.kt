@@ -285,14 +285,16 @@ class CdkWalletGatewayImpl : WalletGateway {
         runCatching { walletFor(mintUrl, cdkUnit(unit)).totalBalance().value.toLong() }.getOrNull()
     }
 
-    override suspend fun createMintQuote(amount: Long?, method: PaymentMethodKind, mintUrl: String, unit: String): MintQuoteInfo = cdkCall {
+    override suspend fun createMintQuote(amount: Long?, method: PaymentMethodKind, mintUrl: String, unit: String, description: String?): MintQuoteInfo = cdkCall {
         val cdkUnit = cdkUnit(unit)
         if (!unit.equals("sat", ignoreCase = true)) ensureWalletUnlocked(mintUrl, cdkUnit)
         val wallet = walletFor(mintUrl, cdkUnit)
         val quote = wallet.mintQuote(
             paymentMethod = cdkPaymentMethod(method),
             amount = amount?.toCdkAmount(),
-            description = null,
+            // Description is only threaded for BOLT12 offers (NUT-04 optional);
+            // mint support on other rails is uneven, so they keep nil.
+            description = description?.takeIf { method == PaymentMethodKind.Bolt12 },
             extra = if (method == PaymentMethodKind.Onchain) "{}" else null,
         )
         persistMintQuoteLocalMetadataIfNeeded(

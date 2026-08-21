@@ -114,7 +114,8 @@ class LightningService: ObservableObject {
         amount: UInt64?,
         method: PaymentMethodKind = .bolt11,
         targetMintURL: String? = nil,
-        unit: Cdk.CurrencyUnit = .sat
+        unit: Cdk.CurrencyUnit = .sat,
+        description: String? = nil
     ) async throws -> MintQuoteInfo {
         guard let activeMint = getActiveMint() else {
             throw WalletError.notInitialized
@@ -149,30 +150,50 @@ class LightningService: ObservableObject {
         let quote = try await wallet.mintQuote(
             paymentMethod: method.cdkMethod,
             amount: amount.map { Amount(value: $0) },
-            description: nil,
+            // Description is only threaded for BOLT12 offers (NUT-04 optional);
+            // mint support on other rails is uneven, so they keep nil.
+            description: method == .bolt12 ? description : nil,
             extra: nil
         )
 
         await persistMintQuote(quote, paymentMethod: method)
 
-        return mintQuoteInfo(from: quote, fallbackAmount: amount, paymentMethod: method)
+        var info = mintQuoteInfo(from: quote, fallbackAmount: amount, paymentMethod: method)
+        info.description = method == .bolt12 ? description : nil
+        return info
     }
 
-    /// Returns the pending amountless BOLT12 offer for one mint and unit, or nil
-    /// if that wallet has none. Offers from another account must never be
-    /// reopened merely because they appeared first in the shared database.
-    func existingAmountlessOffer(
-        mintURL: String,
-        unit: Cdk.CurrencyUnit
-    ) async throws -> MintQuoteInfo? {
+    /// Returns the pending amountless BOLT12 offer matching `description`
+    /// (nil → the plain, description-less offer), or nil if none exists.
+    /// Used to avoid creating a new offer on every visit to the Reusable
+    /// Invoice screen. CDK never returns offer descriptions, so the match
+    /// joins quotes with the locally stored quote-intent memos by quote id —
+    /// keeping reuse unambiguous once several amountless offers exist (offers
+    /// are immutable, so a changed description always mints a fresh one).
+    func existingAmountlessOffer(mintURL: String, unit: Cdk.CurrencyUnit, description: String? = nil) async throws -> MintQuoteInfo? {
         guard let db = walletDatabase() else { return nil }
         let pendingQuotes = try await db.getUnissuedMintQuotes()
-        let requestedContext = MintQuoteWalletContext(mintURL: mintURL, unit: unit)
-        guard let match = MintQuoteContextPolicy.existingAmountlessOffer(
-            in: pendingQuotes,
-            requestedContext: requestedContext
-        ) else { return nil }
-        return mintQuoteInfo(from: match, fallbackAmount: nil, paymentMethod: .bolt12)
+        let memosByQuoteId = Dictionary(
+            CashuRequestStore.shared.requests.compactMap { request in
+                request.quoteId.map { ($0, request.memo) }
+            },
+            uniquingKeysWith: { first, _ in first }
+        )
+        guard let match = pendingQuotes.first(where: {
+            MintQuoteDomain.isReusableAmountlessOffer(
+                paymentMethod: PaymentMethodKind.from($0.paymentMethod),
+                isAmountless: $0.amount == nil,
+                quoteMintUrl: $0.mintUrl.url,
+                quoteUnit: PaymentRequestDecoder.unitDescription($0.unit),
+                activeMintUrl: mintURL,
+                unit: PaymentRequestDecoder.unitDescription(unit),
+                storedMemo: memosByQuoteId[$0.id] ?? nil,
+                description: description
+            )
+        }) else { return nil }
+        var info = mintQuoteInfo(from: match, fallbackAmount: nil, paymentMethod: .bolt12)
+        info.description = description
+        return info
     }
 
     /// Returns an existing unpaid onchain quote at the active mint, or nil if none exists.

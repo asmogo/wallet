@@ -36,6 +36,61 @@ class MintQuoteDomainTest {
     }
 
     @Test
+    fun reusableBolt12OfferReuseMatchesDescriptionExactly() {
+        val plain = MintQuoteInfo(
+            id = "plain",
+            request = "lno1plain",
+            amount = null,
+            paymentMethod = PaymentMethodKind.Bolt12,
+            state = MintQuoteState.Pending,
+            expiryEpochSeconds = null,
+            mintUrl = "https://mint.example",
+            unit = "sat",
+        )
+        val described = plain.copy(id = "described", description = "Coffee tips")
+        val quotes = listOf(plain, described)
+
+        // Nil description reuses only the plain offer.
+        assertEquals(
+            plain,
+            findExistingAmountlessBolt12Offer(
+                quotes = quotes,
+                mintUrl = "https://mint.example",
+                unit = "sat",
+                description = null,
+            ),
+        )
+        // A set description reuses only the offer carrying the same memo.
+        assertEquals(
+            described,
+            findExistingAmountlessBolt12Offer(
+                quotes = quotes,
+                mintUrl = "https://mint.example",
+                unit = "sat",
+                description = "Coffee tips",
+            ),
+        )
+        // A changed description matches nothing, so the caller mints fresh.
+        assertNull(
+            findExistingAmountlessBolt12Offer(
+                quotes = quotes,
+                mintUrl = "https://mint.example",
+                unit = "sat",
+                description = "Different memo",
+            ),
+        )
+        // A plain-offer lookup ignores described offers entirely.
+        assertNull(
+            findExistingAmountlessBolt12Offer(
+                quotes = listOf(described),
+                mintUrl = "https://mint.example",
+                unit = "sat",
+                description = null,
+            ),
+        )
+    }
+
+    @Test
     fun bolt12ZeroExpiryUsesLocalNeverExpiresSentinelForStorageAndIsHiddenForDisplay() {
         val stored = mintQuoteLocalStorageExpiry(0, PaymentMethodKind.Bolt12)
 

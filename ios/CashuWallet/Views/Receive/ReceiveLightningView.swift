@@ -44,6 +44,17 @@ struct ReceiveLightningView: View {
     @State private var showMintPicker = false
     /// Reusable BOLT12 offer: drives the Amount-row pencil → amount picker sheet.
     @State private var showReusableAmountPicker = false
+    /// Reusable BOLT12 offer: drives the Description-row pencil → editor sheet.
+    @State private var showReusableDescriptionEditor = false
+    /// Description the next reusable BOLT12 offer is minted with. Initialized
+    /// once from the newest stored offer intent for this mint so re-opening the
+    /// screen reloads the described offer instead of minting a duplicate (CDK
+    /// never returns offer descriptions — the local memo is the only record).
+    @State private var offerDescription: String?
+    @State private var offerDescriptionLoaded = false
+    // Quote creation is serialized through this handle — a new create cancels
+    // the in-flight one so the slowest task can't clobber the freshest offer.
+    @State private var quoteCreationTask: Task<Void, Never>?
     /// VoiceOver Share action for the QR cards: ShareLink can't be invoked
     /// imperatively, so the accessibility action presents the share sheet.
     @State private var showShareSheet = false
@@ -219,9 +230,14 @@ struct ReceiveLightningView: View {
             }
             .onAppear {
                 syncSelectedMethodWithActiveMint()
+                loadStoredOfferDescriptionIfNeeded()
             }
             .onChange(of: walletManager.activeMint?.id) {
                 syncSelectedMethodWithActiveMint()
+                // Drop the previous mint's description and re-restore.
+                offerDescription = nil
+                offerDescriptionLoaded = false
+                loadStoredOfferDescriptionIfNeeded()
             }
             .onChange(of: selectedMethod) {
                 requestFailure = nil
@@ -628,6 +644,16 @@ struct ReceiveLightningView: View {
                                 value: formatQuoteAmount(quote.amountIssued, unit: quote.unit)
                             )
                         }
+                        // Payer-facing offer description (what the payer sees
+                        // when paying) — editable like the amount, re-mints on
+                        // change (Android "Description" row parity).
+                        editableRow(
+                            icon: "text.alignleft",
+                            label: "Description",
+                            value: CashuRequestStore.shared.intent(forQuoteId: quote.id)?.memo
+                                ?? quote.description ?? "None",
+                            action: { showReusableDescriptionEditor = true }
+                        )
                         if let created = quote.createdAt {
                             detailRow(
                                 label: "Created",
@@ -655,6 +681,13 @@ struct ReceiveLightningView: View {
                 onSelect: {
                     setReusableOfferAmount($0, mintURL: quote.mintURL, unit: quote.unit)
                 }
+            )
+        }
+        .sheet(isPresented: $showReusableDescriptionEditor) {
+            ReusableOfferDescriptionSheet(
+                currentDescription: CashuRequestStore.shared.intent(forQuoteId: quote.id)?.memo
+                    ?? quote.description,
+                onDone: { setReusableOfferDescription($0) }
             )
         }
     }
@@ -1181,6 +1214,7 @@ struct ReceiveLightningView: View {
             amount: quote.isAmountless ? nil : quote.amount,
             unit: quote.unit,
             mints: mintURLs,
+            memo: quote.description,
             reusable: reusable,
             expiry: expiry
         )
@@ -1214,6 +1248,7 @@ struct ReceiveLightningView: View {
         onchainObservation = nil
         monitoredQuoteId = nil
         quoteStatusTask?.cancel()
+        quoteCreationTask?.cancel()
 
         requestCreationTask = Task { @MainActor in
             defer { if !Task.isCancelled { isCreatingRequest = false } }
@@ -1223,7 +1258,8 @@ struct ReceiveLightningView: View {
                     amount: target,
                     method: .bolt12,
                     targetMintURL: requestedMintURL,
-                    unit: requestedUnit
+                    unit: requestedUnit,
+                    description: offerDescription
                 )
                 guard !Task.isCancelled else { return }
                 mintQuote = quote
@@ -1241,6 +1277,53 @@ struct ReceiveLightningView: View {
             }
         }
     }
+
+    /// Re-mints the reusable BOLT12 offer with a new payer-facing description
+    /// (Android `setReusableOfferDescription` parity). Blank → nil (plain
+    /// offer, reuse allowed); non-blank → a fresh offer, since offers are
+    /// immutable. The current fixed amount, if any, is preserved.
+    private func setReusableOfferDescription(_ next: String?) {
+        // Strip control/bidi characters (payer-facing text shown by third-party
+        // wallets), then cap. An explicit user choice wins over the restore.
+        let stripped = (next ?? "")
+            .unicodeScalars
+            .filter { $0.properties.generalCategory != .control || $0 == "\n" }
+            .map { String($0) }.joined()
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        offerDescription = stripped.isEmpty ? nil : String(stripped.prefix(Self.maxOfferDescriptionLength))
+        offerDescriptionLoaded = true
+        // Use the amountless flag, not `quote.amount`: CDK may fill amount
+        // after a payment on an amountless offer, and reminting that as a
+        // fixed offer would drop reuse (Android `!quote.isAmountless` parity).
+        if let quote = mintQuote, quote.paymentMethod == .bolt12,
+           !isAmountless, let amount = quote.amount, amount > 0 {
+            setReusableOfferAmount(amount)
+        } else {
+            amountString = ""
+            loadOrCreateAmountlessOffer()
+        }
+    }
+
+    /// One-time restore of the mint's last-used offer description, so a
+    /// re-open reloads the described offer (memo match) instead of silently
+    /// reverting to the plain one.
+    private func loadStoredOfferDescriptionIfNeeded() {
+        guard !offerDescriptionLoaded else { return }
+        guard let mintUrl = walletManager.activeMint?.url else { return }
+        offerDescription = CashuRequestStore.shared.requests
+            .filter {
+                $0.rail == .bolt12 && $0.mints.contains(mintUrl) &&
+                // Only amountless reusable intents — a memo from a one-off
+                // fixed quote must not leak into the reusable offer.
+                $0.amount == nil
+            }
+            .max(by: { $0.createdAt < $1.createdAt })?
+            .memo
+        offerDescriptionLoaded = true
+    }
+
+    /// Defensive cap for the payer-facing BOLT12 offer description.
+    static let maxOfferDescriptionLength = 640
 
     /// Reopen the mint's existing amountless offer by default. The explicit new
     /// action deliberately bypasses that lookup and leaves the prior offer valid.
@@ -1263,6 +1346,7 @@ struct ReceiveLightningView: View {
         expiryTimeRemaining = 0
         quoteStatusTask?.cancel()
         expiryTimer?.invalidate()
+        quoteCreationTask?.cancel()
 
         requestCreationTask = Task { @MainActor in
             defer { if !Task.isCancelled { isCreatingRequest = false } }
@@ -1272,7 +1356,8 @@ struct ReceiveLightningView: View {
                 if !forceNew,
                    let existing = try await walletManager.existingAmountlessOffer(
                        mintURL: requestedMintURL,
-                       unit: requestedUnit
+                       unit: requestedUnit,
+                       description: offerDescription
                    ) {
                     quote = existing
                 } else {
@@ -1280,7 +1365,8 @@ struct ReceiveLightningView: View {
                         amount: nil,
                         method: .bolt12,
                         targetMintURL: requestedMintURL,
-                        unit: requestedUnit
+                        unit: requestedUnit,
+                        description: offerDescription
                     )
                 }
                 guard !Task.isCancelled else { return }
@@ -1332,6 +1418,7 @@ struct ReceiveLightningView: View {
         expiryTimeRemaining = 0
         quoteStatusTask?.cancel()
         expiryTimer?.invalidate()
+        quoteCreationTask?.cancel()
 
         requestCreationTask = Task { @MainActor in
             defer { if !Task.isCancelled { isCreatingRequest = false } }
@@ -1346,7 +1433,8 @@ struct ReceiveLightningView: View {
                         amount: requestAmount,
                         method: requestMethod,
                         targetMintURL: requestedMintURL,
-                        unit: requestedUnit
+                        unit: requestedUnit,
+                        description: requestMethod == .bolt12 ? offerDescription : nil
                     )
                 }
                 guard !Task.isCancelled else { return }
