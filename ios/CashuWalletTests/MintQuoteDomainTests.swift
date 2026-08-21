@@ -2,6 +2,28 @@ import XCTest
 @testable import CashuWallet
 
 final class MintQuoteDomainTests: XCTestCase {
+    func testBolt12MintDescriptionAdvertisementFailsClosed() {
+        XCTAssertFalse(MintQuoteDomain.reportsBolt12MintDescription(methods: []))
+        XCTAssertFalse(MintQuoteDomain.reportsBolt12MintDescription(methods: [
+            (method: .bolt12, description: nil),
+        ]))
+        XCTAssertFalse(MintQuoteDomain.reportsBolt12MintDescription(methods: [
+            (method: .bolt12, description: false),
+        ]))
+        XCTAssertFalse(MintQuoteDomain.reportsBolt12MintDescription(methods: [
+            (method: .bolt11, description: true),
+        ]))
+        XCTAssertTrue(MintQuoteDomain.reportsBolt12MintDescription(methods: [
+            (method: .bolt11, description: false),
+            (method: .bolt12, description: true),
+        ]))
+        // Any bolt12 unit advertising true is enough.
+        XCTAssertTrue(MintQuoteDomain.reportsBolt12MintDescription(methods: [
+            (method: .bolt12, description: false),
+            (method: .bolt12, description: true),
+        ]))
+    }
+
     func testReusableOfferReuseMatchesDescriptionExactly() {
         XCTAssertTrue(MintQuoteDomain.isReusableAmountlessOffer(
             paymentMethod: .bolt12, isAmountless: true,

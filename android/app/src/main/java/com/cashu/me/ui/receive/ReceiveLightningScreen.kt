@@ -224,6 +224,9 @@ fun ReceiveLightningScreen(
     val activeMint = walletState.activeMint
     val supportedMethods = activeMint?.supportedMintMethods?.ifEmpty { listOf(PaymentMethodKind.Bolt11) }
         ?: listOf(PaymentMethodKind.Bolt11)
+    // Fail closed: only mints that advertised NUT-04 bolt12 description=true
+    // get a Description row / description minting.
+    val mintSupportsBolt12Description = activeMint?.supportsBolt12MintDescription == true
 
     // Mint unit: NUT-04 mintable units only; on-chain always mints sat.
     val effectiveUnit = if (method == PaymentMethodKind.Onchain) {
@@ -244,12 +247,17 @@ fun ReceiveLightningScreen(
     val showsUnitSelector = activeMint?.supportsMultipleMintUnits == true &&
         method != PaymentMethodKind.Onchain
 
-    LaunchedEffect(activeMint?.url, cashuRequestState.requests) {
+    LaunchedEffect(activeMint?.url, cashuRequestState.requests, mintSupportsBolt12Description) {
         val mintUrl = activeMint?.url
         // Mint switch: drop the previous mint's description and re-restore.
         if (reusableOfferDescriptionLoadedFor != null && reusableOfferDescriptionLoadedFor != mintUrl) {
             reusableOfferDescription = null
             reusableOfferDescriptionLoadedFor = null
+        }
+        if (!mintSupportsBolt12Description) {
+            reusableOfferDescription = null
+            reusableOfferDescriptionLoadedFor = null
+            return@LaunchedEffect
         }
         if (reusableOfferDescriptionLoadedFor == null &&
             mintUrl != null &&
@@ -324,7 +332,10 @@ fun ReceiveLightningScreen(
                 // Offers are immutable: reuse only matches an offer carrying
                 // this exact description, so a changed description mints fresh.
                 val offerDescription = reusableOfferDescription
-                    .takeIf { requestMethod == PaymentMethodKind.Bolt12 }
+                    .takeIf {
+                        requestMethod == PaymentMethodKind.Bolt12 &&
+                            mintSupportsBolt12Description
+                    }
                 val quote = if (
                     requestMethod == PaymentMethodKind.Bolt12 &&
                     amountless &&
@@ -1014,7 +1025,8 @@ fun ReceiveLightningScreen(
                             null
                         },
                         onEditReusableDescription = if (
-                            liveQuote.paymentMethod == PaymentMethodKind.Bolt12
+                            liveQuote.paymentMethod == PaymentMethodKind.Bolt12 &&
+                            mintSupportsBolt12Description
                         ) {
                             { reusableDescriptionEditorOpen = true }
                         } else {
@@ -1117,7 +1129,10 @@ fun ReceiveLightningScreen(
         )
     }
 
-    if (reusableDescriptionEditorOpen && displayQuote?.paymentMethod == PaymentMethodKind.Bolt12) {
+    if (reusableDescriptionEditorOpen &&
+        displayQuote?.paymentMethod == PaymentMethodKind.Bolt12 &&
+        mintSupportsBolt12Description
+    ) {
         ReusableDescriptionEditSheet(
             initialDescription = cashuRequestState.requests
                 .firstOrNull { it.quoteId == displayQuote.id }?.memo
@@ -1362,16 +1377,18 @@ private fun DisplayFace(
                         editable = onEditReusableAmount != null,
                         onClick = onEditReusableAmount,
                     )
-                    // Payer-facing offer description (what the payer sees when
-                    // paying) — editable like the amount, re-mints on change.
-                    CanvasDivider(leadingInset = 16.dp)
-                    InspectorRow(
-                        label = "Description",
-                        value = descriptionLabel ?: "None",
-                        leadingIcon = Icons.Outlined.Notes,
-                        editable = onEditReusableDescription != null,
-                        onClick = onEditReusableDescription,
-                    )
+                    // Payer-facing offer description — only when the mint
+                    // advertised NUT-04 bolt12 MintMethodSettings.description.
+                    if (onEditReusableDescription != null) {
+                        CanvasDivider(leadingInset = 16.dp)
+                        InspectorRow(
+                            label = "Description",
+                            value = descriptionLabel ?: "None",
+                            leadingIcon = Icons.Outlined.Notes,
+                            editable = true,
+                            onClick = onEditReusableDescription,
+                        )
+                    }
                     if (createdAtEpochMillis != null) {
                         InspectorRow(
                             label = "Created",

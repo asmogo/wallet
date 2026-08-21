@@ -118,6 +118,40 @@ class MintDiscoveryManagerTest {
         assertEquals(listOf("sat", "usd"), preview?.mintUnits)
         assertEquals(listOf(PaymentMethodKind.Bolt11, PaymentMethodKind.Bolt12), preview?.supportedMintMethods)
         assertEquals(listOf(PaymentMethodKind.Onchain), preview?.supportedMeltMethods)
+        assertEquals(false, preview?.supportsBolt12MintDescription)
+    }
+
+    @Test
+    fun parsesNut04Bolt12DescriptionAdvertisement() {
+        val advertised = MintPreviewParser.parse(
+            mintUrl = "https://mint.example.com",
+            jsonString = """
+                {
+                  "name":"Live Mint",
+                  "nuts":{
+                    "4":{"methods":[
+                      {"method":"bolt12","unit":"sat","description":true}
+                    ]}
+                  }
+                }
+            """.trimIndent(),
+        )
+        val omitted = MintPreviewParser.parse(
+            mintUrl = "https://mint.example.com",
+            jsonString = """
+                {
+                  "name":"Live Mint",
+                  "nuts":{
+                    "4":{"methods":[
+                      {"method":"bolt12","unit":"sat"}
+                    ]}
+                  }
+                }
+            """.trimIndent(),
+        )
+
+        assertEquals(true, advertised?.supportsBolt12MintDescription)
+        assertEquals(false, omitted?.supportsBolt12MintDescription)
     }
 
     @Test

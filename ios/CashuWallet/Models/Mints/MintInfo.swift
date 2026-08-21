@@ -24,6 +24,11 @@ struct MintInfo: Identifiable, Equatable, Codable {
     /// Supported NUT-05 payment methods for sending
     var supportedMeltMethods: [PaymentMethodKind] = [.bolt11]
 
+    /// NUT-04 bolt12 `MintMethodSettings.description`. Default false so records
+    /// persisted before this landed, and mints that omit the field, fail closed
+    /// (the Description row stays hidden until a live fetch advertises true).
+    var supportsBolt12MintDescription: Bool = false
+
     /// Required on-chain confirmations for minting, if advertised by the mint
     var onchainMintConfirmations: Int? = nil
     
@@ -86,6 +91,7 @@ extension MintInfo {
         case mintUnits
         case supportedMintMethods
         case supportedMeltMethods
+        case supportsBolt12MintDescription
         case onchainMintConfirmations
         case lastUpdated
     }
@@ -104,6 +110,7 @@ extension MintInfo {
         mintUnits = try container.decodeIfPresent([String].self, forKey: .mintUnits) ?? units
         supportedMintMethods = try container.decodeIfPresent([PaymentMethodKind].self, forKey: .supportedMintMethods) ?? [.bolt11]
         supportedMeltMethods = try container.decodeIfPresent([PaymentMethodKind].self, forKey: .supportedMeltMethods) ?? [.bolt11]
+        supportsBolt12MintDescription = try container.decodeIfPresent(Bool.self, forKey: .supportsBolt12MintDescription) ?? false
         onchainMintConfirmations = try container.decodeIfPresent(Int.self, forKey: .onchainMintConfirmations)
         lastUpdated = try container.decodeIfPresent(Date.self, forKey: .lastUpdated) ?? Date()
     }
@@ -120,6 +127,7 @@ extension MintInfo {
         try container.encode(mintUnits, forKey: .mintUnits)
         try container.encode(supportedMintMethods, forKey: .supportedMintMethods)
         try container.encode(supportedMeltMethods, forKey: .supportedMeltMethods)
+        try container.encode(supportsBolt12MintDescription, forKey: .supportsBolt12MintDescription)
         try container.encodeIfPresent(onchainMintConfirmations, forKey: .onchainMintConfirmations)
         try container.encode(lastUpdated, forKey: .lastUpdated)
     }

@@ -239,6 +239,11 @@ struct ReceiveLightningView: View {
                 offerDescriptionLoaded = false
                 loadStoredOfferDescriptionIfNeeded()
             }
+            .onChange(of: mintSupportsBolt12Description) {
+                offerDescription = nil
+                offerDescriptionLoaded = false
+                loadStoredOfferDescriptionIfNeeded()
+            }
             .onChange(of: selectedMethod) {
                 requestFailure = nil
                 onchainObservation = nil
@@ -297,6 +302,17 @@ struct ReceiveLightningView: View {
         let methods = walletManager.activeMint?.supportedMintMethods ?? [.bolt11]
         let orderedMethods = PaymentMethodKind.allCases.filter { methods.contains($0) }
         return orderedMethods.isEmpty ? [.bolt11] : orderedMethods
+    }
+
+    /// Fail closed: only mints that advertised NUT-04 bolt12 description=true
+    /// get a Description row / description minting.
+    private var mintSupportsBolt12Description: Bool {
+        walletManager.activeMint?.supportsBolt12MintDescription == true
+    }
+
+    /// Description threaded into mintQuote only when the mint advertises it.
+    private var advertisedOfferDescription: String? {
+        mintSupportsBolt12Description ? offerDescription : nil
     }
 
     /// Picker rows are derived from the mint's supported payment methods.
@@ -644,16 +660,17 @@ struct ReceiveLightningView: View {
                                 value: formatQuoteAmount(quote.amountIssued, unit: quote.unit)
                             )
                         }
-                        // Payer-facing offer description (what the payer sees
-                        // when paying) — editable like the amount, re-mints on
-                        // change (Android "Description" row parity).
-                        editableRow(
-                            icon: "text.alignleft",
-                            label: "Description",
-                            value: CashuRequestStore.shared.intent(forQuoteId: quote.id)?.memo
-                                ?? quote.description ?? "None",
-                            action: { showReusableDescriptionEditor = true }
-                        )
+                        // Payer-facing offer description — only when the mint
+                        // advertised NUT-04 bolt12 MintMethodSettings.description.
+                        if mintSupportsBolt12Description {
+                            editableRow(
+                                icon: "text.alignleft",
+                                label: "Description",
+                                value: CashuRequestStore.shared.intent(forQuoteId: quote.id)?.memo
+                                    ?? quote.description ?? "None",
+                                action: { showReusableDescriptionEditor = true }
+                            )
+                        }
                         if let created = quote.createdAt {
                             detailRow(
                                 label: "Created",
@@ -684,11 +701,13 @@ struct ReceiveLightningView: View {
             )
         }
         .sheet(isPresented: $showReusableDescriptionEditor) {
-            ReusableOfferDescriptionSheet(
-                currentDescription: CashuRequestStore.shared.intent(forQuoteId: quote.id)?.memo
-                    ?? quote.description,
-                onDone: { setReusableOfferDescription($0) }
-            )
+            if mintSupportsBolt12Description {
+                ReusableOfferDescriptionSheet(
+                    currentDescription: CashuRequestStore.shared.intent(forQuoteId: quote.id)?.memo
+                        ?? quote.description,
+                    onDone: { setReusableOfferDescription($0) }
+                )
+            }
         }
     }
 
@@ -1259,7 +1278,7 @@ struct ReceiveLightningView: View {
                     method: .bolt12,
                     targetMintURL: requestedMintURL,
                     unit: requestedUnit,
-                    description: offerDescription
+                    description: advertisedOfferDescription
                 )
                 guard !Task.isCancelled else { return }
                 mintQuote = quote
@@ -1310,6 +1329,11 @@ struct ReceiveLightningView: View {
     private func loadStoredOfferDescriptionIfNeeded() {
         guard !offerDescriptionLoaded else { return }
         guard let mintUrl = walletManager.activeMint?.url else { return }
+        guard mintSupportsBolt12Description else {
+            offerDescription = nil
+            offerDescriptionLoaded = true
+            return
+        }
         offerDescription = CashuRequestStore.shared.requests
             .filter {
                 $0.rail == .bolt12 && $0.mints.contains(mintUrl) &&
@@ -1357,7 +1381,7 @@ struct ReceiveLightningView: View {
                    let existing = try await walletManager.existingAmountlessOffer(
                        mintURL: requestedMintURL,
                        unit: requestedUnit,
-                       description: offerDescription
+                       description: advertisedOfferDescription
                    ) {
                     quote = existing
                 } else {
@@ -1366,7 +1390,7 @@ struct ReceiveLightningView: View {
                         method: .bolt12,
                         targetMintURL: requestedMintURL,
                         unit: requestedUnit,
-                        description: offerDescription
+                        description: advertisedOfferDescription
                     )
                 }
                 guard !Task.isCancelled else { return }
@@ -1434,7 +1458,7 @@ struct ReceiveLightningView: View {
                         method: requestMethod,
                         targetMintURL: requestedMintURL,
                         unit: requestedUnit,
-                        description: requestMethod == .bolt12 ? offerDescription : nil
+                        description: requestMethod == .bolt12 ? advertisedOfferDescription : nil
                     )
                 }
                 guard !Task.isCancelled else { return }

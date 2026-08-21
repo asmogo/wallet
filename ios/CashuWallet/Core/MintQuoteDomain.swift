@@ -3,6 +3,14 @@ import Foundation
 /// Pure mint-quote domain rules (Android `MintQuoteDomain.kt` parity) —
 /// extracted for unit testing.
 enum MintQuoteDomain {
+    /// True when any NUT-04 bolt12 method advertises `description: true`.
+    /// Null or false on every bolt12 method (or no bolt12 method) fails closed.
+    static func reportsBolt12MintDescription(
+        methods: [(method: PaymentMethodKind?, description: Bool?)]
+    ) -> Bool {
+        methods.contains { $0.method == .bolt12 && $0.description == true }
+    }
+
     /// Exact-match rule for reusable-offer reuse: an amountless BOLT12 quote
     /// at the active mint and requested unit whose locally stored memo equals
     /// the requested description (nil → only the plain, description-less

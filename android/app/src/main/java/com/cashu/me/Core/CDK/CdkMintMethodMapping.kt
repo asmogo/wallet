@@ -18,6 +18,17 @@ internal fun CdkNuts.reportedMintMethods(): List<PaymentMethodKind> =
         .sortedBy { it.sortOrder }
 
 /**
+ * True when any NUT-04 bolt12 method advertises `description: true`. Null or
+ * false on every bolt12 method (or no bolt12 method at all) fails closed —
+ * the Receive Description row must not appear unless the mint said so.
+ */
+internal fun CdkNuts.reportsBolt12MintDescription(): Boolean =
+    nut04.methods.any {
+        it.method.toKnownPaymentMethodKind() == PaymentMethodKind.Bolt12 &&
+            it.description == true
+    }
+
+/**
  * NUT-05 melt rails exactly as reported, sat-only (pay-side non-sat is
  * deferred). Same reported-empty semantics as [reportedMintMethods].
  */

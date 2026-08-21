@@ -312,6 +312,11 @@ internal object MintPreviewParser {
             mintUnits = mintUnits,
             supportedMintMethods = mintMethods,
             supportedMeltMethods = meltMethods,
+            supportsBolt12MintDescription = mintSettings.any { setting ->
+                PaymentMethodKind.fromRaw(setting["method"]?.jsonPrimitive?.contentOrNull) ==
+                    PaymentMethodKind.Bolt12 &&
+                    setting["description"]?.jsonPrimitive?.booleanOrNull == true
+            },
         )
     }.getOrNull()
 
@@ -373,6 +378,7 @@ private fun MintInfo.mergedWithPreview(preview: MintInfo): MintInfo = copy(
     mintUnits = preview.mintUnits,
     supportedMintMethods = preview.supportedMintMethods,
     supportedMeltMethods = preview.supportedMeltMethods,
+    supportsBolt12MintDescription = preview.supportsBolt12MintDescription,
     onchainMintConfirmations = preview.onchainMintConfirmations,
     lastUpdatedEpochMillis = preview.lastUpdatedEpochMillis,
 )

@@ -510,6 +510,9 @@ class WalletManager(
                 // value keeps the previously stored one.
                 supportedMintMethods = fetched.supportedMintMethods ?: mint.supportedMintMethods,
                 supportedMeltMethods = fetched.supportedMeltMethods ?: mint.supportedMeltMethods,
+                // Live NUT-04 advertisement is authoritative, including false
+                // (the mint dropped description support).
+                supportsBolt12MintDescription = fetched.supportsBolt12MintDescription,
                 lastUpdatedEpochMillis = System.currentTimeMillis(),
                 balance = mint.balance,
                 isActive = mint.isActive,

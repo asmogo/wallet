@@ -13,6 +13,12 @@ import org.junit.Test
 class MintInfoMethodsTest {
 
     @Test
+    fun bolt12MintDescriptionDefaultsFalseOnUnfetchedRecords() {
+        val mint = MintInfo(url = "https://mint.example")
+        assertEquals(false, mint.supportsBolt12MintDescription)
+    }
+
+    @Test
     fun unknownRailsFallBackToBolt11CompatibilityDefault() {
         val mint = MintInfo(url = "https://mint.example")
 
