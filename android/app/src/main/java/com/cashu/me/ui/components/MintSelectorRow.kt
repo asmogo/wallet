@@ -34,13 +34,13 @@ import com.cashu.me.ui.theme.CashuTheme
 // optional balance line is reserved for Send Ecash, where it explains the
 // amount Send Max will use.
 //
-// Vertical padding is deliberately absent from the container: the "Send Max"
-// chip pads itself out to a real touch target, and container padding would stack
-// on top of that and make the row with a chip taller than the rows without one.
+// The identity needs some air above and below it. A 56dp row keeps the mint
+// selector comfortably tappable and prevents the avatar from feeling pressed
+// against the rounded container on amount-entry screens.
 private val AvatarSize = 28.dp
 private val ChevronSize = 18.dp
-private val RowMinHeight = 48.dp
-private val RowPadding = PaddingValues(horizontal = 16.dp)
+private val RowMinHeight = 56.dp
+private val RowPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp)
 private val UseMaxPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp)
 
 /**

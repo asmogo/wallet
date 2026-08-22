@@ -5,7 +5,6 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -73,19 +72,10 @@ fun MintPickerSheet(
                 .navigationBarsPadding(),
         ) {
             FlowSheetTitle(title = title)
-            // A picker is a viewport, not a hard crop. The shared mask gives
-            // rows a soft exit beneath the sheet chrome, matching iOS instead
-            // of cutting the first/last visible mint on a sharp line.
-            LazyColumn(
-                modifier = Modifier
-                    .weight(1f)
-                    .scrollEdgeFade(
-                        top = CashuTheme.spacing.loose,
-                        bottom = CashuTheme.spacing.loose,
-                    ),
-                contentPadding = PaddingValues(vertical = CashuTheme.spacing.default),
-                verticalArrangement = Arrangement.spacedBy(CashuTheme.spacing.micro),
-            ) {
+            // Keep mint identities crisp at rest. The header already supplies
+            // the breathing room above this list; an always-on fade only made
+            // the selected row look washed out.
+            LazyColumn(modifier = Modifier.weight(1f)) {
                 if (allowAnyMint) {
                     item(key = "any-mint") {
                         MintPickerAnyRow(
@@ -103,7 +93,7 @@ fun MintPickerSheet(
                     )
                 }
             }
-            Spacer(Modifier.height(CashuTheme.spacing.snug))
+            Spacer(Modifier.height(CashuTheme.spacing.default))
         }
     }
 }
