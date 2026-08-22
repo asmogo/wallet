@@ -3806,27 +3806,9 @@ struct MintSelectorSheet: View {
     private let minimumAmount: UInt64?
     private let onSelect: ((MintInfo) -> Void)?
 
-    /// Measured height of the mint rows, driving a content-fit detent so the
-    /// sheet hugs its mints instead of stretching to `.medium`. Mirrors
-    /// `AddMintToPaySheet`. Only applies to `mintListView` — the empty states
-    /// below use a fixed compact height instead, since they're static
-    /// messages, not a list to measure.
-    @State private var rowsHeight: CGFloat = 0
-
-    /// Fixed sheet chrome around the measured rows: drag indicator + inline nav
-    /// bar + a little bottom breathing room.
-    private static let navChrome: CGFloat = 96
-
-    /// Fixed height for the empty / no-compatible-mints messages.
-    private static let compactStateHeight: CGFloat = 320
-
-    private var detentHeight: CGFloat {
-        guard sourceMints.isEmpty == false, displayMints.isEmpty == false else {
-            return Self.compactStateHeight
-        }
-        let rows = rowsHeight > 0 ? rowsHeight : CGFloat(displayMints.count) * 68
-        return rows + Self.navChrome
-    }
+    /// A stable viewport for the title and roughly four mint rows. Additional
+    /// mints scroll within the picker rather than increasing the sheet height.
+    private static let pickerHeight: CGFloat = 368
 
     init(
         selectedMint: Binding<MintInfo?>,
@@ -3856,7 +3838,7 @@ struct MintSelectorSheet: View {
             .navigationTitle("Choose mint")
             .navigationBarTitleDisplayMode(.inline)
         }
-        .presentationDetents([.height(detentHeight)])
+        .presentationDetents([.height(Self.pickerHeight)])
         .presentationDragIndicator(.visible)
         // The default iOS 26 sheet material refracts the dimmed keypad beneath
         // this compact picker, creating distracting dark highlights in the
@@ -3954,11 +3936,6 @@ struct MintSelectorSheet: View {
                     }
                     .buttonStyle(.plain)
                 }
-            }
-            .onGeometryChange(for: CGFloat.self) { proxy in
-                proxy.size.height
-            } action: { newHeight in
-                rowsHeight = newHeight
             }
         }
         .scrollBounceBehavior(.basedOnSize)

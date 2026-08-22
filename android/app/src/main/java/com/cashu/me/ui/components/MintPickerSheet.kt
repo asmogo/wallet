@@ -13,6 +13,8 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.outlined.AllInclusive
@@ -37,6 +39,9 @@ import com.cashu.me.ui.theme.withMonoDigits
 
 // Matches iOS CashuRequestMintPickerSheet / MintSelectorSheet: 40pt avatar.
 private val AvatarSize = 40.dp
+// Keep the picker stable as mints are added: this fits its title and roughly
+// four selection rows. The list below owns any overflow scrolling.
+private val MintPickerSheetHeight = 360.dp
 
 /**
  * Mint chooser bottom sheet — mirrors iOS `MintSelectorSheet` /
@@ -62,23 +67,28 @@ fun MintPickerSheet(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
+                .height(MintPickerSheetHeight)
                 .padding(horizontal = CashuTheme.spacing.comfortable)
                 .navigationBarsPadding(),
         ) {
             FlowSheetTitle(title = title)
-            if (allowAnyMint) {
-                MintPickerAnyRow(
-                    selected = activeMintUrl == null,
-                    onClick = { onSelect(null) },
-                )
-            }
-            mints.forEach { mint ->
-                MintPickerMintRow(
-                    mint = mint,
-                    balanceText = formatter.formatSats(mint.balance),
-                    selected = mint.url == activeMintUrl,
-                    onClick = { onSelect(mint) },
-                )
+            LazyColumn(modifier = Modifier.weight(1f)) {
+                if (allowAnyMint) {
+                    item(key = "any-mint") {
+                        MintPickerAnyRow(
+                            selected = activeMintUrl == null,
+                            onClick = { onSelect(null) },
+                        )
+                    }
+                }
+                items(mints, key = { it.url }) { mint ->
+                    MintPickerMintRow(
+                        mint = mint,
+                        balanceText = formatter.formatSats(mint.balance),
+                        selected = mint.url == activeMintUrl,
+                        onClick = { onSelect(mint) },
+                    )
+                }
             }
             Spacer(Modifier.height(CashuTheme.spacing.snug))
         }
