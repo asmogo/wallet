@@ -73,6 +73,9 @@ struct InlineNotice: View {
     var detail: String? = nil
     /// Hide the leading glyph, for footers that read as plain text.
     var showsIcon: Bool = true
+    /// Centre the glyph + text as a group, for a notice that floats under a
+    /// centred amount rather than sitting in a left-aligned form.
+    var isCentered: Bool = false
 
     var body: some View {
         HStack(alignment: .top, spacing: 6) {
@@ -83,7 +86,7 @@ struct InlineNotice: View {
                     .accessibilityHidden(true)
             }
 
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: isCentered ? .center : .leading, spacing: 2) {
                 if let title {
                     Text(title)
                         .font(.caption.weight(.semibold))
@@ -104,9 +107,12 @@ struct InlineNotice: View {
                 }
             }
 
-            Spacer(minLength: 0)
+            if !isCentered {
+                Spacer(minLength: 0)
+            }
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
+        .multilineTextAlignment(isCentered ? .center : .leading)
+        .frame(maxWidth: .infinity, alignment: isCentered ? .center : .leading)
         .accessibilityElement(children: .combine)
         .accessibilityLabel(accessibilityText)
         .onAppear {

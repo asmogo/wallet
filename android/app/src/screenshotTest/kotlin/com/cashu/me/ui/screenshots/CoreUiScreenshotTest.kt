@@ -33,6 +33,7 @@ import com.cashu.me.ui.components.AmountEntryHero
 import com.cashu.me.ui.components.BalanceDisplay
 import com.cashu.me.ui.components.MintAvatar
 import com.cashu.me.ui.components.NavRow
+import com.cashu.me.ui.components.NumberPad
 import com.cashu.me.ui.components.PaymentStatusPhase
 import com.cashu.me.ui.components.PaymentStatusScreen
 import com.cashu.me.ui.components.QrCard
@@ -89,10 +90,53 @@ fun amountEntryScreenshot() {
             entryRaw = "12500",
             isSat = true,
             unit = "sat",
-            decimals = 0,
             useBitcoinSymbol = false,
             formatter = AmountFormatter(),
         )
+    }
+}
+
+/**
+ * The whole-number-first hero, keystroke by keystroke. "21" must read as
+ * twenty-one dollars — the empty pad shows no fraction at all, and the
+ * fraction only appears once the decimal key is pressed.
+ */
+@PreviewTest
+@Preview(name = "amount-entry-fiat", widthDp = 390, heightDp = 400, showBackground = true)
+@Composable
+fun amountEntryFiatScreenshot() {
+    PreviewFrame {
+        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            listOf("", "21", "21.", "21.5", "21.50").forEach { raw ->
+                AmountEntryHero(
+                    entryRaw = raw,
+                    isSat = false,
+                    unit = "USD",
+                    useBitcoinSymbol = false,
+                    formatter = AmountFormatter(),
+                    fiatCurrencyCode = "USD",
+                )
+            }
+        }
+    }
+}
+
+/** The decimal key exists only where the unit actually has a fraction. */
+@PreviewTest
+@Preview(name = "number-pad-decimals", widthDp = 390, heightDp = 260, showBackground = true)
+@Composable
+fun numberPadDecimalsScreenshot() {
+    PreviewFrame {
+        NumberPad(amount = "21.50", onAmountChange = {}, decimals = 2)
+    }
+}
+
+@PreviewTest
+@Preview(name = "number-pad-integer", widthDp = 390, heightDp = 260, showBackground = true)
+@Composable
+fun numberPadIntegerScreenshot() {
+    PreviewFrame {
+        NumberPad(amount = "12500", onAmountChange = {}, decimals = 0)
     }
 }
 

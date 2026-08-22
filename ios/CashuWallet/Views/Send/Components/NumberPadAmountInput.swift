@@ -8,16 +8,32 @@ struct NumberPadAmountInput: View {
     @Binding var amountString: String
 
     /// How keystrokes are interpreted:
-    /// - `.display`: sats (integer) or fiat (a cents accumulator, digits shift in
-    ///   from the right) — the sats↔fiat display flip.
+    /// - `.display`: sats or the user's fiat — the sats↔fiat display flip.
     /// - `.mintUnit`: a mint account unit entered directly, with `decimals`
-    ///   fraction digits (0 → integer like sats, 2 → cents like fiat).
-    /// Either way the bottom-left slot stays blank — there is no decimal key.
+    ///   fraction digits (0 → integer like sats, 2 → a fraction like fiat).
+    /// Either way it reduces to a fraction-digit count, which is what decides
+    /// whether the bottom-left slot carries a decimal key or stays blank.
     private enum Mode {
         case display(AmountDisplayPrimary)
         case mintUnit(decimals: Int)
     }
     private let mode: Mode
+
+    /// Fraction digits this pad can enter. Zero means no decimal key: sats are
+    /// indivisible here, so a fraction would only produce a rounding surprise.
+    private var decimals: Int {
+        switch mode {
+        case .display(let unit): return AmountFormatter.entryDecimals(for: unit)
+        case .mintUnit(let decimals): return decimals
+        }
+    }
+
+    /// Bottom-left key label — the locale's separator, or blank when the active
+    /// unit has no fraction. The slot is reserved either way, so the grid never
+    /// shifts when the user flips sats↔fiat.
+    private var separatorKey: String {
+        decimals > 0 ? AmountFormatter.decimalSeparator : ""
+    }
 
     /// Sats/fiat display-flip entry (existing call sites).
     init(amountString: Binding<String>, unit: AmountDisplayPrimary = .sats) {
@@ -38,7 +54,7 @@ struct NumberPadAmountInput: View {
             ["1", "2", "3"],
             ["4", "5", "6"],
             ["7", "8", "9"],
-            ["", "0", "⌫"]
+            [separatorKey, "0", "⌫"]
         ]
     }
 
@@ -59,6 +75,16 @@ struct NumberPadAmountInput: View {
         if key.isEmpty {
             Color.clear.frame(maxWidth: .infinity, maxHeight: .infinity)
                 .frame(height: keyHeight)
+        } else if key == separatorKey {
+            Button(action: appendSeparator) {
+                Text(key)
+                    .cashuText(.numberPadKey)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .frame(height: keyHeight)
+            .accessibilityLabel("Decimal point")
         } else if key == "⌫" {
             Button(action: backspace) {
                 Image(systemName: "delete.left")
@@ -90,26 +116,19 @@ struct NumberPadAmountInput: View {
     }
 
     private func append(_ key: String) {
-        let updated: String
-        switch mode {
-        case .display(let unit):
-            updated = AmountFormatter.entryAppend(key, to: amountString, unit: unit)
-        case .mintUnit(let decimals):
-            updated = AmountFormatter.entryAppendUnit(key, to: amountString, decimals: decimals)
-        }
-        guard updated != amountString else { return }
-        HapticFeedback.selection()
-        amountString = updated
+        apply(AmountFormatter.entryAppendUnit(key, to: amountString, decimals: decimals))
+    }
+
+    private func appendSeparator() {
+        apply(AmountFormatter.entryAppendSeparatorUnit(amountString, decimals: decimals))
     }
 
     private func backspace() {
-        let updated: String
-        switch mode {
-        case .display(let unit):
-            updated = AmountFormatter.entryBackspace(amountString, unit: unit)
-        case .mintUnit(let decimals):
-            updated = AmountFormatter.entryBackspaceUnit(amountString, decimals: decimals)
-        }
+        apply(AmountFormatter.entryBackspaceUnit(amountString))
+    }
+
+    /// A rejected key leaves the string untouched, so it gets no haptic either.
+    private func apply(_ updated: String) {
         guard updated != amountString else { return }
         HapticFeedback.selection()
         amountString = updated

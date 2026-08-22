@@ -1,5 +1,6 @@
 package com.cashu.me.Core
 
+import java.text.DecimalFormatSymbols
 import java.text.NumberFormat
 import java.util.Locale
 import com.cashu.me.Core.Protocols.CurrencyDisplay
@@ -9,6 +10,13 @@ import com.cashu.me.Core.Protocols.CurrencyRegistry
 class AmountFormatter(
     private val locale: Locale = Locale.getDefault(),
 ) : CurrencyDisplay {
+    /**
+     * The locale's decimal separator ("." or ","), used as the keypad's decimal
+     * key label and when rendering a partially typed amount. Raw entry strings
+     * are always canonical — see [UnitAmountEntry.SEPARATOR].
+     */
+    val decimalSeparator: String = decimalSeparator(locale)
+
     override fun formatSats(amount: Long, includeUnit: Boolean): String {
         return formatSatsValue(amount, includeUnit = includeUnit, useBitcoinSymbol = false)
     }
@@ -119,13 +127,18 @@ class AmountFormatter(
      * The numerals of a partially typed amount, grouped but unwrapped.
      * Partial-aware: a trailing separator and trailing zeroes render exactly as
      * typed, so the hero doesn't jump while the user is still keying.
+     *
+     * Raw always carries the canonical [UnitAmountEntry.SEPARATOR]; the locale's
+     * separator is applied here, at display time. Reading and writing the same
+     * character would collide on comma-decimal locales, where the integer
+     * grouping of 1234 is itself "1.234".
      */
     private fun partialNumber(raw: String): String {
-        val sep = "."
-        val parts = raw.split(sep)
+        val parts = raw.split(UnitAmountEntry.SEPARATOR)
         val intValue = parts.getOrNull(0)?.toLongOrNull() ?: 0L
         val grouped = NumberFormat.getIntegerInstance(locale).format(intValue)
-        return if (raw.contains(sep)) grouped + sep + parts.getOrNull(1).orEmpty() else grouped
+        if (!raw.contains(UnitAmountEntry.SEPARATOR)) return grouped
+        return grouped + decimalSeparator + parts.getOrNull(1).orEmpty()
     }
 
     /**
@@ -176,6 +189,15 @@ class AmountFormatter(
         amount >= 1_000_000 -> "${amount / 1_000_000}M sat"
         amount >= 1_000 -> "${amount / 1_000}k sat"
         else -> formatSats(amount)
+    }
+
+    companion object {
+        /**
+         * The decimal separator to *show* for a locale. The keypad labels its
+         * decimal key with this; raw entry strings stay canonical.
+         */
+        fun decimalSeparator(locale: Locale = Locale.getDefault()): String =
+            DecimalFormatSymbols.getInstance(locale).decimalSeparator.toString()
     }
 }
 

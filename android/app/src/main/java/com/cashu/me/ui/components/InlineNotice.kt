@@ -29,6 +29,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.cashu.me.ui.theme.CashuTheme
 
@@ -73,6 +74,13 @@ enum class NoticeSeverity { Error, Caution, Info, Success }
  * the fill colour as the text colour.
  *
  * @param detail optional second line for amounts and supporting specifics
+ * @param showsContainer drop the tonal fill and padding, leaving glyph + text.
+ *   For notices that float on a bare surface rather than sitting inside a list
+ *   or card — the Send amount faces, where the only other things on screen are
+ *   the amount and the keypad, and a filled box reads as a foreign object.
+ *   Matches iOS `InlineNotice`, which never fills.
+ * @param centered centre the glyph + text as a group, for a notice that floats
+ *   under a centred amount rather than sitting in a left-aligned form.
  */
 @Composable
 fun InlineNotice(
@@ -80,13 +88,20 @@ fun InlineNotice(
     modifier: Modifier = Modifier,
     severity: NoticeSeverity,
     detail: String? = null,
+    showsContainer: Boolean = true,
+    centered: Boolean = false,
 ) {
     val (icon, content, container) = noticeColors(severity)
     Column(
         modifier = modifier
             .fillMaxWidth()
-            .background(container, NoticeCorner)
-            .padding(NoticePadding)
+            .then(
+                if (showsContainer) {
+                    Modifier.background(container, NoticeCorner).padding(NoticePadding)
+                } else {
+                    Modifier
+                },
+            )
             // Announced on appearance without stealing focus. The component owns
             // this so a call site cannot forget it.
             .semantics { liveRegion = LiveRegionMode.Polite },
@@ -94,7 +109,10 @@ fun InlineNotice(
         Row(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.Top,
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            horizontalArrangement = Arrangement.spacedBy(
+                8.dp,
+                if (centered) Alignment.CenterHorizontally else Alignment.Start,
+            ),
         ) {
             Icon(
                 imageVector = icon,
@@ -103,19 +121,29 @@ fun InlineNotice(
                 modifier = Modifier.size(NoticeIconSize),
             )
             Column(
-                modifier = Modifier.weight(1f),
+                // `fill = false` when centred: a filling child leaves no free
+                // space for the row to centre the group into.
+                modifier = Modifier.weight(1f, fill = !centered),
                 verticalArrangement = Arrangement.spacedBy(2.dp),
+                horizontalAlignment = if (centered) {
+                    Alignment.CenterHorizontally
+                } else {
+                    Alignment.Start
+                },
             ) {
+                val align = if (centered) TextAlign.Center else TextAlign.Start
                 Text(
                     text = text,
                     style = MaterialTheme.typography.bodyMedium,
                     color = content,
+                    textAlign = align,
                 )
                 if (detail != null) {
                     Text(
                         text = detail,
                         style = MaterialTheme.typography.bodySmall,
                         color = content.copy(alpha = 0.78f),
+                        textAlign = align,
                     )
                 }
             }

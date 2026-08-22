@@ -2,13 +2,16 @@ package com.cashu.me.ui.send
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -107,6 +110,7 @@ import com.cashu.me.ui.mints.ConnectMintSheetContent
 import com.cashu.me.ui.testing.UiTestTags
 import com.cashu.me.ui.theme.CashuTheme
 import com.cashu.me.ui.theme.withMonoDigits
+import com.cashu.me.ui.theme.rememberReducedMotion
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -958,23 +962,50 @@ private fun AmountFace(
                 onUseMax = onUseMax,
             )
         }
-        Spacer(Modifier.weight(1f))
-        AmountEntryHero(
-            entryRaw = amount,
-            isSat = !isFiatEntry,
-            unit = if (isFiatEntry) fiatCurrencyCode else "sat",
-            decimals = if (isFiatEntry) 2 else 0,
-            useBitcoinSymbol = useBitcoinSymbol,
-            formatter = formatter,
-            fiatCurrencyCode = fiatCurrencyCode.takeIf { isFiatEntry },
-        )
-        Spacer(Modifier.weight(1f))
-        if (insufficient) {
-            InlineNotice(
-                text = "Insufficient balance",
-                severity = NoticeSeverity.Caution,
+        val reduceMotion = rememberReducedMotion()
+        // One flexible cell: the amount centered in it, the notice *overlaid* at
+        // its bottom (iOS SendView's ZStack, and Send Ecash's twin). As a sibling
+        // the notice shoved the amount up by its full height the instant it
+        // appeared, with no transition at all.
+        Box(
+            modifier = Modifier.weight(1f).fillMaxWidth(),
+            contentAlignment = Alignment.Center,
+        ) {
+            AmountEntryHero(
+                entryRaw = amount,
+                isSat = !isFiatEntry,
+                unit = if (isFiatEntry) fiatCurrencyCode else "sat",
+                useBitcoinSymbol = useBitcoinSymbol,
+                formatter = formatter,
+                fiatCurrencyCode = fiatCurrencyCode.takeIf { isFiatEntry },
             )
-            Spacer(Modifier.height(CashuTheme.spacing.default))
+            Column(
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .fillMaxWidth()
+                    .padding(bottom = CashuTheme.spacing.default),
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
+                AnimatedVisibility(
+                    visible = insufficient,
+                    enter = if (reduceMotion) {
+                        fadeIn(spring(stiffness = Spring.StiffnessMedium))
+                    } else {
+                        fadeIn(spring(stiffness = Spring.StiffnessMedium)) + scaleIn(
+                            animationSpec = spring(stiffness = Spring.StiffnessMedium),
+                            initialScale = 0.95f,
+                        )
+                    },
+                    exit = fadeOut(spring(stiffness = Spring.StiffnessMedium)),
+                ) {
+                    InlineNotice(
+                        text = "Insufficient balance",
+                        severity = NoticeSeverity.Caution,
+                        showsContainer = false,
+                        centered = true,
+                    )
+                }
+            }
         }
         NumberPadFooter(
             amount = amount,

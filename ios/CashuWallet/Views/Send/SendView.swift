@@ -2,11 +2,6 @@ import SwiftUI
 import CoreNFC
 
 struct SendView: View {
-    /// Set when this flow is swapped into the home sheet from Send's method
-    /// row: the input face shows a back chevron to return there. X/swipe
-    /// always abandons to the wallet (dismissal contract).
-    var onBack: (() -> Void)? = nil
-
     @Environment(\.dismiss) private var dismiss
     @EnvironmentObject var walletManager: WalletManager
     @ObservedObject private var settings = SettingsManager.shared
@@ -92,25 +87,13 @@ struct SendView: View {
             // over the black canvas, no secondary gray strip.
             .toolbarBackground(.hidden, for: .navigationBar)
             .toolbar {
-                // Input face: chevron back to Send when swapped in from its
-                // method row, else an explicit close. Generated face keeps the
-                // close — dismissal from anywhere lands on the wallet.
+                // Always a close, never a chevron. This flow is swapped into the
+                // home sheet rather than pushed onto it, so "back" had to
+                // re-present the Send sheet — which slid in behind the user on
+                // the way out. Leaving lands on the wallet, so the glyph says so.
                 ToolbarItem(placement: .topBarLeading) {
-                    if generatedToken == nil, let onBack {
-                        Button {
-                            HapticFeedback.selection()
-                            onBack()
-                        } label: {
-                            Image(systemName: "chevron.left")
-                                .toolbarIconTapTarget()
-                        }
-                        .accessibilityLabel("Back")
-                        .accessibilityHint("Returns to Send")
+                    SheetCloseButton()
                         .disabled(isGenerating)
-                    } else {
-                        SheetCloseButton()
-                            .disabled(isGenerating)
-                    }
                 }
 
                 if generatedToken == nil && tokenCreationFailure == nil {
@@ -255,9 +238,12 @@ struct SendView: View {
                 VStack {
                     Spacer(minLength: 0)
                     if isInsufficientBalance {
+                        // No detail line: the balance is already on the mint row
+                        // directly above, so restating it here just adds a second
+                        // line of text over the keypad.
                         sendInputNotice(
                             message: "Insufficient balance",
-                            detail: insufficientBalanceDetail,
+                            detail: nil,
                             severity: .caution
                         )
                     } else if let error = errorMessage {
@@ -311,7 +297,7 @@ struct SendView: View {
         detail: String?,
         severity: ErrorSeverity
     ) -> some View {
-        InlineNotice(message: message, severity: severity, detail: detail)
+        InlineNotice(message: message, severity: severity, detail: detail, isCentered: true)
             .padding(.horizontal)
             .padding(.bottom, 8)
             .transition(.opacity)

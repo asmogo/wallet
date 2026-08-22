@@ -56,8 +56,10 @@ class UnifiedSendAmountEntryTest {
                 balanceSats = 25_000L,
             ),
         )
+        // An over-long raw can only arrive pre-seeded; it clamps to the largest
+        // amount the entry grammar can express rather than parse-failing to 0.
         assertEquals(
-            1_999_999_999_980L,
+            UnifiedSendAmountEntry.amountSats("999999999999.99", fiat),
             UnifiedSendAmountEntry.amountSats("999999999999999999999999.99", fiat),
         )
         assertEquals(
