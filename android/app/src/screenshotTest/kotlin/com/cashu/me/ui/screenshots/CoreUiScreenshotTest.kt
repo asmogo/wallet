@@ -97,22 +97,6 @@ fun amountEntryScreenshot() {
     }
 }
 
-/** Guards the optical weight relationship between the ₿ prefix and hero digits. */
-@PreviewTest
-@Preview(name = "amount-entry-bitcoin", widthDp = 390, heightDp = 180, showBackground = true)
-@Composable
-fun amountEntryBitcoinScreenshot() {
-    PreviewFrame {
-        AmountEntryHero(
-            entryRaw = "12500",
-            isSat = true,
-            unit = "sat",
-            useBitcoinSymbol = true,
-            formatter = AmountFormatter(),
-        )
-    }
-}
-
 /**
  * The whole-number-first hero, keystroke by keystroke. "21" must read as
  * twenty-one dollars — the empty pad shows no fraction at all, and the
@@ -171,7 +155,7 @@ fun mixedTransactionStatesScreenshot() {
                     type = TransactionType.Incoming,
                     kind = TransactionKind.Lightning,
                     status = TransactionStatus.Completed,
-                    amountLabel = "₿2,500",
+                    amountLabel = "2,500 sat",
                     timestamp = "Today, 12:15",
                 ),
                 onClick = {},
@@ -184,7 +168,7 @@ fun mixedTransactionStatesScreenshot() {
                     type = TransactionType.Outgoing,
                     kind = TransactionKind.Ecash,
                     status = TransactionStatus.Pending,
-                    amountLabel = "₿800",
+                    amountLabel = "800 sat",
                     timestamp = "Today, 11:40",
                 ),
                 onClick = {},
