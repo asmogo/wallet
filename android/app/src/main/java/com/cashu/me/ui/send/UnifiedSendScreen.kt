@@ -586,7 +586,10 @@ fun UnifiedSendScreen(
                         balanceText = activeMint?.let {
                             formatter.formatWalletSats(it.balance, settings.useBitcoinSymbol)
                         },
-                        onPickMint = { mintPickerOpen = true },
+                        // One mint means nothing to choose between, so the row
+                        // drops its chevron and stops opening a picker.
+                        onPickMint = { mintPickerOpen = true }
+                            .takeIf { walletState.mints.size > 1 },
                         onUseMax = {
                             activeMint?.balance?.takeIf { it > 0 }?.let {
                                 amount = UnifiedSendAmountEntry.maxRawForBalance(it, entryContext)
@@ -609,6 +612,9 @@ fun UnifiedSendScreen(
                         amountSats = confirmAmount,
                         mint = activeMint,
                         onPickMint = { mintPickerOpen = true },
+                        // One mint means nothing to choose between, so the row
+                        // drops its chevron and stops opening a picker.
+                        canPickMint = walletState.mints.size > 1,
                         onCreateTopUp = { mintUrl, requestedAmount ->
                             topUpError = null
                             topUpLoading = true
@@ -931,7 +937,7 @@ private fun AmountFace(
     onAmountChange: (String) -> Unit,
     mint: MintInfo?,
     balanceText: String?,
-    onPickMint: () -> Unit,
+    onPickMint: (() -> Unit)?,
     onUseMax: () -> Unit,
     amountSats: Long,
     entryPrimary: AmountDisplayPrimary,
@@ -953,14 +959,6 @@ private fun AmountFace(
         if (showDestination) {
             ToPill(destination = destination)
             Spacer(Modifier.height(CashuTheme.spacing.section))
-        }
-        if (mint != null) {
-            MintSelectorRow(
-                mint = mint,
-                balanceText = balanceText,
-                onPickMint = onPickMint,
-                onUseMax = onUseMax,
-            )
         }
         val reduceMotion = rememberReducedMotion()
         // One flexible cell: the amount centered in it, the notice *overlaid* at
@@ -998,14 +996,29 @@ private fun AmountFace(
                     },
                     exit = fadeOut(spring(stiffness = Spring.StiffnessMedium)),
                 ) {
+                    // The mint row no longer carries a balance, so the detail
+                    // line is what tells you how much would actually fit.
                     InlineNotice(
                         text = "Insufficient balance",
+                        detail = balanceText?.let { "You have $it in ${mint?.name}." },
                         severity = NoticeSeverity.Caution,
                         showsContainer = false,
                         centered = true,
                     )
                 }
             }
+        }
+        // Under the amount, over the keypad (Send Ecash / Receive parity).
+        if (mint != null) {
+            MintSelectorRow(
+                mint = mint,
+                balanceText = balanceText,
+                onPickMint = onPickMint,
+                // Gated on a spendable balance, the way Send Ecash already does
+                // it — an empty mint offered a Max that filled in zero.
+                onUseMax = onUseMax.takeIf { mintBalance > 0L },
+            )
+            Spacer(Modifier.height(CashuTheme.spacing.snug))
         }
         NumberPadFooter(
             amount = amount,
@@ -1025,6 +1038,7 @@ private fun ConfirmFace(
     amountSats: Long,
     mint: MintInfo?,
     onPickMint: () -> Unit,
+    canPickMint: Boolean,
     onCreateTopUp: (mintUrl: String, requestedAmountSats: Long) -> Unit,
     quote: MeltQuoteInfo?,
     cashuRequestFeeEstimate: CashuRequestFeeEstimate,
@@ -1064,12 +1078,13 @@ private fun ConfirmFace(
             .padding(horizontal = CashuTheme.spacing.comfortable),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        // Top accessory: paying mint + recipient (mint-at-top rule).
+        // Top accessory: paying mint over recipient, both wearing the same
+        // label/value shell so the pair reads as one statement.
         if (mint != null) {
             MintSelectorRow(
                 mint = mint,
                 balanceText = formatter.formatWalletSats(mintBalance, useBitcoinSymbol),
-                onPickMint = onPickMint,
+                onPickMint = onPickMint.takeIf { canPickMint },
             )
         }
         if (!hideCreqDestination) rail?.let { ToPill(destination = it.raw) }

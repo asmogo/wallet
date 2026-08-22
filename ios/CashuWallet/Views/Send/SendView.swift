@@ -199,13 +199,6 @@ struct SendView: View {
 
     private var sendInputView: some View {
         VStack(spacing: 0) {
-            // Mint selector
-            if let mint = displaySendMint {
-                mintSelector(mint: mint)
-                    .padding(.horizontal)
-                    .padding(.top, 12)
-            }
-
             // Locked-to-key indicator (when the token will be P2PK-locked)
             if lockWithP2PK, let locked = normalizedP2PKPubkeyInput {
                 lockedKeyChip(key: locked)
@@ -238,12 +231,12 @@ struct SendView: View {
                 VStack {
                     Spacer(minLength: 0)
                     if isInsufficientBalance {
-                        // No detail line: the balance is already on the mint row
-                        // directly above, so restating it here just adds a second
-                        // line of text over the keypad.
+                        // The detail line carries the number now: the mint row
+                        // dropped its balance, so without this the warning says
+                        // the amount is too large but never what would fit.
                         sendInputNotice(
                             message: "Insufficient balance",
-                            detail: nil,
+                            detail: insufficientBalanceDetail,
                             severity: .caution
                         )
                     } else if let error = errorMessage {
@@ -258,6 +251,15 @@ struct SendView: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .animation(reduceMotion ? .easeInOut(duration: 0.2) : .snappy(duration: 0.25), value: isInsufficientBalance)
             .animation(reduceMotion ? .easeInOut(duration: 0.2) : .snappy(duration: 0.25), value: errorMessage)
+
+            // The selector sits under the amount and over the keypad, not under
+            // the toolbar: it qualifies the amount, so it reads as a setting on
+            // the way to the action rather than a second header.
+            if let mint = displaySendMint {
+                mintSelector(mint: mint)
+                    .padding(.horizontal)
+                    .padding(.bottom, 8)
+            }
 
             // Number pad — sats/fiat display entry, or direct entry in the
             // active mint unit's own precision (0 decimals for sat, 2 for eur/usd).
@@ -306,11 +308,13 @@ struct SendView: View {
     // MARK: - Mint Selector
 
     private func mintSelector(mint: MintInfo) -> some View {
-        MintAmountSelectorRow(
+        MintSelectorRow(
             mint: mint,
             balanceText: sendBalanceText,
-            onChooseMint: { showMintPicker = true },
-            onUseMax: { useMax(mint: mint) }
+            // Gated on a spendable balance: an empty mint offered a Max that
+            // filled in zero.
+            onUseMax: effectiveSendBalance > 0 ? { useMax(mint: mint) } : nil,
+            onChooseMint: canChangeMint ? { showMintPicker = true } : nil
         )
     }
 
@@ -390,6 +394,10 @@ struct SendView: View {
     }
 
     /// The mint-row balance line, in the active unit ("…" while non-sat loads).
+    /// One mint means nothing to choose between, so the row drops its chevron
+    /// and stops opening a picker that would list a single row.
+    private var canChangeMint: Bool { walletManager.mints.count > 1 }
+
     private var sendBalanceText: String {
         if isSatSend { return formatBalance(displaySendMint?.balance ?? 0) }
         guard let bal = selectedUnitBalance else { return "…" }
@@ -1061,108 +1069,6 @@ struct SendView: View {
 
 // MARK: - Melt View
 
-// MARK: - Mint + amount selector row
-
-/// The shared amount-entry mint row used by every keypad screen (Create ecash and
-/// the unified Send amount step). A tappable mint identity (avatar + balance) on the
-/// left, then a "Send Max" pill, then the mint-picker chevron at the far right — so
-/// the dropdown affordance reads clearly without crowding the balance.
-struct MintAmountSelectorRow: View {
-    let mint: MintInfo
-    let balanceText: String
-    let onChooseMint: () -> Void
-    let onUseMax: () -> Void
-
-    var body: some View {
-        HStack(spacing: 12) {
-            Button(action: onChooseMint) {
-                HStack(spacing: 12) {
-                    MintAvatarView(iconUrl: mint.iconUrl, name: mint.name, size: 40)
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(mint.name)
-                            .font(.subheadline.weight(.medium))
-                            .lineLimit(1)
-                        Text(balanceText)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-                    // The spacer lives inside the button so it absorbs the row's
-                    // spare width and the content shape below stretches over it —
-                    // outside the button it was a dead zone that swallowed taps
-                    // (Android's MintSelectorRow opens the picker on the same area).
-                    Spacer(minLength: 8)
-                }
-                .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel("Paying mint: \(mint.name), \(balanceText)")
-
-            Button(action: onUseMax) {
-                Text("Send Max")
-                    .font(.caption.weight(.semibold))
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 6)
-                    .background(.thinMaterial, in: Capsule())
-            }
-            .buttonStyle(.plain)
-            .accessibilityHint("Fill the amount with your full mint balance")
-
-            Button(action: onChooseMint) {
-                Image(systemName: "chevron.down")
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(.secondary)
-                    .frame(width: 24, height: 24)
-                    .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel("Choose a different mint")
-        }
-        .padding(12)
-        .liquidGlass(in: RoundedRectangle(cornerRadius: 12), interactive: true)
-    }
-}
-
-/// The shared mint pill for the single-screen payment confirms (Pay Lightning and
-/// Pay Cashu Request). A tappable mint identity — avatar + name + balance — with a
-/// switch chevron, on Liquid Glass; tapping opens the mint picker via `onTap`. Keeps
-/// the two scanner confirms visually identical without duplicating the pill.
-struct MintConfirmSelectorRow: View {
-    let mint: MintInfo
-    var balanceText: String? = nil
-    let onTap: () -> Void
-
-    private var resolvedBalance: String { balanceText ?? "\(mint.balance) sat" }
-
-    var body: some View {
-        Button(action: {
-            HapticFeedback.selection()
-            onTap()
-        }) {
-            HStack(spacing: 12) {
-                MintAvatarView(iconUrl: mint.iconUrl, name: mint.name, size: 40)
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(mint.name)
-                        .font(.subheadline.weight(.medium))
-                        .lineLimit(1)
-                    Text(resolvedBalance)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-                Spacer()
-                Image(systemName: "chevron.up.chevron.down")
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(.secondary)
-            }
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .padding(12)
-        .liquidGlass(in: RoundedRectangle(cornerRadius: 12))
-        .accessibilityLabel("Paying mint: \(mint.name), \(resolvedBalance)")
-        .accessibilityHint("Double-tap to choose the mint to pay from")
-    }
-}
-
 // MARK: - Unified destination-first Send
 
 enum SendPaymentCopy {
@@ -1598,7 +1504,14 @@ struct UnifiedSendView: View {
         if let locked {
             VStack(spacing: 8) {
                 if let mint {
-                    MintConfirmSelectorRow(mint: mint, onTap: { showingMintPicker = true })
+                    MintSelectorRow(
+                        mint: mint,
+                        balanceText: AmountFormatter.sats(mint.balance, useBitcoinSymbol: settings.useBitcoinSymbol),
+                        onChooseMint: canChangeMint ? {
+                            HapticFeedback.selection()
+                            showingMintPicker = true
+                        } : nil
+                    )
                 }
                 toPill(locked)
             }
@@ -1784,14 +1697,16 @@ struct UnifiedSendView: View {
     }
 
     private func amountMintRow(_ mint: MintInfo) -> some View {
-        MintAmountSelectorRow(
+        MintSelectorRow(
             mint: mint,
             balanceText: AmountFormatter.sats(mint.balance, useBitcoinSymbol: settings.useBitcoinSymbol),
-            onChooseMint: {
+            // Gated on a spendable balance, matching Send Ecash — this row
+            // offered a Max on an empty mint that filled in zero.
+            onUseMax: mint.balance > 0 ? useMax : nil,
+            onChooseMint: canChangeMint ? {
                 HapticFeedback.selection()
                 showingMintPicker = true
-            },
-            onUseMax: useMax
+            } : nil
         )
     }
 
@@ -2152,6 +2067,13 @@ struct UnifiedSendView: View {
     }
 
     // MARK: Melt mint helpers (mirror MeltView)
+
+    /// One mint means nothing to choose between, so the row drops its chevron
+    /// and stops opening a picker that would list a single row.
+    private var canChangeMint: Bool {
+        if case .cashuRequest = locked { return candidateMints.count > 1 }
+        return availableMeltMints.count > 1
+    }
 
     private var availableMeltMints: [MintInfo] {
         walletManager.mints.isEmpty
@@ -3041,6 +2963,10 @@ struct MeltView: View {
         availableMeltMints.contains { $0.supportedMeltMethods.contains(.onchain) }
     }
 
+    /// One mint means nothing to choose between, so the row drops its chevron
+    /// and stops opening a picker that would list a single row.
+    private var canChangeMint: Bool { availableMeltMints.count > 1 }
+
     private var availableMeltMints: [MintInfo] {
         if walletManager.mints.isEmpty {
             return walletManager.activeMint.map { [$0] } ?? []
@@ -3165,7 +3091,14 @@ struct MeltView: View {
     private var requestInputView: some View {
         VStack(spacing: 0) {
             if let mint = displayMeltMint {
-                MintConfirmSelectorRow(mint: mint, onTap: { showingMintPicker = true })
+                MintSelectorRow(
+                    mint: mint,
+                    balanceText: AmountFormatter.sats(mint.balance, useBitcoinSymbol: settings.useBitcoinSymbol),
+                    onChooseMint: canChangeMint ? {
+                        HapticFeedback.selection()
+                        showingMintPicker = true
+                    } : nil
+                )
                     .padding(.horizontal)
                     .padding(.top, 12)
             }
@@ -3414,7 +3347,14 @@ struct MeltView: View {
             .padding(.bottom, 16)
         } topAccessory: {
             if let mint = selectorMint {
-                MintConfirmSelectorRow(mint: mint, onTap: { showingMintPicker = true })
+                MintSelectorRow(
+                    mint: mint,
+                    balanceText: AmountFormatter.sats(mint.balance, useBitcoinSymbol: settings.useBitcoinSymbol),
+                    onChooseMint: canChangeMint ? {
+                        HapticFeedback.selection()
+                        showingMintPicker = true
+                    } : nil
+                )
                     .padding(.horizontal)
                     .padding(.top, 12)
             }

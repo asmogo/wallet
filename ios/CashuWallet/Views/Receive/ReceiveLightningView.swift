@@ -384,17 +384,18 @@ struct ReceiveLightningView: View {
 
     private var amountInputView: some View {
         VStack(spacing: 0) {
-            if let mint = walletManager.activeMint {
-                mintSelector(mint: mint)
-                    .padding(.horizontal)
-                    .padding(.top, 12)
-            }
-
             Spacer()
 
             amountHero
 
             Spacer()
+
+            // Under the amount, over the keypad — the same slot the send flows use.
+            if let mint = walletManager.activeMint {
+                mintSelector(mint: mint)
+                    .padding(.horizontal)
+                    .padding(.bottom, 8)
+            }
 
             Group {
                 if isSatReceive {
@@ -485,49 +486,13 @@ struct ReceiveLightningView: View {
     // MARK: - Mint Selector
 
     private func mintSelector(mint: MintInfo) -> some View {
-        Button(action: { showMintPicker = true }) {
-            HStack(spacing: 12) {
-                if let iconUrl = mint.iconUrl, let url = URL(string: iconUrl) {
-                    CachedAsyncImage(url: url) { image in
-                        image.resizable().aspectRatio(contentMode: .fill)
-                    } placeholder: {
-                        Image(systemName: "bitcoinsign.bank.building")
-                            .foregroundStyle(.secondary)
-                    }
-                    .frame(width: 40, height: 40)
-                    .clipShape(Circle())
-                } else {
-                    Image(systemName: "bitcoinsign.bank.building")
-                        .foregroundStyle(.secondary)
-                        .frame(width: 40, height: 40)
-                }
-
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(mint.name)
-                        .font(.subheadline.weight(.medium))
-                    Text(formatBalance(mint.balance))
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-
-                Spacer()
-
-                Image(systemName: "chevron.down")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-            .padding(12)
-            .liquidGlass(in: RoundedRectangle(cornerRadius: 12), interactive: true)
-            // The glass pill is drawn across the whole padded frame, but neither
-            // the glass nor the fallback background expands the hit area — without
-            // an explicit content shape only the glyphs respond, leaving the
-            // pill's middle and edges dead.
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel("Mint: \(mint.name)")
-        .accessibilityHint("Opens mint selector")
+        MintSelectorRow(
+            mint: mint,
+            balanceText: formatBalance(mint.balance),
+            // One mint means nothing to choose between, so the row drops its
+            // chevron and stops opening a picker that would list a single row.
+            onChooseMint: walletManager.mints.count > 1 ? { showMintPicker = true } : nil
+        )
     }
 
     // MARK: - Request Display View

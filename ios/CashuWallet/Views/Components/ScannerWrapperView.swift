@@ -541,9 +541,19 @@ struct CashuPaymentRequestPayView: View {
                     }
                 } topAccessory: {
                     if request.isSatUnit, let selected = pickerSelectedMint {
-                        MintConfirmSelectorRow(mint: selected, onTap: { showingMintPicker = true })
-                            .padding(.horizontal)
-                            .padding(.top, 8)
+                        MintSelectorRow(
+                            mint: selected,
+                            balanceText: AmountFormatter.sats(
+                                selected.balance,
+                                useBitcoinSymbol: settings.useBitcoinSymbol
+                            ),
+                            onChooseMint: candidateMints.count > 1 ? {
+                                HapticFeedback.selection()
+                                showingMintPicker = true
+                            } : nil
+                        )
+                        .padding(.horizontal)
+                        .padding(.top, 8)
                     }
                 }
               }

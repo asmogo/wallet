@@ -2,13 +2,14 @@ package com.cashu.me.ui.components
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.KeyboardArrowDown
@@ -19,82 +20,103 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.cashu.me.Models.MintInfo
 import com.cashu.me.ui.theme.CashuTheme
-import com.cashu.me.ui.theme.withMonoDigits
 
-// iOS MintAmountSelectorRow metrics: 40pt avatar, 12pt padding, capsule Send Max pill.
-private val AvatarSize = 40.dp
-private val ChevronSize = 20.dp
+// A quiet row, not a card: 20dp avatar, one line, 48dp tall. The 64dp block it
+// replaces (40dp avatar over a balance line) outweighed both the toolbar above
+// it and the amount hero it exists to qualify.
+//
+// Vertical padding is deliberately absent from the container: the "Send Max"
+// chip pads itself out to a real touch target, and container padding would stack
+// on top of that and make the row with a chip taller than the rows without one.
+private val AvatarSize = 20.dp
+private val ChevronSize = 18.dp
+private val RowMinHeight = 48.dp
+private val RowPadding = PaddingValues(horizontal = 16.dp)
 private val UseMaxPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp)
 
 /**
- * Card-style mint selector matching iOS `MintAmountSelectorRow`: one rounded
- * surface holding the mint avatar, name + balance, an optional "Send Max" pill,
- * and a trailing chevron. Tapping anywhere (except the pill) opens the picker.
+ * The one mint selector for every value flow, on both platforms: mint identity
+ * on the left, an optional "Send Max" chip and the picker chevron on the right.
+ * Tapping anywhere except the chip opens the picker.
+ *
+ * [onPickMint] is null when the wallet holds a single mint — there is nothing to
+ * choose between, so the row drops its chevron and stops being a control.
+ * [balanceText] is deliberately not rendered; it lives in the accessibility
+ * label and reappears on screen only in the insufficient-balance notice.
  */
 @Composable
 fun MintSelectorRow(
     mint: MintInfo,
     balanceText: String?,
-    onPickMint: () -> Unit,
     modifier: Modifier = Modifier,
+    onPickMint: (() -> Unit)? = null,
     onUseMax: (() -> Unit)? = null,
 ) {
+    val description = if (balanceText != null) {
+        "Mint: ${mint.name}, balance $balanceText"
+    } else {
+        "Mint: ${mint.name}"
+    }
     Row(
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(CashuTheme.spacing.default),
         modifier = modifier
             .fillMaxWidth()
+            .heightIn(min = RowMinHeight)
             .clip(MaterialTheme.shapes.medium)
             .background(MaterialTheme.colorScheme.surfaceContainer)
-            .clickable(onClick = onPickMint)
-            .padding(CashuTheme.spacing.default),
+            .then(
+                if (onPickMint != null) {
+                    Modifier.clickable(role = Role.Button, onClick = onPickMint)
+                } else {
+                    Modifier
+                },
+            )
+            .semantics(mergeDescendants = true) { contentDescription = description }
+            .padding(RowPadding),
     ) {
         MintAvatar(mint = mint, size = AvatarSize)
-        Column(
+        Spacer(Modifier.width(CashuTheme.spacing.snug))
+        Text(
+            text = mint.name,
+            style = MaterialTheme.typography.bodyLarge,
+            fontWeight = FontWeight.Medium,
+            color = MaterialTheme.colorScheme.onSurface,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
             modifier = Modifier.weight(1f),
-            verticalArrangement = Arrangement.spacedBy(2.dp),
-        ) {
-            Text(
-                text = mint.name,
-                style = MaterialTheme.typography.bodyLarge,
-                fontWeight = FontWeight.Medium,
-                color = MaterialTheme.colorScheme.onSurface,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-            if (balanceText != null) {
-                Text(
-                    text = balanceText,
-                    style = MaterialTheme.typography.bodySmall.withMonoDigits(),
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1,
-                )
-            }
-        }
+        )
         if (onUseMax != null) {
-            // iOS: caption semibold in a thin-material capsule.
+            Spacer(Modifier.width(CashuTheme.spacing.snug))
             Text(
                 text = "Send Max",
                 style = MaterialTheme.typography.labelMedium,
                 fontWeight = FontWeight.SemiBold,
                 color = MaterialTheme.colorScheme.onSurface,
+                maxLines = 1,
                 modifier = Modifier
                     .clip(CircleShape)
                     .background(MaterialTheme.colorScheme.surfaceContainerHighest)
-                    .clickable(onClick = onUseMax)
+                    .clickable(role = Role.Button, onClick = onUseMax)
+                    .semantics { contentDescription = "Send maximum" }
                     .padding(UseMaxPadding),
             )
         }
-        Icon(
-            imageVector = Icons.Outlined.KeyboardArrowDown,
-            contentDescription = "Change mint",
-            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.size(ChevronSize),
-        )
+        if (onPickMint != null) {
+            Spacer(Modifier.width(CashuTheme.spacing.snug))
+            Icon(
+                imageVector = Icons.Outlined.KeyboardArrowDown,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.size(ChevronSize),
+            )
+        }
     }
 }

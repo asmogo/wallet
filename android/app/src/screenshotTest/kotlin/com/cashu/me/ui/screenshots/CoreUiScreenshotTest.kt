@@ -32,6 +32,7 @@ import com.cashu.me.Views.Send.ContactlessPayContent
 import com.cashu.me.ui.components.AmountEntryHero
 import com.cashu.me.ui.components.BalanceDisplay
 import com.cashu.me.ui.components.MintAvatar
+import com.cashu.me.ui.components.MintSelectorRow
 import com.cashu.me.ui.components.NavRow
 import com.cashu.me.ui.components.NumberPad
 import com.cashu.me.ui.components.PaymentStatusPhase
@@ -313,6 +314,98 @@ fun largeFontLongMintScreenshot() {
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
+    }
+}
+
+private val ScreenshotMint = MintInfo(
+    url = "https://deterministic.example",
+    name = "Testnut mint",
+)
+
+private val ScreenshotLongMint = MintInfo(
+    url = "https://deterministic.example",
+    name = "A deliberately long deterministic mint name",
+)
+
+/**
+ * Every state of the flow-top selector in one frame: with and without the Send
+ * Max chip, the single-mint variant that has no chevron and no picker, and a
+ * name long enough to truncate. This row has no test tag and no instrumented
+ * coverage, so the golden is the regression net.
+ */
+@PreviewTest
+@Preview(name = "mint-selector-light", widthDp = 390, heightDp = 320, showBackground = true)
+@Composable
+fun mintSelectorRowLightScreenshot() {
+    PreviewFrame {
+        MintSelectorRowCatalog()
+    }
+}
+
+@PreviewTest
+@Preview(
+    name = "mint-selector-dark",
+    widthDp = 390,
+    heightDp = 320,
+    uiMode = Configuration.UI_MODE_NIGHT_YES,
+)
+@Composable
+fun mintSelectorRowDarkScreenshot() {
+    PreviewFrame(darkTheme = true) {
+        MintSelectorRowCatalog()
+    }
+}
+
+@PreviewTest
+@Preview(name = "mint-selector-large-font", widthDp = 390, heightDp = 560, fontScale = 2f)
+@Composable
+fun mintSelectorRowLargeFontScreenshot() {
+    PreviewFrame {
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            MintSelectorRow(
+                mint = ScreenshotLongMint,
+                balanceText = "\u20bf27,096",
+                onPickMint = {},
+                onUseMax = {},
+            )
+            MintSelectorRow(
+                mint = ScreenshotLongMint,
+                balanceText = null,
+                onPickMint = {},
+            )
+        }
+    }
+}
+
+@Composable
+private fun MintSelectorRowCatalog() {
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        // Multi-mint, spendable balance: chip and chevron.
+        MintSelectorRow(
+            mint = ScreenshotMint,
+            balanceText = "\u20bf27,096",
+            onPickMint = {},
+            onUseMax = {},
+        )
+        // Empty mint: no chip.
+        MintSelectorRow(
+            mint = ScreenshotMint,
+            balanceText = "\u20bf0",
+            onPickMint = {},
+        )
+        // Single mint: no chevron, not a control.
+        MintSelectorRow(
+            mint = ScreenshotMint,
+            balanceText = "\u20bf27,096",
+            onUseMax = {},
+        )
+        // Long name truncates.
+        MintSelectorRow(
+            mint = ScreenshotLongMint,
+            balanceText = "\u20bf27,096",
+            onPickMint = {},
+            onUseMax = {},
+        )
     }
 }
 
