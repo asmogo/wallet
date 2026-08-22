@@ -27,7 +27,6 @@ import com.cashu.me.Models.TransactionStatus
 import com.cashu.me.Models.TransactionType
 import com.cashu.me.Models.WalletTransaction
 import com.cashu.me.ui.theme.CashuTheme
-import com.cashu.me.ui.theme.withMonoDigits
 
 // Leading muted directional arrow on a soft circle. Glyph slightly larger
 // than half the 40dp circle for clearer direction without growing the pad.
@@ -101,18 +100,18 @@ fun TransactionRow(
             )
         }
         Column(horizontalAlignment = Alignment.End) {
-            Text(
+            AmountText(
                 text = amountText,
-                style = MaterialTheme.typography.bodyLarge.withMonoDigits(),
-                fontWeight = FontWeight.Medium,
+                style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.Medium),
                 color = amountColor,
+                animated = false,
             )
             if (model.secondaryAmount != null) {
-                Text(
+                AmountText(
                     text = model.secondaryAmount,
-                    style = MaterialTheme.typography.bodyMedium.withMonoDigits(),
-                    fontWeight = FontWeight.Normal,
+                    style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Normal),
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    animated = false,
                 )
             }
         }

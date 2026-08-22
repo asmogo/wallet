@@ -18,7 +18,9 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import com.cashu.me.ui.theme.withMonoDigits
@@ -54,6 +56,10 @@ fun AmountText(
 ) {
     val resolvedColor = if (color == Color.Unspecified) LocalContentColor.current else color
     val finalStyle = style.withMonoDigits().copy(color = resolvedColor)
+    val balancedText = balanceBitcoinGlyphWeight(
+        source = annotated ?: AnnotatedString(text),
+        numeralWeight = finalStyle.fontWeight,
+    )
     val contentAlignment = when (finalStyle.textAlign) {
         TextAlign.Center -> Alignment.Center
         TextAlign.End, TextAlign.Right -> Alignment.CenterEnd
@@ -67,7 +73,7 @@ fun AmountText(
 
     if (!animated) {
         Text(
-            text = annotated ?: AnnotatedString(text),
+            text = balancedText,
             style = finalStyle,
             modifier = modifier.then(textModifier),
             maxLines = maxLines,
@@ -90,7 +96,7 @@ fun AmountText(
         // one-weight-down, secondary ink up to full size and full ink at the
         // instant it began to disappear, and the wider unstyled string could
         // take a different autosize step on the way out.
-        targetState = text to (annotated ?: AnnotatedString(text)),
+        targetState = text to balancedText,
         contentKey = { it.first },
         transitionSpec = {
             fadeIn(spring(stiffness = Spring.StiffnessMedium))
@@ -109,4 +115,27 @@ fun AmountText(
             autoSize = autoSize,
         )
     }
+}
+
+/**
+ * Geist's Bitcoin glyph is denser than its tabular figures at the same nominal
+ * weight. Step ₿ down one weight within amount text so a prefixed Bitcoin
+ * value reads as one lockup on heroes, balances, and transaction rows.
+ */
+private fun balanceBitcoinGlyphWeight(
+    source: AnnotatedString,
+    numeralWeight: FontWeight?,
+): AnnotatedString {
+    val bitcoinWeight = when (numeralWeight) {
+        FontWeight.ExtraBold, FontWeight.Bold, FontWeight.SemiBold -> FontWeight.Medium
+        FontWeight.Medium -> FontWeight.Normal
+        else -> null
+    } ?: return source
+
+    if ('₿' !in source.text) return source
+    return AnnotatedString.Builder(source).apply {
+        source.text.forEachIndexed { index, character ->
+            if (character == '₿') addStyle(SpanStyle(fontWeight = bitcoinWeight), index, index + 1)
+        }
+    }.toAnnotatedString()
 }
