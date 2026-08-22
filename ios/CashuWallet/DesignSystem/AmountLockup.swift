@@ -79,8 +79,12 @@ struct AmountLockup: View {
         case .suffix(let word):
             return Text(parts.value) + gap + unitRun(word)
         case .prefix(let symbol):
+            // The Bitcoin sign is the unit's primary mark, not a subordinate
+            // currency prefix. At the symbol scale it reads visibly smaller
+            // than the numeral lockup, so retain the full point size for ₿.
+            let symbolSize = symbol == "₿" ? pointSize : pointSize * symbolScale
             return Text(symbol).font(
-                fonts.font(.sans, size: pointSize * symbolScale, weight: role.weight)
+                fonts.font(.sans, size: symbolSize, weight: role.weight)
             ) + Text(parts.value)
         }
     }
