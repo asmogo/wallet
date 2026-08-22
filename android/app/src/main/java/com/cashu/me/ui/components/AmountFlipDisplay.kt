@@ -6,16 +6,14 @@ import androidx.compose.animation.core.spring
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.togetherWith
-import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.layout.sizeIn
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.SwapVert
 import androidx.compose.material3.Icon
@@ -25,7 +23,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.semantics.Role
@@ -43,12 +40,12 @@ import com.cashu.me.ui.theme.AmountScale
 import com.cashu.me.ui.theme.CashuTheme
 import com.cashu.me.ui.theme.withMonoDigits
 
-private val FlipPillIconSize = 14.dp
+private val FlipIconSize = 14.dp
 
 /**
- * Hero amount with a tappable unit-flip pill beneath it — the Compose port of
+ * Hero amount with a tappable unit-flip affordance beneath it — the Compose port of
  * iOS `CurrencyAmountDisplay`: the primary amount renders large, the secondary
- * (fiat or sats) sits in a small capsule with a ↕ glyph; tapping the pill
+ * (fiat or sats) sits beside a ↕ glyph; tapping the control
  * swaps which unit leads. The swap cross-fades, same as subsequent value
  * changes via [AmountText].
  *
@@ -56,7 +53,7 @@ private val FlipPillIconSize = 14.dp
  * (partial decimals included) while the secondary line keeps the mint-unit
  * alternate — matching iOS live entry on Receive / Send.
  *
- * When no fiat price is available the pill is omitted and the amount renders
+ * When no fiat price is available the control is omitted and the amount renders
  * plain in sats.
  */
 @Composable
@@ -147,8 +144,6 @@ fun AmountFlipDisplay(
         if (secondary != null) {
             Row(
                 modifier = Modifier
-                    .clip(CircleShape)
-                    .background(MaterialTheme.colorScheme.surfaceVariant)
                     .clickable(
                         interactionSource = remember { MutableInteractionSource() },
                         indication = null,
@@ -168,6 +163,7 @@ fun AmountFlipDisplay(
                         role = Role.Button
                         contentDescription = "Alternate amount: $secondary. Tap to make it primary."
                     }
+                    .sizeIn(minHeight = 48.dp)
                     .padding(
                         horizontal = CashuTheme.spacing.default,
                         vertical = CashuTheme.spacing.micro,
@@ -181,7 +177,7 @@ fun AmountFlipDisplay(
                         fadeIn(spring(stiffness = Spring.StiffnessMedium))
                             .togetherWith(fadeOut(spring(stiffness = Spring.StiffnessMedium)))
                     },
-                    label = "amount-flip-pill",
+                    label = "amount-flip-control",
                 ) { text ->
                     Text(
                         text = text,
@@ -193,7 +189,7 @@ fun AmountFlipDisplay(
                     imageVector = Icons.Outlined.SwapVert,
                     contentDescription = null,
                     tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.size(FlipPillIconSize),
+                    modifier = Modifier.size(FlipIconSize),
                 )
             }
         }

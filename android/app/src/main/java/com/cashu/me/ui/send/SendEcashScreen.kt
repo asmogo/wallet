@@ -669,12 +669,11 @@ private fun InputFace(
                     },
                     exit = fadeOut(spring(stiffness = Spring.StiffnessMedium)),
                 ) {
-                    // The detail line carries the number now: the mint row
-                    // dropped its balance, so without this the warning says the
-                    // amount is too large but never what would fit (iOS parity).
+                    // The mint selector states the available balance, so
+                    // repeating it in this notice would add visual noise.
                     InlineNotice(
                         text = "Insufficient balance",
-                        detail = activeMint?.let { "You have $balanceText in ${it.name}." },
+                        detail = null,
                         severity = NoticeSeverity.Caution,
                         showsContainer = false,
                         centered = true,
@@ -698,6 +697,7 @@ private fun InputFace(
             MintSelectorRow(
                 mint = activeMint,
                 balanceText = balanceText,
+                showBalance = true,
                 onPickMint = onPickMint,
                 onUseMax = if (canUseMax) onUseMax else null,
             )

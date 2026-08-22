@@ -489,6 +489,7 @@ struct ReceiveLightningView: View {
         MintSelectorRow(
             mint: mint,
             balanceText: formatBalance(mint.balance),
+            showsBalance: true,
             // One mint means nothing to choose between, so the row drops its
             // chevron and stops opening a picker that would list a single row.
             onChooseMint: walletManager.mints.count > 1 ? { showMintPicker = true } : nil

@@ -1069,6 +1069,7 @@ private fun InputFace(
             MintSelectorRow(
                 mint = mint,
                 balanceText = mintBalanceText,
+                showBalance = true,
                 onPickMint = onPickMint,
             )
             Spacer(Modifier.height(CashuTheme.spacing.snug))

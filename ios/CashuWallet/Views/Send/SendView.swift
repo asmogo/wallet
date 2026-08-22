@@ -231,12 +231,11 @@ struct SendView: View {
                 VStack {
                     Spacer(minLength: 0)
                     if isInsufficientBalance {
-                        // The detail line carries the number now: the mint row
-                        // dropped its balance, so without this the warning says
-                        // the amount is too large but never what would fit.
+                        // The mint selector states the available balance, so
+                        // repeating it in this notice would add visual noise.
                         sendInputNotice(
                             message: "Insufficient balance",
-                            detail: insufficientBalanceDetail,
+                            detail: nil,
                             severity: .caution
                         )
                     } else if let error = errorMessage {
@@ -311,6 +310,7 @@ struct SendView: View {
         MintSelectorRow(
             mint: mint,
             balanceText: sendBalanceText,
+            showsBalance: true,
             // Gated on a spendable balance: an empty mint offered a Max that
             // filled in zero.
             onUseMax: effectiveSendBalance > 0 ? { useMax(mint: mint) } : nil,
@@ -3844,18 +3844,25 @@ struct MintSelectorSheet: View {
 
     var body: some View {
         NavigationStack {
-            if sourceMints.isEmpty {
-                emptyStateView
-            } else if displayMints.isEmpty {
-                noCompatibleMintsView
-            } else {
-                mintListView
+            Group {
+                if sourceMints.isEmpty {
+                    emptyStateView
+                } else if displayMints.isEmpty {
+                    noCompatibleMintsView
+                } else {
+                    mintListView
+                }
             }
+            .navigationTitle("Choose mint")
+            .navigationBarTitleDisplayMode(.inline)
         }
-        .navigationTitle("Select Mint")
-        .navigationBarTitleDisplayMode(.inline)
         .presentationDetents([.height(detentHeight)])
         .presentationDragIndicator(.visible)
+        // The default iOS 26 sheet material refracts the dimmed keypad beneath
+        // this compact picker, creating distracting dark highlights in the
+        // otherwise empty lower half. A flat adaptive surface keeps attention
+        // on the mint options while retaining native sheet behavior.
+        .presentationBackground(Color(uiColor: .systemBackground))
     }
 
     private var emptyStateView: some View {

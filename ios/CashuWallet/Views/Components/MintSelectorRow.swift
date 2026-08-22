@@ -2,15 +2,15 @@ import SwiftUI
 
 /// Shared metrics for the flow-top mint row.
 ///
-/// A quiet row, not a card: 20pt avatar, one line, 48pt tall. The 64pt block it
-/// replaces (40pt avatar over a balance line) outweighed both the toolbar above
-/// it and the amount hero it exists to qualify.
+/// A quiet row, not a card: 28pt avatar and a compact mint identity. Its
+/// borderless semantic fill keeps the mint as context for the amount rather
+/// than competing with it as a second primary control.
 enum FlowRowMetrics {
     static let corner: CGFloat = 12
     static let horizontalPadding: CGFloat = 16
     static let verticalPadding: CGFloat = 10
     static let minHeight: CGFloat = 48
-    static let avatar: CGFloat = 20
+    static let avatar: CGFloat = 28
     static let gap: CGFloat = 8
 }
 
@@ -20,23 +20,25 @@ enum FlowRowMetrics {
 ///
 /// `onChooseMint` is nil when the wallet holds a single mint — there is nothing
 /// to choose between, so the row drops its chevron and stops being a control and
-/// becomes a label. `balanceText` is deliberately not rendered; it lives in the
-/// accessibility label and reappears on screen only in the insufficient-balance
-/// notice.
+/// becomes a label. `showsBalance` opts into the second balance line on amount
+/// entry screens, where it makes the selected mint's available amount explicit.
 struct MintSelectorRow: View {
     let mint: MintInfo
     let balanceText: String
+    var showsBalance: Bool
     var onUseMax: (() -> Void)?
     var onChooseMint: (() -> Void)?
 
     init(
         mint: MintInfo,
         balanceText: String,
+        showsBalance: Bool = false,
         onUseMax: (() -> Void)? = nil,
         onChooseMint: (() -> Void)? = nil
     ) {
         self.mint = mint
         self.balanceText = balanceText
+        self.showsBalance = showsBalance
         self.onUseMax = onUseMax
         self.onChooseMint = onChooseMint
     }
@@ -57,9 +59,14 @@ struct MintSelectorRow: View {
                 chevron(action: onChooseMint)
             }
         }
-        .liquidGlass(
-            in: RoundedRectangle(cornerRadius: FlowRowMetrics.corner),
-            interactive: onChooseMint != nil
+        // This selector is contextual input, not an elevated control. Keep it
+        // flat on every OS version: Liquid Glass adds a bright edge and too much
+        // depth to the middle of an amount-entry screen on iOS 26. A low-opacity
+        // semantic ink fill resolves near #1C1C1C on the dark canvas, keeping the
+        // control quiet without hard-coding a light or dark appearance.
+        .background(
+            Color.primary.opacity(0.11),
+            in: RoundedRectangle(cornerRadius: FlowRowMetrics.corner)
         )
     }
 
@@ -70,10 +77,19 @@ struct MintSelectorRow: View {
                 name: mint.name,
                 size: FlowRowMetrics.avatar
             )
-            Text(mint.name)
-                .cashuText(.textLink)
-                .lineLimit(1)
-                .truncationMode(.tail)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(mint.name)
+                    .cashuText(.textLink)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+                if showsBalance {
+                    Text(balanceText)
+                        .cashuText(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                }
+            }
             Spacer(minLength: 12)
         }
     }

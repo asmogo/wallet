@@ -2,6 +2,7 @@ package com.cashu.me.ui.components
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -29,14 +30,14 @@ import androidx.compose.ui.unit.dp
 import com.cashu.me.Models.MintInfo
 import com.cashu.me.ui.theme.CashuTheme
 
-// A quiet row, not a card: 20dp avatar, one line, 48dp tall. The 64dp block it
-// replaces (40dp avatar over a balance line) outweighed both the toolbar above
-// it and the amount hero it exists to qualify.
+// A quiet row, not a card: 28dp avatar and a compact mint identity. Its
+// optional balance line is reserved for Send Ecash, where it explains the
+// amount Send Max will use.
 //
 // Vertical padding is deliberately absent from the container: the "Send Max"
 // chip pads itself out to a real touch target, and container padding would stack
 // on top of that and make the row with a chip taller than the rows without one.
-private val AvatarSize = 20.dp
+private val AvatarSize = 28.dp
 private val ChevronSize = 18.dp
 private val RowMinHeight = 48.dp
 private val RowPadding = PaddingValues(horizontal = 16.dp)
@@ -49,14 +50,15 @@ private val UseMaxPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp)
  *
  * [onPickMint] is null when the wallet holds a single mint — there is nothing to
  * choose between, so the row drops its chevron and stops being a control.
- * [balanceText] is deliberately not rendered; it lives in the accessibility
- * label and reappears on screen only in the insufficient-balance notice.
+ * [showBalance] opts into the second balance line on amount entry screens,
+ * where it makes the selected mint's available amount explicit.
  */
 @Composable
 fun MintSelectorRow(
     mint: MintInfo,
     balanceText: String?,
     modifier: Modifier = Modifier,
+    showBalance: Boolean = false,
     onPickMint: (() -> Unit)? = null,
     onUseMax: (() -> Unit)? = null,
 ) {
@@ -84,15 +86,25 @@ fun MintSelectorRow(
     ) {
         MintAvatar(mint = mint, size = AvatarSize)
         Spacer(Modifier.width(CashuTheme.spacing.snug))
-        Text(
-            text = mint.name,
-            style = MaterialTheme.typography.bodyLarge,
-            fontWeight = FontWeight.Medium,
-            color = MaterialTheme.colorScheme.onSurface,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.weight(1f),
-        )
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = mint.name,
+                style = MaterialTheme.typography.bodyLarge,
+                fontWeight = FontWeight.Medium,
+                color = MaterialTheme.colorScheme.onSurface,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            if (showBalance && balanceText != null) {
+                Text(
+                    text = balanceText,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+        }
         if (onUseMax != null) {
             Spacer(Modifier.width(CashuTheme.spacing.snug))
             Text(
