@@ -14,6 +14,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.Dp
@@ -132,13 +133,22 @@ private fun lockup(parts: AmountParts, style: TextStyle): AnnotatedString {
         fontSize = 1.sp,
         letterSpacing = (style.fontSize.value * UnitGapEm).sp,
     )
+    // Geist's ₿ glyph carries more visual ink than its tabular numerals at the
+    // same nominal weight. Let it step down one weight so ₿0 reads as one
+    // lockup rather than a heavy mark followed by lighter digits.
+    val bitcoinSymbolSpan = SpanStyle(
+        fontSize = style.fontSize * SymbolScale,
+        fontWeight = FontWeight.Medium,
+    )
     val symbolSpan = SpanStyle(fontSize = style.fontSize * SymbolScale)
 
     return buildAnnotatedString {
         when (val affix = parts.affix) {
             is AmountParts.Affix.None -> append(parts.value)
             is AmountParts.Affix.Prefix -> {
-                withStyle(symbolSpan) { append(affix.symbol) }
+                withStyle(if (affix.symbol == "₿") bitcoinSymbolSpan else symbolSpan) {
+                    append(affix.symbol)
+                }
                 append(parts.value)
             }
             is AmountParts.Affix.Suffix -> {
