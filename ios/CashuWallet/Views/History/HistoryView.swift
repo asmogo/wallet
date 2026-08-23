@@ -148,7 +148,6 @@ struct HistoryView: View {
             .sheet(item: $selectedTransaction) { transaction in
                 TransactionDetailView(transaction: transaction)
                     .environmentObject(walletManager)
-                    .flatBottomSheetSurface()
             }
             // Claim flow for an unclaimed incoming token. `item:` captures the
             // pending token at presentation, so the content stays stable while
@@ -222,6 +221,9 @@ struct HistoryView: View {
             }
         }
         .accessibilityIdentifier("history-screen")
+        .bottomSheetBackdrop(
+            isPresented: selectedTransaction != nil || selectedRequest != nil
+        )
     }
 
     // MARK: - History List

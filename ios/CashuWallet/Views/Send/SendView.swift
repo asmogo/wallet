@@ -40,8 +40,6 @@ struct SendView: View {
     @State private var checkingTask: Task<Void, Never>?
     @State private var manualClaimCheckResult: PendingTokenClaimCheckResult?
 
-    // Copy button feedback
-    @State private var copyButtonText = "Copy"
     @State private var showShareSheet = false
     @State private var lockWithP2PK = false
     @State private var p2pkPubkeyInput = ""
@@ -740,7 +738,7 @@ struct SendView: View {
 
             VStack(spacing: 12) {
                 Button(action: { copyToken(token) }) {
-                    Text(copyButtonText)
+                    Text("Copy")
                 }
                 .glassButton()
 
@@ -958,12 +956,7 @@ struct SendView: View {
     private func copyToken(_ token: String) {
         UIPasteboard.general.string = token
         HapticFeedback.notification(.success)
-
-        // Show "COPIED" feedback for 3 seconds
-        copyButtonText = "Copied"
-        DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
-            copyButtonText = "Copy"
-        }
+        ConfirmationToast.show("Copied ecash token")
     }
 
     // MARK: - Token Claim Detection

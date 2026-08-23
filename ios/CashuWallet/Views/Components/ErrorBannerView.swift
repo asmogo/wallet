@@ -146,6 +146,127 @@ extension View {
     ) -> some View {
         modifier(ErrorBannerModifier(message: message, severity: severity, retry: retry))
     }
+
+    /// Presents brief, non-blocking confirmation feedback at the top center.
+    /// Copy affordances stay visually stable; this is the app-wide confirmation
+    /// channel for actions that have already completed successfully.
+    func confirmationToastHost() -> some View {
+        modifier(ConfirmationToastHostModifier())
+    }
+
+    /// Softens the presenting canvas while a native bottom sheet is visible.
+    /// The system scrim still owns separation; this deliberately stays subtle.
+    func bottomSheetBackdrop(isPresented: Bool) -> some View {
+        modifier(BottomSheetBackdropModifier(isPresented: isPresented))
+    }
+}
+
+private struct BottomSheetBackdropModifier: ViewModifier {
+    let isPresented: Bool
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    func body(content: Content) -> some View {
+        content
+            .blur(radius: isPresented ? 2.5 : 0)
+            .animation(
+                reduceMotion ? nil : .easeOut(duration: 0.18),
+                value: isPresented
+            )
+    }
+}
+
+// MARK: - Confirmation toast (the transient success channel)
+
+private extension Notification.Name {
+    static let cashuConfirmationToastRequested = Notification.Name(
+        "cashu.confirmation-toast-requested"
+    )
+}
+
+/// Posts a confirmation to the nearest visible ``confirmationToastHost()``.
+/// Native sheets render in a separate presentation layer, so sheet surfaces
+/// mount the same host while the app root remains the fallback for full screens.
+@MainActor
+enum ConfirmationToast {
+    static func show(_ message: String) {
+        NotificationCenter.default.post(
+            name: .cashuConfirmationToastRequested,
+            object: message
+        )
+    }
+}
+
+private struct ConfirmationToastMessage: Identifiable, Equatable {
+    let id = UUID()
+    let text: String
+}
+
+private struct ConfirmationToastView: View {
+    let message: String
+
+    var body: some View {
+        Text(message)
+            .font(.subheadline.weight(.semibold))
+            .foregroundStyle(.primary)
+            .lineLimit(2)
+            .multilineTextAlignment(.center)
+            .padding(.horizontal, 20)
+            .padding(.vertical, 12)
+            .background(.regularMaterial, in: Capsule())
+            .overlay {
+                Capsule()
+                    .stroke(Color(uiColor: .separator), lineWidth: 0.5)
+            }
+            .shadow(color: .black.opacity(0.14), radius: 16, y: 6)
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(message)
+            .onAppear {
+                AccessibilityNotification.Announcement(message).post()
+            }
+    }
+}
+
+private struct ConfirmationToastHostModifier: ViewModifier {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var toast: ConfirmationToastMessage?
+
+    func body(content: Content) -> some View {
+        content
+            .overlay(alignment: .top) {
+                if let toast {
+                    ConfirmationToastView(message: toast.text)
+                        .id(toast.id)
+                        .padding(.horizontal, 24)
+                        .padding(.top, 8)
+                        .allowsHitTesting(false)
+                        .transition(
+                            reduceMotion
+                                ? .opacity
+                                : .asymmetric(
+                                    insertion: .move(edge: .top).combined(with: .opacity),
+                                    removal: .opacity
+                                )
+                        )
+                        .zIndex(100)
+                }
+            }
+            .animation(
+                reduceMotion ? nil : .spring(response: 0.38, dampingFraction: 0.9),
+                value: toast
+            )
+            .onReceive(
+                NotificationCenter.default.publisher(for: .cashuConfirmationToastRequested)
+            ) { notification in
+                guard let message = notification.object as? String else { return }
+                toast = ConfirmationToastMessage(text: message)
+            }
+            .task(id: toast?.id) {
+                guard toast != nil else { return }
+                try? await Task.sleep(for: .seconds(2.2))
+                guard !Task.isCancelled else { return }
+                toast = nil
+            }
+    }
 }
 
 /// The floating banner. Not a general-purpose inline component — reach it only

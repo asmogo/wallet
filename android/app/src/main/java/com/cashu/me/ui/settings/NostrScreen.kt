@@ -41,7 +41,6 @@ import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import com.cashu.me.Core.AppLockManager
@@ -55,14 +54,13 @@ import com.cashu.me.Core.nostrSignerSelectionAction
 import com.cashu.me.ui.components.CashuTextField
 import com.cashu.me.ui.components.DestructiveTextButton
 import com.cashu.me.ui.components.InlineNotice
+import com.cashu.me.ui.components.LocalConfirmationToastController
 import com.cashu.me.ui.components.NavRow
 import com.cashu.me.ui.components.NoticeSeverity
 import com.cashu.me.ui.components.SectionHeader
 import com.cashu.me.ui.components.SettingsFooterText
 import com.cashu.me.ui.components.ToolbarIcon
 import com.cashu.me.ui.theme.CashuTheme
-
-private const val RelayCopiedFeedbackMillis = 2_000L
 
 /** Shown inside the reveal sheet, at the moment the key is about to be exposed. */
 internal const val NostrPrivateKeyWarningText =
@@ -98,6 +96,7 @@ fun NostrScreen(
     val settings by settingsManager.state.collectAsState()
     val nwcState by nwcManager.state.collectAsState()
     val clipboard = LocalClipboardManager.current
+    val confirmationToastController = LocalConfirmationToastController.current
     val scope = rememberCoroutineScope()
     var showNsecReveal by remember { mutableStateOf(false) }
     var showImport by remember { mutableStateOf(false) }
@@ -107,19 +106,12 @@ fun NostrScreen(
     var importError by remember { mutableStateOf<String?>(null) }
     var relayInput by remember { mutableStateOf("") }
     var addRelayError by remember { mutableStateOf<String?>(null) }
-    var copiedRelay by remember { mutableStateOf<String?>(null) }
     var showRelayResetConfirm by remember { mutableStateOf(false) }
     var showMissingCustomKeyChoice by remember { mutableStateOf(false) }
     var showGenerateConfirm by remember { mutableStateOf(false) }
     var showResetConfirm by remember { mutableStateOf(false) }
     var identityMutation by remember { mutableStateOf<NostrIdentityMutation?>(null) }
     var identityMutationError by remember { mutableStateOf<String?>(null) }
-    LaunchedEffect(copiedRelay) {
-        if (copiedRelay != null) {
-            delay(RelayCopiedFeedbackMillis)
-            copiedRelay = null
-        }
-    }
 
     fun submitRelay() {
         when (val result = settingsManager.addRelay(relayInput)) {
@@ -253,10 +245,9 @@ fun NostrScreen(
                     settings.nostrRelays.forEach { relay ->
                         NostrRelayRow(
                             relay = relay,
-                            copied = copiedRelay == relay,
                             onCopy = {
                                 clipboard.setText(AnnotatedString(relay))
-                                copiedRelay = relay
+                                confirmationToastController?.show("Copied relay URL")
                             },
                             onRemove = { settingsManager.removeRelay(relay) },
                         )

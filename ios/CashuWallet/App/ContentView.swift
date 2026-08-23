@@ -64,6 +64,7 @@ struct ContentView: View {
         .onChange(of: appLock.isLocked) { presentInterruptsIfIdle() }
         .onAppear { presentInterruptsIfIdle() }
         .environmentObject(handoff)
+        .confirmationToastHost()
     }
 
     @ViewBuilder

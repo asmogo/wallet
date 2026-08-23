@@ -83,9 +83,9 @@ import com.cashu.me.Models.MintInfo
 import com.cashu.me.Models.NutSupport
 import com.cashu.me.ui.components.DestructiveTextButton
 import com.cashu.me.ui.components.GhostButton
-import com.cashu.me.ui.components.IconSwap
 import com.cashu.me.ui.components.InlineNotice
 import com.cashu.me.ui.components.InspectorRow
+import com.cashu.me.ui.components.LocalConfirmationToastController
 import com.cashu.me.ui.components.MintAvatar
 import com.cashu.me.ui.components.NoticeSeverity
 import com.cashu.me.ui.components.PrimaryButton
@@ -98,7 +98,6 @@ import com.cashu.me.ui.testing.UiTestTags
 import com.cashu.me.ui.theme.CapsuleShape
 import com.cashu.me.ui.theme.CashuTheme
 import com.cashu.me.ui.theme.withSlashedZero
-import kotlinx.coroutines.delay
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -584,19 +583,12 @@ private fun HeaderBlock(mint: MintInfo, isActive: Boolean) {
     }
 }
 
-/// Tappable URL chip, matching iOS `copyUrlChip`: the shortened URL beside a
-/// copy glyph that morphs to a check for [COPY_CONFIRM_RESET_MS] after a tap
-/// (which copies the full URL to the clipboard).
+/// Tappable URL chip, matching iOS `copyUrlChip`: the shortened URL keeps a
+/// stable Copy glyph while the shared top toast confirms the full URL was copied.
 @Composable
 private fun CopyUrlChip(url: String) {
     val clipboard = LocalClipboardManager.current
-    var copied by remember(url) { mutableStateOf(false) }
-    LaunchedEffect(copied) {
-        if (copied) {
-            delay(COPY_CONFIRM_RESET_MS)
-            copied = false
-        }
-    }
+    val confirmationToastController = LocalConfirmationToastController.current
     Row(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(CashuTheme.spacing.tight),
@@ -604,7 +596,7 @@ private fun CopyUrlChip(url: String) {
             .clip(CircleShape)
             .clickable {
                 clipboard.setText(AnnotatedString(url))
-                copied = true
+                confirmationToastController?.show("Copied mint URL")
             }
             .padding(
                 horizontal = CashuTheme.spacing.snug,
@@ -619,11 +611,10 @@ private fun CopyUrlChip(url: String) {
             overflow = TextOverflow.MiddleEllipsis,
             modifier = Modifier.weight(1f, fill = false),
         )
-        IconSwap(
-            icon = if (copied) Icons.Outlined.Check else Icons.Outlined.ContentCopy,
-            contentDescription = if (copied) "Copied URL" else "Copy URL",
-            tint = if (copied) CashuTheme.colors.received
-            else MaterialTheme.colorScheme.onSurfaceVariant,
+        Icon(
+            imageVector = Icons.Outlined.ContentCopy,
+            contentDescription = "Copy URL",
+            tint = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.size(COPY_ROW_ICON_SIZE),
         )
     }
@@ -777,6 +768,5 @@ internal fun mintSatBalanceFiatSecondary(
 // Inline copy-row glyph (smaller than the body 20dp).
 private val COPY_ROW_ICON_SIZE = 18.dp
 
-// iOS parity: collapsed "About" clamp and the copy-confirm reset delay.
+// iOS parity: collapsed "About" clamp.
 private const val ABOUT_COLLAPSED_LINES = 3
-private const val COPY_CONFIRM_RESET_MS = 2_000L

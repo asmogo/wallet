@@ -89,6 +89,7 @@ extension View {
     /// content of every `.sheet`/`.fullScreenCover` (frosted HUDs excluded).
     func canvasSheetBackground() -> some View {
         modifier(CanvasSheetBackground())
+            .confirmationToastHost()
     }
 
     /// Applies ``canvasSheetBackground()`` only to sheets that fill the screen.
@@ -109,6 +110,7 @@ extension View {
         self
             .environment(\.bottomSheetSurfaceStyle, .flat)
             .presentationBackground(Color(uiColor: .systemBackground))
+            .confirmationToastHost()
     }
 
     /// Opaque, elevated surface for content-fit and fixed-height sheets. The
@@ -120,6 +122,7 @@ extension View {
             .presentationBackground {
                 CompactSheetBackground()
             }
+            .confirmationToastHost()
     }
 
     /// One-shot, opacity-only fade for a full screen's content on entry. Plays

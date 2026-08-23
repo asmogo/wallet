@@ -147,10 +147,12 @@ struct MainWalletView: View {
             .sheet(item: $selectedTransaction) { transaction in
                 TransactionDetailView(transaction: transaction)
                     .environmentObject(walletManager)
-                    .flatBottomSheetSurface()
             }
             .task { await walletManager.loadTransactions() }
         }
+        .bottomSheetBackdrop(
+            isPresented: navigationManager.activeWalletSheet != nil || selectedTransaction != nil
+        )
         .onReceive(NotificationCenter.default.publisher(for: .cashuTokenReceived)) { note in
             guard let amount = note.userInfo?["amount"] as? UInt64 else { return }
             // The home balance + delta are sat-denominated. A non-sat receive

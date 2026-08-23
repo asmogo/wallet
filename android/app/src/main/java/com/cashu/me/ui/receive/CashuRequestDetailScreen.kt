@@ -37,7 +37,6 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.rememberModalBottomSheetState
@@ -58,7 +57,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import java.text.DateFormat
 import java.util.Date
-import kotlinx.coroutines.delay
 import com.cashu.me.Core.AmountFormatter
 import com.cashu.me.Core.CashuRequestStore
 import com.cashu.me.Core.CashuRequestNostrReadiness
@@ -80,6 +78,7 @@ import com.cashu.me.ui.components.DetailActionFooter
 import com.cashu.me.ui.components.GhostButton
 import com.cashu.me.ui.components.InlineNotice
 import com.cashu.me.ui.components.InlineNoticeHost
+import com.cashu.me.ui.components.LocalConfirmationToastController
 import com.cashu.me.ui.components.InspectorRow
 import com.cashu.me.ui.components.MintPickerSheet
 import com.cashu.me.ui.components.NumberPadFooter
@@ -109,7 +108,6 @@ fun CashuRequestDetailScreen(
     nfcReceiveCoordinator: NfcReceiveCoordinator,
     requestId: String,
     onClose: () -> Unit,
-    snackbarHostState: SnackbarHostState? = null,
 ) {
     val storeState by cashuRequestStore.state.collectAsState()
     val walletState by walletManager.state.collectAsState()
@@ -119,12 +117,12 @@ fun CashuRequestDetailScreen(
     val formatter = remember { AmountFormatter() }
     val context = LocalContext.current
     val clipboard = LocalClipboardManager.current
+    val confirmationToastController = LocalConfirmationToastController.current
 
     val request = storeState.requests.firstOrNull { it.id == requestId }
     val requestReadiness = remember(settings, nostrState) {
         CashuRequestNostrReadiness.current(nostrService, settingsManager)
     }
-    var copied by remember { mutableStateOf(false) }
     var mintPickerOpen by remember { mutableStateOf(false) }
     var amountPickerOpen by remember { mutableStateOf(false) }
     var unitPickerOpen by remember { mutableStateOf(false) }
@@ -175,13 +173,6 @@ fun CashuRequestDetailScreen(
             )
             regenerateError = null
         }.onFailure { regenerateError = it.userFacingWalletMessage }
-    }
-
-    LaunchedEffect(copied) {
-        if (copied) {
-            delay(2000)
-            copied = false
-        }
     }
 
     // A tap may begin while an editor sheet is open. Once the peer connects,
@@ -324,7 +315,7 @@ fun CashuRequestDetailScreen(
                         content = request.encoded,
                         shareSubject = request.displayTitle,
                         staticOnly = true,
-                        snackbarHostState = snackbarHostState,
+                        confirmationMessage = "Copied Cashu request",
                     )
 
                     // Request amounts render in the request's own unit.
@@ -427,10 +418,10 @@ fun CashuRequestDetailScreen(
                         horizontalArrangement = Arrangement.spacedBy(CashuTheme.spacing.snug),
                     ) {
                         SecondaryButton(
-                            text = if (copied) "Copied" else "Copy",
+                            text = "Copy",
                             onClick = {
                                 clipboard.setText(AnnotatedString(request.encoded))
-                                copied = true
+                                confirmationToastController?.show("Copied Cashu request")
                             },
                             modifier = Modifier.weight(1f),
                         )

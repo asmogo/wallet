@@ -267,7 +267,6 @@ struct TokenDisplayView: View {
     let amount: UInt64
     var onDismiss: (() -> Void)?
     
-    @State private var copied = false
     @ObservedObject var settings = SettingsManager.shared
 
     var body: some View {
@@ -316,7 +315,7 @@ struct TokenDisplayView: View {
                 
                 // Copy button
                 Button(action: copyToken) {
-                    Text(copied ? "Copied" : "Copy")
+                    Text("Copy")
                 }
                 .glassButton()
                 .padding(.horizontal, 20)
@@ -326,14 +325,8 @@ struct TokenDisplayView: View {
 
     private func copyToken() {
         UIPasteboard.general.string = token
-        copied = true
-        
-        let generator = UINotificationFeedbackGenerator()
-        generator.notificationOccurred(.success)
-        
-        DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
-            copied = false
-        }
+        HapticFeedback.notification(.success)
+        ConfirmationToast.show("Copied ecash token")
     }
 }
 

@@ -109,6 +109,7 @@ import com.cashu.me.ui.components.AmountEntryHero
 import com.cashu.me.ui.components.CashuTextField
 import com.cashu.me.ui.components.GhostButton
 import com.cashu.me.ui.components.InlineNotice
+import com.cashu.me.ui.components.LocalConfirmationToastController
 import com.cashu.me.ui.components.MintPickerSheet
 import com.cashu.me.ui.components.MintSelectorRow
 import com.cashu.me.ui.components.NoticeSeverity
@@ -1022,17 +1023,11 @@ private fun GeneratedFace(
     onDone: () -> Unit,
 ) {
     val clipboard = LocalClipboardManager.current
+    val confirmationToastController = LocalConfirmationToastController.current
     val scope = rememberCoroutineScope()
-    var copied by remember { mutableStateOf(false) }
     var claimState: ClaimState by remember(result.token) { mutableStateOf(ClaimState.Pending) }
     var manualCheckResult: PendingTokenClaimCheckResult? by remember(result.token) {
         mutableStateOf(null)
-    }
-    LaunchedEffect(copied) {
-        if (copied) {
-            delay(2000)
-            copied = false
-        }
     }
     // Poll the mint to detect when the recipient redeems the token. Mirrors
     // iOS startClaimPolling: the spinner shows for the whole watch session
@@ -1122,6 +1117,7 @@ private fun GeneratedFace(
             QrCard(
                 content = result.token,
                 shareSubject = "Cashu token",
+                confirmationMessage = "Copied ecash token",
             )
             GeneratedEcashAmount(presentation = amountPresentation)
             ClaimStatusRow(claimState = claimState)
@@ -1183,10 +1179,10 @@ private fun GeneratedFace(
             // Gray tonal fill instead of the inverted-ink primary — the analog of
             // iOS's non-prominent glass capsule; adapts to light/dark.
             PrimaryButton(
-                text = if (copied) "Copied" else "Copy",
+                text = "Copy",
                 onClick = {
                     clipboard.setText(AnnotatedString(result.token))
-                    copied = true
+                    confirmationToastController?.show("Copied ecash token")
                 },
                 colors = neutralActionButtonColors(),
             )

@@ -1,5 +1,6 @@
 package com.cashu.me.ui.history
 
+import android.content.ClipData
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
@@ -13,7 +14,6 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Cancel
 import androidx.compose.material.icons.filled.CheckCircle
-import androidx.compose.material.icons.outlined.Check
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.ContentCopy
 import androidx.compose.material.icons.outlined.IosShare
@@ -22,10 +22,12 @@ import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.SheetValue
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.material3.rememberBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -36,17 +38,16 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.platform.ClipEntry
+import androidx.compose.ui.platform.LocalClipboard
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import com.cashu.me.Core.AmountFormatter
 import com.cashu.me.Core.PendingTokenClaimCheckResult
@@ -66,14 +67,19 @@ import com.cashu.me.Models.TransactionType
 import com.cashu.me.Models.WalletTransaction
 import com.cashu.me.Models.liveDetail
 import com.cashu.me.ui.components.AmountText
+import com.cashu.me.ui.components.CompactSheetContent
+import com.cashu.me.ui.components.ConfirmationToastHost
 import com.cashu.me.ui.components.DetailActionFooter
 import com.cashu.me.ui.components.EmptyState
 import com.cashu.me.ui.components.ExplorerLinkRow
 import com.cashu.me.ui.components.InspectorRow
 import com.cashu.me.ui.components.InlineNotice
+import com.cashu.me.ui.components.LocalConfirmationToastController
 import com.cashu.me.ui.components.NoticeSeverity
 import com.cashu.me.ui.components.PrimaryButton
 import com.cashu.me.ui.components.QrCard
+import com.cashu.me.ui.components.SecondaryButton
+import com.cashu.me.ui.components.SheetHeader
 import com.cashu.me.ui.components.ToolbarIcon
 import com.cashu.me.ui.components.neutralActionButtonColors
 import com.cashu.me.ui.components.openInBrowser
@@ -81,6 +87,130 @@ import com.cashu.me.ui.components.shareText
 import com.cashu.me.ui.theme.CashuTheme
 import com.cashu.me.ui.theme.withMonoDigits
 import com.cashu.me.ui.testing.UiTestTags
+
+/**
+ * Content-fitting receipt for a settled transaction. Completed history is
+ * reference material, so it stays over the originating activity list instead
+ * of replacing it with a pushed full-screen destination.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun TransactionReceiptSheet(
+    transaction: WalletTransaction,
+    settingsManager: SettingsManager,
+    onDismissRequest: () -> Unit,
+) {
+    val settings by settingsManager.state.collectAsState()
+    val context = LocalContext.current
+    val clipboard = LocalClipboard.current
+    val clipboardScope = rememberCoroutineScope()
+    val formatter = remember { AmountFormatter() }
+    val sheetState = rememberBottomSheetState(
+        initialValue = SheetValue.Hidden,
+        enabledValues = setOf(SheetValue.Hidden, SheetValue.Expanded),
+    )
+    val title = remember(transaction) { TransactionDisplay.title(transaction) }
+    val fields = remember(transaction) { TransactionDisplay.detailFields(transaction) }
+    val copyableContent = remember(transaction) { TransactionDisplay.copyableContent(transaction) }
+    val explorerUrl = remember(transaction) { transaction.explorerUrl() }
+    val confirmationToastController = LocalConfirmationToastController.current
+
+    ModalBottomSheet(
+        onDismissRequest = onDismissRequest,
+        sheetState = sheetState,
+        containerColor = CashuTheme.colors.compactSheetContainer,
+    ) {
+        androidx.compose.foundation.layout.Box(modifier = Modifier.fillMaxWidth()) {
+            CompactSheetContent {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .verticalScroll(rememberScrollState()),
+                ) {
+                    SheetHeader(title = title)
+
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = CashuTheme.spacing.comfortable),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(CashuTheme.spacing.comfortable),
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.CheckCircle,
+                            contentDescription = "Completed",
+                            tint = CashuTheme.colors.received,
+                            modifier = Modifier.size(COMPLETED_RECEIPT_GLYPH_SIZE),
+                        )
+
+                        HeroAmount(
+                            transaction = transaction,
+                            formatter = formatter,
+                            useBitcoinSymbol = settings.useBitcoinSymbol,
+                            compact = false,
+                        )
+
+                        Column(modifier = Modifier.fillMaxWidth()) {
+                            fields.forEach { field ->
+                                InspectorRow(
+                                    label = field.label,
+                                    value = field.value,
+                                    valueMonospaced = field.value.length > 24 ||
+                                        field.label in MonospacedLabels,
+                                    onClick = field.copyValue?.let { full ->
+                                        {
+                                            clipboardScope.launch {
+                                                clipboard.setClipEntry(
+                                                    ClipEntry(ClipData.newPlainText(field.label, full)),
+                                                )
+                                                confirmationToastController?.show(
+                                                    copyConfirmationMessage(field.label),
+                                                )
+                                            }
+                                        }
+                                    },
+                                    trailingIcon = field.copyValue?.let { Icons.Outlined.ContentCopy },
+                                )
+                            }
+                            if (explorerUrl != null) {
+                                ExplorerLinkRow(onClick = { context.openInBrowser(explorerUrl) })
+                            }
+                        }
+
+                        if (copyableContent != null) {
+                            Spacer(Modifier.height(CashuTheme.spacing.snug))
+                            SecondaryButton(
+                                text = "Copy",
+                                onClick = {
+                                    clipboardScope.launch {
+                                        clipboard.setClipEntry(
+                                            ClipEntry(ClipData.newPlainText(title, copyableContent)),
+                                        )
+                                        confirmationToastController?.show(
+                                            "Copied ${TransactionDisplay.qrLabel(transaction).replaceFirstChar { it.lowercase() }}",
+                                        )
+                                    }
+                                },
+                                modifier = Modifier.semantics {
+                                    liveRegion = LiveRegionMode.Polite
+                                },
+                            )
+                        }
+
+                        Spacer(Modifier.height(CashuTheme.spacing.comfortable))
+                    }
+                }
+            }
+            confirmationToastController?.let { controller ->
+                ConfirmationToastHost(
+                    controller = controller,
+                    respectStatusBar = false,
+                    modifier = Modifier.align(Alignment.TopCenter),
+                )
+            }
+        }
+    }
+}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -90,12 +220,11 @@ fun TransactionDetailScreen(
     transactionId: String,
     onClose: () -> Unit,
     onClaimReceiveToken: ((String) -> Unit)? = null,
-    snackbarHostState: SnackbarHostState? = null,
 ) {
     val walletState by walletManager.state.collectAsState()
     val settings by settingsManager.state.collectAsState()
     val context = LocalContext.current
-    val clipboard = LocalClipboardManager.current
+    val clipboard = LocalClipboard.current
     val formatter = remember { AmountFormatter() }
     val scope = rememberCoroutineScope()
 
@@ -114,16 +243,10 @@ fun TransactionDetailScreen(
     }
     val transaction = resolved ?: openSnapshot
 
-    var copied by remember { mutableStateOf(false) }
+    val confirmationToastController = LocalConfirmationToastController.current
     var checkingClaim by remember(transactionId) { mutableStateOf(false) }
     var manualCheckResult: PendingTokenClaimCheckResult? by remember(transactionId) {
         mutableStateOf(null)
-    }
-    LaunchedEffect(copied) {
-        if (copied) {
-            delay(2000)
-            copied = false
-        }
     }
     // Single-quote check on open (not the full pending list). Re-checks this
     // mint quote against the mint and mints if already paid — same path Receive
@@ -142,16 +265,6 @@ fun TransactionDetailScreen(
             )
         }
     }
-    // Tap-to-copy inspector rows (Address / Transaction ID / Payment Proof):
-    // which row last copied, for the ContentCopy → green Check swap.
-    var copiedFieldLabel by remember { mutableStateOf<String?>(null) }
-    LaunchedEffect(copiedFieldLabel) {
-        if (copiedFieldLabel != null) {
-            delay(3000)
-            copiedFieldLabel = null
-        }
-    }
-
     val showsQr = transaction?.let { TransactionDisplay.showsQr(it) } == true
     val qrContent = transaction?.let { TransactionDisplay.qrContent(it) }
     val copyableContent = transaction?.let { TransactionDisplay.copyableContent(it) }
@@ -229,7 +342,8 @@ fun TransactionDetailScreen(
                         content = qrContent,
                         staticOnly = transaction.kind != TransactionKind.Ecash,
                         shareSubject = title,
-                        snackbarHostState = snackbarHostState,
+                        confirmationMessage =
+                            "Copied ${TransactionDisplay.qrLabel(transaction).replaceFirstChar { it.lowercase() }}",
                     )
                     transaction.status == TransactionStatus.Completed -> Icon(
                         imageVector = Icons.Filled.CheckCircle,
@@ -255,8 +369,7 @@ fun TransactionDetailScreen(
                 )
                 Column(modifier = Modifier.fillMaxWidth()) {
                     val fields = remember(transaction) { TransactionDisplay.detailFields(transaction) }
-                    fields.forEachIndexed { index, field ->
-                        val fieldCopied = copiedFieldLabel == field.label
+                    fields.forEach { field ->
                         InspectorRow(
                             label = field.label,
                             value = field.value,
@@ -264,17 +377,17 @@ fun TransactionDetailScreen(
                                 field.label in MonospacedLabels,
                             onClick = field.copyValue?.let { full ->
                                 {
-                                    // No app snackbar: Android 13+ shows the system
-                                    // clipboard bubble, so the row's check swap is
-                                    // the only in-app confirmation.
-                                    clipboard.setText(AnnotatedString(full))
-                                    copiedFieldLabel = field.label
+                                    scope.launch {
+                                        clipboard.setClipEntry(
+                                            ClipEntry(ClipData.newPlainText(field.label, full)),
+                                        )
+                                        confirmationToastController?.show(
+                                            copyConfirmationMessage(field.label),
+                                        )
+                                    }
                                 }
                             },
-                            trailingIcon = field.copyValue?.let {
-                                if (fieldCopied) Icons.Outlined.Check else Icons.Outlined.ContentCopy
-                            },
-                            trailingIconTint = if (fieldCopied) CashuTheme.colors.received else null,
+                            trailingIcon = field.copyValue?.let { Icons.Outlined.ContentCopy },
                         )
                     }
                     // Explorer link joins the detail rows (iOS parity), not the
@@ -320,10 +433,16 @@ fun TransactionDetailScreen(
                             // quiet neutral tonal fill (matches Home's Send/Receive)
                             // rather than the loud inverted-ink primary.
                             PrimaryButton(
-                                text = if (copied) "Copied" else "Copy",
+                                text = "Copy",
                                 onClick = {
-                                    clipboard.setText(AnnotatedString(copyableContent))
-                                    copied = true
+                                    scope.launch {
+                                        clipboard.setClipEntry(
+                                            ClipEntry(ClipData.newPlainText(title, copyableContent)),
+                                        )
+                                        confirmationToastController?.show(
+                                            "Copied ${TransactionDisplay.qrLabel(transaction).replaceFirstChar { it.lowercase() }}",
+                                        )
+                                    }
                                 },
                                 colors = neutralActionButtonColors(),
                             )
@@ -367,11 +486,19 @@ fun TransactionDetailScreen(
     }
 }
 
-// Historical success gets a more generous 96dp hero; failure stays restrained.
-private val COMPLETED_HERO_GLYPH_SIZE = 96.dp
+// Status glyphs stay at the same restrained scale on active and receipt details.
+private val COMPLETED_HERO_GLYPH_SIZE = 64.dp
+private val COMPLETED_RECEIPT_GLYPH_SIZE = 64.dp
 private val FAILED_HERO_GLYPH_SIZE = 64.dp
 
 private val MonospacedLabels = setOf("Request", "Address", "Payment Proof", "Transaction ID", "Quote ID", "Mint")
+
+private fun copyConfirmationMessage(label: String): String = when (label) {
+    "Address" -> "Copied Bitcoin address"
+    "Transaction ID" -> "Copied transaction ID"
+    "Payment Proof" -> "Copied payment proof"
+    else -> "Copied ${label.lowercase()}"
+}
 
 // Crisp primary amount hero — direction already lives in the screen title, so
 // the historical detail keeps the amount itself quiet and unsigned like iOS.

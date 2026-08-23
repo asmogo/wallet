@@ -48,7 +48,6 @@ struct P2PKSettingsSection: View {
 
     @State private var showExplainer = false
     @State private var activeQR: QRPayload?
-    @State private var copiedValue: String?
     @State private var privateKeyReveal: PrivateKeyReveal?
 
     var body: some View {
@@ -150,7 +149,6 @@ struct P2PKSettingsSection: View {
                 status: settings.primaryP2PKIsSeedBacked
                     ? .seedBacked
                     : .custom,
-                copiedValue: copiedValue,
                 onCopy: { copy(P2PKKeyDisplay.canonical(forPubkey: pubkey), label: "key") },
                 actions: [
                     .init(title: "Show QR", systemImage: "qrcode") { showPrimaryRequest(pubkey: pubkey) },
@@ -194,10 +192,7 @@ struct P2PKSettingsSection: View {
     private func copy(_ value: String, label: String) {
         UIPasteboard.general.string = value
         HapticFeedback.selection()
-        withAnimation(.snappy(duration: 0.18)) { copiedValue = label }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
-            if copiedValue == label { withAnimation(.snappy(duration: 0.18)) { copiedValue = nil } }
-        }
+        ConfirmationToast.show("Copied key")
     }
 }
 
@@ -245,14 +240,11 @@ struct KeyCard: View {
     let title: String
     let pubkey: String
     let status: Status
-    let copiedValue: String?
     let onCopy: () -> Void
     let actions: [Action]
     /// Overrides the displayed short value. The Nostr hub passes a pre-truncated
     /// npub so a bech32 key isn't routed through the P2PK compressed-hex formatter.
     var displayLabel: String? = nil
-
-    private var isCopied: Bool { copiedValue == "key" || copiedValue == pubkey }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
@@ -283,10 +275,9 @@ struct KeyCard: View {
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
                         .truncationMode(.middle)
-                    Image(systemName: isCopied ? "checkmark" : "doc.on.doc")
+                    Image(systemName: "doc.on.doc")
                         .font(.caption.weight(.semibold))
-                        .foregroundStyle(isCopied ? Color.green : Color.secondary)
-                        .contentTransition(.symbolEffect(.replace))
+                        .foregroundStyle(Color.secondary)
                     Spacer(minLength: 0)
                 }
                 .contentShape(Rectangle())
@@ -462,7 +453,6 @@ private struct DeviceKeyDetailView: View {
 
     @State private var activeQR: QRPayload?
     @State private var privateKeyReveal: PrivateKeyReveal?
-    @State private var copiedValue: String?
     @State private var nameText = ""
     @State private var showRemoveConfirm = false
 
@@ -476,7 +466,6 @@ private struct DeviceKeyDetailView: View {
                         title: key.nickname?.isEmpty == false ? key.nickname! : "Device key",
                         pubkey: key.publicKey,
                         status: .deviceOnly,
-                        copiedValue: copiedValue,
                         onCopy: { copy(P2PKKeyDisplay.canonical(forPubkey: key.publicKey), label: key.publicKey) },
                         actions: [
                             .init(title: "Show QR", systemImage: "qrcode") {
@@ -558,10 +547,7 @@ private struct DeviceKeyDetailView: View {
     private func copy(_ value: String, label: String) {
         UIPasteboard.general.string = value
         HapticFeedback.selection()
-        withAnimation(.snappy(duration: 0.18)) { copiedValue = label }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
-            if copiedValue == label { withAnimation(.snappy(duration: 0.18)) { copiedValue = nil } }
-        }
+        ConfirmationToast.show("Copied key")
     }
 }
 
@@ -641,7 +627,6 @@ struct PrivateKeyRevealSheet: View {
 
     @Environment(\.dismiss) private var dismiss
     @State private var revealed = false
-    @State private var copied = false
 
     private var hidden: String {
         String(repeating: "•", count: 24)
@@ -681,10 +666,8 @@ struct PrivateKeyRevealSheet: View {
                                     Image(systemName: revealed ? "eye.slash" : "eye")
                                 }
                                 Button(action: copyKey) {
-                                    Image(systemName: copied ? "checkmark" : "doc.on.doc")
-                                        .foregroundStyle(copied ? .green : Color.accentColor)
-                                        .contentTransition(.symbolEffect(.replace))
-                                        .animation(.snappy(duration: 0.18), value: copied)
+                                    Image(systemName: "doc.on.doc")
+                                        .foregroundStyle(Color.accentColor)
                                 }
                             }
                         }
@@ -726,8 +709,7 @@ struct PrivateKeyRevealSheet: View {
         Task {
             guard await AppLockManager.shared.authenticate(reason: "Copy this private key") else { return }
             UIPasteboard.general.string = nsec
-            copied = true
-            DispatchQueue.main.asyncAfter(deadline: .now() + 3) { copied = false }
+            ConfirmationToast.show("Copied private key")
         }
     }
 }

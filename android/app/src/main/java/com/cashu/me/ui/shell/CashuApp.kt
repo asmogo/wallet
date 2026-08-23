@@ -6,7 +6,9 @@ import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.VisibilityThreshold
+import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
@@ -24,6 +26,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -34,6 +37,7 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.blur
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.ProgressBarRangeInfo
@@ -43,6 +47,7 @@ import androidx.compose.ui.semantics.progressBarRangeInfo
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.testTagsAsResourceId
 import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.ProcessLifecycleOwner
@@ -63,6 +68,9 @@ import com.cashu.me.ui.mints.ConnectMintSheetContent
 import com.cashu.me.ui.onboarding.OnboardingHandoffController
 import com.cashu.me.ui.onboarding.OnboardingHandoffHost
 import com.cashu.me.ui.onboarding.OnboardingScreen
+import com.cashu.me.ui.components.ConfirmationToastController
+import com.cashu.me.ui.components.ConfirmationToastHost
+import com.cashu.me.ui.components.LocalConfirmationToastController
 import com.cashu.me.ui.navigation.Routes
 import com.cashu.me.ui.navigation.TopTab
 import com.cashu.me.ui.navigation.cashuRequestDetailRouteFor
@@ -97,17 +105,26 @@ import com.cashu.me.ui.testing.UiTestTags
 @Composable
 fun CashuApp(containerFlow: StateFlow<AppContainer?>) {
     CashuTheme {
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .testTag(UiTestTags.AppRoot)
-                .semantics { testTagsAsResourceId = true },
+        val confirmationToastController = remember { ConfirmationToastController() }
+        CompositionLocalProvider(
+            LocalConfirmationToastController provides confirmationToastController,
         ) {
-            val container by containerFlow.collectAsState()
-            if (container == null) {
-                LoadingScreen()
-            } else {
-                CashuAppContent(container = checkNotNull(container))
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .testTag(UiTestTags.AppRoot)
+                    .semantics { testTagsAsResourceId = true },
+            ) {
+                val container by containerFlow.collectAsState()
+                if (container == null) {
+                    LoadingScreen()
+                } else {
+                    CashuAppContent(container = checkNotNull(container))
+                }
+                ConfirmationToastHost(
+                    controller = confirmationToastController,
+                    modifier = Modifier.align(Alignment.TopCenter),
+                )
             }
         }
     }
@@ -295,6 +312,11 @@ private fun AuthenticatedShell(container: AppContainer) {
     // its in-sheet scan.
     var receiveTokenDetail by remember { mutableStateOf<String?>(null) }
     var receiveDetailDismissLocked by remember { mutableStateOf(false) }
+    val sheetBackdropBlur by animateDpAsState(
+        targetValue = if (activeFlow != null) 2.dp else 0.dp,
+        animationSpec = tween(durationMillis = 180),
+        label = "wallet-sheet-backdrop-blur",
+    )
 
     // A fresh flow starts unlocked, whatever the last one left behind.
     LaunchedEffect(activeFlow) { flowDismissLocked = false }
@@ -421,7 +443,11 @@ private fun AuthenticatedShell(container: AppContainer) {
         if (target == ScannerTarget.P2pkLock) openPaymentFlow(WalletFlow.SendEcash)
     }
 
-    Box(modifier = Modifier.fillMaxSize()) {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .blur(sheetBackdropBlur),
+    ) {
         WalletScaffold(
             container = container,
             connectivityState = connectivityState,

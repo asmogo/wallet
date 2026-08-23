@@ -12,7 +12,6 @@ struct CashuRequestDetailView: View {
     let onClose: (() -> Void)?
 
     @State private var requestId: String
-    @State private var showCopied = false
     @State private var showMintPicker = false
     @State private var showAmountPicker = false
     @State private var showUnitPicker = false
@@ -270,7 +269,7 @@ struct CashuRequestDetailView: View {
 
             HStack(spacing: 12) {
                 Button(action: { copy(request.encoded) }) {
-                    Text(showCopied ? "Copied" : "Copy")
+                    Text("Copy")
                 }
                 .glassButton()
 
@@ -400,10 +399,7 @@ struct CashuRequestDetailView: View {
     private func copy(_ s: String) {
         UIPasteboard.general.string = s
         HapticFeedback.selection()
-        showCopied = true
-        DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
-            showCopied = false
-        }
+        ConfirmationToast.show("Copied Cashu request")
     }
 
     /// Re-encodes the displayed request with optional overrides, keeping the same

@@ -1565,6 +1565,7 @@ struct CashuTopUpInvoiceSheet: View {
     private func copyInvoice() {
         UIPasteboard.general.string = context.quote.request
         HapticFeedback.notification(.success)
+        ConfirmationToast.show("Copied payment request")
     }
 
     /// Poll the target mint quote until it's paid, then mint + pay the request.

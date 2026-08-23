@@ -238,7 +238,9 @@ class FunctionalWalletJourneyTest {
             .tapDescription("Clear search")
             .tapTag(UiTestTags.transactionRow("fixture-incoming"))
             .awaitText("Lightning received")
-            .tapDescription("Close")
+            // Completed transactions are compact receipts: dismiss through the
+            // native sheet gesture/back contract rather than a close button.
+            .pressSystemBack()
             .awaitTag(UiTestTags.HistoryScreen)
     }
 

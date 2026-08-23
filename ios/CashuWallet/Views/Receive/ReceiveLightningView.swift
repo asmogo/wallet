@@ -43,7 +43,6 @@ struct ReceiveLightningView: View {
     @State private var showMintPicker = false
     /// Reusable BOLT12 offer: drives the Amount-row pencil → amount picker sheet.
     @State private var showReusableAmountPicker = false
-    @State private var copiedRequest = false
     /// VoiceOver Share action for the QR cards: ShareLink can't be invoked
     /// imperatively, so the accessibility action presents the share sheet.
     @State private var showShareSheet = false
@@ -997,7 +996,7 @@ struct ReceiveLightningView: View {
     }
 
     private func copyButtonTitle(for quote: MintQuoteInfo) -> String {
-        copiedRequest ? "Copied" : "Copy \(quote.paymentMethod.requestDisplayName)"
+        "Copy \(quote.paymentMethod.requestDisplayName)"
     }
 
     private func blockExplorerURL(for quote: MintQuoteInfo) -> URL? {
@@ -1118,7 +1117,6 @@ struct ReceiveLightningView: View {
         requestFailure = nil
         isPaid = false
         isExpired = false
-        copiedRequest = false
         onchainObservation = nil
         monitoredQuoteId = nil
         quoteStatusTask?.cancel()
@@ -1145,7 +1143,6 @@ struct ReceiveLightningView: View {
         isAmountless = true
         isPaid = false
         isExpired = false
-        copiedRequest = false
         onchainObservation = nil
         quoteCreatedAt = nil
         monitoredQuoteId = nil
@@ -1196,7 +1193,6 @@ struct ReceiveLightningView: View {
         requestFailure = nil
         isPaid = false
         isExpired = false
-        copiedRequest = false
         onchainObservation = nil
         quoteCreatedAt = nil
         monitoredQuoteId = nil
@@ -1243,10 +1239,10 @@ struct ReceiveLightningView: View {
     private func copyRequest(_ request: String) {
         UIPasteboard.general.string = request
         HapticFeedback.notification(.success)
-        copiedRequest = true
-        DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
-            copiedRequest = false
-        }
+        let copiedItem = mintQuote?.paymentMethod == .onchain
+            ? "Bitcoin address"
+            : "payment request"
+        ConfirmationToast.show("Copied \(copiedItem)")
     }
 
     private func startExpiryCountdown(quote: MintQuoteInfo) {

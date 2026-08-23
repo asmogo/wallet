@@ -107,6 +107,7 @@ import com.cashu.me.ui.components.CashuTextField
 import com.cashu.me.ui.components.GhostButton
 import com.cashu.me.ui.components.IconSwap
 import com.cashu.me.ui.components.InlineNotice
+import com.cashu.me.ui.components.LocalConfirmationToastController
 import com.cashu.me.ui.components.MintAvatar
 import com.cashu.me.ui.components.NoticeSeverity
 import com.cashu.me.ui.components.PrimaryButton
@@ -1181,12 +1182,11 @@ internal fun ShowMnemonicStageContent(
     modifier: Modifier = Modifier,
 ) {
     val clipboard = LocalClipboardManager.current
+    val confirmationToastController = LocalConfirmationToastController.current
     val haptics = LocalHapticFeedback.current
-    val scope = rememberCoroutineScope()
     val words = remember(mnemonic) { mnemonic.trim().split(' ').filter { it.isNotBlank() } }
 
     var revealed by remember { mutableStateOf(false) }
-    var copied by remember { mutableStateOf(false) }
 
     // Tapping the card toggles the phrase, like iOS — the seed should be easy
     // to put away once it's been written down, not stuck on screen for the
@@ -1244,15 +1244,11 @@ internal fun ShowMnemonicStageContent(
                     .padding(horizontal = HeaderPadding),
             )
             GhostButton(
-                text = if (copied) "Copied" else "Copy",
-                leadingIcon = if (copied) Icons.Filled.Check else Icons.Outlined.ContentCopy,
+                text = "Copy",
+                leadingIcon = Icons.Outlined.ContentCopy,
                 onClick = {
                     clipboard.setText(AnnotatedString(words.joinToString(" ")))
-                    copied = true
-                    scope.launch {
-                        delay(3_000)
-                        copied = false
-                    }
+                    confirmationToastController?.show("Copied recovery phrase")
                 },
                 // The card edge already separates the link from the words, so
                 // the total gap is 16 (snug + snug), not the bare grid's 20.
