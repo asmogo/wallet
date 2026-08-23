@@ -87,14 +87,13 @@ import com.cashu.me.R
 import com.cashu.me.ui.components.AmountEntryHero
 import com.cashu.me.ui.components.AmountText
 import com.cashu.me.ui.components.CashuTextField
-import com.cashu.me.ui.components.CircularMethodButton
 import com.cashu.me.ui.components.EmptyState
 import com.cashu.me.ui.components.EmptyStateSize
 import com.cashu.me.ui.components.FlowSheetTitle
 import com.cashu.me.ui.components.GhostButton
 import com.cashu.me.ui.components.InlineNotice
 import com.cashu.me.ui.components.InspectorRow
-import com.cashu.me.ui.components.MethodRowSpacing
+import com.cashu.me.ui.components.MethodActionRow
 import com.cashu.me.ui.components.MintPickerSheet
 import com.cashu.me.ui.components.MintSelectorRow
 import com.cashu.me.ui.components.NoticeSeverity
@@ -833,7 +832,8 @@ private fun InputFace(
             .padding(horizontal = CashuTheme.spacing.comfortable)
             .padding(bottom = 52.dp)
             .navigationBarsPadding()
-            .imePadding(),
+            .imePadding()
+            .verticalScroll(rememberScrollState()),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         CashuTextField(
@@ -875,29 +875,31 @@ private fun InputFace(
             Spacer(Modifier.height(CashuTheme.spacing.default))
             InlineNotice(text = inputHint, severity = NoticeSeverity.Caution)
         }
-        Spacer(Modifier.height(CashuTheme.spacing.page + CashuTheme.spacing.micro))
-        // Ways to send: Scan · Ecash · Tap (NFC-gated), round 72dp buttons.
-        Row(
-            horizontalArrangement = Arrangement.spacedBy(MethodRowSpacing),
-            verticalAlignment = Alignment.Top,
-        ) {
-            CircularMethodButton(
+        Spacer(Modifier.height(CashuTheme.spacing.section))
+        Column(verticalArrangement = Arrangement.spacedBy(CashuTheme.spacing.default)) {
+            MethodActionRow(
                 icon = Icons.Outlined.QrCodeScanner,
-                label = "Scan",
+                title = "Scan",
+                subtitle = "Scan an invoice, address, or request",
+                accessibilityLabel = "Scan QR code",
                 onClick = onScan,
             )
-            CircularMethodButton(
+            MethodActionRow(
                 icon = Icons.Outlined.Payments,
-                label = "Ecash",
+                title = "Ecash",
+                subtitle = "Create ecash to share",
+                accessibilityLabel = "Create ecash",
                 onClick = onSendEcash,
             )
-            if (hasNfc) {
-                CircularMethodButton(
-                    icon = Icons.Outlined.Nfc,
-                    label = "Tap",
-                    onClick = onContactless,
-                )
-            }
+            MethodActionRow(
+                icon = Icons.Outlined.Nfc,
+                title = "Tap",
+                subtitle = "Pay contactlessly with NFC",
+                accessibilityLabel = "Contactless, tap to pay nearby",
+                onClick = onContactless,
+                enabled = hasNfc,
+                status = if (hasNfc) null else "Unavailable",
+            )
         }
     }
 }

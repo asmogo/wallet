@@ -76,7 +76,7 @@ class FunctionalWalletJourneyTest {
         robot.awaitTag(UiTestTags.WalletScreen)
             .tapTag(UiTestTags.WalletSend)
             .awaitTag(UiTestTags.SendSheet)
-            .tapDescription("Ecash")
+            .tapDescription("Create ecash")
             .awaitTag(UiTestTags.SendEcashScreen)
             .tapDescription("2")
             .tapDescription("5")
@@ -169,7 +169,7 @@ class FunctionalWalletJourneyTest {
 
         robot.awaitTag(UiTestTags.WalletScreen)
             .tapTag(UiTestTags.WalletReceive)
-            .tapDescription("Bitcoin")
+            .tapDescription("Receive over Lightning or on-chain")
             .awaitTag(UiTestTags.ReceiveLightningScreen)
             .tapDescription("2")
             .tapTextWithinTag(UiTestTags.ReceiveLightningScreen, "Create invoice")
@@ -249,7 +249,7 @@ class FunctionalWalletJourneyTest {
 
         robot.awaitTag(UiTestTags.WalletScreen)
             .tapTag(UiTestTags.WalletSend)
-            .tapDescription("Ecash")
+            .tapDescription("Create ecash")
             .awaitTag(UiTestTags.SendEcashScreen)
             .tapDescription("9")
             .tapDescription("9")

@@ -1382,51 +1382,51 @@ struct UnifiedSendView: View {
                     .padding(.top, 10)
             }
 
-            // A centered row of round Liquid Glass icon buttons — the primary
-            // "ways to send" (Scan · Ecash · Tap), one-word label under each.
-            sendMethodRow
+            sendMethodList
                 .padding(.horizontal)
-                .padding(.top, 32)
+                .padding(.top, 24)
         }
         .padding(.bottom, 24)
         .contentFitMeasured { compactContentHeight = $0 }
         .scrollDismissesKeyboard(.interactively)
     }
 
-    // MARK: Send-method buttons
+    // MARK: Send-method actions
 
-    /// The primary "ways to send" as a centered row of round filled icon
-    /// buttons (Apple's sheet-action-circle pattern; same component as Receive).
-    private var sendMethodRow: some View {
-        HStack(spacing: 40) {
-            sendMethodButton(icon: "qrcode.viewfinder", label: "Scan",
-                             a11y: "Scan QR code", action: openScanner)
+    private var sendMethodList: some View {
+        let tapAvailable = NFCNDEFReaderSession.readingAvailable
 
-            sendMethodButton(icon: "banknote", label: "Ecash",
-                             a11y: "Create ecash") {
+        return VStack(spacing: 12) {
+            MethodActionRow(
+                icon: "qrcode.viewfinder",
+                title: "Scan",
+                subtitle: "Scan an invoice, address, or request",
+                accessibilityLabel: "Scan QR code",
+                action: openScanner
+            )
+
+            MethodActionRow(
+                icon: "banknote",
+                title: "Ecash",
+                subtitle: "Create ecash to share",
+                accessibilityLabel: "Create ecash"
+            ) {
                 HapticFeedback.selection()
                 onSendEcash()
             }
 
-            if NFCNDEFReaderSession.readingAvailable {
-                sendMethodButton(icon: "wave.3.right", label: "Tap",
-                                 a11y: "Contactless, tap to pay nearby") {
-                    HapticFeedback.selection()
-                    onContactless()
-                }
+            MethodActionRow(
+                icon: "wave.3.right",
+                title: "Tap",
+                subtitle: "Pay contactlessly with NFC",
+                accessibilityLabel: "Contactless, tap to pay nearby",
+                enabled: tapAvailable,
+                status: tapAvailable ? nil : "Unavailable"
+            ) {
+                HapticFeedback.selection()
+                onContactless()
             }
         }
-        .frame(maxWidth: .infinity)   // center the group on the leading-aligned canvas
-    }
-
-    /// One round filled icon button with a one-word caption on the canvas below it.
-    /// Delegates to the shared `CircularGlassIconButton` so the Send and Receive
-    /// sheets stay pixel-identical.
-    private func sendMethodButton(
-        icon: String, label: String, a11y: String,
-        action: @escaping () -> Void
-    ) -> some View {
-        CircularGlassIconButton(icon: icon, label: label, a11y: a11y, action: action)
     }
 
     private var destinationField: some View {

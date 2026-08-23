@@ -92,6 +92,8 @@
 		CC00000000000007 /* AdvancedSettingsSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC00000000000017 /* AdvancedSettingsSection.swift */; };
 		CC00000000000008 /* LightningAddressSettingsSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC00000000000018 /* LightningAddressSettingsSection.swift */; };
 		CC00000000000020 /* PressableButtonStyle.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC00000000000021 /* PressableButtonStyle.swift */; };
+		MA00000000000001 /* MethodActionRow.swift in Sources */ = {isa = PBXBuildFile; fileRef = MA00000000000011 /* MethodActionRow.swift */; };
+		MA00000000000002 /* MethodActionRowButtonStyle.swift in Sources */ = {isa = PBXBuildFile; fileRef = MA00000000000012 /* MethodActionRowButtonStyle.swift */; };
 		CC000000000000A1 /* NWCManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC000000000000A2 /* NWCManager.swift */; };
 		CC000000000000B1 /* NWCSettingsSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC000000000000B2 /* NWCSettingsSection.swift */; };
 		D200000000000101 /* WalletManager+Lifecycle.swift in Sources */ = {isa = PBXBuildFile; fileRef = D100000000000101 /* WalletManager+Lifecycle.swift */; };
@@ -267,6 +269,8 @@
 		CC00000000000017 /* AdvancedSettingsSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AdvancedSettingsSection.swift; sourceTree = "<group>"; };
 		CC00000000000018 /* LightningAddressSettingsSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LightningAddressSettingsSection.swift; sourceTree = "<group>"; };
 		CC00000000000021 /* PressableButtonStyle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PressableButtonStyle.swift; sourceTree = "<group>"; };
+		MA00000000000011 /* MethodActionRow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MethodActionRow.swift; sourceTree = "<group>"; };
+		MA00000000000012 /* MethodActionRowButtonStyle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MethodActionRowButtonStyle.swift; sourceTree = "<group>"; };
 		CC000000000000A2 /* NWCManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NWCManager.swift; sourceTree = "<group>"; };
 		CC000000000000B2 /* NWCSettingsSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NWCSettingsSection.swift; sourceTree = "<group>"; };
 		D100000000000101 /* WalletManager+Lifecycle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "WalletManager+Lifecycle.swift"; sourceTree = "<group>"; };
@@ -625,6 +629,8 @@
 				3DC08FE85DFC643906176894 /* LiquidGlassModifiers.swift */,
 				21000000000000CF /* MintMethodIcons.swift */,
 				CC00000000000021 /* PressableButtonStyle.swift */,
+				MA00000000000011 /* MethodActionRow.swift */,
+				MA00000000000012 /* MethodActionRowButtonStyle.swift */,
 				AB00000000000052 /* TransactionAmountColumn.swift */,
 				AB00000000000053 /* CashuRequestAmountColumn.swift */,
 			);
@@ -1078,6 +1084,8 @@
 				CC00000000000006 /* PrivacySettingsSection.swift in Sources */,
 				CC00000000000007 /* AdvancedSettingsSection.swift in Sources */,
 				CC00000000000020 /* PressableButtonStyle.swift in Sources */,
+				MA00000000000001 /* MethodActionRow.swift in Sources */,
+				MA00000000000002 /* MethodActionRowButtonStyle.swift in Sources */,
 				AB00000000000050 /* TransactionAmountColumn.swift in Sources */,
 				AB00000000000051 /* CashuRequestAmountColumn.swift in Sources */,
 				CC00000000000008 /* LightningAddressSettingsSection.swift in Sources */,

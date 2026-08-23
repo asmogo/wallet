@@ -10,7 +10,6 @@ import androidx.compose.animation.shrinkVertically
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -18,7 +17,9 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Cancel
 import androidx.compose.material.icons.outlined.CurrencyBitcoin
@@ -49,11 +50,10 @@ import com.cashu.me.Core.WalletManager
 import com.cashu.me.Core.Wallet.userFacingWalletMessage
 import com.cashu.me.Core.createNostrCashuRequest
 import com.cashu.me.ui.components.CashuTextField
-import com.cashu.me.ui.components.CircularMethodButton
 import com.cashu.me.ui.components.FlowSheetTitle
 import com.cashu.me.ui.components.GhostButton
 import com.cashu.me.ui.components.InlineNotice
-import com.cashu.me.ui.components.MethodRowSpacing
+import com.cashu.me.ui.components.MethodActionRow
 import com.cashu.me.ui.components.NoticeSeverity
 import com.cashu.me.ui.components.PaymentStatusPhase
 import com.cashu.me.ui.components.PaymentStatusScreen
@@ -87,7 +87,7 @@ internal fun shouldAutoPasteClipboardToken(spent: Boolean?): Boolean = spent != 
 /**
  * The Receive surface — the mirror of [com.cashu.me.ui.send.UnifiedSendScreen]'s
  * input face so Send and Receive read as one system: a paste field ("Paste a
- * Cashu token") over a Scan · Ecash · Bitcoin ways-to-receive row.
+ * Cashu token") over full-width Scan, Ecash, and Bitcoin destination rows.
  *
  * A pasted / scanned bearer *token* opens the full-screen claim page (Send
  * parity); anything else payable (invoice, address, Cashu Request) is really a
@@ -254,7 +254,8 @@ fun ReceiveEcashScreen(
                 .padding(horizontal = CashuTheme.spacing.comfortable)
                 .padding(bottom = 52.dp)
                 .navigationBarsPadding()
-                .imePadding(),
+                .imePadding()
+                .verticalScroll(rememberScrollState()),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             CashuTextField(
@@ -332,34 +333,30 @@ fun ReceiveEcashScreen(
                     }
                 }
             }
-            Spacer(Modifier.height(CashuTheme.spacing.page + CashuTheme.spacing.micro))
-            // Ways to receive: Scan · Ecash · Bitcoin, round 72dp buttons.
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(MethodRowSpacing),
-                verticalAlignment = Alignment.Top,
-            ) {
-                CircularMethodButton(
+            Spacer(Modifier.height(CashuTheme.spacing.section))
+            Column(verticalArrangement = Arrangement.spacedBy(CashuTheme.spacing.default)) {
+                MethodActionRow(
                     icon = Icons.Outlined.QrCodeScanner,
-                    label = "Scan",
+                    title = "Scan",
+                    subtitle = "Scan an ecash token",
+                    accessibilityLabel = "Scan QR code",
                     onClick = onScan,
                 )
-                CircularMethodButton(
+                MethodActionRow(
                     icon = Icons.Outlined.Payments,
-                    label = "Ecash",
+                    title = "Ecash",
+                    subtitle = "Create an ecash request",
+                    accessibilityLabel = "Create a Cashu request",
                     onClick = ::createNewRequest,
                 )
-                CircularMethodButton(
+                MethodActionRow(
                     icon = Icons.Outlined.CurrencyBitcoin,
-                    label = "Bitcoin",
+                    title = "Bitcoin",
+                    subtitle = "Lightning or on-chain",
+                    accessibilityLabel = "Receive over Lightning or on-chain",
                     onClick = onReceiveBitcoin,
                     enabled = walletState.activeMint != null,
-                )
-            }
-            if (walletState.activeMint == null) {
-                Spacer(Modifier.height(CashuTheme.spacing.comfortable))
-                InlineNotice(
-                    text = "Add a mint to receive bitcoin. Ecash requests and token scans still work without one.",
-                    severity = NoticeSeverity.Info,
+                    status = if (walletState.activeMint == null) "Mint needed" else null,
                 )
             }
         }
