@@ -4,15 +4,17 @@ import UIKit
 // MARK: - Liquid Glass Adaptive Modifiers
 // iOS 26+ Liquid Glass with graceful fallbacks for earlier versions.
 
+extension EnvironmentValues {
+    /// Set by ``View/flatBottomSheetSurface()`` so shared controls can replace
+    /// Liquid Glass with the app's quiet, opaque sheet vocabulary without
+    /// changing the glass used by the wallet canvas and onboarding.
+    @Entry var usesFlatBottomSheetStyle = false
+}
+
 extension View {
     /// Applies Liquid Glass on iOS 26+; falls back to `.quaternary` background.
-    @ViewBuilder
     func liquidGlass<S: InsettableShape>(in shape: S, interactive: Bool = false) -> some View {
-        if #available(iOS 26, *) {
-            self.glassEffect(interactive ? .regular.interactive() : .regular, in: shape)
-        } else {
-            self.background(.quaternary, in: shape)
-        }
+        modifier(AdaptiveGlassSurface(shape: shape, interactive: interactive))
     }
 
     /// Liquid Glass treatment for text-entry containers. The semantic separator
@@ -29,24 +31,25 @@ extension View {
     }
 
     /// Applies Liquid Glass on iOS 26+; falls back to the given material.
-    @ViewBuilder
     func liquidGlassMaterial<S: InsettableShape>(in shape: S, material: Material = .ultraThinMaterial) -> some View {
-        if #available(iOS 26, *) {
-            self.glassEffect(.regular, in: shape)
-        } else {
-            self.background(material, in: shape)
-        }
+        modifier(AdaptiveGlassSurface(shape: shape, interactive: false, fallbackMaterial: material))
     }
 
-    /// Full-width Liquid Glass capsule. Used for all primary CTAs in the app.
-    /// Matches the home-screen action row (Receive / Scan / Send) — neutral
-    /// glass with a primary-color label, readable in both light and dark mode.
+    /// Full-width CTA capsule. Outside a flat bottom sheet it matches the
+    /// home-screen's neutral Liquid Glass action; inside one it becomes a
+    /// solid inverse-ink primary action.
     ///
     /// Pass `prominent: true` for the inverted-ink fill (black in light / white
     /// in dark) used by the enabled primary action — matches Android
     /// `PrimaryButton`.
     func glassButton(prominent: Bool = false) -> some View {
         self.buttonStyle(FullWidthCapsuleButtonStyle(prominent: prominent))
+    }
+
+    /// A quiet, filled action for the secondary slot beside a sheet's single
+    /// primary CTA (for example, Add Mint's Paste action).
+    func flatSheetSecondaryButton() -> some View {
+        self.buttonStyle(FlatSheetSecondaryButtonStyle())
     }
 
     /// Canonical borderless text-link button for tertiary actions
@@ -73,6 +76,15 @@ extension View {
     /// behind it in dark mode, leaving only a rounded corner to separate them.
     func canvasSheetBackground(whenFillingScreen fillsScreen: Bool) -> some View {
         modifier(ConditionalCanvasSheetBackground(fillsScreen: fillsScreen))
+    }
+
+    /// Gives an app-designed bottom sheet the same opaque, adaptive surface as
+    /// the mint selector. The environment flag also converts shared glass
+    /// controls contained by this presentation into quiet semantic fills.
+    func flatBottomSheetSurface() -> some View {
+        self
+            .environment(\.usesFlatBottomSheetStyle, true)
+            .presentationBackground(Color(uiColor: .systemBackground))
     }
 
     /// One-shot, opacity-only fade for a full screen's content on entry. Plays
@@ -174,6 +186,30 @@ extension View {
         }
     }
 
+}
+
+/// Shared implementation for the legacy glass modifiers. Bottom sheets opt
+/// into an opaque surface vocabulary through the environment; all other views
+/// retain their existing iOS 26 Liquid Glass behavior and earlier-OS fallback.
+private struct AdaptiveGlassSurface<S: InsettableShape>: ViewModifier {
+    @Environment(\.usesFlatBottomSheetStyle) private var usesFlatBottomSheetStyle
+
+    let shape: S
+    let interactive: Bool
+    var fallbackMaterial: Material?
+
+    @ViewBuilder
+    func body(content: Content) -> some View {
+        if usesFlatBottomSheetStyle {
+            content.background(Color.primary.opacity(0.11), in: shape)
+        } else if #available(iOS 26, *) {
+            content.glassEffect(interactive ? .regular.interactive() : .regular, in: shape)
+        } else if let fallbackMaterial {
+            content.background(fallbackMaterial, in: shape)
+        } else {
+            content.background(.quaternary, in: shape)
+        }
+    }
 }
 
 // MARK: - Scroll Edge Fade
@@ -719,9 +755,9 @@ struct SettingsSectionFooter<Content: View>: View {
 // MARK: - Full Width Capsule Button Style
 
 /// Full-width capsule rendered as subtly-frosted Liquid Glass on iOS 26+,
-/// with a `.quaternary` fill fallback on iOS 18–25. The 15% primary-color
-/// tint keeps the surface visible even when sitting over an empty dark
-/// canvas (where untinted `.regular` glass would nearly disappear).
+/// with a `.quaternary` fill fallback on iOS 18–25. In a flat bottom sheet,
+/// the same control becomes opaque inverse ink so its commit action remains
+/// unmistakable against the quiet sheet surface.
 ///
 /// `prominent` swaps to inverted ink — pure black fill / white label in light
 /// mode, pure white fill / black label in dark — matching Android
@@ -731,6 +767,7 @@ struct FullWidthCapsuleButtonStyle: ButtonStyle {
     var prominent: Bool = false
     @Environment(\.isEnabled) private var isEnabled
     @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.usesFlatBottomSheetStyle) private var usesFlatBottomSheetStyle
 
     func makeBody(configuration: Configuration) -> some View {
         let ink = colorScheme == .dark ? Color.white : Color.black
@@ -740,11 +777,11 @@ struct FullWidthCapsuleButtonStyle: ButtonStyle {
             .font(.body.weight(.semibold))
             .frame(maxWidth: .infinity)
             .padding(.vertical, 18)
-            .foregroundStyle(prominent ? onInk : Color.primary)
+            .foregroundStyle(prominent || usesFlatBottomSheetStyle ? onInk : Color.primary)
             .contentShape(Capsule())
 
         return Group {
-            if prominent {
+            if prominent || usesFlatBottomSheetStyle {
                 label
                     .background(ink, in: Capsule())
                     .scaleEffect(isEnabled && configuration.isPressed ? 0.97 : 1)
@@ -769,6 +806,29 @@ struct FullWidthCapsuleButtonStyle: ButtonStyle {
             .snappy(duration: configuration.isPressed ? 0.09 : 0.18),
             value: configuration.isPressed
         )
+    }
+}
+
+/// Equal-weight secondary companion to the solid primary sheet CTA. This is
+/// intentionally opaque and quiet: sheets use it for a reversible helper
+/// action, never to compete with the committing action alongside it.
+struct FlatSheetSecondaryButtonStyle: ButtonStyle {
+    @Environment(\.isEnabled) private var isEnabled
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .font(.body.weight(.semibold))
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 18)
+            .foregroundStyle(.primary)
+            .background(Color.primary.opacity(0.11), in: Capsule())
+            .contentShape(Capsule())
+            .scaleEffect(isEnabled && configuration.isPressed ? 0.97 : 1)
+            .opacity(isEnabled ? (configuration.isPressed ? 0.85 : 1) : 0.4)
+            .animation(
+                .snappy(duration: configuration.isPressed ? 0.09 : 0.18),
+                value: configuration.isPressed
+            )
     }
 }
 

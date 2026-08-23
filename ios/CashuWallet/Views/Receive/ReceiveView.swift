@@ -79,6 +79,7 @@ struct UnifiedReceiveView: View {
         }
         .contentFitDetent(compactContentHeight)
         .presentationDragIndicator(.visible)
+        .flatBottomSheetSurface()
     }
 
     /// The clipboard token to auto-paste when the receive input appears, if

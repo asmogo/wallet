@@ -1517,6 +1517,7 @@ struct CashuTopUpInvoiceSheet: View {
             .onAppear { startMonitoring() }
             .onDisappear { monitorTask?.cancel() }
         }
+        .flatBottomSheetSurface()
     }
 
     private var header: some View {

@@ -125,11 +125,11 @@ struct P2PKSettingsSection: View {
         }
         .sheet(item: $activeQR) { payload in
             QRCodeDetailSheet(title: payload.title, content: payload.content)
-                .canvasSheetBackground()
+                .flatBottomSheetSurface()
         }
         .sheet(item: $privateKeyReveal) { reveal in
             PrivateKeyRevealSheet(title: reveal.title, nsec: reveal.nsec)
-                .canvasSheetBackground()
+                .flatBottomSheetSurface()
         }
     }
 
@@ -528,11 +528,11 @@ private struct DeviceKeyDetailView: View {
         .onChange(of: key == nil) { _, removed in if removed { dismiss() } }
         .sheet(item: $activeQR) { payload in
             QRCodeDetailSheet(title: payload.title, content: payload.content)
-                .canvasSheetBackground()
+                .flatBottomSheetSurface()
         }
         .sheet(item: $privateKeyReveal) { reveal in
             PrivateKeyRevealSheet(title: reveal.title, nsec: reveal.nsec)
-                .canvasSheetBackground()
+                .flatBottomSheetSurface()
         }
         .alert("Remove this key?", isPresented: $showRemoveConfirm) {
             Button("Remove Key", role: .destructive) {
@@ -611,6 +611,7 @@ private struct LockedEcashExplainerSheet: View {
         }
         .presentationDetents([.medium, .large])
         .presentationDragIndicator(.visible)
+        .flatBottomSheetSurface()
     }
 
     private func explainerPoint(_ systemImage: String, _ text: String) -> some View {
@@ -709,6 +710,7 @@ struct PrivateKeyRevealSheet: View {
                 }
             }
         }
+        .flatBottomSheetSurface()
     }
 
     private func toggleReveal() {

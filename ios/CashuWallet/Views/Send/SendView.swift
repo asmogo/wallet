@@ -1321,7 +1321,7 @@ struct UnifiedSendView: View {
                     onClose()
                 })
                 .environmentObject(walletManager)
-                .canvasSheetBackground()
+                .flatBottomSheetSurface()
             }
             .onChange(of: destination) { handleDestinationChange() }
             .onChange(of: entryUnit) { oldUnit, newUnit in
@@ -1354,7 +1354,7 @@ struct UnifiedSendView: View {
         .presentationDragIndicator(.visible)
         // A stray swipe must not tear down the flow while the melt is executing.
         .interactiveDismissDisabled(step == .sending)
-        .canvasSheetBackground(whenFillingScreen: !prefersCompactSheet)
+        .flatBottomSheetSurface()
     }
 
     // MARK: Input step
@@ -3781,6 +3781,7 @@ struct UnitSelectorSheet: View {
         }
         .presentationDetents([.height(detentHeight)])
         .presentationDragIndicator(.visible)
+        .flatBottomSheetSurface()
     }
 
     private func select(_ unit: String) {
@@ -3845,6 +3846,7 @@ struct MintSelectorSheet: View {
         // otherwise empty lower half. A flat adaptive surface keeps attention
         // on the mint options while retaining native sheet behavior.
         .presentationBackground(Color(uiColor: .systemBackground))
+        .flatBottomSheetSurface()
     }
 
     private var emptyStateView: some View {
@@ -4077,6 +4079,7 @@ struct AddMintToPaySheet: View {
         }
         .presentationDetents([.height(detentHeight)])
         .presentationDragIndicator(.visible)
+        .flatBottomSheetSurface()
         .onAppear(perform: loadPreviews)
     }
 
@@ -4205,6 +4208,7 @@ struct MethodPickerSheet: View {
         }
         .presentationDetents([.height(detentHeight)])
         .presentationDragIndicator(.visible)
+        .flatBottomSheetSurface()
     }
 
     private func select(_ option: ReceiveMethodOption) {

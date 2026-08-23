@@ -246,6 +246,7 @@ struct ReceiveLightningView: View {
             }
         }
         .accessibilityIdentifier("receive-lightning-screen")
+        .flatBottomSheetSurface()
     }
 
     // MARK: - Computed Properties

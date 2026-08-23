@@ -1283,6 +1283,7 @@ struct QRCodeDetailSheet: View {
                 }
             }
         }
+        .flatBottomSheetSurface()
     }
 
     private func copyToClipboard() {
@@ -1367,6 +1368,7 @@ struct ImportP2PKSheet: View {
                 }
             }
         }
+        .flatBottomSheetSurface()
     }
 
     private func paste() {
@@ -1464,6 +1466,7 @@ struct BackupView: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbarBackground(.hidden, for: .navigationBar)
         }
+        .flatBottomSheetSurface()
     }
 
     /// Hiding is free; revealing always requires authentication, regardless of
@@ -1667,6 +1670,7 @@ struct MintPickerSheet: View {
                 }
             }
         }
+        .flatBottomSheetSurface()
     }
 }
 
@@ -1746,6 +1750,7 @@ struct ImportNsecSheet: View {
         } message: {
             Text(replacementWarning)
         }
+        .flatBottomSheetSurface()
     }
 
     private func pasteFromClipboard() {

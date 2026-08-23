@@ -148,7 +148,7 @@ struct HistoryView: View {
             .sheet(item: $selectedTransaction) { transaction in
                 TransactionDetailView(transaction: transaction)
                     .environmentObject(walletManager)
-                    .canvasSheetBackground()
+                    .flatBottomSheetSurface()
             }
             // Claim flow for an unclaimed incoming token. `item:` captures the
             // pending token at presentation, so the content stays stable while
@@ -167,7 +167,7 @@ struct HistoryView: View {
                     CashuRequestDetailView(request: request)
                         .environmentObject(walletManager)
                 }
-                .canvasSheetBackground()
+                .flatBottomSheetSurface()
             }
             .confirmationDialog(
                 "Remove this Cashu Request from history?",
