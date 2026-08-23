@@ -969,6 +969,7 @@ internal fun WelcomeStageContent(
 private fun EcashConceptSheet(onDismiss: () -> Unit) {
     ModalBottomSheet(
         onDismissRequest = onDismiss,
+        containerColor = CashuTheme.colors.compactSheetContainer,
         // Skip the partially-expanded detent. At that height a short viewport
         // (360x800dp) or a large font scale pushed "Got it" past the sheet edge,
         // where it was clipped and the gesture pill drew across it.
@@ -1039,6 +1040,7 @@ private fun EcashConceptSheet(onDismiss: () -> Unit) {
 private fun MintBackupSheet(onDismiss: () -> Unit) {
     ModalBottomSheet(
         onDismissRequest = onDismiss,
+        containerColor = CashuTheme.colors.compactSheetContainer,
         // Same reason as EcashConceptSheet: at the partial detent a short
         // viewport or a large font scale clipped "Got it".
         sheetState = rememberBottomSheetState(

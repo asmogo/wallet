@@ -183,13 +183,13 @@ struct OnboardingView: View {
         }
         .sheet(isPresented: $showConceptSheet) {
             conceptSheet
-                .flatBottomSheetSurface()
+                .compactBottomSheetSurface()
         }
         // A second sibling sheet rather than an enum-driven one: the two belong
         // to different steps and are never both true.
         .sheet(isPresented: $showMintBackupSheet) {
             mintBackupSheet
-                .flatBottomSheetSurface()
+                .compactBottomSheetSurface()
         }
         .onAppear {
             startAsciiFieldEntrance()

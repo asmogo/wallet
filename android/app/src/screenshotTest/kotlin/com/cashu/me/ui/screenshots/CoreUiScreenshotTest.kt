@@ -9,6 +9,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.CurrencyBitcoin
 import androidx.compose.material.icons.outlined.Lock
+import androidx.compose.material.icons.outlined.Nfc
+import androidx.compose.material.icons.outlined.QrCodeScanner
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -31,6 +33,9 @@ import com.cashu.me.Views.Send.ContactlessAvailability
 import com.cashu.me.Views.Send.ContactlessPayContent
 import com.cashu.me.ui.components.AmountEntryHero
 import com.cashu.me.ui.components.BalanceDisplay
+import com.cashu.me.ui.components.CashuTextField
+import com.cashu.me.ui.components.CompactSheetContent
+import com.cashu.me.ui.components.MethodActionRow
 import com.cashu.me.ui.components.MintAvatar
 import com.cashu.me.ui.components.MintSelectorRow
 import com.cashu.me.ui.components.NavRow
@@ -277,6 +282,67 @@ fun settingsControlsScreenshot() {
                 leadingIcon = Icons.Outlined.Lock,
                 onClick = {},
             )
+        }
+    }
+}
+
+@PreviewTest
+@Preview(name = "compact-method-sheet", widthDp = 390, heightDp = 460, showBackground = true)
+@Composable
+fun compactMethodSheetLightScreenshot() {
+    PreviewFrame {
+        CompactMethodSheetPreview()
+    }
+}
+
+@PreviewTest
+@Preview(
+    name = "compact-method-sheet-dark",
+    widthDp = 390,
+    heightDp = 460,
+    uiMode = Configuration.UI_MODE_NIGHT_YES,
+)
+@Composable
+fun compactMethodSheetDarkScreenshot() {
+    PreviewFrame(darkTheme = true) {
+        CompactMethodSheetPreview()
+    }
+}
+
+@Composable
+private fun CompactMethodSheetPreview() {
+    CompactSheetContent {
+        Surface(
+            color = CashuTheme.colors.compactSheetContainer,
+            shape = MaterialTheme.shapes.extraLarge,
+        ) {
+            Column(
+                modifier = Modifier.padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                CashuTextField(
+                    value = "",
+                    onValueChange = {},
+                    placeholder = "Address, invoice, or Cashu Request",
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                MethodActionRow(
+                    icon = Icons.Outlined.QrCodeScanner,
+                    title = "Scan",
+                    subtitle = "Scan an invoice, address, or request",
+                    accessibilityLabel = "Scan QR code",
+                    onClick = {},
+                )
+                MethodActionRow(
+                    icon = Icons.Outlined.Nfc,
+                    title = "Tap",
+                    subtitle = "Pay contactlessly with NFC",
+                    accessibilityLabel = "Contactless, tap to pay nearby",
+                    enabled = false,
+                    status = "Unavailable",
+                    onClick = {},
+                )
+            }
         }
     }
 }

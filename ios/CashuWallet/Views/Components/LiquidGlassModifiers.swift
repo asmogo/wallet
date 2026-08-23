@@ -5,10 +5,34 @@ import UIKit
 // iOS 26+ Liquid Glass with graceful fallbacks for earlier versions.
 
 extension EnvironmentValues {
-    /// Set by ``View/flatBottomSheetSurface()`` so shared controls can replace
-    /// Liquid Glass with the app's quiet, opaque sheet vocabulary without
-    /// changing the glass used by the wallet canvas and onboarding.
-    @Entry var usesFlatBottomSheetStyle = false
+    /// Identifies the presentation surface shared controls are rendered on.
+    /// Compact sheets use an explicit tonal hierarchy; large flat sheets retain
+    /// their existing semantic fills, and the wallet canvas keeps Liquid Glass.
+    @Entry var bottomSheetSurfaceStyle: BottomSheetSurfaceStyle = .glass
+}
+
+enum BottomSheetSurfaceStyle {
+    case glass
+    case flat
+    case compact
+}
+
+enum CompactSheetPalette {
+    static func sheet(for colorScheme: ColorScheme) -> Color {
+        colorScheme == .dark
+            ? Color(red: 20 / 255, green: 20 / 255, blue: 20 / 255)
+            : Color(red: 247 / 255, green: 247 / 255, blue: 247 / 255)
+    }
+
+    static func control(for colorScheme: ColorScheme) -> Color {
+        colorScheme == .dark
+            ? Color(red: 28 / 255, green: 28 / 255, blue: 28 / 255)
+            : Color(red: 237 / 255, green: 237 / 255, blue: 237 / 255)
+    }
+
+    static func iconInset(for colorScheme: ColorScheme) -> Color {
+        colorScheme == .dark ? .black : .white
+    }
 }
 
 extension View {
@@ -83,8 +107,19 @@ extension View {
     /// controls contained by this presentation into quiet semantic fills.
     func flatBottomSheetSurface() -> some View {
         self
-            .environment(\.usesFlatBottomSheetStyle, true)
+            .environment(\.bottomSheetSurfaceStyle, .flat)
             .presentationBackground(Color(uiColor: .systemBackground))
+    }
+
+    /// Opaque, elevated surface for content-fit and fixed-height sheets. The
+    /// perimeter catches a restrained amount of light without replacing the
+    /// native sheet's shape, detents, dimming, or gesture behavior.
+    func compactBottomSheetSurface() -> some View {
+        self
+            .environment(\.bottomSheetSurfaceStyle, .compact)
+            .presentationBackground {
+                CompactSheetBackground()
+            }
     }
 
     /// One-shot, opacity-only fade for a full screen's content on entry. Plays
@@ -192,7 +227,8 @@ extension View {
 /// into an opaque surface vocabulary through the environment; all other views
 /// retain their existing iOS 26 Liquid Glass behavior and earlier-OS fallback.
 private struct AdaptiveGlassSurface<S: InsettableShape>: ViewModifier {
-    @Environment(\.usesFlatBottomSheetStyle) private var usesFlatBottomSheetStyle
+    @Environment(\.bottomSheetSurfaceStyle) private var bottomSheetSurfaceStyle
+    @Environment(\.colorScheme) private var colorScheme
 
     let shape: S
     let interactive: Bool
@@ -200,7 +236,9 @@ private struct AdaptiveGlassSurface<S: InsettableShape>: ViewModifier {
 
     @ViewBuilder
     func body(content: Content) -> some View {
-        if usesFlatBottomSheetStyle {
+        if bottomSheetSurfaceStyle == .compact {
+            content.background(CompactSheetPalette.control(for: colorScheme), in: shape)
+        } else if bottomSheetSurfaceStyle == .flat {
             content.background(Color.primary.opacity(0.11), in: shape)
         } else if #available(iOS 26, *) {
             content.glassEffect(interactive ? .regular.interactive() : .regular, in: shape)
@@ -209,6 +247,52 @@ private struct AdaptiveGlassSurface<S: InsettableShape>: ViewModifier {
         } else {
             content.background(.quaternary, in: shape)
         }
+    }
+}
+
+private struct CompactSheetBackground: View {
+    @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.colorSchemeContrast) private var colorSchemeContrast
+
+    private var rimMultiplier: Double {
+        colorSchemeContrast == .increased ? 1.35 : 1
+    }
+
+    private var rimColor: Color {
+        colorScheme == .dark ? .white : .black
+    }
+
+    private var rimOpacities: (top: Double, middle: Double, bottom: Double) {
+        colorScheme == .dark ? (0.24, 0.10, 0.04) : (0.16, 0.07, 0.03)
+    }
+
+    var body: some View {
+        CompactSheetPalette.sheet(for: colorScheme)
+            .overlay {
+                ContainerRelativeShape()
+                    .strokeBorder(
+                        LinearGradient(
+                            stops: [
+                                .init(
+                                    color: rimColor.opacity(min(rimOpacities.top * rimMultiplier, 1)),
+                                    location: 0
+                                ),
+                                .init(
+                                    color: rimColor.opacity(min(rimOpacities.middle * rimMultiplier, 1)),
+                                    location: 0.45
+                                ),
+                                .init(
+                                    color: rimColor.opacity(min(rimOpacities.bottom * rimMultiplier, 1)),
+                                    location: 1
+                                ),
+                            ],
+                            startPoint: .top,
+                            endPoint: .bottom
+                        ),
+                        lineWidth: colorSchemeContrast == .increased ? 1 : 0.5
+                    )
+                    .allowsHitTesting(false)
+            }
     }
 }
 
@@ -767,7 +851,7 @@ struct FullWidthCapsuleButtonStyle: ButtonStyle {
     var prominent: Bool = false
     @Environment(\.isEnabled) private var isEnabled
     @Environment(\.colorScheme) private var colorScheme
-    @Environment(\.usesFlatBottomSheetStyle) private var usesFlatBottomSheetStyle
+    @Environment(\.bottomSheetSurfaceStyle) private var bottomSheetSurfaceStyle
 
     func makeBody(configuration: Configuration) -> some View {
         let ink = colorScheme == .dark ? Color.white : Color.black
@@ -777,11 +861,11 @@ struct FullWidthCapsuleButtonStyle: ButtonStyle {
             .font(.body.weight(.semibold))
             .frame(maxWidth: .infinity)
             .padding(.vertical, 18)
-            .foregroundStyle(prominent || usesFlatBottomSheetStyle ? onInk : Color.primary)
+            .foregroundStyle(prominent || bottomSheetSurfaceStyle != .glass ? onInk : Color.primary)
             .contentShape(Capsule())
 
         return Group {
-            if prominent || usesFlatBottomSheetStyle {
+            if prominent || bottomSheetSurfaceStyle != .glass {
                 label
                     .background(ink, in: Capsule())
                     .scaleEffect(isEnabled && configuration.isPressed ? 0.97 : 1)

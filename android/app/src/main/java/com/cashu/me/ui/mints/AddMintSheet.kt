@@ -37,6 +37,7 @@ import com.cashu.me.Core.WalletManager
 import com.cashu.me.Core.mintUrlCandidates
 import com.cashu.me.Core.normalizeUserMintUrl
 import com.cashu.me.ui.components.CashuTextField
+import com.cashu.me.ui.components.CompactSheetContent
 import com.cashu.me.ui.components.FlowSheetTitle
 import com.cashu.me.ui.components.InlineNotice
 import com.cashu.me.ui.components.PrimaryButton
@@ -208,26 +209,29 @@ fun AddMintSheet(
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = sheetState,
+        containerColor = CashuTheme.colors.compactSheetContainer,
     ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .testTag(UiTestTags.AddMintSheet)
-                .padding(horizontal = CashuTheme.spacing.comfortable)
-                .navigationBarsPadding()
-                .padding(bottom = CashuTheme.spacing.comfortable),
-            verticalArrangement = Arrangement.spacedBy(CashuTheme.spacing.snug),
-        ) {
-            // Reached from the Mints tab, not through the "Add by URL" link, so
-            // this one keeps the plain name.
-            FlowSheetTitle(title = "Add mint")
+        CompactSheetContent {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag(UiTestTags.AddMintSheet)
+                    .padding(horizontal = CashuTheme.spacing.comfortable)
+                    .navigationBarsPadding()
+                    .padding(bottom = CashuTheme.spacing.comfortable),
+                verticalArrangement = Arrangement.spacedBy(CashuTheme.spacing.snug),
+            ) {
+                // Reached from the Mints tab, not through the "Add by URL" link, so
+                // this one keeps the plain name.
+                FlowSheetTitle(title = "Add mint")
 
-            AddMintFormBody(
-                walletManager = walletManager,
-                initialUrl = initialUrl,
-                allowCleartextLocalTestMints = allowCleartextLocalTestMints,
-                onAdded = onDismiss,
-            )
+                AddMintFormBody(
+                    walletManager = walletManager,
+                    initialUrl = initialUrl,
+                    allowCleartextLocalTestMints = allowCleartextLocalTestMints,
+                    onAdded = onDismiss,
+                )
+            }
         }
     }
 }

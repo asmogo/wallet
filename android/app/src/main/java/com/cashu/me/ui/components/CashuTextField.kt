@@ -45,6 +45,12 @@ fun CashuTextField(
     minLines: Int = 1,
     maxLines: Int = if (singleLine) 1 else Int.MAX_VALUE,
 ) {
+    val containerColor = if (LocalCompactSheetStyle.current) {
+        MaterialTheme.colorScheme.surfaceContainerHigh
+    } else {
+        MaterialTheme.colorScheme.surfaceContainerHighest
+    }
+
     TextField(
         value = value,
         onValueChange = onValueChange,
@@ -82,8 +88,8 @@ fun CashuTextField(
         maxLines = maxLines,
         shape = MaterialTheme.shapes.large,
         colors = TextFieldDefaults.colors(
-            focusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
-            unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
+            focusedContainerColor = containerColor,
+            unfocusedContainerColor = containerColor,
             disabledContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
             // With the indicator gone, error state reads through the Material
             // error container + red label/supporting text. Use the role rather

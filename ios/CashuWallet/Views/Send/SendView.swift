@@ -1354,7 +1354,7 @@ struct UnifiedSendView: View {
         .presentationDragIndicator(.visible)
         // A stray swipe must not tear down the flow while the melt is executing.
         .interactiveDismissDisabled(step == .sending)
-        .flatBottomSheetSurface()
+        .compactBottomSheetSurface()
     }
 
     // MARK: Input step
@@ -3781,7 +3781,7 @@ struct UnitSelectorSheet: View {
         }
         .presentationDetents([.height(detentHeight)])
         .presentationDragIndicator(.visible)
-        .flatBottomSheetSurface()
+        .compactBottomSheetSurface()
     }
 
     private func select(_ unit: String) {
@@ -3841,12 +3841,7 @@ struct MintSelectorSheet: View {
         }
         .presentationDetents([.height(Self.pickerHeight)])
         .presentationDragIndicator(.visible)
-        // The default iOS 26 sheet material refracts the dimmed keypad beneath
-        // this compact picker, creating distracting dark highlights in the
-        // otherwise empty lower half. A flat adaptive surface keeps attention
-        // on the mint options while retaining native sheet behavior.
-        .presentationBackground(Color(uiColor: .systemBackground))
-        .flatBottomSheetSurface()
+        .compactBottomSheetSurface()
     }
 
     private var emptyStateView: some View {
@@ -4079,7 +4074,7 @@ struct AddMintToPaySheet: View {
         }
         .presentationDetents([.height(detentHeight)])
         .presentationDragIndicator(.visible)
-        .flatBottomSheetSurface()
+        .compactBottomSheetSurface()
         .onAppear(perform: loadPreviews)
     }
 
@@ -4208,7 +4203,7 @@ struct MethodPickerSheet: View {
         }
         .presentationDetents([.height(detentHeight)])
         .presentationDragIndicator(.visible)
-        .flatBottomSheetSurface()
+        .compactBottomSheetSurface()
     }
 
     private func select(_ option: ReceiveMethodOption) {

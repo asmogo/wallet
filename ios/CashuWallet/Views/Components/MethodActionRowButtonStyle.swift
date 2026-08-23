@@ -10,7 +10,7 @@ struct MethodActionRowButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .scaleEffect(isEnabled && configuration.isPressed && !reduceMotion ? 0.98 : 1)
-            .opacity(isEnabled ? (configuration.isPressed ? 0.86 : 1) : 0.38)
+            .opacity(isEnabled && configuration.isPressed ? 0.86 : 1)
             .animation(
                 reduceMotion
                     ? nil

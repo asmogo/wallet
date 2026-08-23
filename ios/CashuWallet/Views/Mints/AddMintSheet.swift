@@ -204,7 +204,7 @@ struct AddMintSheet: View {
         // Hugs the form, like every other content-fit sheet in the app.
         .contentFitDetent(contentHeight, estimate: 260)
         .presentationDragIndicator(.visible)
-        .flatBottomSheetSurface()
+        .compactBottomSheetSurface()
     }
 }
 

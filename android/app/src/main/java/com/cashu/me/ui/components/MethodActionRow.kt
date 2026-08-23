@@ -87,7 +87,6 @@ fun MethodActionRow(
             .graphicsLayer {
                 scaleX = scale
                 scaleY = scale
-                alpha = if (enabled) 1f else DisabledContentAlpha
             }
             .semantics(mergeDescendants = true) {
                 contentDescription = accessibilityLabel
@@ -122,6 +121,9 @@ fun MethodActionRow(
                     imageVector = icon,
                     contentDescription = null,
                     modifier = Modifier.size(MethodIconSize),
+                    tint = MaterialTheme.colorScheme.onSurface.copy(
+                        alpha = if (enabled) 1f else DisabledContentAlpha,
+                    ),
                 )
             }
 
@@ -133,12 +135,16 @@ fun MethodActionRow(
                     text = title,
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.SemiBold,
-                    color = MaterialTheme.colorScheme.onSurface,
+                    color = MaterialTheme.colorScheme.onSurface.copy(
+                        alpha = if (enabled) 1f else DisabledContentAlpha,
+                    ),
                 )
                 Text(
                     text = subtitle,
                     style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(
+                        alpha = if (enabled) 1f else DisabledContentAlpha,
+                    ),
                 )
             }
 
@@ -147,12 +153,20 @@ fun MethodActionRow(
                     shape = RoundedCornerShape(percent = 50),
                     color = MaterialTheme.colorScheme.surfaceContainerHigh,
                     contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+                    border = BorderStroke(
+                        1.dp,
+                        MaterialTheme.colorScheme.outlineVariant.copy(
+                            alpha = if (enabled) 1f else DisabledContentAlpha,
+                        ),
+                    ),
                 ) {
                     Text(
                         text = status,
                         modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
                         style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(
+                            alpha = if (enabled) 1f else DisabledContentAlpha,
+                        ),
                         maxLines = 1,
                         overflow = TextOverflow.Clip,
                     )
@@ -161,7 +175,9 @@ fun MethodActionRow(
                 Icon(
                     imageVector = Icons.AutoMirrored.Outlined.KeyboardArrowRight,
                     contentDescription = null,
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(
+                        alpha = if (enabled) 1f else DisabledContentAlpha,
+                    ),
                     modifier = Modifier.size(MethodIconSize),
                 )
             }

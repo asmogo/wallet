@@ -15,6 +15,9 @@ struct MethodActionRow: View {
     var enabled = true
     var status: String?
 
+    @Environment(\.bottomSheetSurfaceStyle) private var bottomSheetSurfaceStyle
+    @Environment(\.colorScheme) private var colorScheme
+
     init(
         icon: String,
         title: String,
@@ -39,9 +42,10 @@ struct MethodActionRow: View {
                 Image(systemName: icon)
                     .font(.title3)
                     .foregroundStyle(.primary)
+                    .opacity(enabled ? 1 : 0.38)
                     .frame(width: 48, height: 48)
                     .background(
-                        Color.primary.opacity(0.08),
+                        iconInsetColor,
                         in: RoundedRectangle(cornerRadius: 16)
                     )
                     .accessibilityHidden(true)
@@ -56,6 +60,7 @@ struct MethodActionRow: View {
                 }
                 .multilineTextAlignment(.leading)
                 .fixedSize(horizontal: false, vertical: true)
+                .opacity(enabled ? 1 : 0.38)
 
                 Spacer(minLength: 8)
 
@@ -63,24 +68,28 @@ struct MethodActionRow: View {
                     Text(status)
                         .font(.caption)
                         .foregroundStyle(.secondary)
+                        .opacity(enabled ? 1 : 0.38)
                         .lineLimit(1)
                         .padding(.horizontal, 10)
                         .padding(.vertical, 6)
                         .background(Color.primary.opacity(0.04), in: Capsule())
                         .overlay {
-                            Capsule().strokeBorder(.quaternary, lineWidth: 1)
+                            Capsule()
+                                .strokeBorder(.quaternary, lineWidth: 1)
+                                .opacity(enabled ? 1 : 0.38)
                         }
                 } else {
                     Image(systemName: "chevron.right")
                         .font(.body.weight(.semibold))
                         .foregroundStyle(.tertiary)
+                        .opacity(enabled ? 1 : 0.38)
                         .accessibilityHidden(true)
                 }
             }
             .padding(12)
             .frame(maxWidth: .infinity, minHeight: 80, alignment: .leading)
             .background(
-                Color.primary.opacity(0.08),
+                rowColor,
                 in: RoundedRectangle(cornerRadius: 24)
             )
             .contentShape(RoundedRectangle(cornerRadius: 24))
@@ -90,5 +99,17 @@ struct MethodActionRow: View {
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(accessibilityLabel)
         .accessibilityValue(status ?? "")
+    }
+
+    private var rowColor: Color {
+        bottomSheetSurfaceStyle == .compact
+            ? CompactSheetPalette.control(for: colorScheme)
+            : Color.primary.opacity(0.08)
+    }
+
+    private var iconInsetColor: Color {
+        bottomSheetSurfaceStyle == .compact
+            ? CompactSheetPalette.iconInset(for: colorScheme)
+            : Color.primary.opacity(0.08)
     }
 }

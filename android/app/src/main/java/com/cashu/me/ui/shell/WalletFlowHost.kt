@@ -26,7 +26,9 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import kotlinx.coroutines.launch
+import com.cashu.me.ui.components.CompactSheetContent
 import com.cashu.me.ui.navigation.TopTab
+import com.cashu.me.ui.theme.CashuTheme
 
 /**
  * The money flows presented over the shell (iOS `WalletFlow` sheets).
@@ -143,28 +145,31 @@ fun WalletFlowSheetHost(
         ModalBottomSheet(
             onDismissRequest = onDismissed,
             sheetState = sheetState,
+            containerColor = CashuTheme.colors.compactSheetContainer,
         ) {
             // The sheet's *content* keeps the app's real motion scheme — its
             // buttons and morphs animate with these same specs.
             WithMotionScheme(baseMotion) {
-                Box(modifier = Modifier.fillMaxWidth()) {
-                    AnimatedContent(
-                        targetState = flow,
-                        transitionSpec = {
-                            fadeIn(spring(stiffness = Spring.StiffnessMedium))
-                                .togetherWith(fadeOut(spring(stiffness = Spring.StiffnessMedium)))
-                        },
-                        label = "wallet-flow",
-                    ) { current ->
-                        content(current, close)
+                CompactSheetContent {
+                    Box(modifier = Modifier.fillMaxWidth()) {
+                        AnimatedContent(
+                            targetState = flow,
+                            transitionSpec = {
+                                fadeIn(spring(stiffness = Spring.StiffnessMedium))
+                                    .togetherWith(fadeOut(spring(stiffness = Spring.StiffnessMedium)))
+                            },
+                            label = "wallet-flow",
+                        ) { current ->
+                            content(current, close)
+                        }
+                        // Sheet renders in its own Android Window — the root-mounted
+                        // host in CashuApp.kt can't reach here, so mount a second one
+                        // observing the same SnackbarHostState.
+                        SnackbarHost(
+                            hostState = snackbarHostState,
+                            modifier = Modifier.align(Alignment.BottomCenter),
+                        )
                     }
-                    // Sheet renders in its own Android Window — the root-mounted
-                    // host in CashuApp.kt can't reach here, so mount a second one
-                    // observing the same SnackbarHostState.
-                    SnackbarHost(
-                        hostState = snackbarHostState,
-                        modifier = Modifier.align(Alignment.BottomCenter),
-                    )
                 }
             }
         }
