@@ -52,7 +52,6 @@ import com.cashu.me.Core.WalletManager
 import com.cashu.me.Core.WalletState
 import com.cashu.me.ui.components.GhostButton
 import com.cashu.me.ui.components.InlineNotice
-import com.cashu.me.ui.components.ConfirmationToastHost
 import com.cashu.me.ui.components.LocalConfirmationToastController
 import com.cashu.me.ui.components.InspectorRow
 import com.cashu.me.ui.components.MintPickerSheet
@@ -281,13 +280,6 @@ fun LightningScreen(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 Spacer(Modifier.height(CashuTheme.spacing.snug))
-                }
-                confirmationToastController?.let { controller ->
-                    ConfirmationToastHost(
-                        controller = controller,
-                        respectStatusBar = false,
-                        modifier = Modifier.align(Alignment.TopCenter),
-                    )
                 }
             }
         }

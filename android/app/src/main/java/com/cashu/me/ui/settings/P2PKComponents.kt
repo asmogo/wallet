@@ -63,7 +63,6 @@ import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
 import com.cashu.me.Core.AppLockManager
 import com.cashu.me.Core.Bech32
-import com.cashu.me.ui.components.ConfirmationToastHost
 import com.cashu.me.ui.components.IconSwap
 import com.cashu.me.ui.components.LocalConfirmationToastController
 import com.cashu.me.ui.components.PrimaryButton
@@ -392,13 +391,6 @@ fun QrDetailSheet(
             }
             Spacer(Modifier.height(CashuTheme.spacing.comfortable))
             }
-            confirmationToastController?.let { controller ->
-                ConfirmationToastHost(
-                    controller = controller,
-                    respectStatusBar = false,
-                    modifier = Modifier.align(Alignment.TopCenter),
-                )
-            }
         }
     }
 }
@@ -443,13 +435,6 @@ fun PrivateKeyRevealSheet(
                 },
                 onDone = onDismiss,
             )
-            confirmationToastController?.let { controller ->
-                ConfirmationToastHost(
-                    controller = controller,
-                    respectStatusBar = false,
-                    modifier = Modifier.align(Alignment.TopCenter),
-                )
-            }
         }
     }
 }

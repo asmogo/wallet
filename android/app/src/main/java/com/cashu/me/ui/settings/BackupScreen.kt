@@ -34,7 +34,6 @@ import androidx.compose.ui.unit.dp
 import com.cashu.me.Core.AppLockManager
 import com.cashu.me.Core.WalletManager
 import com.cashu.me.ui.components.SheetHeader
-import com.cashu.me.ui.components.ConfirmationToastHost
 import com.cashu.me.ui.components.LocalConfirmationToastController
 import com.cashu.me.ui.security.rememberWalletAuthenticationLauncher
 import com.cashu.me.ui.theme.CashuTheme
@@ -134,13 +133,6 @@ fun BackupSeedSheet(
             ) {
                 Text(if (revealed) "Copy Recovery Phrase" else "Reveal Recovery Phrase")
             }
-            }
-            confirmationToastController?.let { controller ->
-                ConfirmationToastHost(
-                    controller = controller,
-                    respectStatusBar = false,
-                    modifier = Modifier.align(Alignment.TopCenter),
-                )
             }
         }
     }

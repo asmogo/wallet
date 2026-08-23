@@ -123,7 +123,6 @@ fun CashuApp(containerFlow: StateFlow<AppContainer?>) {
                 }
                 ConfirmationToastHost(
                     controller = confirmationToastController,
-                    modifier = Modifier.align(Alignment.TopCenter),
                 )
             }
         }

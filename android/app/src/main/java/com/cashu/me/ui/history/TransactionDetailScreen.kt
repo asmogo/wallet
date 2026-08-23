@@ -68,7 +68,6 @@ import com.cashu.me.Models.WalletTransaction
 import com.cashu.me.Models.liveDetail
 import com.cashu.me.ui.components.AmountText
 import com.cashu.me.ui.components.CompactSheetContent
-import com.cashu.me.ui.components.ConfirmationToastHost
 import com.cashu.me.ui.components.DetailActionFooter
 import com.cashu.me.ui.components.EmptyState
 import com.cashu.me.ui.components.ExplorerLinkRow
@@ -200,13 +199,6 @@ fun TransactionReceiptSheet(
                         Spacer(Modifier.height(CashuTheme.spacing.comfortable))
                     }
                 }
-            }
-            confirmationToastController?.let { controller ->
-                ConfirmationToastHost(
-                    controller = controller,
-                    respectStatusBar = false,
-                    modifier = Modifier.align(Alignment.TopCenter),
-                )
             }
         }
     }

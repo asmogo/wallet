@@ -27,8 +27,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import kotlinx.coroutines.launch
 import com.cashu.me.ui.components.CompactSheetContent
-import com.cashu.me.ui.components.ConfirmationToastHost
-import com.cashu.me.ui.components.LocalConfirmationToastController
 import com.cashu.me.ui.navigation.TopTab
 import com.cashu.me.ui.theme.CashuTheme
 
@@ -112,7 +110,6 @@ fun WalletFlowSheetHost(
     snackbarHostState: SnackbarHostState,
     content: @Composable (flow: WalletFlow, close: () -> Unit) -> Unit,
 ) {
-    val confirmationToastController = LocalConfirmationToastController.current
     if (flow == null) return
     val locked by rememberUpdatedState(dismissLocked)
     // Stable lambda: rememberModalBottomSheetState keys its saver on it.
@@ -165,20 +162,12 @@ fun WalletFlowSheetHost(
                         ) { current ->
                             content(current, close)
                         }
-                        // Sheet renders in its own Android Window — the root-mounted
-                        // host in CashuApp.kt can't reach here, so mount a second one
-                        // observing the same SnackbarHostState.
+                        // Errors remain local to the active flow; confirmation
+                        // toasts use the app-level pass-through overlay window.
                         SnackbarHost(
                             hostState = snackbarHostState,
                             modifier = Modifier.align(Alignment.BottomCenter),
                         )
-                        confirmationToastController?.let { controller ->
-                            ConfirmationToastHost(
-                                controller = controller,
-                                respectStatusBar = false,
-                                modifier = Modifier.align(Alignment.TopCenter),
-                            )
-                        }
                     }
                 }
             }
