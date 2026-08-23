@@ -108,7 +108,6 @@ struct SettingsView: View {
         .sheet(isPresented: $showBackup) {
             BackupView()
                 .environmentObject(walletManager)
-                .presentationDetents([.medium, .large])
         }
         .sheet(isPresented: $showCurrencySheet) {
             CurrencyPickerSheet()
@@ -1402,80 +1401,64 @@ struct BackupView: View {
     @State private var showWords = false
     @State private var copiedToClipboard = false
 
+    private let columns = Array(repeating: GridItem(.flexible(), spacing: 10), count: 3)
+
     var body: some View {
-        NavigationStack {
-            ScrollView {
-                VStack(spacing: 24) {
-                    VStack(spacing: 12) {
-                        Image(systemName: "exclamationmark.triangle.fill")
-                            .font(.title)
-                            .foregroundStyle(.orange)
+        let words = walletManager.getMnemonicWords()
 
-                        Text("Keep Your Seed Phrase Safe")
-                            .font(.headline)
+        VStack(spacing: 24) {
+            Text("Backup Wallet")
+                .font(.title2.weight(.semibold))
 
-                        Text("Anyone with these words can access your funds. Never share them with anyone.")
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
-                            .multilineTextAlignment(.center)
-                    }
-                    .padding()
+            Text(showWords
+                 ? "Write down these words in order and store them somewhere safe. Do not share them with anyone."
+                 : "Your recovery phrase is the only way to restore your wallet. Keep it private and stored somewhere safe. Never share it with anyone.")
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
 
-                    let words = walletManager.getMnemonicWords()
-                    let mnemonic = words.joined(separator: " ")
-                    let hiddenMnemonic = words.map { String(repeating: "\u{2022}", count: max(3, $0.count)) }.joined(separator: " ")
-
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text("Seed phrase")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                            .textCase(.uppercase)
-                        HStack(spacing: 10) {
-                            Text(showWords ? mnemonic : hiddenMnemonic)
-                                .font(.system(.body, design: .monospaced))
-                                .foregroundStyle(showWords ? .primary : .secondary)
-                                .lineLimit(4)
-                                .multilineTextAlignment(.leading)
-
+            if showWords {
+                LazyVGrid(columns: columns, spacing: 10) {
+                    ForEach(Array(words.enumerated()), id: \.offset) { index, word in
+                        HStack(spacing: 6) {
+                            Text("\(index + 1).")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                            Text(word)
+                                .font(.body.weight(.medium))
+                                .lineLimit(1)
+                                .minimumScaleFactor(0.75)
                             Spacer(minLength: 0)
-
-                            VStack(spacing: 8) {
-                                Button(action: toggleReveal) {
-                                    Image(systemName: showWords ? "eye.slash" : "eye")
-                                }
-
-                                Button(action: copyToClipboard) {
-                                    Image(systemName: copiedToClipboard ? "checkmark" : "doc.on.doc")
-                                        .foregroundStyle(copiedToClipboard ? .green : Color.accentColor)
-                                        .contentTransition(.symbolEffect(.replace))
-                                        .animation(.snappy(duration: 0.18), value: copiedToClipboard)
-                                }
-                            }
                         }
+                        .padding(.horizontal, 12)
+                        .frame(maxWidth: .infinity, minHeight: 48, alignment: .leading)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 12)
+                                .stroke(.secondary.opacity(0.45), lineWidth: 1)
+                        )
+                        .accessibilityElement(children: .combine)
+                        .accessibilityLabel("Word \(index + 1), \(word)")
                     }
-                    .padding(12)
-                    .liquidGlass(in: RoundedRectangle(cornerRadius: 10))
-                    .padding(.horizontal)
-                    .padding(.bottom, 24)
                 }
             }
-            // No Cancel / Done buttons — this is a modal; swipe down or tap
-            // outside to dismiss. Dropping them also removes the tall spacer
-            // that pushed "Done" below the medium detent (the drag-to-see jank).
-            .navigationTitle("Backup")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbarBackground(.hidden, for: .navigationBar)
+
+            Button(showWords ? (copiedToClipboard ? "Copied" : "Copy Recovery Phrase") : "Reveal Recovery Phrase") {
+                if showWords {
+                    copyToClipboard()
+                } else {
+                    revealWords()
+                }
+            }
+            .glassButton()
         }
+        .padding(.horizontal, 24)
+        .padding(.vertical, 20)
+        .presentationDetents(showWords ? [.height(520)] : [.height(300)])
+        .presentationDragIndicator(.visible)
         .flatBottomSheetSurface()
     }
 
-    /// Hiding is free; revealing always requires authentication, regardless of
-    /// the App Lock setting.
-    private func toggleReveal() {
-        if showWords {
-            showWords = false
-            return
-        }
+    /// Revealing always requires authentication, regardless of the App Lock setting.
+    private func revealWords() {
         Task {
             if await AppLockManager.shared.authenticate(reason: "Reveal your seed phrase") {
                 showWords = true
