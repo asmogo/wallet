@@ -121,6 +121,28 @@ jobs:
         sudo udevadm control --reload-rules
         sudo udevadm trigger --name-match=kvm
 
+    - name: Verify emulator host health
+      run: |
+        set -euo pipefail
+        test -r /dev/kvm
+        adb kill-server || true
+        adb start-server
+        timeout 30s adb version
+        timeout 30s adb devices -l
+        free -h
+        df -h
+
+    - name: Provision managed device
+      # Provision the system image and managed-device snapshot ahead of the
+      # suite. AGP still owns boot/readiness, but this removes setup work from
+      # the first instrumentation attempt.
+      run: |
+        if [ "$UI_TIER" = "full" ]; then
+          ./gradlew --no-daemon :app:modernApi36Setup
+        else
+          ./gradlew --no-daemon :app:pixel2Api35Setup
+        fi
+
     - name: Cache local mint runtimes
       id: mint-cache
       uses: actions/cache@v4
@@ -155,6 +177,9 @@ jobs:
 
     - name: Run required Android UI suite
       if: env.UI_TIER != 'full'
+      env:
+        MAX_ATTEMPTS: '4'
+        RESET_MANAGED_DEVICES: 'true'
       run: |
         bash ../CI/retry-android-ui-test.sh \
           ./gradlew --no-daemon :app:pixel2Api35DebugAndroidTest \
@@ -165,6 +190,9 @@ jobs:
 
     - name: Run full Android UI and native suite
       if: env.UI_TIER == 'full'
+      env:
+        MAX_ATTEMPTS: '4'
+        RESET_MANAGED_DEVICES: 'true'
       run: |
         bash ../CI/retry-android-ui-test.sh \
           ./gradlew --no-daemon :app:modernApi36DebugAndroidTest \
@@ -248,7 +276,24 @@ jobs:
         sudo udevadm control --reload-rules
         sudo udevadm trigger --name-match=kvm
 
+    - name: Verify emulator host health
+      run: |
+        set -euo pipefail
+        test -r /dev/kvm
+        adb kill-server || true
+        adb start-server
+        timeout 30s adb version
+        timeout 30s adb devices -l
+        free -h
+        df -h
+
+    - name: Provision compatibility managed device
+      run: ./gradlew --no-daemon :app:${{ matrix.device }}Setup
+
     - name: Run compatibility behavior pack
+      env:
+        MAX_ATTEMPTS: '4'
+        RESET_MANAGED_DEVICES: 'true'
       run: |
         bash ../CI/retry-android-ui-test.sh \
           ./gradlew --no-daemon :app:${{ matrix.device }}DebugAndroidTest \

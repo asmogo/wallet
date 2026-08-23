@@ -12,11 +12,13 @@
 # build if it keeps failing.
 #
 # Usage: CI/retry-android-ui-test.sh <gradle command...>
-# Env:   MAX_ATTEMPTS (default 3), LOG_FILE (default android-ui-test.log)
+# Env:   MAX_ATTEMPTS (default 3), LOG_FILE (default android-ui-test.log),
+#        RESET_MANAGED_DEVICES (default true)
 set -uo pipefail
 
 MAX_ATTEMPTS="${MAX_ATTEMPTS:-3}"
 LOG_FILE="${LOG_FILE:-android-ui-test.log}"
+RESET_MANAGED_DEVICES="${RESET_MANAGED_DEVICES:-true}"
 TRANSIENT_PATTERN="device offline|Failed to retrieve additional test outputs|emulator: ERROR|INSTALL_FAILED_DEVICE|DEVICE_UNAVAILABLE|adb: device .* not found|Emulator.*crashed|Failed to (install|push).*device"
 RESULTS_GLOB="app/build/outputs/androidTest-results/managedDevice/debug/*/TEST-*.xml"
 # GNU mktemp (GitHub's Linux runners) requires a template containing at least
@@ -26,13 +28,31 @@ trap 'rm -f "$PASSED_CLASSES_FILE"' EXIT
 
 reset_device_state() {
   echo "Resetting ADB/emulator state..."
+  adb reconnect offline 2>/dev/null || true
   pkill -f "qemu-system" 2>/dev/null || true
   pkill -f "crashpad_handler" 2>/dev/null || true
   adb kill-server 2>/dev/null || true
   sleep 5
   adb start-server 2>/dev/null || true
   sleep 5
-  adb devices || true
+  adb version || true
+  adb devices -l || true
+}
+
+capture_device_diagnostics() {
+  echo "=== Managed-device diagnostics ==="
+  adb devices -l || true
+  ps -ef | grep -E '[q]emu-system|[e]mulator' || true
+  free -h || true
+  df -h || true
+}
+
+clean_managed_devices() {
+  [ "$RESET_MANAGED_DEVICES" = "true" ] || return 0
+  # A device that went offline may leave a broken managed-device snapshot behind.
+  # Recreate only AGP-managed state before retrying; project/build caches remain.
+  echo "Clearing stale Gradle managed-device state..."
+  "$1" --no-daemon :app:cleanManagedDevices || true
 }
 
 # Unions every testsuite that completed without failures or errors into the
@@ -82,11 +102,13 @@ while [ "$attempt" -le "$MAX_ATTEMPTS" ]; do
     exit "$status"
   fi
 
+  capture_device_diagnostics
   collect_passed_classes
   if [ -s "$PASSED_CLASSES_FILE" ]; then
     extra_args=("-Pandroid.testInstrumentationRunnerArguments.notClass=$(paste -sd, "$PASSED_CLASSES_FILE")")
   fi
 
   echo "Transient device failure detected (exit $status); resuming remaining tests after emulator reset..."
+  clean_managed_devices "$1"
   attempt=$((attempt + 1))
 done
