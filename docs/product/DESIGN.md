@@ -1146,8 +1146,9 @@ single top-center capsule with a short semantic message (for example, “Copied
 Bitcoin address”). It enters with a restrained upward spring/slide and opacity,
 exits with opacity only, never stacks, contains no status icon, and auto-dismisses
 after roughly 2.2 seconds. Reduced Motion collapses the spatial transition to a
-fade. Native sheets mount the same host in their own presentation layer so the
-feedback remains above the sheet rather than behind its scrim.
+fade. One pass-through global overlay owns the toast for the entire app; screens
+and native sheets must not mount competing hosts. The overlay stays at the
+physical top center above sheets, their scrims, and any presenting-canvas blur.
 
 **The Mint Card Exception (retired 2026-05-22).** The home screen no longer
 carries a horizontal mint-card switcher. Mint browsing, active-mint selection,

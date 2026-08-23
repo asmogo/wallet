@@ -147,13 +147,6 @@ extension View {
         modifier(ErrorBannerModifier(message: message, severity: severity, retry: retry))
     }
 
-    /// Presents brief, non-blocking confirmation feedback at the top center.
-    /// Copy affordances stay visually stable; this is the app-wide confirmation
-    /// channel for actions that have already completed successfully.
-    func confirmationToastHost() -> some View {
-        modifier(ConfirmationToastHostModifier())
-    }
-
     /// Softens the presenting canvas while a native bottom sheet is visible.
     /// The system scrim still owns separation; this deliberately stays subtle.
     func bottomSheetBackdrop(isPresented: Bool) -> some View {
@@ -166,38 +159,33 @@ private struct BottomSheetBackdropModifier: ViewModifier {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     func body(content: Content) -> some View {
+        let animation: Animation? = if reduceMotion {
+            nil
+        } else if isPresented {
+            .easeOut(duration: 0.14)
+        } else {
+            .easeOut(duration: 0.06)
+        }
+
         content
             .blur(radius: isPresented ? 2.5 : 0)
-            .animation(
-                reduceMotion ? nil : .easeOut(duration: 0.18),
-                value: isPresented
-            )
+            .animation(animation, value: isPresented)
     }
 }
 
 // MARK: - Confirmation toast (the transient success channel)
 
-private extension Notification.Name {
-    static let cashuConfirmationToastRequested = Notification.Name(
-        "cashu.confirmation-toast-requested"
-    )
-}
-
-/// Posts a confirmation to the nearest visible ``confirmationToastHost()``.
-/// Native sheets render in a separate presentation layer, so sheet surfaces
-/// mount the same host while the app root remains the fallback for full screens.
+/// Brief confirmation feedback is rendered in one pass-through overlay window.
+/// That gives the app exactly one toast at the physical top center, above native
+/// sheets, their system scrims, and the presenting canvas blur.
 @MainActor
 enum ConfirmationToast {
     static func show(_ message: String) {
-        NotificationCenter.default.post(
-            name: .cashuConfirmationToastRequested,
-            object: message
-        )
+        ConfirmationToastPresenter.shared.show(message)
     }
 }
 
-private struct ConfirmationToastMessage: Identifiable, Equatable {
-    let id = UUID()
+private struct ConfirmationToastMessage: Equatable {
     let text: String
 }
 
@@ -220,52 +208,100 @@ private struct ConfirmationToastView: View {
             .shadow(color: .black.opacity(0.14), radius: 16, y: 6)
             .accessibilityElement(children: .ignore)
             .accessibilityLabel(message)
-            .onAppear {
-                AccessibilityNotification.Announcement(message).post()
-            }
     }
 }
 
-private struct ConfirmationToastHostModifier: ViewModifier {
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @State private var toast: ConfirmationToastMessage?
+@MainActor
+private final class ConfirmationToastPresenter: ObservableObject {
+    static let shared = ConfirmationToastPresenter()
 
-    func body(content: Content) -> some View {
-        content
-            .overlay(alignment: .top) {
-                if let toast {
-                    ConfirmationToastView(message: toast.text)
-                        .id(toast.id)
-                        .padding(.horizontal, 24)
-                        .padding(.top, 8)
-                        .allowsHitTesting(false)
-                        .transition(
-                            reduceMotion
-                                ? .opacity
-                                : .asymmetric(
-                                    insertion: .move(edge: .top).combined(with: .opacity),
-                                    removal: .opacity
-                                )
-                        )
-                        .zIndex(100)
-                }
+    @Published private(set) var toast: ConfirmationToastMessage?
+
+    private var dismissTask: Task<Void, Never>?
+    private var overlayWindow: ConfirmationToastWindow?
+
+    private init() {}
+
+    func show(_ message: String) {
+        ensureOverlayWindow()
+        dismissTask?.cancel()
+
+        let animation: Animation? = UIAccessibility.isReduceMotionEnabled
+            ? nil
+            : .spring(response: 0.38, dampingFraction: 0.9)
+        withAnimation(animation) {
+            toast = ConfirmationToastMessage(text: message)
+        }
+        AccessibilityNotification.Announcement(message).post()
+
+        dismissTask = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(2.2))
+            guard !Task.isCancelled, let self else { return }
+            withAnimation(UIAccessibility.isReduceMotionEnabled ? nil : .easeOut(duration: 0.14)) {
+                self.toast = nil
             }
-            .animation(
-                reduceMotion ? nil : .spring(response: 0.38, dampingFraction: 0.9),
-                value: toast
-            )
-            .onReceive(
-                NotificationCenter.default.publisher(for: .cashuConfirmationToastRequested)
-            ) { notification in
-                guard let message = notification.object as? String else { return }
-                toast = ConfirmationToastMessage(text: message)
+        }
+    }
+
+    private func ensureOverlayWindow() {
+        guard let windowScene = UIApplication.shared.connectedScenes
+            .compactMap({ $0 as? UIWindowScene })
+            .first(where: { $0.activationState == .foregroundActive })
+        else { return }
+
+        if overlayWindow?.windowScene === windowScene {
+            return
+        }
+
+        overlayWindow?.isHidden = true
+
+        let window = ConfirmationToastWindow(windowScene: windowScene)
+        window.windowLevel = UIWindow.Level(rawValue: UIWindow.Level.normal.rawValue + 1)
+        window.backgroundColor = .clear
+
+        let hostingController = UIHostingController(
+            rootView: ConfirmationToastOverlay(presenter: self)
+        )
+        hostingController.view.backgroundColor = .clear
+        window.rootViewController = hostingController
+        window.isHidden = false
+        overlayWindow = window
+    }
+}
+
+private final class ConfirmationToastWindow: UIWindow {
+    override var canBecomeKey: Bool { false }
+
+    override func hitTest(_ point: CGPoint, with event: UIEvent?) -> UIView? {
+        nil
+    }
+}
+
+private struct ConfirmationToastOverlay: View {
+    @ObservedObject var presenter: ConfirmationToastPresenter
+
+    var body: some View {
+        ZStack(alignment: .top) {
+            Color.clear
+
+            if let toast = presenter.toast {
+                ConfirmationToastView(message: toast.text)
+                    .padding(.horizontal, 24)
+                    .padding(.top, 8)
+                    .transition(
+                        UIAccessibility.isReduceMotionEnabled
+                            ? .opacity
+                            : .asymmetric(
+                                insertion: .move(edge: .top).combined(with: .opacity),
+                                removal: .opacity
+                            )
+                    )
             }
-            .task(id: toast?.id) {
-                guard toast != nil else { return }
-                try? await Task.sleep(for: .seconds(2.2))
-                guard !Task.isCancelled else { return }
-                toast = nil
-            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .safeAreaPadding(.top, 8)
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
     }
 }
 

@@ -280,7 +280,6 @@ struct TransactionDetailView: View {
         .presentationDetents(presentationDetents)
         .presentationDragIndicator(.visible)
         .presentationBackground(sheetBackground)
-        .confirmationToastHost()
     }
 
     // MARK: - Subviews
