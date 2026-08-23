@@ -1397,9 +1397,11 @@ struct ImportP2PKSheet: View {
 
 struct BackupView: View {
     @EnvironmentObject var walletManager: WalletManager
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     @State private var showWords = false
     @State private var copiedToClipboard = false
+    @State private var selectedDetent: PresentationDetent = .height(300)
 
     private let columns = Array(repeating: GridItem(.flexible(), spacing: 10), count: 3)
 
@@ -1417,28 +1419,32 @@ struct BackupView: View {
                 .multilineTextAlignment(.center)
 
             if showWords {
-                LazyVGrid(columns: columns, spacing: 10) {
-                    ForEach(Array(words.enumerated()), id: \.offset) { index, word in
-                        HStack(spacing: 6) {
-                            Text("\(index + 1).")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                            Text(word)
-                                .font(.body.weight(.medium))
-                                .lineLimit(1)
-                                .minimumScaleFactor(0.75)
-                            Spacer(minLength: 0)
+                ScrollView {
+                    LazyVGrid(columns: columns, spacing: 10) {
+                        ForEach(Array(words.enumerated()), id: \.offset) { index, word in
+                            HStack(spacing: 6) {
+                                Text("\(index + 1).")
+                                    .font(.caption2)
+                                    .foregroundStyle(.secondary)
+                                Text(word)
+                                    .font(.caption2.weight(.medium))
+                                    .fixedSize(horizontal: false, vertical: true)
+                                    .multilineTextAlignment(.leading)
+                                Spacer(minLength: 0)
+                            }
+                            .padding(.horizontal, 12)
+                            .frame(maxWidth: .infinity, minHeight: 48, alignment: .leading)
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 12)
+                                    .stroke(.secondary.opacity(0.45), lineWidth: 1)
+                            )
+                            .accessibilityElement(children: .combine)
+                            .accessibilityLabel("Word \(index + 1), \(word)")
                         }
-                        .padding(.horizontal, 12)
-                        .frame(maxWidth: .infinity, minHeight: 48, alignment: .leading)
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 12)
-                                .stroke(.secondary.opacity(0.45), lineWidth: 1)
-                        )
-                        .accessibilityElement(children: .combine)
-                        .accessibilityLabel("Word \(index + 1), \(word)")
                     }
                 }
+                .frame(maxHeight: 260)
+                .transition(.opacity.combined(with: .move(edge: .bottom)))
             }
 
             Button(showWords ? (copiedToClipboard ? "Copied" : "Copy Recovery Phrase") : "Reveal Recovery Phrase") {
@@ -1449,19 +1455,31 @@ struct BackupView: View {
                 }
             }
             .glassButton()
+            .contentTransition(.opacity)
         }
         .padding(.horizontal, 24)
         .padding(.vertical, 20)
-        .presentationDetents(showWords ? [.height(520)] : [.height(300)])
+        .presentationDetents([.height(300), .height(560)], selection: $selectedDetent)
         .presentationDragIndicator(.visible)
         .flatBottomSheetSurface()
+        .animation(reduceMotion ? nil : .snappy(duration: 0.25), value: showWords)
     }
 
     /// Revealing always requires authentication, regardless of the App Lock setting.
     private func revealWords() {
         Task {
             if await AppLockManager.shared.authenticate(reason: "Reveal your seed phrase") {
-                showWords = true
+                let reveal = {
+                    showWords = true
+                    selectedDetent = .height(560)
+                }
+                if reduceMotion {
+                    reveal()
+                } else {
+                    withAnimation(.snappy(duration: 0.35)) {
+                        reveal()
+                    }
+                }
             }
         }
     }
