@@ -760,12 +760,12 @@ struct MainWalletView: View {
             SendView()
                 .environmentObject(walletManager)
                 .presentationDetents([.large])
-                .flatBottomSheetSurface()
+                .compactBottomSheetSurface()
         case .receiveLightning:
             ReceiveLightningView()
                 .environmentObject(walletManager)
                 .presentationDetents([.large])
-                .flatBottomSheetSurface()
+                .compactBottomSheetSurface()
         case .meltInvoice(let invoice):
             MeltViewWithInvoice(invoice: invoice)
                 .environmentObject(walletManager)

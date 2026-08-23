@@ -62,6 +62,17 @@ fun MintSelectorRow(
     onPickMint: (() -> Unit)? = null,
     onUseMax: (() -> Unit)? = null,
 ) {
+    val isCompactSheet = LocalCompactSheetStyle.current
+    val rowColor = if (isCompactSheet) {
+        MaterialTheme.colorScheme.surfaceContainerHigh
+    } else {
+        MaterialTheme.colorScheme.surfaceContainer
+    }
+    val useMaxColor = if (isCompactSheet) {
+        MaterialTheme.colorScheme.surfaceContainerLowest
+    } else {
+        MaterialTheme.colorScheme.surfaceContainerHighest
+    }
     val description = if (balanceText != null) {
         "Mint: ${mint.name}, balance $balanceText"
     } else {
@@ -73,7 +84,7 @@ fun MintSelectorRow(
             .fillMaxWidth()
             .heightIn(min = RowMinHeight)
             .clip(MaterialTheme.shapes.medium)
-            .background(MaterialTheme.colorScheme.surfaceContainer)
+            .background(rowColor)
             .then(
                 if (onPickMint != null) {
                     Modifier.clickable(role = Role.Button, onClick = onPickMint)
@@ -115,7 +126,7 @@ fun MintSelectorRow(
                 maxLines = 1,
                 modifier = Modifier
                     .clip(CircleShape)
-                    .background(MaterialTheme.colorScheme.surfaceContainerHighest)
+                    .background(useMaxColor)
                     .clickable(role = Role.Button, onClick = onUseMax)
                     .semantics { contentDescription = "Send maximum" }
                     .padding(UseMaxPadding),

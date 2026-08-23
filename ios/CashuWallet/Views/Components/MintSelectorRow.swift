@@ -23,6 +23,9 @@ enum FlowRowMetrics {
 /// becomes a label. `showsBalance` opts into the second balance line on amount
 /// entry screens, where it makes the selected mint's available amount explicit.
 struct MintSelectorRow: View {
+    @Environment(\.bottomSheetSurfaceStyle) private var sheetSurfaceStyle
+    @Environment(\.colorScheme) private var colorScheme
+
     let mint: MintInfo
     let balanceText: String
     var showsBalance: Bool
@@ -59,15 +62,24 @@ struct MintSelectorRow: View {
                 chevron(action: onChooseMint)
             }
         }
-        // This selector is contextual input, not an elevated control. Keep it
-        // flat on every OS version: Liquid Glass adds a bright edge and too much
-        // depth to the middle of an amount-entry screen on iOS 26. A low-opacity
-        // semantic ink fill resolves near #1C1C1C on the dark canvas, keeping the
-        // control quiet without hard-coding a light or dark appearance.
+        // This selector is contextual input, not an elevated control. Compact
+        // payment sheets use the same exact control tone as their method rows;
+        // other surfaces retain the existing semantic fill.
         .background(
-            Color.primary.opacity(0.11),
+            rowFill,
             in: RoundedRectangle(cornerRadius: FlowRowMetrics.corner)
         )
+    }
+
+    private var isCompactSheet: Bool {
+        if case .compact = sheetSurfaceStyle { return true }
+        return false
+    }
+
+    private var rowFill: Color {
+        isCompactSheet
+            ? CompactSheetPalette.control(for: colorScheme)
+            : Color.primary.opacity(0.11)
     }
 
     private var identityContent: some View {
@@ -125,7 +137,13 @@ struct MintSelectorRow: View {
                 .fontWeight(.semibold)
                 .padding(.horizontal, 10)
                 .padding(.vertical, 6)
-                .background(.thinMaterial, in: Capsule())
+                .background {
+                    if isCompactSheet {
+                        Capsule().fill(CompactSheetPalette.iconInset(for: colorScheme))
+                    } else {
+                        Capsule().fill(.thinMaterial)
+                    }
+                }
                 .padding(.leading, FlowRowMetrics.gap)
                 .padding(.trailing, trailingInset)
                 .frame(minHeight: FlowRowMetrics.minHeight)
