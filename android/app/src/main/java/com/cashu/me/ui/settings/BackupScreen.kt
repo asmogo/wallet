@@ -2,6 +2,7 @@ package com.cashu.me.ui.settings
 
 import androidx.compose.foundation.background
 import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.spring
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -70,7 +71,12 @@ fun BackupSeedSheet(
                 .navigationBarsPadding()
                 .padding(horizontal = CashuTheme.spacing.comfortable)
                 .padding(bottom = CashuTheme.spacing.section)
-                .animateContentSize(animationSpec = spring()),
+                .animateContentSize(
+                    animationSpec = spring(
+                        dampingRatio = Spring.DampingRatioNoBouncy,
+                        stiffness = Spring.StiffnessMediumLow,
+                    ),
+                ),
             verticalArrangement = Arrangement.spacedBy(CashuTheme.spacing.section),
         ) {
             SheetHeader(title = "Backup Wallet")

@@ -1401,7 +1401,7 @@ struct BackupView: View {
 
     @State private var showWords = false
     @State private var copiedToClipboard = false
-    @State private var selectedDetent: PresentationDetent = .height(300)
+    @State private var contentHeight: CGFloat = 0
 
     private let columns = Array(repeating: GridItem(.flexible(), spacing: 10), count: 3)
 
@@ -1434,9 +1434,10 @@ struct BackupView: View {
                             }
                             .padding(.horizontal, 12)
                             .frame(maxWidth: .infinity, minHeight: 48, alignment: .leading)
+                            .background(.quaternary.opacity(0.55), in: RoundedRectangle(cornerRadius: 12))
                             .overlay(
                                 RoundedRectangle(cornerRadius: 12)
-                                    .stroke(.secondary.opacity(0.45), lineWidth: 1)
+                                    .stroke(Color(uiColor: .separator), lineWidth: 0.5)
                             )
                             .accessibilityElement(children: .combine)
                             .accessibilityLabel("Word \(index + 1), \(word)")
@@ -1459,7 +1460,14 @@ struct BackupView: View {
         }
         .padding(.horizontal, 24)
         .padding(.vertical, 20)
-        .presentationDetents([.height(300), .height(560)], selection: $selectedDetent)
+        .contentFitMeasured { contentHeight = $0 }
+        .contentFitDetent(
+            contentHeight,
+            estimate: showWords ? 460 : 250,
+            navigationBar: false,
+            step: showWords,
+            stepResize: .milliseconds(300)
+        )
         .presentationDragIndicator(.visible)
         .flatBottomSheetSurface()
         .animation(reduceMotion ? nil : .snappy(duration: 0.25), value: showWords)
@@ -1469,17 +1477,7 @@ struct BackupView: View {
     private func revealWords() {
         Task {
             if await AppLockManager.shared.authenticate(reason: "Reveal your seed phrase") {
-                let reveal = {
-                    showWords = true
-                    selectedDetent = .height(560)
-                }
-                if reduceMotion {
-                    reveal()
-                } else {
-                    withAnimation(.snappy(duration: 0.35)) {
-                        reveal()
-                    }
-                }
+                showWords = true
             }
         }
     }
