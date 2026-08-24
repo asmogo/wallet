@@ -112,6 +112,7 @@ import com.cashu.me.ui.components.InlineNotice
 import com.cashu.me.ui.components.LocalConfirmationToastController
 import com.cashu.me.ui.components.MintPickerSheet
 import com.cashu.me.ui.components.MintSelectorRow
+import com.cashu.me.ui.components.MintSelectorDirection
 import com.cashu.me.ui.components.NoticeSeverity
 import com.cashu.me.ui.components.PaymentStatusPhase
 import com.cashu.me.ui.components.PaymentStatusScreen
@@ -696,6 +697,7 @@ private fun InputFace(
         // to the action rather than a second header competing with the title.
         if (activeMint != null) {
             MintSelectorRow(
+                direction = MintSelectorDirection.Source,
                 mint = activeMint,
                 balanceText = balanceText,
                 showBalance = true,

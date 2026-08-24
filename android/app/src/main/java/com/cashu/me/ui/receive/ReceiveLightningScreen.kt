@@ -101,6 +101,7 @@ import com.cashu.me.ui.components.InlineNotice
 import com.cashu.me.ui.components.InspectorRow
 import com.cashu.me.ui.components.LocalConfirmationToastController
 import com.cashu.me.ui.components.MintPickerSheet
+import com.cashu.me.ui.components.MintSelectorDirection
 import com.cashu.me.ui.components.MintSelectorRow
 import com.cashu.me.ui.components.NoticeSeverity
 import com.cashu.me.ui.components.NumberPadFooter
@@ -1068,6 +1069,7 @@ private fun InputFace(
         // Under the amount, over the keypad — the same slot the send flows use.
         if (mint != null) {
             MintSelectorRow(
+                direction = MintSelectorDirection.Destination,
                 mint = mint,
                 balanceText = mintBalanceText,
                 showBalance = true,

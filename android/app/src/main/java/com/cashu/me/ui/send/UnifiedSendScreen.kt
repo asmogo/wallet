@@ -95,6 +95,7 @@ import com.cashu.me.ui.components.InlineNotice
 import com.cashu.me.ui.components.InspectorRow
 import com.cashu.me.ui.components.MethodActionRow
 import com.cashu.me.ui.components.MintPickerSheet
+import com.cashu.me.ui.components.MintSelectorDirection
 import com.cashu.me.ui.components.MintSelectorRow
 import com.cashu.me.ui.components.NoticeSeverity
 import com.cashu.me.ui.components.NumberPadFooter
@@ -998,11 +999,11 @@ private fun AmountFace(
                     },
                     exit = fadeOut(spring(stiffness = Spring.StiffnessMedium)),
                 ) {
-                    // The mint row no longer carries a balance, so the detail
-                    // line is what tells you how much would actually fit.
+                    // The mint selector states the available balance, so
+                    // repeating it in this notice would add visual noise.
                     InlineNotice(
                         text = "Insufficient balance",
-                        detail = balanceText?.let { "You have $it in ${mint?.name}." },
+                        detail = null,
                         severity = NoticeSeverity.Caution,
                         showsContainer = false,
                         centered = true,
@@ -1013,8 +1014,10 @@ private fun AmountFace(
         // Under the amount, over the keypad (Send Ecash / Receive parity).
         if (mint != null) {
             MintSelectorRow(
+                direction = MintSelectorDirection.Source,
                 mint = mint,
                 balanceText = balanceText,
+                showBalance = true,
                 onPickMint = onPickMint,
                 // Gated on a spendable balance, the way Send Ecash already does
                 // it — an empty mint offered a Max that filled in zero.
@@ -1084,6 +1087,7 @@ private fun ConfirmFace(
         // label/value shell so the pair reads as one statement.
         if (mint != null) {
             MintSelectorRow(
+                direction = MintSelectorDirection.Source,
                 mint = mint,
                 balanceText = formatter.formatWalletSats(mintBalance, useBitcoinSymbol),
                 onPickMint = onPickMint.takeIf { canPickMint },

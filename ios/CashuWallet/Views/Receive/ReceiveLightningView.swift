@@ -487,6 +487,7 @@ struct ReceiveLightningView: View {
 
     private func mintSelector(mint: MintInfo) -> some View {
         MintSelectorRow(
+            direction: .destination,
             mint: mint,
             balanceText: formatBalance(mint.balance),
             showsBalance: true,
@@ -609,7 +610,7 @@ struct ReceiveLightningView: View {
             Button(action: { copyRequest(quote.request) }) {
                 Text(copyButtonTitle(for: quote))
             }
-            .glassButton()
+            .flatSheetSecondaryButton()
             .padding(.horizontal)
             .padding(.bottom, 16)
         }
@@ -728,7 +729,7 @@ struct ReceiveLightningView: View {
             Button(action: { copyRequest(quote.request) }) {
                 Text(copyButtonTitle(for: quote))
             }
-            .glassButton()
+            .flatSheetSecondaryButton()
             .padding(.horizontal)
             .padding(.bottom, 16)
         }

@@ -542,6 +542,7 @@ struct CashuPaymentRequestPayView: View {
                 } topAccessory: {
                     if request.isSatUnit, let selected = pickerSelectedMint {
                         MintSelectorRow(
+                            direction: .source,
                             mint: selected,
                             balanceText: AmountFormatter.sats(
                                 selected.balance,

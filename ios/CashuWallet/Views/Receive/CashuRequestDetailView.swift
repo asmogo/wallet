@@ -271,7 +271,7 @@ struct CashuRequestDetailView: View {
                 Button(action: { copy(request.encoded) }) {
                     Text("Copy")
                 }
-                .glassButton()
+                .flatSheetSecondaryButton()
 
                 // "New Request" rotates a fresh NUT-18 request; it's meaningless
                 // for a quote-backed reusable offer (the offer is the artifact).
@@ -279,7 +279,7 @@ struct CashuRequestDetailView: View {
                     Button(action: { regenerate() }) {
                         Text("New Request")
                     }
-                    .glassButton()
+                    .flatSheetSecondaryButton()
                     .accessibilityHint("Generates a fresh Cashu Request and rotates the QR")
                 }
             }

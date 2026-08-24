@@ -306,6 +306,7 @@ struct SendView: View {
 
     private func mintSelector(mint: MintInfo) -> some View {
         MintSelectorRow(
+            direction: .source,
             mint: mint,
             balanceText: sendBalanceText,
             showsBalance: true,
@@ -1498,6 +1499,7 @@ struct UnifiedSendView: View {
             VStack(spacing: 8) {
                 if let mint {
                     MintSelectorRow(
+                        direction: .source,
                         mint: mint,
                         balanceText: AmountFormatter.sats(mint.balance, useBitcoinSymbol: settings.useBitcoinSymbol),
                         onChooseMint: canChangeMint ? {
@@ -1691,8 +1693,10 @@ struct UnifiedSendView: View {
 
     private func amountMintRow(_ mint: MintInfo) -> some View {
         MintSelectorRow(
+            direction: .source,
             mint: mint,
             balanceText: AmountFormatter.sats(mint.balance, useBitcoinSymbol: settings.useBitcoinSymbol),
+            showsBalance: true,
             // Gated on a spendable balance, matching Send Ecash — this row
             // offered a Max on an empty mint that filled in zero.
             onUseMax: mint.balance > 0 ? useMax : nil,
@@ -3085,6 +3089,7 @@ struct MeltView: View {
         VStack(spacing: 0) {
             if let mint = displayMeltMint {
                 MintSelectorRow(
+                    direction: .source,
                     mint: mint,
                     balanceText: AmountFormatter.sats(mint.balance, useBitcoinSymbol: settings.useBitcoinSymbol),
                     onChooseMint: canChangeMint ? {
@@ -3341,6 +3346,7 @@ struct MeltView: View {
         } topAccessory: {
             if let mint = selectorMint {
                 MintSelectorRow(
+                    direction: .source,
                     mint: mint,
                     balanceText: AmountFormatter.sats(mint.balance, useBitcoinSymbol: settings.useBitcoinSymbol),
                     onChooseMint: canChangeMint ? {

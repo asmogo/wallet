@@ -38,6 +38,7 @@ import com.cashu.me.ui.components.CompactSheetContent
 import com.cashu.me.ui.components.MethodActionRow
 import com.cashu.me.ui.components.MintAvatar
 import com.cashu.me.ui.components.MintSelectorRow
+import com.cashu.me.ui.components.MintSelectorDirection
 import com.cashu.me.ui.components.NavRow
 import com.cashu.me.ui.components.NumberPad
 import com.cashu.me.ui.components.PaymentStatusPhase
@@ -410,8 +411,8 @@ private val ScreenshotLongMint = MintInfo(
 )
 
 /**
- * Every state of the flow-top selector in one frame: with and without the Send
- * Max chip, the single-mint variant that has no chevron and no picker, and a
+ * Every state of the flow-top selector in one frame: source and destination,
+ * with and without Send Max, the single-mint variant with no picker, and a
  * name long enough to truncate. This row has no test tag and no instrumented
  * coverage, so the golden is the regression net.
  */
@@ -445,12 +446,15 @@ fun mintSelectorRowLargeFontScreenshot() {
     PreviewFrame {
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             MintSelectorRow(
+                direction = MintSelectorDirection.Source,
                 mint = ScreenshotLongMint,
                 balanceText = "\u20bf27,096",
+                showBalance = true,
                 onPickMint = {},
                 onUseMax = {},
             )
             MintSelectorRow(
+                direction = MintSelectorDirection.Destination,
                 mint = ScreenshotLongMint,
                 balanceText = null,
                 onPickMint = {},
@@ -462,27 +466,33 @@ fun mintSelectorRowLargeFontScreenshot() {
 @Composable
 private fun MintSelectorRowCatalog() {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        // Multi-mint, spendable balance: chip and chevron.
+        // Multi-mint source with a spendable balance, Max, and chevron.
         MintSelectorRow(
+            direction = MintSelectorDirection.Source,
             mint = ScreenshotMint,
             balanceText = "\u20bf27,096",
+            showBalance = true,
             onPickMint = {},
             onUseMax = {},
         )
-        // Empty mint: no chip.
+        // Destination with an empty balance and no Max action.
         MintSelectorRow(
+            direction = MintSelectorDirection.Destination,
             mint = ScreenshotMint,
             balanceText = "\u20bf0",
+            showBalance = true,
             onPickMint = {},
         )
         // Single mint: no chevron, not a control.
         MintSelectorRow(
+            direction = MintSelectorDirection.Source,
             mint = ScreenshotMint,
             balanceText = "\u20bf27,096",
             onUseMax = {},
         )
         // Long name truncates.
         MintSelectorRow(
+            direction = MintSelectorDirection.Source,
             mint = ScreenshotLongMint,
             balanceText = "\u20bf27,096",
             onPickMint = {},
