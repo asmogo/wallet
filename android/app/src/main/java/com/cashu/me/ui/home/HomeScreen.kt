@@ -155,7 +155,7 @@ fun HomeScreen(
     val balanceDisplay = remember(walletState.balance, settings, priceState) {
         formatter.displayText(
             amountSats = walletState.balance,
-            preferredPrimary = settings.amountDisplayPrimary,
+            preferredPrimary = AmountDisplayPrimary.Sats.rawValue,
             showFiat = settings.showFiatBalance && priceState.btcPrice > 0,
             btcPrice = priceState.btcPrice,
             currencyCode = settings.bitcoinPriceCurrency,

@@ -310,15 +310,6 @@ struct MainWalletView: View {
                     .font(.body)
                     .foregroundStyle(.secondary)
                     .transition(.opacity)
-            } else if settings.showFiatBalance,
-                      let fiatBalance = priceService.formatSatsAsFiat(walletManager.balance) {
-                // Was the one branch of this ZStack with no styling at all: it
-                // rendered in primary ink beside three secondary siblings, and
-                // skipped tabular figures on a money value.
-                Text(fiatBalance)
-                    .cashuAmount(.amountRow, value: nil)
-                    .foregroundStyle(.secondary)
-                    .transition(.opacity)
             } else if let secondary = display.secondary {
                 Text(secondary)
                     .font(.body)
@@ -630,7 +621,7 @@ struct MainWalletView: View {
     private func balanceDisplay(_ sats: UInt64) -> AmountDisplayText {
         AmountFormatter.displayText(
             amountSats: sats,
-            preferredPrimary: settings.amountDisplayPrimary,
+            preferredPrimary: .sats,
             showFiat: settings.showFiatBalance,
             btcPrice: priceService.btcPriceUSD,
             currencyCode: settings.bitcoinPriceCurrency,
