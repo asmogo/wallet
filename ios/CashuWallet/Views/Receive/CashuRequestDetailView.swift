@@ -222,41 +222,35 @@ struct CashuRequestDetailView: View {
                         // here until the unified editable detail lands.
                         if request.rail == .ecash {
                             editableRow(
-                                icon: "bitcoinsign.bank.building",
                                 label: "Mint",
                                 value: mintDisplayValue(for: request),
                                 action: { showMintPicker = true }
                             )
                             editableRow(
-                                icon: "bitcoinsign",
                                 label: "Amount",
                                 value: amountDisplayValue(for: request),
                                 action: { showAmountPicker = true }
                             )
                         } else {
                             detailRow(
-                                icon: "bitcoinsign.bank.building",
                                 label: "Mint",
                                 value: mintDisplayValue(for: request)
                             )
                             detailRow(
-                                icon: "bitcoinsign",
                                 label: "Amount",
                                 value: amountDisplayValue(for: request)
                             )
                         }
                         if unitEditable(for: request) {
                             editableRow(
-                                icon: "creditcard",
                                 label: "Unit",
                                 value: request.unit.uppercased(),
                                 action: { showUnitPicker = true }
                             )
                         } else {
-                            detailRow(icon: "creditcard", label: "Unit", value: request.unit.uppercased())
+                            detailRow(label: "Unit", value: request.unit.uppercased())
                         }
                         detailRow(
-                            icon: "calendar",
                             label: "Created",
                             value: request.createdAt.formatted(date: .abbreviated, time: .shortened)
                         )
@@ -328,9 +322,9 @@ struct CashuRequestDetailView: View {
 
     // MARK: - Detail rows
 
-    private func detailRow(icon: String, label: String, value: String) -> some View {
+    private func detailRow(label: String, value: String) -> some View {
         HStack {
-            Label(label, systemImage: icon)
+            Text(label)
                 .foregroundStyle(.secondary)
             Spacer()
             Text(value)
@@ -342,12 +336,15 @@ struct CashuRequestDetailView: View {
         .font(.subheadline)
         .padding(.vertical, 12)
         .padding(.horizontal, 8)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(label)
+        .accessibilityValue(value)
     }
 
-    private func editableRow(icon: String, label: String, value: String, action: @escaping () -> Void) -> some View {
+    private func editableRow(label: String, value: String, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             HStack {
-                Label(label, systemImage: icon)
+                Text(label)
                     .foregroundStyle(.secondary)
                 Spacer()
                 Text(value)
@@ -366,6 +363,8 @@ struct CashuRequestDetailView: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .accessibilityLabel(label)
+        .accessibilityValue(value)
         .accessibilityHint("Edits the \(label.lowercased())")
     }
 

@@ -23,11 +23,8 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.AccountBalance
-import androidx.compose.material.icons.outlined.AccountBalanceWallet
-import androidx.compose.material.icons.outlined.CalendarToday
 import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.Close
-import androidx.compose.material.icons.outlined.CurrencyExchange
 import androidx.compose.material.icons.outlined.IosShare
 import androidx.compose.material.icons.outlined.Payments
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -367,7 +364,6 @@ fun CashuRequestDetailScreen(
                         InspectorRow(
                             label = "Mint",
                             value = mintLabel,
-                            leadingIcon = Icons.Outlined.AccountBalance,
                             editable = requestEditable,
                             onClick = { mintPickerOpen = true },
                         )
@@ -376,7 +372,6 @@ fun CashuRequestDetailScreen(
                             value = request.amount?.let {
                                 if (isSatRequest) "$it sat" else formatRequestAmount(it)
                             } ?: "Any",
-                            leadingIcon = Icons.Outlined.AccountBalanceWallet,
                             valueMonospaced = true,
                             editable = requestEditable,
                             onClick = { amountPickerOpen = true },
@@ -384,20 +379,17 @@ fun CashuRequestDetailScreen(
                         InspectorRow(
                             label = "Unit",
                             value = request.unit.uppercase(),
-                            leadingIcon = Icons.Outlined.CurrencyExchange,
                             editable = requestEditable && requestMint?.supportsMultipleMintUnits == true,
                             onClick = { unitPickerOpen = true },
                         )
                         InspectorRow(
                             label = "Created",
                             value = formatDate(request.createdAtEpochMillis),
-                            leadingIcon = Icons.Outlined.CalendarToday,
                         )
                         if (request.totalReceived > 0L) {
                             InspectorRow(
                                 label = "Total received",
                                 value = formatRequestAmount(request.totalReceived),
-                                leadingIcon = Icons.Outlined.CheckCircle,
                                 valueMonospaced = true,
                             )
                         }
