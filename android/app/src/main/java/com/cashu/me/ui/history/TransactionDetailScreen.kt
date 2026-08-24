@@ -48,9 +48,11 @@ import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.launch
 import com.cashu.me.Core.AmountFormatter
 import com.cashu.me.Core.PendingTokenClaimCheckResult
+import com.cashu.me.Core.PriceService
 import com.cashu.me.Core.Protocols.CurrencyAmount
 import com.cashu.me.Core.Protocols.CurrencyRegistry
 import com.cashu.me.Core.OnchainExplorer
@@ -67,6 +69,7 @@ import com.cashu.me.Models.TransactionType
 import com.cashu.me.Models.WalletTransaction
 import com.cashu.me.Models.liveDetail
 import com.cashu.me.ui.components.AmountText
+import com.cashu.me.ui.components.AmountHero
 import com.cashu.me.ui.components.CompactSheetContent
 import com.cashu.me.ui.components.DetailActionFooter
 import com.cashu.me.ui.components.EmptyState
@@ -83,7 +86,10 @@ import com.cashu.me.ui.components.ToolbarIcon
 import com.cashu.me.ui.components.neutralActionButtonColors
 import com.cashu.me.ui.components.openInBrowser
 import com.cashu.me.ui.components.shareText
+import com.cashu.me.ui.theme.AmountScale
 import com.cashu.me.ui.theme.CashuTheme
+import com.cashu.me.ui.theme.LeadingLabel
+import com.cashu.me.ui.theme.atSize
 import com.cashu.me.ui.theme.withMonoDigits
 import com.cashu.me.ui.testing.UiTestTags
 
@@ -97,9 +103,11 @@ import com.cashu.me.ui.testing.UiTestTags
 fun TransactionReceiptSheet(
     transaction: WalletTransaction,
     settingsManager: SettingsManager,
+    priceService: PriceService,
     onDismissRequest: () -> Unit,
 ) {
     val settings by settingsManager.state.collectAsState()
+    val priceState by priceService.state.collectAsState()
     val context = LocalContext.current
     val clipboard = LocalClipboard.current
     val clipboardScope = rememberCoroutineScope()
@@ -146,6 +154,9 @@ fun TransactionReceiptSheet(
                             transaction = transaction,
                             formatter = formatter,
                             useBitcoinSymbol = settings.useBitcoinSymbol,
+                            showFiat = settings.showFiatBalance,
+                            btcPrice = priceState.btcPrice,
+                            currencyCode = priceState.currencyCode,
                             compact = false,
                         )
 
@@ -209,12 +220,14 @@ fun TransactionReceiptSheet(
 fun TransactionDetailScreen(
     walletManager: WalletManager,
     settingsManager: SettingsManager,
+    priceService: PriceService,
     transactionId: String,
     onClose: () -> Unit,
     onClaimReceiveToken: ((String) -> Unit)? = null,
 ) {
     val walletState by walletManager.state.collectAsState()
     val settings by settingsManager.state.collectAsState()
+    val priceState by priceService.state.collectAsState()
     val context = LocalContext.current
     val clipboard = LocalClipboard.current
     val formatter = remember { AmountFormatter() }
@@ -357,6 +370,9 @@ fun TransactionDetailScreen(
                     transaction = transaction,
                     formatter = formatter,
                     useBitcoinSymbol = settings.useBitcoinSymbol,
+                    showFiat = settings.showFiatBalance,
+                    btcPrice = priceState.btcPrice,
+                    currencyCode = priceState.currencyCode,
                     compact = showsQr,
                 )
                 Column(modifier = Modifier.fillMaxWidth()) {
@@ -492,31 +508,65 @@ private fun copyConfirmationMessage(label: String): String = when (label) {
     else -> "Copied ${label.lowercase()}"
 }
 
-// Crisp primary amount hero — direction already lives in the screen title, so
-// the historical detail keeps the amount itself quiet and unsigned like iOS.
+// Static receipt amount pair — direction already lives in the screen title, so
+// historical details keep the settled sat amount quiet and unsigned. Fiat is a
+// subordinate live reference, never an interactive display-mode control.
 @Composable
 private fun HeroAmount(
     transaction: WalletTransaction,
     formatter: AmountFormatter,
     useBitcoinSymbol: Boolean,
+    showFiat: Boolean,
+    btcPrice: Double,
+    currencyCode: String,
     compact: Boolean,
 ) {
-    val formatted = if (transaction.unit.equals("sat", ignoreCase = true)) {
-        formatter.formatWalletSats(transaction.amount, useBitcoinSymbol)
-    } else {
-        CurrencyAmount(
+    if (!transaction.unit.equals("sat", ignoreCase = true)) {
+        val formatted = CurrencyAmount(
             transaction.amount,
             CurrencyRegistry.currencyForMintUnit(transaction.unit),
         ).formatted()
+        AmountText(
+            text = formatted,
+            style = (if (compact) MaterialTheme.typography.headlineLarge else MaterialTheme.typography.displayMedium)
+                .copy(fontWeight = FontWeight.Bold)
+                .withMonoDigits(),
+            color = MaterialTheme.colorScheme.onSurface,
+            modifier = Modifier.padding(vertical = 5.dp),
+        )
+        return
     }
-    AmountText(
-        text = formatted,
-        style = (if (compact) MaterialTheme.typography.headlineLarge else MaterialTheme.typography.displayMedium)
-            .copy(fontWeight = FontWeight.Bold)
-            .withMonoDigits(),
-        color = MaterialTheme.colorScheme.onSurface,
-        modifier = Modifier.padding(vertical = 5.dp),
-    )
+
+    val fiatParts = if (showFiat) {
+        formatter.fiatParts(
+            amountSats = transaction.amount,
+            btcPrice = btcPrice.takeIf { it > 0 },
+            currencyCode = currencyCode,
+        )
+    } else {
+        null
+    }
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
+        AmountHero(
+            parts = formatter.satsParts(transaction.amount, useBitcoinSymbol),
+            scale = if (compact) AmountScale.Compact else AmountScale.Confirm,
+            accessibilityPrefix = "Amount",
+        )
+        fiatParts?.let { parts ->
+            AmountText(
+                text = parts.joined,
+                style = MaterialTheme.typography.bodyLarge
+                    .atSize(18.sp, leading = LeadingLabel)
+                    .copy(fontWeight = FontWeight.Medium)
+                    .withMonoDigits(),
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                animated = false,
+            )
+        }
+    }
 }
 
 private fun WalletTransaction.explorerUrl(): String? {

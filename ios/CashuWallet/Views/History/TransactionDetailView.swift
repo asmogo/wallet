@@ -8,6 +8,7 @@ struct TransactionDetailView: View {
     /// successful open-check can flip Pending → Completed without dismissing.
     private let seed: WalletTransaction
     @ObservedObject var settings = SettingsManager.shared
+    @ObservedObject private var priceService = PriceService.shared
 
     @State private var showShareSheet = false
     @State private var isCheckingClaim = false
@@ -154,12 +155,14 @@ struct TransactionDetailView: View {
                                     accessibilityPrefix: "Amount"
                                 )
                             } else {
-                                CurrencyAmountDisplay(
+                                TransactionReceiptAmountPair(
                                     sats: transaction.amount,
-                                    primary: $settings.amountDisplayPrimary,
-                                    role: showsQR ? .amountCompact : .amountConfirm
+                                    role: showsQR ? .amountCompact : .amountConfirm,
+                                    showFiat: settings.showFiatBalance,
+                                    btcPrice: priceService.btcPriceUSD,
+                                    currencyCode: priceService.currencyCode,
+                                    useBitcoinSymbol: settings.useBitcoinSymbol
                                 )
-                                .accessibilityLabel("Amount: \(transaction.amount) sats")
                             }
                         }
                         .padding(.top, heroSlotIsEmpty ? 32 : 0)
@@ -556,5 +559,45 @@ struct TransactionDetailView: View {
             announcement = "Couldn't check status. \(message.text)"
         }
         AccessibilityNotification.Announcement(announcement).post()
+    }
+}
+
+/// A receipt is a settled sat amount with an optional live fiat reference — not
+/// an entry control. Keeping the pair static prevents a historical transaction
+/// from changing hierarchy with the home or keypad display preferences.
+private struct TransactionReceiptAmountPair: View {
+    let sats: UInt64
+    let role: CashuTextRole
+    let showFiat: Bool
+    let btcPrice: Double
+    let currencyCode: String
+    let useBitcoinSymbol: Bool
+
+    private var fiatText: String? {
+        guard showFiat else { return nil }
+        return AmountFormatter.fiat(
+            sats: sats,
+            btcPrice: btcPrice,
+            currencyCode: currencyCode
+        )
+    }
+
+    var body: some View {
+        VStack(spacing: 4) {
+            AmountLockup(
+                parts: AmountFormatter.satsParts(sats, useBitcoinSymbol: useBitcoinSymbol),
+                role: role,
+                value: Double(sats),
+                accessibilityPrefix: "Amount"
+            )
+
+            if let fiatText {
+                Text(fiatText)
+                    .cashuText(.bodyEmphasis)
+                    .monospacedDigit()
+                    .foregroundStyle(.secondary)
+                    .accessibilityLabel("Fiat equivalent: \(fiatText)")
+            }
+        }
     }
 }

@@ -140,6 +140,7 @@ fun CashuNavHost(
             TransactionDetailScreen(
                 walletManager = container.walletManager,
                 settingsManager = container.settingsManager,
+                priceService = container.priceService,
                 transactionId = txId,
                 onClose = { navController.popBackStack() },
                 onClaimReceiveToken = onClaimReceiveToken,
@@ -284,6 +285,7 @@ fun CashuNavHost(
         TransactionReceiptSheet(
             transaction = transaction,
             settingsManager = container.settingsManager,
+            priceService = container.priceService,
             onDismissRequest = { receiptTransaction = null },
         )
     }
