@@ -4,6 +4,7 @@ import androidx.activity.compose.BackHandler
 import androidx.activity.compose.ReportDrawnWhen
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.LinearOutSlowInEasing
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.VisibilityThreshold
 import androidx.compose.animation.core.animateDpAsState
@@ -297,6 +298,7 @@ private fun AuthenticatedShell(container: AppContainer) {
     // The active money flow, hosted in a modal bottom sheet (iOS WalletFlow sheets).
     var activeFlow by remember { mutableStateOf<WalletFlow?>(null) }
     var flowDismissLocked by remember { mutableStateOf(false) }
+    var isFlowBackdropVisible by remember { mutableStateOf(false) }
     val flowHandoff = remember { WalletFlowHandoffCoordinator() }
     var pendingSendScan by remember { mutableStateOf<String?>(null) }
     var pendingMintScan by remember { mutableStateOf<String?>(null) }
@@ -312,13 +314,21 @@ private fun AuthenticatedShell(container: AppContainer) {
     var receiveTokenDetail by remember { mutableStateOf<String?>(null) }
     var receiveDetailDismissLocked by remember { mutableStateOf(false) }
     val sheetBackdropBlur by animateDpAsState(
-        targetValue = if (activeFlow != null) 2.dp else 0.dp,
-        animationSpec = tween(durationMillis = 180),
+        targetValue = if (isFlowBackdropVisible) 2.dp else 0.dp,
+        // Keep presentation soft, but clear depth quickly as soon as dismissal
+        // begins so the backdrop does not linger after the sheet is gone.
+        animationSpec = tween(
+            durationMillis = if (isFlowBackdropVisible) 180 else 30,
+            easing = LinearOutSlowInEasing,
+        ),
         label = "wallet-sheet-backdrop-blur",
     )
 
     // A fresh flow starts unlocked, whatever the last one left behind.
-    LaunchedEffect(activeFlow) { flowDismissLocked = false }
+    LaunchedEffect(activeFlow) {
+        flowDismissLocked = false
+        isFlowBackdropVisible = activeFlow != null
+    }
     LaunchedEffect(receiveTokenDetail) { receiveDetailDismissLocked = false }
     LaunchedEffect(walletState.isRuntimeReady) {
         if (!walletState.isRuntimeReady) {
@@ -576,6 +586,7 @@ private fun AuthenticatedShell(container: AppContainer) {
         // prevents a sheet from mounting for a frame if readiness drops.
         flow = activeFlow.takeIf { walletState.isRuntimeReady },
         dismissLocked = flowDismissLocked,
+        onBackdropVisibilityChanged = { isFlowBackdropVisible = it },
         onDismissed = {
             activeFlow = null
             flowHandoff.completeDismissal { destination ->

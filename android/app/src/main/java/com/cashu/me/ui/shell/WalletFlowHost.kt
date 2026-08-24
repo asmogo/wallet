@@ -19,12 +19,15 @@ import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.launch
 import com.cashu.me.ui.components.CompactSheetContent
 import com.cashu.me.ui.navigation.TopTab
@@ -106,20 +109,46 @@ internal class WalletFlowHandoffCoordinator {
 fun WalletFlowSheetHost(
     flow: WalletFlow?,
     dismissLocked: Boolean,
+    onBackdropVisibilityChanged: (Boolean) -> Unit,
     onDismissed: () -> Unit,
     snackbarHostState: SnackbarHostState,
     content: @Composable (flow: WalletFlow, close: () -> Unit) -> Unit,
 ) {
     if (flow == null) return
     val locked by rememberUpdatedState(dismissLocked)
+    val backdropVisibilityChanged by rememberUpdatedState(onBackdropVisibilityChanged)
     // Stable lambda: rememberModalBottomSheetState keys its saver on it.
     val confirmValueChange = remember {
-        { value: SheetValue -> value != SheetValue.Hidden || !locked }
+        { value: SheetValue ->
+            val canChange = value != SheetValue.Hidden || !locked
+            if (canChange && value == SheetValue.Hidden) {
+                // This is the earliest common point for scrim taps, back,
+                // swipes, and programmatic closes. Release the blur before
+                // the sheet starts travelling instead of waiting for a later
+                // snapshot observation or the completed dismissal callback.
+                backdropVisibilityChanged(false)
+            }
+            canChange
+        }
     }
     val sheetState = rememberModalBottomSheetState(
         skipPartiallyExpanded = true,
         confirmValueChange = confirmValueChange,
     )
+    LaunchedEffect(sheetState) {
+        var hasBeenVisible = false
+        snapshotFlow { sheetState.targetValue }.collect { target ->
+            if (target != SheetValue.Hidden) {
+                hasBeenVisible = true
+                backdropVisibilityChanged(true)
+            } else if (hasBeenVisible) {
+                // Target state changes at dismissal start, before the sheet's
+                // slide-out finishes. Clearing here keeps the blur from
+                // lingering for a second animation after the sheet disappears.
+                backdropVisibilityChanged(false)
+            }
+        }
+    }
     val scope = rememberCoroutineScope()
     val close: () -> Unit = {
         scope.launch { sheetState.hide() }.invokeOnCompletion { onDismissed() }

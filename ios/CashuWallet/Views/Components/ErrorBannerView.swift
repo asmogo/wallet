@@ -152,6 +152,20 @@ extension View {
     func bottomSheetBackdrop(isPresented: Bool) -> some View {
         modifier(BottomSheetBackdropModifier(isPresented: isPresented))
     }
+
+    /// Reports user-driven native sheet dismissal before its animation begins.
+    /// SwiftUI updates an item-backed sheet binding later for outside taps, so
+    /// the presenting canvas uses this signal to release its blur in sync.
+    func observeBottomSheetDismissal(
+        _ onDismissalStateChanged: @escaping (Bool) -> Void
+    ) -> some View {
+        background {
+            BottomSheetDismissalObserver(
+                onDismissalStateChanged: onDismissalStateChanged
+            )
+            .frame(width: 0, height: 0)
+        }
+    }
 }
 
 private struct BottomSheetBackdropModifier: ViewModifier {
@@ -164,12 +178,156 @@ private struct BottomSheetBackdropModifier: ViewModifier {
         } else if isPresented {
             .easeOut(duration: 0.14)
         } else {
-            .easeOut(duration: 0.06)
+            .easeOut(duration: 0.03)
         }
 
         content
             .blur(radius: isPresented ? 2.5 : 0)
             .animation(animation, value: isPresented)
+    }
+}
+
+private struct BottomSheetDismissalObserver: UIViewControllerRepresentable {
+    let onDismissalStateChanged: (Bool) -> Void
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(onDismissalStateChanged: onDismissalStateChanged)
+    }
+
+    func makeUIViewController(context: Context) -> ObserverViewController {
+        let controller = ObserverViewController()
+        controller.coordinator = context.coordinator
+        return controller
+    }
+
+    func updateUIViewController(_ controller: ObserverViewController, context: Context) {
+        context.coordinator.onDismissalStateChanged = onDismissalStateChanged
+        controller.coordinator = context.coordinator
+        context.coordinator.attach(from: controller)
+    }
+
+    static func dismantleUIViewController(
+        _ controller: ObserverViewController,
+        coordinator: Coordinator
+    ) {
+        coordinator.detach()
+    }
+
+    final class ObserverViewController: UIViewController {
+        weak var coordinator: Coordinator?
+
+        override func didMove(toParent parent: UIViewController?) {
+            super.didMove(toParent: parent)
+            coordinator?.attach(from: self)
+        }
+
+        override func viewDidAppear(_ animated: Bool) {
+            super.viewDidAppear(animated)
+            coordinator?.presentationDidAppear()
+            coordinator?.attach(from: self)
+        }
+
+        override func viewWillDisappear(_ animated: Bool) {
+            super.viewWillDisappear(animated)
+            coordinator?.presentationWillDisappear(from: self)
+        }
+    }
+
+    final class Coordinator: NSObject, UIAdaptivePresentationControllerDelegate {
+        var onDismissalStateChanged: (Bool) -> Void
+        private weak var presentationController: UIPresentationController?
+        private weak var forwardingDelegate: UIAdaptivePresentationControllerDelegate?
+        private var isDismissalReported = false
+
+        init(onDismissalStateChanged: @escaping (Bool) -> Void) {
+            self.onDismissalStateChanged = onDismissalStateChanged
+        }
+
+        func attach(from controller: UIViewController) {
+            var ancestor: UIViewController? = controller
+            while let current = ancestor {
+                if let presentationController = current.presentationController {
+                    attach(to: presentationController)
+                    return
+                }
+                ancestor = current.parent
+            }
+        }
+
+        func detach() {
+            if presentationController?.delegate === self {
+                presentationController?.delegate = forwardingDelegate
+            }
+            presentationController = nil
+            forwardingDelegate = nil
+        }
+
+        func presentationDidAppear() {
+            guard isDismissalReported else { return }
+            isDismissalReported = false
+            onDismissalStateChanged(false)
+        }
+
+        func presentationWillDisappear(from controller: UIViewController) {
+            var ancestor: UIViewController? = controller
+            while let current = ancestor {
+                if current.isBeingDismissed || current.navigationController?.isBeingDismissed == true {
+                    beginDismissal(using: current.transitionCoordinator)
+                    return
+                }
+                ancestor = current.parent
+            }
+        }
+
+        private func attach(to presentationController: UIPresentationController) {
+            guard presentationController.delegate !== self else { return }
+            detach()
+            self.presentationController = presentationController
+            forwardingDelegate = presentationController.delegate
+            presentationController.delegate = self
+        }
+
+        func presentationControllerShouldDismiss(
+            _ presentationController: UIPresentationController
+        ) -> Bool {
+            forwardingDelegate?.presentationControllerShouldDismiss?(presentationController) ?? true
+        }
+
+        func presentationControllerWillDismiss(
+            _ presentationController: UIPresentationController
+        ) {
+            beginDismissal(
+                using: presentationController.presentedViewController.transitionCoordinator
+            )
+            forwardingDelegate?.presentationControllerWillDismiss?(presentationController)
+        }
+
+        private func beginDismissal(
+            using transitionCoordinator: UIViewControllerTransitionCoordinator?
+        ) {
+            guard !isDismissalReported else { return }
+            isDismissalReported = true
+            onDismissalStateChanged(true)
+
+            transitionCoordinator?
+                .notifyWhenInteractionChanges { [weak self] context in
+                    guard context.isCancelled, let self else { return }
+                    self.isDismissalReported = false
+                    self.onDismissalStateChanged(false)
+                }
+        }
+
+        func presentationControllerDidDismiss(
+            _ presentationController: UIPresentationController
+        ) {
+            forwardingDelegate?.presentationControllerDidDismiss?(presentationController)
+        }
+
+        func presentationControllerDidAttemptToDismiss(
+            _ presentationController: UIPresentationController
+        ) {
+            forwardingDelegate?.presentationControllerDidAttemptToDismiss?(presentationController)
+        }
     }
 }
 

@@ -31,6 +31,7 @@ struct MainWalletView: View {
     @State private var deltaDismissTask: Task<Void, Never>?
     @State private var contactlessCoordinator = ContactlessPaymentCoordinator()
     @State private var selectedTransaction: WalletTransaction?
+    @State private var isSheetDismissing = false
     @State private var topInsetHeight: CGFloat = 0
     /// Last-viewed home balance unit, persisted so the wallet reopens on it.
     /// Clamped back to "sat" whenever that unit no longer carries a balance.
@@ -62,6 +63,10 @@ struct MainWalletView: View {
     private let pageDotSize: CGFloat = 6
     /// Gap between hero and dots — always reserved with the dots slot.
     private let pageDotGap: CGFloat = 0
+
+    private var isBottomSheetPresented: Bool {
+        navigationManager.activeWalletSheet != nil || selectedTransaction != nil
+    }
 
     /// Units the home hero can page through: sat, then each held non-sat unit.
     private var homeUnits: [String] {
@@ -143,16 +148,21 @@ struct MainWalletView: View {
                 onDismiss: { navigationManager.sheetDidDismiss() }
             ) { sheet in
                 sheetView(for: sheet)
+                    .observeBottomSheetDismissal { isSheetDismissing = $0 }
             }
             .sheet(item: $selectedTransaction) { transaction in
                 TransactionDetailView(transaction: transaction)
                     .environmentObject(walletManager)
+                    .observeBottomSheetDismissal { isSheetDismissing = $0 }
             }
             .task { await walletManager.loadTransactions() }
         }
         .bottomSheetBackdrop(
-            isPresented: navigationManager.activeWalletSheet != nil || selectedTransaction != nil
+            isPresented: isBottomSheetPresented && !isSheetDismissing
         )
+        .onChange(of: isBottomSheetPresented) { _, presented in
+            if presented { isSheetDismissing = false }
+        }
         .onReceive(NotificationCenter.default.publisher(for: .cashuTokenReceived)) { note in
             guard let amount = note.userInfo?["amount"] as? UInt64 else { return }
             // The home balance + delta are sat-denominated. A non-sat receive

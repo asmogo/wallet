@@ -31,6 +31,7 @@ struct HistoryView: View {
     @FocusState private var isSearchFocused: Bool
     @State private var selectedTransaction: WalletTransaction?
     @State private var selectedRequest: CashuRequest?
+    @State private var isSheetDismissing = false
     @State private var requestPendingDeletion: CashuRequest?
     @State private var receiveTokenPendingDeletion: WalletTransaction?
     /// Unclaimed incoming token being claimed (rows open the claim flow
@@ -69,6 +70,10 @@ struct HistoryView: View {
     // Match MainWalletView's recent-list row metrics so spacing reads the
     // same from Home → History (16pt vertical padding, 4pt title/time gap).
     private let rowVerticalPadding: CGFloat = 16
+
+    private var isBottomSheetPresented: Bool {
+        selectedTransaction != nil || selectedRequest != nil
+    }
 
     var body: some View {
         NavigationStack {
@@ -148,6 +153,7 @@ struct HistoryView: View {
             .sheet(item: $selectedTransaction) { transaction in
                 TransactionDetailView(transaction: transaction)
                     .environmentObject(walletManager)
+                    .observeBottomSheetDismissal { isSheetDismissing = $0 }
             }
             // Claim flow for an unclaimed incoming token. `item:` captures the
             // pending token at presentation, so the content stays stable while
@@ -167,6 +173,7 @@ struct HistoryView: View {
                         .environmentObject(walletManager)
                 }
                 .flatBottomSheetSurface()
+                .observeBottomSheetDismissal { isSheetDismissing = $0 }
             }
             .confirmationDialog(
                 "Remove this Cashu Request from history?",
@@ -222,8 +229,11 @@ struct HistoryView: View {
         }
         .accessibilityIdentifier("history-screen")
         .bottomSheetBackdrop(
-            isPresented: selectedTransaction != nil || selectedRequest != nil
+            isPresented: isBottomSheetPresented && !isSheetDismissing
         )
+        .onChange(of: isBottomSheetPresented) { _, presented in
+            if presented { isSheetDismissing = false }
+        }
     }
 
     // MARK: - History List
