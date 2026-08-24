@@ -329,7 +329,6 @@ private fun NavGraphBuilder.tabDestinations(
             walletManager = container.walletManager,
             settingsManager = container.settingsManager,
             priceService = container.priceService,
-            onOpenMints = { navController.navigateToTab(TopTab.Mints) },
             onOpenHistory = { navController.navigateToTab(TopTab.History) },
             onOpenTransaction = onOpenTransaction,
             // Receive goes straight to the unified surface — no chooser (iOS

@@ -200,8 +200,6 @@ struct MainWalletView: View {
 
     private var balanceSection: some View {
         VStack(spacing: 0) {
-            mintChip
-
             // Fixed footprint: hero + (gap + dots) always, whether the active
             // mint is single-unit or multi-unit — switching mints must not shove
             // Receive/Send / Recent up or down.
@@ -371,72 +369,6 @@ struct MainWalletView: View {
                 receivedDelta = nil
             }
         }
-    }
-
-    // MARK: - Active Mint Chip
-
-    @ViewBuilder
-    private var mintChip: some View {
-        if let active = walletManager.activeMint {
-            Menu {
-                ForEach(walletManager.mints) { mint in
-                    Button {
-                        HapticFeedback.selection()
-                        Task { try? await walletManager.setActiveMint(mint) }
-                    } label: {
-                        if mint.id == active.id {
-                            Label(mint.name, systemImage: "checkmark")
-                        } else {
-                            Text(mint.name)
-                        }
-                    }
-                }
-
-                Divider()
-
-                Button {
-                    navigationManager.activeWalletSheet = .discoverMints
-                } label: {
-                    Label("Add mint", systemImage: "plus")
-                }
-            } label: {
-                HStack(spacing: 8) {
-                    mintChipIcon(url: active.iconUrl)
-                    Text(active.name)
-                        .font(.subheadline.weight(.medium))
-                        .lineLimit(1)
-                }
-                .foregroundStyle(.secondary)
-                .padding(.horizontal, 14)
-                .padding(.vertical, 7)
-                .liquidGlass(in: Capsule(), interactive: true)
-                .contentShape(Capsule())
-            }
-            .accessibilityLabel("Active mint: \(active.name)")
-            .accessibilityHint("Choose a different active mint")
-        }
-    }
-
-    @ViewBuilder
-    private func mintChipIcon(url: String?) -> some View {
-        if let urlString = url, let imageURL = URL(string: urlString) {
-            CachedAsyncImage(url: imageURL) { image in
-                image.resizable().scaledToFill()
-            } placeholder: {
-                mintChipIconPlaceholder
-            }
-            .frame(width: 20, height: 20)
-            .clipShape(Circle())
-        } else {
-            mintChipIconPlaceholder
-        }
-    }
-
-    private var mintChipIconPlaceholder: some View {
-        Image(systemName: "bitcoinsign.bank.building.fill")
-            .font(.system(size: 14, weight: .semibold))
-            .foregroundStyle(.secondary)
-            .frame(width: 20, height: 20)
     }
 
     // MARK: - Action Buttons (Receive + Send)

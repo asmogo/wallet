@@ -80,7 +80,6 @@ import com.cashu.me.ui.components.BalanceDisplay
 import com.cashu.me.ui.components.balanceHeroHeight
 import com.cashu.me.ui.components.EmptyState
 import com.cashu.me.ui.components.GhostButton
-import com.cashu.me.ui.components.MintChip
 import com.cashu.me.ui.components.PrimaryButton
 import com.cashu.me.ui.components.SectionHeader
 import com.cashu.me.ui.components.scrollEdgeFade
@@ -133,7 +132,6 @@ fun HomeScreen(
     walletManager: WalletManager,
     settingsManager: SettingsManager,
     priceService: PriceService,
-    onOpenMints: () -> Unit,
     onAddMint: () -> Unit,
     onOpenHistory: () -> Unit,
     onOpenTransaction: (WalletTransaction) -> Unit,
@@ -225,21 +223,9 @@ fun HomeScreen(
             .consumeWindowInsets(contentPadding),
     ) {
         SubcomposeLayout(modifier = Modifier.fillMaxSize()) { constraints ->
-        // Pinned top section (mint chip + balance + triptych), measured first.
+        // Pinned top section (balance + actions), measured first.
         val pinned = subcompose(HomeSlot.Pinned) {
             PinnedTop(
-                // No mint, no chip — a "No mint" pill is chrome that states the
-                // obvious under a zero balance. iOS emits nothing here either.
-                mintChip = walletState.activeMint?.let { active ->
-                    {
-                        MintChip(
-                            activeMint = active,
-                            mints = walletState.mints,
-                            onSelect = { mint -> walletManager.launch { walletManager.setActiveMint(mint) } },
-                            onManage = onOpenMints,
-                        )
-                    }
-                },
                 balance = {
                     HomeBalanceHero(
                         showsPager = HomeBalance.showsUnitPager(
@@ -382,7 +368,6 @@ private enum class HomeSlot { Pinned, Body }
 
 @Composable
 private fun PinnedTop(
-    mintChip: (@Composable () -> Unit)?,
     balance: @Composable () -> Unit,
     triptych: @Composable () -> Unit,
     onOpenSettings: () -> Unit,
@@ -425,21 +410,13 @@ private fun PinnedTop(
                 )
             }
         }
-        // Mint chip + balance + Receive/Send — tighter vertical rhythm than the
-        // older ~28dp gaps so the hero block reads as one unit under the nav row.
+        // Balance + Receive/Send — tighter vertical rhythm than the older ~28dp
+        // gaps so the hero block reads as one unit under the nav row.
         Column(
             modifier = Modifier.fillMaxWidth(),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(14.dp),
         ) {
-            // Conditional on the Box, not just its content: an empty composable is
-            // still a placed child, so gating inside MintChip would leave the 14dp
-            // gap hanging above the balance.
-            if (mintChip != null) {
-                Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-                    mintChip()
-                }
-            }
             balance()
             triptych()
         }
