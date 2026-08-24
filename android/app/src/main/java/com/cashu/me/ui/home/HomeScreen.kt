@@ -155,12 +155,24 @@ fun HomeScreen(
     val balanceDisplay = remember(walletState.balance, settings, priceState) {
         formatter.displayText(
             amountSats = walletState.balance,
-            preferredPrimary = AmountDisplayPrimary.Sats.rawValue,
+            preferredPrimary = settings.homeBalancePrimary,
             showFiat = settings.showFiatBalance && priceState.btcPrice > 0,
             btcPrice = priceState.btcPrice,
             currencyCode = settings.bitcoinPriceCurrency,
             useBitcoinSymbol = settings.useBitcoinSymbol,
         )
+    }
+    val onSatBalanceClick: (() -> Unit)? = balanceDisplay.secondary?.let {
+        {
+            haptics.perform(WalletHaptic.Selection)
+            settingsManager.setHomeBalancePrimary(
+                if (balanceDisplay.effectivePrimary == AmountDisplayPrimary.Sats) {
+                    AmountDisplayPrimary.Fiat.rawValue
+                } else {
+                    AmountDisplayPrimary.Sats.rawValue
+                },
+            )
+        }
     }
 
     val recentTransactions = remember(walletState.transactions) {
@@ -236,6 +248,7 @@ fun HomeScreen(
                         satAmount = balanceDisplay,
                         persistedUnit = settings.homeBalanceUnit,
                         onUnitSelected = settingsManager::setHomeBalanceUnit,
+                        onSatBalanceClick = onSatBalanceClick,
                         receivedPayment = receivedPayment,
                         formatter = formatter,
                         statusMessage = PREPARING_WALLET_LABEL.takeIf {
@@ -439,6 +452,7 @@ private fun HomeBalanceHero(
     satAmount: AmountDisplayText,
     persistedUnit: String,
     onUnitSelected: (String) -> Unit,
+    onSatBalanceClick: (() -> Unit)?,
     receivedPayment: ReceivedPaymentEvent?,
     formatter: AmountFormatter,
     statusMessage: String?,
@@ -498,6 +512,7 @@ private fun HomeBalanceHero(
                         },
                         receivedDelta = receivedDelta,
                         statusMessage = statusMessage,
+                        onPrimaryClick = if (isSat) onSatBalanceClick else null,
                         modifier = Modifier.fillMaxWidth(),
                     )
                 }
@@ -508,6 +523,7 @@ private fun HomeBalanceHero(
                         ?.takeIf { it.unit.equals("sat", ignoreCase = true) }
                         ?.displayDelta(formatter),
                     statusMessage = statusMessage,
+                    onPrimaryClick = onSatBalanceClick,
                     modifier = Modifier.fillMaxWidth(),
                 )
             }

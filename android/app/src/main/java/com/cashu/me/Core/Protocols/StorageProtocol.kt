@@ -87,6 +87,7 @@ object StorageKeys {
     const val settingsNostrMintBackupEnabled = "settings.nostrMintBackupEnabled"
     const val walletNostrMintBackupLastBackupDate = "wallet.nostrMintBackup.lastBackupDate"
     const val settingsAmountDisplayPrimary = "settings.amountDisplayPrimary"
+    const val settingsHomeBalancePrimary = "settings.homeBalancePrimary"
     const val settingsHomeBalanceUnit = "settings.homeBalanceUnit"
     const val settingsSentryEnabled = "settings.sentryEnabled"
     const val settingsAppLockEnabled = "settings.appLockEnabled"

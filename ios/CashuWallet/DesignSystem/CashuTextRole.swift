@@ -225,11 +225,19 @@ private struct CashuTextModifier: ViewModifier {
 private struct NumericTransitionModifier: ViewModifier {
     let value: Double?
 
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
     func body(content: Content) -> some View {
         if let value {
-            content
-                .contentTransition(.numericText(value: value))
-                .animation(.snappy, value: value)
+            if reduceMotion {
+                content
+                    .contentTransition(.opacity)
+                    .animation(.easeOut(duration: 0.2), value: value)
+            } else {
+                content
+                    .contentTransition(.numericText(value: value))
+                    .animation(.snappy, value: value)
+            }
         } else {
             content
         }

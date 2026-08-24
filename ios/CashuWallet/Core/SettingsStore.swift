@@ -112,6 +112,11 @@ final class SettingsStore {
         set { set(newValue, forKey: StorageKeys.amountDisplayPrimary) }
     }
 
+    var homeBalancePrimary: String {
+        get { value(StorageKeys.homeBalancePrimary) ?? "sats" }
+        set { set(newValue, forKey: StorageKeys.homeBalancePrimary) }
+    }
+
     var appLockEnabled: Bool {
         get { bool(StorageKeys.appLockEnabled, default: false) }
         set { set(newValue, forKey: StorageKeys.appLockEnabled) }

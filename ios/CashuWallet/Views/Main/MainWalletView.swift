@@ -244,18 +244,37 @@ struct MainWalletView: View {
             if unit.lowercased() == "sat" {
                 let sats = walletManager.balancesByUnit["sat"] ?? walletManager.balance
                 let display = balanceDisplay(sats)
-                AmountLockup(
-                    parts: display.primaryParts,
-                    value: Double(sats),
-                    accessibilityPrefix: "Balance"
-                )
-                .animation(.snappy, value: sats)
+                let primaryValue = balanceNumericValue(sats, primary: display.effectivePrimary)
+                if let secondary = display.secondary {
+                    Button {
+                        withAnimation(reduceMotion ? .easeOut(duration: 0.2) : .snappy) {
+                            settings.homeBalancePrimary.toggle()
+                        }
+                    } label: {
+                        AmountLockup(
+                            parts: display.primaryParts,
+                            value: primaryValue,
+                            accessibilityPrefix: "Balance"
+                        )
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Balance: \(display.primary)")
+                    .accessibilityHint("Double tap to make \(secondary) the primary balance")
+                    .sensoryFeedback(.selection, trigger: settings.homeBalancePrimary)
+                } else {
+                    AmountLockup(
+                        parts: display.primaryParts,
+                        value: primaryValue,
+                        accessibilityPrefix: "Balance"
+                    )
+                }
 
                 // Status line under the balance: a transient monochrome
                 // received-delta beat takes over the fiat slot for 2.5s on receipt,
                 // then fiat fades back. Same slot, so the swap doesn't reflow the
                 // balance. (De-greened 2026-07-05 — the balance roll carries the moment.)
-                balanceStatusLine(display)
+                balanceStatusLine(display, secondaryValue: balanceSecondaryNumericValue(sats, display: display))
             } else {
                 let amount = walletManager.balancesByUnit[unit] ?? 0
                 let formatted = CurrencyAmount(
@@ -300,7 +319,7 @@ struct MainWalletView: View {
     /// while a payment just landed, otherwise the fiat sub-amount. Always keeps
     /// [statusLineHeight] so hiding fiat never collapses the hero.
     @ViewBuilder
-    private func balanceStatusLine(_ display: AmountDisplayText) -> some View {
+    private func balanceStatusLine(_ display: AmountDisplayText, secondaryValue: Double?) -> some View {
         ZStack {
             if let delta = receivedDelta {
                 receivedDeltaBeat(delta)
@@ -313,6 +332,9 @@ struct MainWalletView: View {
             } else if let secondary = display.secondary {
                 Text(secondary)
                     .font(.body)
+                    .monospacedDigit()
+                    .contentTransition(reduceMotion ? .opacity : .numericText(value: secondaryValue ?? 0))
+                    .animation(reduceMotion ? .easeOut(duration: 0.2) : .snappy, value: secondaryValue)
                     .foregroundStyle(.secondary)
                     .transition(.opacity)
             }
@@ -621,12 +643,21 @@ struct MainWalletView: View {
     private func balanceDisplay(_ sats: UInt64) -> AmountDisplayText {
         AmountFormatter.displayText(
             amountSats: sats,
-            preferredPrimary: .sats,
+            preferredPrimary: settings.homeBalancePrimary,
             showFiat: settings.showFiatBalance,
             btcPrice: priceService.btcPriceUSD,
             currencyCode: settings.bitcoinPriceCurrency,
             useBitcoinSymbol: settings.useBitcoinSymbol
         )
+    }
+
+    private func balanceNumericValue(_ sats: UInt64, primary: AmountDisplayPrimary) -> Double {
+        primary == .fiat ? priceService.satsToFiat(sats) : Double(sats)
+    }
+
+    private func balanceSecondaryNumericValue(_ sats: UInt64, display: AmountDisplayText) -> Double? {
+        guard display.secondary != nil else { return nil }
+        return display.effectivePrimary == .fiat ? Double(sats) : priceService.satsToFiat(sats)
     }
 
     @ViewBuilder

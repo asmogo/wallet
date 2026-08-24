@@ -59,6 +59,7 @@ data class SettingsState(
     val receivePaymentRequestsAutomatically: Boolean = true,
     val showP2PKButtonInDrawer: Boolean = false,
     val amountDisplayPrimary: String = "fiat",
+    val homeBalancePrimary: String = "sats",
     val homeBalanceUnit: String = "sat",
     val sentryEnabled: Boolean = false,
     val appLockEnabled: Boolean = false,
@@ -243,6 +244,9 @@ class SettingsManager(
     fun setAmountDisplayPrimary(value: String) = update {
         settingsStore.amountDisplayPrimary = AmountDisplayPrimary.fromRaw(value).rawValue
     }
+    fun setHomeBalancePrimary(value: String) = update {
+        settingsStore.homeBalancePrimary = AmountDisplayPrimary.fromRaw(value).rawValue
+    }
     fun setHomeBalanceUnit(unit: String) = update { settingsStore.homeBalanceUnit = unit }
 
     /**
@@ -400,6 +404,7 @@ class SettingsManager(
         receivePaymentRequestsAutomatically = settingsStore.receivePaymentRequestsAutomatically,
         showP2PKButtonInDrawer = settingsStore.showP2PKButtonInDrawer,
         amountDisplayPrimary = AmountDisplayPrimary.fromRaw(settingsStore.amountDisplayPrimary).rawValue,
+        homeBalancePrimary = AmountDisplayPrimary.fromRaw(settingsStore.homeBalancePrimary).rawValue,
         homeBalanceUnit = settingsStore.homeBalanceUnit,
         sentryEnabled = settingsStore.sentryEnabled,
         appLockEnabled = settingsStore.appLockEnabled,
