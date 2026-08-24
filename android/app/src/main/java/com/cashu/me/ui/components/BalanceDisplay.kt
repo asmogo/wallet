@@ -94,6 +94,10 @@ fun BalanceDisplay(
         Modifier
             .clickable(
                 interactionSource = remember { MutableInteractionSource() },
+                // The home balance is an informational lockup, not a button.
+                // Keep its direct tap affordance quiet so the bounded Material
+                // ripple does not draw a rectangular bar around the numeral.
+                indication = null,
                 role = Role.Button,
                 onClickLabel = "Make ${amount.secondary} primary",
                 onClick = onPrimaryClick,
