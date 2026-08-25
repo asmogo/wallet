@@ -1224,7 +1224,20 @@ struct UnifiedSendView: View {
         connectMintRoute == nil ? compactContentHeight : connectMintContentHeight
     }
 
-    enum Step: Equatable { case input, amount, confirm, sending, sent, failed }
+    enum Step: Hashable { case input, amount, confirm, sending, sent, failed }
+
+    /// The detent owner must change with both the main flow and the nested
+    /// connect-mint flow. Keying only on `connectMintRoute` left input → amount
+    /// as an uncoordinated height change on physical devices.
+    private enum SheetSizingStep: Hashable {
+        case send(Step)
+        case connectMint(ConnectMintRoute)
+    }
+
+    private var sheetSizingStep: SheetSizingStep {
+        if let connectMintRoute { return .connectMint(connectMintRoute) }
+        return .send(step)
+    }
 
     enum LockedDestination: Equatable {
         case melt(request: String, mode: MeltView.MeltMode, decoded: PaymentRequestDecodeResult)
@@ -1337,13 +1350,12 @@ struct UnifiedSendView: View {
         }
         // Own the sheet chrome so the detent can follow the step: compact for
         // input, `.large` + flat canvas for amount/confirm/status.
-        // Keyed on the connect-a-mint step so that resize is one motion with the
-        // slide. Input → amount/confirm keeps snapping: that swap is in place
-        // and already carries its own animation.
+        // Keyed on the actual visible face so compact → amount/confirm and the
+        // connect-mint steps resize in the same motion as their content swap.
         .contentFitDetent(
             sheetContentHeight,
             enabled: prefersCompactSheet,
-            step: connectMintRoute,
+            step: sheetSizingStep,
             stepResize: SharedAxis.duration
         )
         .presentationDragIndicator(.visible)
@@ -1662,41 +1674,51 @@ struct UnifiedSendView: View {
     // MARK: Amount step
 
     private var amountStep: some View {
-        VStack(spacing: 0) {
-            Spacer(minLength: 0)
+        GeometryReader { proxy in
+            ScrollView {
+                VStack(spacing: 0) {
+                    Spacer(minLength: 0)
 
-            CurrencyAmountDisplay(
-                sats: amountSats,
-                primary: $settings.amountDisplayPrimary,
-                entryRaw: amountString
-            )
+                    CurrencyAmountDisplay(
+                        sats: amountSats,
+                        primary: $settings.amountDisplayPrimary,
+                        entryRaw: amountString
+                    )
 
-            if let errorMessage {
-                errorNotice(errorMessage)
+                    if let errorMessage {
+                        errorNotice(errorMessage)
+                            .padding(.horizontal)
+                            .padding(.top, 12)
+                    }
+
+                    Spacer(minLength: 0)
+
+                    // Keep the source selector in the same pre-keypad slot as Receive.
+                    if let mint = currentAmountMint {
+                        amountMintRow(mint)
+                            .padding(.horizontal)
+                            .padding(.bottom, 8)
+                    }
+
+                    NumberPadAmountInput(amountString: $amountString, unit: entryUnit)
+                        .padding(.horizontal, 24)
+
+                    Button(action: continueFromAmount) {
+                        Text("Continue")
+                    }
+                    .glassButton()
+                    .disabled(amountSats == 0)
                     .padding(.horizontal)
                     .padding(.top, 12)
+                    .padding(.bottom, 16)
+                }
+                // The large detent gets the anchored layout. While the sheet is
+                // still growing from its compact input detent, the intrinsic
+                // content scrolls instead of being compressed into an overlap.
+                .frame(minHeight: proxy.size.height)
             }
-
-            Spacer(minLength: 0)
-
-            // Keep the source selector in the same pre-keypad slot as Receive.
-            if let mint = currentAmountMint {
-                amountMintRow(mint)
-                    .padding(.horizontal)
-                    .padding(.bottom, 8)
-            }
-
-            NumberPadAmountInput(amountString: $amountString, unit: entryUnit)
-                .padding(.horizontal, 24)
-
-            Button(action: continueFromAmount) {
-                Text("Continue")
-            }
-            .glassButton()
-            .disabled(amountSats == 0)
-            .padding(.horizontal)
-            .padding(.top, 12)
-            .padding(.bottom, 16)
+            .scrollBounceBehavior(.basedOnSize)
+            .scrollIndicators(.hidden)
         }
     }
 
