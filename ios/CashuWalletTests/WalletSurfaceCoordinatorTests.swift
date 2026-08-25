@@ -85,6 +85,25 @@ final class WalletSurfaceCoordinatorTests: XCTestCase {
         XCTAssertTrue(nav.isFlowSurfaceOpen)
     }
 
+    func testSendAmountSheetWaitsForCompactSheetDismissal() {
+        let nav = NavigationManager()
+        nav.activeWalletSheet = .send(prefill: nil)
+        let destination = SendAmountDestination.melt(
+            request: "wallet@example.com",
+            mode: .lightning,
+            decoded: .lightningAddress("wallet@example.com")
+        )
+
+        nav.present(.sheet(.sendAmount(destination)))
+
+        XCTAssertNil(nav.activeWalletSheet)
+        XCTAssertTrue(nav.isFlowSurfaceOpen, "the compact sheet is still dismissing")
+
+        nav.sheetDidDismiss()
+
+        XCTAssertEqual(nav.activeWalletSheet?.id, "sendAmount")
+    }
+
     func testDeepLinkTokensQueueAndConsumeInOrder() {
         let nav = NavigationManager()
 

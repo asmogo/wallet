@@ -684,27 +684,21 @@ struct MainWalletView: View {
             )
             .environmentObject(walletManager)
         case .send(let prefill):
-            // UnifiedSendView owns its presentation detents: content-fit on the
-            // input step, `.large` + canvas once amount/confirm/status take over.
-            UnifiedSendView(
+            unifiedSendSheet(initialDestination: prefill)
+        case .sendEdit(let prefill):
+            unifiedSendSheet(
                 initialDestination: prefill,
-                onClose: { navigationManager.activeWalletSheet = nil },
-                onReceive: { navigationManager.activeWalletSheet = .receive },
-                onContactless: {
-                    navigationManager.activeWalletSheet = nil
-                    contactlessCoordinator.start(
-                        walletManager: walletManager,
-                        navigationManager: navigationManager
-                    )
-                },
-                // A token pasted into Send is a receive: bounce it to the
-                // full-screen claim page, closing the Send sheet first.
-                onOpenReceiveToken: { token in
-                    navigationManager.present(.cover(.receiveToken(token)))
-                },
-                onSendEcash: { navigationManager.activeWalletSheet = .sendEcash }
+                autoAdvanceInitialDestination: false
             )
-            .environmentObject(walletManager)
+        case .sendAmount(let destination):
+            unifiedSendSheet(
+                initialAmountDestination: destination,
+                onEditDestination: {
+                    navigationManager.present(
+                        .sheet(.sendEdit(prefill: destination.rawInput))
+                    )
+                }
+            )
         case .scanner:
             // The scanner self-dismisses on a successful read and hands the
             // payload back; the routed surface presents only after this sheet
@@ -747,6 +741,43 @@ struct MainWalletView: View {
             .environmentObject(walletManager)
             .flatBottomSheetSurface()
         }
+    }
+
+    /// All Send faces share one implementation, but amount entry is a separate
+    /// native sheet presentation. Dismissing the compact input before opening
+    /// the large amount sheet avoids racing keyboard removal against a detent
+    /// resize, and mirrors the already-smooth Send Ecash handoff.
+    private func unifiedSendSheet(
+        initialDestination: String? = nil,
+        initialAmountDestination: SendAmountDestination? = nil,
+        autoAdvanceInitialDestination: Bool = true,
+        onEditDestination: (() -> Void)? = nil
+    ) -> some View {
+        UnifiedSendView(
+            initialDestination: initialDestination,
+            initialAmountDestination: initialAmountDestination,
+            autoAdvanceInitialDestination: autoAdvanceInitialDestination,
+            onClose: { navigationManager.activeWalletSheet = nil },
+            onReceive: { navigationManager.activeWalletSheet = .receive },
+            onContactless: {
+                navigationManager.activeWalletSheet = nil
+                contactlessCoordinator.start(
+                    walletManager: walletManager,
+                    navigationManager: navigationManager
+                )
+            },
+            // A token pasted into Send is a receive: bounce it to the
+            // full-screen claim page, closing the Send sheet first.
+            onOpenReceiveToken: { token in
+                navigationManager.present(.cover(.receiveToken(token)))
+            },
+            onSendEcash: { navigationManager.activeWalletSheet = .sendEcash },
+            onRequestAmount: { destination in
+                navigationManager.present(.sheet(.sendAmount(destination)))
+            },
+            onEditDestination: onEditDestination
+        )
+        .environmentObject(walletManager)
     }
 }
 

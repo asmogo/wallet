@@ -1072,20 +1072,36 @@ enum SendPaymentCopy {
     )
 }
 
+/// A destination that needs an amount before it can be paid. Keeping this as
+/// route data lets the compact destination sheet dismiss completely before the
+/// large amount sheet appears, matching the native Send Ecash handoff.
+enum SendAmountDestination: Equatable {
+    case melt(request: String, mode: MeltView.MeltMode, decoded: PaymentRequestDecodeResult)
+    case cashuRequest(CashuPaymentRequestSummary)
+
+    var rawInput: String {
+        switch self {
+        case .melt(let request, _, _): request
+        case .cashuRequest(let summary): summary.encoded
+        }
+    }
+}
+
 /// The single entry point for sending — one grounded screen modeled on the Family
 /// wallet. The title "Send" and a pinned "To [recipient]" pill stay put; only the
 /// area below transitions through steps: input → amount keypad → confirm(fee) →
 /// sending → sent. A "Send to" field accepts a Lightning address, BOLT11 invoice,
 /// BOLT12 offer, on-chain address, or Cashu request; detecting a valid destination
 /// advances automatically (paste/scan/recent immediately, hand-typing after a short
-/// settle). The pay/confirm logic mirrors `MeltView` and `CashuPaymentRequestPayView`
-/// (same `walletManager` calls) but is hosted in-place so the screen stays grounded.
-/// A pasted bearer *token* routes out to the Receive-this claim screen.
+/// settle). Amountless destinations use a native sheet handoff before amount entry;
+/// later payment steps remain hosted in place. A pasted bearer *token* routes out
+/// to the Receive-this claim screen.
 struct UnifiedSendView: View {
     /// Pre-fills the destination field on open — used when the Receive sheet
     /// hands a pasted/scanned *payable* (invoice, address, Cashu Request) back to
     /// Send. Consumed once, then decoded exactly like a paste.
     var initialDestination: String? = nil
+    private let autoAdvanceInitialDestination: Bool
     let onClose: () -> Void
     /// CTA out of the zero-balance empty state — opens the Receive chooser.
     let onReceive: () -> Void
@@ -1097,16 +1113,20 @@ struct UnifiedSendView: View {
     let onOpenReceiveToken: (String) -> Void
     /// Swap the sheet content to the Create-Ecash flow.
     let onSendEcash: () -> Void
+    /// Amountless destinations leave the compact input sheet and reopen in a
+    /// dedicated large sheet. This avoids an in-place detent + keyboard race.
+    let onRequestAmount: (SendAmountDestination) -> Void
+    /// Present only when this instance started as the routed amount sheet.
+    private let onEditDestination: (() -> Void)?
 
     @EnvironmentObject var walletManager: WalletManager
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @ObservedObject private var settings = SettingsManager.shared
     @ObservedObject private var priceService = PriceService.shared
-
     // Step machine
-    @State private var step: Step = .input
-    @State private var destination = ""
-    @State private var locked: LockedDestination?
+    @State private var step: Step
+    @State private var destination: String
+    @State private var locked: SendAmountDestination?
 
     // Amount + melt quote
     @State private var amountString = ""
@@ -1218,6 +1238,33 @@ struct UnifiedSendView: View {
     /// step's height and the sheet stays sized for the step just left.
     @State private var connectMintContentHeight: CGFloat = 0
 
+    init(
+        initialDestination: String? = nil,
+        initialAmountDestination: SendAmountDestination? = nil,
+        autoAdvanceInitialDestination: Bool = true,
+        onClose: @escaping () -> Void,
+        onReceive: @escaping () -> Void,
+        onContactless: @escaping () -> Void,
+        onOpenReceiveToken: @escaping (String) -> Void,
+        onSendEcash: @escaping () -> Void,
+        onRequestAmount: @escaping (SendAmountDestination) -> Void,
+        onEditDestination: (() -> Void)? = nil
+    ) {
+        self.initialDestination = initialDestination
+        self.autoAdvanceInitialDestination = autoAdvanceInitialDestination
+        self.onClose = onClose
+        self.onReceive = onReceive
+        self.onContactless = onContactless
+        self.onOpenReceiveToken = onOpenReceiveToken
+        self.onSendEcash = onSendEcash
+        self.onRequestAmount = onRequestAmount
+        self.onEditDestination = onEditDestination
+
+        _step = State(initialValue: initialAmountDestination == nil ? .input : .amount)
+        _destination = State(initialValue: initialAmountDestination?.rawInput ?? initialDestination ?? "")
+        _locked = State(initialValue: initialAmountDestination)
+    }
+
     /// Whichever step currently owns the sheet's height — each hugs its own
     /// content, and the resize rides the swap. See `SharedAxis`.
     private var sheetContentHeight: CGFloat {
@@ -1237,11 +1284,6 @@ struct UnifiedSendView: View {
     private var sheetSizingStep: SheetSizingStep {
         if let connectMintRoute { return .connectMint(connectMintRoute) }
         return .send(step)
-    }
-
-    enum LockedDestination: Equatable {
-        case melt(request: String, mode: MeltView.MeltMode, decoded: PaymentRequestDecodeResult)
-        case cashuRequest(CashuPaymentRequestSummary)
     }
 
     /// Resolved fee for the current creq mint + amount.
@@ -1341,7 +1383,9 @@ struct UnifiedSendView: View {
                 didConsumeInitialDestination = true
                 suppressedValue = initialDestination.trimmingCharacters(in: .whitespacesAndNewlines)
                 destination = initialDestination
-                advanceNow(raw: initialDestination)
+                if autoAdvanceInitialDestination {
+                    advanceNow(raw: initialDestination)
+                }
             }
             .onDisappear {
                 autoAdvanceTask?.cancel()
@@ -1476,7 +1520,7 @@ struct UnifiedSendView: View {
 
     // MARK: Pinned "To" pill
 
-    private func toPill(_ locked: LockedDestination) -> some View {
+    private func toPill(_ locked: SendAmountDestination) -> some View {
         Button(action: editFromPill) {
             HStack(spacing: 10) {
                 Text("To")
@@ -1507,7 +1551,7 @@ struct UnifiedSendView: View {
     /// anchored amount hero (see `PayFlowScaffold`). The mint is `nil` for Cashu-request
     /// states with no held mint — those keep an actionable row in the details instead.
     @ViewBuilder
-    private func confirmHeader(mint: MintInfo?, locked: LockedDestination?) -> some View {
+    private func confirmHeader(mint: MintInfo?, locked: SendAmountDestination?) -> some View {
         if let locked {
             VStack(spacing: 8) {
                 if let mint {
@@ -1528,7 +1572,7 @@ struct UnifiedSendView: View {
         }
     }
 
-    private func pillValue(_ locked: LockedDestination) -> String {
+    private func pillValue(_ locked: SendAmountDestination) -> String {
         switch locked {
         case .melt(let request, _, let decoded):
             if case .lightningAddress(let addr) = decoded { return addr }
@@ -1542,6 +1586,10 @@ struct UnifiedSendView: View {
 
     private func editFromPill() {
         HapticFeedback.selection()
+        if let onEditDestination {
+            onEditDestination()
+            return
+        }
         suppressedValue = destination.trimmingCharacters(in: .whitespacesAndNewlines)
         meltQuote = nil
         feeTask?.cancel()
@@ -1662,7 +1710,8 @@ struct UnifiedSendView: View {
     private func goToAmount() {
         amountString = ""
         HapticFeedback.selection()
-        withAnimation(.smooth(duration: 0.3)) { step = .amount }
+        guard step == .input, let locked else { return }
+        onRequestAmount(locked)
     }
 
     private func startMeltConfirm() {
