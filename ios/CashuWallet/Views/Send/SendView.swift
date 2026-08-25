@@ -1326,6 +1326,7 @@ struct UnifiedSendView: View {
                       let initialDestination,
                       !initialDestination.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
                 didConsumeInitialDestination = true
+                suppressedValue = initialDestination.trimmingCharacters(in: .whitespacesAndNewlines)
                 destination = initialDestination
                 advanceNow(raw: initialDestination)
             }
@@ -1556,7 +1557,9 @@ struct UnifiedSendView: View {
             let result = PaymentRequestDecoder.decode(
                 trimmed, includeCashuPaymentRequests: true, preferCashuPaymentRequests: true
             )
-            advance(result, raw: trimmed)
+            // A paused keystroke is not a submit. Continue auto-routing valid
+            // destinations, but do not flash a generic error while typing.
+            advance(result, raw: trimmed, showUnrecognizedHint: false)
         }
     }
 
@@ -1572,7 +1575,11 @@ struct UnifiedSendView: View {
 
     /// Lock the destination and move to the right step. Setting `step` away from
     /// `.input` makes any in-flight debounce bail on its own re-check.
-    private func advance(_ result: PaymentRequestDecodeResult, raw: String) {
+    private func advance(
+        _ result: PaymentRequestDecodeResult,
+        raw: String,
+        showUnrecognizedHint: Bool = true
+    ) {
         switch result {
         case .bolt11, .bolt12:
             if let notice = result.amountlessMeltCaution {
@@ -1621,7 +1628,7 @@ struct UnifiedSendView: View {
             if let token = TokenParser.normalizedToken(from: raw) {
                 HapticFeedback.selection()
                 onOpenReceiveToken(token)
-            } else {
+            } else if showUnrecognizedHint {
                 inputHint = "Unrecognized — try a Lightning address, invoice, Bitcoin address, or Cashu Request"
             }
         }
@@ -2674,6 +2681,7 @@ struct UnifiedSendView: View {
     private func handleScannedDestination(_ scanned: String) {
         let trimmed = scanned.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
+        suppressedValue = trimmed
         destination = trimmed
         advanceNow(raw: trimmed)
     }
@@ -2683,6 +2691,7 @@ struct UnifiedSendView: View {
         let trimmed = content.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
         HapticFeedback.selection()
+        suppressedValue = trimmed
         destination = trimmed
         advanceNow(raw: trimmed)
     }

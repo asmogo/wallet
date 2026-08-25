@@ -22,6 +22,11 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -159,20 +164,24 @@ fun InlineNotice(
 fun InlineNoticeHost(
     text: String?,
     modifier: Modifier = Modifier,
+    contentModifier: Modifier = Modifier,
     severity: NoticeSeverity,
     detail: String? = null,
 ) {
     // Keep the last non-null text so the exit fade shows content, not a blank.
-    var lastText = text
+    var lastText by remember { mutableStateOf(text) }
+    LaunchedEffect(text) {
+        if (text != null) lastText = text
+    }
     AnimatedVisibility(
         visible = text != null,
         modifier = modifier,
         enter = slideInVertically(tween(220)) { it / 2 } + fadeIn(tween(220)),
         exit = fadeOut(tween(180)),
     ) {
-        text?.let { lastText = it }
         InlineNotice(
-            text = lastText.orEmpty(),
+            text = (text ?: lastText).orEmpty(),
+            modifier = contentModifier,
             severity = severity,
             detail = detail,
         )

@@ -1,6 +1,7 @@
 package com.cashu.me.ui.components
 
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -19,6 +20,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalDensity
@@ -155,12 +157,21 @@ private fun MintIdentity(
     onPickMint: (() -> Unit)?,
     modifier: Modifier = Modifier,
 ) {
+    val identityInteractionSource = remember { MutableInteractionSource() }
     val identityModifier = modifier
         .heightIn(min = RowMinHeight)
         .then(
             if (onPickMint != null) {
                 Modifier
-                    .clickable(role = Role.Button, onClick = onPickMint)
+                    // Opening the picker is the feedback. Suppress the default
+                    // rectangular ripple so this deliberately unboxed selector
+                    // does not flash a filled card around only the mint name.
+                    .clickable(
+                        interactionSource = identityInteractionSource,
+                        indication = null,
+                        role = Role.Button,
+                        onClick = onPickMint,
+                    )
                     .clearAndSetSemantics {
                         contentDescription = description
                         role = Role.Button

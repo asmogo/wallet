@@ -92,6 +92,7 @@ import com.cashu.me.ui.components.EmptyStateSize
 import com.cashu.me.ui.components.FlowSheetTitle
 import com.cashu.me.ui.components.GhostButton
 import com.cashu.me.ui.components.InlineNotice
+import com.cashu.me.ui.components.InlineNoticeHost
 import com.cashu.me.ui.components.InspectorRow
 import com.cashu.me.ui.components.MethodActionRow
 import com.cashu.me.ui.components.MintPickerSheet
@@ -260,7 +261,11 @@ fun UnifiedSendScreen(
     }
 
     /** Rail inference (iOS handleDestinationChange → advance). */
-    fun advance(raw: String, fromScan: Boolean = false) {
+    fun advance(
+        raw: String,
+        fromScan: Boolean = false,
+        showUnrecognizedHint: Boolean = true,
+    ) {
         val trimmed = raw.trim()
         if (trimmed.isEmpty() || trimmed == suppressedValue) return
         inputHint = null
@@ -291,8 +296,10 @@ fun UnifiedSendScreen(
             }
             is SendDestinationResolution.EcashToken -> onOpenReceiveToken(resolution.token)
             SendDestinationResolution.Unrecognized -> {
-                inputHint =
-                    "Unrecognized — try a Lightning address, invoice, Bitcoin address, or Cashu Request"
+                if (showUnrecognizedHint) {
+                    inputHint =
+                        "Unrecognized — try a Lightning address, invoice, Bitcoin address, or Cashu Request"
+                }
             }
         }
     }
@@ -401,13 +408,17 @@ fun UnifiedSendScreen(
             return@LaunchedEffect
         }
         delay(TYPE_DEBOUNCE_MS)
-        advance(destination)
+        // A paused keystroke is not a submit. Keep resolving valid destinations
+        // automatically, but reserve the generic error for discrete complete
+        // inputs such as paste and scan so the form never jumps while typing.
+        advance(destination, showUnrecognizedHint = false)
     }
 
     LaunchedEffect(prefilledPayload) {
         val pre = prefilledPayload?.takeIf { it.isNotBlank() } ?: return@LaunchedEffect
         destination = pre
         advance(pre, fromScan = true)
+        suppressedValue = pre.trim()
         onPrefilledConsumed()
     }
 
@@ -571,6 +582,7 @@ fun UnifiedSendScreen(
                                     if (clip.isNotEmpty()) {
                                         destination = clip
                                         advance(clip)
+                                        suppressedValue = clip
                                     }
                                 },
                                 onClear = {
@@ -886,10 +898,11 @@ private fun InputFace(
                 }
             } else null,
         )
-        if (inputHint != null) {
-            Spacer(Modifier.height(CashuTheme.spacing.default))
-            InlineNotice(text = inputHint, severity = NoticeSeverity.Caution)
-        }
+        InlineNoticeHost(
+            text = inputHint,
+            severity = NoticeSeverity.Caution,
+            contentModifier = Modifier.padding(top = CashuTheme.spacing.default),
+        )
         Spacer(Modifier.height(CashuTheme.spacing.section))
         Column(verticalArrangement = Arrangement.spacedBy(CashuTheme.spacing.default)) {
             MethodActionRow(
