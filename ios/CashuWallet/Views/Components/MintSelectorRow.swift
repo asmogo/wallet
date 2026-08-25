@@ -17,7 +17,6 @@ enum MintSelectorDirection {
 /// Shared metrics for the unboxed mint selector used throughout value flows.
 enum FlowRowMetrics {
     static let minHeight: CGFloat = 48
-    static let avatar: CGFloat = 28
     static let gap: CGFloat = 8
     static let actionInset: CGFloat = 8
     static let verticalPadding: CGFloat = 6
@@ -80,34 +79,45 @@ struct MintSelectorRow: View {
     }
 
     private func identityContent(showsDirection: Bool) -> some View {
-        HStack(spacing: FlowRowMetrics.gap) {
+        HStack(alignment: .firstTextBaseline, spacing: FlowRowMetrics.gap) {
             if showsDirection {
                 Text(direction.label)
                     .cashuText(.textLink)
                     .foregroundStyle(.secondary)
             }
 
-            MintAvatarView(
-                iconUrl: mint.iconUrl,
-                name: mint.name,
-                size: FlowRowMetrics.avatar
-            )
-
-            VStack(alignment: .leading, spacing: 2) {
-                Text(mint.name)
-                    .cashuText(.textLink)
-                    .lineLimit(1)
-                    .truncationMode(.tail)
-                if showsBalance {
-                    Text(balanceText)
-                        .cashuText(.metadata)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
-                        .truncationMode(.tail)
+            if showsBalance && dynamicTypeSize.isAccessibilitySize {
+                VStack(alignment: .leading, spacing: 2) {
+                    mintName
+                    balance
+                }
+            } else {
+                HStack(alignment: .firstTextBaseline, spacing: FlowRowMetrics.gap) {
+                    mintName
+                    if showsBalance {
+                        balance
+                            .fixedSize(horizontal: true, vertical: false)
+                    }
                 }
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private var mintName: some View {
+        Text(mint.name)
+            .cashuText(.body)
+            .fontWeight(.medium)
+            .lineLimit(1)
+            .truncationMode(.tail)
+    }
+
+    private var balance: some View {
+        Text(balanceText)
+            .cashuText(.metadata)
+            .foregroundStyle(.secondary)
+            .lineLimit(1)
+            .truncationMode(.tail)
     }
 
     @ViewBuilder

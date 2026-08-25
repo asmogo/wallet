@@ -40,7 +40,6 @@ enum class MintSelectorDirection(val label: String) {
     Destination("To"),
 }
 
-private val AvatarSize = 28.dp
 private val ChevronSize = 18.dp
 private val RowMinHeight = 56.dp
 private val MinimumTouchTarget = 48.dp
@@ -99,6 +98,7 @@ fun MintSelectorRow(
                 balanceText = balanceText,
                 showBalance = showBalance,
                 showDirection = !isAccessibilityLayout,
+                stacksBalance = isAccessibilityLayout,
                 description = description,
                 onPickMint = onPickMint,
                 modifier = Modifier.weight(1f),
@@ -150,6 +150,7 @@ private fun MintIdentity(
     balanceText: String?,
     showBalance: Boolean,
     showDirection: Boolean,
+    stacksBalance: Boolean,
     description: String,
     onPickMint: (() -> Unit)?,
     modifier: Modifier = Modifier,
@@ -188,10 +189,12 @@ private fun MintIdentity(
             Spacer(Modifier.width(CashuTheme.spacing.snug))
         }
 
-        MintAvatar(mint = mint, size = AvatarSize)
-        Spacer(Modifier.width(CashuTheme.spacing.snug))
-
-        Column(modifier = Modifier.weight(1f)) {
+        if (showBalance && balanceText != null && stacksBalance) {
+            Column(modifier = Modifier.weight(1f)) {
+                MintName(mint.name)
+                MintBalance(balanceText)
+            }
+        } else {
             Text(
                 text = mint.name,
                 style = MaterialTheme.typography.bodyLarge,
@@ -199,16 +202,36 @@ private fun MintIdentity(
                 color = MaterialTheme.colorScheme.onSurface,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
+                modifier = Modifier
+                    .weight(1f, fill = false),
             )
             if (showBalance && balanceText != null) {
-                Text(
-                    text = balanceText,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
+                Spacer(Modifier.width(CashuTheme.spacing.snug))
+                MintBalance(balanceText)
             }
         }
     }
+}
+
+@Composable
+private fun MintName(name: String) {
+    Text(
+        text = name,
+        style = MaterialTheme.typography.bodyLarge,
+        fontWeight = FontWeight.Medium,
+        color = MaterialTheme.colorScheme.onSurface,
+        maxLines = 1,
+        overflow = TextOverflow.Ellipsis,
+    )
+}
+
+@Composable
+private fun MintBalance(balanceText: String) {
+    Text(
+        text = balanceText,
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        maxLines = 1,
+        overflow = TextOverflow.Ellipsis,
+    )
 }

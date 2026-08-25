@@ -3,9 +3,11 @@ import SwiftUI
 /// Family-style two-line amount display.
 ///
 /// Renders the active amount in either fiat or sats as the primary (large) line,
-/// with the alternate unit underneath. Tapping the secondary line flips which
-/// side is primary and persists the choice.
+/// with the alternate unit underneath. Tapping either line flips which side is
+/// primary and persists the choice.
 struct CurrencyAmountDisplay: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
     let sats: UInt64
     @Binding var primary: AmountDisplayPrimary
     /// The rung of the amount ladder this instance sits on. A role, never a
@@ -61,6 +63,15 @@ struct CurrencyAmountDisplay: View {
 
     private var primaryText: String { primaryParts.joined }
 
+    /// Matches Home's transition driver: the animated value follows whichever
+    /// unit is currently primary rather than staying fixed in sats.
+    private var primaryNumericValue: Double {
+        switch effectivePrimary {
+        case .fiat: priceService.satsToFiat(sats)
+        case .sats: Double(sats)
+        }
+    }
+
     private var secondaryText: String {
         switch effectivePrimary {
         case .fiat: return AmountFormatter.sats(sats, useBitcoinSymbol: settings.useBitcoinSymbol)
@@ -72,45 +83,50 @@ struct CurrencyAmountDisplay: View {
     }
 
     var body: some View {
-        VStack(spacing: AmountPairMetrics.spacing) {
-            AmountLockup(
-                parts: primaryParts,
-                role: role,
-                value: Double(sats),
-                isDimmed: isDimmed
-            )
-            .animation(.snappy, value: effectivePrimary)
-            .animation(.snappy, value: isDimmed)
-
-            // The secondary affordance is only meaningful when fiat is available —
-            // otherwise there's no second unit to flip into, and we'd render
-            // a placeholder "$0.00" that fragments the eye.
+        Group {
             if fiatAvailable {
                 Button(action: flip) {
-                    Text(secondaryText)
-                        .cashuText(.bodyEmphasis)
-                        .monospacedDigit()
-                        .contentTransition(.numericText(value: Double(sats)))
-                        .foregroundStyle(.secondary)
-                        .padding(.horizontal, 10)
-                        .frame(
-                            minWidth: AmountPairMetrics.minimumTapTarget,
-                            minHeight: AmountPairMetrics.minimumTapTarget,
-                            alignment: .top
-                        )
+                    amountPair
                         .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
-                .accessibilityLabel("Flip primary currency")
-                .accessibilityHint("Currently showing \(primaryText), tap to switch to \(secondaryText)")
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel("Amount: \(primaryText)")
+                .accessibilityHint("Double tap to make \(secondaryText) primary")
+                .sensoryFeedback(.selection, trigger: primary)
+            } else {
+                amountPair
             }
         }
     }
 
+    private var amountPair: some View {
+        VStack(spacing: AmountPairMetrics.spacing) {
+            AmountLockup(
+                parts: primaryParts,
+                role: role,
+                value: primaryNumericValue,
+                isDimmed: isDimmed
+            )
+            .animation(reduceMotion ? .easeOut(duration: 0.2) : .snappy, value: isDimmed)
+
+            // The whole pair is the toggle, matching Home. Keeping the support
+            // line visually plain avoids implying that only the smaller value
+            // can be tapped.
+            if fiatAvailable {
+                Text(secondaryText)
+                    .cashuText(.bodyEmphasis)
+                    .monospacedDigit()
+                    .contentTransition(.numericText(value: Double(sats)))
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .frame(minHeight: AmountPairMetrics.minimumTapTarget)
+    }
+
     private func flip() {
         guard fiatAvailable else { return }
-        HapticFeedback.selection()
-        withAnimation(.snappy) {
+        withAnimation(reduceMotion ? .easeOut(duration: 0.2) : .snappy) {
             primary.toggle()
         }
     }
