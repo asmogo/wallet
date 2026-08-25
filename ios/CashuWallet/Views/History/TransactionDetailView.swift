@@ -2,7 +2,6 @@ import SwiftUI
 
 struct TransactionDetailView: View {
     @Environment(\.dismiss) private var dismiss
-    @Environment(\.colorScheme) private var colorScheme
     @EnvironmentObject var walletManager: WalletManager
     /// Snapshot at open; [transaction] prefers the live wallet row so a
     /// successful open-check can flip Pending → Completed without dismissing.
@@ -116,12 +115,6 @@ struct TransactionDetailView: View {
         return transaction.kind == .onchain
             ? [.fraction(0.78), .large]
             : [.fraction(0.68), .large]
-    }
-
-    private var sheetBackground: Color {
-        isCompactReceipt
-            ? CompactSheetPalette.sheet(for: colorScheme)
-            : Color(uiColor: .systemBackground)
     }
 
     var body: some View {
@@ -282,7 +275,13 @@ struct TransactionDetailView: View {
         .environment(\.bottomSheetSurfaceStyle, isCompactReceipt ? .compact : .flat)
         .presentationDetents(presentationDetents)
         .presentationDragIndicator(.visible)
-        .presentationBackground(sheetBackground)
+        .presentationBackground {
+            if isCompactReceipt {
+                CompactSheetBackground()
+            } else {
+                Color(uiColor: .systemBackground)
+            }
+        }
     }
 
     // MARK: - Subviews
@@ -583,7 +582,7 @@ private struct TransactionReceiptAmountPair: View {
     }
 
     var body: some View {
-        VStack(spacing: 4) {
+        VStack(spacing: AmountPairMetrics.spacing) {
             AmountLockup(
                 parts: AmountFormatter.satsParts(sats, useBitcoinSymbol: useBitcoinSymbol),
                 role: role,

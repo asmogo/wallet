@@ -172,7 +172,7 @@ struct HistoryView: View {
                     CashuRequestDetailView(request: request)
                         .environmentObject(walletManager)
                 }
-                .flatBottomSheetSurface()
+                .compactBottomSheetSurface()
                 .observeBottomSheetDismissal { isSheetDismissing = $0 }
             }
             .confirmationDialog(

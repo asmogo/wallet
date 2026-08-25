@@ -3,8 +3,8 @@ import SwiftUI
 /// Family-style two-line amount display.
 ///
 /// Renders the active amount in either fiat or sats as the primary (large) line,
-/// with the alternate unit underneath. Tapping the secondary line or the `↕`
-/// affordance flips which side is primary and persists the choice.
+/// with the alternate unit underneath. Tapping the secondary line flips which
+/// side is primary and persists the choice.
 struct CurrencyAmountDisplay: View {
     let sats: UInt64
     @Binding var primary: AmountDisplayPrimary
@@ -72,7 +72,7 @@ struct CurrencyAmountDisplay: View {
     }
 
     var body: some View {
-        VStack(spacing: 6) {
+        VStack(spacing: AmountPairMetrics.spacing) {
             AmountLockup(
                 parts: primaryParts,
                 role: role,
@@ -87,19 +87,18 @@ struct CurrencyAmountDisplay: View {
             // a placeholder "$0.00" that fragments the eye.
             if fiatAvailable {
                 Button(action: flip) {
-                    HStack(spacing: 6) {
-                        Text(secondaryText)
-                            .font(.subheadline.weight(.medium))
-                            .monospacedDigit()
-                            .contentTransition(.numericText(value: Double(sats)))
-                        Image(systemName: "arrow.up.arrow.down")
-                            .font(.caption.weight(.semibold))
-                    }
-                    .foregroundStyle(.secondary)
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 5)
-                    .frame(minHeight: 44)
-                    .contentShape(Capsule())
+                    Text(secondaryText)
+                        .cashuText(.bodyEmphasis)
+                        .monospacedDigit()
+                        .contentTransition(.numericText(value: Double(sats)))
+                        .foregroundStyle(.secondary)
+                        .padding(.horizontal, 10)
+                        .frame(
+                            minWidth: AmountPairMetrics.minimumTapTarget,
+                            minHeight: AmountPairMetrics.minimumTapTarget,
+                            alignment: .top
+                        )
+                        .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel("Flip primary currency")

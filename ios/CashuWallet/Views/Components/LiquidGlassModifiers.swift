@@ -250,7 +250,7 @@ private struct AdaptiveGlassSurface<S: InsettableShape>: ViewModifier {
     }
 }
 
-private struct CompactSheetBackground: View {
+struct CompactSheetBackground: View {
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.colorSchemeContrast) private var colorSchemeContrast
 

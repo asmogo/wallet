@@ -12,6 +12,14 @@ private let unitGapEm: CGFloat = 0.15
 /// keeps full ink and weight, drops only slightly in size, and tucks tight.
 private let symbolScale: CGFloat = 0.85
 
+/// Shared vertical rhythm for a primary amount and its supporting conversion.
+/// Interactive secondary values keep a full tap target below the visible line,
+/// so the optical gap remains identical to a static receipt amount pair.
+enum AmountPairMetrics {
+    static let spacing: CGFloat = 4
+    static let minimumTapTarget: CGFloat = 44
+}
+
 /// The one hero numeral.
 ///
 /// Owns the value/unit lockup, tabular figures, the digit transition, the line
