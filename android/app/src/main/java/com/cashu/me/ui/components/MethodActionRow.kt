@@ -1,13 +1,11 @@
 package com.cashu.me.ui.components
 
-import androidx.compose.animation.core.Spring
-import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.spring
-import androidx.compose.foundation.BorderStroke
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -26,7 +24,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -39,19 +37,18 @@ import com.cashu.me.Core.rememberWalletHaptics
 import com.cashu.me.ui.theme.CashuTheme
 import com.cashu.me.ui.theme.rememberReducedMotion
 
-private val MethodRowMinHeight = 80.dp
-private val MethodRowCorner = 24.dp
-private val MethodIconTileSize = 48.dp
+private val MethodRowMinHeight = 64.dp
+private val MethodRowPressCorner = 16.dp
 private val MethodIconSize = 24.dp
-private const val MethodPressedScale = 0.98f
+private const val MethodPressedHighlightAlpha = 0.08f
 private const val DisabledContentAlpha = 0.38f
 
 /**
  * A full-width destination row used by the Send and Receive entry sheets.
  *
- * The solid neutral surface, inset icon tile, two-line label, and trailing
- * affordance mirror iOS `MethodActionRow`. Unavailable destinations remain in
- * place and replace the chevron with a concise status pill.
+ * The resting state stays deliberately background-free, so the icon and
+ * two-line label carry the hierarchy. Unavailable destinations remain in place
+ * and replace the chevron with a concise status label.
  */
 @Composable
 fun MethodActionRow(
@@ -68,13 +65,21 @@ fun MethodActionRow(
     val reduceMotion = rememberReducedMotion()
     val interactionSource = remember { MutableInteractionSource() }
     val pressed by interactionSource.collectIsPressedAsState()
-    val scale by animateFloatAsState(
-        targetValue = if (enabled && pressed && !reduceMotion) MethodPressedScale else 1f,
-        animationSpec = spring(
-            dampingRatio = Spring.DampingRatioNoBouncy,
-            stiffness = if (pressed) Spring.StiffnessHigh else Spring.StiffnessMedium,
-        ),
-        label = "method-row-press",
+    val pressedHighlight by animateColorAsState(
+        targetValue = if (enabled && pressed) {
+            MaterialTheme.colorScheme.onSurface.copy(alpha = MethodPressedHighlightAlpha)
+        } else {
+            Color.Transparent
+        },
+        animationSpec = if (reduceMotion) {
+            tween(durationMillis = 0)
+        } else {
+            tween(
+                durationMillis = if (pressed) 90 else 180,
+                easing = FastOutSlowInEasing,
+            )
+        },
+        label = "method-row-press-highlight",
     )
 
     Surface(
@@ -84,17 +89,13 @@ fun MethodActionRow(
         },
         modifier = modifier
             .fillMaxWidth()
-            .graphicsLayer {
-                scaleX = scale
-                scaleY = scale
-            }
             .semantics(mergeDescendants = true) {
                 contentDescription = accessibilityLabel
                 if (status != null) stateDescription = status
             },
         enabled = enabled,
-        shape = RoundedCornerShape(MethodRowCorner),
-        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+        shape = RoundedCornerShape(MethodRowPressCorner),
+        color = pressedHighlight,
         contentColor = MaterialTheme.colorScheme.onSurface,
         interactionSource = interactionSource,
     ) {
@@ -102,30 +103,18 @@ fun MethodActionRow(
             modifier = Modifier
                 .fillMaxWidth()
                 .heightIn(min = MethodRowMinHeight)
-                .padding(CashuTheme.spacing.default),
+                .padding(horizontal = CashuTheme.spacing.default, vertical = 8.dp),
             horizontalArrangement = Arrangement.spacedBy(CashuTheme.spacing.comfortable),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Box(
-                modifier = Modifier
-                    .size(MethodIconTileSize),
-                contentAlignment = Alignment.Center,
-            ) {
-                Surface(
-                    modifier = Modifier.matchParentSize(),
-                    shape = MaterialTheme.shapes.large,
-                    color = MaterialTheme.colorScheme.surfaceContainerLowest,
-                    contentColor = MaterialTheme.colorScheme.onSurface,
-                ) {}
-                Icon(
-                    imageVector = icon,
-                    contentDescription = null,
-                    modifier = Modifier.size(MethodIconSize),
-                    tint = MaterialTheme.colorScheme.onSurface.copy(
-                        alpha = if (enabled) 1f else DisabledContentAlpha,
-                    ),
-                )
-            }
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                modifier = Modifier.size(MethodIconSize),
+                tint = MaterialTheme.colorScheme.onSurface.copy(
+                    alpha = if (enabled) 1f else DisabledContentAlpha,
+                ),
+            )
 
             Column(
                 modifier = Modifier.weight(1f),
@@ -149,28 +138,15 @@ fun MethodActionRow(
             }
 
             if (status != null) {
-                Surface(
-                    shape = RoundedCornerShape(percent = 50),
-                    color = MaterialTheme.colorScheme.surfaceContainerHigh,
-                    contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                    border = BorderStroke(
-                        1.dp,
-                        MaterialTheme.colorScheme.outlineVariant.copy(
-                            alpha = if (enabled) 1f else DisabledContentAlpha,
-                        ),
+                Text(
+                    text = status,
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(
+                        alpha = if (enabled) 1f else DisabledContentAlpha,
                     ),
-                ) {
-                    Text(
-                        text = status,
-                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(
-                            alpha = if (enabled) 1f else DisabledContentAlpha,
-                        ),
-                        maxLines = 1,
-                        overflow = TextOverflow.Clip,
-                    )
-                }
+                    maxLines = 1,
+                    overflow = TextOverflow.Clip,
+                )
             } else {
                 Icon(
                     imageVector = Icons.AutoMirrored.Outlined.KeyboardArrowRight,

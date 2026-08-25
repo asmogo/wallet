@@ -10,6 +10,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.CurrencyBitcoin
 import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material.icons.outlined.Nfc
+import androidx.compose.material.icons.outlined.Payments
 import androidx.compose.material.icons.outlined.QrCodeScanner
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -288,7 +289,7 @@ fun settingsControlsScreenshot() {
 }
 
 @PreviewTest
-@Preview(name = "compact-method-sheet", widthDp = 390, heightDp = 460, showBackground = true)
+@Preview(name = "compact-method-sheet", widthDp = 390, heightDp = 500, showBackground = true)
 @Composable
 fun compactMethodSheetLightScreenshot() {
     PreviewFrame {
@@ -300,7 +301,7 @@ fun compactMethodSheetLightScreenshot() {
 @Preview(
     name = "compact-method-sheet-dark",
     widthDp = 390,
-    heightDp = 460,
+    heightDp = 500,
     uiMode = Configuration.UI_MODE_NIGHT_YES,
 )
 @Composable
@@ -332,6 +333,13 @@ private fun CompactMethodSheetPreview() {
                     title = "Scan",
                     subtitle = "Scan an invoice, address, or request",
                     accessibilityLabel = "Scan QR code",
+                    onClick = {},
+                )
+                MethodActionRow(
+                    icon = Icons.Outlined.Payments,
+                    title = "Ecash",
+                    subtitle = "Create ecash to share",
+                    accessibilityLabel = "Create ecash",
                     onClick = {},
                 )
                 MethodActionRow(

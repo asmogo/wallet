@@ -2,10 +2,10 @@ import SwiftUI
 
 /// A full-width destination row used by the Send and Receive entry sheets.
 ///
-/// The solid neutral surface, inset icon tile, two-line label, and trailing
-/// affordance mirror the same component on Android while remaining native to
-/// SwiftUI. Disabled destinations stay visible and replace the chevron with a
-/// short explanation, so the layout does not jump when capability changes.
+/// The resting state stays deliberately background-free, so the icon and
+/// two-line label carry the hierarchy. Disabled destinations remain visible
+/// and replace the chevron with a short explanation, so the layout does not
+/// jump when capability changes.
 struct MethodActionRow: View {
     let icon: String
     let title: String
@@ -15,8 +15,7 @@ struct MethodActionRow: View {
     var enabled = true
     var status: String?
 
-    @Environment(\.bottomSheetSurfaceStyle) private var bottomSheetSurfaceStyle
-    @Environment(\.colorScheme) private var colorScheme
+    @ScaledMetric(relativeTo: .body) private var iconSize = 24
 
     init(
         icon: String,
@@ -40,14 +39,10 @@ struct MethodActionRow: View {
         Button(action: action) {
             HStack(spacing: 16) {
                 Image(systemName: icon)
-                    .font(.title3)
+                    .font(.system(size: iconSize, weight: .regular))
                     .foregroundStyle(.primary)
                     .opacity(enabled ? 1 : 0.38)
-                    .frame(width: 48, height: 48)
-                    .background(
-                        iconInsetColor,
-                        in: RoundedRectangle(cornerRadius: 16)
-                    )
+                    .frame(width: iconSize, height: iconSize)
                     .accessibilityHidden(true)
 
                 VStack(alignment: .leading, spacing: 2) {
@@ -70,14 +65,6 @@ struct MethodActionRow: View {
                         .foregroundStyle(.secondary)
                         .opacity(enabled ? 1 : 0.38)
                         .lineLimit(1)
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 6)
-                        .background(Color.primary.opacity(0.04), in: Capsule())
-                        .overlay {
-                            Capsule()
-                                .strokeBorder(.quaternary, lineWidth: 1)
-                                .opacity(enabled ? 1 : 0.38)
-                        }
                 } else {
                     Image(systemName: "chevron.right")
                         .font(.body.weight(.semibold))
@@ -86,30 +73,15 @@ struct MethodActionRow: View {
                         .accessibilityHidden(true)
                 }
             }
-            .padding(12)
-            .frame(maxWidth: .infinity, minHeight: 80, alignment: .leading)
-            .background(
-                rowColor,
-                in: RoundedRectangle(cornerRadius: 24)
-            )
-            .contentShape(RoundedRectangle(cornerRadius: 24))
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
+            .frame(maxWidth: .infinity, minHeight: 64, alignment: .leading)
+            .contentShape(Rectangle())
         }
         .buttonStyle(MethodActionRowButtonStyle())
         .disabled(!enabled)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(accessibilityLabel)
         .accessibilityValue(status ?? "")
-    }
-
-    private var rowColor: Color {
-        bottomSheetSurfaceStyle == .compact
-            ? CompactSheetPalette.control(for: colorScheme)
-            : Color.primary.opacity(0.08)
-    }
-
-    private var iconInsetColor: Color {
-        bottomSheetSurfaceStyle == .compact
-            ? CompactSheetPalette.iconInset(for: colorScheme)
-            : Color.primary.opacity(0.08)
     }
 }
