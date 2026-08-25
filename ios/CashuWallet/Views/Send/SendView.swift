@@ -1656,25 +1656,27 @@ struct UnifiedSendView: View {
 
     private var amountStep: some View {
         VStack(spacing: 0) {
-            ScrollView {
-                VStack(spacing: 20) {
-                    CurrencyAmountDisplay(
-                        sats: amountSats,
-                        primary: $settings.amountDisplayPrimary,
-                        entryRaw: amountString
-                    )
-                    .padding(.top, 24)
+            Spacer(minLength: 0)
 
-                    if let mint = currentAmountMint {
-                        amountMintRow(mint)
-                            .padding(.horizontal)
-                    }
+            CurrencyAmountDisplay(
+                sats: amountSats,
+                primary: $settings.amountDisplayPrimary,
+                entryRaw: amountString
+            )
 
-                    if let errorMessage {
-                        errorNotice(errorMessage)
-                            .padding(.horizontal)
-                    }
-                }
+            if let errorMessage {
+                errorNotice(errorMessage)
+                    .padding(.horizontal)
+                    .padding(.top, 12)
+            }
+
+            Spacer(minLength: 0)
+
+            // Keep the source selector in the same pre-keypad slot as Receive.
+            if let mint = currentAmountMint {
+                amountMintRow(mint)
+                    .padding(.horizontal)
+                    .padding(.bottom, 8)
             }
 
             NumberPadAmountInput(amountString: $amountString, unit: entryUnit)
