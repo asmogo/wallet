@@ -17,6 +17,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.semantics.Role
@@ -60,6 +61,7 @@ fun AmountFlipDisplay(
     entryRaw: String? = null,
     primaryTextStyle: TextStyle? = null,
     primaryAccessibilityPrefix: String? = null,
+    color: Color = MaterialTheme.colorScheme.onSurface,
 ) {
     val haptics = LocalHapticFeedback.current
     val formatter = remember { AmountFormatter() }
@@ -130,6 +132,7 @@ fun AmountFlipDisplay(
             AmountHero(
                 parts = display.primaryParts,
                 scale = AmountScale.Hero,
+                color = color,
                 accessibilityPrefix = primaryAccessibilityPrefix,
             )
         } else {
@@ -162,6 +165,7 @@ fun AmountFlipDisplay(
                         Modifier
                     },
                     style = primaryStyle,
+                    color = color,
                 )
             }
         }

@@ -220,11 +220,12 @@ fun cashuTypeRoles(fonts: CashuFonts = CashuFonts.Geist): CashuTypeRoles {
     val t = fonts.tracking
     val m3 = cashuTypography(fonts)
     return CashuTypeRoles(
-        // 52, not 56. Geist sets about 7% wider than Roboto at the same nominal
-        // size, so the ladder was re-based to buy that width back rather than
-        // let long balances hit the autosize floor sooner than they used to.
+        // Match iOS's 64pt hero base so the Home balance and live amount-entry
+        // screens carry the same visual weight on both platforms. Long values
+        // still share AmountHero's 0.5 autosize floor, so parity does not cost
+        // narrow-screen resilience.
         amountHero = m3.displayMedium
-            .atSize(52.sp, leading = LeadingHero, trackingEm = t.amountHero)
+            .atSize(64.sp, leading = LeadingHero, trackingEm = t.amountHero)
             .copy(fontWeight = FontWeight.SemiBold, textAlign = TextAlign.Center)
             .withMonoDigits(),
 

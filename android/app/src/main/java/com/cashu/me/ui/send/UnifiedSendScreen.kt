@@ -84,7 +84,7 @@ import com.cashu.me.Models.MeltSettlement
 import com.cashu.me.Models.MintInfo
 import com.cashu.me.Models.MintQuoteInfo
 import com.cashu.me.R
-import com.cashu.me.ui.components.AmountEntryHero
+import com.cashu.me.ui.components.AmountFlipDisplay
 import com.cashu.me.ui.components.AmountText
 import com.cashu.me.ui.components.CashuTextField
 import com.cashu.me.ui.components.EmptyState
@@ -194,9 +194,12 @@ fun UnifiedSendScreen(
         mutableStateOf<CashuRequestFeeEstimate>(CashuRequestFeeEstimate.Unrequested)
     }
 
+    val entryFiatPrice = priceState.btcPrice.takeIf {
+        settings.showFiatBalance && it > 0
+    }
     val entryContext = UnifiedSendAmountEntry.context(
         preferredPrimary = settings.amountDisplayPrimary,
-        btcPrice = priceState.btcPrice,
+        btcPrice = entryFiatPrice ?: 0.0,
     )
     var previousEntryContext by remember { mutableStateOf(entryContext) }
     val activeMintUrl = selectedMintUrl ?: walletState.activeMint?.url
@@ -597,6 +600,10 @@ fun UnifiedSendScreen(
                         },
                         amountSats = enteredAmount,
                         entryPrimary = entryContext.primary,
+                        onFlipEntryPrimary = {
+                            settingsManager.setAmountDisplayPrimary(it.rawValue)
+                        },
+                        btcPrice = entryFiatPrice,
                         fiatCurrencyCode = priceState.currencyCode,
                         useBitcoinSymbol = settings.useBitcoinSymbol,
                         formatter = formatter,
@@ -944,6 +951,8 @@ private fun AmountFace(
     onUseMax: () -> Unit,
     amountSats: Long,
     entryPrimary: AmountDisplayPrimary,
+    onFlipEntryPrimary: (AmountDisplayPrimary) -> Unit,
+    btcPrice: Double?,
     fiatCurrencyCode: String,
     useBitcoinSymbol: Boolean,
     formatter: AmountFormatter,
@@ -972,13 +981,15 @@ private fun AmountFace(
             modifier = Modifier.weight(1f).fillMaxWidth(),
             contentAlignment = Alignment.Center,
         ) {
-            AmountEntryHero(
-                entryRaw = amount,
-                isSat = !isFiatEntry,
-                unit = if (isFiatEntry) fiatCurrencyCode else "sat",
+            AmountFlipDisplay(
+                amountSats = amountSats,
+                primary = entryPrimary,
+                onFlip = onFlipEntryPrimary,
+                btcPrice = btcPrice,
+                currencyCode = fiatCurrencyCode,
                 useBitcoinSymbol = useBitcoinSymbol,
-                formatter = formatter,
-                fiatCurrencyCode = fiatCurrencyCode.takeIf { isFiatEntry },
+                entryRaw = amount,
+                primaryAccessibilityPrefix = "Send amount",
             )
             Column(
                 modifier = Modifier

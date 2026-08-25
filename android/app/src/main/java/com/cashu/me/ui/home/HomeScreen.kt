@@ -323,7 +323,7 @@ fun HomeScreen(
                             val amountDisplay = formatter.displayMintUnitAmount(
                                 amount = tx.amount,
                                 unit = tx.unit,
-                                preferredPrimary = settings.amountDisplayPrimary,
+                                preferredPrimary = settings.homeBalancePrimary,
                                 showFiat = settings.showFiatBalance,
                                 btcPrice = priceState.btcPrice,
                                 currencyCode = settings.bitcoinPriceCurrency,

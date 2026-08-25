@@ -606,7 +606,7 @@ struct HistoryView: View {
         if transaction.unit.lowercased() == "sat" {
             value = AmountFormatter.displayText(
                 amountSats: transaction.amount,
-                preferredPrimary: settings.amountDisplayPrimary,
+                preferredPrimary: settings.homeBalancePrimary,
                 showFiat: settings.showFiatBalance,
                 btcPrice: priceService.btcPriceUSD,
                 currencyCode: settings.bitcoinPriceCurrency,

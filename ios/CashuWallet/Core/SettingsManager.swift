@@ -139,7 +139,7 @@ class SettingsManager: ObservableObject {
         }
     }
 
-    /// Home-only amount ordering. Payment entry keeps [amountDisplayPrimary].
+    /// Home and history-row amount ordering. Payment entry keeps [amountDisplayPrimary].
     @Published var homeBalancePrimary: AmountDisplayPrimary {
         didSet {
             settingsStore.homeBalancePrimary = homeBalancePrimary.rawValue

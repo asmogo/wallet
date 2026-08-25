@@ -92,6 +92,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.cashu.me.Core.AmountFormatter
+import com.cashu.me.Core.AmountDisplayPrimary
 import com.cashu.me.Core.PendingTokenClaimCheckResult
 import com.cashu.me.Core.Protocols.CurrencyAmount
 import com.cashu.me.Core.Protocols.CurrencyRegistry
@@ -106,6 +107,7 @@ import com.cashu.me.Models.SendTokenResult
 import com.cashu.me.Views.Components.ScannerQuickAction
 import com.cashu.me.ui.components.SectionHeader
 import com.cashu.me.ui.components.AmountEntryHero
+import com.cashu.me.ui.components.AmountFlipDisplay
 import com.cashu.me.ui.components.CashuTextField
 import com.cashu.me.ui.components.GhostButton
 import com.cashu.me.ui.components.InlineNotice
@@ -252,11 +254,14 @@ fun SendEcashScreen(
     }
     val currency = CurrencyRegistry.currencyForMintUnit(effectiveUnit)
     val isSatUnit = effectiveUnit.equals("sat", ignoreCase = true)
+    val entryFiatPrice = priceState.btcPrice.takeIf {
+        settings.showFiatBalance && it > 0
+    }
     val amountEntryContext = SendEcashAmountEntry.context(
         unit = effectiveUnit,
         unitDecimals = currency.decimals,
         preferredPrimary = settings.amountDisplayPrimary,
-        btcPrice = priceState.btcPrice,
+        btcPrice = entryFiatPrice ?: 0.0,
     )
     var previousAmountEntryContext by remember { mutableStateOf(amountEntryContext) }
     val amountValue = amountEntryContext.amountBaseUnits(amount)
@@ -425,18 +430,18 @@ fun SendEcashScreen(
                         isSatUnit -> formatter.formatWalletSats(mintBalance, settings.useBitcoinSymbol)
                         else -> CurrencyAmount(mintBalance, currency).formatted()
                     },
-                    isSat = isSatUnit && !amountEntryContext.isFiatEntry,
-                    unit = if (amountEntryContext.isFiatEntry) {
-                        priceState.currencyCode
-                    } else {
-                        effectiveUnit
+                    isSatUnit = isSatUnit,
+                    unit = effectiveUnit,
+                    amountSats = amountValue,
+                    entryPrimary = amountEntryContext.satEntry.primary,
+                    onFlipEntryPrimary = {
+                        settingsManager.setAmountDisplayPrimary(it.rawValue)
                     },
+                    btcPrice = entryFiatPrice,
                     useBitcoinSymbol = settings.useBitcoinSymbol,
                     formatter = formatter,
                     decimals = amountEntryContext.keypadDecimals,
-                    fiatCurrencyCode = priceState.currencyCode.takeIf {
-                        amountEntryContext.isFiatEntry
-                    },
+                    fiatCurrencyCode = priceState.currencyCode,
                     sending = sending,
                     errorText = errorText,
                     confirmedP2pkPubkey = validatedP2pkPubkey,
@@ -581,12 +586,16 @@ private fun InputFace(
     mintBalance: Long,
     balanceLoading: Boolean,
     balanceText: String,
-    isSat: Boolean,
+    isSatUnit: Boolean,
     unit: String,
+    amountSats: Long,
+    entryPrimary: AmountDisplayPrimary,
+    onFlipEntryPrimary: (AmountDisplayPrimary) -> Unit,
+    btcPrice: Double?,
     useBitcoinSymbol: Boolean,
     formatter: AmountFormatter,
     decimals: Int,
-    fiatCurrencyCode: String?,
+    fiatCurrencyCode: String,
     sending: Boolean,
     errorText: String?,
     confirmedP2pkPubkey: String?,
@@ -631,15 +640,28 @@ private fun InputFace(
             contentAlignment = Alignment.Center,
         ) {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                AmountEntryHero(
-                    entryRaw = amount,
-                    isSat = isSat,
-                    unit = unit,
-                    useBitcoinSymbol = useBitcoinSymbol,
-                    formatter = formatter,
-                    fiatCurrencyCode = fiatCurrencyCode,
-                    color = amountColor,
-                )
+                if (isSatUnit) {
+                    AmountFlipDisplay(
+                        amountSats = amountSats,
+                        primary = entryPrimary,
+                        onFlip = onFlipEntryPrimary,
+                        btcPrice = btcPrice,
+                        currencyCode = fiatCurrencyCode,
+                        useBitcoinSymbol = useBitcoinSymbol,
+                        entryRaw = amount,
+                        primaryAccessibilityPrefix = "Send amount",
+                        color = amountColor,
+                    )
+                } else {
+                    AmountEntryHero(
+                        entryRaw = amount,
+                        isSat = false,
+                        unit = unit,
+                        useBitcoinSymbol = useBitcoinSymbol,
+                        formatter = formatter,
+                        color = amountColor,
+                    )
+                }
 
                 confirmedP2pkPubkey?.let { pubkey ->
                     P2pkRecipientConfirmation(

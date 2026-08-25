@@ -9,28 +9,35 @@ import SwiftUI
 // Amount Rule, The Quiet Pending Rule,
 // The Fiat Sub-Amount Rule.
 struct TransactionAmountColumn: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
     let transaction: WalletTransaction
 
     @ObservedObject var settings: SettingsManager = .shared
     @ObservedObject var priceService: PriceService = .shared
 
     var body: some View {
-        VStack(alignment: .trailing, spacing: 2) {
-            // The Row rung of the amount ladder. It carries the tabular figures,
-            // the line limit, the digit transition and the deliberate absence of
-            // autoscale — see `CashuTextRole.amountRow`, which documents why
-            // those last two cannot both be on.
-            Text(formattedAmount)
-                .cashuAmount(.amountRow, value: Double(transaction.amount))
-                .foregroundStyle(amountColor)
+        ZStack(alignment: .trailing) {
+            VStack(alignment: .trailing, spacing: 2) {
+                // The Row rung of the amount ladder. It carries the tabular figures,
+                // the line limit, the digit transition and the deliberate absence of
+                // autoscale — see `CashuTextRole.amountRow`, which documents why
+                // those last two cannot both be on.
+                Text(formattedAmount)
+                    .cashuAmount(.amountRow, value: Double(transaction.amount))
+                    .foregroundStyle(amountColor)
 
-            if let secondaryAmount {
-                Text(secondaryAmount)
-                    .font(.subheadline)
-                    .monospacedDigit()
-                    .foregroundStyle(.secondary)
+                if let secondaryAmount {
+                    Text(secondaryAmount)
+                        .font(.subheadline)
+                        .monospacedDigit()
+                        .foregroundStyle(.secondary)
+                }
             }
+            .id(settings.homeBalancePrimary)
+            .transition(.opacity)
         }
+        .animation(swapAnimation, value: settings.homeBalancePrimary)
     }
 
     // Received value is the only green element in the row. Sent value stays
@@ -69,11 +76,15 @@ struct TransactionAmountColumn: View {
     private var satDisplay: AmountDisplayText {
         AmountFormatter.displayText(
             amountSats: transaction.amount,
-            preferredPrimary: settings.amountDisplayPrimary,
+            preferredPrimary: settings.homeBalancePrimary,
             showFiat: settings.showFiatBalance,
             btcPrice: priceService.btcPriceUSD,
             currencyCode: settings.bitcoinPriceCurrency,
             useBitcoinSymbol: settings.useBitcoinSymbol
         )
+    }
+
+    private var swapAnimation: Animation {
+        reduceMotion ? .easeOut(duration: 0.2) : .snappy
     }
 }

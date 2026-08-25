@@ -244,6 +244,7 @@ class SettingsManager(
     fun setAmountDisplayPrimary(value: String) = update {
         settingsStore.amountDisplayPrimary = AmountDisplayPrimary.fromRaw(value).rawValue
     }
+    /** Shared Home balance and history-row ordering; payment entry stays independent. */
     fun setHomeBalancePrimary(value: String) = update {
         settingsStore.homeBalancePrimary = AmountDisplayPrimary.fromRaw(value).rawValue
     }
