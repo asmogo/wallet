@@ -716,19 +716,18 @@ struct SendView: View {
                         // change swap. The receiver's redeem fee is shown on
                         // their side, so a "0 sat" row here only misleads.
                         if tokenFee > 0 {
-                            detailRow(icon: "arrow.up.arrow.down", label: "Fee", value: generatedFeeText)
+                            detailRow(label: "Fee", value: generatedFeeText)
                         }
-                        detailRow(icon: "banknote", label: "Unit", value: generatedTokenUnit.uppercased())
+                        detailRow(label: "Unit", value: generatedTokenUnit.uppercased())
                         // Fiat conversion is only meaningful for sats, only when
                         // the user opted into fiat balances, and only for amounts
                         // worth at least a cent — matches Android's gating.
                         if generatedIsSat, settings.showFiatBalance,
                            let fiatValue = priceService.formatSatsAsFiat(generatedAmount) {
-                            detailRow(icon: "banknote", label: "Fiat", value: fiatValue)
+                            detailRow(label: "Fiat", value: fiatValue)
                         }
                         if let mintURL = generatedTokenMintURL {
-                            detailRow(icon: "bitcoinsign.bank.building", label: "Mint",
-                                      value: extractMintHost(mintURL))
+                            detailRow(label: "Mint", value: extractMintHost(mintURL))
                         }
                     }
                     .padding(.top, 8)
@@ -787,14 +786,13 @@ struct SendView: View {
             ? AmountFormatter.sats(generatedAmount, useBitcoinSymbol: settings.useBitcoinSymbol)
             : CurrencyAmount(value: generatedAmount, currency: generatedUnitCurrency).formatted()
         var rows: [PaymentStatusView.DetailRow] = [
-            .init(icon: "bitcoinsign", label: "Amount", value: amountText),
+            .init(label: "Amount", value: amountText),
         ]
         if tokenFee > 0 {
-            rows.append(.init(icon: "arrow.up.arrow.down", label: "Fee", value: generatedFeeText))
+            rows.append(.init(label: "Fee", value: generatedFeeText))
         }
         if let mintURL = generatedTokenMintURL {
             rows.append(.init(
-                icon: "bitcoinsign.bank.building",
                 label: "Mint",
                 value: extractMintHost(mintURL)
             ))
@@ -810,9 +808,9 @@ struct SendView: View {
         generatedIsSat ? "\(tokenFee) sat" : CurrencyAmount(value: tokenFee, currency: generatedUnitCurrency).formatted()
     }
 
-    private func detailRow(icon: String, label: String, value: String) -> some View {
+    private func detailRow(label: String, value: String) -> some View {
         HStack {
-            Label(label, systemImage: icon)
+            Text(label)
                 .foregroundStyle(.secondary)
             Spacer()
             Text(value)
@@ -1899,19 +1897,17 @@ struct UnifiedSendView: View {
         let isOnchain: Bool = { if case .melt(_, .onchain, _) = locked { return true } else { return false } }()
         return VStack(spacing: 0) {
             if isOnchain, case let .melt(request, _, _) = locked {
-                creqDetailRow(icon: "arrow.up.right", label: "To", value: request)
+                creqDetailRow(label: "To", value: request)
             }
             if let explanation = activeRouteExplanation {
                 CashuRequestRouteExplanationRow(explanation: explanation)
             }
             creqDetailRow(
-                icon: "arrow.up.arrow.down",
                 label: "Network fee",
                 value: AmountFormatter.sats(quote?.feeReserve ?? 0, useBitcoinSymbol: settings.useBitcoinSymbol)
             )
             .redacted(reason: isLoading ? .placeholder : [])
             creqDetailRow(
-                icon: "creditcard",
                 label: "Total",
                 value: AmountFormatter.sats(quote?.totalAmount ?? 0, useBitcoinSymbol: settings.useBitcoinSymbol)
             )
@@ -1928,7 +1924,7 @@ struct UnifiedSendView: View {
     @ViewBuilder
     private func mintDetailRow(label: String, mint: MintInfo, switchable: Bool) -> some View {
         let content = HStack(spacing: 8) {
-            Label(label, systemImage: "bitcoinsign.bank.building")
+            Text(label)
                 .foregroundStyle(.secondary)
             Spacer()
             MintAvatarView(iconUrl: mint.iconUrl, name: mint.name, size: 22)
@@ -1996,36 +1992,32 @@ struct UnifiedSendView: View {
                 // Same row order as MeltView's status screen (Method → To → Amount →
                 // fee → Mint) so both Lightning/on-chain pay screens read alike and the
                 // rows stay stable through processing.
-                rows.append(.init(icon: "bolt", label: "Method", value: meltPaymentMethod.displayName))
+                rows.append(.init(label: "Method", value: meltPaymentMethod.displayName))
                 if quote.paymentMethod == .onchain {
-                    rows.append(.init(icon: "arrow.up.right", label: "To", value: request))
+                    rows.append(.init(label: "To", value: request))
                 }
                 rows.append(.init(
-                    icon: "bitcoinsign",
                     label: "Amount",
                     value: AmountFormatter.sats(quote.amount, useBitcoinSymbol: settings.useBitcoinSymbol)
                 ))
                 if let explanation = activeRouteExplanation {
                     rows.append(.init(
-                        icon: "arrow.triangle.branch",
                         label: "Route",
                         value: explanation.localizedValue
                     ))
                 }
                 rows.append(.init(
-                    icon: "arrow.up.arrow.down",
                     label: "Network fee",
                     value: AmountFormatter.sats(quote.feeReserve, useBitcoinSymbol: settings.useBitcoinSymbol)
                 ))
                 if let mint = mintInfo(for: quote) ?? activeMeltMint {
-                    rows.append(.init(icon: "bitcoinsign.bank.building", label: "Mint", value: mint.name))
+                    rows.append(.init(label: "Mint", value: mint.name))
                 }
             } else if errorShowsMintAction, let mint = activeMeltMint {
                 // Insufficient-balance failure (no quote to summarise): show the mint and
                 // what's actually there, so the shortfall reads as a fact, not a scold.
-                rows.append(.init(icon: "bitcoinsign.bank.building", label: "Mint", value: mint.name))
+                rows.append(.init(label: "Mint", value: mint.name))
                 rows.append(.init(
-                    icon: "banknote",
                     label: "Balance",
                     value: AmountFormatter.sats(mint.balance, useBitcoinSymbol: settings.useBitcoinSymbol)
                 ))
@@ -2035,7 +2027,6 @@ struct UnifiedSendView: View {
             // values (the fee, or the mint in the acquire path) fill their reserved slot
             // in place instead of inserting mid-list and shoving the rows below down.
             rows.append(.init(
-                icon: "bitcoinsign",
                 label: "Amount",
                 value: paymentAmountForCreq.map {
                     AmountFormatter.sats($0, useBitcoinSymbol: settings.useBitcoinSymbol)
@@ -2045,14 +2036,13 @@ struct UnifiedSendView: View {
             rows.append(creqStatusMintRow)
             if let explanation = activeRouteExplanation {
                 rows.append(.init(
-                    icon: "arrow.triangle.branch",
                     label: "Route",
                     value: explanation.localizedValue
                 ))
             }
             rows.append(creqStatusFeeRow)
             if let memo = creq.description?.trimmingCharacters(in: .whitespacesAndNewlines), !memo.isEmpty {
-                rows.append(.init(icon: "quote.bubble", label: "Memo", value: memo))
+                rows.append(.init(label: "Memo", value: memo))
             }
         case nil:
             break
@@ -2539,37 +2529,34 @@ struct UnifiedSendView: View {
     /// the held mint's name; in the acquire path the target host; a spinner only if
     /// neither is known yet.
     private var creqStatusMintRow: PaymentStatusView.DetailRow {
-        let icon = "bitcoinsign.bank.building"
         if let mint = selectedPaymentMint {
-            return .init(icon: icon, label: "Mint", value: mint.name)
+            return .init(label: "Mint", value: mint.name)
         }
         if let host = acquireTargetHost {
-            return .init(icon: icon, label: "Mint", value: host)
+            return .init(label: "Mint", value: host)
         }
-        return .init(icon: icon, label: "Mint", value: "", isPending: true)
+        return .init(label: "Mint", value: "", isPending: true)
     }
 
     /// The swap fee as a status detail row, always present so its slot is reserved.
     /// Mirrors `creqFeeValueText`: a spinner while the fee computes, then the value;
     /// acquiring a mint routes over Lightning, whose reserve is confirmed later.
     private var creqStatusFeeRow: PaymentStatusView.DetailRow {
-        let icon = "arrow.up.arrow.down"
         if needsAcquire {
-            return .init(icon: icon, label: "Fees", value: "Network fee")
+            return .init(label: "Fees", value: "Network fee")
         }
         switch feeState {
         case .loading:
-            return .init(icon: icon, label: "Fees", value: "", isPending: true)
+            return .init(label: "Fees", value: "", isPending: true)
         case .free:
-            return .init(icon: icon, label: "Fees", value: "No fee")
+            return .init(label: "Fees", value: "No fee")
         case .amount(let fee):
             return .init(
-                icon: icon,
                 label: "Fees",
                 value: AmountFormatter.sats(fee, useBitcoinSymbol: settings.useBitcoinSymbol)
             )
         case .idle, .unavailable:
-            return .init(icon: icon, label: "Fees", value: "—")
+            return .init(label: "Fees", value: "—")
         }
     }
 
@@ -2618,7 +2605,7 @@ struct UnifiedSendView: View {
                     CashuRequestRouteExplanationRow(explanation: explanation)
                 }
                 if let memo = creqMemo(creq) {
-                    creqDetailRow(icon: "quote.bubble", label: "Memo", value: memo)
+                    creqDetailRow(label: "Memo", value: memo)
                 }
                 creqFeesRow
             }
@@ -2648,7 +2635,7 @@ struct UnifiedSendView: View {
                 creqActionableMintRow(host: host, subtitle: subtitle)
             } else {
                 HStack(spacing: 8) {
-                    Label("Mint", systemImage: "exclamationmark.triangle")
+                    Text("Mint")
                         .foregroundStyle(.orange)
                     Spacer()
                     Text(hosts.isEmpty ? "Add a mint to pay"
@@ -2671,7 +2658,7 @@ struct UnifiedSendView: View {
     /// no alarming color (the CTA does the work).
     private func creqActionableMintRow(host: String, subtitle: String) -> some View {
         HStack(spacing: 8) {
-            Label("Mint", systemImage: "bitcoinsign.bank.building")
+            Text("Mint")
                 .foregroundStyle(.secondary)
             Spacer()
             VStack(alignment: .trailing, spacing: 2) {
@@ -2693,7 +2680,7 @@ struct UnifiedSendView: View {
 
     private var creqFeesRow: some View {
         HStack {
-            Label("Fees", systemImage: "arrow.up.arrow.down")
+            Text("Fees")
                 .foregroundStyle(.secondary)
             Spacer()
             creqFeeValueText
@@ -2725,9 +2712,9 @@ struct UnifiedSendView: View {
         }
     }
 
-    private func creqDetailRow(icon: String, label: String, value: String) -> some View {
+    private func creqDetailRow(label: String, value: String) -> some View {
         HStack {
-            Label(label, systemImage: icon)
+            Text(label)
                 .foregroundStyle(.secondary)
             Spacer()
             Text(value)
@@ -3369,24 +3356,23 @@ struct MeltView: View {
             )
         } details: {
             VStack(spacing: 0) {
-                meltDetailRow(icon: "bolt", label: "Method", value: methodName)
+                meltDetailRow(label: "Method", value: methodName)
                 if let routeExplanation {
                     CashuRequestRouteExplanationRow(explanation: routeExplanation)
                 }
                 if quote?.paymentMethod == .onchain {
                     meltDetailRow(
-                        icon: "arrow.up.right",
                         label: "To",
                         value: PaymentRequestParser.normalizeBitcoinRequest(requestInput)
                     )
                 }
-                meltDetailRow(icon: "bitcoinsign", label: "Amount", value: "\(displayAmount) sat")
-                meltDetailRow(icon: "arrow.up.arrow.down", label: "Max fee", value: "\(quote?.feeReserve ?? 0) sat")
+                meltDetailRow(label: "Amount", value: "\(displayAmount) sat")
+                meltDetailRow(label: "Max fee", value: "\(quote?.feeReserve ?? 0) sat")
                     .redacted(reason: isLoading ? .placeholder : [])
                 // Reserve the Required-balance row while loading (we don't yet know the fee)
                 // so the common fee-bearing case doesn't shift when the quote lands.
                 if isLoading || (quote?.feeReserve ?? 0) > 0 {
-                    meltDetailRow(icon: "creditcard", label: "Required balance", value: "\(quote?.totalAmount ?? 0) sat")
+                    meltDetailRow(label: "Required balance", value: "\(quote?.totalAmount ?? 0) sat")
                         .redacted(reason: isLoading ? .placeholder : [])
                 }
                 // The paying mint is already shown in the selector chip above (with
@@ -3442,9 +3428,9 @@ struct MeltView: View {
         }
     }
 
-    private func meltDetailRow(icon: String, label: String, value: String) -> some View {
+    private func meltDetailRow(label: String, value: String) -> some View {
         HStack {
-            Label(label, systemImage: icon)
+            Text(label)
                 .foregroundStyle(.secondary)
             Spacer()
             Text(value)
@@ -3468,25 +3454,23 @@ struct MeltView: View {
             // the confirm → processing transition (only the amount hero morphs into the
             // spinner). The mint — a top chip on confirm, which the status scaffold has
             // no room for — becomes the trailing row here.
-            rows.append(.init(icon: "bolt", label: "Method", value: quote.paymentMethod.displayName))
+            rows.append(.init(label: "Method", value: quote.paymentMethod.displayName))
             if let routeExplanation {
                 rows.append(.init(
-                    icon: "arrow.triangle.branch",
                     label: "Route",
                     value: routeExplanation.localizedValue
                 ))
             }
             if quote.paymentMethod == .onchain {
                 rows.append(.init(
-                    icon: "arrow.up.right",
                     label: "To",
                     value: PaymentRequestParser.normalizeBitcoinRequest(requestInput)
                 ))
             }
-            rows.append(.init(icon: "bitcoinsign", label: "Amount", value: "\(quote.amount) sat"))
-            rows.append(.init(icon: "arrow.up.arrow.down", label: "Max fee", value: "\(quote.feeReserve) sat"))
+            rows.append(.init(label: "Amount", value: "\(quote.amount) sat"))
+            rows.append(.init(label: "Max fee", value: "\(quote.feeReserve) sat"))
             if let mint = mintInfo(for: quote) {
-                rows.append(.init(icon: "bitcoinsign.bank.building", label: "Mint", value: mint.name))
+                rows.append(.init(label: "Mint", value: mint.name))
             }
         }
         return PaymentStatusView(

@@ -43,7 +43,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.filled.Key
 import androidx.compose.material.icons.filled.Lock
-import androidx.compose.material.icons.outlined.AccountBalance
 import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.ContentPaste
@@ -51,8 +50,6 @@ import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.IosShare
 import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material.icons.outlined.LockOpen
-import androidx.compose.material.icons.outlined.Payments
-import androidx.compose.material.icons.outlined.Receipt
 import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material.icons.outlined.Schedule
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -1104,20 +1101,17 @@ private fun GeneratedFace(
                     com.cashu.me.ui.components.InspectorRow(
                         label = "Amount",
                         value = amountPresentation.primary,
-                        leadingIcon = Icons.Outlined.Payments,
                     )
                     receipt.fee?.let { feeLabel ->
                         com.cashu.me.ui.components.InspectorRow(
                             label = "Fee",
                             value = feeLabel,
                             valueMonospaced = true,
-                            leadingIcon = Icons.Outlined.Receipt,
                         )
                     }
                     com.cashu.me.ui.components.InspectorRow(
                         label = "Mint",
                         value = receipt.mint,
-                        leadingIcon = Icons.Outlined.AccountBalance,
                     )
                 },
             )

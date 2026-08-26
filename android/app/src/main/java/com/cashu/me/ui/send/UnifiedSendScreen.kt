@@ -30,13 +30,11 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
-import androidx.compose.material.icons.outlined.AccountBalance
 import androidx.compose.material.icons.outlined.ArrowCircleDown
 import androidx.compose.material.icons.outlined.Cancel
 import androidx.compose.material.icons.outlined.Nfc
 import androidx.compose.material.icons.outlined.Payments
 import androidx.compose.material.icons.outlined.QrCodeScanner
-import androidx.compose.material.icons.outlined.Receipt
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -793,16 +791,6 @@ internal fun SendPaymentDetailRows(
             } else {
                 Modifier
             },
-            leadingIcon = when (row.key) {
-                SendPaymentDetailKey.Method,
-                SendPaymentDetailKey.Amount,
-                SendPaymentDetailKey.Route -> Icons.Outlined.Payments
-                SendPaymentDetailKey.NetworkFee,
-                SendPaymentDetailKey.InputFee,
-                SendPaymentDetailKey.Memo -> Icons.Outlined.Receipt
-                SendPaymentDetailKey.Mint -> Icons.Outlined.AccountBalance
-                SendPaymentDetailKey.Destination -> null
-            },
             valueMonospaced = row.valueMonospaced,
             loading = loading,
         )
@@ -1179,7 +1167,6 @@ private fun ConfirmFace(
                     InspectorRow(
                         label = "Mint",
                         value = mint.name,
-                        leadingIcon = Icons.Outlined.AccountBalance,
                     )
                 }
                 if (!creqDescription.isNullOrBlank()) {

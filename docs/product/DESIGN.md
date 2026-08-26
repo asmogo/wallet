@@ -137,7 +137,8 @@ components:
     padding: "12px 8px"
     typography: "{typography.body}"
     trailingHintSymbol: "pencil"
-    note: "Cashu Request detail. Tap opens a medium-detent sub-sheet."
+    leadingSymbol: null
+    note: "Cashu Request detail. Label + value only, no leading field icon (Iconless-Row Rule). Tap opens a medium-detent sub-sheet."
   divider-canvas:
     backgroundColor: "{colors.separator-hair}"
     height: "0.5px"
@@ -188,9 +189,9 @@ What this system explicitly rejects, pulled verbatim from docs/product/PRODUCT.m
   press feedback, sheet cross-fade (in-sheet flow swap), payment-received
   celebration, and waiting-pulse. Nothing decorative beyond that.
 - One inspector pattern for editable detail rows (Cashu Request → Mint, Amount):
-  leading SF Symbol + secondary label + trailing value (medium weight, middle-
-  truncated) + trailing `pencil` hint glyph. Tap opens a `.medium`-detent
-  sub-sheet rather than pushing a screen.
+  secondary label + trailing value (medium weight, middle-truncated) + trailing
+  `pencil` hint glyph. Tap opens a `.medium`-detent sub-sheet rather than pushing
+  a screen. No leading field icon — see The Iconless-Row Rule, §5.
 
 ## 2. Colors: The Inverted-Ink Palette
 
@@ -1140,6 +1141,19 @@ use `Label(_:systemImage:)` because iOS context menus expect an icon column
 and look wrong without one. Small inline copy chips (Settings rows, the
 truncated Lightning-address chip on the main wallet) also keep their icons
 — there, the SF Symbol *is* the affordance because there is no text label.
+
+**The Iconless-Row Rule.** Two-column detail rows — the metadata list on a
+transaction receipt, the confirm-screen facts on a pay/receive flow, and the
+preserved payment facts on `PaymentStatusView` (processing → success → failure)
+— are **label + value only**. No leading SF Symbol, no `Label(_:systemImage:)`.
+The label already names the field, so a glyph beside it is decoration that
+competes with the value it is meant to introduce, and a column of unrelated
+symbols reads as a toolbar rather than a receipt. Trailing affordances stay:
+the `pencil` on an editable row, `arrow.up.right` on an outbound link, the
+seal/caution glyph that qualifies a *value* (a locked-ecash key), and the
+chevron on a switchable mint. Method/action rows (the Send and Receive entry
+sheets, Settings navigation rows) are a different vocabulary and keep their
+leading icons — there the glyph identifies a destination, not a field.
 
 **The Confirmation Toast Rule.** Completed utility actions such as Copy use a
 single top-center capsule with a short semantic message (for example, “Copied

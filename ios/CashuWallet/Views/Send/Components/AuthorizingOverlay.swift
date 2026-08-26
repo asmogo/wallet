@@ -23,8 +23,8 @@ struct PaymentStatusView: View {
     }
 
     /// A preserved payment fact rendered as one detail row (Amount / Mint / Method / Max fee).
+    /// Label-only, matching the receipt rows in TransactionDetailView — no leading glyph.
     struct DetailRow: Identifiable {
-        let icon: String
         let label: String
         let value: String
         /// When true the value slot shows a mini spinner instead of `value`, so a row
@@ -178,7 +178,7 @@ struct PaymentStatusView: View {
 
     private func detailRow(_ row: DetailRow) -> some View {
         HStack {
-            Label(row.label, systemImage: row.icon)
+            Text(row.label)
                 .foregroundStyle(.secondary)
             Spacer()
             if row.isPending {

@@ -28,6 +28,7 @@ Cashu Wallet is a **system utility**, not a crypto dashboard. The bar is set by 
 | **Share-At-Top Rule** | When a screen shows a shareable QR (invoice, request, token, transaction), `Share` lives in the `TopAppBar` actions, never in the footer button stack. |
 | **Singular Button Rule** | Primary AND secondary CTAs both use `FilledTonalButton`. No `OutlinedButton`, no inverted-fill. Hierarchy via copy and disabled state. The single most-prominent action per screen (e.g. "Create Wallet") may use `Button` (filled). |
 | **Iconless-CTA Rule** | Primary CTAs (Copy, Send, Receive, Continue, New Request) are text-only. No leading icons. |
+| **Iconless-Row Rule** | Two-column detail rows (`InspectorRow`) on receipts, pay/receive confirms, and `PaymentStatusScreen` are label + value only — no `leadingIcon`. Trailing affordances (pencil, link arrow) stay. Method/action and Settings rows keep their leading icons. |
 | **Copy Feedback Rule** | Copy affordances never morph into checkmarks or change their label. A successful copy raises the shared, one-at-a-time top-center confirmation toast for 2.2s. One pass-through app-level dialog owns the toast above sheets and scrims; sheet content must not mount another host. The toast has no icon or bounce and respects the system motion scale. |
 
 ---
@@ -404,7 +405,7 @@ Body:
 - QR card.
 - Amount (if fixed; otherwise hidden).
 - Status: same waiting / live-burst / persistent count states as Receive Lightning.
-- **Inspector rows** — `ListItem`s with leading icon, label, trailing value, and (on editable rows) a trailing pencil `IconButton`. Inspector divider is 0.5dp at 8dp horizontal inset (tighter than canvas).
+- **Inspector rows** — `ListItem`s with label, trailing value, and (on editable rows) a trailing pencil `IconButton`. No leading icon (Iconless-Row Rule). Inspector divider is 0.5dp at 8dp horizontal inset (tighter than canvas).
 
 | Row | Editable | Tap behavior |
 |-----|---------|--------------|

@@ -409,7 +409,7 @@ struct CashuRequestRouteExplanationRow: View {
 
     var body: some View {
         HStack {
-            Label("Route", systemImage: "arrow.triangle.branch")
+            Text("Route")
                 .foregroundStyle(.secondary)
             Spacer()
             Text(explanation.localizedValue)
@@ -745,7 +745,7 @@ struct CashuPaymentRequestPayView: View {
                     CashuRequestRouteExplanationRow(explanation: routeExplanation)
                 }
                 if let memo {
-                    detailRow(icon: "quote.bubble", label: "Memo", value: memo)
+                    detailRow(label: "Memo", value: memo)
                 }
                 feesRow
             }
@@ -802,7 +802,7 @@ struct CashuPaymentRequestPayView: View {
     /// the exact fee for a fee-charging mint; "—" before an amount exists.
     private var feesRow: some View {
         HStack {
-            Label("Fees", systemImage: "arrow.up.arrow.down")
+            Text("Fees")
                 .foregroundStyle(.secondary)
             Spacer()
             feeValueText
@@ -886,9 +886,9 @@ struct CashuPaymentRequestPayView: View {
     /// Read-only detail row matching the app's `detailRow` vocabulary
     /// (TransactionDetailView, CashuRequestDetailView). Memo text is prose, so it
     /// wraps once and tail-truncates rather than middle-truncating like an ID.
-    private func detailRow(icon: String, label: String, value: String) -> some View {
+    private func detailRow(label: String, value: String) -> some View {
         HStack {
-            Label(label, systemImage: icon)
+            Text(label)
                 .foregroundStyle(.secondary)
             Spacer()
             Text(value)
@@ -1154,7 +1154,6 @@ struct CashuPaymentRequestPayView: View {
         // slot in place instead of inserting and shoving the rows below them.
         var rows: [PaymentStatusView.DetailRow] = [
             .init(
-                icon: "bitcoinsign",
                 label: "Amount",
                 value: paymentAmount.map { "\($0) sat" } ?? "",
                 isPending: paymentAmount == nil
@@ -1163,14 +1162,13 @@ struct CashuPaymentRequestPayView: View {
         ]
         if let explanation = activeRouteExplanation {
             rows.append(.init(
-                icon: "arrow.triangle.branch",
                 label: "Route",
                 value: explanation.localizedValue
             ))
         }
         rows.append(statusFeeRow)
         if let memo = requestMemo {
-            rows.append(.init(icon: "quote.bubble", label: "Memo", value: memo))
+            rows.append(.init(label: "Memo", value: memo))
         }
         return PaymentStatusView(
             details: rows,
@@ -1187,37 +1185,34 @@ struct CashuPaymentRequestPayView: View {
     /// the held mint's name; in the acquire path (mint not held yet) it shows the
     /// target host so the slot still has a real value, and only spins if neither is known.
     private var statusMintRow: PaymentStatusView.DetailRow {
-        let icon = "bitcoinsign.bank.building"
         if let mint = selectedPaymentMint {
-            return .init(icon: icon, label: "Mint", value: mint.name)
+            return .init(label: "Mint", value: mint.name)
         }
         if let host = acquireTargetHost {
-            return .init(icon: icon, label: "Mint", value: host)
+            return .init(label: "Mint", value: host)
         }
-        return .init(icon: icon, label: "Mint", value: "", isPending: true)
+        return .init(label: "Mint", value: "", isPending: true)
     }
 
     /// The swap fee as a detail row, always present so its slot is reserved. Mirrors
     /// the confirm screen's `feeValueText`: a spinner while the fee computes, then the
     /// value; acquiring a mint routes over Lightning, whose reserve is confirmed later.
     private var statusFeeRow: PaymentStatusView.DetailRow {
-        let icon = "arrow.up.arrow.down"
         if needsAcquire {
-            return .init(icon: icon, label: "Fees", value: "Network fee")
+            return .init(label: "Fees", value: "Network fee")
         }
         switch feeState {
         case .loading:
-            return .init(icon: icon, label: "Fees", value: "", isPending: true)
+            return .init(label: "Fees", value: "", isPending: true)
         case .free:
-            return .init(icon: icon, label: "Fees", value: "No fee")
+            return .init(label: "Fees", value: "No fee")
         case .amount(let fee):
             return .init(
-                icon: icon,
                 label: "Fees",
                 value: AmountFormatter.sats(fee, useBitcoinSymbol: settings.useBitcoinSymbol)
             )
         case .idle, .unavailable:
-            return .init(icon: icon, label: "Fees", value: "—")
+            return .init(label: "Fees", value: "—")
         }
     }
 }

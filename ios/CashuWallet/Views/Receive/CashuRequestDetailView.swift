@@ -145,7 +145,6 @@ struct CashuRequestDetailView: View {
         var rows: [PaymentStatusView.DetailRow] = []
         if let receivedAmount {
             rows.append(.init(
-                icon: "bitcoinsign",
                 label: "Amount",
                 value: request.map { formatAmount(receivedAmount, unit: $0.unit) }
                     ?? AmountFormatter.sats(receivedAmount, useBitcoinSymbol: settings.useBitcoinSymbol)
@@ -153,7 +152,6 @@ struct CashuRequestDetailView: View {
         }
         if let request {
             rows.append(.init(
-                icon: "bitcoinsign.bank.building",
                 label: "Mint",
                 value: mintDisplayValue(for: request)
             ))

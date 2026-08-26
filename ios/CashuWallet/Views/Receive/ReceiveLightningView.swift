@@ -583,19 +583,16 @@ struct ReceiveLightningView: View {
 
                     VStack(spacing: 0) {
                         detailRow(
-                            icon: "bitcoinsign.bank.building",
                             label: "Mint",
                             value: reusableMintDisplayValue
                         )
                         editableRow(
-                            icon: "bitcoinsign",
                             label: "Amount",
                             value: quote.amount.flatMap { $0 > 0 ? formatQuoteAmount($0, unit: quote.unit) : nil } ?? "Any",
                             action: { showReusableAmountPicker = true }
                         )
                         if let created = quote.createdAt {
                             detailRow(
-                                icon: "calendar",
                                 label: "Created",
                                 value: created.formatted(date: .abbreviated, time: .shortened)
                             )
@@ -649,14 +646,12 @@ struct ReceiveLightningView: View {
         var rows: [PaymentStatusView.DetailRow] = []
         if let amount = quote.amount {
             rows.append(.init(
-                icon: "bitcoinsign",
                 label: "Amount",
                 value: formatQuoteAmount(amount, unit: quote.unit)
             ))
         }
         if let mint = walletManager.activeMint {
             rows.append(.init(
-                icon: "bitcoinsign.bank.building",
                 label: "Mint",
                 value: extractMintHost(mint.url)
             ))
@@ -710,7 +705,6 @@ struct ReceiveLightningView: View {
                         VStack(spacing: 0) {
                             if let mint = walletManager.activeMint {
                                 detailRow(
-                                    icon: "bitcoinsign.bank.building",
                                     label: "Mint",
                                     value: extractMintHost(mint.url)
                                 )
@@ -790,9 +784,9 @@ struct ReceiveLightningView: View {
 
     // MARK: - Detail Row
 
-    private func detailRow(icon: String, label: String, value: String) -> some View {
+    private func detailRow(label: String, value: String) -> some View {
         HStack {
-            Label(label, systemImage: icon)
+            Text(label)
                 .foregroundStyle(.secondary)
             Spacer()
             Text(value)
@@ -808,10 +802,10 @@ struct ReceiveLightningView: View {
 
     /// Same as `detailRow` but tappable, with a trailing pencil — used for the
     /// Amount row on the reusable offer screen (mirrors the Cashu Request screen).
-    private func editableRow(icon: String, label: String, value: String, action: @escaping () -> Void) -> some View {
+    private func editableRow(label: String, value: String, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             HStack {
-                Label(label, systemImage: icon)
+                Text(label)
                     .foregroundStyle(.secondary)
                 Spacer()
                 Text(value)
@@ -839,7 +833,7 @@ struct ReceiveLightningView: View {
     private func explorerLinkRow(label: String, url: URL) -> some View {
         Link(destination: url) {
             HStack {
-                Label(label, systemImage: "safari")
+                Text(label)
                     .foregroundStyle(.secondary)
                 Spacer()
                 Image(systemName: "arrow.up.right")

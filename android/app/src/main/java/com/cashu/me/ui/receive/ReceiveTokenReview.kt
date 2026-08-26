@@ -3,11 +3,7 @@ package com.cashu.me.ui.receive
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.AccountBalance
 import androidx.compose.material.icons.outlined.CheckCircle
-import androidx.compose.material.icons.outlined.Lock
-import androidx.compose.material.icons.outlined.Payments
-import androidx.compose.material.icons.outlined.Receipt
 import androidx.compose.material.icons.outlined.WarningAmber
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
@@ -289,20 +285,17 @@ internal fun TokenInspectorRows(
                 isSatToken -> "$fee sat"
                 else -> CurrencyAmount(fee, tokenCurrency).formatted()
             },
-            leadingIcon = Icons.Outlined.Receipt,
             loading = fee == null,
         )
         InspectorRow(
             label = "Mint",
             value = info.mint,
-            leadingIcon = Icons.Outlined.AccountBalance,
         )
         lockPresentation?.let { lock ->
             lock.targetLabels.forEachIndexed { index, target ->
                 InspectorRow(
                     label = if (index == 0) "Locked to" else "Also locked to",
                     value = target,
-                    leadingIcon = Icons.Outlined.Lock,
                     valueMonospaced = true,
                 )
             }
@@ -395,20 +388,17 @@ internal fun TokenClaimTerminal(
                 InspectorRow(
                     label = "Amount",
                     value = formatted(data.amount),
-                    leadingIcon = Icons.Outlined.Payments,
                 )
                 if (data.fee > 0L) {
                     InspectorRow(
                         label = "Fee",
                         value = formatted(data.fee),
-                        leadingIcon = Icons.Outlined.Receipt,
                     )
                 }
                 if (data.mint.isNotEmpty()) {
                     InspectorRow(
                         label = "Mint",
                         value = data.mint,
-                        leadingIcon = Icons.Outlined.AccountBalance,
                     )
                 }
             }

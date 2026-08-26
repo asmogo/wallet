@@ -22,11 +22,9 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.AccountBalance
 import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.IosShare
-import androidx.compose.material.icons.outlined.Payments
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.Icon
@@ -697,7 +695,6 @@ internal fun ColumnScope.CashuRequestReceiptRows(
         InspectorRow(
             label = "Amount",
             value = amountLabel,
-            leadingIcon = Icons.Outlined.Payments,
             valueMonospaced = true,
         )
     }
@@ -705,7 +702,6 @@ internal fun ColumnScope.CashuRequestReceiptRows(
         InspectorRow(
             label = "Mint",
             value = mintName,
-            leadingIcon = Icons.Outlined.AccountBalance,
         )
     }
 }
