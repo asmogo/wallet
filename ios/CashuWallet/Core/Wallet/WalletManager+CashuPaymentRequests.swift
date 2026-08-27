@@ -195,7 +195,15 @@ extension WalletManager {
                 )
                 let customAmount = request.amount() == nil ? Amount(value: amount) : nil
 
-                try await wallet.payRequest(paymentRequest: request, customAmount: customAmount)
+                // CDK rc.1 splits atomic pay_request into prepare + confirm:
+                // prepare resolves method/fees and reserves proofs, confirm
+                // delivers. On delivery failure the pending operation stays
+                // reclaimable via revokeSend instead of paying twice.
+                let prepared = try await wallet.preparePayRequest(
+                    paymentRequest: request,
+                    customAmount: customAmount
+                )
+                try await prepared.confirm()
                 await self.refreshBalanceAssumingWalletOperationLease()
                 await self.loadTransactionsAssumingWalletOperationLease()
             } catch {
