@@ -31,6 +31,7 @@ struct MainWalletView: View {
     @State private var deltaDismissTask: Task<Void, Never>?
     @State private var contactlessCoordinator = ContactlessPaymentCoordinator()
     @State private var selectedTransaction: WalletTransaction?
+    @State private var isSheetDismissing = false
     @State private var topInsetHeight: CGFloat = 0
     /// Last-viewed home balance unit, persisted so the wallet reopens on it.
     /// Clamped back to "sat" whenever that unit no longer carries a balance.
@@ -62,6 +63,10 @@ struct MainWalletView: View {
     private let pageDotSize: CGFloat = 6
     /// Gap between hero and dots — always reserved with the dots slot.
     private let pageDotGap: CGFloat = 0
+
+    private var isBottomSheetPresented: Bool {
+        navigationManager.activeWalletSheet != nil || selectedTransaction != nil
+    }
 
     /// Units the home hero can page through: sat, then each held non-sat unit.
     private var homeUnits: [String] {
@@ -143,13 +148,20 @@ struct MainWalletView: View {
                 onDismiss: { navigationManager.sheetDidDismiss() }
             ) { sheet in
                 sheetView(for: sheet)
+                    .observeBottomSheetDismissal { isSheetDismissing = $0 }
             }
             .sheet(item: $selectedTransaction) { transaction in
                 TransactionDetailView(transaction: transaction)
                     .environmentObject(walletManager)
-                    .flatBottomSheetSurface()
+                    .observeBottomSheetDismissal { isSheetDismissing = $0 }
             }
             .task { await walletManager.loadTransactions() }
+        }
+        .bottomSheetBackdrop(
+            isPresented: isBottomSheetPresented && !isSheetDismissing
+        )
+        .onChange(of: isBottomSheetPresented) { _, presented in
+            if presented { isSheetDismissing = false }
         }
         .onReceive(NotificationCenter.default.publisher(for: .cashuTokenReceived)) { note in
             guard let amount = note.userInfo?["amount"] as? UInt64 else { return }
@@ -188,8 +200,6 @@ struct MainWalletView: View {
 
     private var balanceSection: some View {
         VStack(spacing: 0) {
-            mintChip
-
             // Fixed footprint: hero + (gap + dots) always, whether the active
             // mint is single-unit or multi-unit — switching mints must not shove
             // Receive/Send / Recent up or down.
@@ -234,18 +244,37 @@ struct MainWalletView: View {
             if unit.lowercased() == "sat" {
                 let sats = walletManager.balancesByUnit["sat"] ?? walletManager.balance
                 let display = balanceDisplay(sats)
-                AmountLockup(
-                    parts: display.primaryParts,
-                    value: Double(sats),
-                    accessibilityPrefix: "Balance"
-                )
-                .animation(.snappy, value: sats)
+                let primaryValue = balanceNumericValue(sats, primary: display.effectivePrimary)
+                if let secondary = display.secondary {
+                    Button {
+                        withAnimation(reduceMotion ? .easeOut(duration: 0.2) : .snappy) {
+                            settings.homeBalancePrimary.toggle()
+                        }
+                    } label: {
+                        AmountLockup(
+                            parts: display.primaryParts,
+                            value: primaryValue,
+                            accessibilityPrefix: "Balance"
+                        )
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Balance: \(display.primary)")
+                    .accessibilityHint("Double tap to make \(secondary) the primary balance")
+                    .sensoryFeedback(.selection, trigger: settings.homeBalancePrimary)
+                } else {
+                    AmountLockup(
+                        parts: display.primaryParts,
+                        value: primaryValue,
+                        accessibilityPrefix: "Balance"
+                    )
+                }
 
                 // Status line under the balance: a transient monochrome
                 // received-delta beat takes over the fiat slot for 2.5s on receipt,
                 // then fiat fades back. Same slot, so the swap doesn't reflow the
                 // balance. (De-greened 2026-07-05 — the balance roll carries the moment.)
-                balanceStatusLine(display)
+                balanceStatusLine(display, secondaryValue: balanceSecondaryNumericValue(sats, display: display))
             } else {
                 let amount = walletManager.balancesByUnit[unit] ?? 0
                 let formatted = CurrencyAmount(
@@ -290,7 +319,7 @@ struct MainWalletView: View {
     /// while a payment just landed, otherwise the fiat sub-amount. Always keeps
     /// [statusLineHeight] so hiding fiat never collapses the hero.
     @ViewBuilder
-    private func balanceStatusLine(_ display: AmountDisplayText) -> some View {
+    private func balanceStatusLine(_ display: AmountDisplayText, secondaryValue: Double?) -> some View {
         ZStack {
             if let delta = receivedDelta {
                 receivedDeltaBeat(delta)
@@ -300,18 +329,12 @@ struct MainWalletView: View {
                     .font(.body)
                     .foregroundStyle(.secondary)
                     .transition(.opacity)
-            } else if settings.showFiatBalance,
-                      let fiatBalance = priceService.formatSatsAsFiat(walletManager.balance) {
-                // Was the one branch of this ZStack with no styling at all: it
-                // rendered in primary ink beside three secondary siblings, and
-                // skipped tabular figures on a money value.
-                Text(fiatBalance)
-                    .cashuAmount(.amountRow, value: nil)
-                    .foregroundStyle(.secondary)
-                    .transition(.opacity)
             } else if let secondary = display.secondary {
                 Text(secondary)
                     .font(.body)
+                    .monospacedDigit()
+                    .contentTransition(reduceMotion ? .opacity : .numericText(value: secondaryValue ?? 0))
+                    .animation(reduceMotion ? .easeOut(duration: 0.2) : .snappy, value: secondaryValue)
                     .foregroundStyle(.secondary)
                     .transition(.opacity)
             }
@@ -359,72 +382,6 @@ struct MainWalletView: View {
                 receivedDelta = nil
             }
         }
-    }
-
-    // MARK: - Active Mint Chip
-
-    @ViewBuilder
-    private var mintChip: some View {
-        if let active = walletManager.activeMint {
-            Menu {
-                ForEach(walletManager.mints) { mint in
-                    Button {
-                        HapticFeedback.selection()
-                        Task { try? await walletManager.setActiveMint(mint) }
-                    } label: {
-                        if mint.id == active.id {
-                            Label(mint.name, systemImage: "checkmark")
-                        } else {
-                            Text(mint.name)
-                        }
-                    }
-                }
-
-                Divider()
-
-                Button {
-                    navigationManager.activeWalletSheet = .discoverMints
-                } label: {
-                    Label("Add mint", systemImage: "plus")
-                }
-            } label: {
-                HStack(spacing: 8) {
-                    mintChipIcon(url: active.iconUrl)
-                    Text(active.name)
-                        .font(.subheadline.weight(.medium))
-                        .lineLimit(1)
-                }
-                .foregroundStyle(.secondary)
-                .padding(.horizontal, 14)
-                .padding(.vertical, 7)
-                .liquidGlass(in: Capsule(), interactive: true)
-                .contentShape(Capsule())
-            }
-            .accessibilityLabel("Active mint: \(active.name)")
-            .accessibilityHint("Choose a different active mint")
-        }
-    }
-
-    @ViewBuilder
-    private func mintChipIcon(url: String?) -> some View {
-        if let urlString = url, let imageURL = URL(string: urlString) {
-            CachedAsyncImage(url: imageURL) { image in
-                image.resizable().scaledToFill()
-            } placeholder: {
-                mintChipIconPlaceholder
-            }
-            .frame(width: 20, height: 20)
-            .clipShape(Circle())
-        } else {
-            mintChipIconPlaceholder
-        }
-    }
-
-    private var mintChipIconPlaceholder: some View {
-        Image(systemName: "bitcoinsign.bank.building.fill")
-            .font(.system(size: 14, weight: .semibold))
-            .foregroundStyle(.secondary)
-            .frame(width: 20, height: 20)
     }
 
     // MARK: - Action Buttons (Receive + Send)
@@ -686,12 +643,21 @@ struct MainWalletView: View {
     private func balanceDisplay(_ sats: UInt64) -> AmountDisplayText {
         AmountFormatter.displayText(
             amountSats: sats,
-            preferredPrimary: settings.amountDisplayPrimary,
+            preferredPrimary: settings.homeBalancePrimary,
             showFiat: settings.showFiatBalance,
             btcPrice: priceService.btcPriceUSD,
             currencyCode: settings.bitcoinPriceCurrency,
             useBitcoinSymbol: settings.useBitcoinSymbol
         )
+    }
+
+    private func balanceNumericValue(_ sats: UInt64, primary: AmountDisplayPrimary) -> Double {
+        primary == .fiat ? priceService.satsToFiat(sats) : Double(sats)
+    }
+
+    private func balanceSecondaryNumericValue(_ sats: UInt64, display: AmountDisplayText) -> Double? {
+        guard display.secondary != nil else { return nil }
+        return display.effectivePrimary == .fiat ? Double(sats) : priceService.satsToFiat(sats)
     }
 
     @ViewBuilder
@@ -718,27 +684,21 @@ struct MainWalletView: View {
             )
             .environmentObject(walletManager)
         case .send(let prefill):
-            // UnifiedSendView owns its presentation detents: content-fit on the
-            // input step, `.large` + canvas once amount/confirm/status take over.
-            UnifiedSendView(
+            unifiedSendSheet(initialDestination: prefill)
+        case .sendEdit(let prefill):
+            unifiedSendSheet(
                 initialDestination: prefill,
-                onClose: { navigationManager.activeWalletSheet = nil },
-                onReceive: { navigationManager.activeWalletSheet = .receive },
-                onContactless: {
-                    navigationManager.activeWalletSheet = nil
-                    contactlessCoordinator.start(
-                        walletManager: walletManager,
-                        navigationManager: navigationManager
-                    )
-                },
-                // A token pasted into Send is a receive: bounce it to the
-                // full-screen claim page, closing the Send sheet first.
-                onOpenReceiveToken: { token in
-                    navigationManager.present(.cover(.receiveToken(token)))
-                },
-                onSendEcash: { navigationManager.activeWalletSheet = .sendEcash }
+                autoAdvanceInitialDestination: false
             )
-            .environmentObject(walletManager)
+        case .sendAmount(let destination):
+            unifiedSendSheet(
+                initialAmountDestination: destination,
+                onEditDestination: {
+                    navigationManager.present(
+                        .sheet(.sendEdit(prefill: destination.rawInput))
+                    )
+                }
+            )
         case .scanner:
             // The scanner self-dismisses on a successful read and hands the
             // payload back; the routed surface presents only after this sheet
@@ -760,12 +720,12 @@ struct MainWalletView: View {
             SendView()
                 .environmentObject(walletManager)
                 .presentationDetents([.large])
-                .flatBottomSheetSurface()
+                .compactBottomSheetSurface()
         case .receiveLightning:
             ReceiveLightningView()
                 .environmentObject(walletManager)
                 .presentationDetents([.large])
-                .flatBottomSheetSurface()
+                .compactBottomSheetSurface()
         case .meltInvoice(let invoice):
             MeltViewWithInvoice(invoice: invoice)
                 .environmentObject(walletManager)
@@ -781,6 +741,43 @@ struct MainWalletView: View {
             .environmentObject(walletManager)
             .flatBottomSheetSurface()
         }
+    }
+
+    /// All Send faces share one implementation, but amount entry is a separate
+    /// native sheet presentation. Dismissing the compact input before opening
+    /// the large amount sheet avoids racing keyboard removal against a detent
+    /// resize, and mirrors the already-smooth Send Ecash handoff.
+    private func unifiedSendSheet(
+        initialDestination: String? = nil,
+        initialAmountDestination: SendAmountDestination? = nil,
+        autoAdvanceInitialDestination: Bool = true,
+        onEditDestination: (() -> Void)? = nil
+    ) -> some View {
+        UnifiedSendView(
+            initialDestination: initialDestination,
+            initialAmountDestination: initialAmountDestination,
+            autoAdvanceInitialDestination: autoAdvanceInitialDestination,
+            onClose: { navigationManager.activeWalletSheet = nil },
+            onReceive: { navigationManager.activeWalletSheet = .receive },
+            onContactless: {
+                navigationManager.activeWalletSheet = nil
+                contactlessCoordinator.start(
+                    walletManager: walletManager,
+                    navigationManager: navigationManager
+                )
+            },
+            // A token pasted into Send is a receive: bounce it to the
+            // full-screen claim page, closing the Send sheet first.
+            onOpenReceiveToken: { token in
+                navigationManager.present(.cover(.receiveToken(token)))
+            },
+            onSendEcash: { navigationManager.activeWalletSheet = .sendEcash },
+            onRequestAmount: { destination in
+                navigationManager.present(.sheet(.sendAmount(destination)))
+            },
+            onEditDestination: onEditDestination
+        )
+        .environmentObject(walletManager)
     }
 }
 

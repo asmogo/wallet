@@ -19,14 +19,19 @@ import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.launch
+import com.cashu.me.ui.components.CompactSheetContent
 import com.cashu.me.ui.navigation.TopTab
+import com.cashu.me.ui.theme.CashuTheme
 
 /**
  * The money flows presented over the shell (iOS `WalletFlow` sheets).
@@ -104,20 +109,46 @@ internal class WalletFlowHandoffCoordinator {
 fun WalletFlowSheetHost(
     flow: WalletFlow?,
     dismissLocked: Boolean,
+    onBackdropVisibilityChanged: (Boolean) -> Unit,
     onDismissed: () -> Unit,
     snackbarHostState: SnackbarHostState,
     content: @Composable (flow: WalletFlow, close: () -> Unit) -> Unit,
 ) {
     if (flow == null) return
     val locked by rememberUpdatedState(dismissLocked)
+    val backdropVisibilityChanged by rememberUpdatedState(onBackdropVisibilityChanged)
     // Stable lambda: rememberModalBottomSheetState keys its saver on it.
     val confirmValueChange = remember {
-        { value: SheetValue -> value != SheetValue.Hidden || !locked }
+        { value: SheetValue ->
+            val canChange = value != SheetValue.Hidden || !locked
+            if (canChange && value == SheetValue.Hidden) {
+                // This is the earliest common point for scrim taps, back,
+                // swipes, and programmatic closes. Release the blur before
+                // the sheet starts travelling instead of waiting for a later
+                // snapshot observation or the completed dismissal callback.
+                backdropVisibilityChanged(false)
+            }
+            canChange
+        }
     }
     val sheetState = rememberModalBottomSheetState(
         skipPartiallyExpanded = true,
         confirmValueChange = confirmValueChange,
     )
+    LaunchedEffect(sheetState) {
+        var hasBeenVisible = false
+        snapshotFlow { sheetState.targetValue }.collect { target ->
+            if (target != SheetValue.Hidden) {
+                hasBeenVisible = true
+                backdropVisibilityChanged(true)
+            } else if (hasBeenVisible) {
+                // Target state changes at dismissal start, before the sheet's
+                // slide-out finishes. Clearing here keeps the blur from
+                // lingering for a second animation after the sheet disappears.
+                backdropVisibilityChanged(false)
+            }
+        }
+    }
     val scope = rememberCoroutineScope()
     val close: () -> Unit = {
         scope.launch { sheetState.hide() }.invokeOnCompletion { onDismissed() }
@@ -143,28 +174,30 @@ fun WalletFlowSheetHost(
         ModalBottomSheet(
             onDismissRequest = onDismissed,
             sheetState = sheetState,
+            containerColor = CashuTheme.colors.compactSheetContainer,
         ) {
             // The sheet's *content* keeps the app's real motion scheme — its
             // buttons and morphs animate with these same specs.
             WithMotionScheme(baseMotion) {
-                Box(modifier = Modifier.fillMaxWidth()) {
-                    AnimatedContent(
-                        targetState = flow,
-                        transitionSpec = {
-                            fadeIn(spring(stiffness = Spring.StiffnessMedium))
-                                .togetherWith(fadeOut(spring(stiffness = Spring.StiffnessMedium)))
-                        },
-                        label = "wallet-flow",
-                    ) { current ->
-                        content(current, close)
+                CompactSheetContent {
+                    Box(modifier = Modifier.fillMaxWidth()) {
+                        AnimatedContent(
+                            targetState = flow,
+                            transitionSpec = {
+                                fadeIn(spring(stiffness = Spring.StiffnessMedium))
+                                    .togetherWith(fadeOut(spring(stiffness = Spring.StiffnessMedium)))
+                            },
+                            label = "wallet-flow",
+                        ) { current ->
+                            content(current, close)
+                        }
+                        // Errors remain local to the active flow; confirmation
+                        // toasts use the app-level pass-through overlay window.
+                        SnackbarHost(
+                            hostState = snackbarHostState,
+                            modifier = Modifier.align(Alignment.BottomCenter),
+                        )
                     }
-                    // Sheet renders in its own Android Window — the root-mounted
-                    // host in CashuApp.kt can't reach here, so mount a second one
-                    // observing the same SnackbarHostState.
-                    SnackbarHost(
-                        hostState = snackbarHostState,
-                        modifier = Modifier.align(Alignment.BottomCenter),
-                    )
                 }
             }
         }

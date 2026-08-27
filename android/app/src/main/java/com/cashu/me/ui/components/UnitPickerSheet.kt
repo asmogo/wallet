@@ -42,50 +42,53 @@ fun UnitPickerSheet(
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = sheetState,
+        containerColor = CashuTheme.colors.compactSheetContainer,
     ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = CashuTheme.spacing.comfortable)
-                .navigationBarsPadding(),
-        ) {
-            FlowSheetTitle(title = title)
-            units.forEach { unit ->
-                val code = unit.uppercase()
-                val displayName = CurrencyRegistry.currencyForMintUnit(unit).displayName
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clickable { onSelect(unit) }
-                        .padding(
-                            horizontal = CashuTheme.spacing.snug,
-                            vertical = CashuTheme.spacing.default,
-                        ),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(CashuTheme.spacing.default),
-                ) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(code, style = MaterialTheme.typography.bodyLarge)
-                        if (!displayName.equals(code, ignoreCase = true)) {
-                            Text(
-                                displayName,
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                maxLines = 1,
+        CompactSheetContent {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = CashuTheme.spacing.comfortable)
+                    .navigationBarsPadding(),
+            ) {
+                FlowSheetTitle(title = title)
+                units.forEach { unit ->
+                    val code = unit.uppercase()
+                    val displayName = CurrencyRegistry.currencyForMintUnit(unit).displayName
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { onSelect(unit) }
+                            .padding(
+                                horizontal = CashuTheme.spacing.snug,
+                                vertical = CashuTheme.spacing.default,
+                            ),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(CashuTheme.spacing.default),
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(code, style = MaterialTheme.typography.bodyLarge)
+                            if (!displayName.equals(code, ignoreCase = true)) {
+                                Text(
+                                    displayName,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    maxLines = 1,
+                                )
+                            }
+                        }
+                        if (unit == selectedUnit) {
+                            Icon(
+                                imageVector = Icons.Filled.Check,
+                                contentDescription = "Selected",
+                                tint = MaterialTheme.colorScheme.onSurface,
+                                modifier = Modifier.size(CashuTheme.spacing.loose),
                             )
                         }
                     }
-                    if (unit == selectedUnit) {
-                        Icon(
-                            imageVector = Icons.Filled.Check,
-                            contentDescription = "Selected",
-                            tint = MaterialTheme.colorScheme.onSurface,
-                            modifier = Modifier.size(CashuTheme.spacing.loose),
-                        )
-                    }
                 }
+                Spacer(Modifier.height(CashuTheme.spacing.snug))
             }
-            Spacer(Modifier.height(CashuTheme.spacing.snug))
         }
     }
 }

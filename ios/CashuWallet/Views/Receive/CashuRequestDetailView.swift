@@ -12,7 +12,6 @@ struct CashuRequestDetailView: View {
     let onClose: (() -> Void)?
 
     @State private var requestId: String
-    @State private var showCopied = false
     @State private var showMintPicker = false
     @State private var showAmountPicker = false
     @State private var showUnitPicker = false
@@ -115,7 +114,7 @@ struct CashuRequestDetailView: View {
             )
             markPaymentReceived(amount: payment.amount)
         }
-        .flatBottomSheetSurface()
+        .compactBottomSheetSurface()
     }
 
     /// Single-fire transition into the shared full-screen success — the same
@@ -146,7 +145,6 @@ struct CashuRequestDetailView: View {
         var rows: [PaymentStatusView.DetailRow] = []
         if let receivedAmount {
             rows.append(.init(
-                icon: "bitcoinsign",
                 label: "Amount",
                 value: request.map { formatAmount(receivedAmount, unit: $0.unit) }
                     ?? AmountFormatter.sats(receivedAmount, useBitcoinSymbol: settings.useBitcoinSymbol)
@@ -154,7 +152,6 @@ struct CashuRequestDetailView: View {
         }
         if let request {
             rows.append(.init(
-                icon: "bitcoinsign.bank.building",
                 label: "Mint",
                 value: mintDisplayValue(for: request)
             ))
@@ -223,41 +220,35 @@ struct CashuRequestDetailView: View {
                         // here until the unified editable detail lands.
                         if request.rail == .ecash {
                             editableRow(
-                                icon: "bitcoinsign.bank.building",
                                 label: "Mint",
                                 value: mintDisplayValue(for: request),
                                 action: { showMintPicker = true }
                             )
                             editableRow(
-                                icon: "bitcoinsign",
                                 label: "Amount",
                                 value: amountDisplayValue(for: request),
                                 action: { showAmountPicker = true }
                             )
                         } else {
                             detailRow(
-                                icon: "bitcoinsign.bank.building",
                                 label: "Mint",
                                 value: mintDisplayValue(for: request)
                             )
                             detailRow(
-                                icon: "bitcoinsign",
                                 label: "Amount",
                                 value: amountDisplayValue(for: request)
                             )
                         }
                         if unitEditable(for: request) {
                             editableRow(
-                                icon: "creditcard",
                                 label: "Unit",
                                 value: request.unit.uppercased(),
                                 action: { showUnitPicker = true }
                             )
                         } else {
-                            detailRow(icon: "creditcard", label: "Unit", value: request.unit.uppercased())
+                            detailRow(label: "Unit", value: request.unit.uppercased())
                         }
                         detailRow(
-                            icon: "calendar",
                             label: "Created",
                             value: request.createdAt.formatted(date: .abbreviated, time: .shortened)
                         )
@@ -270,9 +261,9 @@ struct CashuRequestDetailView: View {
 
             HStack(spacing: 12) {
                 Button(action: { copy(request.encoded) }) {
-                    Text(showCopied ? "Copied" : "Copy")
+                    Text("Copy")
                 }
-                .glassButton()
+                .flatSheetSecondaryButton()
 
                 // "New Request" rotates a fresh NUT-18 request; it's meaningless
                 // for a quote-backed reusable offer (the offer is the artifact).
@@ -280,7 +271,7 @@ struct CashuRequestDetailView: View {
                     Button(action: { regenerate() }) {
                         Text("New Request")
                     }
-                    .glassButton()
+                    .flatSheetSecondaryButton()
                     .accessibilityHint("Generates a fresh Cashu Request and rotates the QR")
                 }
             }
@@ -329,9 +320,9 @@ struct CashuRequestDetailView: View {
 
     // MARK: - Detail rows
 
-    private func detailRow(icon: String, label: String, value: String) -> some View {
+    private func detailRow(label: String, value: String) -> some View {
         HStack {
-            Label(label, systemImage: icon)
+            Text(label)
                 .foregroundStyle(.secondary)
             Spacer()
             Text(value)
@@ -343,12 +334,15 @@ struct CashuRequestDetailView: View {
         .font(.subheadline)
         .padding(.vertical, 12)
         .padding(.horizontal, 8)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(label)
+        .accessibilityValue(value)
     }
 
-    private func editableRow(icon: String, label: String, value: String, action: @escaping () -> Void) -> some View {
+    private func editableRow(label: String, value: String, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             HStack {
-                Label(label, systemImage: icon)
+                Text(label)
                     .foregroundStyle(.secondary)
                 Spacer()
                 Text(value)
@@ -367,6 +361,8 @@ struct CashuRequestDetailView: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .accessibilityLabel(label)
+        .accessibilityValue(value)
         .accessibilityHint("Edits the \(label.lowercased())")
     }
 
@@ -400,10 +396,7 @@ struct CashuRequestDetailView: View {
     private func copy(_ s: String) {
         UIPasteboard.general.string = s
         HapticFeedback.selection()
-        showCopied = true
-        DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
-            showCopied = false
-        }
+        ConfirmationToast.show("Copied Cashu request")
     }
 
     /// Re-encodes the displayed request with optional overrides, keeping the same

@@ -8,6 +8,8 @@ import SwiftUI
 // read as one amount block. See DESIGN.md —
 // The Amount Column Rule, The One Green Rule, The Fiat Sub-Amount Rule.
 struct CashuRequestAmountColumn: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
     let request: CashuRequest
     let received: Bool
     let receivedAmount: UInt64
@@ -19,34 +21,10 @@ struct CashuRequestAmountColumn: View {
     var body: some View {
         if received {
             let display = amountDisplay(receivedAmount)
-            VStack(alignment: .trailing, spacing: 2) {
-                Text("+\(display.primary)")
-                    .cashuAmount(.amountRow, value: Double(receivedAmount))
-                    .foregroundStyle(.green)
-
-                if let secondary = display.secondary {
-                    Text(secondary)
-                        .font(.subheadline)
-                        .monospacedDigit()
-                        .foregroundStyle(.secondary)
-                }
-            }
+            animatedAmountPair(display: display, amount: receivedAmount, received: true)
         } else if let amount = request.amount, amount > 0 {
             let display = amountDisplay(amount)
-            VStack(alignment: .trailing, spacing: 2) {
-                // No value passed: a waiting amount is static, so it takes the
-                // role's tabular figures without the digit transition.
-                Text(display.primary)
-                    .cashuText(.amountRow)
-                    .foregroundStyle(.secondary)
-
-                if let secondary = display.secondary {
-                    Text(secondary)
-                        .font(.subheadline)
-                        .monospacedDigit()
-                        .foregroundStyle(.secondary)
-                }
-            }
+            animatedAmountPair(display: display, amount: amount, received: false)
         }
         // "any amount" + waiting: no trailing element.
     }
@@ -66,11 +44,47 @@ struct CashuRequestAmountColumn: View {
         }
         return AmountFormatter.displayText(
             amountSats: amount,
-            preferredPrimary: settings.amountDisplayPrimary,
+            preferredPrimary: settings.homeBalancePrimary,
             showFiat: settings.showFiatBalance,
             btcPrice: priceService.btcPriceUSD,
             currencyCode: settings.bitcoinPriceCurrency,
             useBitcoinSymbol: settings.useBitcoinSymbol
         )
+    }
+
+    private func animatedAmountPair(
+        display: AmountDisplayText,
+        amount: UInt64,
+        received: Bool
+    ) -> some View {
+        ZStack(alignment: .trailing) {
+            VStack(alignment: .trailing, spacing: 2) {
+                if received {
+                    Text("+\(display.primary)")
+                        .cashuAmount(.amountRow, value: Double(amount))
+                        .foregroundStyle(.green)
+                } else {
+                    // No value passed: a waiting amount is static, so it takes the
+                    // role's tabular figures without the digit transition.
+                    Text(display.primary)
+                        .cashuText(.amountRow)
+                        .foregroundStyle(.secondary)
+                }
+
+                if let secondary = display.secondary {
+                    Text(secondary)
+                        .font(.subheadline)
+                        .monospacedDigit()
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .id(settings.homeBalancePrimary)
+            .transition(.opacity)
+        }
+        .animation(swapAnimation, value: settings.homeBalancePrimary)
+    }
+
+    private var swapAnimation: Animation {
+        reduceMotion ? .easeOut(duration: 0.2) : .snappy
     }
 }

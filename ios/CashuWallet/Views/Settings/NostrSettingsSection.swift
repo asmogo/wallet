@@ -21,7 +21,6 @@ struct NostrKeysSettingsSection: View {
     @State private var showResetKeyConfirm = false
     @State private var nostrKeyError: String?
     @State private var showNsecReveal = false
-    @State private var copiedValue: String?
 
     var body: some View {
         VStack(spacing: 0) {
@@ -109,7 +108,6 @@ struct NostrKeysSettingsSection: View {
                 title: "Nostr key",
                 pubkey: nostrService.npub,
                 status: nostrService.signerType == .seed ? .seedBacked : .custom,
-                copiedValue: copiedValue,
                 onCopy: { copyNpub() },
                 actions: [
                     .init(title: "Reveal nsec", systemImage: "eye") {
@@ -166,10 +164,7 @@ struct NostrKeysSettingsSection: View {
     private func copyNpub() {
         UIPasteboard.general.string = nostrService.npub
         HapticFeedback.selection()
-        withAnimation(.snappy(duration: 0.18)) { copiedValue = "key" }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
-            if copiedValue == "key" { withAnimation(.snappy(duration: 0.18)) { copiedValue = nil } }
-        }
+        ConfirmationToast.show("Copied Nostr public key")
     }
 
     private func generateNewKey() {
@@ -237,7 +232,6 @@ struct NostrRelaysSettingsSection: View {
 
     @State private var relayInput = ""
     @State private var relayError: String?
-    @State private var copiedRelay: String?
 
     private var canAdd: Bool {
         !relayInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
@@ -311,10 +305,9 @@ struct NostrRelaysSettingsSection: View {
             Spacer(minLength: 8)
             HStack(spacing: 18) {
                 Button(action: { copyRelay(relay) }) {
-                    Image(systemName: copiedRelay == relay ? "checkmark" : "doc.on.doc")
+                    Image(systemName: "doc.on.doc")
                         .font(.caption.weight(.semibold))
-                        .foregroundStyle(copiedRelay == relay ? Color.green : Color.secondary)
-                        .contentTransition(.symbolEffect(.replace))
+                        .foregroundStyle(Color.secondary)
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel("Copy relay URL")
@@ -354,12 +347,7 @@ struct NostrRelaysSettingsSection: View {
     private func copyRelay(_ relay: String) {
         UIPasteboard.general.string = relay
         HapticFeedback.selection()
-        withAnimation(.snappy(duration: 0.18)) { copiedRelay = relay }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
-            if copiedRelay == relay {
-                withAnimation(.snappy(duration: 0.18)) { copiedRelay = nil }
-            }
-        }
+        ConfirmationToast.show("Copied relay URL")
     }
 }
 

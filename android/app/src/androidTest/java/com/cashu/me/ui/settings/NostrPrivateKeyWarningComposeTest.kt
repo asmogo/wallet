@@ -27,7 +27,6 @@ class NostrPrivateKeyWarningComposeTest {
                 title = "Nostr private key",
                 warning = NostrPrivateKeyWarningText,
                 revealedNsec = null,
-                copied = false,
                 onToggleReveal = {},
                 onCopy = {},
                 onDone = {},

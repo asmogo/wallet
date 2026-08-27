@@ -11,11 +11,11 @@ final class ReceiveUITests: UITestBase {
     }
 
     private var receiveEcashOption: XCUIElement {
-        app.buttons["Create a Cashu request"]
+        app.buttons["wallet-flow-receiveEcash"]
     }
 
     private var receiveBitcoinOption: XCUIElement {
-        app.buttons["Receive over Lightning or on-chain"]
+        app.buttons["wallet-flow-receiveLightning"]
     }
 
     private var receiveDestinationField: XCUIElement {

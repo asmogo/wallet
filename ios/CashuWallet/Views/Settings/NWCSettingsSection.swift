@@ -156,6 +156,7 @@ struct NWCSettingsView: View {
             Button {
                 UIPasteboard.general.string = uri
                 HapticFeedback.selection()
+                ConfirmationToast.show("Copied connection code")
             } label: {
                 Label("Copy code", systemImage: "doc.on.doc")
             }

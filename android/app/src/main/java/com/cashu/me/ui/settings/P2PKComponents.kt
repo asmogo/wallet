@@ -23,7 +23,6 @@ import androidx.compose.material.icons.automirrored.outlined.Send
 import androidx.compose.material.icons.filled.Key
 import androidx.compose.material.icons.filled.Verified
 import androidx.compose.material.icons.filled.Warning
-import androidx.compose.material.icons.outlined.Check
 import androidx.compose.material.icons.outlined.ContentCopy
 import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material.icons.outlined.LockOpen
@@ -61,11 +60,11 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import com.cashu.me.Core.AppLockManager
 import com.cashu.me.Core.Bech32
 import com.cashu.me.ui.components.IconSwap
+import com.cashu.me.ui.components.LocalConfirmationToastController
 import com.cashu.me.ui.components.PrimaryButton
 import com.cashu.me.ui.components.QrCard
 import com.cashu.me.ui.components.shareText
@@ -76,7 +75,6 @@ import com.cashu.me.ui.theme.withSlashedZero
 // iOS KeyCard geometry: 34pt glyph circle, rounded-14 card.
 private val KeyGlyphSize = 36.dp
 private val KeyGlyphIconSize = 18.dp
-private const val CopiedFeedbackMillis = 2_000L
 private const val HiddenKeyDots = 24
 
 /**
@@ -151,15 +149,9 @@ fun KeyCard(
     copyOptions: List<KeyCardCopyOption> = emptyList(),
 ) {
     val clipboard = LocalClipboardManager.current
+    val confirmationToastController = LocalConfirmationToastController.current
     val haptics = LocalHapticFeedback.current
-    var copied by remember { mutableStateOf(false) }
     var menuOpen by remember { mutableStateOf(false) }
-    LaunchedEffect(copied) {
-        if (copied) {
-            delay(CopiedFeedbackMillis)
-            copied = false
-        }
-    }
     Column(
         modifier = modifier
             .fillMaxWidth()
@@ -218,7 +210,7 @@ fun KeyCard(
             }
         }
 
-        // Tap-to-copy pubkey with a 2s checkmark beat (iOS parity). When the caller
+        // Tap-to-copy pubkey with stable affordance + shared toast. When the caller
         // supplies alternate encodings, long-press offers them without spending a row.
         Box {
             Row(
@@ -228,7 +220,7 @@ fun KeyCard(
                         if (copyOptions.isEmpty()) {
                             Modifier.clickable {
                                 clipboard.setText(AnnotatedString(P2PKKeyDisplay.canonical(pubkey)))
-                                copied = true
+                                confirmationToastController?.show("Copied key")
                             }
                         } else {
                             Modifier
@@ -241,7 +233,7 @@ fun KeyCard(
                                         clipboard.setText(
                                             AnnotatedString(P2PKKeyDisplay.canonical(pubkey)),
                                         )
-                                        copied = true
+                                        confirmationToastController?.show("Copied key")
                                     },
                                     onLongClick = {
                                         haptics.performHapticFeedback(HapticFeedbackType.LongPress)
@@ -261,11 +253,10 @@ fun KeyCard(
                     maxLines = 1,
                     overflow = TextOverflow.MiddleEllipsis,
                 )
-                IconSwap(
-                    icon = if (copied) Icons.Outlined.Check else Icons.Outlined.ContentCopy,
+                Icon(
+                    imageVector = Icons.Outlined.ContentCopy,
                     contentDescription = "Copy this key",
-                    tint = if (copied) CashuTheme.colors.received
-                    else MaterialTheme.colorScheme.onSurfaceVariant,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.size(CashuTheme.spacing.comfortable),
                 )
             }
@@ -283,7 +274,7 @@ fun KeyCard(
                         onClick = {
                             menuOpen = false
                             clipboard.setText(AnnotatedString(option.value))
-                            copied = true
+                            confirmationToastController?.show("Copied key")
                         },
                     )
                 }
@@ -334,20 +325,14 @@ fun QrDetailSheet(
     val clipboard = LocalClipboard.current
     val clipboardScope = rememberCoroutineScope()
     val context = LocalContext.current
-    var copied by remember { mutableStateOf(false) }
-
-    LaunchedEffect(copied) {
-        if (copied) {
-            delay(CopiedFeedbackMillis)
-            copied = false
-        }
-    }
+    val confirmationToastController = LocalConfirmationToastController.current
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = sheetState,
     ) {
-        Column(
+        Box(modifier = Modifier.fillMaxWidth()) {
+            Column(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = CashuTheme.spacing.comfortable)
@@ -361,7 +346,12 @@ fun QrDetailSheet(
                 color = MaterialTheme.colorScheme.onSurface,
             )
             Spacer(Modifier.height(CashuTheme.spacing.loose))
-            QrCard(content = content, staticOnly = true, shareSubject = title)
+            QrCard(
+                content = content,
+                staticOnly = true,
+                shareSubject = title,
+                confirmationMessage = "Copied ${title.lowercase()}",
+            )
             Spacer(Modifier.height(CashuTheme.spacing.default))
             Text(
                 text = content,
@@ -381,14 +371,14 @@ fun QrDetailSheet(
                             clipboard.setClipEntry(
                                 ClipEntry(ClipData.newPlainText(title, content)),
                             )
-                            copied = true
+                            confirmationToastController?.show("Copied ${title.lowercase()}")
                         }
                     },
                     modifier = Modifier.weight(1f),
                 ) {
                     Icon(Icons.Outlined.ContentCopy, contentDescription = null)
                     Spacer(Modifier.size(CashuTheme.spacing.micro))
-                    Text(if (copied) "Copied" else "Copy")
+                    Text("Copy")
                 }
                 FilledTonalButton(
                     onClick = { context.shareText(content, title) },
@@ -400,6 +390,7 @@ fun QrDetailSheet(
                 }
             }
             Spacer(Modifier.height(CashuTheme.spacing.comfortable))
+            }
         }
     }
 }
@@ -418,38 +409,33 @@ fun PrivateKeyRevealSheet(
     warning: String = "Anyone with this key can claim ecash locked to it. Never share it.",
 ) {
     val clipboard = LocalClipboardManager.current
+    val confirmationToastController = LocalConfirmationToastController.current
     val authenticate = rememberWalletAuthenticationLauncher(appLockManager)
     var revealedNsec by remember { mutableStateOf<String?>(null) }
-    var copied by remember { mutableStateOf(false) }
-    LaunchedEffect(copied) {
-        if (copied) {
-            delay(CopiedFeedbackMillis)
-            copied = false
-        }
-    }
     ModalBottomSheet(onDismissRequest = onDismiss) {
-        PrivateKeyRevealContent(
-            title = title,
-            warning = warning,
-            revealedNsec = revealedNsec,
-            copied = copied,
-            onToggleReveal = {
-                if (revealedNsec != null) {
-                    revealedNsec = null
-                } else {
-                    authenticate("Reveal this private key") { revealedNsec = loadNsec() }
-                }
-            },
-            onCopy = {
-                authenticate("Copy this private key") {
-                    loadNsec()?.let { nsec ->
-                        clipboard.setText(AnnotatedString(nsec))
-                        copied = true
+        Box(modifier = Modifier.fillMaxWidth()) {
+            PrivateKeyRevealContent(
+                title = title,
+                warning = warning,
+                revealedNsec = revealedNsec,
+                onToggleReveal = {
+                    if (revealedNsec != null) {
+                        revealedNsec = null
+                    } else {
+                        authenticate("Reveal this private key") { revealedNsec = loadNsec() }
                     }
-                }
-            },
-            onDone = onDismiss,
-        )
+                },
+                onCopy = {
+                    authenticate("Copy this private key") {
+                        loadNsec()?.let { nsec ->
+                            clipboard.setText(AnnotatedString(nsec))
+                            confirmationToastController?.show("Copied private key")
+                        }
+                    }
+                },
+                onDone = onDismiss,
+            )
+        }
     }
 }
 
@@ -462,7 +448,6 @@ internal fun PrivateKeyRevealContent(
     title: String,
     warning: String,
     revealedNsec: String?,
-    copied: Boolean,
     onToggleReveal: () -> Unit,
     onCopy: () -> Unit,
     onDone: () -> Unit,
@@ -535,12 +520,10 @@ internal fun PrivateKeyRevealContent(
                         )
                     }
                     IconButton(onClick = onCopy) {
-                        IconSwap(
-                            icon = if (copied) Icons.Outlined.Check
-                            else Icons.Outlined.ContentCopy,
+                        Icon(
+                            imageVector = Icons.Outlined.ContentCopy,
                             contentDescription = "Copy key",
-                            tint = if (copied) CashuTheme.colors.received
-                            else MaterialTheme.colorScheme.onSurface,
+                            tint = MaterialTheme.colorScheme.onSurface,
                         )
                     }
                 }

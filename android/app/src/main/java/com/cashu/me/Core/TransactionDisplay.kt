@@ -115,7 +115,7 @@ object TransactionDisplay {
                 }
             } else {
                 transaction.preimage?.let {
-                    add(TransactionDetailField("Payment Proof", it, copyValue = it))
+                    add(TransactionDetailField("Payment Proof", middleTruncated(it), copyValue = it))
                 }
             }
         }

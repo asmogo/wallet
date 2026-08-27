@@ -514,4 +514,46 @@ final class MultiUnitSupportTests: XCTestCase {
         XCTAssertEqual(display.secondary, "300,000 sat")
         XCTAssertEqual(display.effectivePrimary, .fiat)
     }
+
+    func testSatsPrimaryDisplayOrdersSatsBeforeFiat() {
+        let display = AmountFormatter.displayText(
+            amountSats: 300_000,
+            preferredPrimary: .sats,
+            showFiat: true,
+            btcPrice: 20_000,
+            currencyCode: "USD",
+            useBitcoinSymbol: false
+        )
+
+        XCTAssertEqual(display.primary, "300,000 sat")
+        XCTAssertEqual(display.secondary, "$60.00")
+        XCTAssertEqual(display.effectivePrimary, .sats)
+    }
+
+    func testSatsPrimaryDisplayHidesFiatWhenDisplayIsDisabled() {
+        let display = AmountFormatter.displayText(
+            amountSats: 300_000,
+            preferredPrimary: .sats,
+            showFiat: false,
+            btcPrice: 20_000,
+            currencyCode: "USD",
+            useBitcoinSymbol: false
+        )
+
+        XCTAssertEqual(display.primary, "300,000 sat")
+        XCTAssertNil(display.secondary)
+        XCTAssertEqual(display.effectivePrimary, .sats)
+    }
+
+    func testHomeBalancePrimaryDefaultsToSatsAndPersistsIndependently() {
+        let store = SettingsStore(storage: InMemoryStorage())
+
+        XCTAssertEqual(store.homeBalancePrimary, "sats")
+        XCTAssertEqual(store.amountDisplayPrimary, "fiat")
+
+        store.homeBalancePrimary = "fiat"
+
+        XCTAssertEqual(store.homeBalancePrimary, "fiat")
+        XCTAssertEqual(store.amountDisplayPrimary, "fiat")
+    }
 }

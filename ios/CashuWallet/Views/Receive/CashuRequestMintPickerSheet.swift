@@ -30,6 +30,7 @@ struct CashuRequestMintPickerSheet: View {
                     }
                 }
                 .listRowSeparator(.hidden)
+                .listRowBackground(Color.clear)
                 .buttonStyle(.plain)
 
                 ForEach(walletManager.mints) { mint in
@@ -51,14 +52,17 @@ struct CashuRequestMintPickerSheet: View {
                         }
                     }
                     .listRowSeparator(.hidden)
+                    .listRowBackground(Color.clear)
                     .buttonStyle(.plain)
                 }
             }
             .listStyle(.plain)
+            .scrollContentBackground(.hidden)
+            .background(Color.clear)
             .navigationTitle("Mint")
             .navigationBarTitleDisplayMode(.inline)
         }
-        .flatBottomSheetSurface()
+        .compactBottomSheetSurface()
     }
 
     private func select(_ mintUrl: String?) {
@@ -139,13 +143,16 @@ struct CashuRequestUnitPickerSheet: View {
                     .contentShape(Rectangle())
                 }
                 .listRowSeparator(.hidden)
+                .listRowBackground(Color.clear)
                 .buttonStyle(.plain)
             }
             .listStyle(.plain)
+            .scrollContentBackground(.hidden)
+            .background(Color.clear)
             .navigationTitle("Unit")
             .navigationBarTitleDisplayMode(.inline)
         }
-        .flatBottomSheetSurface()
+        .compactBottomSheetSurface()
     }
 
     private func select(_ unit: String) {

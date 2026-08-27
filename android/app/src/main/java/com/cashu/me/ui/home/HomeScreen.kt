@@ -80,7 +80,6 @@ import com.cashu.me.ui.components.BalanceDisplay
 import com.cashu.me.ui.components.balanceHeroHeight
 import com.cashu.me.ui.components.EmptyState
 import com.cashu.me.ui.components.GhostButton
-import com.cashu.me.ui.components.MintChip
 import com.cashu.me.ui.components.PrimaryButton
 import com.cashu.me.ui.components.SectionHeader
 import com.cashu.me.ui.components.scrollEdgeFade
@@ -133,7 +132,6 @@ fun HomeScreen(
     walletManager: WalletManager,
     settingsManager: SettingsManager,
     priceService: PriceService,
-    onOpenMints: () -> Unit,
     onAddMint: () -> Unit,
     onOpenHistory: () -> Unit,
     onOpenTransaction: (WalletTransaction) -> Unit,
@@ -157,12 +155,24 @@ fun HomeScreen(
     val balanceDisplay = remember(walletState.balance, settings, priceState) {
         formatter.displayText(
             amountSats = walletState.balance,
-            preferredPrimary = settings.amountDisplayPrimary,
+            preferredPrimary = settings.homeBalancePrimary,
             showFiat = settings.showFiatBalance && priceState.btcPrice > 0,
             btcPrice = priceState.btcPrice,
             currencyCode = settings.bitcoinPriceCurrency,
             useBitcoinSymbol = settings.useBitcoinSymbol,
         )
+    }
+    val onSatBalanceClick: (() -> Unit)? = balanceDisplay.secondary?.let {
+        {
+            haptics.perform(WalletHaptic.Selection)
+            settingsManager.setHomeBalancePrimary(
+                if (balanceDisplay.effectivePrimary == AmountDisplayPrimary.Sats) {
+                    AmountDisplayPrimary.Fiat.rawValue
+                } else {
+                    AmountDisplayPrimary.Sats.rawValue
+                },
+            )
+        }
     }
 
     val recentTransactions = remember(walletState.transactions) {
@@ -225,21 +235,9 @@ fun HomeScreen(
             .consumeWindowInsets(contentPadding),
     ) {
         SubcomposeLayout(modifier = Modifier.fillMaxSize()) { constraints ->
-        // Pinned top section (mint chip + balance + triptych), measured first.
+        // Pinned top section (balance + actions), measured first.
         val pinned = subcompose(HomeSlot.Pinned) {
             PinnedTop(
-                // No mint, no chip — a "No mint" pill is chrome that states the
-                // obvious under a zero balance. iOS emits nothing here either.
-                mintChip = walletState.activeMint?.let { active ->
-                    {
-                        MintChip(
-                            activeMint = active,
-                            mints = walletState.mints,
-                            onSelect = { mint -> walletManager.launch { walletManager.setActiveMint(mint) } },
-                            onManage = onOpenMints,
-                        )
-                    }
-                },
                 balance = {
                     HomeBalanceHero(
                         showsPager = HomeBalance.showsUnitPager(
@@ -250,6 +248,7 @@ fun HomeScreen(
                         satAmount = balanceDisplay,
                         persistedUnit = settings.homeBalanceUnit,
                         onUnitSelected = settingsManager::setHomeBalanceUnit,
+                        onSatBalanceClick = onSatBalanceClick,
                         receivedPayment = receivedPayment,
                         formatter = formatter,
                         statusMessage = PREPARING_WALLET_LABEL.takeIf {
@@ -324,7 +323,7 @@ fun HomeScreen(
                             val amountDisplay = formatter.displayMintUnitAmount(
                                 amount = tx.amount,
                                 unit = tx.unit,
-                                preferredPrimary = settings.amountDisplayPrimary,
+                                preferredPrimary = settings.homeBalancePrimary,
                                 showFiat = settings.showFiatBalance,
                                 btcPrice = priceState.btcPrice,
                                 currencyCode = settings.bitcoinPriceCurrency,
@@ -382,7 +381,6 @@ private enum class HomeSlot { Pinned, Body }
 
 @Composable
 private fun PinnedTop(
-    mintChip: (@Composable () -> Unit)?,
     balance: @Composable () -> Unit,
     triptych: @Composable () -> Unit,
     onOpenSettings: () -> Unit,
@@ -425,21 +423,13 @@ private fun PinnedTop(
                 )
             }
         }
-        // Mint chip + balance + Receive/Send — tighter vertical rhythm than the
-        // older ~28dp gaps so the hero block reads as one unit under the nav row.
+        // Balance + Receive/Send — tighter vertical rhythm than the older ~28dp
+        // gaps so the hero block reads as one unit under the nav row.
         Column(
             modifier = Modifier.fillMaxWidth(),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(14.dp),
         ) {
-            // Conditional on the Box, not just its content: an empty composable is
-            // still a placed child, so gating inside MintChip would leave the 14dp
-            // gap hanging above the balance.
-            if (mintChip != null) {
-                Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-                    mintChip()
-                }
-            }
             balance()
             triptych()
         }
@@ -462,6 +452,7 @@ private fun HomeBalanceHero(
     satAmount: AmountDisplayText,
     persistedUnit: String,
     onUnitSelected: (String) -> Unit,
+    onSatBalanceClick: (() -> Unit)?,
     receivedPayment: ReceivedPaymentEvent?,
     formatter: AmountFormatter,
     statusMessage: String?,
@@ -521,6 +512,7 @@ private fun HomeBalanceHero(
                         },
                         receivedDelta = receivedDelta,
                         statusMessage = statusMessage,
+                        onPrimaryClick = if (isSat) onSatBalanceClick else null,
                         modifier = Modifier.fillMaxWidth(),
                     )
                 }
@@ -531,6 +523,7 @@ private fun HomeBalanceHero(
                         ?.takeIf { it.unit.equals("sat", ignoreCase = true) }
                         ?.displayDelta(formatter),
                     statusMessage = statusMessage,
+                    onPrimaryClick = onSatBalanceClick,
                     modifier = Modifier.fillMaxWidth(),
                 )
             }

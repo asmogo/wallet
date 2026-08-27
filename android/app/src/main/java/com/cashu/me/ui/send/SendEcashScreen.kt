@@ -43,7 +43,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.filled.Key
 import androidx.compose.material.icons.filled.Lock
-import androidx.compose.material.icons.outlined.AccountBalance
 import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.ContentPaste
@@ -51,8 +50,6 @@ import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.IosShare
 import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material.icons.outlined.LockOpen
-import androidx.compose.material.icons.outlined.Payments
-import androidx.compose.material.icons.outlined.Receipt
 import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material.icons.outlined.Schedule
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -92,6 +89,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.cashu.me.Core.AmountFormatter
+import com.cashu.me.Core.AmountDisplayPrimary
 import com.cashu.me.Core.PendingTokenClaimCheckResult
 import com.cashu.me.Core.Protocols.CurrencyAmount
 import com.cashu.me.Core.Protocols.CurrencyRegistry
@@ -106,11 +104,14 @@ import com.cashu.me.Models.SendTokenResult
 import com.cashu.me.Views.Components.ScannerQuickAction
 import com.cashu.me.ui.components.SectionHeader
 import com.cashu.me.ui.components.AmountEntryHero
+import com.cashu.me.ui.components.AmountFlipDisplay
 import com.cashu.me.ui.components.CashuTextField
 import com.cashu.me.ui.components.GhostButton
 import com.cashu.me.ui.components.InlineNotice
+import com.cashu.me.ui.components.LocalConfirmationToastController
 import com.cashu.me.ui.components.MintPickerSheet
 import com.cashu.me.ui.components.MintSelectorRow
+import com.cashu.me.ui.components.MintSelectorDirection
 import com.cashu.me.ui.components.NoticeSeverity
 import com.cashu.me.ui.components.PaymentStatusPhase
 import com.cashu.me.ui.components.PaymentStatusScreen
@@ -250,11 +251,14 @@ fun SendEcashScreen(
     }
     val currency = CurrencyRegistry.currencyForMintUnit(effectiveUnit)
     val isSatUnit = effectiveUnit.equals("sat", ignoreCase = true)
+    val entryFiatPrice = priceState.btcPrice.takeIf {
+        settings.showFiatBalance && it > 0
+    }
     val amountEntryContext = SendEcashAmountEntry.context(
         unit = effectiveUnit,
         unitDecimals = currency.decimals,
         preferredPrimary = settings.amountDisplayPrimary,
-        btcPrice = priceState.btcPrice,
+        btcPrice = entryFiatPrice ?: 0.0,
     )
     var previousAmountEntryContext by remember { mutableStateOf(amountEntryContext) }
     val amountValue = amountEntryContext.amountBaseUnits(amount)
@@ -423,18 +427,18 @@ fun SendEcashScreen(
                         isSatUnit -> formatter.formatWalletSats(mintBalance, settings.useBitcoinSymbol)
                         else -> CurrencyAmount(mintBalance, currency).formatted()
                     },
-                    isSat = isSatUnit && !amountEntryContext.isFiatEntry,
-                    unit = if (amountEntryContext.isFiatEntry) {
-                        priceState.currencyCode
-                    } else {
-                        effectiveUnit
+                    isSatUnit = isSatUnit,
+                    unit = effectiveUnit,
+                    amountSats = amountValue,
+                    entryPrimary = amountEntryContext.satEntry.primary,
+                    onFlipEntryPrimary = {
+                        settingsManager.setAmountDisplayPrimary(it.rawValue)
                     },
+                    btcPrice = entryFiatPrice,
                     useBitcoinSymbol = settings.useBitcoinSymbol,
                     formatter = formatter,
                     decimals = amountEntryContext.keypadDecimals,
-                    fiatCurrencyCode = priceState.currencyCode.takeIf {
-                        amountEntryContext.isFiatEntry
-                    },
+                    fiatCurrencyCode = priceState.currencyCode,
                     sending = sending,
                     errorText = errorText,
                     confirmedP2pkPubkey = validatedP2pkPubkey,
@@ -579,12 +583,16 @@ private fun InputFace(
     mintBalance: Long,
     balanceLoading: Boolean,
     balanceText: String,
-    isSat: Boolean,
+    isSatUnit: Boolean,
     unit: String,
+    amountSats: Long,
+    entryPrimary: AmountDisplayPrimary,
+    onFlipEntryPrimary: (AmountDisplayPrimary) -> Unit,
+    btcPrice: Double?,
     useBitcoinSymbol: Boolean,
     formatter: AmountFormatter,
     decimals: Int,
-    fiatCurrencyCode: String?,
+    fiatCurrencyCode: String,
     sending: Boolean,
     errorText: String?,
     confirmedP2pkPubkey: String?,
@@ -629,15 +637,28 @@ private fun InputFace(
             contentAlignment = Alignment.Center,
         ) {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                AmountEntryHero(
-                    entryRaw = amount,
-                    isSat = isSat,
-                    unit = unit,
-                    useBitcoinSymbol = useBitcoinSymbol,
-                    formatter = formatter,
-                    fiatCurrencyCode = fiatCurrencyCode,
-                    color = amountColor,
-                )
+                if (isSatUnit) {
+                    AmountFlipDisplay(
+                        amountSats = amountSats,
+                        primary = entryPrimary,
+                        onFlip = onFlipEntryPrimary,
+                        btcPrice = btcPrice,
+                        currencyCode = fiatCurrencyCode,
+                        useBitcoinSymbol = useBitcoinSymbol,
+                        entryRaw = amount,
+                        primaryAccessibilityPrefix = "Send amount",
+                        color = amountColor,
+                    )
+                } else {
+                    AmountEntryHero(
+                        entryRaw = amount,
+                        isSat = false,
+                        unit = unit,
+                        useBitcoinSymbol = useBitcoinSymbol,
+                        formatter = formatter,
+                        color = amountColor,
+                    )
+                }
 
                 confirmedP2pkPubkey?.let { pubkey ->
                     P2pkRecipientConfirmation(
@@ -695,6 +716,7 @@ private fun InputFace(
         // to the action rather than a second header competing with the title.
         if (activeMint != null) {
             MintSelectorRow(
+                direction = MintSelectorDirection.Source,
                 mint = activeMint,
                 balanceText = balanceText,
                 showBalance = true,
@@ -1022,17 +1044,11 @@ private fun GeneratedFace(
     onDone: () -> Unit,
 ) {
     val clipboard = LocalClipboardManager.current
+    val confirmationToastController = LocalConfirmationToastController.current
     val scope = rememberCoroutineScope()
-    var copied by remember { mutableStateOf(false) }
     var claimState: ClaimState by remember(result.token) { mutableStateOf(ClaimState.Pending) }
     var manualCheckResult: PendingTokenClaimCheckResult? by remember(result.token) {
         mutableStateOf(null)
-    }
-    LaunchedEffect(copied) {
-        if (copied) {
-            delay(2000)
-            copied = false
-        }
     }
     // Poll the mint to detect when the recipient redeems the token. Mirrors
     // iOS startClaimPolling: the spinner shows for the whole watch session
@@ -1085,20 +1101,17 @@ private fun GeneratedFace(
                     com.cashu.me.ui.components.InspectorRow(
                         label = "Amount",
                         value = amountPresentation.primary,
-                        leadingIcon = Icons.Outlined.Payments,
                     )
                     receipt.fee?.let { feeLabel ->
                         com.cashu.me.ui.components.InspectorRow(
                             label = "Fee",
                             value = feeLabel,
                             valueMonospaced = true,
-                            leadingIcon = Icons.Outlined.Receipt,
                         )
                     }
                     com.cashu.me.ui.components.InspectorRow(
                         label = "Mint",
                         value = receipt.mint,
-                        leadingIcon = Icons.Outlined.AccountBalance,
                     )
                 },
             )
@@ -1122,6 +1135,7 @@ private fun GeneratedFace(
             QrCard(
                 content = result.token,
                 shareSubject = "Cashu token",
+                confirmationMessage = "Copied ecash token",
             )
             GeneratedEcashAmount(presentation = amountPresentation)
             ClaimStatusRow(claimState = claimState)
@@ -1183,10 +1197,10 @@ private fun GeneratedFace(
             // Gray tonal fill instead of the inverted-ink primary — the analog of
             // iOS's non-prominent glass capsule; adapts to light/dark.
             PrimaryButton(
-                text = if (copied) "Copied" else "Copy",
+                text = "Copy",
                 onClick = {
                     clipboard.setText(AnnotatedString(result.token))
-                    copied = true
+                    confirmationToastController?.show("Copied ecash token")
                 },
                 colors = neutralActionButtonColors(),
             )

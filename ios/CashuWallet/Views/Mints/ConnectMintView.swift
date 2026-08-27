@@ -355,7 +355,7 @@ struct ConnectMintSheet: View {
             stepResize: SharedAxis.duration
         )
         .presentationDragIndicator(.visible)
-        .flatBottomSheetSurface()
+        .compactBottomSheetSurface()
     }
 
     private func addMint(_ url: String) {

@@ -101,18 +101,22 @@ fun TransactionRow(
             )
         }
         Column(horizontalAlignment = Alignment.End) {
-            Text(
+            AmountText(
                 text = amountText,
-                style = MaterialTheme.typography.bodyLarge.withMonoDigits(),
-                fontWeight = FontWeight.Medium,
+                style = MaterialTheme.typography.bodyLarge
+                    .copy(fontWeight = FontWeight.Medium)
+                    .withMonoDigits(),
                 color = amountColor,
+                maxLines = 1,
             )
             if (model.secondaryAmount != null) {
-                Text(
+                AmountText(
                     text = model.secondaryAmount,
-                    style = MaterialTheme.typography.bodyMedium.withMonoDigits(),
-                    fontWeight = FontWeight.Normal,
+                    style = MaterialTheme.typography.bodyMedium
+                        .copy(fontWeight = FontWeight.Normal)
+                        .withMonoDigits(),
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
                 )
             }
         }

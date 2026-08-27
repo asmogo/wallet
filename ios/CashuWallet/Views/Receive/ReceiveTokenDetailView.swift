@@ -195,7 +195,7 @@ struct ReceiveTokenDetailView: View {
                 VStack(spacing: 0) {
                     if isLoadingFee {
                         HStack {
-                            Label("Fee", systemImage: "arrow.up.arrow.down")
+                            Text("Fee")
                                 .foregroundStyle(.secondary)
                             Spacer()
                             ProgressView().scaleEffect(0.8)
@@ -208,12 +208,11 @@ struct ReceiveTokenDetailView: View {
                         // "No fee" states the user is charged nothing; a bare
                         // "0 sat" reads as an accounting figure.
                         detailRow(
-                            icon: "arrow.up.arrow.down",
                             label: "Fee",
                             value: receiveFee == 0 ? "No fee" : formatFee(receiveFee)
                         )
                     }
-                    detailRow(icon: "bitcoinsign.bank.building", label: "Mint", value: shortMintUrl(mintUrl))
+                    detailRow(label: "Mint", value: shortMintUrl(mintUrl))
                     if let memo = reviewPresentation.memo {
                         memoRow(memo)
                     }
@@ -291,18 +290,16 @@ struct ReceiveTokenDetailView: View {
         let paidFee = claimedAmount.map { tokenAmount - min($0, tokenAmount) }
         var rows: [PaymentStatusView.DetailRow] = [
             .init(
-                icon: "bitcoinsign",
                 label: "Amount",
                 value: formatAmount(claimedAmount ?? netReceiveAmount)
             ),
         ]
         let settledFee = paidFee ?? receiveFee
         if settledFee > 0 {
-            rows.append(.init(icon: "arrow.up.arrow.down", label: "Fee", value: formatFee(settledFee)))
+            rows.append(.init(label: "Fee", value: formatFee(settledFee)))
         }
         if !mintUrl.isEmpty {
             rows.append(.init(
-                icon: "bitcoinsign.bank.building",
                 label: "Mint",
                 value: shortMintUrl(mintUrl)
             ))
@@ -326,7 +323,7 @@ struct ReceiveTokenDetailView: View {
     /// key, otherwise the npub the ecash is locked to plus a caution glyph.
     private var lockedToRow: some View {
         HStack {
-            Label("Locked to", systemImage: "lock.fill")
+            Text("Locked to")
                 .foregroundStyle(.secondary)
             Spacer()
             HStack(spacing: 6) {
@@ -350,9 +347,9 @@ struct ReceiveTokenDetailView: View {
         return "Unknown key"
     }
 
-    private func detailRow(icon: String, label: String, value: String) -> some View {
+    private func detailRow(label: String, value: String) -> some View {
         HStack {
-            Label(label, systemImage: icon)
+            Text(label)
                 .foregroundStyle(.secondary)
             Spacer()
             Text(value)
@@ -369,7 +366,7 @@ struct ReceiveTokenDetailView: View {
     /// single-line, middle-truncated treatment used for identifiers.
     private func memoRow(_ memo: ReceiveTokenReviewPresentation.Memo) -> some View {
         HStack(alignment: .firstTextBaseline, spacing: 12) {
-            Label(memo.accessibilityLabel, systemImage: "quote.bubble")
+            Text(memo.accessibilityLabel)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: true, vertical: false)
             Spacer(minLength: 0)
