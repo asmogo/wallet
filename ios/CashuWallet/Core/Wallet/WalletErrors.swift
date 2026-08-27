@@ -113,6 +113,10 @@ enum WalletErrorMessage {
         case .Internal(let errorMessage):
             return classified(forRawMessage: errorMessage)
                 ?? cleanedCDKMessage(errorMessage)
+        case .PaymentRequestDeliveryFailed:
+            // The token was created but transport delivery failed; the send
+            // stays pending and is reclaimed via revokeSend if unclaimed.
+            return .error("The payment couldn't be delivered. Any reserved funds stay pending and are reclaimed if unclaimed.")
         }
     }
 

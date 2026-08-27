@@ -653,7 +653,13 @@ class CdkWalletGatewayImpl : WalletGateway {
         val mintUrl = preferredMint
             ?: candidateMints.firstOrNull()
             ?: firstWallet().mintUrl().url
-        walletFor(mintUrl).payRequest(request, if (request.amount() == null) amount else null)
+        // CDK rc.1 splits atomic pay_request into prepare + confirm: prepare
+        // resolves method/fees and reserves proofs, confirm delivers. On
+        // delivery failure the pending operation stays reclaimable via
+        // revokeSend instead of paying twice.
+        walletFor(mintUrl)
+            .preparePayRequest(request, if (request.amount() == null) amount else null)
+            .confirm()
     }
 
     override suspend fun listPendingSendOperationIds(mintUrl: String, unit: String): List<String> = cdkCall {
