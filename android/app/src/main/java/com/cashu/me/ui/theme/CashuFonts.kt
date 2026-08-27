@@ -33,12 +33,28 @@ private fun geistMono(weight: Int) = Font(
     variationSettings = FontVariation.Settings(FontVariation.weight(weight)),
 )
 
+private fun bitcoinSymbol(weight: Int) = Font(
+    R.font.manrope,
+    FontWeight(weight),
+    variationSettings = FontVariation.Settings(FontVariation.weight(weight)),
+)
+
 val GeistSans = FontFamily(
     geistSans(400), geistSans(500), geistSans(600), geistSans(700), geistSans(800),
 )
 
 val GeistMono = FontFamily(
     geistMono(400), geistMono(500), geistMono(600), geistMono(700),
+)
+
+/**
+ * Bitcoin-only fallback for amount lockups. Geist deliberately does not ship
+ * U+20BF, so leaving it unspecified would select a different system font per
+ * device. Manrope has a compatible geometric construction and a variable
+ * weight axis, letting the Bitcoin sign track Geist's numeral weight.
+ */
+val BitcoinSymbol = FontFamily(
+    bitcoinSymbol(400), bitcoinSymbol(500), bitcoinSymbol(600), bitcoinSymbol(700), bitcoinSymbol(800),
 )
 
 /**

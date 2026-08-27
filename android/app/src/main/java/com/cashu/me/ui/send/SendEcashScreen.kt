@@ -403,7 +403,9 @@ fun SendEcashScreen(
                         errorText = null
                     },
                     activeMint = activeMint,
-                    onPickMint = { pickerOpen = true },
+                    // One mint means nothing to choose between, so the row drops
+                    // its chevron and stops opening a single-row picker.
+                    onPickMint = { pickerOpen = true }.takeIf { walletState.mints.size > 1 },
                     onUseMax = {
                         if (mintBalance > 0L) {
                             amount = amountEntryContext.maxRawForBalance(mintBalance)
@@ -413,8 +415,9 @@ fun SendEcashScreen(
                     amountValue = amountValue,
                     mintBalance = mintBalance,
                     balanceLoading = balanceLoading,
-                    // Per-mint spendable balance, shown under the mint name
-                    // inside the selector card (iOS MintAmountSelectorRow).
+                    // Per-mint spendable balance. No longer rendered in the
+                    // selector row — it feeds the row's accessibility label and
+                    // the insufficient-balance notice.
                     balanceText = when {
                         balanceLoading -> "…"
                         isSatUnit -> formatter.formatWalletSats(mintBalance, settings.useBitcoinSymbol)
@@ -569,7 +572,7 @@ private fun InputFace(
     amount: String,
     onAmountChange: (String) -> Unit,
     activeMint: com.cashu.me.Models.MintInfo?,
-    onPickMint: () -> Unit,
+    onPickMint: (() -> Unit)?,
     onUseMax: () -> Unit,
     canUseMax: Boolean,
     amountValue: Long,
@@ -606,16 +609,6 @@ private fun InputFace(
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
         Spacer(Modifier.height(CashuTheme.spacing.micro))
-        // One card: avatar + name + balance + Send Max pill + chevron
-        // (iOS MintAmountSelectorRow parity).
-        if (activeMint != null) {
-            MintSelectorRow(
-                mint = activeMint,
-                balanceText = balanceText,
-                onPickMint = onPickMint,
-                onUseMax = if (canUseMax) onUseMax else null,
-            )
-        }
 
         val amountColor by animateColorAsState(
             targetValue = if (insufficient) {
@@ -676,11 +669,11 @@ private fun InputFace(
                     },
                     exit = fadeOut(spring(stiffness = Spring.StiffnessMedium)),
                 ) {
-                    // No detail line: the balance is already on the mint row
-                    // directly above, so restating it here just adds a second
-                    // line of text over the keypad (iOS SendView parity).
+                    // The mint selector states the available balance, so
+                    // repeating it in this notice would add visual noise.
                     InlineNotice(
                         text = "Insufficient balance",
+                        detail = null,
                         severity = NoticeSeverity.Caution,
                         showsContainer = false,
                         centered = true,
@@ -695,6 +688,20 @@ private fun InputFace(
                     )
                 }
             }
+        }
+
+        // The selector sits under the amount and over the keypad, not under the
+        // toolbar: it qualifies the amount, so it reads as a setting on the way
+        // to the action rather than a second header competing with the title.
+        if (activeMint != null) {
+            MintSelectorRow(
+                mint = activeMint,
+                balanceText = balanceText,
+                showBalance = true,
+                onPickMint = onPickMint,
+                onUseMax = if (canUseMax) onUseMax else null,
+            )
+            Spacer(Modifier.height(CashuTheme.spacing.snug))
         }
 
         NumberPadFooter(

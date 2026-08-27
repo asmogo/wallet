@@ -132,6 +132,7 @@ struct CurrencyPickerSheet: View {
                 }
             }
         }
+        .flatBottomSheetSurface()
     }
 
     // MARK: - Price footer

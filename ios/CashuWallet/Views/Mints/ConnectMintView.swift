@@ -355,11 +355,7 @@ struct ConnectMintSheet: View {
             stepResize: SharedAxis.duration
         )
         .presentationDragIndicator(.visible)
-        // Hugging the shortlist, this floats over the canvas and keeps the
-        // system's elevated background; only the pushed full-height steps adopt
-        // the flat canvas. Every other partial-height sheet in the app does the
-        // same — see `MintsListView`'s Add Mint and the Send sheet's compact face.
-        .canvasSheetBackground(whenFillingScreen: route == .discover)
+        .flatBottomSheetSurface()
     }
 
     private func addMint(_ url: String) {

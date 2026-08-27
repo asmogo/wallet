@@ -1,13 +1,8 @@
 package com.cashu.me.ui.mints
 
-import androidx.compose.animation.AnimatedContent
-import androidx.compose.animation.core.Spring
-import androidx.compose.animation.core.spring
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -21,6 +16,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
@@ -42,9 +38,9 @@ import com.cashu.me.Core.mintUrlCandidates
 import com.cashu.me.Core.normalizeUserMintUrl
 import com.cashu.me.ui.components.CashuTextField
 import com.cashu.me.ui.components.FlowSheetTitle
-import com.cashu.me.ui.components.GhostButton
 import com.cashu.me.ui.components.InlineNotice
 import com.cashu.me.ui.components.PrimaryButton
+import com.cashu.me.ui.components.SecondaryButton
 import com.cashu.me.ui.theme.CashuTheme
 import com.cashu.me.ui.testing.UiTestTags
 
@@ -137,38 +133,19 @@ fun AddMintFormBody(
             keyboardOptions = KeyboardOptions(
                 capitalization = KeyboardCapitalization.None,
             ),
-            // Paste ↔ Clear cross-fade, identical to the Receive and Send input
-            // faces — a mint URL is pasted like any other payload. The slot is
-            // absent entirely when there is nothing to paste and nothing to
-            // clear, rather than sitting there dead.
-            trailingIcon = if (url.isNotBlank() || clipboard.hasText()) {
+            // Clear stays where users expect it after typing, while Paste moves
+            // to the sheet's secondary action slot so the text field itself
+            // stays focused on URL entry.
+            trailingIcon = if (url.isNotBlank()) {
                 {
-                    AnimatedContent(
-                        targetState = url.isNotBlank(),
-                        transitionSpec = {
-                            fadeIn(spring(stiffness = Spring.StiffnessMedium))
-                                .togetherWith(fadeOut(spring(stiffness = Spring.StiffnessMedium)))
+                    IconButton(
+                        onClick = {
+                            url = ""
+                            error = null
                         },
-                        label = "mint-url-trailing",
-                    ) { hasInput ->
-                        if (hasInput) {
-                            IconButton(
-                                onClick = {
-                                    url = ""
-                                    error = null
-                                },
-                                modifier = Modifier.testTag(UiTestTags.AddMintClear),
-                            ) {
-                                Icon(Icons.Outlined.Cancel, contentDescription = "Clear")
-                            }
-                        } else {
-                            GhostButton(
-                                text = "Paste",
-                                onClick = ::pasteFromClipboard,
-                                enabled = !isAdding,
-                                modifier = Modifier.testTag(UiTestTags.AddMintPaste),
-                            )
-                        }
+                        modifier = Modifier.testTag(UiTestTags.AddMintClear),
+                    ) {
+                        Icon(Icons.Outlined.Cancel, contentDescription = "Clear")
                     }
                 }
             } else {
@@ -187,13 +164,29 @@ fun AddMintFormBody(
 
         Spacer(modifier = Modifier.height(CashuTheme.spacing.tight))
 
-        PrimaryButton(
-            text = "Add mint",
-            onClick = ::addMint,
-            enabled = url.isNotBlank() && !isAdding,
-            loading = isAdding,
-            modifier = Modifier.testTag(UiTestTags.AddMintSubmit),
-        )
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(CashuTheme.spacing.snug),
+        ) {
+            SecondaryButton(
+                text = "Paste",
+                onClick = ::pasteFromClipboard,
+                enabled = !isAdding,
+                modifier = Modifier
+                    .weight(1f)
+                    .testTag(UiTestTags.AddMintPaste),
+            )
+            PrimaryButton(
+                text = "Add mint",
+                onClick = ::addMint,
+                enabled = url.isNotBlank() && !isAdding,
+                loading = isAdding,
+                colors = ButtonDefaults.buttonColors(),
+                modifier = Modifier
+                    .weight(1f)
+                    .testTag(UiTestTags.AddMintSubmit),
+            )
+        }
     }
 }
 

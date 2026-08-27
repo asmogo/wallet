@@ -58,6 +58,7 @@ struct CashuRequestMintPickerSheet: View {
             .navigationTitle("Mint")
             .navigationBarTitleDisplayMode(.inline)
         }
+        .flatBottomSheetSurface()
     }
 
     private func select(_ mintUrl: String?) {
@@ -144,6 +145,7 @@ struct CashuRequestUnitPickerSheet: View {
             .navigationTitle("Unit")
             .navigationBarTitleDisplayMode(.inline)
         }
+        .flatBottomSheetSurface()
     }
 
     private func select(_ unit: String) {

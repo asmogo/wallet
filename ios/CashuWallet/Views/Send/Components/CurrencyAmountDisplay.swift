@@ -30,7 +30,7 @@ struct CurrencyAmountDisplay: View {
     }
 
     private var fiatAvailable: Bool {
-        // Entry mode only needs a live price — the primary unit and flip pill
+        // Entry mode only needs a live price — the primary unit and flip control
         // must stay put while the user types through small values. Display
         // mode also drops fiat for sub-cent amounts.
         if entryRaw != nil { return priceService.btcPriceUSD > 0 }
@@ -65,7 +65,7 @@ struct CurrencyAmountDisplay: View {
         switch effectivePrimary {
         case .fiat: return AmountFormatter.sats(sats, useBitcoinSymbol: settings.useBitcoinSymbol)
         case .sats:
-            // Entry mode keeps the raw conversion (even "$0.00") so the pill
+            // Entry mode keeps the raw conversion (even "$0.00") so the control
             // doesn't blink in and out while typing through small values.
             return displayFiat ?? AmountFormatter.fiat(priceService.satsToFiat(sats), currencyCode: priceService.currencyCode)
         }
@@ -82,7 +82,7 @@ struct CurrencyAmountDisplay: View {
             .animation(.snappy, value: effectivePrimary)
             .animation(.snappy, value: isDimmed)
 
-            // The secondary pill is only meaningful when fiat is available —
+            // The secondary affordance is only meaningful when fiat is available —
             // otherwise there's no second unit to flip into, and we'd render
             // a placeholder "$0.00" that fragments the eye.
             if fiatAvailable {
@@ -98,7 +98,7 @@ struct CurrencyAmountDisplay: View {
                     .foregroundStyle(.secondary)
                     .padding(.horizontal, 10)
                     .padding(.vertical, 5)
-                    .background(.thinMaterial, in: Capsule())
+                    .frame(minHeight: 44)
                     .contentShape(Capsule())
                 }
                 .buttonStyle(.plain)

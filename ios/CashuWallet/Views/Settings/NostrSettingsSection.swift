@@ -96,7 +96,7 @@ struct NostrKeysSettingsSection: View {
                 nsec: nostrService.getNsec(),
                 warning: "Anyone with this key can control your Lightning address. Never share it."
             )
-            .canvasSheetBackground()
+            .flatBottomSheetSurface()
         }
     }
 

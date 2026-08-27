@@ -147,7 +147,7 @@ struct MainWalletView: View {
             .sheet(item: $selectedTransaction) { transaction in
                 TransactionDetailView(transaction: transaction)
                     .environmentObject(walletManager)
-                    .canvasSheetBackground()
+                    .flatBottomSheetSurface()
             }
             .task { await walletManager.loadTransactions() }
         }
@@ -760,17 +760,17 @@ struct MainWalletView: View {
             SendView()
                 .environmentObject(walletManager)
                 .presentationDetents([.large])
-                .canvasSheetBackground()
+                .flatBottomSheetSurface()
         case .receiveLightning:
             ReceiveLightningView()
                 .environmentObject(walletManager)
                 .presentationDetents([.large])
-                .canvasSheetBackground()
+                .flatBottomSheetSurface()
         case .meltInvoice(let invoice):
             MeltViewWithInvoice(invoice: invoice)
                 .environmentObject(walletManager)
                 .presentationDetents([.large])
-                .canvasSheetBackground()
+                .flatBottomSheetSurface()
         case .connectMint:
             // Same surface the Send sheet shows when there are no mints — the
             // detents and canvas background live inside it.
@@ -779,7 +779,7 @@ struct MainWalletView: View {
         case .discoverMints:
             MintDiscoverySheet()
             .environmentObject(walletManager)
-            .canvasSheetBackground()
+            .flatBottomSheetSurface()
         }
     }
 }

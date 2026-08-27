@@ -249,6 +249,7 @@ struct MintDiscoverySheet: View {
                     }
                 }
         }
+        .flatBottomSheetSurface()
     }
 }
 

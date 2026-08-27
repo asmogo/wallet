@@ -95,6 +95,7 @@ struct CashuRequestAmountPickerSheet: View {
         }
         .presentationDetents([.large])
         .presentationDragIndicator(.visible)
+        .flatBottomSheetSurface()
         .onChange(of: entryUnit) { oldUnit, newUnit in
             // Only the sats keypad flips between fiat and sats; a non-sat request
             // stays in its own unit regardless of the display setting.

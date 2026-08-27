@@ -105,6 +105,13 @@ object WalletErrorMessages {
             has("incorrect quote amount", "quote amount mismatch", "mismatched quote amount") ->
                 error("The mint declined the payment amount. Try again or use another mint.")
 
+            // Same zeroing defect as the amount-limit rule below: a decoded 11002 response
+            // becomes `TransactionUnbalanced(0, 0, 0)`, which CDK renders as
+            // "Inputs: `0`, Outputs: `0`, Expected Fee: `0`". Unbalanced almost always means
+            // the wallet and mint disagreed on the fee, and re-quoting usually clears it.
+            has("transaction unbalanced", "expected fee") ->
+                error("The wallet and mint disagreed on the fee. Try again or use another mint.")
+
             has("insufficient", "not enough", "no spendable", "no available proofs", "balance too low") ->
                 error("Not enough balance.")
 
@@ -138,7 +145,13 @@ object WalletErrorMessages {
             ) ->
                 caution("This invoice doesn't set an amount. Ask the sender for one with the amount set.")
 
-            has("amount out", "outside of allowed", "amount is outside") ->
+            // CDK's own wording for a NUT-04/05 limit rejection is "Amount must be between
+            // `{min}` and `{max}` is `{amount}`". Wallet-side that message is worthless: when
+            // the mint's 11006 response is decoded back into an Error, cdk-common rebuilds the
+            // variant with three `Amount::default()`, so it always reads `0`/`0`/`0` and the
+            // mint's real limits (carried in the response `detail`) are dropped. Match the
+            // phrasing here so the raw zeros never reach the UI.
+            has("amount out", "outside of allowed", "amount is outside", "amount must be between") ->
                 caution("This amount is outside the mint's limits. Try a different amount.")
 
             has("minting disabled") ->

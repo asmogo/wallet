@@ -91,7 +91,11 @@ android {
                 create("pixel2Api35") {
                     device = "Pixel 2"
                     apiLevel = 35
-                    systemImageSource = "aosp"
+                    // The primary CI suite is instrumentation-only. ATD removes
+                    // background services that are irrelevant to tests, reducing
+                    // memory/CPU pressure on GitHub-hosted runners and making the
+                    // long managed-device run less prone to losing ADB.
+                    systemImageSource = "aosp-atd"
                 }
                 create("compactApi26") {
                     device = "Pixel 2"

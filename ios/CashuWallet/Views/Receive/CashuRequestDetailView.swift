@@ -115,6 +115,7 @@ struct CashuRequestDetailView: View {
             )
             markPaymentReceived(amount: payment.amount)
         }
+        .flatBottomSheetSurface()
     }
 
     /// Single-fire transition into the shared full-screen success — the same

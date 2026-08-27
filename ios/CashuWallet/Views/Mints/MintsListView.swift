@@ -43,7 +43,7 @@ struct MintsListView: View {
             .sheet(isPresented: $showDiscoverySheet) {
                 MintDiscoverySheet()
                     .environmentObject(walletManager)
-                    .canvasSheetBackground()
+                    .flatBottomSheetSurface()
             }
             .task {
                 await walletManager.refreshMintInfo()

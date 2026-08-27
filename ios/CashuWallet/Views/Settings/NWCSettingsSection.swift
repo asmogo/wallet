@@ -348,6 +348,7 @@ private struct NWCBudgetSheet: View {
                 if digits != newValue { budgetText = digits }
             }
         }
+        .flatBottomSheetSurface()
     }
 
     private func save() {

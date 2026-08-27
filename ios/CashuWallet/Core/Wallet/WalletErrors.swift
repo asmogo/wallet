@@ -192,6 +192,15 @@ enum WalletErrorMessage {
             return .error("The mint declined the payment amount. Try again or use another mint.")
         }
 
+        // Same zeroing defect as the amount-limit rule below: a decoded 11002 response
+        // becomes `TransactionUnbalanced(0, 0, 0)`, which CDK renders as
+        // "Inputs: `0`, Outputs: `0`, Expected Fee: `0`". Unbalanced almost always means
+        // the wallet and mint disagreed on the fee, and re-quoting usually clears it.
+        if normalized.contains("transaction unbalanced")
+            || normalized.contains("expected fee") {
+            return .error("The wallet and mint disagreed on the fee. Try again or use another mint.")
+        }
+
         if normalized.contains("insufficient")
             || normalized.contains("not enough")
             || normalized.contains("no spendable")
@@ -261,9 +270,16 @@ enum WalletErrorMessage {
             return .caution("This invoice doesn't set an amount. Ask the sender for one with the amount set.")
         }
 
+        // CDK's own wording for a NUT-04/05 limit rejection is "Amount must be between
+        // `{min}` and `{max}` is `{amount}`". Wallet-side that message is worthless: when
+        // the mint's 11006 response is decoded back into an Error, cdk-common rebuilds the
+        // variant with three `Amount::default()`, so it always reads `0`/`0`/`0` and the
+        // mint's real limits (carried in the response `detail`) are dropped. Match the
+        // phrasing here so the raw zeros never reach the UI.
         if normalized.contains("amount out")
             || normalized.contains("outside of allowed")
-            || normalized.contains("amount is outside") {
+            || normalized.contains("amount is outside")
+            || normalized.contains("amount must be between") {
             return .caution("This amount is outside the mint's limits. Try a different amount.")
         }
 

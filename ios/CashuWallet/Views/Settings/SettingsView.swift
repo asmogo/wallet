@@ -108,7 +108,6 @@ struct SettingsView: View {
         .sheet(isPresented: $showBackup) {
             BackupView()
                 .environmentObject(walletManager)
-                .presentationDetents([.medium, .large])
         }
         .sheet(isPresented: $showCurrencySheet) {
             CurrencyPickerSheet()
@@ -1283,6 +1282,7 @@ struct QRCodeDetailSheet: View {
                 }
             }
         }
+        .flatBottomSheetSurface()
     }
 
     private func copyToClipboard() {
@@ -1367,6 +1367,7 @@ struct ImportP2PKSheet: View {
                 }
             }
         }
+        .flatBottomSheetSurface()
     }
 
     private func paste() {
@@ -1396,83 +1397,84 @@ struct ImportP2PKSheet: View {
 
 struct BackupView: View {
     @EnvironmentObject var walletManager: WalletManager
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     @State private var showWords = false
     @State private var copiedToClipboard = false
+    @State private var contentHeight: CGFloat = 0
+
+    private let columns = Array(repeating: GridItem(.flexible(), spacing: 10), count: 3)
 
     var body: some View {
-        NavigationStack {
-            ScrollView {
-                VStack(spacing: 24) {
-                    VStack(spacing: 12) {
-                        Image(systemName: "exclamationmark.triangle.fill")
-                            .font(.title)
-                            .foregroundStyle(.orange)
+        let words = walletManager.getMnemonicWords()
 
-                        Text("Keep Your Seed Phrase Safe")
-                            .font(.headline)
+        VStack(spacing: 24) {
+            Text("Backup Wallet")
+                .font(.title2.weight(.semibold))
 
-                        Text("Anyone with these words can access your funds. Never share them with anyone.")
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
-                            .multilineTextAlignment(.center)
-                    }
-                    .padding()
+            Text(showWords
+                 ? "Write down these words in order and store them somewhere safe. Do not share them with anyone."
+                 : "Your recovery phrase is the only way to restore your wallet. Keep it private and stored somewhere safe. Never share it with anyone.")
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
 
-                    let words = walletManager.getMnemonicWords()
-                    let mnemonic = words.joined(separator: " ")
-                    let hiddenMnemonic = words.map { String(repeating: "\u{2022}", count: max(3, $0.count)) }.joined(separator: " ")
-
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text("Seed phrase")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                            .textCase(.uppercase)
-                        HStack(spacing: 10) {
-                            Text(showWords ? mnemonic : hiddenMnemonic)
-                                .font(.system(.body, design: .monospaced))
-                                .foregroundStyle(showWords ? .primary : .secondary)
-                                .lineLimit(4)
-                                .multilineTextAlignment(.leading)
-
-                            Spacer(minLength: 0)
-
-                            VStack(spacing: 8) {
-                                Button(action: toggleReveal) {
-                                    Image(systemName: showWords ? "eye.slash" : "eye")
-                                }
-
-                                Button(action: copyToClipboard) {
-                                    Image(systemName: copiedToClipboard ? "checkmark" : "doc.on.doc")
-                                        .foregroundStyle(copiedToClipboard ? .green : Color.accentColor)
-                                        .contentTransition(.symbolEffect(.replace))
-                                        .animation(.snappy(duration: 0.18), value: copiedToClipboard)
-                                }
+            if showWords {
+                ScrollView {
+                    LazyVGrid(columns: columns, spacing: 10) {
+                        ForEach(Array(words.enumerated()), id: \.offset) { index, word in
+                            HStack(spacing: 6) {
+                                Text("\(index + 1).")
+                                    .font(.caption2)
+                                    .foregroundStyle(.secondary)
+                                Text(word)
+                                    .font(.caption2.weight(.medium))
+                                    .fixedSize(horizontal: false, vertical: true)
+                                    .multilineTextAlignment(.leading)
+                                Spacer(minLength: 0)
                             }
+                            .padding(.horizontal, 12)
+                            .frame(maxWidth: .infinity, minHeight: 48, alignment: .leading)
+                            .background(.quaternary.opacity(0.55), in: RoundedRectangle(cornerRadius: 12))
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 12)
+                                    .stroke(Color(uiColor: .separator), lineWidth: 0.5)
+                            )
+                            .accessibilityElement(children: .combine)
+                            .accessibilityLabel("Word \(index + 1), \(word)")
                         }
                     }
-                    .padding(12)
-                    .liquidGlass(in: RoundedRectangle(cornerRadius: 10))
-                    .padding(.horizontal)
-                    .padding(.bottom, 24)
+                }
+                .frame(maxHeight: 260)
+                .transition(.opacity.combined(with: .move(edge: .bottom)))
+            }
+
+            Button(showWords ? (copiedToClipboard ? "Copied" : "Copy Recovery Phrase") : "Reveal Recovery Phrase") {
+                if showWords {
+                    copyToClipboard()
+                } else {
+                    revealWords()
                 }
             }
-            // No Cancel / Done buttons — this is a modal; swipe down or tap
-            // outside to dismiss. Dropping them also removes the tall spacer
-            // that pushed "Done" below the medium detent (the drag-to-see jank).
-            .navigationTitle("Backup")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbarBackground(.hidden, for: .navigationBar)
+            .glassButton()
+            .contentTransition(.opacity)
         }
+        .padding(.horizontal, 24)
+        .padding(.vertical, 20)
+        .contentFitMeasured { contentHeight = $0 }
+        .contentFitDetent(
+            contentHeight,
+            estimate: showWords ? 460 : 250,
+            navigationBar: false,
+            step: showWords,
+            stepResize: .milliseconds(300)
+        )
+        .presentationDragIndicator(.visible)
+        .flatBottomSheetSurface()
+        .animation(reduceMotion ? nil : .snappy(duration: 0.25), value: showWords)
     }
 
-    /// Hiding is free; revealing always requires authentication, regardless of
-    /// the App Lock setting.
-    private func toggleReveal() {
-        if showWords {
-            showWords = false
-            return
-        }
+    /// Revealing always requires authentication, regardless of the App Lock setting.
+    private func revealWords() {
         Task {
             if await AppLockManager.shared.authenticate(reason: "Reveal your seed phrase") {
                 showWords = true
@@ -1667,6 +1669,7 @@ struct MintPickerSheet: View {
                 }
             }
         }
+        .flatBottomSheetSurface()
     }
 }
 
@@ -1746,6 +1749,7 @@ struct ImportNsecSheet: View {
         } message: {
             Text(replacementWarning)
         }
+        .flatBottomSheetSurface()
     }
 
     private func pasteFromClipboard() {

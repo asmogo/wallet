@@ -41,7 +41,6 @@ import androidx.compose.material.icons.outlined.Payments
 import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material.icons.outlined.Repeat
 import androidx.compose.material.icons.outlined.Timer
-import androidx.compose.material.icons.outlined.UnfoldMore
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -66,7 +65,6 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import java.text.DateFormat
 import java.util.Date
@@ -101,8 +99,8 @@ import com.cashu.me.ui.components.FlowSheetTitle
 import com.cashu.me.ui.components.IconSwap
 import com.cashu.me.ui.components.InlineNotice
 import com.cashu.me.ui.components.InspectorRow
-import com.cashu.me.ui.components.MintAvatar
 import com.cashu.me.ui.components.MintPickerSheet
+import com.cashu.me.ui.components.MintSelectorRow
 import com.cashu.me.ui.components.NoticeSeverity
 import com.cashu.me.ui.components.NumberPadFooter
 import com.cashu.me.ui.components.PaymentStatusPhase
@@ -620,7 +618,10 @@ fun ReceiveLightningScreen(
                             mintBalanceText = activeMint?.let {
                                 formatter.formatWalletSats(it.balance, settings.useBitcoinSymbol)
                             },
-                            onPickMint = { mintPickerOpen = true },
+                            // One mint means nothing to choose between, so the
+                            // row drops its chevron and stops opening a picker.
+                            onPickMint = { mintPickerOpen = true }
+                                .takeIf { walletState.mints.size > 1 },
                             isSatUnit = isSatUnit,
                             unit = effectiveUnit,
                             amountSats = ReceiveAmountEntry.amountBaseUnits(amount, amountEntryContext),
@@ -994,7 +995,7 @@ private fun InputFace(
     creating: Boolean,
     mint: MintInfo?,
     mintBalanceText: String?,
-    onPickMint: () -> Unit,
+    onPickMint: (() -> Unit)?,
     isSatUnit: Boolean,
     unit: String,
     amountSats: Long,
@@ -1017,13 +1018,6 @@ private fun InputFace(
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         Spacer(Modifier.height(CashuTheme.spacing.default))
-        if (mint != null) {
-            MintSelectorRow(
-                mint = mint,
-                balanceText = mintBalanceText,
-                onClick = onPickMint,
-            )
-        }
         Spacer(Modifier.weight(1f))
         if (selectedMethod == PaymentMethodKind.Onchain) {
             Text(
@@ -1070,6 +1064,16 @@ private fun InputFace(
             InlineNotice(text = errorText, severity = NoticeSeverity.Error)
         }
         Spacer(Modifier.weight(1f))
+        // Under the amount, over the keypad — the same slot the send flows use.
+        if (mint != null) {
+            MintSelectorRow(
+                mint = mint,
+                balanceText = mintBalanceText,
+                showBalance = true,
+                onPickMint = onPickMint,
+            )
+            Spacer(Modifier.height(CashuTheme.spacing.snug))
+        }
         NumberPadFooter(
             amount = amount,
             onAmountChange = onAmountChange,
@@ -1078,48 +1082,6 @@ private fun InputFace(
             onButtonClick = onCreate,
             buttonEnabled = !creating && (!selectedMethod.requiresMintAmount || amountValid),
             buttonLoading = creating,
-        )
-    }
-}
-
-/** Mint row: avatar + name + balance + change affordance (iOS mintSelector). */
-@Composable
-private fun MintSelectorRow(
-    mint: MintInfo,
-    balanceText: String?,
-    onClick: () -> Unit,
-) {
-    Row(
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(CashuTheme.spacing.default),
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(onClick = onClick)
-            .padding(vertical = CashuTheme.spacing.snug),
-    ) {
-        MintAvatar(mint = mint)
-        Column(modifier = Modifier.weight(1f)) {
-            Text(
-                text = mint.name,
-                style = MaterialTheme.typography.bodyLarge,
-                fontWeight = FontWeight.Medium,
-                color = MaterialTheme.colorScheme.onSurface,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-            if (balanceText != null) {
-                Text(
-                    text = "Balance $balanceText",
-                    style = MaterialTheme.typography.bodySmall.withMonoDigits(),
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-        }
-        Icon(
-            imageVector = Icons.Outlined.UnfoldMore,
-            contentDescription = "Change mint",
-            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.size(CashuTheme.spacing.loose),
         )
     }
 }
