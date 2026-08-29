@@ -66,8 +66,10 @@ struct LightningAddressSettingsSection: View {
         .animation(.easeInOut(duration: 0.2), value: npcService.errorMessage)
         .animation(.easeInOut(duration: 0.2), value: settings.checkIncomingInvoices)
         .sheet(isPresented: $showMintPicker) {
+            // Titled after the row that opened it, so the sheet reads as a
+            // continuation of the tap rather than a new context.
             MintPickerSheet(
-                title: "Mint for Lightning",
+                title: "Receiving mint",
                 mints: walletManager.mints,
                 selectedMintUrl: $npcService.selectedMintUrl,
                 onSelect: { mintUrl in

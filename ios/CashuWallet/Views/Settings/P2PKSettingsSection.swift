@@ -559,41 +559,45 @@ private struct LockedEcashExplainerSheet: View {
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 20) {
-                Text("Locked ecash")
-                    .font(.title.weight(.heavy))
-                    .tracking(-0.3)
-                    .padding(.top, 8)
+        // Pinned-CTA layout (the receipt-sheet shape): the scroll region ends
+        // above the button, so the last point can never crowd or run under it.
+        VStack(spacing: 0) {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 20) {
+                    Text("Locked ecash")
+                        .font(.title.weight(.heavy))
+                        .tracking(-0.3)
+                        .padding(.top, 8)
 
-                VStack(alignment: .leading, spacing: 16) {
-                    explainerPoint(
-                        "lock.open",
-                        "Ecash is bearer cash. Whoever holds a token can spend it — like a banknote."
-                    )
-                    explainerPoint(
-                        "lock",
-                        "Locking ties a token to a key. Even if it's intercepted in transit, only the key's holder can claim it."
-                    )
-                    explainerPoint(
-                        "key.fill",
-                        "Your key comes from your seed phrase, so it's backed up automatically. Share your key or QR, and anyone can send you locked ecash."
-                    )
-                    explainerPoint(
-                        "paperplane",
-                        "When you send, you can lock ecash to someone else's key so only they can claim it."
-                    )
+                    VStack(alignment: .leading, spacing: 16) {
+                        explainerPoint(
+                            "lock.open",
+                            "Ecash is bearer cash. Whoever holds a token can spend it — like a banknote."
+                        )
+                        explainerPoint(
+                            "lock",
+                            "Locking ties a token to a key. Even if it's intercepted in transit, only the key's holder can claim it."
+                        )
+                        explainerPoint(
+                            "key.fill",
+                            "Your key comes from your seed phrase, so it's backed up automatically. Share your key or QR, and anyone can send you locked ecash."
+                        )
+                        explainerPoint(
+                            "paperplane",
+                            "When you send, you can lock ecash to someone else's key so only they can claim it."
+                        )
+                    }
                 }
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(28)
-            .padding(.bottom, 80)
-        }
-        .safeAreaInset(edge: .bottom) {
-            Button(action: { dismiss() }) { Text("Got it") }
-                .glassButton()
+                .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.horizontal, 28)
-                .padding(.bottom, 12)
+                .padding(.top, 28)
+                .padding(.bottom, 24)
+            }
+
+            Button(action: { dismiss() }) { Text("Got it") }
+                .flatSheetSecondaryButton()
+                .padding(.horizontal, 28)
+                .padding(.bottom, 16)
         }
         .presentationDetents([.medium, .large])
         .presentationDragIndicator(.visible)

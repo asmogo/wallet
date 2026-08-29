@@ -248,7 +248,9 @@ fun LightningScreen(
                 mintPickerOpen = false
             },
             onDismiss = { mintPickerOpen = false },
-            title = "Mint for Lightning",
+            // Titled after the row that opened it, so the sheet reads as a
+            // continuation of the tap rather than a new context.
+            title = LightningAddressSettingsCopy.ReceivingMintTitle,
         )
     }
 

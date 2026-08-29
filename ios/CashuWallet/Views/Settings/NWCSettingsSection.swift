@@ -92,7 +92,7 @@ struct NWCSettingsView: View {
         .animation(.easeInOut(duration: 0.2), value: nwc.errorMessage)
         .sheet(isPresented: $showMintPicker) {
             MintPickerSheet(
-                title: "Mint for Wallet Connect",
+                title: "Mint",
                 mints: walletManager.mints,
                 selectedMintUrl: Binding(
                     get: { nwc.selectedMintUrl },

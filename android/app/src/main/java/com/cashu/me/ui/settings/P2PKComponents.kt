@@ -28,8 +28,8 @@ import androidx.compose.material.icons.filled.Verified
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material.icons.outlined.ContentCopy
 import androidx.compose.material.icons.outlined.Lock
-import androidx.compose.material.icons.outlined.LockOpen
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -50,7 +50,12 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.graphics.vector.path
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.ClipEntry
 import androidx.compose.ui.platform.LocalClipboard
@@ -60,6 +65,7 @@ import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -74,6 +80,7 @@ import com.cashu.me.ui.components.SheetHeader
 import com.cashu.me.ui.components.shareText
 import com.cashu.me.ui.security.rememberWalletAuthenticationLauncher
 import com.cashu.me.ui.theme.CashuTheme
+import com.cashu.me.ui.theme.tracked
 import com.cashu.me.ui.theme.withSlashedZero
 
 // iOS KeyCard geometry: 34pt glyph circle, rounded-14 card.
@@ -363,19 +370,22 @@ fun QrDetailSheet(
                 confirmationMessage = "Copied ${title.lowercase()}",
             )
             Spacer(Modifier.height(CashuTheme.spacing.default))
+            // One quiet middle-truncated line (iOS parity) — the full value
+            // travels via Copy/Share, so wrapping it here just reads as noise.
             Text(
                 text = content,
                 style = MaterialTheme.typography.bodySmall.copy(fontFamily = CashuTheme.fonts.mono).withSlashedZero(),
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
+                maxLines = 1,
+                overflow = TextOverflow.MiddleEllipsis,
             )
-            Spacer(Modifier.height(CashuTheme.spacing.default))
+            Spacer(Modifier.height(CashuTheme.spacing.loose))
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(CashuTheme.spacing.default),
             ) {
-                FilledTonalButton(
+                SecondaryButton(
+                    text = "Copy",
                     onClick = {
                         clipboardScope.launch {
                             clipboard.setClipEntry(
@@ -385,19 +395,15 @@ fun QrDetailSheet(
                         }
                     },
                     modifier = Modifier.weight(1f),
-                ) {
-                    Icon(Icons.Outlined.ContentCopy, contentDescription = null)
-                    Spacer(Modifier.size(CashuTheme.spacing.micro))
-                    Text("Copy")
-                }
-                FilledTonalButton(
+                )
+                PrimaryButton(
+                    text = "Share",
                     onClick = { context.shareText(content, title) },
+                    // Inverted ink, matching the confirm sheets' action button
+                    // and iOS's white Share pill (PrimaryButton is gray by default).
+                    colors = ButtonDefaults.buttonColors(),
                     modifier = Modifier.weight(1f),
-                ) {
-                    Icon(Icons.AutoMirrored.Outlined.Send, contentDescription = null)
-                    Spacer(Modifier.size(CashuTheme.spacing.micro))
-                    Text("Share")
-                }
+                )
             }
             Spacer(Modifier.height(CashuTheme.spacing.comfortable))
             }
@@ -509,12 +515,12 @@ internal fun PrivateKeyRevealContent(
                 modifier = Modifier.fillMaxWidth(),
             )
         } else {
-            Button(
+            PrimaryButton(
+                text = "Reveal Private Key",
                 onClick = onReveal,
+                colors = ButtonDefaults.buttonColors(),
                 modifier = Modifier.fillMaxWidth(),
-            ) {
-                Text("Reveal Private Key")
-            }
+            )
         }
     }
 }
@@ -536,12 +542,17 @@ fun LockedEcashExplainerSheet(onDismiss: () -> Unit) {
         ) {
             Text(
                 text = "Locked ecash",
-                style = MaterialTheme.typography.headlineMedium,
+                // iOS's `.title.weight(.heavy)` with tightened tracking — the
+                // bare headlineMedium renders regular-weight and reads off-brand
+                // next to every other bold surface title.
+                style = MaterialTheme.typography.headlineMedium
+                    .copy(fontWeight = FontWeight.Bold)
+                    .tracked(-0.01f),
                 color = MaterialTheme.colorScheme.onSurface,
             )
             Spacer(Modifier.height(CashuTheme.spacing.loose))
             ExplainerPoint(
-                icon = Icons.Outlined.LockOpen,
+                icon = LockOpenClear,
                 text = "Ecash is bearer cash. Whoever holds a token can spend it — like a banknote.",
             )
             ExplainerPoint(
@@ -557,7 +568,8 @@ fun LockedEcashExplainerSheet(onDismiss: () -> Unit) {
                 text = "When you send, you can lock ecash to someone else's key so only they can claim it.",
             )
             Spacer(Modifier.height(CashuTheme.spacing.section))
-            PrimaryButton(text = "Got it", onClick = onDismiss)
+            // Dismissal-only CTA — secondary on both platforms.
+            SecondaryButton(text = "Got it", onClick = onDismiss)
             Spacer(Modifier.height(CashuTheme.spacing.comfortable))
         }
     }
@@ -579,9 +591,67 @@ private fun ExplainerPoint(icon: ImageVector, text: String) {
         )
         Text(
             text = text,
-            style = MaterialTheme.typography.bodyMedium,
+            // iOS `.callout` (16pt) — bodyMedium's 14sp made the prose read a
+            // size class smaller than the iOS sheet.
+            style = MaterialTheme.typography.bodyLarge,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.weight(1f),
         )
     }
+}
+
+/**
+ * An unlocked padlock whose shackle is swung open with a visible gap (SF
+ * `lock.open` parity). Material's `Outlined.LockOpen` keeps the shackle arched
+ * over the body, so at 24dp it reads as locked — defeating the one bullet whose
+ * whole point is "unlocked".
+ */
+private val LockOpenClear: ImageVector by lazy {
+    ImageVector.Builder(
+        name = "LockOpenClear",
+        defaultWidth = 24.dp,
+        defaultHeight = 24.dp,
+        viewportWidth = 24f,
+        viewportHeight = 24f,
+    ).apply {
+        // Body
+        path(
+            fill = null,
+            stroke = SolidColor(Color.Black),
+            strokeLineWidth = 2f,
+            strokeLineCap = StrokeCap.Round,
+            strokeLineJoin = StrokeJoin.Round,
+        ) {
+            moveTo(6f, 10f)
+            horizontalLineTo(12f)
+            arcTo(2f, 2f, 0f, false, true, 14f, 12f)
+            verticalLineTo(19f)
+            arcTo(2f, 2f, 0f, false, true, 12f, 21f)
+            horizontalLineTo(6f)
+            arcTo(2f, 2f, 0f, false, true, 4f, 19f)
+            verticalLineTo(12f)
+            arcTo(2f, 2f, 0f, false, true, 6f, 10f)
+            close()
+        }
+        // Keyhole
+        path(fill = SolidColor(Color.Black)) {
+            moveTo(9f, 14f)
+            arcToRelative(1.5f, 1.5f, 0f, true, true, 0f, 3f)
+            arcToRelative(1.5f, 1.5f, 0f, true, true, 0f, -3f)
+            close()
+        }
+        // Shackle, attached on the left and hanging open past the body's edge
+        path(
+            fill = null,
+            stroke = SolidColor(Color.Black),
+            strokeLineWidth = 2f,
+            strokeLineCap = StrokeCap.Round,
+            strokeLineJoin = StrokeJoin.Round,
+        ) {
+            moveTo(9f, 10f)
+            verticalLineTo(6.5f)
+            arcTo(3.5f, 3.5f, 0f, false, true, 16f, 6.5f)
+            verticalLineTo(8f)
+        }
+    }.build()
 }

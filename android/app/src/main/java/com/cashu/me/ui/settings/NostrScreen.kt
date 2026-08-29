@@ -85,7 +85,7 @@ import com.cashu.me.ui.theme.CashuTheme
 
 /** Shown inside the reveal sheet, at the moment the key is about to be exposed. */
 internal const val NostrPrivateKeyWarningText =
-    "Your nsec controls your Nostr identity and Lightning address. Never share it."
+    "Anyone with this key can control your Lightning address. Never share it."
 
 internal enum class NostrIdentityMutation(
     val progressMessage: String,
@@ -454,7 +454,7 @@ fun NostrScreen(
 
     if (showNsecReveal) {
         PrivateKeyRevealSheet(
-            title = "Nostr private key",
+            title = "Nostr Private Key",
             // Read through the service so a generate/import while the sheet is
             // open cannot hand back the key it replaced.
             loadNsec = { nostrService.state.value.nsec.takeIf(String::isNotBlank) },
