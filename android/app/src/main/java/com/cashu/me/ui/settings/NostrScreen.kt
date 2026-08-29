@@ -373,52 +373,34 @@ fun NostrScreen(
     }
 
     if (showGenerateConfirm) {
-        AlertDialog(
-            onDismissRequest = { showGenerateConfirm = false },
-            title = { Text("Generate new key") },
-            text = {
-                Text(
-                    NostrIdentityReplacementWarnings.Generate,
-                    style = MaterialTheme.typography.bodyMedium,
+        KeyActionConfirmSheet(
+            title = "Generate new key?",
+            message = NostrIdentityReplacementWarnings.Generate,
+            actionLabel = "Generate",
+            onConfirm = {
+                showGenerateConfirm = false
+                performIdentityMutation(
+                    mutation = NostrIdentityMutation.GenerateKey,
+                    operation = { nostrService.generateRandomKeypair() },
                 )
             },
-            confirmButton = {
-                DestructiveTextButton(text = "Generate", onClick = {
-                    showGenerateConfirm = false
-                    performIdentityMutation(
-                        mutation = NostrIdentityMutation.GenerateKey,
-                        operation = { nostrService.generateRandomKeypair() },
-                    )
-                })
-            },
-            dismissButton = {
-                TextButton(onClick = { showGenerateConfirm = false }) { Text("Cancel") }
-            },
+            onDismiss = { showGenerateConfirm = false },
         )
     }
 
     if (showResetConfirm) {
-        AlertDialog(
-            onDismissRequest = { showResetConfirm = false },
-            title = { Text("Reset to wallet seed") },
-            text = {
-                Text(
-                    NostrIdentityReplacementWarnings.Reset,
-                    style = MaterialTheme.typography.bodyMedium,
+        KeyActionConfirmSheet(
+            title = "Reset to wallet seed?",
+            message = NostrIdentityReplacementWarnings.Reset,
+            actionLabel = "Reset",
+            onConfirm = {
+                showResetConfirm = false
+                performIdentityMutation(
+                    mutation = NostrIdentityMutation.ResetKey,
+                    operation = { nostrService.resetToSeedKey() },
                 )
             },
-            confirmButton = {
-                DestructiveTextButton(text = "Reset", onClick = {
-                    showResetConfirm = false
-                    performIdentityMutation(
-                        mutation = NostrIdentityMutation.ResetKey,
-                        operation = { nostrService.resetToSeedKey() },
-                    )
-                })
-            },
-            dismissButton = {
-                TextButton(onClick = { showResetConfirm = false }) { Text("Cancel") }
-            },
+            onDismiss = { showResetConfirm = false },
         )
     }
 
@@ -677,14 +659,68 @@ private fun NsecImportSheet(
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 textAlign = TextAlign.Center,
                             )
-                            PrimaryButton(
+                            SecondaryButton(
                                 text = "Done",
                                 onClick = onDismiss,
-                                colors = ButtonDefaults.buttonColors(),
                                 modifier = Modifier.fillMaxWidth(),
                             )
                         }
                     }
+                }
+            }
+        }
+    }
+}
+
+/**
+ * Single-face confirmation sheet for a Nostr key mutation, on the same recipe
+ * as the import sheet's confirm face (iOS `KeyActionConfirmSheet` parity):
+ * SheetHeader title, centered warning copy, and a Cancel/action row, instead
+ * of an AlertDialog stacked over the screen.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun KeyActionConfirmSheet(
+    title: String,
+    message: String,
+    actionLabel: String,
+    onConfirm: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    ModalBottomSheet(onDismissRequest = onDismiss) {
+        Box(modifier = Modifier.fillMaxWidth()) {
+            Column(
+                modifier = Modifier
+                    .navigationBarsPadding()
+                    .padding(horizontal = CashuTheme.spacing.comfortable)
+                    .padding(bottom = CashuTheme.spacing.section),
+                verticalArrangement = Arrangement.spacedBy(CashuTheme.spacing.section),
+            ) {
+                SheetHeader(title = title)
+
+                Text(
+                    text = message,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(CashuTheme.spacing.snug),
+                ) {
+                    SecondaryButton(
+                        text = "Cancel",
+                        onClick = onDismiss,
+                        modifier = Modifier.weight(1f),
+                    )
+                    PrimaryButton(
+                        text = actionLabel,
+                        onClick = onConfirm,
+                        colors = ButtonDefaults.buttonColors(),
+                        modifier = Modifier.weight(1f),
+                    )
                 }
             }
         }

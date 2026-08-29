@@ -1808,7 +1808,7 @@ struct ImportNsecSheet: View {
                 .multilineTextAlignment(.center)
 
             Button("Done") { dismiss() }
-                .glassButton()
+                .flatSheetSecondaryButton()
         }
         .transition(.opacity)
     }
