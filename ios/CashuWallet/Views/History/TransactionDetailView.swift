@@ -103,15 +103,12 @@ struct TransactionDetailView: View {
         }
     }
 
-    /// Settled transactions are receipts, not active payment workspaces. Open
-    /// those at a compact detent while preserving the full-height detent for QR
-    /// and claim/check flows that need it.
-    private var isCompactReceipt: Bool {
-        transaction.status == .completed
-    }
-
+    /// Every transaction detail opens as a member of the same receipt-sheet
+    /// family; only the height varies with content. A QR hero needs most of the
+    /// screen, an onchain receipt carries an extra explorer row, and everything
+    /// else fits the standard receipt detent. `.large` stays reachable by drag.
     private var presentationDetents: Set<PresentationDetent> {
-        guard isCompactReceipt else { return [.large] }
+        if showsQR { return [.fraction(0.92), .large] }
         return transaction.kind == .onchain
             ? [.fraction(0.78), .large]
             : [.fraction(0.68), .large]
@@ -236,22 +233,11 @@ struct TransactionDetailView: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbarBackground(.hidden, for: .navigationBar)
             .toolbar {
-                if !isCompactReceipt {
-                    ToolbarItem(placement: .navigationBarLeading) {
-                        SheetCloseButton()
-                    }
-                }
+                // Title only — no close or share chrome. Like every receipt
+                // sheet, dismissal is the drag indicator / swipe, and sharing
+                // stays on the QR itself (context menu + VoiceOver action).
                 ToolbarItem(placement: .principal) {
                     Text(transaction.displayTitle).font(.headline)
-                }
-                if showsQR {
-                    ToolbarItem(placement: .topBarTrailing) {
-                        Button(action: { showShareSheet = true }) {
-                            Image(systemName: "square.and.arrow.up")
-                                .toolbarIconTapTarget()
-                        }
-                        .accessibilityLabel("Share")
-                    }
                 }
             }
             .sheet(isPresented: $showShareSheet) {
