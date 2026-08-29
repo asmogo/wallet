@@ -128,7 +128,6 @@ struct P2PKSettingsSection: View {
         }
         .sheet(item: $privateKeyReveal) { reveal in
             PrivateKeyRevealSheet(title: reveal.title, nsec: reveal.nsec)
-                .flatBottomSheetSurface()
         }
     }
 
@@ -521,7 +520,6 @@ private struct DeviceKeyDetailView: View {
         }
         .sheet(item: $privateKeyReveal) { reveal in
             PrivateKeyRevealSheet(title: reveal.title, nsec: reveal.nsec)
-                .flatBottomSheetSurface()
         }
         .alert("Remove this key?", isPresented: $showRemoveConfirm) {
             Button("Remove Key", role: .destructive) {
@@ -616,88 +614,72 @@ private struct LockedEcashExplainerSheet: View {
 
 // MARK: - Private-key reveal sheet
 
-/// Reveals a key's nsec behind authentication, mirroring the seed-phrase backup
-/// pattern: hidden by default, reveal and copy both require auth. Shared by the
-/// Locked Ecash hub and the Nostr settings hub — the caveat line is caller-supplied
-/// so each reads accurately (ecash-claim vs. Lightning-address control).
+/// Reveals a key's nsec behind authentication, matching `BackupView` (the
+/// seed-phrase reveal) beat for beat: in-content title, warning copy, and one
+/// CTA that flips from Reveal to Copy once the key is showing, on a
+/// content-fit sheet dismissed by drag. Shared by the Locked Ecash hub and the
+/// Nostr settings hub — the caveat line is caller-supplied so each reads
+/// accurately (ecash-claim vs. Lightning-address control).
 struct PrivateKeyRevealSheet: View {
     let title: String
     let nsec: String
     var warning: String = "Anyone with this key can claim ecash locked to it. Never share it."
 
-    @Environment(\.dismiss) private var dismiss
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var revealed = false
-
-    private var hidden: String {
-        String(repeating: "•", count: 24)
-    }
+    @State private var contentHeight: CGFloat = 0
 
     var body: some View {
-        NavigationStack {
-            ScrollView {
-                VStack(spacing: 24) {
-                    VStack(spacing: 12) {
-                        Image(systemName: "exclamationmark.triangle.fill")
-                            .font(.title)
-                            .foregroundStyle(.orange)
-                        Text("Keep this key secret")
-                            .font(.headline)
-                        Text(warning)
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
-                            .multilineTextAlignment(.center)
-                    }
-                    .padding()
+        VStack(spacing: 24) {
+            Text(title)
+                .font(.title2.weight(.semibold))
 
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text("Private key (nsec)")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                            .textCase(.uppercase)
-                        HStack(spacing: 10) {
-                            Text(revealed ? nsec : hidden)
-                                .font(.system(.body, design: .monospaced))
-                                .foregroundStyle(revealed ? .primary : .secondary)
-                                .lineLimit(3)
-                                .multilineTextAlignment(.leading)
-                            Spacer(minLength: 0)
-                            VStack(spacing: 8) {
-                                Button(action: toggleReveal) {
-                                    Image(systemName: revealed ? "eye.slash" : "eye")
-                                }
-                                Button(action: copyKey) {
-                                    Image(systemName: "doc.on.doc")
-                                        .foregroundStyle(Color.accentColor)
-                                }
-                            }
-                        }
-                    }
+            Text(warning)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+
+            if revealed {
+                Text(nsec)
+                    .font(.system(.footnote, design: .monospaced).weight(.medium))
+                    .multilineTextAlignment(.leading)
+                    .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(12)
-                    .liquidGlass(in: RoundedRectangle(cornerRadius: 10))
-                    .padding(.horizontal)
+                    .background(.quaternary.opacity(0.55), in: RoundedRectangle(cornerRadius: 12))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 12)
+                            .stroke(Color(uiColor: .separator), lineWidth: 0.5)
+                    )
+                    .transition(.opacity.combined(with: .move(edge: .bottom)))
+                    .accessibilityLabel("Private key, \(nsec)")
+            }
 
-                    Spacer(minLength: 40)
-
-                    Button(action: { dismiss() }) { Text("Done") }
-                        .glassButton()
-                        .padding(.horizontal)
-                        .padding(.bottom, 24)
+            Button(revealed ? "Copy Private Key" : "Reveal Private Key") {
+                if revealed {
+                    copyKey()
+                } else {
+                    revealKey()
                 }
             }
-            .navigationTitle(title)
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbarBackground(.hidden, for: .navigationBar)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") { dismiss() }
-                }
-            }
+            .glassButton()
+            .contentTransition(.opacity)
         }
+        .padding(.horizontal, 24)
+        .padding(.vertical, 20)
+        .contentFitMeasured { contentHeight = $0 }
+        .contentFitDetent(
+            contentHeight,
+            estimate: revealed ? 340 : 250,
+            navigationBar: false,
+            step: revealed,
+            stepResize: .milliseconds(300)
+        )
+        .presentationDragIndicator(.visible)
         .flatBottomSheetSurface()
+        .animation(reduceMotion ? nil : .snappy(duration: 0.25), value: revealed)
     }
 
-    private func toggleReveal() {
-        if revealed { revealed = false; return }
+    /// Revealing always requires authentication, regardless of the App Lock setting.
+    private func revealKey() {
         Task {
             if await AppLockManager.shared.authenticate(reason: "Reveal this private key") {
                 revealed = true
