@@ -122,6 +122,7 @@ data class CashuColors(
     val onPendingContainer: Color,
     val onReceivedContainer: Color,
     val canvasDivider: Color,
+    val compactSheetContainer: Color,
 )
 
 internal val LightCashuColors = CashuColors(
@@ -135,6 +136,7 @@ internal val LightCashuColors = CashuColors(
     onPendingContainer = Color(0xFF96500A),
     onReceivedContainer = Color(0xFF0B5227),
     canvasDivider = Color(0xFFEBEBEB),
+    compactSheetContainer = Color(0xFFF7F7F7),
 )
 
 internal val DarkCashuColors = CashuColors(
@@ -148,6 +150,7 @@ internal val DarkCashuColors = CashuColors(
     onPendingContainer = Color(0xFFFF9F0A),
     onReceivedContainer = Color(0xFFB7F0C8),
     canvasDivider = Color(0xFF262626),
+    compactSheetContainer = Color(0xFF141414),
 )
 
 val LocalCashuColors = compositionLocalOf { LightCashuColors }

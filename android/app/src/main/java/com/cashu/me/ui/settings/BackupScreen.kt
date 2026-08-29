@@ -5,6 +5,7 @@ import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.spring
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
@@ -20,12 +21,12 @@ import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.style.TextAlign
@@ -33,9 +34,9 @@ import androidx.compose.ui.unit.dp
 import com.cashu.me.Core.AppLockManager
 import com.cashu.me.Core.WalletManager
 import com.cashu.me.ui.components.SheetHeader
+import com.cashu.me.ui.components.LocalConfirmationToastController
 import com.cashu.me.ui.security.rememberWalletAuthenticationLauncher
 import com.cashu.me.ui.theme.CashuTheme
-import kotlinx.coroutines.delay
 
 /**
  * Settings → Backup & Restore → "Backup seed phrase" (iOS `BackupView`): a quiet
@@ -54,32 +55,30 @@ fun BackupSeedSheet(
     val revealedText = remember(words) { words.joinToString(" ") }
 
     val clipboard = LocalClipboardManager.current
+    val confirmationToastController = LocalConfirmationToastController.current
     val authenticate = rememberWalletAuthenticationLauncher(appLockManager)
 
     var revealed by remember { mutableStateOf(false) }
-    var copied by remember { mutableStateOf(false) }
-    LaunchedEffect(copied) {
-        if (copied) { delay(3000); copied = false }
-    }
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = rememberModalBottomSheetState(),
     ) {
-        Column(
-            modifier = Modifier
-                .navigationBarsPadding()
-                .padding(horizontal = CashuTheme.spacing.comfortable)
-                .padding(bottom = CashuTheme.spacing.section)
-                .animateContentSize(
-                    animationSpec = spring(
-                        dampingRatio = Spring.DampingRatioNoBouncy,
-                        stiffness = Spring.StiffnessMediumLow,
+        Box(modifier = Modifier.fillMaxWidth()) {
+            Column(
+                modifier = Modifier
+                    .navigationBarsPadding()
+                    .padding(horizontal = CashuTheme.spacing.comfortable)
+                    .padding(bottom = CashuTheme.spacing.section)
+                    .animateContentSize(
+                        animationSpec = spring(
+                            dampingRatio = Spring.DampingRatioNoBouncy,
+                            stiffness = Spring.StiffnessMediumLow,
+                        ),
                     ),
-                ),
-            verticalArrangement = Arrangement.spacedBy(CashuTheme.spacing.section),
-        ) {
-            SheetHeader(title = "Backup Wallet")
+                verticalArrangement = Arrangement.spacedBy(CashuTheme.spacing.section),
+            ) {
+                SheetHeader(title = "Backup Wallet")
 
             Text(
                 text = if (revealed) {
@@ -117,14 +116,14 @@ fun BackupSeedSheet(
                         )
                     }
                 }
-            }
+                }
 
             Button(
                 onClick = {
                     if (revealed) {
                         authenticate("Copy your seed phrase") {
                             clipboard.setText(AnnotatedString(revealedText))
-                            copied = true
+                            confirmationToastController?.show("Copied recovery phrase")
                         }
                     } else {
                         authenticate("Reveal your seed phrase") { revealed = true }
@@ -132,7 +131,8 @@ fun BackupSeedSheet(
                 },
                 modifier = Modifier.fillMaxWidth(),
             ) {
-                Text(if (copied) "Copied" else if (revealed) "Copy Recovery Phrase" else "Reveal Recovery Phrase")
+                Text(if (revealed) "Copy Recovery Phrase" else "Reveal Recovery Phrase")
+            }
             }
         }
     }

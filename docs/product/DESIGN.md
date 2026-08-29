@@ -137,7 +137,8 @@ components:
     padding: "12px 8px"
     typography: "{typography.body}"
     trailingHintSymbol: "pencil"
-    note: "Cashu Request detail. Tap opens a medium-detent sub-sheet."
+    leadingSymbol: null
+    note: "Cashu Request detail. Label + value only, no leading field icon (Iconless-Row Rule). Tap opens a medium-detent sub-sheet."
   divider-canvas:
     backgroundColor: "{colors.separator-hair}"
     height: "0.5px"
@@ -188,9 +189,9 @@ What this system explicitly rejects, pulled verbatim from docs/product/PRODUCT.m
   press feedback, sheet cross-fade (in-sheet flow swap), payment-received
   celebration, and waiting-pulse. Nothing decorative beyond that.
 - One inspector pattern for editable detail rows (Cashu Request → Mint, Amount):
-  leading SF Symbol + secondary label + trailing value (medium weight, middle-
-  truncated) + trailing `pencil` hint glyph. Tap opens a `.medium`-detent
-  sub-sheet rather than pushing a screen.
+  secondary label + trailing value (medium weight, middle-truncated) + trailing
+  `pencil` hint glyph. Tap opens a `.medium`-detent sub-sheet rather than pushing
+  a screen. No leading field icon — see The Iconless-Row Rule, §5.
 
 ## 2. Colors: The Inverted-Ink Palette
 
@@ -298,7 +299,11 @@ sheet was **reverted**. `PaymentStatusView` success keeps its 64pt green
 (their own later pass).
 
 The detail sheet (`TransactionDetailView`) is a **hero state slot above a crisp
-`.primary` amount hero**. The slot resolves by state: an **actionable request**
+`.primary` amount hero**. A completed transaction opens as a compact native
+receipt sheet over its activity list, with no explicit close control; swipe or
+tap the scrim to dismiss. The presenting canvas takes a restrained 2–2.5pt blur
+beneath the native dimming scrim. Pending, failed, expired, QR, and claim/check states
+retain the large detail workspace. The slot resolves by state: an **actionable request**
 shows its QR (unclaimed outgoing token — gated on `status == .pending` since the
 token string is retained after claim — a pending invoice, or a reusable BOLT12
 offer, `lno` prefix); a **completed** transaction shows the 64pt green
@@ -313,15 +318,19 @@ value (the hero glyph already carries the colour): completed → **Claimed** (ec
 past its quote expiry — the QR/Share/Copy retire with it and the hero stays
 empty like a pending no-QR row; no red X, since nothing failed, the invoice
 simply lapsed. A quote paid before expiry stays **Pending** even past expiry —
-NUT-04 lets it be minted afterwards)*. A **`Date` row** follows. Remaining rows are conditional essentials —
+NUT-04 lets it be minted afterwards)*. A **`Date` row** follows. Metadata is a
+plain two-column label/value list with no leading field icons; only copyable
+values receive a trailing affordance. Remaining rows are conditional essentials —
 **Fee** when `> 0`, **Mint** always; the **Unit** row and the settled **Request**
 row stay dropped (`unitLabel` is always BTC/SAT; the live request is the QR/Copy).
+Opaque reference values, including **Payment Proof**, render as
+`prefix(8)…suffix(6)` while their Copy action preserves the full value.
 On-chain keeps **Address** / **Transaction ID** and its address QR. The **Type**
 row stays omitted (the nav title names kind/direction).
 
 **The Settled-Ecash Receipt carve-out.** *Added 2026-07-05.* A **settled ecash
 token** (completed, either direction) additionally exposes the **bottom Copy
-button as a receipt** — it copies the raw token string as a *record* of what was
+button as a quiet secondary tonal action** — it copies the raw token string as a *record* of what was
 received/sent. This is a deliberate exception to the actionability gate above: a
 claimed token is spent, so the QR hero and top **Share stay retired** for it (the
 green-check "done" hero and the "Claimed" Status row already read the screen as
@@ -444,7 +453,7 @@ double demotion that pushes it under the legibility line. `caption` and
   ad-hoc `.principal` font for a nav-bar title.
 - **Text Link** is always applied via `.textLinkButton()`
   (`TextLinkButtonStyle`), never hand-rolled per site: "Skip" / "Skip for now",
-  "What is ecash?", "Copy" / "Copied", "Add custom mint URL".
+  "What is ecash?", "Copy", "Add custom mint URL".
 - **Overline** is the only uppercase in the system, and casing lives in the role
   so no call site has to remember it. Use the shared `SectionHeader`.
 
@@ -490,7 +499,11 @@ sheet was **reverted**. `PaymentStatusView` success keeps its 64pt green
 (their own later pass).
 
 The detail sheet (`TransactionDetailView`) is a **hero state slot above a crisp
-`.primary` amount hero**. The slot resolves by state: an **actionable request**
+`.primary` amount hero**. A completed transaction opens as a compact native
+receipt sheet over its activity list, with no explicit close control; swipe or
+tap the scrim to dismiss. The presenting canvas takes a restrained 2–2.5pt blur
+beneath the native dimming scrim. Pending, failed, expired, QR, and claim/check states
+retain the large detail workspace. The slot resolves by state: an **actionable request**
 shows its QR (unclaimed outgoing token — gated on `status == .pending` since the
 token string is retained after claim — a pending invoice, or a reusable BOLT12
 offer, `lno` prefix); a **completed** transaction shows the 64pt green
@@ -505,15 +518,19 @@ value (the hero glyph already carries the colour): completed → **Claimed** (ec
 past its quote expiry — the QR/Share/Copy retire with it and the hero stays
 empty like a pending no-QR row; no red X, since nothing failed, the invoice
 simply lapsed. A quote paid before expiry stays **Pending** even past expiry —
-NUT-04 lets it be minted afterwards)*. A **`Date` row** follows. Remaining rows are conditional essentials —
+NUT-04 lets it be minted afterwards)*. A **`Date` row** follows. Metadata is a
+plain two-column label/value list with no leading field icons; only copyable
+values receive a trailing affordance. Remaining rows are conditional essentials —
 **Fee** when `> 0`, **Mint** always; the **Unit** row and the settled **Request**
 row stay dropped (`unitLabel` is always BTC/SAT; the live request is the QR/Copy).
+Opaque reference values, including **Payment Proof**, render as
+`prefix(8)…suffix(6)` while their Copy action preserves the full value.
 On-chain keeps **Address** / **Transaction ID** and its address QR. The **Type**
 row stays omitted (the nav title names kind/direction).
 
 **The Settled-Ecash Receipt carve-out.** *Added 2026-07-05.* A **settled ecash
 token** (completed, either direction) additionally exposes the **bottom Copy
-button as a receipt** — it copies the raw token string as a *record* of what was
+button as a quiet secondary tonal action** — it copies the raw token string as a *record* of what was
 received/sent. This is a deliberate exception to the actionability gate above: a
 claimed token is spent, so the QR hero and top **Share stay retired** for it (the
 green-check "done" hero and the "Claimed" Status row already read the screen as
@@ -641,7 +658,7 @@ double demotion that pushes it under the legibility line. `caption` and
   `glassButton()` / `FullWidthCapsuleButtonStyle`), history row title.
 - **Body** (`.body`): default for prose, settings rows, detail values.
 - **Text Link** (`.subheadline.weight(.medium)`, `.secondary`): borderless
-  tertiary actions — "Skip" / "Skip for now", "Copy" / "Copied",
+  tertiary actions — "Skip" / "Skip for now", "Copy",
   "Add custom mint URL". Always applied via `.textLinkButton()`
   (`TextLinkButtonStyle`), never hand-rolled per site.
 - **Callout** (`.callout`): supporting descriptive text under hero headings,
@@ -1021,8 +1038,8 @@ contexts.
   better when stacked tightly between editable rows. (If this divergence
   bothers a reader, the right fix is to add an `inset` and `tint` parameter
   to `CanvasDivider`, not to introduce a third hairline.)
-- **Actions**: two siblings via `glassButton()` — "Copy" (flips to "Copied"
-  for 2s after tap, no other state change) and "New Request" (regenerates,
+- **Actions**: two siblings via `glassButton()` — "Copy" (stays visually stable
+  and raises the shared confirmation toast) and "New Request" (regenerates,
   rotating the QR). Order matters: the existing request lives on the left
   because it is the thing you'd usually share; the destructive-ish rotate
   lives on the right.
@@ -1117,13 +1134,35 @@ mint URL") is allowed — it lives in the call-site label, not the style.
 sheet are **text-only**. No leading SF Symbol, no `Label(_:systemImage:)`,
 no `HStack { Image + Text }`. The verb already lives in the label
 ("Copy Invoice", "New Request", "Send", "Pay"), so an icon next to it is
-visual noise that reduces the typographic weight of the action. The "Copied"
-post-tap confirmation is also text-only — the label flips ("Copy" →
-"Copied"), no checkmark icon. Context-menu entries are the exception: they
+visual noise that reduces the typographic weight of the action. Copy controls
+do not morph or relabel after activation; the shared top-center confirmation
+toast is the only in-app success feedback. Context-menu entries are the exception: they
 use `Label(_:systemImage:)` because iOS context menus expect an icon column
 and look wrong without one. Small inline copy chips (Settings rows, the
 truncated Lightning-address chip on the main wallet) also keep their icons
 — there, the SF Symbol *is* the affordance because there is no text label.
+
+**The Iconless-Row Rule.** Two-column detail rows — the metadata list on a
+transaction receipt, the confirm-screen facts on a pay/receive flow, and the
+preserved payment facts on `PaymentStatusView` (processing → success → failure)
+— are **label + value only**. No leading SF Symbol, no `Label(_:systemImage:)`.
+The label already names the field, so a glyph beside it is decoration that
+competes with the value it is meant to introduce, and a column of unrelated
+symbols reads as a toolbar rather than a receipt. Trailing affordances stay:
+the `pencil` on an editable row, `arrow.up.right` on an outbound link, the
+seal/caution glyph that qualifies a *value* (a locked-ecash key), and the
+chevron on a switchable mint. Method/action rows (the Send and Receive entry
+sheets, Settings navigation rows) are a different vocabulary and keep their
+leading icons — there the glyph identifies a destination, not a field.
+
+**The Confirmation Toast Rule.** Completed utility actions such as Copy use a
+single top-center capsule with a short semantic message (for example, “Copied
+Bitcoin address”). It enters with a restrained upward spring/slide and opacity,
+exits with opacity only, never stacks, contains no status icon, and auto-dismisses
+after roughly 2.2 seconds. Reduced Motion collapses the spatial transition to a
+fade. One pass-through global overlay owns the toast for the entire app; screens
+and native sheets must not mount competing hosts. The overlay stays at the
+physical top center above sheets, their scrims, and any presenting-canvas blur.
 
 **The Mint Card Exception (retired 2026-05-22).** The home screen no longer
 carries a horizontal mint-card switcher. Mint browsing, active-mint selection,

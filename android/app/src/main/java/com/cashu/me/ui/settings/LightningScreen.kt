@@ -7,6 +7,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -51,6 +52,7 @@ import com.cashu.me.Core.WalletManager
 import com.cashu.me.Core.WalletState
 import com.cashu.me.ui.components.GhostButton
 import com.cashu.me.ui.components.InlineNotice
+import com.cashu.me.ui.components.LocalConfirmationToastController
 import com.cashu.me.ui.components.InspectorRow
 import com.cashu.me.ui.components.MintPickerSheet
 import com.cashu.me.ui.components.NoticeSeverity
@@ -101,6 +103,7 @@ fun LightningScreen(
     val walletState by walletManager.state.collectAsState()
     val npcState by npcService.state.collectAsState()
     val clipboard = LocalClipboardManager.current
+    val confirmationToastController = LocalConfirmationToastController.current
     val scope = rememberCoroutineScope()
 
     var mintPickerOpen by remember { mutableStateOf(false) }
@@ -149,6 +152,7 @@ fun LightningScreen(
                             text = "Copy address",
                             onClick = {
                                 clipboard.setText(AnnotatedString(npcState.lightningAddress))
+                                confirmationToastController?.show("Copied Lightning address")
                             },
                             modifier = Modifier.fillMaxWidth(),
                         )
@@ -250,7 +254,8 @@ fun LightningScreen(
             onDismissRequest = { addressQrOpen = false },
             sheetState = sheetState,
         ) {
-            Column(
+            Box(modifier = Modifier.fillMaxWidth()) {
+                Column(
                 modifier = Modifier.fillMaxWidth().padding(
                     horizontal = CashuTheme.spacing.comfortable,
                     vertical = CashuTheme.spacing.snug,
@@ -267,6 +272,7 @@ fun LightningScreen(
                     content = npcState.lightningAddress,
                     shareSubject = "Lightning address",
                     staticOnly = true,
+                    confirmationMessage = "Copied Lightning address",
                 )
                 Text(
                     text = npcState.lightningAddress,
@@ -274,6 +280,7 @@ fun LightningScreen(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 Spacer(Modifier.height(CashuTheme.spacing.snug))
+                }
             }
         }
     }

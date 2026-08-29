@@ -182,6 +182,17 @@ final class TypographyGuardTests: XCTestCase {
         XCTAssertEqual(sizes, sizes.sorted(by: >), "the ladder is not descending: \(sizes)")
     }
 
+    /// The three prominent amount contexts share one 4:3 scale rather than
+    /// collecting unrelated point sizes as screens evolve independently.
+    func testProminentAmountRungsShareFourThirdsScale() {
+        let hero = CashuTextRole.amountHero.pointSize(at: .large)
+        let confirm = CashuTextRole.amountConfirm.pointSize(at: .large)
+        let compact = CashuTextRole.amountCompact.pointSize(at: .large)
+
+        XCTAssertEqual(hero / confirm, 4.0 / 3.0, accuracy: 0.0001)
+        XCTAssertEqual(confirm / compact, 4.0 / 3.0, accuracy: 0.0001)
+    }
+
     /// Every role gives its glyphs at least as much line as they occupy.
     /// Mirrors the Android assertion of the same name.
     func testEveryRoleHasALineBoxNoSmallerThanItsType() {

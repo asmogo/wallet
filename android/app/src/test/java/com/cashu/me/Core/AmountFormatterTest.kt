@@ -79,6 +79,22 @@ class AmountFormatterTest {
     }
 
     @Test
+    fun satsPrimaryHidesFiatWhenDisplayIsDisabled() {
+        val display = formatter.displayText(
+            amountSats = 100_000_000,
+            preferredPrimary = AmountDisplayPrimary.Sats.rawValue,
+            showFiat = false,
+            btcPrice = 20_000.0,
+            currencyCode = "USD",
+            useBitcoinSymbol = false,
+        )
+
+        assertEquals("100,000,000 sat", display.primary)
+        assertNull(display.secondary)
+        assertEquals(AmountDisplayPrimary.Sats, display.effectivePrimary)
+    }
+
+    @Test
     fun formatFiatShowsExactlyOneCent() {
         // 50 sats at $20k/BTC = $0.01 — the smallest displayable amount.
         assertEquals("$0.01", formatter.formatFiat(amountSats = 50, btcPrice = 20_000.0, currencyCode = "USD"))

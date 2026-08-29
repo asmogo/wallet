@@ -5,8 +5,8 @@ import UIKit
 
 /// The single entry point for receiving — the mirror of `UnifiedSendView`'s
 /// input step so Send and Receive read as one system. A paste field ("Paste a
-/// Cashu token") sits above a centered row of round glass buttons: Scan · Ecash
-/// · Bitcoin, each with a one-word caption. Pasting or scanning a bearer *token*
+/// Cashu token") sits above three full-width destination rows: Scan, Ecash, and
+/// Bitcoin. Pasting or scanning a bearer *token*
 /// routes into the claim screen; pasting anything else payable (invoice,
 /// address, Cashu Request) is really a Send, so it's handed back to the Send
 /// flow — the symmetric inverse of `UnifiedSendView` bouncing a pasted token to
@@ -35,7 +35,7 @@ struct UnifiedReceiveView: View {
     @State private var clipboardCheckTask: Task<Void, Never>?
 
     /// Measured height of the input body (field + methods). Drives a content-fit
-    /// detent so the buttons stay thumb-reachable — same technique as
+    /// detent so the actions stay thumb-reachable — same technique as
     /// `UnifiedSendView`'s compact input step.
     @State private var compactContentHeight: CGFloat = 0
 
@@ -66,6 +66,10 @@ struct UnifiedReceiveView: View {
                 .fullScreenCover(item: $route) { routeView($0).canvasSheetBackground() }
                 .onChange(of: tokenInput) { handleInputChange() }
                 .onAppear {
+                    // A synchronous system-pasteboard read can wait on the
+                    // privacy service and block XCTest's accessibility snapshot.
+                    // UI tests inject their own input and require a quiescent app.
+                    guard !IntegrationTestConfig.shouldUseDeterministicUIRuntime else { return }
                     guard let token = Self.automaticReceiveClipboardToken(
                         enabled: settings.autoPasteEcashReceive,
                         currentInput: tokenInput,
@@ -79,7 +83,7 @@ struct UnifiedReceiveView: View {
         }
         .contentFitDetent(compactContentHeight)
         .presentationDragIndicator(.visible)
-        .flatBottomSheetSurface()
+        .compactBottomSheetSurface()
     }
 
     /// The clipboard token to auto-paste when the receive input appears, if
@@ -146,11 +150,9 @@ struct UnifiedReceiveView: View {
                     )
             }
 
-            // A centered row of round Liquid Glass icon buttons — the primary
-            // "ways to receive" (Scan · Ecash · Bitcoin), one-word label under each.
-            receiveMethodRow
+            receiveMethodList
                 .padding(.horizontal)
-                .padding(.top, 32)
+                .padding(.top, 24)
         }
         .padding(.bottom, 24)
         // Animate on the measured body, inside the content-fit ScrollView, so the
@@ -196,31 +198,42 @@ struct UnifiedReceiveView: View {
         .liquidGlassInput(in: RoundedRectangle(cornerRadius: 12))
     }
 
-    // MARK: Receive-method buttons
+    // MARK: Receive-method actions
 
-    /// The primary "ways to receive" — a centered row of round filled icon
-    /// buttons (Apple's sheet-action-circle pattern; same component as Send).
-    private var receiveMethodRow: some View {
-        HStack(spacing: 40) {
-            CircularGlassIconButton(icon: "qrcode.viewfinder", label: "Scan",
-                                    a11y: "Scan QR code") {
+    private var receiveMethodList: some View {
+        VStack(spacing: 12) {
+            MethodActionRow(
+                icon: "qrcode.viewfinder",
+                title: "Scan",
+                subtitle: "Scan an ecash token",
+                accessibilityLabel: "Scan. Scan QR code"
+            ) {
                 HapticFeedback.selection()
                 showingScanner = true
             }
 
-            CircularGlassIconButton(icon: "banknote", label: "Ecash",
-                                    a11y: "Create a Cashu request",
-                                    action: createNewRequest)
-                .accessibilityIdentifier("wallet-flow-receiveEcash")
+            MethodActionRow(
+                icon: "banknote",
+                title: "Ecash",
+                subtitle: "Create an ecash request",
+                accessibilityLabel: "Ecash. Create a Cashu request",
+                accessibilityIdentifier: "wallet-flow-receiveEcash",
+                action: createNewRequest
+            )
 
-            CircularGlassIconButton(icon: "bitcoinsign", label: "Bitcoin",
-                                    a11y: "Receive over Lightning or on-chain") {
+            MethodActionRow(
+                icon: "bitcoinsign",
+                title: "Bitcoin",
+                subtitle: "Lightning or on-chain",
+                accessibilityLabel: "Bitcoin. Receive over Lightning or on-chain",
+                accessibilityIdentifier: "wallet-flow-receiveLightning",
+                enabled: walletManager.activeMint != nil,
+                status: walletManager.activeMint == nil ? "Mint needed" : nil
+            ) {
                 HapticFeedback.selection()
                 onReceiveLightning()
             }
-            .accessibilityIdentifier("wallet-flow-receiveLightning")
         }
-        .frame(maxWidth: .infinity)   // center the group on the leading-aligned canvas
     }
 
     // MARK: Routing out

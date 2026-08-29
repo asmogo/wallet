@@ -12,6 +12,7 @@ class SettingsManagerTest {
 
         assertEquals(true, defaults.enablePaymentRequests)
         assertEquals(true, defaults.receivePaymentRequestsAutomatically)
+        assertEquals(AmountDisplayPrimary.Sats.rawValue, defaults.homeBalancePrimary)
     }
 
     @Test

@@ -16,6 +16,7 @@ import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.sp
@@ -80,7 +81,10 @@ fun AmountHero(
         AmountText(
             text = parts.value,
             annotated = lockup(parts, style),
-            style = style,
+            // AmountText fills the bounded hero while auto-sizing; the text
+            // itself must therefore center within that width, not merely have
+            // its composable centered by this Box.
+            style = style.copy(textAlign = TextAlign.Center),
             color = color,
             animated = animated,
             maxLines = 1,

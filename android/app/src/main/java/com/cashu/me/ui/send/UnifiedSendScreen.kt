@@ -30,13 +30,11 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
-import androidx.compose.material.icons.outlined.AccountBalance
 import androidx.compose.material.icons.outlined.ArrowCircleDown
 import androidx.compose.material.icons.outlined.Cancel
 import androidx.compose.material.icons.outlined.Nfc
 import androidx.compose.material.icons.outlined.Payments
 import androidx.compose.material.icons.outlined.QrCodeScanner
-import androidx.compose.material.icons.outlined.Receipt
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -84,18 +82,19 @@ import com.cashu.me.Models.MeltSettlement
 import com.cashu.me.Models.MintInfo
 import com.cashu.me.Models.MintQuoteInfo
 import com.cashu.me.R
-import com.cashu.me.ui.components.AmountEntryHero
+import com.cashu.me.ui.components.AmountFlipDisplay
 import com.cashu.me.ui.components.AmountText
 import com.cashu.me.ui.components.CashuTextField
-import com.cashu.me.ui.components.CircularMethodButton
 import com.cashu.me.ui.components.EmptyState
 import com.cashu.me.ui.components.EmptyStateSize
 import com.cashu.me.ui.components.FlowSheetTitle
 import com.cashu.me.ui.components.GhostButton
 import com.cashu.me.ui.components.InlineNotice
+import com.cashu.me.ui.components.InlineNoticeHost
 import com.cashu.me.ui.components.InspectorRow
-import com.cashu.me.ui.components.MethodRowSpacing
+import com.cashu.me.ui.components.MethodActionRow
 import com.cashu.me.ui.components.MintPickerSheet
+import com.cashu.me.ui.components.MintSelectorDirection
 import com.cashu.me.ui.components.MintSelectorRow
 import com.cashu.me.ui.components.NoticeSeverity
 import com.cashu.me.ui.components.NumberPadFooter
@@ -109,6 +108,7 @@ import com.cashu.me.ui.mints.ConnectMintContext
 import com.cashu.me.ui.mints.ConnectMintSheetContent
 import com.cashu.me.ui.testing.UiTestTags
 import com.cashu.me.ui.theme.CashuTheme
+import com.cashu.me.ui.theme.CapsuleShape
 import com.cashu.me.ui.theme.withMonoDigits
 import com.cashu.me.ui.theme.rememberReducedMotion
 import kotlinx.coroutines.CancellationException
@@ -194,9 +194,12 @@ fun UnifiedSendScreen(
         mutableStateOf<CashuRequestFeeEstimate>(CashuRequestFeeEstimate.Unrequested)
     }
 
+    val entryFiatPrice = priceState.btcPrice.takeIf {
+        settings.showFiatBalance && it > 0
+    }
     val entryContext = UnifiedSendAmountEntry.context(
         preferredPrimary = settings.amountDisplayPrimary,
-        btcPrice = priceState.btcPrice,
+        btcPrice = entryFiatPrice ?: 0.0,
     )
     var previousEntryContext by remember { mutableStateOf(entryContext) }
     val activeMintUrl = selectedMintUrl ?: walletState.activeMint?.url
@@ -256,7 +259,11 @@ fun UnifiedSendScreen(
     }
 
     /** Rail inference (iOS handleDestinationChange → advance). */
-    fun advance(raw: String, fromScan: Boolean = false) {
+    fun advance(
+        raw: String,
+        fromScan: Boolean = false,
+        showUnrecognizedHint: Boolean = true,
+    ) {
         val trimmed = raw.trim()
         if (trimmed.isEmpty() || trimmed == suppressedValue) return
         inputHint = null
@@ -287,8 +294,10 @@ fun UnifiedSendScreen(
             }
             is SendDestinationResolution.EcashToken -> onOpenReceiveToken(resolution.token)
             SendDestinationResolution.Unrecognized -> {
-                inputHint =
-                    "Unrecognized — try a Lightning address, invoice, Bitcoin address, or Cashu Request"
+                if (showUnrecognizedHint) {
+                    inputHint =
+                        "Unrecognized — try a Lightning address, invoice, Bitcoin address, or Cashu Request"
+                }
             }
         }
     }
@@ -397,13 +406,17 @@ fun UnifiedSendScreen(
             return@LaunchedEffect
         }
         delay(TYPE_DEBOUNCE_MS)
-        advance(destination)
+        // A paused keystroke is not a submit. Keep resolving valid destinations
+        // automatically, but reserve the generic error for discrete complete
+        // inputs such as paste and scan so the form never jumps while typing.
+        advance(destination, showUnrecognizedHint = false)
     }
 
     LaunchedEffect(prefilledPayload) {
         val pre = prefilledPayload?.takeIf { it.isNotBlank() } ?: return@LaunchedEffect
         destination = pre
         advance(pre, fromScan = true)
+        suppressedValue = pre.trim()
         onPrefilledConsumed()
     }
 
@@ -525,143 +538,154 @@ fun UnifiedSendScreen(
                     onMintAdded = {},
                 )
             } else {
-                if (step == SendStep.Input) {
-                    FlowSheetTitle(
-                        title = if (creqFromScan) "Pay Cashu Request" else "Send",
-                    )
-                } else {
-                    SheetHeader(
-                        title = if (creqFromScan) "Pay Cashu Request" else "Send",
-                        navigationIcon = Icons.AutoMirrored.Outlined.ArrowBack,
-                        navigationContentDescription = "Back",
-                        onNavigationClick = ::goBack,
-                    )
-                }
-                TwoFaceScreen(
-                    targetState = step,
-                    // The AnimatedContent above carries the Column weight; the
-                    // faces just fill it (Input stays wrap-height).
+                Column(
                     modifier = if (step == SendStep.Input) {
                         Modifier.fillMaxWidth()
                     } else {
                         Modifier.fillMaxSize()
                     },
-                    forward = { initial, target -> target.ordinal >= initial.ordinal },
-                    label = "unified-send-step",
-                ) { current ->
-                when (current) {
-                    SendStep.Input -> InputFace(
-                        hasBalance = walletState.hasAnyBalance,
-                        destination = destination,
-                        onDestinationChange = {
-                            destination = it
-                            inputHint = null
+                ) {
+                    if (step == SendStep.Input) {
+                        FlowSheetTitle(
+                            title = if (creqFromScan) "Pay Cashu Request" else "Send",
+                        )
+                    } else {
+                        SheetHeader(
+                            title = if (creqFromScan) "Pay Cashu Request" else "Send",
+                            navigationIcon = Icons.AutoMirrored.Outlined.ArrowBack,
+                            navigationContentDescription = "Back",
+                            onNavigationClick = ::goBack,
+                        )
+                    }
+                    TwoFaceScreen(
+                        targetState = step,
+                        modifier = if (step == SendStep.Input) {
+                            Modifier.fillMaxWidth()
+                        } else {
+                            Modifier.weight(1f).fillMaxWidth()
                         },
-                        onPaste = {
-                            val clip = clipboard.getText()?.text?.trim().orEmpty()
-                            if (clip.isNotEmpty()) {
-                                destination = clip
-                                advance(clip)
-                            }
-                        },
-                        onClear = {
-                            destination = ""
-                            inputHint = null
-                        },
-                        clipboardHasText = clipboard.hasText(),
-                        inputHint = inputHint,
-                        hasNfc = hasNfc,
-                        onScan = onScan,
-                        onSendEcash = onSendEcash,
-                        onContactless = onContactless,
-                        onReceive = onReceive,
-                    )
-
-                    SendStep.Amount -> AmountFace(
-                        destination = locked?.raw ?: destination,
-                        showDestination = !creqFromScan,
-                        amount = amount,
-                        onAmountChange = { amount = it },
-                        mint = activeMint,
-                        balanceText = activeMint?.let {
-                            formatter.formatWalletSats(it.balance, settings.useBitcoinSymbol)
-                        },
-                        // One mint means nothing to choose between, so the row
-                        // drops its chevron and stops opening a picker.
-                        onPickMint = { mintPickerOpen = true }
-                            .takeIf { walletState.mints.size > 1 },
-                        onUseMax = {
-                            activeMint?.balance?.takeIf { it > 0 }?.let {
-                                amount = UnifiedSendAmountEntry.maxRawForBalance(it, entryContext)
-                            }
-                        },
-                        amountSats = enteredAmount,
-                        entryPrimary = entryContext.primary,
-                        fiatCurrencyCode = priceState.currencyCode,
-                        useBitcoinSymbol = settings.useBitcoinSymbol,
-                        formatter = formatter,
-                        onContinue = {
-                            cameFromAmount = true
-                            step = SendStep.Confirm
-                        },
-                    )
-
-                    SendStep.Confirm -> ConfirmFace(
-                        rail = locked,
-                        cashuRoute = cashuRoute,
-                        amountSats = confirmAmount,
-                        mint = activeMint,
-                        onPickMint = { mintPickerOpen = true },
-                        // One mint means nothing to choose between, so the row
-                        // drops its chevron and stops opening a picker.
-                        canPickMint = walletState.mints.size > 1,
-                        onCreateTopUp = { mintUrl, requestedAmount ->
-                            topUpError = null
-                            topUpLoading = true
-                            scope.launch {
-                                try {
-                                    topUpQuote = createExternalTopUpQuote(
-                                        mintUrl = mintUrl,
-                                        requestedAmountSats = requestedAmount,
-                                    ) { targetMintUrl, amount, method, unit ->
-                                        walletManager.createMintQuoteForMint(
-                                            mintUrl = targetMintUrl,
-                                            amount = amount,
-                                            method = method,
-                                            unit = unit,
-                                        )
+                        forward = { initial, target -> target.ordinal >= initial.ordinal },
+                        label = "unified-send-step",
+                    ) { current ->
+                        when (current) {
+                            SendStep.Input -> InputFace(
+                                hasBalance = walletState.hasAnyBalance,
+                                destination = destination,
+                                onDestinationChange = {
+                                    destination = it
+                                    inputHint = null
+                                },
+                                onPaste = {
+                                    val clip = clipboard.getText()?.text?.trim().orEmpty()
+                                    if (clip.isNotEmpty()) {
+                                        destination = clip
+                                        advance(clip)
+                                        suppressedValue = clip
                                     }
-                                } catch (cancellation: CancellationException) {
-                                    throw cancellation
-                                } catch (failure: Throwable) {
-                                    topUpError = failure.userFacingWalletMessage
-                                } finally {
-                                    topUpLoading = false
-                                }
-                            }
-                        },
-                        quote = meltQuote,
-                        cashuRequestFeeEstimate = displayedCashuRequestFeeEstimate,
-                        quoteError = quoteError,
-                        onRetryQuote = {
-                            quoteError = null
-                            // Re-trigger the prefetch by nudging state.
-                            val current = selectedMintUrl
-                            selectedMintUrl = null
-                            selectedMintUrl = current
-                        },
-                        confirmError = confirmError,
-                        mintBalance = activeMint?.balance ?: 0L,
-                        formatter = formatter,
-                        useBitcoinSymbol = settings.useBitcoinSymbol,
-                        preferredPrimary = settings.amountDisplayPrimary,
-                        showFiat = settings.showFiatBalance,
-                        btcPrice = priceState.btcPrice,
-                        currencyCode = priceState.currencyCode,
-                        topUpLoading = topUpLoading,
-                        topUpError = topUpError,
-                        onPay = ::pay,
-                    )
+                                },
+                                onClear = {
+                                    destination = ""
+                                    inputHint = null
+                                },
+                                clipboardHasText = clipboard.hasText(),
+                                inputHint = inputHint,
+                                hasNfc = hasNfc,
+                                onScan = onScan,
+                                onSendEcash = onSendEcash,
+                                onContactless = onContactless,
+                                onReceive = onReceive,
+                            )
+
+                            SendStep.Amount -> AmountFace(
+                                destination = locked?.raw ?: destination,
+                                showDestination = !creqFromScan,
+                                amount = amount,
+                                onAmountChange = { amount = it },
+                                mint = activeMint,
+                                balanceText = activeMint?.let {
+                                    formatter.formatWalletSats(it.balance, settings.useBitcoinSymbol)
+                                },
+                                // One mint means nothing to choose between, so the row
+                                // drops its chevron and stops opening a picker.
+                                onPickMint = { mintPickerOpen = true }
+                                    .takeIf { walletState.mints.size > 1 },
+                                onUseMax = {
+                                    activeMint?.balance?.takeIf { it > 0 }?.let {
+                                        amount = UnifiedSendAmountEntry.maxRawForBalance(it, entryContext)
+                                    }
+                                },
+                                amountSats = enteredAmount,
+                                entryPrimary = entryContext.primary,
+                                onFlipEntryPrimary = {
+                                    settingsManager.setAmountDisplayPrimary(it.rawValue)
+                                },
+                                btcPrice = entryFiatPrice,
+                                fiatCurrencyCode = priceState.currencyCode,
+                                useBitcoinSymbol = settings.useBitcoinSymbol,
+                                formatter = formatter,
+                                onContinue = {
+                                    cameFromAmount = true
+                                    step = SendStep.Confirm
+                                },
+                            )
+
+                            SendStep.Confirm -> ConfirmFace(
+                                rail = locked,
+                                cashuRoute = cashuRoute,
+                                amountSats = confirmAmount,
+                                mint = activeMint,
+                                onPickMint = { mintPickerOpen = true },
+                                // One mint means nothing to choose between, so the row
+                                // drops its chevron and stops opening a picker.
+                                canPickMint = walletState.mints.size > 1,
+                                onCreateTopUp = { mintUrl, requestedAmount ->
+                                    topUpError = null
+                                    topUpLoading = true
+                                    scope.launch {
+                                        try {
+                                            topUpQuote = createExternalTopUpQuote(
+                                                mintUrl = mintUrl,
+                                                requestedAmountSats = requestedAmount,
+                                            ) { targetMintUrl, amount, method, unit ->
+                                                walletManager.createMintQuoteForMint(
+                                                    mintUrl = targetMintUrl,
+                                                    amount = amount,
+                                                    method = method,
+                                                    unit = unit,
+                                                )
+                                            }
+                                        } catch (cancellation: CancellationException) {
+                                            throw cancellation
+                                        } catch (failure: Throwable) {
+                                            topUpError = failure.userFacingWalletMessage
+                                        } finally {
+                                            topUpLoading = false
+                                        }
+                                    }
+                                },
+                                quote = meltQuote,
+                                cashuRequestFeeEstimate = displayedCashuRequestFeeEstimate,
+                                quoteError = quoteError,
+                                onRetryQuote = {
+                                    quoteError = null
+                                    // Re-trigger the prefetch by nudging state.
+                                    val current = selectedMintUrl
+                                    selectedMintUrl = null
+                                    selectedMintUrl = current
+                                },
+                                confirmError = confirmError,
+                                mintBalance = activeMint?.balance ?: 0L,
+                                formatter = formatter,
+                                useBitcoinSymbol = settings.useBitcoinSymbol,
+                                preferredPrimary = settings.amountDisplayPrimary,
+                                showFiat = settings.showFiatBalance,
+                                btcPrice = priceState.btcPrice,
+                                currencyCode = priceState.currencyCode,
+                                topUpLoading = topUpLoading,
+                                topUpError = topUpError,
+                                onPay = ::pay,
+                            )
+                        }
                     }
                 }
             }
@@ -767,16 +791,6 @@ internal fun SendPaymentDetailRows(
             } else {
                 Modifier
             },
-            leadingIcon = when (row.key) {
-                SendPaymentDetailKey.Method,
-                SendPaymentDetailKey.Amount,
-                SendPaymentDetailKey.Route -> Icons.Outlined.Payments
-                SendPaymentDetailKey.NetworkFee,
-                SendPaymentDetailKey.InputFee,
-                SendPaymentDetailKey.Memo -> Icons.Outlined.Receipt
-                SendPaymentDetailKey.Mint -> Icons.Outlined.AccountBalance
-                SendPaymentDetailKey.Destination -> null
-            },
             valueMonospaced = row.valueMonospaced,
             loading = loading,
         )
@@ -833,7 +847,8 @@ private fun InputFace(
             .padding(horizontal = CashuTheme.spacing.comfortable)
             .padding(bottom = 52.dp)
             .navigationBarsPadding()
-            .imePadding(),
+            .imePadding()
+            .verticalScroll(rememberScrollState()),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         CashuTextField(
@@ -871,33 +886,36 @@ private fun InputFace(
                 }
             } else null,
         )
-        if (inputHint != null) {
-            Spacer(Modifier.height(CashuTheme.spacing.default))
-            InlineNotice(text = inputHint, severity = NoticeSeverity.Caution)
-        }
-        Spacer(Modifier.height(CashuTheme.spacing.page + CashuTheme.spacing.micro))
-        // Ways to send: Scan · Ecash · Tap (NFC-gated), round 72dp buttons.
-        Row(
-            horizontalArrangement = Arrangement.spacedBy(MethodRowSpacing),
-            verticalAlignment = Alignment.Top,
-        ) {
-            CircularMethodButton(
+        InlineNoticeHost(
+            text = inputHint,
+            severity = NoticeSeverity.Caution,
+            contentModifier = Modifier.padding(top = CashuTheme.spacing.default),
+        )
+        Spacer(Modifier.height(CashuTheme.spacing.section))
+        Column(verticalArrangement = Arrangement.spacedBy(CashuTheme.spacing.default)) {
+            MethodActionRow(
                 icon = Icons.Outlined.QrCodeScanner,
-                label = "Scan",
+                title = "Scan",
+                subtitle = "Scan an invoice, address, or request",
+                accessibilityLabel = "Scan. Scan QR code",
                 onClick = onScan,
             )
-            CircularMethodButton(
+            MethodActionRow(
                 icon = Icons.Outlined.Payments,
-                label = "Ecash",
+                title = "Ecash",
+                subtitle = "Create ecash to share",
+                accessibilityLabel = "Ecash. Create ecash",
                 onClick = onSendEcash,
             )
-            if (hasNfc) {
-                CircularMethodButton(
-                    icon = Icons.Outlined.Nfc,
-                    label = "Tap",
-                    onClick = onContactless,
-                )
-            }
+            MethodActionRow(
+                icon = Icons.Outlined.Nfc,
+                title = "Tap",
+                subtitle = "Pay contactlessly with NFC",
+                accessibilityLabel = "Tap. Contactless, tap to pay nearby",
+                onClick = onContactless,
+                enabled = hasNfc,
+                status = if (hasNfc) null else "Unavailable",
+            )
         }
     }
 }
@@ -905,27 +923,32 @@ private fun InputFace(
 /** "TO" pill: caption label + middle-truncated recipient. */
 @Composable
 private fun ToPill(destination: String) {
-    Row(
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(CashuTheme.spacing.snug),
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = CashuTheme.spacing.comfortable),
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = CapsuleShape,
+        color = MaterialTheme.colorScheme.surfaceContainerHigh,
     ) {
-        Text(
-            text = "TO",
-            style = MaterialTheme.typography.labelMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-        Text(
-            text = destination,
-            style = MaterialTheme.typography.bodyMedium.copy(
-                fontFamily = CashuTheme.fonts.mono,
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(CashuTheme.spacing.snug),
+            modifier = Modifier.padding(
+                horizontal = CashuTheme.spacing.default,
+                vertical = CashuTheme.spacing.snug,
             ),
-            color = MaterialTheme.colorScheme.onSurface,
-            maxLines = 1,
-            overflow = TextOverflow.MiddleEllipsis,
-        )
+        ) {
+            Text(
+                text = "TO",
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Text(
+                text = destination,
+                style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.Medium),
+                color = MaterialTheme.colorScheme.onSurface,
+                maxLines = 1,
+                overflow = TextOverflow.MiddleEllipsis,
+            )
+        }
     }
 }
 
@@ -941,6 +964,8 @@ private fun AmountFace(
     onUseMax: () -> Unit,
     amountSats: Long,
     entryPrimary: AmountDisplayPrimary,
+    onFlipEntryPrimary: (AmountDisplayPrimary) -> Unit,
+    btcPrice: Double?,
     fiatCurrencyCode: String,
     useBitcoinSymbol: Boolean,
     formatter: AmountFormatter,
@@ -969,13 +994,15 @@ private fun AmountFace(
             modifier = Modifier.weight(1f).fillMaxWidth(),
             contentAlignment = Alignment.Center,
         ) {
-            AmountEntryHero(
-                entryRaw = amount,
-                isSat = !isFiatEntry,
-                unit = if (isFiatEntry) fiatCurrencyCode else "sat",
+            AmountFlipDisplay(
+                amountSats = amountSats,
+                primary = entryPrimary,
+                onFlip = onFlipEntryPrimary,
+                btcPrice = btcPrice,
+                currencyCode = fiatCurrencyCode,
                 useBitcoinSymbol = useBitcoinSymbol,
-                formatter = formatter,
-                fiatCurrencyCode = fiatCurrencyCode.takeIf { isFiatEntry },
+                entryRaw = amount,
+                primaryAccessibilityPrefix = "Send amount",
             )
             Column(
                 modifier = Modifier
@@ -996,11 +1023,11 @@ private fun AmountFace(
                     },
                     exit = fadeOut(spring(stiffness = Spring.StiffnessMedium)),
                 ) {
-                    // The mint row no longer carries a balance, so the detail
-                    // line is what tells you how much would actually fit.
+                    // The mint selector states the available balance, so
+                    // repeating it in this notice would add visual noise.
                     InlineNotice(
                         text = "Insufficient balance",
-                        detail = balanceText?.let { "You have $it in ${mint?.name}." },
+                        detail = null,
                         severity = NoticeSeverity.Caution,
                         showsContainer = false,
                         centered = true,
@@ -1011,8 +1038,10 @@ private fun AmountFace(
         // Under the amount, over the keypad (Send Ecash / Receive parity).
         if (mint != null) {
             MintSelectorRow(
+                direction = MintSelectorDirection.Source,
                 mint = mint,
                 balanceText = balanceText,
+                showBalance = true,
                 onPickMint = onPickMint,
                 // Gated on a spendable balance, the way Send Ecash already does
                 // it — an empty mint offered a Max that filled in zero.
@@ -1082,6 +1111,7 @@ private fun ConfirmFace(
         // label/value shell so the pair reads as one statement.
         if (mint != null) {
             MintSelectorRow(
+                direction = MintSelectorDirection.Source,
                 mint = mint,
                 balanceText = formatter.formatWalletSats(mintBalance, useBitcoinSymbol),
                 onPickMint = onPickMint.takeIf { canPickMint },
@@ -1137,7 +1167,6 @@ private fun ConfirmFace(
                     InspectorRow(
                         label = "Mint",
                         value = mint.name,
-                        leadingIcon = Icons.Outlined.AccountBalance,
                     )
                 }
                 if (!creqDescription.isNullOrBlank()) {

@@ -20,7 +20,6 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowCircleUp
 import androidx.compose.material.icons.outlined.AddCircleOutline
-import androidx.compose.material.icons.outlined.Check
 import androidx.compose.material.icons.outlined.ContentCopy
 import androidx.compose.material.icons.outlined.DeleteOutline
 import androidx.compose.material.icons.outlined.FileDownload
@@ -41,7 +40,6 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import com.cashu.me.Core.NostrSignerType
 import com.cashu.me.ui.components.CashuTextField
-import com.cashu.me.ui.components.IconSwap
 import com.cashu.me.ui.components.InlineNotice
 import com.cashu.me.ui.components.NavRow
 import com.cashu.me.ui.components.NoticeSeverity
@@ -248,7 +246,6 @@ internal fun NostrRelayInputRow(
 @Composable
 internal fun NostrRelayRow(
     relay: String,
-    copied: Boolean,
     onCopy: () -> Unit,
     onRemove: () -> Unit,
 ) {
@@ -279,15 +276,11 @@ internal fun NostrRelayRow(
             overflow = TextOverflow.MiddleEllipsis,
         )
         IconButton(onClick = onCopy) {
-            IconSwap(
-                icon = if (copied) Icons.Outlined.Check else Icons.Outlined.ContentCopy,
+            Icon(
+                imageVector = Icons.Outlined.ContentCopy,
                 contentDescription = "Copy relay URL",
-                tint = if (copied) {
-                    CashuTheme.colors.received
-                } else {
-                    MaterialTheme.colorScheme.onSurfaceVariant
-                },
-                iconSize = CashuTheme.spacing.loose,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.size(CashuTheme.spacing.loose),
             )
         }
         IconButton(onClick = onRemove) {

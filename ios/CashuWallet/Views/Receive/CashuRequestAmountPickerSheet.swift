@@ -65,37 +65,45 @@ struct CashuRequestAmountPickerSheet: View {
         // Mirrors the app's other amount-entry surfaces (ReceiveLightningView's
         // `amountHero`, SendView): amount centered between two flexible spacers,
         // full-width keypad, action button directly beneath the keypad.
-        VStack(spacing: 0) {
-            header
+        NavigationStack {
+            VStack(spacing: 0) {
+                Spacer(minLength: 0)
 
-            Spacer(minLength: 0)
+                amountDisplay
+                    .padding(.horizontal)
+                    .frame(maxWidth: .infinity)
 
-            amountDisplay
+                Spacer(minLength: 0)
+
+                Group {
+                    if isSat {
+                        NumberPadAmountInput(amountString: $amountString, unit: entryUnit)
+                    } else {
+                        NumberPadAmountInput(amountString: $amountString, decimals: unitDecimals)
+                    }
+                }
+                .padding(.horizontal, 24)
+
+                Button(action: confirm) {
+                    Text("Done")
+                }
+                .glassButton()
                 .padding(.horizontal)
-                .frame(maxWidth: .infinity)
-
-            Spacer(minLength: 0)
-
-            Group {
-                if isSat {
-                    NumberPadAmountInput(amountString: $amountString, unit: entryUnit)
-                } else {
-                    NumberPadAmountInput(amountString: $amountString, decimals: unitDecimals)
+                .padding(.top, 16)
+                .padding(.bottom, 16)
+            }
+            .navigationTitle("Amount")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbarBackground(.hidden, for: .navigationBar)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    SheetCloseButton()
                 }
             }
-            .padding(.horizontal, 24)
-
-            Button(action: confirm) {
-                Text("Done")
-            }
-            .glassButton()
-            .padding(.horizontal)
-            .padding(.top, 16)
-            .padding(.bottom, 16)
         }
         .presentationDetents([.large])
         .presentationDragIndicator(.visible)
-        .flatBottomSheetSurface()
+        .compactBottomSheetSurface()
         .onChange(of: entryUnit) { oldUnit, newUnit in
             // Only the sats keypad flips between fiat and sats; a non-sat request
             // stays in its own unit regardless of the display setting.
@@ -125,23 +133,6 @@ struct CashuRequestAmountPickerSheet: View {
                 accessibilityPrefix: "Request amount"
             )
         }
-    }
-
-    private var header: some View {
-        ZStack {
-            Text("Amount")
-                .font(.headline)
-
-            HStack {
-                SheetCloseButton()
-                    .font(.body.weight(.semibold))
-                    .foregroundStyle(.secondary)
-
-                Spacer()
-            }
-        }
-        .padding(.horizontal)
-        .padding(.top, 12)
     }
 
     private func confirm() {

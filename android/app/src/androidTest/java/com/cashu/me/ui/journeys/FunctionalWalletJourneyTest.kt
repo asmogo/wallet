@@ -76,7 +76,7 @@ class FunctionalWalletJourneyTest {
         robot.awaitTag(UiTestTags.WalletScreen)
             .tapTag(UiTestTags.WalletSend)
             .awaitTag(UiTestTags.SendSheet)
-            .tapDescription("Ecash")
+            .tapDescription("Ecash. Create ecash")
             .awaitTag(UiTestTags.SendEcashScreen)
             .tapDescription("2")
             .tapDescription("5")
@@ -169,7 +169,7 @@ class FunctionalWalletJourneyTest {
 
         robot.awaitTag(UiTestTags.WalletScreen)
             .tapTag(UiTestTags.WalletReceive)
-            .tapDescription("Bitcoin")
+            .tapDescription("Bitcoin. Receive over Lightning or on-chain")
             .awaitTag(UiTestTags.ReceiveLightningScreen)
             .tapDescription("2")
             .tapTextWithinTag(UiTestTags.ReceiveLightningScreen, "Create invoice")
@@ -237,8 +237,11 @@ class FunctionalWalletJourneyTest {
             .awaitText("No matches")
             .tapDescription("Clear search")
             .tapTag(UiTestTags.transactionRow("fixture-incoming"))
-            .awaitText("Lightning received")
-            .tapDescription("Close")
+            .awaitTag(UiTestTags.TransactionReceiptSheet)
+            .awaitTextWithinTag(UiTestTags.TransactionReceiptSheet, "Lightning received")
+            // Completed transactions are compact receipts: dismiss through the
+            // native sheet gesture/back contract rather than a close button.
+            .pressSystemBack()
             .awaitTag(UiTestTags.HistoryScreen)
     }
 
@@ -249,7 +252,7 @@ class FunctionalWalletJourneyTest {
 
         robot.awaitTag(UiTestTags.WalletScreen)
             .tapTag(UiTestTags.WalletSend)
-            .tapDescription("Ecash")
+            .tapDescription("Ecash. Create ecash")
             .awaitTag(UiTestTags.SendEcashScreen)
             .tapDescription("9")
             .tapDescription("9")

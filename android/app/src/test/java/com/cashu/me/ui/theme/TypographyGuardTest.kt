@@ -2,6 +2,7 @@ package com.cashu.me.ui.theme
 
 import androidx.compose.material3.Typography
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.unit.sp
 import java.io.File
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -88,6 +89,12 @@ class TypographyGuardTest {
                 line >= size * 1.05f,
             )
         }
+    }
+
+    /** Keep the shared Home and entry hero aligned with iOS's 64pt base. */
+    @Test
+    fun `amount hero matches the cross-platform scale`() {
+        assertEquals(64.sp, cashuTypeRoles(CashuFonts.Geist).amountHero.fontSize)
     }
 
     /**

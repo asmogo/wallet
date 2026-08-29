@@ -10,7 +10,6 @@ struct SettingsView: View {
 
     @State private var showBackup = false
     @State private var showDeleteConfirm = false
-    @State private var copiedLightningAddress = false
     @State private var isCheckingPayments = false
     @State private var showMintPicker = false
     @State private var showCurrencySheet = false
@@ -325,7 +324,6 @@ struct SettingsView: View {
     private var lightningDetailView: some View {
         ScrollView {
             LightningAddressSettingsSection(
-                copiedLightningAddress: $copiedLightningAddress,
                 isCheckingPayments: $isCheckingPayments,
                 showMintPicker: $showMintPicker
             )
@@ -1236,8 +1234,6 @@ struct QRCodeDetailSheet: View {
     let title: String
     let content: String
 
-    @State private var copied = false
-
     var body: some View {
         NavigationStack {
             VStack(spacing: 20) {
@@ -1256,7 +1252,7 @@ struct QRCodeDetailSheet: View {
 
                 HStack(spacing: 12) {
                     Button(action: copyToClipboard) {
-                        Text(copied ? "Copied" : "Copy")
+                        Text("Copy")
                     }
                     .glassButton()
 
@@ -1287,10 +1283,7 @@ struct QRCodeDetailSheet: View {
 
     private func copyToClipboard() {
         UIPasteboard.general.string = content
-        copied = true
-        DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
-            copied = false
-        }
+        ConfirmationToast.show("Copied \(title.lowercased())")
     }
 }
 
@@ -1400,7 +1393,6 @@ struct BackupView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     @State private var showWords = false
-    @State private var copiedToClipboard = false
     @State private var contentHeight: CGFloat = 0
 
     private let columns = Array(repeating: GridItem(.flexible(), spacing: 10), count: 3)
@@ -1448,7 +1440,7 @@ struct BackupView: View {
                 .transition(.opacity.combined(with: .move(edge: .bottom)))
             }
 
-            Button(showWords ? (copiedToClipboard ? "Copied" : "Copy Recovery Phrase") : "Reveal Recovery Phrase") {
+            Button(showWords ? "Copy Recovery Phrase" : "Reveal Recovery Phrase") {
                 if showWords {
                     copyToClipboard()
                 } else {
@@ -1487,10 +1479,7 @@ struct BackupView: View {
             guard await AppLockManager.shared.authenticate(reason: "Copy your seed phrase") else { return }
             let words = walletManager.getMnemonicWords().joined(separator: " ")
             UIPasteboard.general.string = words
-            copiedToClipboard = true
-            DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
-                copiedToClipboard = false
-            }
+            ConfirmationToast.show("Copied recovery phrase")
         }
     }
 }

@@ -1,28 +1,39 @@
 import SwiftUI
 
-/// Shared metrics for the flow-top mint row.
-///
-/// A quiet row, not a card: 28pt avatar and a compact mint identity. Its
-/// borderless semantic fill keeps the mint as context for the amount rather
-/// than competing with it as a second primary control.
-enum FlowRowMetrics {
-    static let corner: CGFloat = 12
-    static let horizontalPadding: CGFloat = 16
-    static let verticalPadding: CGFloat = 10
-    static let minHeight: CGFloat = 48
-    static let avatar: CGFloat = 28
-    static let gap: CGFloat = 8
+/// The selected mint's role in the value flow. Requiring the role at each call
+/// site prevents a receiving mint from being described as the payment source.
+enum MintSelectorDirection {
+    case source
+    case destination
+
+    var label: String {
+        switch self {
+        case .source: "From"
+        case .destination: "To"
+        }
+    }
 }
 
-/// The one mint selector for every value flow, on both platforms: mint identity
-/// on the left, an optional "Send Max" chip and the picker chevron on the right.
-/// Tapping anywhere except the chip opens the picker.
+/// Shared metrics for the unboxed mint selector used throughout value flows.
+enum FlowRowMetrics {
+    static let minHeight: CGFloat = 48
+    static let gap: CGFloat = 8
+    static let actionInset: CGFloat = 8
+    static let verticalPadding: CGFloat = 6
+}
+
+/// The one mint selector for every value flow, on both platforms: a quiet
+/// directional label and mint identity, with an optional "Send Max" action and
+/// picker chevron. The row deliberately has no fill, border, or divider so the
+/// amount remains the screen's focal point.
 ///
-/// `onChooseMint` is nil when the wallet holds a single mint — there is nothing
-/// to choose between, so the row drops its chevron and stops being a control and
-/// becomes a label. `showsBalance` opts into the second balance line on amount
-/// entry screens, where it makes the selected mint's available amount explicit.
+/// `onChooseMint` is nil when the wallet holds a single mint. In that state the
+/// chevron disappears and the identity becomes information rather than a
+/// control. `showsBalance` is reserved for amount-entry screens.
 struct MintSelectorRow: View {
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
+    let direction: MintSelectorDirection
     let mint: MintInfo
     let balanceText: String
     var showsBalance: Bool
@@ -30,12 +41,14 @@ struct MintSelectorRow: View {
     var onChooseMint: (() -> Void)?
 
     init(
+        direction: MintSelectorDirection,
         mint: MintInfo,
         balanceText: String,
         showsBalance: Bool = false,
         onUseMax: (() -> Void)? = nil,
         onChooseMint: (() -> Void)? = nil
     ) {
+        self.direction = direction
         self.mint = mint
         self.balanceText = balanceText
         self.showsBalance = showsBalance
@@ -44,90 +57,96 @@ struct MintSelectorRow: View {
     }
 
     var body: some View {
-        // Whichever element sits last owns the row's right inset, so no region
-        // ends flush against the glass and no strip of it is a dead zone.
-        let identityTrailing = (onUseMax == nil && onChooseMint == nil)
-            ? FlowRowMetrics.horizontalPadding : 0
-        let chipTrailing = onChooseMint == nil ? FlowRowMetrics.horizontalPadding : 0
-
-        HStack(spacing: 0) {
-            identity(trailingInset: identityTrailing)
-            if let onUseMax {
-                sendMaxChip(action: onUseMax, trailingInset: chipTrailing)
-            }
-            if let onChooseMint {
-                chevron(action: onChooseMint)
-            }
-        }
-        // This selector is contextual input, not an elevated control. Keep it
-        // flat on every OS version: Liquid Glass adds a bright edge and too much
-        // depth to the middle of an amount-entry screen on iOS 26. A low-opacity
-        // semantic ink fill resolves near #1C1C1C on the dark canvas, keeping the
-        // control quiet without hard-coding a light or dark appearance.
-        .background(
-            Color.primary.opacity(0.11),
-            in: RoundedRectangle(cornerRadius: FlowRowMetrics.corner)
-        )
-    }
-
-    private var identityContent: some View {
-        HStack(spacing: FlowRowMetrics.gap) {
-            MintAvatarView(
-                iconUrl: mint.iconUrl,
-                name: mint.name,
-                size: FlowRowMetrics.avatar
-            )
-            VStack(alignment: .leading, spacing: 2) {
-                Text(mint.name)
+        VStack(alignment: .leading, spacing: dynamicTypeSize.isAccessibilitySize ? 2 : 0) {
+            if dynamicTypeSize.isAccessibilitySize {
+                Text(direction.label)
                     .cashuText(.textLink)
-                    .lineLimit(1)
-                    .truncationMode(.tail)
-                if showsBalance {
-                    Text(balanceText)
-                        .cashuText(.caption)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
-                        .truncationMode(.tail)
+                    .foregroundStyle(.secondary)
+                    .accessibilityHidden(true)
+            }
+
+            HStack(spacing: 0) {
+                identity(showsDirection: !dynamicTypeSize.isAccessibilitySize)
+                if let onUseMax {
+                    sendMaxAction(action: onUseMax)
+                }
+                if let onChooseMint {
+                    chevron(action: onChooseMint)
                 }
             }
-            Spacer(minLength: 12)
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
-    /// The identity region absorbs the row's spare width, so the padding ring is
-    /// part of the tap target rather than a dead edge — the half of `c121fe87`
-    /// that the keypad and confirm rows never got.
+    private func identityContent(showsDirection: Bool) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: FlowRowMetrics.gap) {
+            if showsDirection {
+                Text(direction.label)
+                    .cashuText(.textLink)
+                    .foregroundStyle(.secondary)
+            }
+
+            if showsBalance && dynamicTypeSize.isAccessibilitySize {
+                VStack(alignment: .leading, spacing: 2) {
+                    mintName
+                    balance
+                }
+            } else {
+                HStack(alignment: .firstTextBaseline, spacing: FlowRowMetrics.gap) {
+                    mintName
+                    if showsBalance {
+                        balance
+                            .fixedSize(horizontal: true, vertical: false)
+                    }
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private var mintName: some View {
+        Text(mint.name)
+            .cashuText(.body)
+            .fontWeight(.medium)
+            .lineLimit(1)
+            .truncationMode(.tail)
+    }
+
+    private var balance: some View {
+        Text(balanceText)
+            .cashuText(.metadata)
+            .foregroundStyle(.secondary)
+            .lineLimit(1)
+            .truncationMode(.tail)
+    }
+
     @ViewBuilder
-    private func identity(trailingInset: CGFloat) -> some View {
-        let padded = identityContent
-            .padding(.leading, FlowRowMetrics.horizontalPadding)
-            .padding(.trailing, trailingInset)
+    private func identity(showsDirection: Bool) -> some View {
+        let content = identityContent(showsDirection: showsDirection)
             .padding(.vertical, FlowRowMetrics.verticalPadding)
             .frame(minHeight: FlowRowMetrics.minHeight)
             .contentShape(Rectangle())
 
         if let onChooseMint {
-            Button(action: onChooseMint) { padded }
+            Button(action: onChooseMint) { content }
                 .buttonStyle(.plain)
-                .accessibilityLabel("Mint: \(mint.name), balance \(balanceText)")
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel(accessibilityLabel)
                 .accessibilityHint("Double-tap to choose a different mint")
         } else {
-            padded
-                .accessibilityElement(children: .combine)
-                .accessibilityLabel("Mint: \(mint.name), balance \(balanceText)")
+            content
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel(accessibilityLabel)
         }
     }
 
-    private func sendMaxChip(action: @escaping () -> Void, trailingInset: CGFloat) -> some View {
+    private func sendMaxAction(action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Text("Send Max")
-                .cashuText(.caption)
+                .cashuText(.textLink)
                 .fontWeight(.semibold)
-                .padding(.horizontal, 10)
-                .padding(.vertical, 6)
-                .background(.thinMaterial, in: Capsule())
-                .padding(.leading, FlowRowMetrics.gap)
-                .padding(.trailing, trailingInset)
+                .lineLimit(1)
+                .padding(.horizontal, FlowRowMetrics.actionInset)
                 .frame(minHeight: FlowRowMetrics.minHeight)
                 .contentShape(Rectangle())
         }
@@ -141,13 +160,18 @@ struct MintSelectorRow: View {
             Image(systemName: "chevron.down")
                 .font(.caption.weight(.semibold))
                 .foregroundStyle(.secondary)
-                .padding(.leading, FlowRowMetrics.gap)
-                .padding(.trailing, FlowRowMetrics.horizontalPadding)
-                .frame(minHeight: FlowRowMetrics.minHeight)
+                .frame(width: FlowRowMetrics.minHeight, height: FlowRowMetrics.minHeight)
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        // The identity region already announces this action.
+        // The identity already exposes the picker as one coherent control.
         .accessibilityHidden(true)
+    }
+
+    private var accessibilityLabel: String {
+        if showsBalance {
+            return "\(direction.label) \(mint.name), balance \(balanceText)"
+        }
+        return "\(direction.label) \(mint.name)"
     }
 }

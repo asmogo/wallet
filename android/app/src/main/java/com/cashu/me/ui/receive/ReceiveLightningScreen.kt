@@ -29,15 +29,11 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.MoreVert
-import androidx.compose.material.icons.outlined.AccountBalance
-import androidx.compose.material.icons.outlined.AccountBalanceWallet
-import androidx.compose.material.icons.outlined.CalendarToday
 import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.Bolt
 import androidx.compose.material.icons.outlined.CurrencyBitcoin
 import androidx.compose.material.icons.outlined.IosShare
-import androidx.compose.material.icons.outlined.Payments
 import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material.icons.outlined.Repeat
 import androidx.compose.material.icons.outlined.Timer
@@ -99,7 +95,9 @@ import com.cashu.me.ui.components.FlowSheetTitle
 import com.cashu.me.ui.components.IconSwap
 import com.cashu.me.ui.components.InlineNotice
 import com.cashu.me.ui.components.InspectorRow
+import com.cashu.me.ui.components.LocalConfirmationToastController
 import com.cashu.me.ui.components.MintPickerSheet
+import com.cashu.me.ui.components.MintSelectorDirection
 import com.cashu.me.ui.components.MintSelectorRow
 import com.cashu.me.ui.components.NoticeSeverity
 import com.cashu.me.ui.components.NumberPadFooter
@@ -1067,6 +1065,7 @@ private fun InputFace(
         // Under the amount, over the keypad — the same slot the send flows use.
         if (mint != null) {
             MintSelectorRow(
+                direction = MintSelectorDirection.Destination,
                 mint = mint,
                 balanceText = mintBalanceText,
                 showBalance = true,
@@ -1119,13 +1118,7 @@ private fun DisplayFace(
     onEditReusableAmount: (() -> Unit)?,
     onOpenExplorer: (() -> Unit)?,
 ) {
-    var copied by remember { mutableStateOf(false) }
-    LaunchedEffect(copied) {
-        if (copied) {
-            delay(2000)
-            copied = false
-        }
-    }
+    val confirmationToastController = LocalConfirmationToastController.current
     val isReusable = quote.paymentMethod == PaymentMethodKind.Bolt12
     Column(modifier = Modifier.fillMaxSize()) {
         // Scrolling content region; the copy CTA is pinned to the bottom (iOS
@@ -1139,7 +1132,16 @@ private fun DisplayFace(
             verticalArrangement = Arrangement.spacedBy(CashuTheme.spacing.comfortable),
         ) {
             Spacer(Modifier.height(CashuTheme.spacing.comfortable))
-            QrCard(content = quote.request, shareSubject = "Payment request", staticOnly = true)
+            QrCard(
+                content = quote.request,
+                shareSubject = "Payment request",
+                staticOnly = true,
+                confirmationMessage = if (quote.paymentMethod == PaymentMethodKind.Onchain) {
+                    "Copied Bitcoin address"
+                } else {
+                    "Copied payment request"
+                },
+            )
             if (amountLabel != null) {
                 GeneratedInvoiceAmount(
                     amount = quote.amount ?: 0L,
@@ -1172,13 +1174,11 @@ private fun DisplayFace(
                         InspectorRow(
                             label = "Mint",
                             value = mintName,
-                            leadingIcon = Icons.Outlined.AccountBalance,
                         )
                     }
                     InspectorRow(
                         label = "Amount",
                         value = amountLabel ?: "Any",
-                        leadingIcon = Icons.Outlined.AccountBalanceWallet,
                         valueMonospaced = amountLabel != null,
                         editable = onEditReusableAmount != null,
                         onClick = onEditReusableAmount,
@@ -1187,14 +1187,12 @@ private fun DisplayFace(
                         InspectorRow(
                             label = "Created",
                             value = formatReusableCreatedAt(createdAtEpochMillis),
-                            leadingIcon = Icons.Outlined.CalendarToday,
                         )
                     }
                     if (receivedAmountLabel != null) {
                         InspectorRow(
                             label = "Total received",
                             value = receivedAmountLabel,
-                            leadingIcon = Icons.Outlined.CheckCircle,
                             valueMonospaced = true,
                         )
                     }
@@ -1205,7 +1203,6 @@ private fun DisplayFace(
                         InspectorRow(
                             label = "Mint",
                             value = mintName,
-                            leadingIcon = Icons.Outlined.AccountBalance,
                         )
                     }
                     if (onOpenExplorer != null) {
@@ -1221,10 +1218,16 @@ private fun DisplayFace(
             // Copy is a secondary convenience, not a primary action — quiet
             // neutral tonal fill (iOS gray .glassButton() parity on every rail).
             PrimaryButton(
-                text = if (copied) "Copied" else quote.paymentMethod.copyActionTitle,
+                text = quote.paymentMethod.copyActionTitle,
                 onClick = {
                     onCopy()
-                    copied = true
+                    confirmationToastController?.show(
+                        if (quote.paymentMethod == PaymentMethodKind.Onchain) {
+                            "Copied Bitcoin address"
+                        } else {
+                            "Copied payment request"
+                        },
+                    )
                 },
                 colors = neutralActionButtonColors(),
             )
@@ -1543,7 +1546,6 @@ private fun ReceiveSuccessTerminal(
                 InspectorRow(
                     label = "Amount",
                     value = info.amountLabel,
-                    leadingIcon = Icons.Outlined.Payments,
                     valueMonospaced = true,
                 )
             }
@@ -1551,7 +1553,6 @@ private fun ReceiveSuccessTerminal(
                 InspectorRow(
                     label = "Mint",
                     value = info.mintName,
-                    leadingIcon = Icons.Outlined.AccountBalance,
                 )
             }
         },

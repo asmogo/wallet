@@ -43,7 +43,6 @@ struct ReceiveLightningView: View {
     @State private var showMintPicker = false
     /// Reusable BOLT12 offer: drives the Amount-row pencil → amount picker sheet.
     @State private var showReusableAmountPicker = false
-    @State private var copiedRequest = false
     /// VoiceOver Share action for the QR cards: ShareLink can't be invoked
     /// imperatively, so the accessibility action presents the share sheet.
     @State private var showShareSheet = false
@@ -246,7 +245,7 @@ struct ReceiveLightningView: View {
             }
         }
         .accessibilityIdentifier("receive-lightning-screen")
-        .flatBottomSheetSurface()
+        .compactBottomSheetSurface()
     }
 
     // MARK: - Computed Properties
@@ -488,6 +487,7 @@ struct ReceiveLightningView: View {
 
     private func mintSelector(mint: MintInfo) -> some View {
         MintSelectorRow(
+            direction: .destination,
             mint: mint,
             balanceText: formatBalance(mint.balance),
             showsBalance: true,
@@ -583,19 +583,16 @@ struct ReceiveLightningView: View {
 
                     VStack(spacing: 0) {
                         detailRow(
-                            icon: "bitcoinsign.bank.building",
                             label: "Mint",
                             value: reusableMintDisplayValue
                         )
                         editableRow(
-                            icon: "bitcoinsign",
                             label: "Amount",
                             value: quote.amount.flatMap { $0 > 0 ? formatQuoteAmount($0, unit: quote.unit) : nil } ?? "Any",
                             action: { showReusableAmountPicker = true }
                         )
                         if let created = quote.createdAt {
                             detailRow(
-                                icon: "calendar",
                                 label: "Created",
                                 value: created.formatted(date: .abbreviated, time: .shortened)
                             )
@@ -610,7 +607,7 @@ struct ReceiveLightningView: View {
             Button(action: { copyRequest(quote.request) }) {
                 Text(copyButtonTitle(for: quote))
             }
-            .glassButton()
+            .flatSheetSecondaryButton()
             .padding(.horizontal)
             .padding(.bottom, 16)
         }
@@ -649,14 +646,12 @@ struct ReceiveLightningView: View {
         var rows: [PaymentStatusView.DetailRow] = []
         if let amount = quote.amount {
             rows.append(.init(
-                icon: "bitcoinsign",
                 label: "Amount",
                 value: formatQuoteAmount(amount, unit: quote.unit)
             ))
         }
         if let mint = walletManager.activeMint {
             rows.append(.init(
-                icon: "bitcoinsign.bank.building",
                 label: "Mint",
                 value: extractMintHost(mint.url)
             ))
@@ -710,7 +705,6 @@ struct ReceiveLightningView: View {
                         VStack(spacing: 0) {
                             if let mint = walletManager.activeMint {
                                 detailRow(
-                                    icon: "bitcoinsign.bank.building",
                                     label: "Mint",
                                     value: extractMintHost(mint.url)
                                 )
@@ -729,7 +723,7 @@ struct ReceiveLightningView: View {
             Button(action: { copyRequest(quote.request) }) {
                 Text(copyButtonTitle(for: quote))
             }
-            .glassButton()
+            .flatSheetSecondaryButton()
             .padding(.horizontal)
             .padding(.bottom, 16)
         }
@@ -790,9 +784,9 @@ struct ReceiveLightningView: View {
 
     // MARK: - Detail Row
 
-    private func detailRow(icon: String, label: String, value: String) -> some View {
+    private func detailRow(label: String, value: String) -> some View {
         HStack {
-            Label(label, systemImage: icon)
+            Text(label)
                 .foregroundStyle(.secondary)
             Spacer()
             Text(value)
@@ -808,10 +802,10 @@ struct ReceiveLightningView: View {
 
     /// Same as `detailRow` but tappable, with a trailing pencil — used for the
     /// Amount row on the reusable offer screen (mirrors the Cashu Request screen).
-    private func editableRow(icon: String, label: String, value: String, action: @escaping () -> Void) -> some View {
+    private func editableRow(label: String, value: String, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             HStack {
-                Label(label, systemImage: icon)
+                Text(label)
                     .foregroundStyle(.secondary)
                 Spacer()
                 Text(value)
@@ -839,7 +833,7 @@ struct ReceiveLightningView: View {
     private func explorerLinkRow(label: String, url: URL) -> some View {
         Link(destination: url) {
             HStack {
-                Label(label, systemImage: "safari")
+                Text(label)
                     .foregroundStyle(.secondary)
                 Spacer()
                 Image(systemName: "arrow.up.right")
@@ -997,7 +991,7 @@ struct ReceiveLightningView: View {
     }
 
     private func copyButtonTitle(for quote: MintQuoteInfo) -> String {
-        copiedRequest ? "Copied" : "Copy \(quote.paymentMethod.requestDisplayName)"
+        "Copy \(quote.paymentMethod.requestDisplayName)"
     }
 
     private func blockExplorerURL(for quote: MintQuoteInfo) -> URL? {
@@ -1118,7 +1112,6 @@ struct ReceiveLightningView: View {
         requestFailure = nil
         isPaid = false
         isExpired = false
-        copiedRequest = false
         onchainObservation = nil
         monitoredQuoteId = nil
         quoteStatusTask?.cancel()
@@ -1145,7 +1138,6 @@ struct ReceiveLightningView: View {
         isAmountless = true
         isPaid = false
         isExpired = false
-        copiedRequest = false
         onchainObservation = nil
         quoteCreatedAt = nil
         monitoredQuoteId = nil
@@ -1196,7 +1188,6 @@ struct ReceiveLightningView: View {
         requestFailure = nil
         isPaid = false
         isExpired = false
-        copiedRequest = false
         onchainObservation = nil
         quoteCreatedAt = nil
         monitoredQuoteId = nil
@@ -1243,10 +1234,10 @@ struct ReceiveLightningView: View {
     private func copyRequest(_ request: String) {
         UIPasteboard.general.string = request
         HapticFeedback.notification(.success)
-        copiedRequest = true
-        DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
-            copiedRequest = false
-        }
+        let copiedItem = mintQuote?.paymentMethod == .onchain
+            ? "Bitcoin address"
+            : "payment request"
+        ConfirmationToast.show("Copied \(copiedItem)")
     }
 
     private func startExpiryCountdown(quote: MintQuoteInfo) {

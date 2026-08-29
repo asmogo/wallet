@@ -63,37 +63,40 @@ fun MintPickerSheet(
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = sheetState,
+        containerColor = CashuTheme.colors.compactSheetContainer,
     ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(MintPickerSheetHeight)
-                .padding(horizontal = CashuTheme.spacing.comfortable)
-                .navigationBarsPadding(),
-        ) {
-            FlowSheetTitle(title = title)
-            // Keep mint identities crisp at rest. The header already supplies
-            // the breathing room above this list; an always-on fade only made
-            // the selected row look washed out.
-            LazyColumn(modifier = Modifier.weight(1f)) {
-                if (allowAnyMint) {
-                    item(key = "any-mint") {
-                        MintPickerAnyRow(
-                            selected = activeMintUrl == null,
-                            onClick = { onSelect(null) },
+        CompactSheetContent {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(MintPickerSheetHeight)
+                    .padding(horizontal = CashuTheme.spacing.comfortable)
+                    .navigationBarsPadding(),
+            ) {
+                FlowSheetTitle(title = title)
+                // Keep mint identities crisp at rest. The header already supplies
+                // the breathing room above this list; an always-on fade only made
+                // the selected row look washed out.
+                LazyColumn(modifier = Modifier.weight(1f)) {
+                    if (allowAnyMint) {
+                        item(key = "any-mint") {
+                            MintPickerAnyRow(
+                                selected = activeMintUrl == null,
+                                onClick = { onSelect(null) },
+                            )
+                        }
+                    }
+                    items(mints, key = { it.url }) { mint ->
+                        MintPickerMintRow(
+                            mint = mint,
+                            balanceText = formatter.formatSats(mint.balance),
+                            selected = mint.url == activeMintUrl,
+                            onClick = { onSelect(mint) },
                         )
                     }
                 }
-                items(mints, key = { it.url }) { mint ->
-                    MintPickerMintRow(
-                        mint = mint,
-                        balanceText = formatter.formatSats(mint.balance),
-                        selected = mint.url == activeMintUrl,
-                        onClick = { onSelect(mint) },
-                    )
-                }
+                Spacer(Modifier.height(CashuTheme.spacing.default))
             }
-            Spacer(Modifier.height(CashuTheme.spacing.default))
         }
     }
 }

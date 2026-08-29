@@ -4,7 +4,6 @@ struct LightningAddressSettingsSection: View {
     @EnvironmentObject var walletManager: WalletManager
     @ObservedObject var npcService = NPCService.shared
 
-    @Binding var copiedLightningAddress: Bool
     @Binding var isCheckingPayments: Bool
     @Binding var showMintPicker: Bool
 
@@ -236,10 +235,7 @@ struct LightningAddressSettingsSection: View {
     private func copyLightningAddress() {
         UIPasteboard.general.string = npcService.lightningAddress
         HapticFeedback.selection()
-        withAnimation(.snappy(duration: 0.18)) { copiedLightningAddress = true }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
-            withAnimation(.snappy(duration: 0.18)) { copiedLightningAddress = false }
-        }
+        ConfirmationToast.show("Copied Lightning address")
     }
 
     private func checkForPayments() {
@@ -259,4 +255,3 @@ struct LightningAddressSettingsSection: View {
         return formatter.localizedString(for: date, relativeTo: Date())
     }
 }
-

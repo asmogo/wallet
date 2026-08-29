@@ -139,6 +139,13 @@ class SettingsManager: ObservableObject {
         }
     }
 
+    /// Home and history-row amount ordering. Payment entry keeps [amountDisplayPrimary].
+    @Published var homeBalancePrimary: AmountDisplayPrimary {
+        didSet {
+            settingsStore.homeBalancePrimary = homeBalancePrimary.rawValue
+        }
+    }
+
     @Published var appLockEnabled: Bool {
         didSet {
             settingsStore.appLockEnabled = appLockEnabled
@@ -177,6 +184,7 @@ class SettingsManager: ObservableObject {
         self.nostrRelays = settingsStore.nostrRelays
         self.nostrMintBackupEnabled = settingsStore.nostrMintBackupEnabled
         self.amountDisplayPrimary = AmountDisplayPrimary(rawValue: settingsStore.amountDisplayPrimary) ?? .fiat
+        self.homeBalancePrimary = AmountDisplayPrimary(rawValue: settingsStore.homeBalancePrimary) ?? .sats
         self.appLockEnabled = settingsStore.appLockEnabled
         self.sentryEnabled = settingsStore.sentryEnabled
 

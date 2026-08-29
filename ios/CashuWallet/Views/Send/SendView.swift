@@ -40,8 +40,6 @@ struct SendView: View {
     @State private var checkingTask: Task<Void, Never>?
     @State private var manualClaimCheckResult: PendingTokenClaimCheckResult?
 
-    // Copy button feedback
-    @State private var copyButtonText = "Copy"
     @State private var showShareSheet = false
     @State private var lockWithP2PK = false
     @State private var p2pkPubkeyInput = ""
@@ -308,6 +306,7 @@ struct SendView: View {
 
     private func mintSelector(mint: MintInfo) -> some View {
         MintSelectorRow(
+            direction: .source,
             mint: mint,
             balanceText: sendBalanceText,
             showsBalance: true,
@@ -717,19 +716,18 @@ struct SendView: View {
                         // change swap. The receiver's redeem fee is shown on
                         // their side, so a "0 sat" row here only misleads.
                         if tokenFee > 0 {
-                            detailRow(icon: "arrow.up.arrow.down", label: "Fee", value: generatedFeeText)
+                            detailRow(label: "Fee", value: generatedFeeText)
                         }
-                        detailRow(icon: "banknote", label: "Unit", value: generatedTokenUnit.uppercased())
+                        detailRow(label: "Unit", value: generatedTokenUnit.uppercased())
                         // Fiat conversion is only meaningful for sats, only when
                         // the user opted into fiat balances, and only for amounts
                         // worth at least a cent — matches Android's gating.
                         if generatedIsSat, settings.showFiatBalance,
                            let fiatValue = priceService.formatSatsAsFiat(generatedAmount) {
-                            detailRow(icon: "banknote", label: "Fiat", value: fiatValue)
+                            detailRow(label: "Fiat", value: fiatValue)
                         }
                         if let mintURL = generatedTokenMintURL {
-                            detailRow(icon: "bitcoinsign.bank.building", label: "Mint",
-                                      value: extractMintHost(mintURL))
+                            detailRow(label: "Mint", value: extractMintHost(mintURL))
                         }
                     }
                     .padding(.top, 8)
@@ -740,7 +738,7 @@ struct SendView: View {
 
             VStack(spacing: 12) {
                 Button(action: { copyToken(token) }) {
-                    Text(copyButtonText)
+                    Text("Copy")
                 }
                 .glassButton()
 
@@ -788,14 +786,13 @@ struct SendView: View {
             ? AmountFormatter.sats(generatedAmount, useBitcoinSymbol: settings.useBitcoinSymbol)
             : CurrencyAmount(value: generatedAmount, currency: generatedUnitCurrency).formatted()
         var rows: [PaymentStatusView.DetailRow] = [
-            .init(icon: "bitcoinsign", label: "Amount", value: amountText),
+            .init(label: "Amount", value: amountText),
         ]
         if tokenFee > 0 {
-            rows.append(.init(icon: "arrow.up.arrow.down", label: "Fee", value: generatedFeeText))
+            rows.append(.init(label: "Fee", value: generatedFeeText))
         }
         if let mintURL = generatedTokenMintURL {
             rows.append(.init(
-                icon: "bitcoinsign.bank.building",
                 label: "Mint",
                 value: extractMintHost(mintURL)
             ))
@@ -811,9 +808,9 @@ struct SendView: View {
         generatedIsSat ? "\(tokenFee) sat" : CurrencyAmount(value: tokenFee, currency: generatedUnitCurrency).formatted()
     }
 
-    private func detailRow(icon: String, label: String, value: String) -> some View {
+    private func detailRow(label: String, value: String) -> some View {
         HStack {
-            Label(label, systemImage: icon)
+            Text(label)
                 .foregroundStyle(.secondary)
             Spacer()
             Text(value)
@@ -958,12 +955,7 @@ struct SendView: View {
     private func copyToken(_ token: String) {
         UIPasteboard.general.string = token
         HapticFeedback.notification(.success)
-
-        // Show "COPIED" feedback for 3 seconds
-        copyButtonText = "Copied"
-        DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
-            copyButtonText = "Copy"
-        }
+        ConfirmationToast.show("Copied ecash token")
     }
 
     // MARK: - Token Claim Detection
@@ -1078,20 +1070,36 @@ enum SendPaymentCopy {
     )
 }
 
+/// A destination that needs an amount before it can be paid. Keeping this as
+/// route data lets the compact destination sheet dismiss completely before the
+/// large amount sheet appears, matching the native Send Ecash handoff.
+enum SendAmountDestination: Equatable {
+    case melt(request: String, mode: MeltView.MeltMode, decoded: PaymentRequestDecodeResult)
+    case cashuRequest(CashuPaymentRequestSummary)
+
+    var rawInput: String {
+        switch self {
+        case .melt(let request, _, _): request
+        case .cashuRequest(let summary): summary.encoded
+        }
+    }
+}
+
 /// The single entry point for sending — one grounded screen modeled on the Family
 /// wallet. The title "Send" and a pinned "To [recipient]" pill stay put; only the
 /// area below transitions through steps: input → amount keypad → confirm(fee) →
 /// sending → sent. A "Send to" field accepts a Lightning address, BOLT11 invoice,
 /// BOLT12 offer, on-chain address, or Cashu request; detecting a valid destination
 /// advances automatically (paste/scan/recent immediately, hand-typing after a short
-/// settle). The pay/confirm logic mirrors `MeltView` and `CashuPaymentRequestPayView`
-/// (same `walletManager` calls) but is hosted in-place so the screen stays grounded.
-/// A pasted bearer *token* routes out to the Receive-this claim screen.
+/// settle). Amountless destinations use a native sheet handoff before amount entry;
+/// later payment steps remain hosted in place. A pasted bearer *token* routes out
+/// to the Receive-this claim screen.
 struct UnifiedSendView: View {
     /// Pre-fills the destination field on open — used when the Receive sheet
     /// hands a pasted/scanned *payable* (invoice, address, Cashu Request) back to
     /// Send. Consumed once, then decoded exactly like a paste.
     var initialDestination: String? = nil
+    private let autoAdvanceInitialDestination: Bool
     let onClose: () -> Void
     /// CTA out of the zero-balance empty state — opens the Receive chooser.
     let onReceive: () -> Void
@@ -1103,16 +1111,20 @@ struct UnifiedSendView: View {
     let onOpenReceiveToken: (String) -> Void
     /// Swap the sheet content to the Create-Ecash flow.
     let onSendEcash: () -> Void
+    /// Amountless destinations leave the compact input sheet and reopen in a
+    /// dedicated large sheet. This avoids an in-place detent + keyboard race.
+    let onRequestAmount: (SendAmountDestination) -> Void
+    /// Present only when this instance started as the routed amount sheet.
+    private let onEditDestination: (() -> Void)?
 
     @EnvironmentObject var walletManager: WalletManager
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @ObservedObject private var settings = SettingsManager.shared
     @ObservedObject private var priceService = PriceService.shared
-
     // Step machine
-    @State private var step: Step = .input
-    @State private var destination = ""
-    @State private var locked: LockedDestination?
+    @State private var step: Step
+    @State private var destination: String
+    @State private var locked: SendAmountDestination?
 
     // Amount + melt quote
     @State private var amountString = ""
@@ -1224,17 +1236,52 @@ struct UnifiedSendView: View {
     /// step's height and the sheet stays sized for the step just left.
     @State private var connectMintContentHeight: CGFloat = 0
 
+    init(
+        initialDestination: String? = nil,
+        initialAmountDestination: SendAmountDestination? = nil,
+        autoAdvanceInitialDestination: Bool = true,
+        onClose: @escaping () -> Void,
+        onReceive: @escaping () -> Void,
+        onContactless: @escaping () -> Void,
+        onOpenReceiveToken: @escaping (String) -> Void,
+        onSendEcash: @escaping () -> Void,
+        onRequestAmount: @escaping (SendAmountDestination) -> Void,
+        onEditDestination: (() -> Void)? = nil
+    ) {
+        self.initialDestination = initialDestination
+        self.autoAdvanceInitialDestination = autoAdvanceInitialDestination
+        self.onClose = onClose
+        self.onReceive = onReceive
+        self.onContactless = onContactless
+        self.onOpenReceiveToken = onOpenReceiveToken
+        self.onSendEcash = onSendEcash
+        self.onRequestAmount = onRequestAmount
+        self.onEditDestination = onEditDestination
+
+        _step = State(initialValue: initialAmountDestination == nil ? .input : .amount)
+        _destination = State(initialValue: initialAmountDestination?.rawInput ?? initialDestination ?? "")
+        _locked = State(initialValue: initialAmountDestination)
+    }
+
     /// Whichever step currently owns the sheet's height — each hugs its own
     /// content, and the resize rides the swap. See `SharedAxis`.
     private var sheetContentHeight: CGFloat {
         connectMintRoute == nil ? compactContentHeight : connectMintContentHeight
     }
 
-    enum Step: Equatable { case input, amount, confirm, sending, sent, failed }
+    enum Step: Hashable { case input, amount, confirm, sending, sent, failed }
 
-    enum LockedDestination: Equatable {
-        case melt(request: String, mode: MeltView.MeltMode, decoded: PaymentRequestDecodeResult)
-        case cashuRequest(CashuPaymentRequestSummary)
+    /// The detent owner must change with both the main flow and the nested
+    /// connect-mint flow. Keying only on `connectMintRoute` left input → amount
+    /// as an uncoordinated height change on physical devices.
+    private enum SheetSizingStep: Hashable {
+        case send(Step)
+        case connectMint(ConnectMintRoute)
+    }
+
+    private var sheetSizingStep: SheetSizingStep {
+        if let connectMintRoute { return .connectMint(connectMintRoute) }
+        return .send(step)
     }
 
     /// Resolved fee for the current creq mint + amount.
@@ -1332,8 +1379,11 @@ struct UnifiedSendView: View {
                       let initialDestination,
                       !initialDestination.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
                 didConsumeInitialDestination = true
+                suppressedValue = initialDestination.trimmingCharacters(in: .whitespacesAndNewlines)
                 destination = initialDestination
-                advanceNow(raw: initialDestination)
+                if autoAdvanceInitialDestination {
+                    advanceNow(raw: initialDestination)
+                }
             }
             .onDisappear {
                 autoAdvanceTask?.cancel()
@@ -1342,19 +1392,18 @@ struct UnifiedSendView: View {
         }
         // Own the sheet chrome so the detent can follow the step: compact for
         // input, `.large` + flat canvas for amount/confirm/status.
-        // Keyed on the connect-a-mint step so that resize is one motion with the
-        // slide. Input → amount/confirm keeps snapping: that swap is in place
-        // and already carries its own animation.
+        // Keyed on the actual visible face so compact → amount/confirm and the
+        // connect-mint steps resize in the same motion as their content swap.
         .contentFitDetent(
             sheetContentHeight,
             enabled: prefersCompactSheet,
-            step: connectMintRoute,
+            step: sheetSizingStep,
             stepResize: SharedAxis.duration
         )
         .presentationDragIndicator(.visible)
         // A stray swipe must not tear down the flow while the melt is executing.
         .interactiveDismissDisabled(step == .sending)
-        .flatBottomSheetSurface()
+        .compactBottomSheetSurface()
     }
 
     // MARK: Input step
@@ -1382,51 +1431,51 @@ struct UnifiedSendView: View {
                     .padding(.top, 10)
             }
 
-            // A centered row of round Liquid Glass icon buttons — the primary
-            // "ways to send" (Scan · Ecash · Tap), one-word label under each.
-            sendMethodRow
+            sendMethodList
                 .padding(.horizontal)
-                .padding(.top, 32)
+                .padding(.top, 24)
         }
         .padding(.bottom, 24)
         .contentFitMeasured { compactContentHeight = $0 }
         .scrollDismissesKeyboard(.interactively)
     }
 
-    // MARK: Send-method buttons
+    // MARK: Send-method actions
 
-    /// The primary "ways to send" as a centered row of round filled icon
-    /// buttons (Apple's sheet-action-circle pattern; same component as Receive).
-    private var sendMethodRow: some View {
-        HStack(spacing: 40) {
-            sendMethodButton(icon: "qrcode.viewfinder", label: "Scan",
-                             a11y: "Scan QR code", action: openScanner)
+    private var sendMethodList: some View {
+        let tapAvailable = NFCNDEFReaderSession.readingAvailable
 
-            sendMethodButton(icon: "banknote", label: "Ecash",
-                             a11y: "Create ecash") {
+        return VStack(spacing: 12) {
+            MethodActionRow(
+                icon: "qrcode.viewfinder",
+                title: "Scan",
+                subtitle: "Scan an invoice, address, or request",
+                accessibilityLabel: "Scan. Scan QR code",
+                action: openScanner
+            )
+
+            MethodActionRow(
+                icon: "banknote",
+                title: "Ecash",
+                subtitle: "Create ecash to share",
+                accessibilityLabel: "Ecash. Create ecash"
+            ) {
                 HapticFeedback.selection()
                 onSendEcash()
             }
 
-            if NFCNDEFReaderSession.readingAvailable {
-                sendMethodButton(icon: "wave.3.right", label: "Tap",
-                                 a11y: "Contactless, tap to pay nearby") {
-                    HapticFeedback.selection()
-                    onContactless()
-                }
+            MethodActionRow(
+                icon: "wave.3.right",
+                title: "Tap",
+                subtitle: "Pay contactlessly with NFC",
+                accessibilityLabel: "Tap. Contactless, tap to pay nearby",
+                enabled: tapAvailable,
+                status: tapAvailable ? nil : "Unavailable"
+            ) {
+                HapticFeedback.selection()
+                onContactless()
             }
         }
-        .frame(maxWidth: .infinity)   // center the group on the leading-aligned canvas
-    }
-
-    /// One round filled icon button with a one-word caption on the canvas below it.
-    /// Delegates to the shared `CircularGlassIconButton` so the Send and Receive
-    /// sheets stay pixel-identical.
-    private func sendMethodButton(
-        icon: String, label: String, a11y: String,
-        action: @escaping () -> Void
-    ) -> some View {
-        CircularGlassIconButton(icon: icon, label: label, a11y: a11y, action: action)
     }
 
     private var destinationField: some View {
@@ -1469,7 +1518,7 @@ struct UnifiedSendView: View {
 
     // MARK: Pinned "To" pill
 
-    private func toPill(_ locked: LockedDestination) -> some View {
+    private func toPill(_ locked: SendAmountDestination) -> some View {
         Button(action: editFromPill) {
             HStack(spacing: 10) {
                 Text("To")
@@ -1500,11 +1549,12 @@ struct UnifiedSendView: View {
     /// anchored amount hero (see `PayFlowScaffold`). The mint is `nil` for Cashu-request
     /// states with no held mint — those keep an actionable row in the details instead.
     @ViewBuilder
-    private func confirmHeader(mint: MintInfo?, locked: LockedDestination?) -> some View {
+    private func confirmHeader(mint: MintInfo?, locked: SendAmountDestination?) -> some View {
         if let locked {
             VStack(spacing: 8) {
                 if let mint {
                     MintSelectorRow(
+                        direction: .source,
                         mint: mint,
                         balanceText: AmountFormatter.sats(mint.balance, useBitcoinSymbol: settings.useBitcoinSymbol),
                         onChooseMint: canChangeMint ? {
@@ -1520,7 +1570,7 @@ struct UnifiedSendView: View {
         }
     }
 
-    private func pillValue(_ locked: LockedDestination) -> String {
+    private func pillValue(_ locked: SendAmountDestination) -> String {
         switch locked {
         case .melt(let request, _, let decoded):
             if case .lightningAddress(let addr) = decoded { return addr }
@@ -1534,6 +1584,10 @@ struct UnifiedSendView: View {
 
     private func editFromPill() {
         HapticFeedback.selection()
+        if let onEditDestination {
+            onEditDestination()
+            return
+        }
         suppressedValue = destination.trimmingCharacters(in: .whitespacesAndNewlines)
         meltQuote = nil
         feeTask?.cancel()
@@ -1561,7 +1615,9 @@ struct UnifiedSendView: View {
             let result = PaymentRequestDecoder.decode(
                 trimmed, includeCashuPaymentRequests: true, preferCashuPaymentRequests: true
             )
-            advance(result, raw: trimmed)
+            // A paused keystroke is not a submit. Continue auto-routing valid
+            // destinations, but do not flash a generic error while typing.
+            advance(result, raw: trimmed, showUnrecognizedHint: false)
         }
     }
 
@@ -1577,7 +1633,11 @@ struct UnifiedSendView: View {
 
     /// Lock the destination and move to the right step. Setting `step` away from
     /// `.input` makes any in-flight debounce bail on its own re-check.
-    private func advance(_ result: PaymentRequestDecodeResult, raw: String) {
+    private func advance(
+        _ result: PaymentRequestDecodeResult,
+        raw: String,
+        showUnrecognizedHint: Bool = true
+    ) {
         switch result {
         case .bolt11, .bolt12:
             if let notice = result.amountlessMeltCaution {
@@ -1626,7 +1686,7 @@ struct UnifiedSendView: View {
             if let token = TokenParser.normalizedToken(from: raw) {
                 HapticFeedback.selection()
                 onOpenReceiveToken(token)
-            } else {
+            } else if showUnrecognizedHint {
                 inputHint = "Unrecognized — try a Lightning address, invoice, Bitcoin address, or Cashu Request"
             }
         }
@@ -1648,7 +1708,8 @@ struct UnifiedSendView: View {
     private func goToAmount() {
         amountString = ""
         HapticFeedback.selection()
-        withAnimation(.smooth(duration: 0.3)) { step = .amount }
+        guard step == .input, let locked else { return }
+        onRequestAmount(locked)
     }
 
     private func startMeltConfirm() {
@@ -1660,46 +1721,60 @@ struct UnifiedSendView: View {
     // MARK: Amount step
 
     private var amountStep: some View {
-        VStack(spacing: 0) {
+        GeometryReader { proxy in
             ScrollView {
-                VStack(spacing: 20) {
+                VStack(spacing: 0) {
+                    Spacer(minLength: 0)
+
                     CurrencyAmountDisplay(
                         sats: amountSats,
                         primary: $settings.amountDisplayPrimary,
                         entryRaw: amountString
                     )
-                    .padding(.top, 24)
-
-                    if let mint = currentAmountMint {
-                        amountMintRow(mint)
-                            .padding(.horizontal)
-                    }
 
                     if let errorMessage {
                         errorNotice(errorMessage)
                             .padding(.horizontal)
+                            .padding(.top, 12)
                     }
+
+                    Spacer(minLength: 0)
+
+                    // Keep the source selector in the same pre-keypad slot as Receive.
+                    if let mint = currentAmountMint {
+                        amountMintRow(mint)
+                            .padding(.horizontal)
+                            .padding(.bottom, 8)
+                    }
+
+                    NumberPadAmountInput(amountString: $amountString, unit: entryUnit)
+                        .padding(.horizontal, 24)
+
+                    Button(action: continueFromAmount) {
+                        Text("Continue")
+                    }
+                    .glassButton()
+                    .disabled(amountSats == 0)
+                    .padding(.horizontal)
+                    .padding(.top, 12)
+                    .padding(.bottom, 16)
                 }
+                // The large detent gets the anchored layout. While the sheet is
+                // still growing from its compact input detent, the intrinsic
+                // content scrolls instead of being compressed into an overlap.
+                .frame(minHeight: proxy.size.height)
             }
-
-            NumberPadAmountInput(amountString: $amountString, unit: entryUnit)
-                .padding(.horizontal, 24)
-
-            Button(action: continueFromAmount) {
-                Text("Continue")
-            }
-            .glassButton()
-            .disabled(amountSats == 0)
-            .padding(.horizontal)
-            .padding(.top, 12)
-            .padding(.bottom, 16)
+            .scrollBounceBehavior(.basedOnSize)
+            .scrollIndicators(.hidden)
         }
     }
 
     private func amountMintRow(_ mint: MintInfo) -> some View {
         MintSelectorRow(
+            direction: .source,
             mint: mint,
             balanceText: AmountFormatter.sats(mint.balance, useBitcoinSymbol: settings.useBitcoinSymbol),
+            showsBalance: true,
             // Gated on a spendable balance, matching Send Ecash — this row
             // offered a Max on an empty mint that filled in zero.
             onUseMax: mint.balance > 0 ? useMax : nil,
@@ -1822,19 +1897,17 @@ struct UnifiedSendView: View {
         let isOnchain: Bool = { if case .melt(_, .onchain, _) = locked { return true } else { return false } }()
         return VStack(spacing: 0) {
             if isOnchain, case let .melt(request, _, _) = locked {
-                creqDetailRow(icon: "arrow.up.right", label: "To", value: request)
+                creqDetailRow(label: "To", value: request)
             }
             if let explanation = activeRouteExplanation {
                 CashuRequestRouteExplanationRow(explanation: explanation)
             }
             creqDetailRow(
-                icon: "arrow.up.arrow.down",
                 label: "Network fee",
                 value: AmountFormatter.sats(quote?.feeReserve ?? 0, useBitcoinSymbol: settings.useBitcoinSymbol)
             )
             .redacted(reason: isLoading ? .placeholder : [])
             creqDetailRow(
-                icon: "creditcard",
                 label: "Total",
                 value: AmountFormatter.sats(quote?.totalAmount ?? 0, useBitcoinSymbol: settings.useBitcoinSymbol)
             )
@@ -1851,7 +1924,7 @@ struct UnifiedSendView: View {
     @ViewBuilder
     private func mintDetailRow(label: String, mint: MintInfo, switchable: Bool) -> some View {
         let content = HStack(spacing: 8) {
-            Label(label, systemImage: "bitcoinsign.bank.building")
+            Text(label)
                 .foregroundStyle(.secondary)
             Spacer()
             MintAvatarView(iconUrl: mint.iconUrl, name: mint.name, size: 22)
@@ -1919,36 +1992,32 @@ struct UnifiedSendView: View {
                 // Same row order as MeltView's status screen (Method → To → Amount →
                 // fee → Mint) so both Lightning/on-chain pay screens read alike and the
                 // rows stay stable through processing.
-                rows.append(.init(icon: "bolt", label: "Method", value: meltPaymentMethod.displayName))
+                rows.append(.init(label: "Method", value: meltPaymentMethod.displayName))
                 if quote.paymentMethod == .onchain {
-                    rows.append(.init(icon: "arrow.up.right", label: "To", value: request))
+                    rows.append(.init(label: "To", value: request))
                 }
                 rows.append(.init(
-                    icon: "bitcoinsign",
                     label: "Amount",
                     value: AmountFormatter.sats(quote.amount, useBitcoinSymbol: settings.useBitcoinSymbol)
                 ))
                 if let explanation = activeRouteExplanation {
                     rows.append(.init(
-                        icon: "arrow.triangle.branch",
                         label: "Route",
                         value: explanation.localizedValue
                     ))
                 }
                 rows.append(.init(
-                    icon: "arrow.up.arrow.down",
                     label: "Network fee",
                     value: AmountFormatter.sats(quote.feeReserve, useBitcoinSymbol: settings.useBitcoinSymbol)
                 ))
                 if let mint = mintInfo(for: quote) ?? activeMeltMint {
-                    rows.append(.init(icon: "bitcoinsign.bank.building", label: "Mint", value: mint.name))
+                    rows.append(.init(label: "Mint", value: mint.name))
                 }
             } else if errorShowsMintAction, let mint = activeMeltMint {
                 // Insufficient-balance failure (no quote to summarise): show the mint and
                 // what's actually there, so the shortfall reads as a fact, not a scold.
-                rows.append(.init(icon: "bitcoinsign.bank.building", label: "Mint", value: mint.name))
+                rows.append(.init(label: "Mint", value: mint.name))
                 rows.append(.init(
-                    icon: "banknote",
                     label: "Balance",
                     value: AmountFormatter.sats(mint.balance, useBitcoinSymbol: settings.useBitcoinSymbol)
                 ))
@@ -1958,7 +2027,6 @@ struct UnifiedSendView: View {
             // values (the fee, or the mint in the acquire path) fill their reserved slot
             // in place instead of inserting mid-list and shoving the rows below down.
             rows.append(.init(
-                icon: "bitcoinsign",
                 label: "Amount",
                 value: paymentAmountForCreq.map {
                     AmountFormatter.sats($0, useBitcoinSymbol: settings.useBitcoinSymbol)
@@ -1968,14 +2036,13 @@ struct UnifiedSendView: View {
             rows.append(creqStatusMintRow)
             if let explanation = activeRouteExplanation {
                 rows.append(.init(
-                    icon: "arrow.triangle.branch",
                     label: "Route",
                     value: explanation.localizedValue
                 ))
             }
             rows.append(creqStatusFeeRow)
             if let memo = creq.description?.trimmingCharacters(in: .whitespacesAndNewlines), !memo.isEmpty {
-                rows.append(.init(icon: "quote.bubble", label: "Memo", value: memo))
+                rows.append(.init(label: "Memo", value: memo))
             }
         case nil:
             break
@@ -2462,37 +2529,34 @@ struct UnifiedSendView: View {
     /// the held mint's name; in the acquire path the target host; a spinner only if
     /// neither is known yet.
     private var creqStatusMintRow: PaymentStatusView.DetailRow {
-        let icon = "bitcoinsign.bank.building"
         if let mint = selectedPaymentMint {
-            return .init(icon: icon, label: "Mint", value: mint.name)
+            return .init(label: "Mint", value: mint.name)
         }
         if let host = acquireTargetHost {
-            return .init(icon: icon, label: "Mint", value: host)
+            return .init(label: "Mint", value: host)
         }
-        return .init(icon: icon, label: "Mint", value: "", isPending: true)
+        return .init(label: "Mint", value: "", isPending: true)
     }
 
     /// The swap fee as a status detail row, always present so its slot is reserved.
     /// Mirrors `creqFeeValueText`: a spinner while the fee computes, then the value;
     /// acquiring a mint routes over Lightning, whose reserve is confirmed later.
     private var creqStatusFeeRow: PaymentStatusView.DetailRow {
-        let icon = "arrow.up.arrow.down"
         if needsAcquire {
-            return .init(icon: icon, label: "Fees", value: "Network fee")
+            return .init(label: "Fees", value: "Network fee")
         }
         switch feeState {
         case .loading:
-            return .init(icon: icon, label: "Fees", value: "", isPending: true)
+            return .init(label: "Fees", value: "", isPending: true)
         case .free:
-            return .init(icon: icon, label: "Fees", value: "No fee")
+            return .init(label: "Fees", value: "No fee")
         case .amount(let fee):
             return .init(
-                icon: icon,
                 label: "Fees",
                 value: AmountFormatter.sats(fee, useBitcoinSymbol: settings.useBitcoinSymbol)
             )
         case .idle, .unavailable:
-            return .init(icon: icon, label: "Fees", value: "—")
+            return .init(label: "Fees", value: "—")
         }
     }
 
@@ -2541,7 +2605,7 @@ struct UnifiedSendView: View {
                     CashuRequestRouteExplanationRow(explanation: explanation)
                 }
                 if let memo = creqMemo(creq) {
-                    creqDetailRow(icon: "quote.bubble", label: "Memo", value: memo)
+                    creqDetailRow(label: "Memo", value: memo)
                 }
                 creqFeesRow
             }
@@ -2571,7 +2635,7 @@ struct UnifiedSendView: View {
                 creqActionableMintRow(host: host, subtitle: subtitle)
             } else {
                 HStack(spacing: 8) {
-                    Label("Mint", systemImage: "exclamationmark.triangle")
+                    Text("Mint")
                         .foregroundStyle(.orange)
                     Spacer()
                     Text(hosts.isEmpty ? "Add a mint to pay"
@@ -2594,7 +2658,7 @@ struct UnifiedSendView: View {
     /// no alarming color (the CTA does the work).
     private func creqActionableMintRow(host: String, subtitle: String) -> some View {
         HStack(spacing: 8) {
-            Label("Mint", systemImage: "bitcoinsign.bank.building")
+            Text("Mint")
                 .foregroundStyle(.secondary)
             Spacer()
             VStack(alignment: .trailing, spacing: 2) {
@@ -2616,7 +2680,7 @@ struct UnifiedSendView: View {
 
     private var creqFeesRow: some View {
         HStack {
-            Label("Fees", systemImage: "arrow.up.arrow.down")
+            Text("Fees")
                 .foregroundStyle(.secondary)
             Spacer()
             creqFeeValueText
@@ -2648,9 +2712,9 @@ struct UnifiedSendView: View {
         }
     }
 
-    private func creqDetailRow(icon: String, label: String, value: String) -> some View {
+    private func creqDetailRow(label: String, value: String) -> some View {
         HStack {
-            Label(label, systemImage: icon)
+            Text(label)
                 .foregroundStyle(.secondary)
             Spacer()
             Text(value)
@@ -2675,6 +2739,7 @@ struct UnifiedSendView: View {
     private func handleScannedDestination(_ scanned: String) {
         let trimmed = scanned.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
+        suppressedValue = trimmed
         destination = trimmed
         advanceNow(raw: trimmed)
     }
@@ -2684,6 +2749,7 @@ struct UnifiedSendView: View {
         let trimmed = content.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
         HapticFeedback.selection()
+        suppressedValue = trimmed
         destination = trimmed
         advanceNow(raw: trimmed)
     }
@@ -3092,6 +3158,7 @@ struct MeltView: View {
         VStack(spacing: 0) {
             if let mint = displayMeltMint {
                 MintSelectorRow(
+                    direction: .source,
                     mint: mint,
                     balanceText: AmountFormatter.sats(mint.balance, useBitcoinSymbol: settings.useBitcoinSymbol),
                     onChooseMint: canChangeMint ? {
@@ -3289,24 +3356,23 @@ struct MeltView: View {
             )
         } details: {
             VStack(spacing: 0) {
-                meltDetailRow(icon: "bolt", label: "Method", value: methodName)
+                meltDetailRow(label: "Method", value: methodName)
                 if let routeExplanation {
                     CashuRequestRouteExplanationRow(explanation: routeExplanation)
                 }
                 if quote?.paymentMethod == .onchain {
                     meltDetailRow(
-                        icon: "arrow.up.right",
                         label: "To",
                         value: PaymentRequestParser.normalizeBitcoinRequest(requestInput)
                     )
                 }
-                meltDetailRow(icon: "bitcoinsign", label: "Amount", value: "\(displayAmount) sat")
-                meltDetailRow(icon: "arrow.up.arrow.down", label: "Max fee", value: "\(quote?.feeReserve ?? 0) sat")
+                meltDetailRow(label: "Amount", value: "\(displayAmount) sat")
+                meltDetailRow(label: "Max fee", value: "\(quote?.feeReserve ?? 0) sat")
                     .redacted(reason: isLoading ? .placeholder : [])
                 // Reserve the Required-balance row while loading (we don't yet know the fee)
                 // so the common fee-bearing case doesn't shift when the quote lands.
                 if isLoading || (quote?.feeReserve ?? 0) > 0 {
-                    meltDetailRow(icon: "creditcard", label: "Required balance", value: "\(quote?.totalAmount ?? 0) sat")
+                    meltDetailRow(label: "Required balance", value: "\(quote?.totalAmount ?? 0) sat")
                         .redacted(reason: isLoading ? .placeholder : [])
                 }
                 // The paying mint is already shown in the selector chip above (with
@@ -3348,6 +3414,7 @@ struct MeltView: View {
         } topAccessory: {
             if let mint = selectorMint {
                 MintSelectorRow(
+                    direction: .source,
                     mint: mint,
                     balanceText: AmountFormatter.sats(mint.balance, useBitcoinSymbol: settings.useBitcoinSymbol),
                     onChooseMint: canChangeMint ? {
@@ -3361,9 +3428,9 @@ struct MeltView: View {
         }
     }
 
-    private func meltDetailRow(icon: String, label: String, value: String) -> some View {
+    private func meltDetailRow(label: String, value: String) -> some View {
         HStack {
-            Label(label, systemImage: icon)
+            Text(label)
                 .foregroundStyle(.secondary)
             Spacer()
             Text(value)
@@ -3387,25 +3454,23 @@ struct MeltView: View {
             // the confirm → processing transition (only the amount hero morphs into the
             // spinner). The mint — a top chip on confirm, which the status scaffold has
             // no room for — becomes the trailing row here.
-            rows.append(.init(icon: "bolt", label: "Method", value: quote.paymentMethod.displayName))
+            rows.append(.init(label: "Method", value: quote.paymentMethod.displayName))
             if let routeExplanation {
                 rows.append(.init(
-                    icon: "arrow.triangle.branch",
                     label: "Route",
                     value: routeExplanation.localizedValue
                 ))
             }
             if quote.paymentMethod == .onchain {
                 rows.append(.init(
-                    icon: "arrow.up.right",
                     label: "To",
                     value: PaymentRequestParser.normalizeBitcoinRequest(requestInput)
                 ))
             }
-            rows.append(.init(icon: "bitcoinsign", label: "Amount", value: "\(quote.amount) sat"))
-            rows.append(.init(icon: "arrow.up.arrow.down", label: "Max fee", value: "\(quote.feeReserve) sat"))
+            rows.append(.init(label: "Amount", value: "\(quote.amount) sat"))
+            rows.append(.init(label: "Max fee", value: "\(quote.feeReserve) sat"))
             if let mint = mintInfo(for: quote) {
-                rows.append(.init(icon: "bitcoinsign.bank.building", label: "Mint", value: mint.name))
+                rows.append(.init(label: "Mint", value: mint.name))
             }
         }
         return PaymentStatusView(
@@ -3781,7 +3846,7 @@ struct UnitSelectorSheet: View {
         }
         .presentationDetents([.height(detentHeight)])
         .presentationDragIndicator(.visible)
-        .flatBottomSheetSurface()
+        .compactBottomSheetSurface()
     }
 
     private func select(_ unit: String) {
@@ -3841,12 +3906,7 @@ struct MintSelectorSheet: View {
         }
         .presentationDetents([.height(Self.pickerHeight)])
         .presentationDragIndicator(.visible)
-        // The default iOS 26 sheet material refracts the dimmed keypad beneath
-        // this compact picker, creating distracting dark highlights in the
-        // otherwise empty lower half. A flat adaptive surface keeps attention
-        // on the mint options while retaining native sheet behavior.
-        .presentationBackground(Color(uiColor: .systemBackground))
-        .flatBottomSheetSurface()
+        .compactBottomSheetSurface()
     }
 
     private var emptyStateView: some View {
@@ -4079,7 +4139,7 @@ struct AddMintToPaySheet: View {
         }
         .presentationDetents([.height(detentHeight)])
         .presentationDragIndicator(.visible)
-        .flatBottomSheetSurface()
+        .compactBottomSheetSurface()
         .onAppear(perform: loadPreviews)
     }
 
@@ -4208,7 +4268,7 @@ struct MethodPickerSheet: View {
         }
         .presentationDetents([.height(detentHeight)])
         .presentationDragIndicator(.visible)
-        .flatBottomSheetSurface()
+        .compactBottomSheetSurface()
     }
 
     private func select(_ option: ReceiveMethodOption) {

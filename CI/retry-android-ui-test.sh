@@ -21,10 +21,9 @@ LOG_FILE="${LOG_FILE:-android-ui-test.log}"
 RESET_MANAGED_DEVICES="${RESET_MANAGED_DEVICES:-true}"
 TRANSIENT_PATTERN="device offline|Failed to retrieve additional test outputs|emulator: ERROR|INSTALL_FAILED_DEVICE|DEVICE_UNAVAILABLE|adb: device .* not found|Emulator.*crashed|Failed to (install|push).*device"
 RESULTS_GLOB="app/build/outputs/androidTest-results/managedDevice/debug/*/TEST-*.xml"
-if ! PASSED_CLASSES_FILE="$(mktemp "${TMPDIR:-/tmp}/android-ui-passed-classes.XXXXXX")"; then
-  echo "Failed to create the passed-class ledger." >&2
-  exit 1
-fi
+# GNU mktemp (GitHub's Linux runners) requires a template containing at least
+# three Xs. An explicit /tmp template works on both GNU and BSD mktemp.
+PASSED_CLASSES_FILE="$(mktemp /tmp/android-ui-passed-classes.XXXXXX)"
 trap 'rm -f "$PASSED_CLASSES_FILE"' EXIT
 
 reset_device_state() {

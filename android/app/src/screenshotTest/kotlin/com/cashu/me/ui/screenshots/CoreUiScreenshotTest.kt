@@ -9,6 +9,9 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.CurrencyBitcoin
 import androidx.compose.material.icons.outlined.Lock
+import androidx.compose.material.icons.outlined.Nfc
+import androidx.compose.material.icons.outlined.Payments
+import androidx.compose.material.icons.outlined.QrCodeScanner
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -31,8 +34,12 @@ import com.cashu.me.Views.Send.ContactlessAvailability
 import com.cashu.me.Views.Send.ContactlessPayContent
 import com.cashu.me.ui.components.AmountEntryHero
 import com.cashu.me.ui.components.BalanceDisplay
+import com.cashu.me.ui.components.CashuTextField
+import com.cashu.me.ui.components.CompactSheetContent
+import com.cashu.me.ui.components.MethodActionRow
 import com.cashu.me.ui.components.MintAvatar
 import com.cashu.me.ui.components.MintSelectorRow
+import com.cashu.me.ui.components.MintSelectorDirection
 import com.cashu.me.ui.components.NavRow
 import com.cashu.me.ui.components.NumberPad
 import com.cashu.me.ui.components.PaymentStatusPhase
@@ -282,6 +289,74 @@ fun settingsControlsScreenshot() {
 }
 
 @PreviewTest
+@Preview(name = "compact-method-sheet", widthDp = 390, heightDp = 500, showBackground = true)
+@Composable
+fun compactMethodSheetLightScreenshot() {
+    PreviewFrame {
+        CompactMethodSheetPreview()
+    }
+}
+
+@PreviewTest
+@Preview(
+    name = "compact-method-sheet-dark",
+    widthDp = 390,
+    heightDp = 500,
+    uiMode = Configuration.UI_MODE_NIGHT_YES,
+)
+@Composable
+fun compactMethodSheetDarkScreenshot() {
+    PreviewFrame(darkTheme = true) {
+        CompactMethodSheetPreview()
+    }
+}
+
+@Composable
+private fun CompactMethodSheetPreview() {
+    CompactSheetContent {
+        Surface(
+            color = CashuTheme.colors.compactSheetContainer,
+            shape = MaterialTheme.shapes.extraLarge,
+        ) {
+            Column(
+                modifier = Modifier.padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                CashuTextField(
+                    value = "",
+                    onValueChange = {},
+                    placeholder = "Address, invoice, or Cashu Request",
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                MethodActionRow(
+                    icon = Icons.Outlined.QrCodeScanner,
+                    title = "Scan",
+                    subtitle = "Scan an invoice, address, or request",
+                    accessibilityLabel = "Scan. Scan QR code",
+                    onClick = {},
+                )
+                MethodActionRow(
+                    icon = Icons.Outlined.Payments,
+                    title = "Ecash",
+                    subtitle = "Create ecash to share",
+                    accessibilityLabel = "Ecash. Create ecash",
+                    onClick = {},
+                )
+                MethodActionRow(
+                    icon = Icons.Outlined.Nfc,
+                    title = "Tap",
+                    subtitle = "Pay contactlessly with NFC",
+                    accessibilityLabel = "Tap. Contactless, tap to pay nearby",
+                    enabled = false,
+                    status = "Unavailable",
+                    onClick = {},
+                )
+            }
+        }
+    }
+}
+
+@PreviewTest
 @Preview(name = "contactless-unavailable", widthDp = 390, heightDp = 360, showBackground = true)
 @Composable
 fun contactlessUnavailableScreenshot() {
@@ -344,8 +419,8 @@ private val ScreenshotLongMint = MintInfo(
 )
 
 /**
- * Every state of the flow-top selector in one frame: with and without the Send
- * Max chip, the single-mint variant that has no chevron and no picker, and a
+ * Every state of the flow-top selector in one frame: source and destination,
+ * with and without Send Max, the single-mint variant with no picker, and a
  * name long enough to truncate. This row has no test tag and no instrumented
  * coverage, so the golden is the regression net.
  */
@@ -379,12 +454,15 @@ fun mintSelectorRowLargeFontScreenshot() {
     PreviewFrame {
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             MintSelectorRow(
+                direction = MintSelectorDirection.Source,
                 mint = ScreenshotLongMint,
                 balanceText = "\u20bf27,096",
+                showBalance = true,
                 onPickMint = {},
                 onUseMax = {},
             )
             MintSelectorRow(
+                direction = MintSelectorDirection.Destination,
                 mint = ScreenshotLongMint,
                 balanceText = null,
                 onPickMint = {},
@@ -396,27 +474,33 @@ fun mintSelectorRowLargeFontScreenshot() {
 @Composable
 private fun MintSelectorRowCatalog() {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        // Multi-mint, spendable balance: chip and chevron.
+        // Multi-mint source with a spendable balance, Max, and chevron.
         MintSelectorRow(
+            direction = MintSelectorDirection.Source,
             mint = ScreenshotMint,
             balanceText = "\u20bf27,096",
+            showBalance = true,
             onPickMint = {},
             onUseMax = {},
         )
-        // Empty mint: no chip.
+        // Destination with an empty balance and no Max action.
         MintSelectorRow(
+            direction = MintSelectorDirection.Destination,
             mint = ScreenshotMint,
             balanceText = "\u20bf0",
+            showBalance = true,
             onPickMint = {},
         )
         // Single mint: no chevron, not a control.
         MintSelectorRow(
+            direction = MintSelectorDirection.Source,
             mint = ScreenshotMint,
             balanceText = "\u20bf27,096",
             onUseMax = {},
         )
         // Long name truncates.
         MintSelectorRow(
+            direction = MintSelectorDirection.Source,
             mint = ScreenshotLongMint,
             balanceText = "\u20bf27,096",
             onPickMint = {},

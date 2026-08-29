@@ -7,12 +7,9 @@ struct TransactionDetailView: View {
     /// successful open-check can flip Pending → Completed without dismissing.
     private let seed: WalletTransaction
     @ObservedObject var settings = SettingsManager.shared
+    @ObservedObject private var priceService = PriceService.shared
 
-    @State private var copyButtonText = "Copy"
     @State private var showShareSheet = false
-    /// Label of the row whose value was just copied — drives the doc.on.doc →
-    /// green checkmark swap on tap-to-copy rows (Address / Transaction ID / …).
-    @State private var copiedRowLabel: String?
     @State private var isCheckingClaim = false
     @State private var manualClaimCheckResult: PendingTokenClaimCheckResult?
     @State private var manualClaimCheckTask: Task<Void, Never>?
@@ -106,6 +103,20 @@ struct TransactionDetailView: View {
         }
     }
 
+    /// Settled transactions are receipts, not active payment workspaces. Open
+    /// those at a compact detent while preserving the large canvas for QR and
+    /// claim/check flows that need it.
+    private var isCompactReceipt: Bool {
+        transaction.status == .completed
+    }
+
+    private var presentationDetents: Set<PresentationDetent> {
+        guard isCompactReceipt else { return [.large] }
+        return transaction.kind == .onchain
+            ? [.fraction(0.78), .large]
+            : [.fraction(0.68), .large]
+    }
+
     var body: some View {
         NavigationStack {
             VStack(spacing: 0) {
@@ -137,12 +148,14 @@ struct TransactionDetailView: View {
                                     accessibilityPrefix: "Amount"
                                 )
                             } else {
-                                CurrencyAmountDisplay(
+                                TransactionReceiptAmountPair(
                                     sats: transaction.amount,
-                                    primary: $settings.amountDisplayPrimary,
-                                    role: showsQR ? .amountCompact : .amountConfirm
+                                    role: showsQR ? .amountCompact : .amountConfirm,
+                                    showFiat: settings.showFiatBalance,
+                                    btcPrice: priceService.btcPriceUSD,
+                                    currencyCode: priceService.currencyCode,
+                                    useBitcoinSymbol: settings.useBitcoinSymbol
                                 )
-                                .accessibilityLabel("Amount: \(transaction.amount) sats")
                             }
                         }
                         .padding(.top, heroSlotIsEmpty ? 32 : 0)
@@ -150,11 +163,11 @@ struct TransactionDetailView: View {
                         // Detail rows on canvas, led by Status + Date. Type is
                         // omitted — the nav title names it.
                         VStack(spacing: 0) {
-                            ForEach(Array(detailRows.enumerated()), id: \.offset) { index, row in
+                            ForEach(Array(detailRows.enumerated()), id: \.offset) { _, row in
                                 if let copyValue = row.copyValue {
-                                    copyableRow(icon: row.icon, label: row.label, value: row.value, copyValue: copyValue)
+                                    copyableRow(label: row.label, value: row.value, copyValue: copyValue)
                                 } else {
-                                    detailRow(icon: row.icon, label: row.label, value: row.value)
+                                    detailRow(label: row.label, value: row.value)
                                 }
                             }
                             if let explorerURL = onchainExplorerURL {
@@ -184,6 +197,7 @@ struct TransactionDetailView: View {
                         }
                     }
                     .padding(.horizontal)
+                    .padding(.bottom, copyableContent == nil ? 0 : 24)
                 }
 
                 // Pending outgoing ecash gains the same one-off status action as
@@ -193,10 +207,10 @@ struct TransactionDetailView: View {
                     VStack(spacing: 12) {
                         if let content = copyableContent {
                             Button(action: { copyContent(content) }) {
-                                Text(copyButtonText)
+                                Text("Copy")
                             }
-                            .glassButton()
-                            .accessibilityLabel(copyButtonText == "Copied" ? "Copied" : "Copy \(qrContentTypeLabel)")
+                            .flatSheetSecondaryButton()
+                            .accessibilityLabel("Copy \(qrContentTypeLabel)")
                             .accessibilityHint("Copies the \(qrContentAccessibilityLabel) to clipboard")
                         }
 
@@ -222,8 +236,10 @@ struct TransactionDetailView: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbarBackground(.hidden, for: .navigationBar)
             .toolbar {
-                ToolbarItem(placement: .navigationBarLeading) {
-                    SheetCloseButton()
+                if !isCompactReceipt {
+                    ToolbarItem(placement: .navigationBarLeading) {
+                        SheetCloseButton()
+                    }
                 }
                 ToolbarItem(placement: .principal) {
                     Text(transaction.displayTitle).font(.headline)
@@ -254,6 +270,16 @@ struct TransactionDetailView: View {
             }
             .onDisappear {
                 manualClaimCheckTask?.cancel()
+            }
+        }
+        .environment(\.bottomSheetSurfaceStyle, isCompactReceipt ? .compact : .flat)
+        .presentationDetents(presentationDetents)
+        .presentationDragIndicator(.visible)
+        .presentationBackground {
+            if isCompactReceipt {
+                CompactSheetBackground()
+            } else {
+                Color(uiColor: .systemBackground)
             }
         }
     }
@@ -331,46 +357,36 @@ struct TransactionDetailView: View {
         }
     }
 
-    /// A monochrome row glyph for the Status row (row icons are all `.secondary`).
-    private var statusFieldIcon: String {
-        switch transaction.status {
-        case .completed: return "checkmark.circle"
-        case .pending:   return "clock"
-        case .failed:    return "xmark.circle"
-        case .expired:   return "clock.badge.xmark"
-        }
-    }
-
     /// Detail rows as data, led by Status + Date, so the hairline interleaving stays
     /// correct as later rows drop out. Unit is gone (`unitLabel` is always BTC/SAT);
     /// the settled Request string is gone (its live form is the QR/Copy). On-chain
     /// keeps Address / Transaction ID (still actionable).
-    private var detailRows: [(icon: String, label: String, value: String, copyValue: String?)] {
-        var rows: [(icon: String, label: String, value: String, copyValue: String?)] = [
-            (statusFieldIcon, "Status", statusFieldValue, nil),
-            ("calendar", "Date", transaction.date.formatted(date: .abbreviated, time: .shortened), nil),
+    private var detailRows: [(label: String, value: String, copyValue: String?)] {
+        var rows: [(label: String, value: String, copyValue: String?)] = [
+            ("Status", statusFieldValue, nil),
+            ("Date", transaction.date.formatted(date: .abbreviated, time: .shortened), nil),
         ]
         if transaction.fee > 0 {
-            rows.append(("arrow.up.arrow.down", "Fee", formattedNativeFee, nil))
+            rows.append(("Fee", formattedNativeFee, nil))
         }
         if transaction.kind == .onchain {
             if let mintUrl = transaction.mintUrl {
-                rows.append(("bitcoinsign.bank.building", "Mint", extractMintHost(mintUrl), nil))
+                rows.append(("Mint", extractMintHost(mintUrl), nil))
             }
             // Address/txid are reference blobs — show the decoder's standard
             // 8…6 short form; tap-to-copy carries the full value.
             if let request = transaction.invoice {
-                rows.append(("qrcode", "Address", PaymentRequestDecoder.middleTruncated(request), request))
+                rows.append(("Address", PaymentRequestDecoder.middleTruncated(request), request))
             }
             if let preimage = transaction.preimage {
-                rows.append(("checkmark.seal", "Transaction ID", PaymentRequestDecoder.middleTruncated(preimage), preimage))
+                rows.append(("Transaction ID", PaymentRequestDecoder.middleTruncated(preimage), preimage))
             }
         } else {
             if let mintUrl = transaction.mintUrl {
-                rows.append(("bitcoinsign.bank.building", "Mint", extractMintHost(mintUrl), nil))
+                rows.append(("Mint", extractMintHost(mintUrl), nil))
             }
             if let preimage = transaction.preimage {
-                rows.append(("key", "Payment Proof", preimage, preimage))
+                rows.append(("Payment Proof", PaymentRequestDecoder.middleTruncated(preimage), preimage))
             }
         }
         return rows
@@ -395,9 +411,9 @@ struct TransactionDetailView: View {
         ).formatted()
     }
 
-    private func detailRow(icon: String, label: String, value: String) -> some View {
+    private func detailRow(label: String, value: String) -> some View {
         HStack {
-            Label(label, systemImage: icon)
+            Text(label)
                 .foregroundStyle(.secondary)
             Spacer()
             Text(value)
@@ -410,25 +426,22 @@ struct TransactionDetailView: View {
         .font(.subheadline)
         .padding(.horizontal, 4)
         .padding(.vertical, 14)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(label)
+        .accessibilityValue(value)
     }
 
-    /// Same shape as `detailRow` but tap-to-copy: copies the FULL value (the
-    /// display may be middle-truncated) with a success haptic and a fleeting
-    /// doc.on.doc → green checkmark swap — the app's copy-feedback convention
-    /// (iOS has no native toast). Deliberately no `.textSelection`: it would
-    /// fight the tap gesture, and the row itself is the copy affordance.
-    private func copyableRow(icon: String, label: String, value: String, copyValue: String) -> some View {
-        let isCopied = copiedRowLabel == label
-        return Button {
+    /// Same shape as `detailRow` but tap-to-copy: copies the FULL value while
+    /// leaving the affordance visually stable. The shared top toast is the one
+    /// confirmation channel; no icon morph competes with it.
+    private func copyableRow(label: String, value: String, copyValue: String) -> some View {
+        Button {
             UIPasteboard.general.string = copyValue
             HapticFeedback.notification(.success)
-            copiedRowLabel = label
-            DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
-                if copiedRowLabel == label { copiedRowLabel = nil }
-            }
+            ConfirmationToast.show(copyConfirmationMessage(for: label))
         } label: {
             HStack {
-                Label(label, systemImage: icon)
+                Text(label)
                     .foregroundStyle(.secondary)
                 Spacer()
                 Text(value)
@@ -436,9 +449,9 @@ struct TransactionDetailView: View {
                     .multilineTextAlignment(.trailing)
                     .lineLimit(1)
                     .truncationMode(.middle)
-                Image(systemName: isCopied ? "checkmark" : "doc.on.doc")
+                Image(systemName: "doc.on.doc")
                     .font(.footnote)
-                    .foregroundStyle(isCopied ? AnyShapeStyle(.green) : AnyShapeStyle(.tertiary))
+                    .foregroundStyle(.tertiary)
                     .padding(.leading, 4)
             }
             .font(.subheadline)
@@ -447,8 +460,8 @@ struct TransactionDetailView: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .animation(.snappy(duration: 0.18), value: copiedRowLabel)
-        .accessibilityLabel(isCopied ? "\(label) copied" : label)
+        .accessibilityLabel(label)
+        .accessibilityValue(value)
         .accessibilityHint("Copies the \(label.lowercased()) to clipboard")
     }
 
@@ -458,7 +471,7 @@ struct TransactionDetailView: View {
     private func explorerLinkRow(label: String, url: URL) -> some View {
         Link(destination: url) {
             HStack {
-                Label(label, systemImage: "safari")
+                Text(label)
                     .foregroundStyle(.secondary)
                 Spacer()
                 Image(systemName: "arrow.up.right")
@@ -499,9 +512,15 @@ struct TransactionDetailView: View {
     private func copyContent(_ content: String) {
         UIPasteboard.general.string = content
         HapticFeedback.notification(.success)
-        copyButtonText = "Copied"
-        DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
-            copyButtonText = "Copy"
+        ConfirmationToast.show("Copied \(qrContentAccessibilityLabel)")
+    }
+
+    private func copyConfirmationMessage(for label: String) -> String {
+        switch label {
+        case "Address": return "Copied Bitcoin address"
+        case "Transaction ID": return "Copied transaction ID"
+        case "Payment Proof": return "Copied payment proof"
+        default: return "Copied \(label.lowercased())"
         }
     }
 
@@ -539,5 +558,45 @@ struct TransactionDetailView: View {
             announcement = "Couldn't check status. \(message.text)"
         }
         AccessibilityNotification.Announcement(announcement).post()
+    }
+}
+
+/// A receipt is a settled sat amount with an optional live fiat reference — not
+/// an entry control. Keeping the pair static prevents a historical transaction
+/// from changing hierarchy with the home or keypad display preferences.
+private struct TransactionReceiptAmountPair: View {
+    let sats: UInt64
+    let role: CashuTextRole
+    let showFiat: Bool
+    let btcPrice: Double
+    let currencyCode: String
+    let useBitcoinSymbol: Bool
+
+    private var fiatText: String? {
+        guard showFiat else { return nil }
+        return AmountFormatter.fiat(
+            sats: sats,
+            btcPrice: btcPrice,
+            currencyCode: currencyCode
+        )
+    }
+
+    var body: some View {
+        VStack(spacing: AmountPairMetrics.spacing) {
+            AmountLockup(
+                parts: AmountFormatter.satsParts(sats, useBitcoinSymbol: useBitcoinSymbol),
+                role: role,
+                value: Double(sats),
+                accessibilityPrefix: "Amount"
+            )
+
+            if let fiatText {
+                Text(fiatText)
+                    .cashuText(.bodyEmphasis)
+                    .monospacedDigit()
+                    .foregroundStyle(.secondary)
+                    .accessibilityLabel("Fiat equivalent: \(fiatText)")
+            }
+        }
     }
 }

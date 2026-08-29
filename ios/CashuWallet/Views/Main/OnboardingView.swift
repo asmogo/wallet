@@ -40,7 +40,6 @@ struct OnboardingView: View {
     // Seed phrase reveal / acknowledge state
     @State private var seedRevealed = false
     @State private var seedAcknowledged = false
-    @State private var seedCopied = false
     // Snapshot of the seed words taken when the seed step appears, so wallet
     // manager publishes during the step can't rebuild (and re-animate) the grid.
     @State private var mnemonicWords: [String] = []
@@ -183,13 +182,13 @@ struct OnboardingView: View {
         }
         .sheet(isPresented: $showConceptSheet) {
             conceptSheet
-                .flatBottomSheetSurface()
+                .compactBottomSheetSurface()
         }
         // A second sibling sheet rather than an enum-driven one: the two belong
         // to different steps and are never both true.
         .sheet(isPresented: $showMintBackupSheet) {
             mintBackupSheet
-                .flatBottomSheetSurface()
+                .compactBottomSheetSurface()
         }
         .onAppear {
             startAsciiFieldEntrance()
@@ -1163,12 +1162,9 @@ struct OnboardingView: View {
 
             Button(action: copyMnemonic) {
                 HStack(spacing: 6) {
-                    Image(systemName: seedCopied ? "checkmark" : "doc.on.doc")
-                        .contentTransition(.symbolEffect(.replace))
-                    Text(seedCopied ? "Copied" : "Copy")
-                        .contentTransition(.opacity)
+                    Image(systemName: "doc.on.doc")
+                    Text("Copy")
                 }
-                .animation(.snappy, value: seedCopied)
             }
             .textLinkButton()
             .frame(maxWidth: .infinity)
@@ -1193,7 +1189,6 @@ struct OnboardingView: View {
             // composable (OnboardingScreen.kt).
             seedRevealed = false
             seedAcknowledged = false
-            seedCopied = false
             triggerEntrance { mnemonicAppeared = true }
         }
     }
@@ -1211,11 +1206,8 @@ struct OnboardingView: View {
 
     private func copyMnemonic() {
         UIPasteboard.general.string = mnemonicWords.joined(separator: " ")
-        withAnimation(.snappy) { seedCopied = true }
         HapticFeedback.selection()
-        DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
-            withAnimation(.snappy) { seedCopied = false }
-        }
+        ConfirmationToast.show("Copied recovery phrase")
     }
 
     private func mnemonicWordsGrid(words: [String]) -> some View {

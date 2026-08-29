@@ -13,7 +13,6 @@ struct MintDetailView: View {
     @State private var isLoading = true
     @State private var errorMessage: String?
     @State private var showRemoveConfirmation = false
-    @State private var copiedUrl = false
     @State private var nutsExpanded = false
     @State private var aboutExpanded = false
     @State private var showNavTitle = false
@@ -182,15 +181,13 @@ struct MintDetailView: View {
                     .font(.caption)
                     .lineLimit(1)
                     .truncationMode(.middle)
-                Image(systemName: copiedUrl ? "checkmark" : "doc.on.doc")
+                Image(systemName: "doc.on.doc")
                     .font(.caption2)
-                    .contentTransition(.symbolEffect(.replace))
-                    .animation(.snappy(duration: 0.18), value: copiedUrl)
             }
             .foregroundStyle(.secondary)
         }
         .buttonStyle(.plain)
-        .accessibilityLabel(copiedUrl ? "Copied mint URL" : "Copy mint URL")
+        .accessibilityLabel("Copy mint URL")
     }
 
     // MARK: - Identity stats
@@ -662,10 +659,7 @@ struct MintDetailView: View {
 
     private func copyUrl() {
         UIPasteboard.general.string = mint.url
-        copiedUrl = true
-        DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
-            copiedUrl = false
-        }
+        ConfirmationToast.show("Copied mint URL")
     }
 
     private func loadMintInfo() async {
