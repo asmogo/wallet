@@ -205,6 +205,7 @@ data class CashuTypeRoles(
     val numberPadKey: TextStyle,
     val metadata: TextStyle,
     // Technical strings.
+    val monoDisplay: TextStyle,
     val monoBody: TextStyle,
     val monoCaption: TextStyle,
 ) {
@@ -274,6 +275,14 @@ fun cashuTypeRoles(fonts: CashuFonts = CashuFonts.Geist): CashuTypeRoles {
         // metadata is already demoted by secondary ink, and 12sp on top of that
         // is a double demotion that pushes it under the legibility line.
         metadata = m3.bodyMedium,
+
+        // The value a QR/receipt sheet displays under its code — the technical
+        // string as the sheet's second focal point, not a caption-sized
+        // footnote (iOS `monoDisplay` parity).
+        monoDisplay = m3.bodyLarge
+            .copy(fontFamily = fonts.mono)
+            .tracked(t.mono)
+            .withSlashedZero(),
 
         monoBody = m3.bodyMedium
             .copy(fontFamily = fonts.mono)

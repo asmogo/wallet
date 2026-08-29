@@ -303,13 +303,13 @@ struct TransactionDetailView: View {
             // severity vocabulary, so it takes the same tokens rather than
             // raw .green/.red.
             Image(systemName: "checkmark.circle.fill")
-                .font(.system(size: 64))
+                .font(.statusGlyph)
                 .foregroundStyle(ErrorSeverity.success.foreground)
                 .padding(.top, 24)
                 .accessibilityLabel("Completed")
         } else if transaction.status == .failed {
             Image(systemName: "xmark.circle.fill")
-                .font(.system(size: 64))
+                .font(.statusGlyph)
                 .foregroundStyle(ErrorSeverity.error.foreground)
                 .padding(.top, 24)
                 .accessibilityLabel("Failed")

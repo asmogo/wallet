@@ -1233,53 +1233,53 @@ struct QRCodeDetailSheet: View {
     let title: String
     let content: String
 
+    @State private var contentHeight: CGFloat = 0
+
     var body: some View {
-        NavigationStack {
-            VStack(spacing: 0) {
-                ScrollView {
-                    VStack(spacing: 20) {
-                        QRCodeView(content: content, showControls: false)
-                            .padding()
-                            .frame(width: 280, height: 280)
-                            .background(Color.white)
-                            .clipShape(.rect(cornerRadius: 12))
+        // Content-fit receipt, not a .medium detent: the medium sheet cut the
+        // value line off below the fold, so the one thing the QR encodes was
+        // invisible until the user dragged. The sheet now hugs title + QR +
+        // value + actions exactly, matching Android's content-height sheet.
+        VStack(spacing: 0) {
+            // In-content title — like every receipt sheet, dismissal is the
+            // drag indicator / swipe, not a floating close-X.
+            Text(title)
+                .font(.title2.weight(.semibold))
 
-                        Text(content)
-                            .font(.system(.caption, design: .monospaced))
-                            .multilineTextAlignment(.center)
-                            .lineLimit(2)
-                            .truncationMode(.middle)
-                    }
-                    .padding(.horizontal)
-                    .padding(.top, 8)
+            QRCodeView(content: content, showControls: false)
+                .padding()
+                .frame(width: 280, height: 280)
+                .background(Color.white)
+                .clipShape(.rect(cornerRadius: 16))
+                .padding(.top, 24)
+
+            // One middle-truncated line at full body size and primary ink —
+            // this is the sheet's second focal point, not a footnote. The full
+            // value travels via Copy/Share.
+            Text(content)
+                .cashuText(.monoDisplay)
+                .truncationMode(.middle)
+                .padding(.top, 16)
+
+            HStack(spacing: 12) {
+                Button(action: copyToClipboard) {
+                    Text("Copy")
                 }
+                .flatSheetSecondaryButton()
 
-                HStack(spacing: 12) {
-                    Button(action: copyToClipboard) {
-                        Text("Copy")
-                    }
-                    .flatSheetSecondaryButton()
-
-                    ShareLink(item: content) {
-                        Text("Share")
-                    }
-                    .glassButton()
+                ShareLink(item: content) {
+                    Text("Share")
                 }
-                .padding(.horizontal)
-                .padding(.bottom, 16)
+                .glassButton()
             }
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbarBackground(.hidden, for: .navigationBar)
-            .toolbar {
-                // Title only — like every receipt sheet, dismissal is the drag
-                // indicator / swipe, not a floating close-X.
-                ToolbarItem(placement: .principal) {
-                    Text(title).font(.headline)
-                }
-            }
+            .padding(.top, 24)
         }
+        .padding(.horizontal, 24)
+        .padding(.top, 20)
+        .padding(.bottom, 16)
+        .contentFitMeasured { contentHeight = $0 }
+        .contentFitDetent(contentHeight, estimate: 480, navigationBar: false)
         .compactBottomSheetSurface()
-        .presentationDetents([.medium, .large])
         .presentationDragIndicator(.visible)
     }
 
@@ -1807,7 +1807,7 @@ struct ImportNsecSheet: View {
                 .font(.title2.weight(.semibold))
 
             Image(systemName: "checkmark.circle.fill")
-                .font(.system(size: 64))
+                .font(.statusGlyph)
                 .foregroundStyle(ErrorSeverity.success.foreground)
                 .accessibilityLabel("Success")
 

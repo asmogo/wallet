@@ -41,6 +41,18 @@ struct CashuFonts {
     }
 }
 
+// MARK: - Symbol sizes
+
+/// Sanctioned SF Symbol sizes — glyph sizing, not text, which is why it lives
+/// in the design layer rather than tripping the hardcoded-point-size ratchet
+/// at five call sites.
+extension Font {
+    /// The status glyph on success/failure faces (payment settled, key
+    /// imported, transaction detail). One size, so every outcome face carries
+    /// the same visual weight.
+    static let statusGlyph = Font.system(size: 64)
+}
+
 /// Per-role tracking, in **em**.
 ///
 /// Em rather than points, deliberately. The five copy-pasted `.tracking(1.2)`

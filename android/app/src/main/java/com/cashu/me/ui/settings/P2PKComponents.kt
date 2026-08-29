@@ -350,62 +350,64 @@ fun QrDetailSheet(
     ) {
         Box(modifier = Modifier.fillMaxWidth()) {
             Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = CashuTheme.spacing.comfortable)
-                .navigationBarsPadding()
-                .verticalScroll(rememberScrollState()),
-            horizontalAlignment = Alignment.CenterHorizontally,
-        ) {
-            Text(
-                text = title,
-                style = MaterialTheme.typography.titleMedium,
-                color = MaterialTheme.colorScheme.onSurface,
-            )
-            Spacer(Modifier.height(CashuTheme.spacing.loose))
-            QrCard(
-                content = content,
-                staticOnly = true,
-                shareSubject = title,
-                confirmationMessage = "Copied ${title.lowercase()}",
-            )
-            Spacer(Modifier.height(CashuTheme.spacing.default))
-            // One quiet middle-truncated line (iOS parity) — the full value
-            // travels via Copy/Share, so wrapping it here just reads as noise.
-            Text(
-                text = content,
-                style = MaterialTheme.typography.bodySmall.copy(fontFamily = CashuTheme.fonts.mono).withSlashedZero(),
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = 1,
-                overflow = TextOverflow.MiddleEllipsis,
-            )
-            Spacer(Modifier.height(CashuTheme.spacing.loose))
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(CashuTheme.spacing.default),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = CashuTheme.spacing.comfortable)
+                    .navigationBarsPadding()
+                    .verticalScroll(rememberScrollState()),
+                horizontalAlignment = Alignment.CenterHorizontally,
             ) {
-                SecondaryButton(
-                    text = "Copy",
-                    onClick = {
-                        clipboardScope.launch {
-                            clipboard.setClipEntry(
-                                ClipEntry(ClipData.newPlainText(title, content)),
-                            )
-                            confirmationToastController?.show("Copied ${title.lowercase()}")
-                        }
-                    },
-                    modifier = Modifier.weight(1f),
+                // Canonical sheet chrome, like the sibling reveal sheet —
+                // not a bare titleMedium line.
+                SheetHeader(title = title)
+                Spacer(Modifier.height(CashuTheme.spacing.snug))
+                QrCard(
+                    content = content,
+                    // 248 code + 16 cushion = the 280 card iOS draws, so both
+                    // sheets carry the same code-to-sheet proportion.
+                    size = 248.dp,
+                    staticOnly = true,
+                    shareSubject = title,
+                    confirmationMessage = "Copied ${title.lowercase()}",
                 )
-                PrimaryButton(
-                    text = "Share",
-                    onClick = { context.shareText(content, title) },
-                    // Inverted ink, matching the confirm sheets' action button
-                    // and iOS's white Share pill (PrimaryButton is gray by default).
-                    colors = ButtonDefaults.buttonColors(),
-                    modifier = Modifier.weight(1f),
+                Spacer(Modifier.height(CashuTheme.spacing.comfortable))
+                // One middle-truncated line at full body size and primary ink —
+                // the sheet's second focal point, not a footnote. The full
+                // value travels via Copy/Share.
+                Text(
+                    text = content,
+                    style = CashuTheme.type.monoDisplay,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    maxLines = 1,
+                    overflow = TextOverflow.MiddleEllipsis,
                 )
-            }
-            Spacer(Modifier.height(CashuTheme.spacing.comfortable))
+                Spacer(Modifier.height(CashuTheme.spacing.section))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(CashuTheme.spacing.default),
+                ) {
+                    SecondaryButton(
+                        text = "Copy",
+                        onClick = {
+                            clipboardScope.launch {
+                                clipboard.setClipEntry(
+                                    ClipEntry(ClipData.newPlainText(title, content)),
+                                )
+                                confirmationToastController?.show("Copied ${title.lowercase()}")
+                            }
+                        },
+                        modifier = Modifier.weight(1f),
+                    )
+                    PrimaryButton(
+                        text = "Share",
+                        onClick = { context.shareText(content, title) },
+                        // Inverted ink, matching the confirm sheets' action button
+                        // and iOS's white Share pill (PrimaryButton is gray by default).
+                        colors = ButtonDefaults.buttonColors(),
+                        modifier = Modifier.weight(1f),
+                    )
+                }
+                Spacer(Modifier.height(CashuTheme.spacing.comfortable))
             }
         }
     }

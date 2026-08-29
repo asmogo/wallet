@@ -132,7 +132,7 @@ struct PaymentStatusView: View {
                 // *into focus* as it scales in, riding the same `.smooth(0.3)`. Reduce
                 // Motion drops both blur and scale to a plain fade.
                 Image(systemName: "checkmark.circle.fill")
-                    .font(.system(size: 64))
+                    .font(.statusGlyph)
                     .foregroundStyle(.green)
                     .symbolEffect(.bounce, value: reduceMotion ? 0 : phaseKey)
                     .transition(reduceMotion ? .opacity : .scale(scale: 0.92).combined(with: .opacity).combined(with: .materializeBlur))
@@ -141,7 +141,7 @@ struct PaymentStatusView: View {
                 // celebration beat (DESIGN.md §6); a failure/caution glyph must not
                 // borrow it. It still scales + fades in, just without the delight.
                 Image(systemName: isCaution ? "exclamationmark.triangle.fill" : "xmark.circle.fill")
-                    .font(.system(size: 64))
+                    .font(.statusGlyph)
                     .foregroundStyle(isCaution ? .orange : .red)
                     .transition(reduceMotion ? .opacity : .scale(scale: 0.92).combined(with: .opacity))
             }
@@ -160,15 +160,19 @@ struct PaymentStatusView: View {
                 .opacity(0)
                 .accessibilityHidden(true)
         case .success:
+            // Quiet secondary, not the white primary: the payment already
+            // happened, Done just closes the screen (matches Android's neutral
+            // Done and the Key Imported success face).
             Button(action: onDone) { Text("Done") }
-                .glassButton()
+                .flatSheetSecondaryButton()
         case .failure(_, _, let isTerminal):
             if let failureCTA {
                 Button(action: failureCTA.action) { Text(failureCTA.title) }
                     .glassButton()
             } else if isTerminal {
+                // Same demotion as success — there is nothing left to do here.
                 Button(action: onDone) { Text("Done") }
-                    .glassButton()
+                    .flatSheetSecondaryButton()
             } else {
                 Button(action: onRetry) { Text("Try Again") }
                     .glassButton()

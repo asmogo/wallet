@@ -186,6 +186,14 @@ extension CashuTextRole {
 
     // MARK: Technical strings
 
+    /// The value a QR/receipt sheet displays under its code — the technical
+    /// string as the sheet's second focal point, not a caption-sized footnote.
+    /// Single-line by role: it is a fingerprint (call sites middle-truncate);
+    /// the full value travels via Copy/Share.
+    static let monoDisplay = CashuTextRole(
+        size: .style(.body), face: .mono, trackingKey: \.mono, lineLimit: 1
+    )
+
     static let monoBody = CashuTextRole(
         size: .style(.subheadline), face: .mono, trackingKey: \.mono
     )
