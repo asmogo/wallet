@@ -26,7 +26,6 @@ struct SettingsView: View {
                     currencyRow
                     toggleRow(
                         "Use ₿ symbol",
-                        subtitle: "Use ₿ symbol instead of sats.",
                         icon: "bitcoinsign",
                         isOn: $settings.useBitcoinSymbol
                     )
