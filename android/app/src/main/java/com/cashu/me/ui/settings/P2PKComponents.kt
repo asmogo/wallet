@@ -1,6 +1,9 @@
 package com.cashu.me.ui.settings
 
 import android.content.ClipData
+import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.spring
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -26,8 +29,7 @@ import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material.icons.outlined.ContentCopy
 import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material.icons.outlined.LockOpen
-import androidx.compose.material.icons.outlined.Visibility
-import androidx.compose.material.icons.outlined.VisibilityOff
+import androidx.compose.material3.Button
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -58,15 +60,17 @@ import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
 import com.cashu.me.Core.AppLockManager
 import com.cashu.me.Core.Bech32
-import com.cashu.me.ui.components.IconSwap
 import com.cashu.me.ui.components.LocalConfirmationToastController
 import com.cashu.me.ui.components.PrimaryButton
 import com.cashu.me.ui.components.QrCard
+import com.cashu.me.ui.components.SecondaryButton
+import com.cashu.me.ui.components.SheetHeader
 import com.cashu.me.ui.components.shareText
 import com.cashu.me.ui.security.rememberWalletAuthenticationLauncher
 import com.cashu.me.ui.theme.CashuTheme
@@ -75,7 +79,6 @@ import com.cashu.me.ui.theme.withSlashedZero
 // iOS KeyCard geometry: 34pt glyph circle, rounded-14 card.
 private val KeyGlyphSize = 36.dp
 private val KeyGlyphIconSize = 18.dp
-private const val HiddenKeyDots = 24
 
 /**
  * Formatting for P2PK keys so they read the same everywhere (the Locked Ecash
@@ -403,8 +406,11 @@ fun QrDetailSheet(
 }
 
 /**
- * Reveals a key's nsec, mirroring the seed-phrase backup pattern: the key is
- * loaded only after device authentication, independently for reveal and copy.
+ * Reveals a key's nsec, matching the seed-phrase backup sheet beat for beat
+ * (iOS `PrivateKeyRevealSheet` parity): sheet title, warning copy, and one CTA
+ * that flips from Reveal to Copy once the key is showing, on a sheet dismissed
+ * by drag. The key is loaded only after device authentication, independently
+ * for reveal and copy.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -425,12 +431,8 @@ fun PrivateKeyRevealSheet(
                 title = title,
                 warning = warning,
                 revealedNsec = revealedNsec,
-                onToggleReveal = {
-                    if (revealedNsec != null) {
-                        revealedNsec = null
-                    } else {
-                        authenticate("Reveal this private key") { revealedNsec = loadNsec() }
-                    }
+                onReveal = {
+                    authenticate("Reveal this private key") { revealedNsec = loadNsec() }
                 },
                 onCopy = {
                     authenticate("Copy this private key") {
@@ -440,7 +442,6 @@ fun PrivateKeyRevealSheet(
                         }
                     }
                 },
-                onDone = onDismiss,
             )
         }
     }
@@ -455,91 +456,66 @@ internal fun PrivateKeyRevealContent(
     title: String,
     warning: String,
     revealedNsec: String?,
-    onToggleReveal: () -> Unit,
+    onReveal: () -> Unit,
     onCopy: () -> Unit,
-    onDone: () -> Unit,
 ) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
+            .navigationBarsPadding()
             .padding(horizontal = CashuTheme.spacing.comfortable)
-            .navigationBarsPadding(),
-        horizontalAlignment = Alignment.CenterHorizontally,
+            .padding(bottom = CashuTheme.spacing.section)
+            .animateContentSize(
+                animationSpec = spring(
+                    dampingRatio = Spring.DampingRatioNoBouncy,
+                    stiffness = Spring.StiffnessMediumLow,
+                ),
+            ),
+        verticalArrangement = Arrangement.spacedBy(CashuTheme.spacing.section),
     ) {
-        Icon(
-            imageVector = Icons.Filled.Warning,
-            contentDescription = null,
-            tint = CashuTheme.colors.pending,
-            modifier = Modifier.size(CashuTheme.spacing.page),
-        )
-        Spacer(Modifier.height(CashuTheme.spacing.snug))
         // Names which key is on screen — the app holds a Nostr key, a primary
         // P2PK key, and any number of device keys.
-        Text(
-            text = title.uppercase(),
-            style = CashuTheme.type.overline,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-        Spacer(Modifier.height(CashuTheme.spacing.micro))
-        Text(
-            text = "Keep this key secret",
-            style = MaterialTheme.typography.titleMedium,
-            color = MaterialTheme.colorScheme.onSurface,
-        )
-        Spacer(Modifier.height(CashuTheme.spacing.snug))
+        SheetHeader(title = title)
+
         Text(
             text = warning,
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
+            textAlign = TextAlign.Center,
+            modifier = Modifier.fillMaxWidth(),
         )
-        Spacer(Modifier.height(CashuTheme.spacing.section))
 
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .background(MaterialTheme.colorScheme.surfaceContainerHigh, MaterialTheme.shapes.small)
-                .padding(CashuTheme.spacing.default),
-            verticalArrangement = Arrangement.spacedBy(CashuTheme.spacing.snug),
-        ) {
+        if (revealedNsec != null) {
+            // Same container treatment the revealed seed words use.
             Text(
-                text = "Private key (nsec)",
-                style = CashuTheme.type.overline,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                text = revealedNsec,
+                style = MaterialTheme.typography.bodyMedium
+                    .copy(fontFamily = CashuTheme.fonts.mono)
+                    .withSlashedZero(),
+                color = MaterialTheme.colorScheme.onSurface,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(MaterialTheme.colorScheme.surfaceContainer, MaterialTheme.shapes.medium)
+                    .padding(CashuTheme.spacing.default),
             )
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(CashuTheme.spacing.snug),
-            ) {
-                Text(
-                    text = revealedNsec ?: "\u2022".repeat(HiddenKeyDots),
-                    style = MaterialTheme.typography.bodyMedium.copy(fontFamily = CashuTheme.fonts.mono).withSlashedZero(),
-                    color = if (revealedNsec != null) MaterialTheme.colorScheme.onSurface
-                    else MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 3,
-                    modifier = Modifier.weight(1f),
-                )
-                Column(verticalArrangement = Arrangement.spacedBy(CashuTheme.spacing.micro)) {
-                    IconButton(onClick = onToggleReveal) {
-                        IconSwap(
-                            icon = if (revealedNsec != null) Icons.Outlined.VisibilityOff
-                            else Icons.Outlined.Visibility,
-                            contentDescription = if (revealedNsec != null) "Hide key" else "Reveal key",
-                        )
-                    }
-                    IconButton(onClick = onCopy) {
-                        Icon(
-                            imageVector = Icons.Outlined.ContentCopy,
-                            contentDescription = "Copy key",
-                            tint = MaterialTheme.colorScheme.onSurface,
-                        )
-                    }
-                }
-            }
         }
 
-        Spacer(Modifier.height(CashuTheme.spacing.section))
-        PrimaryButton(text = "Done", onClick = onDone)
-        Spacer(Modifier.height(CashuTheme.spacing.comfortable))
+        // Reveal is the sheet's one primary action; once the key is showing,
+        // Copy is a quieter follow-up and drops to the secondary style.
+        if (revealedNsec != null) {
+            SecondaryButton(
+                text = "Copy Private Key",
+                onClick = onCopy,
+                modifier = Modifier.fillMaxWidth(),
+            )
+        } else {
+            Button(
+                onClick = onReveal,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Text("Reveal Private Key")
+            }
+        }
     }
 }
 

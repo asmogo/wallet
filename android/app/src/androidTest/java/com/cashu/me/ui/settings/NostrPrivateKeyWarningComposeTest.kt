@@ -27,9 +27,8 @@ class NostrPrivateKeyWarningComposeTest {
                 title = "Nostr private key",
                 warning = NostrPrivateKeyWarningText,
                 revealedNsec = null,
-                onToggleReveal = {},
+                onReveal = {},
                 onCopy = {},
-                onDone = {},
             )
         }
     }
@@ -52,6 +51,6 @@ class NostrPrivateKeyWarningComposeTest {
     fun revealSheetNamesWhichKeyItIsAboutToShow() {
         setRevealContent()
 
-        compose.onNodeWithText("NOSTR PRIVATE KEY").assertIsDisplayed()
+        compose.onNodeWithText("Nostr private key").assertIsDisplayed()
     }
 }
