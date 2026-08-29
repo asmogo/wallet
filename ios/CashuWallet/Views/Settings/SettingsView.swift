@@ -1664,6 +1664,9 @@ struct MintPickerSheet: View {
 
 // MARK: - Import Nsec Sheet
 
+/// Imports a custom Nostr key on the same content-fit sheet recipe as
+/// `BackupView` and `PrivateKeyRevealSheet`: in-content title, secondary copy,
+/// one primary CTA, dismissed by drag.
 struct ImportNsecSheet: View {
     @Binding var nsecText: String
     let replacementWarning: String
@@ -1671,74 +1674,72 @@ struct ImportNsecSheet: View {
     /// a decode failure visible instead of leaving it on the screen behind us.
     let onImport: () -> String?
 
-    @Environment(\.dismiss) private var dismiss
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var errorMessage: String?
     @State private var showReplacementConfirm = false
+    @State private var contentHeight: CGFloat = 0
 
     private var canImport: Bool {
         !nsecText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
     var body: some View {
-        NavigationStack {
-            ScrollView {
-                LazyVStack(spacing: 0) {
-                    SettingsSectionGroup("Nostr private key") {
-                        HStack(spacing: 10) {
-                            TextField("nsec1…", text: $nsecText)
-                                .font(.system(.body, design: .monospaced))
-                                .textInputAutocapitalization(.never)
-                                .autocorrectionDisabled()
-                                .onSubmit(review)
+        VStack(spacing: 24) {
+            Text("Import Key")
+                .font(.title2.weight(.semibold))
 
-                            Button(action: pasteFromClipboard) {
-                                Image(systemName: "doc.on.clipboard")
-                                    .font(.title3)
-                                    .foregroundStyle(Color.primary)
-                            }
-                            .buttonStyle(.plain)
-                            .accessibilityLabel("Paste from clipboard")
-                        }
-                        .padding(14)
-                        .liquidGlass(in: RoundedRectangle(cornerRadius: 14))
+            Text("Enter your nsec (Nostr private key) to use it for your Lightning address.")
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+
+            VStack(spacing: 12) {
+                HStack(spacing: 10) {
+                    TextField("nsec1…", text: $nsecText)
+                        .font(.system(.body, design: .monospaced))
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled()
+                        .onSubmit(review)
+
+                    Button(action: pasteFromClipboard) {
+                        Image(systemName: "doc.on.clipboard")
+                            .font(.title3)
+                            .foregroundStyle(Color.primary)
                     }
-
-                    if let errorMessage {
-                        InlineNotice(message: errorMessage, severity: .error)
-                            .padding(.horizontal, 6)
-                            .padding(.top, 4)
-                            .transition(.opacity)
-                    }
-
-                    SettingsSectionFooter {
-                        Text("Enter your nsec (Nostr private key) to use it for your Lightning address.")
-                    }
-
-                    Button("Review Import", action: review)
-                        .glassButton()
-                        .disabled(!canImport)
-                        .padding(.top, 8)
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Paste from clipboard")
                 }
-                .padding(.horizontal)
-                .padding(.bottom, 32)
-            }
-            .animation(.easeInOut(duration: 0.2), value: errorMessage)
-            .navigationTitle("Import Key")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbarBackground(.hidden, for: .navigationBar)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") { dismiss() }
+                .padding(14)
+                .liquidGlass(in: RoundedRectangle(cornerRadius: 14))
+
+                if let errorMessage {
+                    InlineNotice(message: errorMessage, severity: .error)
+                        .transition(.opacity)
                 }
             }
+
+            Button("Review Import", action: review)
+                .glassButton()
+                .disabled(!canImport)
         }
+        .padding(.horizontal, 24)
+        .padding(.vertical, 20)
+        .contentFitMeasured { contentHeight = $0 }
+        .contentFitDetent(
+            contentHeight,
+            estimate: 300,
+            navigationBar: false,
+            step: errorMessage,
+            stepResize: .milliseconds(300)
+        )
+        .presentationDragIndicator(.visible)
+        .flatBottomSheetSurface()
+        .animation(reduceMotion ? nil : .snappy(duration: 0.25), value: errorMessage)
         .alert("Replace Nostr Key?", isPresented: $showReplacementConfirm) {
             Button("Cancel", role: .cancel) {}
             Button("Import", role: .destructive) { errorMessage = onImport() }
         } message: {
             Text(replacementWarning)
         }
-        .flatBottomSheetSurface()
     }
 
     private func pasteFromClipboard() {
