@@ -192,6 +192,7 @@ fun CashuNavHost(
             LightningScreen(
                 walletManager = container.walletManager,
                 npcService = container.npcService,
+                settingsManager = container.settingsManager,
                 onClose = { navController.popBackStack() },
             )
         }
