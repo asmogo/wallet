@@ -1666,7 +1666,9 @@ struct MintPickerSheet: View {
 
 /// Imports a custom Nostr key on the same content-fit sheet recipe as
 /// `BackupView` and `PrivateKeyRevealSheet`: in-content title, secondary copy,
-/// one primary CTA, dismissed by drag.
+/// one primary CTA, dismissed by drag. Two faces on one sheet — entry and the
+/// replace-key confirmation — cross-fade while the sheet resizes between them,
+/// instead of stacking an alert on top of the sheet.
 struct ImportNsecSheet: View {
     @Binding var nsecText: String
     let replacementWarning: String
@@ -1676,8 +1678,11 @@ struct ImportNsecSheet: View {
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var errorMessage: String?
-    @State private var showReplacementConfirm = false
+    @State private var step: Step = .entry
     @State private var contentHeight: CGFloat = 0
+    @FocusState private var fieldFocused: Bool
+
+    private enum Step: Hashable { case entry, confirm }
 
     private var canImport: Bool {
         !nsecText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
@@ -1685,6 +1690,29 @@ struct ImportNsecSheet: View {
 
     var body: some View {
         VStack(spacing: 24) {
+            switch step {
+            case .entry: entryFace
+            case .confirm: confirmFace
+            }
+        }
+        .padding(.horizontal, 24)
+        .padding(.vertical, 20)
+        .contentFitMeasured { contentHeight = $0 }
+        .contentFitDetent(
+            contentHeight,
+            estimate: 300,
+            navigationBar: false,
+            step: [AnyHashable(step), AnyHashable(errorMessage)],
+            stepResize: .milliseconds(300)
+        )
+        .presentationDragIndicator(.visible)
+        .flatBottomSheetSurface()
+        .animation(reduceMotion ? nil : .snappy(duration: 0.25), value: step)
+        .animation(reduceMotion ? nil : .snappy(duration: 0.25), value: errorMessage)
+    }
+
+    @ViewBuilder private var entryFace: some View {
+        Group {
             Text("Import Key")
                 .font(.title2.weight(.semibold))
 
@@ -1701,6 +1729,7 @@ struct ImportNsecSheet: View {
                         .accessibilityLabel("Nostr private key")
                         .textInputAutocapitalization(.never)
                         .autocorrectionDisabled()
+                        .focused($fieldFocused)
                         .onSubmit(review)
                         .onChange(of: nsecText) {
                             if errorMessage != nil { errorMessage = nil }
@@ -1740,25 +1769,27 @@ struct ImportNsecSheet: View {
                     .disabled(!canImport)
             }
         }
-        .padding(.horizontal, 24)
-        .padding(.vertical, 20)
-        .contentFitMeasured { contentHeight = $0 }
-        .contentFitDetent(
-            contentHeight,
-            estimate: 300,
-            navigationBar: false,
-            step: errorMessage,
-            stepResize: .milliseconds(300)
-        )
-        .presentationDragIndicator(.visible)
-        .flatBottomSheetSurface()
-        .animation(reduceMotion ? nil : .snappy(duration: 0.25), value: errorMessage)
-        .alert("Replace Nostr Key?", isPresented: $showReplacementConfirm) {
-            Button("Cancel", role: .cancel) {}
-            Button("Import", role: .destructive) { errorMessage = onImport() }
-        } message: {
+        .transition(.opacity)
+    }
+
+    @ViewBuilder private var confirmFace: some View {
+        Group {
+            Text("Replace Nostr Key?")
+                .font(.title2.weight(.semibold))
+
             Text(replacementWarning)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+
+            HStack(spacing: 12) {
+                Button("Cancel") { step = .entry }
+                    .flatSheetSecondaryButton()
+
+                Button("Import", action: confirmImport)
+                    .glassButton()
+            }
         }
+        .transition(.opacity)
     }
 
     private func pasteFromClipboard() {
@@ -1772,8 +1803,20 @@ struct ImportNsecSheet: View {
     }
 
     private func review() {
-        guard canImport else { return }
-        if validateNsec() { showReplacementConfirm = true }
+        guard canImport, validateNsec() else { return }
+        // Resign concurrently with the face swap — sequencing behind the
+        // keyboard leaves the morph waiting on keyboard-blind geometry.
+        fieldFocused = false
+        step = .confirm
+    }
+
+    private func confirmImport() {
+        if let failure = onImport() {
+            // Import failed: morph back to the entry face with the error
+            // inline, where the field is available to fix it.
+            errorMessage = failure
+            step = .entry
+        }
     }
 
     private func validateNsec() -> Bool {
