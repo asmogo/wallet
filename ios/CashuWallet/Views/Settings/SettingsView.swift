@@ -1235,25 +1235,30 @@ struct QRCodeDetailSheet: View {
 
     var body: some View {
         NavigationStack {
-            VStack(spacing: 20) {
-                QRCodeView(content: content, showControls: false)
-                    .padding()
-                    .frame(width: 280, height: 280)
-                    .background(Color.white)
-                    .clipShape(.rect(cornerRadius: 12))
+            VStack(spacing: 0) {
+                ScrollView {
+                    VStack(spacing: 20) {
+                        QRCodeView(content: content, showControls: false)
+                            .padding()
+                            .frame(width: 280, height: 280)
+                            .background(Color.white)
+                            .clipShape(.rect(cornerRadius: 12))
 
-                Text(content)
-                    .font(.system(.caption, design: .monospaced))
-                    .multilineTextAlignment(.center)
-                    .lineLimit(2)
-                    .truncationMode(.middle)
+                        Text(content)
+                            .font(.system(.caption, design: .monospaced))
+                            .multilineTextAlignment(.center)
+                            .lineLimit(2)
+                            .truncationMode(.middle)
+                    }
                     .padding(.horizontal)
+                    .padding(.top, 8)
+                }
 
                 HStack(spacing: 12) {
                     Button(action: copyToClipboard) {
                         Text("Copy")
                     }
-                    .glassButton()
+                    .flatSheetSecondaryButton()
 
                     ShareLink(item: content) {
                         Text("Share")
@@ -1261,23 +1266,21 @@ struct QRCodeDetailSheet: View {
                     .glassButton()
                 }
                 .padding(.horizontal)
-
-                Spacer()
+                .padding(.bottom, 16)
             }
-            // Extra top clearance so the wide, centered QR card doesn't tuck
-            // under the floating close-X (its column overlaps the card's
-            // top-left corner at this width).
-            .padding(.top, 44)
-            .navigationTitle(title)
             .navigationBarTitleDisplayMode(.inline)
             .toolbarBackground(.hidden, for: .navigationBar)
             .toolbar {
-                ToolbarItem(placement: .navigationBarLeading) {
-                    SheetCloseButton()
+                // Title only — like every receipt sheet, dismissal is the drag
+                // indicator / swipe, not a floating close-X.
+                ToolbarItem(placement: .principal) {
+                    Text(title).font(.headline)
                 }
             }
         }
-        .flatBottomSheetSurface()
+        .compactBottomSheetSurface()
+        .presentationDetents([.medium, .large])
+        .presentationDragIndicator(.visible)
     }
 
     private func copyToClipboard() {
@@ -1616,6 +1619,7 @@ struct ICloudBackupSettingsView: View {
 // MARK: - Mint Picker Sheet
 
 struct MintPickerSheet: View {
+    var title: String = "Select Mint"
     let mints: [MintInfo]
     @Binding var selectedMintUrl: String?
     let onSelect: (String) -> Void
@@ -1629,17 +1633,18 @@ struct MintPickerSheet: View {
                     // Selection is confirmed by the server round-trip in
                     // onSelect; writing it here would show a mint the server
                     // never accepted.
+                    HapticFeedback.selection()
                     onSelect(mint.url)
                     dismiss()
                 } label: {
-                    HStack {
-                        VStack(alignment: .leading, spacing: 4) {
+                    HStack(spacing: 12) {
+                        MintAvatarView(iconUrl: mint.iconUrl, name: mint.name, size: 40)
+                        VStack(alignment: .leading, spacing: 2) {
                             Text(mint.name)
-                            Text(mint.url)
-                                .font(.caption)
+                                .font(.body.weight(.medium))
+                            Text(SettingsManager.shared.formatAmountBalance(mint.balance) + " sat")
+                                .font(.subheadline)
                                 .foregroundStyle(.secondary)
-                                .lineLimit(1)
-                                .truncationMode(.middle)
                         }
                         Spacer()
                         if selectedMintUrl == mint.url {
@@ -1647,17 +1652,20 @@ struct MintPickerSheet: View {
                                 .foregroundStyle(Color.accentColor)
                         }
                     }
+                    .contentShape(Rectangle())
                 }
+                .listRowSeparator(.hidden)
+                .listRowBackground(Color.clear)
+                .buttonStyle(.plain)
             }
-            .navigationTitle("Select Mint")
+            .listStyle(.plain)
+            .scrollContentBackground(.hidden)
+            .background(Color.clear)
+            .navigationTitle(title)
             .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") { dismiss() }
-                }
-            }
         }
-        .flatBottomSheetSurface()
+        .compactBottomSheetSurface()
+        .presentationDetents([.medium, .large])
     }
 }
 

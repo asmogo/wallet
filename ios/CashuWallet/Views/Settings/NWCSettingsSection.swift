@@ -92,6 +92,7 @@ struct NWCSettingsView: View {
         .animation(.easeInOut(duration: 0.2), value: nwc.errorMessage)
         .sheet(isPresented: $showMintPicker) {
             MintPickerSheet(
+                title: "Mint for Wallet Connect",
                 mints: walletManager.mints,
                 selectedMintUrl: Binding(
                     get: { nwc.selectedMintUrl },
@@ -99,7 +100,6 @@ struct NWCSettingsView: View {
                 ),
                 onSelect: { nwc.selectedMintUrl = $0 }
             )
-            .presentationDetents([.medium, .large])
         }
         .sheet(isPresented: $showBudgetSheet) {
             NWCBudgetSheet()
@@ -108,7 +108,6 @@ struct NWCSettingsView: View {
         }
         .sheet(isPresented: $showConnectionQR) {
             QRCodeDetailSheet(title: "Wallet Connect", content: nwc.connectionUri ?? "")
-                .presentationDetents([.medium, .large])
         }
         .alert("Reset Connection", isPresented: $showRegenerateConfirm) {
             Button("Cancel", role: .cancel) {}

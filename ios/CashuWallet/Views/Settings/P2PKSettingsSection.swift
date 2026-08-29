@@ -124,7 +124,6 @@ struct P2PKSettingsSection: View {
         }
         .sheet(item: $activeQR) { payload in
             QRCodeDetailSheet(title: payload.title, content: payload.content)
-                .flatBottomSheetSurface()
         }
         .sheet(item: $privateKeyReveal) { reveal in
             PrivateKeyRevealSheet(title: reveal.title, nsec: reveal.nsec)
@@ -520,7 +519,6 @@ private struct DeviceKeyDetailView: View {
         .onChange(of: key == nil) { _, removed in if removed { dismiss() } }
         .sheet(item: $activeQR) { payload in
             QRCodeDetailSheet(title: payload.title, content: payload.content)
-                .flatBottomSheetSurface()
         }
         .sheet(item: $privateKeyReveal) { reveal in
             PrivateKeyRevealSheet(title: reveal.title, nsec: reveal.nsec)
