@@ -110,10 +110,14 @@ object P2PKKeyDisplay {
     }
 }
 
-/** Backup status line on a KeyCard (iOS KeyCard.Status). */
-enum class KeyCardStatus(val text: String) {
+/**
+ * Backup status line on a KeyCard (iOS KeyCard.Status). A null text renders no
+ * line — a custom key's backup burden is carried by the import confirmation,
+ * not a permanent warning badge on the card.
+ */
+enum class KeyCardStatus(val text: String?) {
     SeedBacked("Backed up by your seed phrase"),
-    Custom("Custom key — back it up yourself"),
+    Custom(null),
     DeviceOnly("On this device only — not in your seed backup"),
 }
 
@@ -184,28 +188,31 @@ fun KeyCard(
                     maxLines = 1,
                     overflow = TextOverflow.MiddleEllipsis,
                 )
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(CashuTheme.spacing.micro),
-                ) {
-                    val statusTint = when (status) {
-                        KeyCardStatus.SeedBacked -> MaterialTheme.colorScheme.onSurfaceVariant
-                        KeyCardStatus.Custom, KeyCardStatus.DeviceOnly -> CashuTheme.colors.pending
+                val statusText = status.text
+                if (statusText != null) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(CashuTheme.spacing.micro),
+                    ) {
+                        val statusTint = when (status) {
+                            KeyCardStatus.SeedBacked -> MaterialTheme.colorScheme.onSurfaceVariant
+                            KeyCardStatus.Custom, KeyCardStatus.DeviceOnly -> CashuTheme.colors.pending
+                        }
+                        Icon(
+                            imageVector = when (status) {
+                                KeyCardStatus.SeedBacked -> Icons.Filled.Verified
+                                KeyCardStatus.Custom, KeyCardStatus.DeviceOnly -> Icons.Filled.Warning
+                            },
+                            contentDescription = null,
+                            tint = statusTint,
+                            modifier = Modifier.size(CashuTheme.spacing.default),
+                        )
+                        Text(
+                            text = statusText,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = statusTint,
+                        )
                     }
-                    Icon(
-                        imageVector = when (status) {
-                            KeyCardStatus.SeedBacked -> Icons.Filled.Verified
-                            KeyCardStatus.Custom, KeyCardStatus.DeviceOnly -> Icons.Filled.Warning
-                        },
-                        contentDescription = null,
-                        tint = statusTint,
-                        modifier = Modifier.size(CashuTheme.spacing.default),
-                    )
-                    Text(
-                        text = status.text,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = statusTint,
-                    )
                 }
             }
         }
