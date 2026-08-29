@@ -104,8 +104,8 @@ struct TransactionDetailView: View {
     }
 
     /// Settled transactions are receipts, not active payment workspaces. Open
-    /// those at a compact detent while preserving the large canvas for QR and
-    /// claim/check flows that need it.
+    /// those at a compact detent while preserving the full-height detent for QR
+    /// and claim/check flows that need it.
     private var isCompactReceipt: Bool {
         transaction.status == .completed
     }
@@ -272,16 +272,9 @@ struct TransactionDetailView: View {
                 manualClaimCheckTask?.cancel()
             }
         }
-        .environment(\.bottomSheetSurfaceStyle, isCompactReceipt ? .compact : .flat)
+        .compactBottomSheetSurface()
         .presentationDetents(presentationDetents)
         .presentationDragIndicator(.visible)
-        .presentationBackground {
-            if isCompactReceipt {
-                CompactSheetBackground()
-            } else {
-                Color(uiColor: .systemBackground)
-            }
-        }
     }
 
     // MARK: - Subviews
