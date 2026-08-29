@@ -1693,23 +1693,36 @@ struct ImportNsecSheet: View {
                 .multilineTextAlignment(.center)
 
             VStack(spacing: 12) {
+                // Field and action row copy the Add Mint form: a clear affordance
+                // in the field, Paste as the secondary button beside the CTA.
                 HStack(spacing: 10) {
                     TextField("nsec1…", text: $nsecText)
                         .font(.system(.body, design: .monospaced))
+                        .accessibilityLabel("Nostr private key")
                         .textInputAutocapitalization(.never)
                         .autocorrectionDisabled()
                         .onSubmit(review)
+                        .onChange(of: nsecText) {
+                            if errorMessage != nil { errorMessage = nil }
+                        }
 
-                    Button(action: pasteFromClipboard) {
-                        Image(systemName: "doc.on.clipboard")
-                            .font(.title3)
-                            .foregroundStyle(Color.primary)
+                    if !nsecText.isEmpty {
+                        Button {
+                            nsecText = ""
+                            errorMessage = nil
+                        } label: {
+                            Image(systemName: "xmark.circle.fill")
+                                .font(.body)
+                                .foregroundStyle(.secondary)
+                        }
+                        .buttonStyle(.borderless)
+                        .accessibilityLabel("Clear")
                     }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel("Paste from clipboard")
                 }
-                .padding(14)
-                .liquidGlass(in: RoundedRectangle(cornerRadius: 14))
+                .animation(.smooth(duration: 0.2), value: nsecText.isEmpty)
+                .padding(.horizontal, 16)
+                .padding(.vertical, 14)
+                .background(.quaternary.opacity(0.5), in: RoundedRectangle(cornerRadius: 12))
 
                 if let errorMessage {
                     InlineNotice(message: errorMessage, severity: .error)
@@ -1717,9 +1730,15 @@ struct ImportNsecSheet: View {
                 }
             }
 
-            Button("Review Import", action: review)
-                .glassButton()
-                .disabled(!canImport)
+            HStack(spacing: 12) {
+                Button("Paste", action: pasteFromClipboard)
+                    .flatSheetSecondaryButton()
+                    .accessibilityHint("Pastes an nsec key from the clipboard")
+
+                Button("Review Import", action: review)
+                    .glassButton()
+                    .disabled(!canImport)
+            }
         }
         .padding(.horizontal, 24)
         .padding(.vertical, 20)
@@ -1743,10 +1762,13 @@ struct ImportNsecSheet: View {
     }
 
     private func pasteFromClipboard() {
-        if let text = UIPasteboard.general.string {
-            nsecText = text.trimmingCharacters(in: .whitespacesAndNewlines)
-            errorMessage = nil
+        guard let text = UIPasteboard.general.string,
+              !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            errorMessage = "Clipboard is empty."
+            return
         }
+        nsecText = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        errorMessage = nil
     }
 
     private func review() {
