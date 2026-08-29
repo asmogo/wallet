@@ -653,15 +653,15 @@ struct PrivateKeyRevealSheet: View {
                     .accessibilityLabel("Private key, \(nsec)")
             }
 
-            Button(revealed ? "Copy Private Key" : "Reveal Private Key") {
-                if revealed {
-                    copyKey()
-                } else {
-                    revealKey()
-                }
+            // Reveal is the sheet's one primary action; once the key is showing,
+            // Copy is a quieter follow-up and drops to the secondary style.
+            if revealed {
+                Button("Copy Private Key") { copyKey() }
+                    .flatSheetSecondaryButton()
+            } else {
+                Button("Reveal Private Key") { revealKey() }
+                    .glassButton()
             }
-            .glassButton()
-            .contentTransition(.opacity)
         }
         .padding(.horizontal, 24)
         .padding(.vertical, 20)
