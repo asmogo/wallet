@@ -17,6 +17,15 @@ enum BottomSheetSurfaceStyle {
     case compact
 }
 
+/// Disabled control pair (fill / content), mirroring Android's M3 disabled
+/// tokens (onSurface at 12% / 38%). A deliberate grey pair, not a translucency
+/// wash of the enabled colors — dimming inverse ink over a dark sheet
+/// collapsed the fill and label into nearly the same grey.
+enum DisabledControlOpacity {
+    static let fill: Double = 0.12
+    static let content: Double = 0.38
+}
+
 enum CompactSheetPalette {
     static func sheet(for colorScheme: ColorScheme) -> Color {
         colorScheme == .dark
@@ -856,19 +865,29 @@ struct FullWidthCapsuleButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         let ink = colorScheme == .dark ? Color.white : Color.black
         let onInk = colorScheme == .dark ? Color.black : Color.white
+        let solid = prominent || bottomSheetSurfaceStyle != .glass
 
         let label = configuration.label
             .font(.body.weight(.semibold))
             .frame(maxWidth: .infinity)
             .padding(.vertical, 18)
-            .foregroundStyle(prominent || bottomSheetSurfaceStyle != .glass ? onInk : Color.primary)
+            .foregroundStyle(
+                isEnabled
+                    ? (solid ? onInk : Color.primary)
+                    : Color.primary.opacity(DisabledControlOpacity.content)
+            )
             .contentShape(Capsule())
 
         return Group {
-            if prominent || bottomSheetSurfaceStyle != .glass {
+            if !isEnabled {
+                // Disabled swaps to the grey pair regardless of surface — a
+                // dimmed inverse-ink or glass ghost reads muddier than a
+                // deliberate quiet fill with a muted label.
+                label.background(Color.primary.opacity(DisabledControlOpacity.fill), in: Capsule())
+            } else if solid {
                 label
                     .background(ink, in: Capsule())
-                    .scaleEffect(isEnabled && configuration.isPressed ? 0.97 : 1)
+                    .scaleEffect(configuration.isPressed ? 0.97 : 1)
             } else if #available(iOS 26, *) {
                 label.glassEffect(
                     .regular.tint(Color.primary.opacity(0.15)).interactive(),
@@ -879,10 +898,10 @@ struct FullWidthCapsuleButtonStyle: ButtonStyle {
                 // the fallback surface gets a scale-on-press so the tactile
                 // feedback is at parity below iOS 26.
                 label.background(.quaternary, in: Capsule())
-                    .scaleEffect(isEnabled && configuration.isPressed ? 0.97 : 1)
+                    .scaleEffect(configuration.isPressed ? 0.97 : 1)
             }
         }
-        .opacity(isEnabled ? (configuration.isPressed ? 0.85 : 1) : 0.4)
+        .opacity(isEnabled && configuration.isPressed ? 0.85 : 1)
         // Asymmetric, matching PressableButtonStyle: feedback belongs on
         // touch-down and has to feel immediate, while the release is the system
         // responding and can settle.
@@ -904,11 +923,16 @@ struct FlatSheetSecondaryButtonStyle: ButtonStyle {
             .font(.body.weight(.semibold))
             .frame(maxWidth: .infinity)
             .padding(.vertical, 18)
-            .foregroundStyle(.primary)
-            .background(Color.primary.opacity(0.11), in: Capsule())
+            .foregroundStyle(
+                isEnabled ? Color.primary : Color.primary.opacity(DisabledControlOpacity.content)
+            )
+            .background(
+                Color.primary.opacity(isEnabled ? 0.11 : DisabledControlOpacity.fill),
+                in: Capsule()
+            )
             .contentShape(Capsule())
             .scaleEffect(isEnabled && configuration.isPressed ? 0.97 : 1)
-            .opacity(isEnabled ? (configuration.isPressed ? 0.85 : 1) : 0.4)
+            .opacity(isEnabled && configuration.isPressed ? 0.85 : 1)
             .animation(
                 .snappy(duration: configuration.isPressed ? 0.09 : 0.18),
                 value: configuration.isPressed
