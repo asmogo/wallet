@@ -107,8 +107,11 @@ struct TransactionDetailView: View {
     /// family; only the height varies with content. A QR hero needs most of the
     /// screen, an onchain receipt carries an extra explorer row, and everything
     /// else fits the standard receipt detent. `.large` stays reachable by drag.
+    /// The QR fraction is sized so the scroll content — including its 24pt
+    /// bottom padding, the row-to-CTA gap every receipt shows — fits without
+    /// clipping; any tighter and that gap is the first thing cut.
     private var presentationDetents: Set<PresentationDetent> {
-        if showsQR { return [.fraction(0.92), .large] }
+        if showsQR { return [.fraction(0.94), .large] }
         return transaction.kind == .onchain
             ? [.fraction(0.78), .large]
             : [.fraction(0.68), .large]
