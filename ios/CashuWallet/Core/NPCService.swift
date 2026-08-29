@@ -200,6 +200,9 @@ class NPCService: ObservableObject {
         stopBackgroundRefresh()
         isConnected = false
         client = nil
+        // A stale error must not outlive the session it came from — Android
+        // clears it on disable, and the status dot reads it as red forever.
+        errorMessage = nil
     }
     
     // MARK: - API Methods
@@ -253,6 +256,7 @@ class NPCService: ObservableObject {
         do {
             let quotes = try await getQuotes(since: nil)
             lastCheck = Date()
+            errorMessage = nil
             
             // Process paid quotes
             let paidQuotes = quotes
