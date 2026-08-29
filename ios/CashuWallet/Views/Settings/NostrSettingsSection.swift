@@ -185,7 +185,8 @@ struct NostrKeysSettingsSection: View {
         do {
             try nostrService.importNsec(nsec)
             importNsecText = ""
-            showImportNsec = false
+            // Don't dismiss here — the sheet morphs to its success face and
+            // dismisses itself from Done.
             return nil
         } catch {
             return error.localizedDescription

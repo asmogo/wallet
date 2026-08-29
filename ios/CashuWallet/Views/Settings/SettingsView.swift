@@ -1677,12 +1677,13 @@ struct ImportNsecSheet: View {
     let onImport: () -> String?
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.dismiss) private var dismiss
     @State private var errorMessage: String?
     @State private var step: Step = .entry
     @State private var contentHeight: CGFloat = 0
     @FocusState private var fieldFocused: Bool
 
-    private enum Step: Hashable { case entry, confirm }
+    private enum Step: Hashable { case entry, confirm, success }
 
     private var canImport: Bool {
         !nsecText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
@@ -1693,6 +1694,7 @@ struct ImportNsecSheet: View {
             switch step {
             case .entry: entryFace
             case .confirm: confirmFace
+            case .success: successFace
             }
         }
         .padding(.horizontal, 24)
@@ -1792,6 +1794,26 @@ struct ImportNsecSheet: View {
         .transition(.opacity)
     }
 
+    @ViewBuilder private var successFace: some View {
+        Group {
+            Text("Key Imported")
+                .font(.title2.weight(.semibold))
+
+            Image(systemName: "checkmark.circle.fill")
+                .font(.system(size: 64))
+                .foregroundStyle(ErrorSeverity.success.foreground)
+                .accessibilityLabel("Success")
+
+            Text("Your Nostr key was replaced with the imported key. Your Lightning address and npub.cash now come from this key.")
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+
+            Button("Done") { dismiss() }
+                .glassButton()
+        }
+        .transition(.opacity)
+    }
+
     private func pasteFromClipboard() {
         guard let text = UIPasteboard.general.string,
               !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
@@ -1816,6 +1838,8 @@ struct ImportNsecSheet: View {
             // inline, where the field is available to fix it.
             errorMessage = failure
             step = .entry
+        } else {
+            step = .success
         }
     }
 

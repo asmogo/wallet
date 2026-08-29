@@ -208,10 +208,12 @@ struct KeyCard: View {
         case custom         // a custom key the user must back up themselves
         case deviceOnly     // a random device-only key, not in the seed backup
 
-        var text: String {
+        /// nil renders no status line — a custom key's backup burden is carried
+        /// by the import confirmation, not a permanent orange badge on the card.
+        var text: String? {
             switch self {
             case .seedBacked: return "Backed up by your seed phrase"
-            case .custom:     return "Custom key — back it up yourself"
+            case .custom:     return nil
             case .deviceOnly: return "On this device only — not in your seed backup"
             }
         }
@@ -259,10 +261,12 @@ struct KeyCard: View {
                         .font(.body.weight(.semibold))
                         .lineLimit(1)
                         .truncationMode(.middle)
-                    Label(status.text, systemImage: status.systemImage)
-                        .font(.caption)
-                        .foregroundStyle(status.tint)
-                        .labelStyle(.titleAndIcon)
+                    if let statusText = status.text {
+                        Label(statusText, systemImage: status.systemImage)
+                            .font(.caption)
+                            .foregroundStyle(status.tint)
+                            .labelStyle(.titleAndIcon)
+                    }
                 }
                 Spacer(minLength: 0)
             }
