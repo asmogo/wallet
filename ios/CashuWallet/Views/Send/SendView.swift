@@ -1083,6 +1083,24 @@ enum SendAmountDestination: Equatable {
         case .cashuRequest(let summary): summary.encoded
         }
     }
+
+    /// True when the destination itself fixes the amount (an amount-carrying
+    /// invoice/offer or Cashu request). The routed payment sheet then opens
+    /// straight on confirm, with no amount step behind it — its leading control
+    /// is a close, not a back.
+    var carriesAmount: Bool {
+        switch self {
+        case .melt(_, _, let decoded):
+            // Amountless invoices/offers never lock (the input step keeps them
+            // with a caution), so a locked bolt11/bolt12 always carries one.
+            switch decoded {
+            case .bolt11, .bolt12: return true
+            default: return false
+            }
+        case .cashuRequest(let summary):
+            return summary.amount != nil
+        }
+    }
 }
 
 /// The single entry point for sending — one grounded screen modeled on the Family
@@ -1091,9 +1109,11 @@ enum SendAmountDestination: Equatable {
 /// sending → sent. A "Send to" field accepts a Lightning address, BOLT11 invoice,
 /// BOLT12 offer, on-chain address, or Cashu request; detecting a valid destination
 /// advances automatically (paste/scan/recent immediately, hand-typing after a short
-/// settle). Amountless destinations use a native sheet handoff before amount entry;
-/// later payment steps remain hosted in place. A pasted bearer *token* routes out
-/// to the Receive-this claim screen.
+/// settle). Every locked destination leaves the compact input via a native sheet
+/// handoff: the routed payment sheet is a fixed `.large` modal (the Receive
+/// convention — X to abandon, back arrow from confirm to amount), never a detent
+/// that stretches in place. A pasted bearer *token* routes out to the
+/// Receive-this claim screen.
 struct UnifiedSendView: View {
     /// Pre-fills the destination field on open — used when the Receive sheet
     /// hands a pasted/scanned *payable* (invoice, address, Cashu Request) back to
@@ -1111,11 +1131,22 @@ struct UnifiedSendView: View {
     let onOpenReceiveToken: (String) -> Void
     /// Swap the sheet content to the Create-Ecash flow.
     let onSendEcash: () -> Void
-    /// Amountless destinations leave the compact input sheet and reopen in a
-    /// dedicated large sheet. This avoids an in-place detent + keyboard race.
-    let onRequestAmount: (SendAmountDestination) -> Void
+    /// Every locked destination leaves the compact input sheet and reopens in
+    /// the dedicated large payment sheet (amount entry, or straight to confirm
+    /// when the destination carries its amount). Avoids an in-place detent +
+    /// keyboard race, and keeps the compact sheet from stretching to `.large`.
+    let onRoutePayment: (SendAmountDestination) -> Void
     /// Present only when this instance started as the routed amount sheet.
     private let onEditDestination: (() -> Void)?
+    /// True for the routed payment sheet (`initialAmountDestination != nil`):
+    /// a fixed `.large` modal wearing the Receive convention's chrome — X to
+    /// abandon, back arrow from confirm when an amount step sits behind it.
+    /// False for the compact input sheet, which hugs its content and only ever
+    /// shows the input faces.
+    private let routedPresentation: Bool
+    /// The destination carried its own amount, so this routed sheet opened
+    /// straight on confirm — there is no amount step to go back to.
+    private let startedAtConfirm: Bool
 
     @EnvironmentObject var walletManager: WalletManager
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -1162,6 +1193,10 @@ struct UnifiedSendView: View {
     @State private var suppressedValue: String?
     /// Guards `initialDestination` so a pre-filled payable is consumed only once.
     @State private var didConsumeInitialDestination = false
+    /// Guards the confirm-first open's quote/fee kickoff so a re-appear (for
+    /// example after a presented picker dismisses) can't refetch underneath a
+    /// settled confirm screen.
+    @State private var didStartInitialConfirm = false
 
     private func presentError(_ message: String, severity: ErrorSeverity = .error) {
         errorMessage = message
@@ -1245,7 +1280,7 @@ struct UnifiedSendView: View {
         onContactless: @escaping () -> Void,
         onOpenReceiveToken: @escaping (String) -> Void,
         onSendEcash: @escaping () -> Void,
-        onRequestAmount: @escaping (SendAmountDestination) -> Void,
+        onRoutePayment: @escaping (SendAmountDestination) -> Void,
         onEditDestination: (() -> Void)? = nil
     ) {
         self.initialDestination = initialDestination
@@ -1255,10 +1290,14 @@ struct UnifiedSendView: View {
         self.onContactless = onContactless
         self.onOpenReceiveToken = onOpenReceiveToken
         self.onSendEcash = onSendEcash
-        self.onRequestAmount = onRequestAmount
+        self.onRoutePayment = onRoutePayment
         self.onEditDestination = onEditDestination
 
-        _step = State(initialValue: initialAmountDestination == nil ? .input : .amount)
+        routedPresentation = initialAmountDestination != nil
+        startedAtConfirm = initialAmountDestination?.carriesAmount ?? false
+        _step = State(initialValue: initialAmountDestination == nil
+            ? .input
+            : (startedAtConfirm ? .confirm : .amount))
         _destination = State(initialValue: initialAmountDestination?.rawInput ?? initialDestination ?? "")
         _locked = State(initialValue: initialAmountDestination)
     }
@@ -1300,10 +1339,10 @@ struct UnifiedSendView: View {
     var body: some View {
         NavigationStack {
             VStack(spacing: 0) {
-                // Amount-keypad step keeps the "To" pill up here; the confirm step renders
+                // Amount-keypad step keeps the "To" row up here; the confirm step renders
                 // its own mint + "To" header in the scaffold's floating topAccessory.
                 if let locked, step == .amount, statusPhase == nil {
-                    toPill(locked)
+                    toRow(locked)
                         .padding(.horizontal)
                         .padding(.top, 8)
                         .transition(reduceMotion ? .opacity : .move(edge: .top).combined(with: .opacity))
@@ -1354,6 +1393,18 @@ struct UnifiedSendView: View {
                             }
                         }
                     }
+                } else if routedPresentation, statusPhase == nil {
+                    // Receive-modal chrome: X abandons to the wallet; confirm
+                    // reached from the amount step gets a back arrow instead.
+                    // The status faces drop the leading control — Done owns
+                    // dismissal there, and a swipe stays disabled mid-melt.
+                    ToolbarItem(placement: .topBarLeading) {
+                        if step == .confirm && !startedAtConfirm {
+                            ConnectMintBackButton { backToAmount() }
+                        } else {
+                            SheetCloseButton(action: onClose)
+                        }
+                    }
                 }
             }
             .sheet(isPresented: $showingScanner) {
@@ -1375,6 +1426,17 @@ struct UnifiedSendView: View {
                 amountString = AmountFormatter.entryConverted(raw: amountString, from: oldUnit, to: newUnit)
             }
             .onAppear {
+                // Confirm-first open (destination carries its amount): the
+                // quote/fee preflight that continueFromAmount would have run.
+                if startedAtConfirm && !didStartInitialConfirm {
+                    didStartInitialConfirm = true
+                    switch locked {
+                    case .melt: fetchMeltQuote()
+                    case .cashuRequest: recomputeFee()
+                    case nil: break
+                    }
+                }
+
                 guard !didConsumeInitialDestination,
                       let initialDestination,
                       !initialDestination.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
@@ -1400,7 +1462,9 @@ struct UnifiedSendView: View {
             step: sheetSizingStep,
             stepResize: SharedAxis.duration
         )
-        .presentationDragIndicator(.visible)
+        // The routed payment sheet wears the Receive convention: the X is the
+        // dismiss affordance, so no grabber competes with it.
+        .presentationDragIndicator(routedPresentation ? .hidden : .visible)
         // A stray swipe must not tear down the flow while the melt is executing.
         .interactiveDismissDisabled(step == .sending)
         .compactBottomSheetSurface()
@@ -1516,42 +1580,44 @@ struct UnifiedSendView: View {
         .liquidGlassInput(in: RoundedRectangle(cornerRadius: 12))
     }
 
-    // MARK: Pinned "To" pill
+    // MARK: Pinned "To" row
 
-    private func toPill(_ locked: SendAmountDestination) -> some View {
-        Button(action: editFromPill) {
-            HStack(spacing: 10) {
+    /// Recipient row in the flow-row vocabulary — the same quiet, unboxed shape
+    /// as `MintSelectorRow`, so "From" and "To" share one left edge and one
+    /// label style. No fill or capsule: the amount stays the screen's focal
+    /// point, and the row is still tappable to change the recipient.
+    private func toRow(_ locked: SendAmountDestination) -> some View {
+        Button(action: editRecipient) {
+            HStack(alignment: .firstTextBaseline, spacing: FlowRowMetrics.gap) {
                 Text("To")
-                    .font(.caption.weight(.semibold))
+                    .cashuText(.textLink)
                     .foregroundStyle(.secondary)
-                    .textCase(.uppercase)
-                    .tracking(0.5)
-                Text(pillValue(locked))
-                    .font(.subheadline.weight(.medium))
-                    .foregroundStyle(.primary)
+                Text(recipientValue(locked))
+                    .cashuText(.body)
+                    .fontWeight(.medium)
                     .lineLimit(1)
                     .truncationMode(.middle)
                 Spacer(minLength: 0)
             }
-            .padding(.horizontal, 14)
-            .padding(.vertical, 12)
-            .liquidGlass(in: Capsule())
-            .contentShape(Capsule())
+            .padding(.vertical, FlowRowMetrics.verticalPadding)
+            .frame(minHeight: FlowRowMetrics.minHeight)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .disabled(statusPhase != nil)
-        .accessibilityLabel("Recipient \(pillValue(locked))")
+        .accessibilityLabel("Recipient \(recipientValue(locked))")
         .accessibilityHint("Double-tap to change the recipient")
     }
 
-    /// Confirm-step header: the standard top mint selector stacked over the "To" pill.
-    /// Lives in the scaffold's floating `topAccessory` so neither pill shifts the
+    /// Confirm-step header: the standard top mint selector stacked over the "To" row.
+    /// Lives in the scaffold's floating `topAccessory` so neither row shifts the
     /// anchored amount hero (see `PayFlowScaffold`). The mint is `nil` for Cashu-request
     /// states with no held mint — those keep an actionable row in the details instead.
     @ViewBuilder
     private func confirmHeader(mint: MintInfo?, locked: SendAmountDestination?) -> some View {
         if let locked {
-            VStack(spacing: 8) {
+            VStack(spacing: 0) {
                 if let mint {
                     MintSelectorRow(
                         direction: .source,
@@ -1563,26 +1629,26 @@ struct UnifiedSendView: View {
                         } : nil
                     )
                 }
-                toPill(locked)
+                toRow(locked)
             }
             .padding(.horizontal)
             .padding(.top, 12)
         }
     }
 
-    private func pillValue(_ locked: SendAmountDestination) -> String {
+    private func recipientValue(_ locked: SendAmountDestination) -> String {
         switch locked {
         case .melt(let request, _, let decoded):
             if case .lightningAddress(let addr) = decoded { return addr }
             return PaymentRequestDecoder.shortRepresentation(request, result: decoded)
         case .cashuRequest(let summary):
-            // Mirror the Lightning pill: show the opaque request string, truncated. The
+            // Mirror the Lightning row: show the opaque request string, truncated. The
             // memo still surfaces in the confirm's dedicated Memo detail row.
             return PaymentRequestDecoder.middleTruncated(summary.encoded)
         }
     }
 
-    private func editFromPill() {
+    private func editRecipient() {
         HapticFeedback.selection()
         if let onEditDestination {
             onEditDestination()
@@ -1650,13 +1716,13 @@ struct UnifiedSendView: View {
             let request = PaymentRequestDecoder.encodedLightningRequest(from: raw)
                 ?? PaymentRequestParser.normalizeLightningRequest(raw)
             lockMelt(request: request, mode: .lightning, decoded: result)
-            startMeltConfirm()   // amount carried by the invoice
+            routeToPayment()   // amount carried by the invoice → opens on confirm
         case .lightningAddress(let address):
             lockMelt(request: address, mode: .lightning, decoded: result)
-            goToAmount()
+            routeToPayment()
         case .onchain:
             lockMelt(request: PaymentRequestParser.normalizeBitcoinRequest(raw), mode: .onchain, decoded: result)
-            goToAmount()
+            routeToPayment()
         case .cashuPaymentRequest(let summary):
             // Prefer ecash when a held mint can pay; otherwise fall back to a
             // bundled bolt11 (BIP-321) rather than dead-ending on an unheld mint.
@@ -1666,13 +1732,7 @@ struct UnifiedSendView: View {
                 activeRouteExplanation = nil
                 selectedMint = nil
                 errorMessage = nil
-                HapticFeedback.selection()
-                if summary.amount != nil {
-                    withAnimation(.smooth(duration: 0.3)) { step = .confirm }
-                    recomputeFee()
-                } else {
-                    goToAmount()
-                }
+                routeToPayment()
             case .payBolt11Fallback(let bolt11):
                 lockMelt(
                     request: bolt11,
@@ -1680,7 +1740,7 @@ struct UnifiedSendView: View {
                     decoded: PaymentRequestDecoder.decode(bolt11),
                     routeExplanation: CashuRequestRouteExplanation(state: .lightningFallback)
                 )
-                startMeltConfirm()
+                routeToPayment()
             }
         case .unrecognized:
             if let token = TokenParser.normalizedToken(from: raw) {
@@ -1705,17 +1765,14 @@ struct UnifiedSendView: View {
         errorMessage = nil
     }
 
-    private func goToAmount() {
-        amountString = ""
+    /// Hand the locked destination to the routed payment sheet. Whether that
+    /// sheet opens on the amount keypad or straight on confirm is the
+    /// destination's call (`carriesAmount`); the compact input never grows a
+    /// later step in place.
+    private func routeToPayment() {
         HapticFeedback.selection()
         guard step == .input, let locked else { return }
-        onRequestAmount(locked)
-    }
-
-    private func startMeltConfirm() {
-        HapticFeedback.selection()
-        withAnimation(.smooth(duration: 0.3)) { step = .confirm }
-        fetchMeltQuote()
+        onRoutePayment(locked)
     }
 
     // MARK: Amount step
@@ -1804,6 +1861,18 @@ struct UnifiedSendView: View {
         case nil:
             break
         }
+    }
+
+    /// Confirm's back arrow. The quote/fee preflight belongs to the confirm
+    /// face, so it is dropped on the way out — Continue re-runs it against
+    /// whatever amount the user settles on.
+    private func backToAmount() {
+        HapticFeedback.selection()
+        feeTask?.cancel()
+        feeState = .idle
+        meltQuote = nil
+        errorMessage = nil
+        withAnimation(.smooth(duration: 0.3)) { step = .amount }
     }
 
     // MARK: Confirm step
