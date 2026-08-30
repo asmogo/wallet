@@ -95,12 +95,10 @@ class SettingsManager: ObservableObject {
             settingsStore.enablePaymentRequests = enablePaymentRequests
             guard !suppressPaymentRequestSideEffects else { return }
             guard enablePaymentRequests != oldValue else { return }
-            Task { @MainActor in
-                if enablePaymentRequests {
-                    await CashuRequestListener.shared.start()
-                } else {
-                    await CashuRequestListener.shared.stop()
-                }
+            if enablePaymentRequests {
+                CashuRequestListener.shared.requestStart()
+            } else {
+                CashuRequestListener.shared.requestStop()
             }
         }
     }
