@@ -66,7 +66,7 @@ struct NostrKeysSettingsSection: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .animation(.easeInOut(duration: 0.2), value: nostrService.signerType)
         .animation(.easeInOut(duration: 0.2), value: nostrKeyError)
-        .sheet(isPresented: $showGenerateKeyConfirm) {
+        .backdropSheet(isPresented: $showGenerateKeyConfirm) {
             KeyActionConfirmSheet(
                 title: "Generate New Key?",
                 message: NostrIdentityReplacementWarning.generate,
@@ -74,7 +74,7 @@ struct NostrKeysSettingsSection: View {
                 action: generateNewKey
             )
         }
-        .sheet(isPresented: $showResetKeyConfirm) {
+        .backdropSheet(isPresented: $showResetKeyConfirm) {
             KeyActionConfirmSheet(
                 title: "Reset to Wallet Seed?",
                 message: NostrIdentityReplacementWarning.reset,
@@ -84,14 +84,14 @@ struct NostrKeysSettingsSection: View {
                 action: resetToSeedKey
             )
         }
-        .sheet(isPresented: $showImportNsec) {
+        .backdropSheet(isPresented: $showImportNsec) {
             ImportNsecSheet(
                 nsecText: $importNsecText,
                 replacementWarning: NostrIdentityReplacementWarning.importKey,
                 onImport: importNsec
             )
         }
-        .sheet(isPresented: $showNsecReveal) {
+        .backdropSheet(isPresented: $showNsecReveal) {
             PrivateKeyRevealSheet(
                 title: "Nostr Private Key",
                 nsec: nostrService.getNsec(),

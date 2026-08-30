@@ -119,13 +119,13 @@ struct P2PKSettingsSection: View {
                 .accessibilityLabel("How locking works")
             }
         }
-        .sheet(isPresented: $showExplainer) {
+        .backdropSheet(isPresented: $showExplainer) {
             LockedEcashExplainerSheet()
         }
-        .sheet(item: $activeQR) { payload in
+        .backdropSheet(item: $activeQR) { payload in
             QRCodeDetailSheet(title: payload.title, content: payload.content)
         }
-        .sheet(item: $privateKeyReveal) { reveal in
+        .backdropSheet(item: $privateKeyReveal) { reveal in
             PrivateKeyRevealSheet(title: reveal.title, nsec: reveal.nsec)
         }
     }
@@ -369,9 +369,10 @@ private struct AdvancedKeysView: View {
         .toolbarBackground(.hidden, for: .navigationBar)
         .animation(.easeInOut(duration: 0.2), value: settings.p2pkKeys)
         .animation(.easeInOut(duration: 0.2), value: actionError)
-        .sheet(isPresented: $showImport) {
+        .backdropSheet(isPresented: $showImport) {
             ImportP2PKSheet(nsecText: $importText) { importKey() }
         }
+        .bottomSheetBackdropHost()
     }
 
     private func actionRow(_ title: String, systemImage: String) -> some View {
@@ -517,10 +518,10 @@ private struct DeviceKeyDetailView: View {
         .onAppear { nameText = key?.nickname ?? "" }
         .onDisappear { saveName() }
         .onChange(of: key == nil) { _, removed in if removed { dismiss() } }
-        .sheet(item: $activeQR) { payload in
+        .backdropSheet(item: $activeQR) { payload in
             QRCodeDetailSheet(title: payload.title, content: payload.content)
         }
-        .sheet(item: $privateKeyReveal) { reveal in
+        .backdropSheet(item: $privateKeyReveal) { reveal in
             PrivateKeyRevealSheet(title: reveal.title, nsec: reveal.nsec)
         }
         .alert("Remove this key?", isPresented: $showRemoveConfirm) {
@@ -531,6 +532,7 @@ private struct DeviceKeyDetailView: View {
         } message: {
             Text("Ecash locked to this key can only be claimed with it. This can't be undone.")
         }
+        .bottomSheetBackdropHost()
     }
 
     private func backUp(_ key: P2PKKey) {

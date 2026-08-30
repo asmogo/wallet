@@ -65,7 +65,7 @@ struct LightningAddressSettingsSection: View {
         .animation(.easeInOut(duration: 0.2), value: npcService.isEnabled)
         .animation(.easeInOut(duration: 0.2), value: npcService.errorMessage)
         .animation(.easeInOut(duration: 0.2), value: settings.checkIncomingInvoices)
-        .sheet(isPresented: $showMintPicker) {
+        .backdropSheet(isPresented: $showMintPicker) {
             // Titled after the row that opened it, so the sheet reads as a
             // continuation of the tap rather than a new context.
             MintPickerSheet(
@@ -83,7 +83,7 @@ struct LightningAddressSettingsSection: View {
                 }
             )
         }
-        .sheet(isPresented: $showAddressQR) {
+        .backdropSheet(isPresented: $showAddressQR) {
             QRCodeDetailSheet(
                 title: "Lightning Address",
                 content: npcService.lightningAddress

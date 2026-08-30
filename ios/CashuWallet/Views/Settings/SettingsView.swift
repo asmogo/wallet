@@ -103,11 +103,7 @@ struct SettingsView: View {
                 .accessibilityIdentifier("settings-back-button")
             }
         }
-        .sheet(isPresented: $showBackup) {
-            BackupView()
-                .environmentObject(walletManager)
-        }
-        .sheet(isPresented: $showCurrencySheet) {
+        .backdropSheet(isPresented: $showCurrencySheet) {
             CurrencyPickerSheet()
                 .presentationDetents([.medium, .large])
                 .presentationDragIndicator(.visible)
@@ -121,6 +117,9 @@ struct SettingsView: View {
             Text("Are you sure you want to delete your wallet? This action cannot be undone. Make sure you have backed up your seed phrase!")
         }
         .errorBanner($walletActionError)
+        // Softens this page while any sheet reported from its subtree is up —
+        // the same canvas blur Home and History wear behind their sheets.
+        .bottomSheetBackdropHost()
     }
 
     // MARK: - Section + Row Helpers
@@ -318,6 +317,13 @@ struct SettingsView: View {
         }
         .navigationTitle("Backup & Restore")
         .toolbarBackground(.hidden, for: .navigationBar)
+        // Presented here, not on the root page: this pushed page is what is
+        // visible behind the sheet, so it owns the presentation and the blur.
+        .backdropSheet(isPresented: $showBackup) {
+            BackupView()
+                .environmentObject(walletManager)
+        }
+        .bottomSheetBackdropHost()
     }
 
     private var lightningDetailView: some View {
@@ -334,6 +340,7 @@ struct SettingsView: View {
         }
         .navigationTitle("Lightning")
         .toolbarBackground(.hidden, for: .navigationBar)
+        .bottomSheetBackdropHost()
     }
 
     private var nostrDetailView: some View {
@@ -369,6 +376,7 @@ struct SettingsView: View {
         }
         .navigationTitle("Nostr")
         .toolbarBackground(.hidden, for: .navigationBar)
+        .bottomSheetBackdropHost()
     }
 
     private var p2pkDetailView: some View {
@@ -379,6 +387,7 @@ struct SettingsView: View {
         }
         .navigationTitle("Locked Ecash")
         .toolbarBackground(.hidden, for: .navigationBar)
+        .bottomSheetBackdropHost()
     }
 
     private var privacyDetailView: some View {
