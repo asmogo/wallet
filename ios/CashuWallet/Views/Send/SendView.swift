@@ -1354,7 +1354,12 @@ struct UnifiedSendView: View {
                     toRow(locked)
                         .padding(.horizontal)
                         .padding(.top, 8)
-                        .transition(reduceMotion ? .opacity : .move(edge: .top).combined(with: .opacity))
+                        // A plain fade, matching the status faces' own opacity
+                        // swap. The row only ever enters/leaves against the
+                        // full-screen status (pay → processing, retry → back),
+                        // and a move-up exit read as the recipient escaping the
+                        // screen while everything else cross-faded in place.
+                        .transition(.opacity)
                 }
 
                 Group {
