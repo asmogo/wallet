@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
@@ -23,6 +24,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.layout.layout
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
@@ -32,6 +34,7 @@ import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.cashu.me.Models.MintInfo
 import com.cashu.me.ui.theme.CashuTheme
@@ -46,7 +49,29 @@ private val ChevronSize = 18.dp
 private val RowMinHeight = 56.dp
 private val MinimumTouchTarget = 48.dp
 private val RowVerticalPadding = 6.dp
-private val ActionPadding = PaddingValues(horizontal = 8.dp)
+
+/**
+ * Half the slack a 48dp touch target leaves around an 18dp glyph. Trimming it
+ * from the chevron's *layout* box (never its hit area) stops the dead space
+ * from pushing the glyph a third of the way in from the trailing margin, and
+ * from inflating its gap to Send Max to several times the gap inside the
+ * identity. Mirrors iOS's FlowRowMetrics.chevronBox + hitSlop.
+ */
+private val ChevronBoxTrim = 14.dp
+
+/**
+ * Report a narrower box than was measured, placing the content centred so it
+ * overhangs on both sides. The touch target keeps its full size; only the space
+ * it claims in the row shrinks. Compose has no negative padding, so this is the
+ * layout-modifier equivalent.
+ */
+private fun Modifier.trimHorizontal(trim: Dp) = this.layout { measurable, constraints ->
+    val placeable = measurable.measure(constraints)
+    val trimPx = trim.roundToPx()
+    val width = (placeable.width - trimPx * 2).coerceAtLeast(0)
+    layout(width, placeable.height) { placeable.place(-trimPx, 0) }
+}
+private val ActionPadding = PaddingValues(start = 8.dp, end = 0.dp)
 
 /**
  * The shared value-flow mint selector: an unboxed mint identity with an optional
@@ -102,6 +127,7 @@ fun MintSelectorRow(
                 TextButton(
                     onClick = onUseMax,
                     modifier = Modifier
+                        .defaultMinSize(minWidth = 0.dp, minHeight = MinimumTouchTarget)
                         .heightIn(min = MinimumTouchTarget)
                         .semantics { contentDescription = "Send maximum" },
                     contentPadding = ActionPadding,
@@ -120,6 +146,7 @@ fun MintSelectorRow(
                 Box(
                     contentAlignment = Alignment.Center,
                     modifier = Modifier
+                        .trimHorizontal(ChevronBoxTrim)
                         .size(MinimumTouchTarget)
                         .clickable(role = Role.Button, onClick = onPickMint)
                         // The identity already exposes the picker as one control.

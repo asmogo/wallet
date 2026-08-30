@@ -258,7 +258,9 @@ struct SendView: View {
             // the way to the action rather than a second header.
             if let mint = displaySendMint {
                 mintSelector(mint: mint)
-                    .padding(.horizontal)
+                    // Aligned to the number pad below, not the CTA: the pad is
+                    // the block this row reads against.
+                    .padding(.horizontal, NumberPadMetrics.gutter)
                     .padding(.bottom, 8)
             }
 
@@ -271,7 +273,7 @@ struct SendView: View {
                     NumberPadAmountInput(amountString: $amountString, decimals: sendUnitDecimals)
                 }
             }
-            .padding(.horizontal, 24)
+            .padding(.horizontal, NumberPadMetrics.gutter)
 
             Button(action: {
                 HapticFeedback.impact(.light)
@@ -1807,12 +1809,13 @@ struct UnifiedSendView: View {
                     // Keep the source selector in the same pre-keypad slot as Receive.
                     if let mint = currentAmountMint {
                         amountMintRow(mint)
-                            .padding(.horizontal)
+                            // Aligned to the number pad below, not the CTA.
+                            .padding(.horizontal, NumberPadMetrics.gutter)
                             .padding(.bottom, 8)
                     }
 
                     NumberPadAmountInput(amountString: $amountString, unit: entryUnit)
-                        .padding(.horizontal, 24)
+                        .padding(.horizontal, NumberPadMetrics.gutter)
 
                     Button(action: continueFromAmount) {
                         Text("Continue")
@@ -3316,7 +3319,8 @@ struct MeltView: View {
                         showingMintPicker = true
                     } : nil
                 )
-                    .padding(.horizontal)
+                    // Aligned to the number pad below, not the CTA.
+                    .padding(.horizontal, NumberPadMetrics.gutter)
                     .padding(.top, 12)
             }
 
@@ -3380,7 +3384,7 @@ struct MeltView: View {
 
             if amountRequired {
                 NumberPadAmountInput(amountString: $amountString, unit: entryUnit)
-                    .padding(.horizontal, 24)
+                    .padding(.horizontal, NumberPadMetrics.gutter)
                     .padding(.top, 12)
             } else {
                 launchpadSection

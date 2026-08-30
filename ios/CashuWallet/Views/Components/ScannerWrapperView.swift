@@ -515,7 +515,7 @@ struct CashuPaymentRequestPayView: View {
                     VStack(spacing: 16) {
                         if request.amount == nil {
                             NumberPadAmountInput(amountString: $customAmountString, unit: entryUnit)
-                                .padding(.horizontal, 24)
+                                .padding(.horizontal, NumberPadMetrics.gutter)
                         }
 
                         Button(action: payRequest) {
@@ -553,7 +553,8 @@ struct CashuPaymentRequestPayView: View {
                                 showingMintPicker = true
                             } : nil
                         )
-                        .padding(.horizontal)
+                        // Aligned to the number pad below, not the CTA.
+                        .padding(.horizontal, NumberPadMetrics.gutter)
                         .padding(.top, 8)
                     }
                 }

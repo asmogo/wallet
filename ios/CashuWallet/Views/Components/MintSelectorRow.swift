@@ -20,6 +20,29 @@ enum FlowRowMetrics {
     static let gap: CGFloat = 8
     static let actionInset: CGFloat = 8
     static let verticalPadding: CGFloat = 6
+
+    /// The chevron's drawn width. A 48pt frame around an ~12pt glyph left 18pt
+    /// of dead space on each side, which is what pushed the glyph a third of
+    /// the way in from the trailing margin while inflating its gap to Send Max
+    /// to three times the gap inside the identity. The hit area stays 44pt via
+    /// `hitSlop`; only the layout box shrinks.
+    static let chevronBox: CGFloat = 20
+
+    /// Added to a control's hit area without costing layout width.
+    static let hitSlop: CGFloat = 12
+}
+
+extension View {
+    /// Grow a control's touch target beyond its drawn box: pad, claim the
+    /// padded region as the hit shape, then undo the padding's layout cost.
+    /// Lets a small glyph sit on the margin while still being comfortably
+    /// tappable.
+    func hitSlop(_ inset: CGFloat) -> some View {
+        self
+            .padding(.horizontal, inset)
+            .contentShape(Rectangle())
+            .padding(.horizontal, -inset)
+    }
 }
 
 /// The one mint selector for every value flow, on both platforms: a quiet mint
@@ -141,7 +164,7 @@ struct MintSelectorRow: View {
                 .cashuText(.textLink)
                 .fontWeight(.semibold)
                 .lineLimit(1)
-                .padding(.horizontal, FlowRowMetrics.actionInset)
+                .padding(.leading, FlowRowMetrics.actionInset)
                 .frame(minHeight: FlowRowMetrics.minHeight)
                 .contentShape(Rectangle())
         }
@@ -155,8 +178,8 @@ struct MintSelectorRow: View {
             Image(systemName: "chevron.down")
                 .font(.caption.weight(.semibold))
                 .foregroundStyle(.secondary)
-                .frame(width: FlowRowMetrics.minHeight, height: FlowRowMetrics.minHeight)
-                .contentShape(Rectangle())
+                .frame(width: FlowRowMetrics.chevronBox, height: FlowRowMetrics.minHeight)
+                .hitSlop(FlowRowMetrics.hitSlop)
         }
         .buttonStyle(.plain)
         // The identity already exposes the picker as one coherent control.

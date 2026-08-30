@@ -396,7 +396,8 @@ struct ReceiveLightningView: View {
             // Under the amount, over the keypad — the same slot the send flows use.
             if let mint = walletManager.activeMint {
                 mintSelector(mint: mint)
-                    .padding(.horizontal)
+                    // Aligned to the number pad below, not the CTA.
+                    .padding(.horizontal, NumberPadMetrics.gutter)
                     .padding(.bottom, 8)
             }
 
@@ -407,7 +408,7 @@ struct ReceiveLightningView: View {
                     NumberPadAmountInput(amountString: $amountString, decimals: receiveUnitDecimals)
                 }
             }
-            .padding(.horizontal, 24)
+            .padding(.horizontal, NumberPadMetrics.gutter)
             .onChange(of: amountString) { _, newValue in
                 // Typing a digit takes over from the amountless offer.
                 if isAmountless && !newValue.isEmpty { isAmountless = false }
