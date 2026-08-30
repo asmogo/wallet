@@ -2161,6 +2161,7 @@ struct UnifiedSendView: View {
             // An async-accepted (NUT-05) melt — typical for on-chain — isn't settled
             // yet: the mint took the payment and pays out in the background.
             successTitle: meltSettlementPending ? "Payment Processing" : "Payment Sent!",
+            settlementPending: meltSettlementPending,
             failureCTA: meltSwitchMintCTA,
             onDone: onClose,
             onRetry: {
@@ -3587,6 +3588,7 @@ struct MeltView: View {
             // An async-accepted (NUT-05) melt — typical for on-chain — isn't settled
             // yet: the mint took the payment and pays out in the background.
             successTitle: meltSettlementPending ? "Payment Processing" : "Payment Sent!",
+            settlementPending: meltSettlementPending,
             onDone: close,
             onRetry: {
                 withAnimation(.smooth(duration: 0.3)) { paymentPhase = nil }

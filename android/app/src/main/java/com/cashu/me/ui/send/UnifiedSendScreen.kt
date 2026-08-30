@@ -749,7 +749,14 @@ private fun SendStatusTerminal(
             is SendStatus.Sent -> if (settlementPending) "Payment processing" else "Payment sent"
             is SendStatus.Failed -> "Payment failed"
         },
-        detail = failure?.text,
+        detail = when {
+            failure != null -> failure.text
+            settlementPending ->
+                "The mint accepted this payment and is settling it. " +
+                    "Your balance will update automatically."
+            else -> null
+        },
+        settlementPending = settlementPending,
         doneLabel = if (failure != null && !failure.isTerminal) "Try again" else "Done",
         onDone = when (status) {
             is SendStatus.Sending -> null

@@ -40,6 +40,13 @@ struct PaymentStatusView: View {
     var successTitle: String = "Payment Sent!"
     var failureTitle: String = "Payment Failed"
 
+    /// The mint accepted the payment for asynchronous settlement (NUT-05) and
+    /// pays out in the background. The success face then must not claim
+    /// completion: the glyph becomes a pending clock instead of the green
+    /// check (no celebration bounce), and the message slot explains what is
+    /// still happening.
+    var settlementPending: Bool = false
+
     /// Optional custom failure CTA (overrides the default Done / Try Again button).
     var failureCTA: FailureCTA? = nil
 
@@ -65,8 +72,11 @@ struct PaymentStatusView: View {
         }
     }
 
-    private var failureMessage: String? {
+    private var statusMessage: String? {
         if case .failure(let message, _, _) = phase, !message.isEmpty { return message }
+        if case .success = phase, settlementPending {
+            return "The mint accepted this payment and is settling it. Your balance will update automatically."
+        }
         return nil
     }
 
@@ -86,12 +96,12 @@ struct PaymentStatusView: View {
                         .multilineTextAlignment(.center)
 
                     // Reserved slot so success ↔ failure never nudges the icon above it.
-                    Text(failureMessage ?? " ")
+                    Text(statusMessage ?? " ")
                         .font(.callout)
                         .foregroundStyle(.secondary)
                         .multilineTextAlignment(.center)
                         .lineLimit(3)
-                        .opacity(failureMessage == nil ? 0 : 1)
+                        .opacity(statusMessage == nil ? 0 : 1)
                         .padding(.horizontal, 32)
                         .frame(minHeight: 44)
                 }
@@ -128,14 +138,24 @@ struct PaymentStatusView: View {
                 SpinnerRing()
                     .transition(reduceMotion ? .opacity : .opacity.combined(with: .scale(scale: 0.9)))
             case .success:
-                // Blur-to-sharp materialize (DESIGN.md §6 carve-out): the check comes
-                // *into focus* as it scales in, riding the same `.smooth(0.3)`. Reduce
-                // Motion drops both blur and scale to a plain fade.
-                Image(systemName: "checkmark.circle.fill")
-                    .font(.statusGlyph)
-                    .foregroundStyle(.green)
-                    .symbolEffect(.bounce, value: reduceMotion ? 0 : phaseKey)
-                    .transition(reduceMotion ? .opacity : .scale(scale: 0.92).combined(with: .opacity).combined(with: .materializeBlur))
+                if settlementPending {
+                    // Async settlement isn't the celebration beat: a pending
+                    // clock in the app's pending orange, entering like the
+                    // failure glyph — no bounce, no green check yet.
+                    Image(systemName: "clock.fill")
+                        .font(.statusGlyph)
+                        .foregroundStyle(.orange)
+                        .transition(reduceMotion ? .opacity : .scale(scale: 0.92).combined(with: .opacity))
+                } else {
+                    // Blur-to-sharp materialize (DESIGN.md §6 carve-out): the check comes
+                    // *into focus* as it scales in, riding the same `.smooth(0.3)`. Reduce
+                    // Motion drops both blur and scale to a plain fade.
+                    Image(systemName: "checkmark.circle.fill")
+                        .font(.statusGlyph)
+                        .foregroundStyle(.green)
+                        .symbolEffect(.bounce, value: reduceMotion ? 0 : phaseKey)
+                        .transition(reduceMotion ? .opacity : .scale(scale: 0.92).combined(with: .opacity).combined(with: .materializeBlur))
+                }
             case .failure(_, let isCaution, _):
                 // No `.symbolEffect(.bounce)` here — bounce is the payment-received
                 // celebration beat (DESIGN.md §6); a failure/caution glyph must not

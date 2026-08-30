@@ -84,6 +84,11 @@ fun PaymentStatusScreen(
     onDone: (() -> Unit)? = null,
     rows: (@Composable ColumnScope.() -> Unit)? = null,
     showRowsDuringProcessing: Boolean = false,
+    // The mint accepted the payment for asynchronous settlement (NUT-05) and
+    // pays out in the background. The success face then must not claim
+    // completion: the glyph becomes a pending clock instead of the green
+    // check, with no celebration bounce (iOS parity).
+    settlementPending: Boolean = false,
 ) {
     val haptics = LocalHapticFeedback.current
     LaunchedEffect(phase) {
@@ -178,10 +183,21 @@ fun PaymentStatusScreen(
                                     size = SpinnerSize,
                                     color = MaterialTheme.colorScheme.primary,
                                 )
-                                PaymentStatusPhase.Success -> {
+                                PaymentStatusPhase.Success -> if (settlementPending) {
+                                    // Async settlement isn't the celebration
+                                    // beat: a pending clock, entering like the
+                                    // failure glyph — no bounce, no green
+                                    // check yet.
+                                    StatusCircleGlyph(
+                                        kind = StatusGlyphKind.Pending,
+                                        contentDescription = "Pending",
+                                        tint = CashuTheme.colors.pending,
+                                        modifier = Modifier.size(StatusGlyphSize),
+                                    )
+                                } else {
                                     val bounce = rememberBounceScale(trigger = current, bounceOnEntry = true)
                                     StatusCircleGlyph(
-                                        success = true,
+                                        kind = StatusGlyphKind.Success,
                                         contentDescription = "Success",
                                         tint = CashuTheme.colors.received,
                                         modifier = Modifier
@@ -194,7 +210,7 @@ fun PaymentStatusScreen(
                                     )
                                 }
                                 PaymentStatusPhase.Failure -> StatusCircleGlyph(
-                                    success = false,
+                                    kind = StatusGlyphKind.Failure,
                                     contentDescription = "Failed",
                                     tint = failureTint,
                                     modifier = Modifier.size(StatusGlyphSize),
@@ -262,15 +278,18 @@ fun PaymentStatusScreen(
     }
 }
 
+private enum class StatusGlyphKind { Success, Failure, Pending }
+
 /**
- * SF Symbols-style filled status glyph. Compose's Material check/cancel vectors
- * use square stroke ends, while iOS `checkmark.circle.fill` and
- * `xmark.circle.fill` use rounded caps. Drawing the two strokes explicitly keeps
- * Android's silhouette, line weight, and negative space aligned with iOS.
+ * SF Symbols-style filled status glyph. Compose's Material check/cancel/clock
+ * vectors use square stroke ends, while iOS `checkmark.circle.fill`,
+ * `xmark.circle.fill` and `clock.fill` use rounded caps. Drawing the strokes
+ * explicitly keeps Android's silhouette, line weight, and negative space
+ * aligned with iOS.
  */
 @Composable
 private fun StatusCircleGlyph(
-    success: Boolean,
+    kind: StatusGlyphKind,
     contentDescription: String,
     tint: Color,
     modifier: Modifier = Modifier,
@@ -282,36 +301,56 @@ private fun StatusCircleGlyph(
     ) {
         drawCircle(color = tint)
         val strokeWidth = 6.dp.toPx()
-        if (success) {
-            drawLine(
-                color = Color.White,
-                start = Offset(size.width * 0.29f, size.height * 0.52f),
-                end = Offset(size.width * 0.44f, size.height * 0.67f),
-                strokeWidth = strokeWidth,
-                cap = StrokeCap.Round,
-            )
-            drawLine(
-                color = Color.White,
-                start = Offset(size.width * 0.44f, size.height * 0.67f),
-                end = Offset(size.width * 0.72f, size.height * 0.34f),
-                strokeWidth = strokeWidth,
-                cap = StrokeCap.Round,
-            )
-        } else {
-            drawLine(
-                color = Color.White,
-                start = Offset(size.width * 0.34f, size.height * 0.34f),
-                end = Offset(size.width * 0.66f, size.height * 0.66f),
-                strokeWidth = strokeWidth,
-                cap = StrokeCap.Round,
-            )
-            drawLine(
-                color = Color.White,
-                start = Offset(size.width * 0.66f, size.height * 0.34f),
-                end = Offset(size.width * 0.34f, size.height * 0.66f),
-                strokeWidth = strokeWidth,
-                cap = StrokeCap.Round,
-            )
+        when (kind) {
+            StatusGlyphKind.Success -> {
+                drawLine(
+                    color = Color.White,
+                    start = Offset(size.width * 0.29f, size.height * 0.52f),
+                    end = Offset(size.width * 0.44f, size.height * 0.67f),
+                    strokeWidth = strokeWidth,
+                    cap = StrokeCap.Round,
+                )
+                drawLine(
+                    color = Color.White,
+                    start = Offset(size.width * 0.44f, size.height * 0.67f),
+                    end = Offset(size.width * 0.72f, size.height * 0.34f),
+                    strokeWidth = strokeWidth,
+                    cap = StrokeCap.Round,
+                )
+            }
+            StatusGlyphKind.Failure -> {
+                drawLine(
+                    color = Color.White,
+                    start = Offset(size.width * 0.34f, size.height * 0.34f),
+                    end = Offset(size.width * 0.66f, size.height * 0.66f),
+                    strokeWidth = strokeWidth,
+                    cap = StrokeCap.Round,
+                )
+                drawLine(
+                    color = Color.White,
+                    start = Offset(size.width * 0.66f, size.height * 0.34f),
+                    end = Offset(size.width * 0.34f, size.height * 0.66f),
+                    strokeWidth = strokeWidth,
+                    cap = StrokeCap.Round,
+                )
+            }
+            StatusGlyphKind.Pending -> {
+                // Clock hands at 12 and 3 (iOS `clock.fill` parity).
+                drawLine(
+                    color = Color.White,
+                    start = Offset(size.width * 0.5f, size.height * 0.5f),
+                    end = Offset(size.width * 0.5f, size.height * 0.28f),
+                    strokeWidth = strokeWidth,
+                    cap = StrokeCap.Round,
+                )
+                drawLine(
+                    color = Color.White,
+                    start = Offset(size.width * 0.5f, size.height * 0.5f),
+                    end = Offset(size.width * 0.68f, size.height * 0.5f),
+                    strokeWidth = strokeWidth,
+                    cap = StrokeCap.Round,
+                )
+            }
         }
     }
 }
