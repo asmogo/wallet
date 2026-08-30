@@ -1148,13 +1148,19 @@ struct ReceiveLightningView: View {
         Task { @MainActor in
             do {
                 let quote: MintQuoteInfo
-                if !forceNew, let existing = try await walletManager.existingAmountlessOffer() {
+                let requestedUnit = unit ?? effectiveUnit
+                if !forceNew,
+                   let mintURL = walletManager.activeMint?.url,
+                   let existing = try await walletManager.existingAmountlessOffer(
+                       mintURL: mintURL,
+                       unit: requestedUnit
+                   ) {
                     quote = existing
                 } else {
                     quote = try await walletManager.createMintQuote(
                         amount: nil,
                         method: .bolt12,
-                        unit: unit ?? effectiveUnit
+                        unit: requestedUnit
                     )
                 }
                 quoteCreatedAt = Date()

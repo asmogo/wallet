@@ -24,9 +24,9 @@ struct MintQuoteInfo: Identifiable {
 
 /// Remembers when each reusable (amountless BOLT12) offer was first materialized.
 /// The CDK `MintQuote` has no creation timestamp, and the same offer is reused
-/// across opens via `LightningService.existingAmountlessOffer()`, so without a
-/// stable record the "Created" row would drift to "now" on every visit. Keyed by
-/// quote id; stamped once, read back forever after.
+/// across opens via `LightningService.existingAmountlessOffer(mintURL:unit:)`.
+/// Without a stable record, the "Created" row would drift to "now" on every
+/// visit. Keyed by quote id; stamped once, read back forever after.
 enum MintQuoteCreatedAtStore {
     private static let storageKey = "mintQuoteCreatedAt.v1"
 

@@ -1,6 +1,41 @@
 import Foundation
 import Cdk
 
+struct MintQuoteWalletContext: Equatable {
+    let mintURL: String
+    let unit: Cdk.CurrencyUnit
+}
+
+/// Keeps every operation on the wallet that owns the quote. The active mint is
+/// only a compatibility fallback for quotes that predate local persistence.
+enum MintQuoteContextPolicy {
+    static func context(for quote: MintQuote) -> MintQuoteWalletContext {
+        MintQuoteWalletContext(mintURL: quote.mintUrl.url, unit: quote.unit)
+    }
+
+    static func existingAmountlessOffer(
+        in quotes: [MintQuote],
+        requestedContext: MintQuoteWalletContext
+    ) -> MintQuote? {
+        quotes.first {
+            PaymentMethodKind.from($0.paymentMethod) == .bolt12
+                && $0.amount == nil
+                && context(for: $0) == requestedContext
+        }
+    }
+
+    static func walletContext(
+        storedQuote: MintQuote?,
+        activeMintURL: String?
+    ) -> MintQuoteWalletContext? {
+        if let storedQuote {
+            return context(for: storedQuote)
+        }
+        guard let activeMintURL else { return nil }
+        return MintQuoteWalletContext(mintURL: activeMintURL, unit: .sat)
+    }
+}
+
 // MARK: - Lightning Service
 
 /// Service responsible for Lightning Network operations (NUT-04/NUT-05).
@@ -54,7 +89,7 @@ class LightningService: ObservableObject {
     /// - Parameter targetMintURL: mint the quote is created at. Defaults to the
     ///   active mint (existing callers). Pass an explicit URL to mint at a
     ///   specific mint — e.g. funding a freshly-added mint to pay a Cashu request.
-    ///   Only honored for the bolt11 path; onchain still uses the active mint.
+    ///   Honored for bolt11 and bolt12; onchain still uses the active mint.
     func createMintQuote(
         amount: UInt64?,
         method: PaymentMethodKind = .bolt11,
@@ -103,14 +138,20 @@ class LightningService: ObservableObject {
         return mintQuoteInfo(from: quote, fallbackAmount: amount, paymentMethod: method)
     }
 
-    /// Returns the first pending amountless BOLT12 offer stored in the DB, or nil if none exists.
-    /// Used to avoid creating a new offer on every visit to the Reusable Invoice screen.
-    func existingAmountlessOffer() async throws -> MintQuoteInfo? {
+    /// Returns the pending amountless BOLT12 offer for one mint and unit, or nil
+    /// if that wallet has none. Offers from another account must never be
+    /// reopened merely because they appeared first in the shared database.
+    func existingAmountlessOffer(
+        mintURL: String,
+        unit: Cdk.CurrencyUnit
+    ) async throws -> MintQuoteInfo? {
         guard let db = walletDatabase() else { return nil }
         let pendingQuotes = try await db.getUnissuedMintQuotes()
-        guard let match = pendingQuotes.first(where: {
-            PaymentMethodKind.from($0.paymentMethod) == .bolt12 && $0.amount == nil
-        }) else { return nil }
+        let requestedContext = MintQuoteWalletContext(mintURL: mintURL, unit: unit)
+        guard let match = MintQuoteContextPolicy.existingAmountlessOffer(
+            in: pendingQuotes,
+            requestedContext: requestedContext
+        ) else { return nil }
         return mintQuoteInfo(from: match, fallbackAmount: nil, paymentMethod: .bolt12)
     }
 
@@ -154,8 +195,11 @@ class LightningService: ObservableObject {
                 await persistMintQuoteIfNeeded(existingQuote, paymentMethod: .bolt12)
             }
 
-            // Poll through the quote's own unit wallet, not an assumed sat one.
-            let wallet = try await repo.getWallet(mintUrl: existingQuote.mintUrl, unit: existingQuote.unit)
+            let context = MintQuoteContextPolicy.context(for: existingQuote)
+            let wallet = try await repo.getWallet(
+                mintUrl: MintUrl(url: context.mintURL),
+                unit: context.unit
+            )
             let quote = try await wallet.checkMintQuote(quoteId: quoteId)
             let paymentMethod = PaymentMethodKind.from(quote.paymentMethod) ?? storedPaymentMethod ?? .bolt11
             let refreshedQuote = mintQuoteForLocalStorage(
@@ -171,12 +215,17 @@ class LightningService: ObservableObject {
             )
         }
 
-        guard let activeMint = getActiveMint() else {
+        guard let context = MintQuoteContextPolicy.walletContext(
+            storedQuote: nil,
+            activeMintURL: getActiveMint()?.url
+        ) else {
             throw WalletError.notInitialized
         }
 
-        let mintUrl = MintUrl(url: activeMint.url)
-        let wallet = try await repo.getWallet(mintUrl: mintUrl, unit: .sat)
+        let wallet = try await repo.getWallet(
+            mintUrl: MintUrl(url: context.mintURL),
+            unit: context.unit
+        )
         let quote = try await wallet.checkMintQuote(quoteId: quoteId)
         let paymentMethod = PaymentMethodKind.from(quote.paymentMethod) ?? .bolt11
         await persistMintQuote(quote, paymentMethod: paymentMethod)
@@ -594,12 +643,28 @@ class LightningService: ObservableObject {
         quoteId: String,
         paymentMethod: PaymentMethodKind
     ) async throws -> ActiveSubscription? {
-        guard let repo = walletRepository(), let activeMint = getActiveMint() else {
+        guard let repo = walletRepository() else {
             throw WalletError.notInitialized
         }
 
-        let mintUrl = MintUrl(url: activeMint.url)
-        let wallet = try await repo.getWallet(mintUrl: mintUrl, unit: .sat)
+        let storedQuote: MintQuote?
+        if let database = walletDatabase() {
+            storedQuote = try await database.getMintQuote(quoteId: quoteId)
+        } else {
+            storedQuote = nil
+        }
+
+        guard let context = MintQuoteContextPolicy.walletContext(
+            storedQuote: storedQuote,
+            activeMintURL: getActiveMint()?.url
+        ) else {
+            throw WalletError.notInitialized
+        }
+
+        let wallet = try await repo.getWallet(
+            mintUrl: MintUrl(url: context.mintURL),
+            unit: context.unit
+        )
         let params = SubscribeParams(kind: paymentMethod.subscriptionKind, filters: [quoteId], id: nil)
         return try await wallet.subscribe(params: params)
     }
