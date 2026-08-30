@@ -393,6 +393,8 @@ fun NostrScreen(
             title = "Reset to wallet seed?",
             message = NostrIdentityReplacementWarnings.Reset,
             actionLabel = "Reset",
+            // Deletes the custom key — the commit wears destructive red.
+            destructive = true,
             onConfirm = {
                 showResetConfirm = false
                 performIdentityMutation(
@@ -686,6 +688,9 @@ private fun KeyActionConfirmSheet(
     actionLabel: String,
     onConfirm: () -> Unit,
     onDismiss: () -> Unit,
+    // Red commit button for the mutation that destroys a key outright
+    // (Reset deletes the custom key); false keeps the inverted-ink primary.
+    destructive: Boolean = false,
 ) {
     ModalBottomSheet(onDismissRequest = onDismiss) {
         Box(modifier = Modifier.fillMaxWidth()) {
@@ -718,7 +723,14 @@ private fun KeyActionConfirmSheet(
                     PrimaryButton(
                         text = actionLabel,
                         onClick = onConfirm,
-                        colors = ButtonDefaults.buttonColors(),
+                        colors = if (destructive) {
+                            ButtonDefaults.buttonColors(
+                                containerColor = MaterialTheme.colorScheme.error,
+                                contentColor = MaterialTheme.colorScheme.onError,
+                            )
+                        } else {
+                            ButtonDefaults.buttonColors()
+                        },
                         modifier = Modifier.weight(1f),
                     )
                 }

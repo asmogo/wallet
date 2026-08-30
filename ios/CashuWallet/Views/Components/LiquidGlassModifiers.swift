@@ -75,8 +75,12 @@ extension View {
     /// Pass `prominent: true` for the inverted-ink fill (black in light / white
     /// in dark) used by the enabled primary action — matches Android
     /// `PrimaryButton`.
-    func glassButton(prominent: Bool = false) -> some View {
-        self.buttonStyle(FullWidthCapsuleButtonStyle(prominent: prominent))
+    ///
+    /// Pass `destructive: true` for a solid system-red fill with a white label —
+    /// the commit button of a confirm sheet whose action destroys something
+    /// (key reset). Matches Android's error-colored confirm.
+    func glassButton(prominent: Bool = false, destructive: Bool = false) -> some View {
+        self.buttonStyle(FullWidthCapsuleButtonStyle(prominent: prominent, destructive: destructive))
     }
 
     /// A quiet, filled action for the secondary slot beside a sheet's single
@@ -858,14 +862,17 @@ struct SettingsSectionFooter<Content: View>: View {
 /// `systemBackground`) so sheets don't resolve to elevated greys.
 struct FullWidthCapsuleButtonStyle: ButtonStyle {
     var prominent: Bool = false
+    /// Solid system-red fill + white label in every scheme — the destructive
+    /// confirm. Disabled still falls to the neutral grey pair.
+    var destructive: Bool = false
     @Environment(\.isEnabled) private var isEnabled
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.bottomSheetSurfaceStyle) private var bottomSheetSurfaceStyle
 
     func makeBody(configuration: Configuration) -> some View {
-        let ink = colorScheme == .dark ? Color.white : Color.black
-        let onInk = colorScheme == .dark ? Color.black : Color.white
-        let solid = prominent || bottomSheetSurfaceStyle != .glass
+        let ink = destructive ? Color(.systemRed) : (colorScheme == .dark ? Color.white : Color.black)
+        let onInk = destructive ? Color.white : (colorScheme == .dark ? Color.black : Color.white)
+        let solid = prominent || destructive || bottomSheetSurfaceStyle != .glass
 
         let label = configuration.label
             .font(.body.weight(.semibold))

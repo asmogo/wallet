@@ -79,6 +79,8 @@ struct NostrKeysSettingsSection: View {
                 title: "Reset to Wallet Seed?",
                 message: NostrIdentityReplacementWarning.reset,
                 actionLabel: "Reset",
+                // Deletes the custom key — the commit wears destructive red.
+                destructive: true,
                 action: resetToSeedKey
             )
         }
@@ -472,6 +474,9 @@ private struct KeyActionConfirmSheet: View {
     let title: String
     let message: String
     let actionLabel: String
+    /// Red commit button for the mutation that destroys a key outright
+    /// (Reset deletes the custom key); false keeps the neutral primary.
+    var destructive: Bool = false
     let action: () -> Void
 
     @Environment(\.dismiss) private var dismiss
@@ -494,7 +499,7 @@ private struct KeyActionConfirmSheet: View {
                     dismiss()
                     action()
                 }
-                .glassButton()
+                .glassButton(destructive: destructive)
             }
         }
         .padding(.horizontal, 24)
