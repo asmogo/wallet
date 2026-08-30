@@ -417,7 +417,9 @@ struct ReceiveLightningView: View {
                     Text(selectedMethod.createActionTitle)
                 }
             }
-            .glassButton()
+            // Quiet tonal fill, matching Android's gray keypad CTA — the white
+            // ink stays reserved for the pay-confirm commit.
+            .flatSheetSecondaryButton()
             .accessibilityIdentifier("receive-lightning-create-request")
             .disabled(!canCreateRequest)
             .padding(.horizontal)

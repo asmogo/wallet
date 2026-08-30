@@ -279,7 +279,10 @@ struct SendView: View {
                     Text("Send")
                 }
             }
-            .glassButton()
+            // Quiet tonal fill, not the white primary — Android's keypad CTA
+            // is the gray neutral, and the white ink stays reserved for the
+            // pay-confirm commit.
+            .flatSheetSecondaryButton()
             .disabled(!canSend || isGenerating)
             .padding(.horizontal)
             .padding(.top, 16)
@@ -737,10 +740,12 @@ struct SendView: View {
             }
 
             VStack(spacing: 12) {
+                // Both are helper actions on an already-created token — gray
+                // tonal fill like Android's, never the inverted-ink primary.
                 Button(action: { copyToken(token) }) {
                     Text("Copy")
                 }
-                .glassButton()
+                .flatSheetSecondaryButton()
 
                 if !settings.checkSentTokens {
                     Button(action: { startManualClaimCheck(token: token) }) {
@@ -750,7 +755,7 @@ struct SendView: View {
                             Text("Check Status")
                         }
                     }
-                    .glassButton()
+                    .flatSheetSecondaryButton()
                     .disabled(isCheckingClaim)
                     .accessibilityIdentifier("cashu.send.ecash.check-status")
                     .accessibilityLabel(isCheckingClaim ? "Checking claim status" : "Check Status")
