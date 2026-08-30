@@ -201,7 +201,9 @@ class FunctionalWalletJourneyTest {
             .typeIntoTag(UiTestTags.SendDestination, FixedBolt11Invoice)
             .awaitTag(UiTestTags.SendPaymentSubmit)
             .awaitText("Network fee")
-            .awaitText("2 sat")
+            // The confirm's fee/total rows honour the ₿-symbol setting now,
+            // same as the status terminal below.
+            .awaitText("₿2")
             .tapTag(UiTestTags.SendPaymentSubmit)
             .awaitText("Payment sent")
             .awaitText("Network fee")
