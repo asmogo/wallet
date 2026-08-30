@@ -24,6 +24,12 @@ enum BottomSheetSurfaceStyle {
 enum DisabledControlOpacity {
     static let fill: Double = 0.12
     static let content: Double = 0.38
+
+    /// Disabled fill for controls whose *enabled* state is already a quiet
+    /// translucency rather than inverse ink. `fill` (0.12) demotes solid ink,
+    /// but it sits above the secondary button's enabled 0.11 — reusing it there
+    /// made a disabled control brighter than an active one. This stays below.
+    static let secondaryFill: Double = 0.06
 }
 
 enum CompactSheetPalette {
@@ -94,6 +100,15 @@ extension View {
     /// text-link vocabulary in the app — see `TextLinkButtonStyle`.
     func textLinkButton() -> some View {
         self.buttonStyle(TextLinkButtonStyle())
+    }
+
+    /// The tertiary action sitting directly beneath a full-width CTA
+    /// ("Receive Later", the onboarding chassis' skip slot). It carries the
+    /// capsule's own label type, so the pair differs by fill and ink alone and
+    /// never by type — see `CtaStackTextLinkButtonStyle`. Inline links keep
+    /// `textLinkButton()`.
+    func ctaStackTextLinkButton() -> some View {
+        self.buttonStyle(CtaStackTextLinkButtonStyle())
     }
 
     /// Make a presented sheet/cover read as the same flat canvas as the home
@@ -934,7 +949,7 @@ struct FlatSheetSecondaryButtonStyle: ButtonStyle {
                 isEnabled ? Color.primary : Color.primary.opacity(DisabledControlOpacity.content)
             )
             .background(
-                Color.primary.opacity(isEnabled ? 0.11 : DisabledControlOpacity.fill),
+                Color.primary.opacity(isEnabled ? 0.11 : DisabledControlOpacity.secondaryFill),
                 in: Capsule()
             )
             .contentShape(Capsule())
@@ -962,6 +977,28 @@ struct TextLinkButtonStyle: ButtonStyle {
         configuration.label
             .font(.subheadline.weight(.medium))
             .foregroundStyle(.secondary)
+            .contentShape(Rectangle())
+            .opacity(isEnabled ? (configuration.isPressed ? 0.6 : 1) : 0.4)
+            .animation(
+                .snappy(duration: configuration.isPressed ? 0.09 : 0.18),
+                value: configuration.isPressed
+            )
+    }
+}
+
+/// A text link that reads as the CTA's sibling: same `.body.weight(.semibold)`
+/// as `FullWidthCapsuleButtonStyle`, separated from it by ink and the absent
+/// fill rather than by a second type size. Stacking a 15pt regular label under a
+/// 17pt semibold capsule made the pair look like two unrelated controls.
+struct CtaStackTextLinkButtonStyle: ButtonStyle {
+    @Environment(\.isEnabled) private var isEnabled
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .font(.body.weight(.semibold))
+            .foregroundStyle(.secondary)
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 18)
             .contentShape(Rectangle())
             .opacity(isEnabled ? (configuration.isPressed ? 0.6 : 1) : 0.4)
             .animation(

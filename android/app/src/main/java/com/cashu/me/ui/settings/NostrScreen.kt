@@ -661,7 +661,11 @@ private fun NsecImportSheet(
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 textAlign = TextAlign.Center,
                             )
-                            SecondaryButton(
+                            // Neutral fill, matching PaymentStatusScreen's terminal
+                            // Done. secondaryContainer (#262626) sits *above*
+                            // surfaceContainerHigh (#1C1C1C) in dark, so demoting
+                            // to SecondaryButton here made this Done the loudest.
+                            PrimaryButton(
                                 text = "Done",
                                 onClick = onDismiss,
                                 modifier = Modifier.fillMaxWidth(),

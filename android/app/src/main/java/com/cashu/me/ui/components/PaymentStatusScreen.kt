@@ -40,7 +40,6 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.LocalInspectionMode
@@ -171,11 +170,9 @@ fun PaymentStatusScreen(
             ),
     ) {
         val scaffoldHeight = maxHeight
-        val failureTint = if (MaterialTheme.colorScheme.background.luminance() < 0.5f) {
-            Color(0xFFFF453A)
-        } else {
-            Color(0xFFFF3B30)
-        }
+        // The theme already carries a light/dark error pair; hand-rolling one off
+        // background luminance made this the only screen with its own red.
+        val failureTint = MaterialTheme.colorScheme.error
         val hasAction = phase != PaymentStatusPhase.Processing && onDone != null
 
         Column(modifier = Modifier.fillMaxSize()) {
