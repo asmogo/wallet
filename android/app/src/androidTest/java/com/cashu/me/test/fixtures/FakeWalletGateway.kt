@@ -343,6 +343,8 @@ class FakeWalletGateway(
 
     override suspend fun calculateReceiveFee(tokenString: String): Long = 0
 
+    override suspend fun activeMintInputFeePpk(mintUrl: String): Long? = 0
+
     override suspend fun estimateCashuPaymentRequestFee(amountSats: Long, mintUrl: String): Long = 0
 
     override suspend fun checkTokenSpendable(token: String, mintUrl: String): Boolean = true

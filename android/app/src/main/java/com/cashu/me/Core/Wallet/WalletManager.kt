@@ -33,11 +33,13 @@ import com.cashu.me.Core.Platform.WalletFileBackup
 import com.cashu.me.Core.Protocols.SecureStorage
 import com.cashu.me.Core.Protocols.StorageKeys
 import com.cashu.me.Core.Protocols.WalletServiceProtocol
+import com.cashu.me.Core.Wallet.isInsufficientBalance
 import com.cashu.me.Models.MeltPaymentResult
 import com.cashu.me.Models.MeltQuoteInfo
 import com.cashu.me.Models.MeltQuoteState
 import com.cashu.me.Models.MintInfo
 import com.cashu.me.Models.MintQuoteInfo
+import com.cashu.me.Models.MintQuoteState
 import com.cashu.me.Models.PaymentMethodKind
 import com.cashu.me.Models.PendingReceiveToken
 import com.cashu.me.Models.RestoreMintResult
@@ -1152,20 +1154,142 @@ class WalletManager(
         }
     }
 
-    suspend fun addMintAndPayCashuPaymentRequest(encoded: String, customAmountSats: Long?, mintUrl: String) {
-        withLoading {
-            addMintAndPayCashuPaymentRequestAndRefresh(
-                encoded = encoded,
-                customAmountSats = customAmountSats,
-                mintUrl = mintUrl,
-                ensureMintTracked = { ensureMintTracked(it) },
-                payCashuPaymentRequest = { request, amount, trackedMintUrl ->
-                    gateway.payCashuPaymentRequest(request, amount, trackedMintUrl)
-                },
-                refreshBalance = { refreshBalance() },
-                loadTransactions = { loadTransactions() },
+    /**
+     * Acquire ecash at the requested mint, then pay the Cashu Request.
+     *
+     * A different held mint funds the target over BOLT11 when possible. If no
+     * held mint can cover the transfer and its fee reserve, return the already
+     * created target quote so the UI can collect an explicit external top-up.
+     */
+    internal suspend fun acquireAndPayCashuPaymentRequest(
+        encoded: String,
+        amountSats: Long,
+        targetMintUrl: String,
+    ): CashuRequestAcquireResult = withLoadingResult {
+        val trackedTargetMintUrl = ensureMintTracked(targetMintUrl)
+        val inputFeePpk = try {
+            gateway.activeMintInputFeePpk(trackedTargetMintUrl)
+        } catch (cancellation: CancellationException) {
+            throw cancellation
+        } catch (_: Throwable) {
+            null
+        }
+        val mintAmount = cashuRequestTopUpAmount(amountSats, inputFeePpk)
+        val targetQuote = gateway.createMintQuote(
+            amount = mintAmount,
+            method = PaymentMethodKind.Bolt11,
+            mintUrl = trackedTargetMintUrl,
+            unit = "sat",
+        ).also { mintQuoteSyncService.rememberMintQuoteTimestamp(it.id) }
+
+        val source = selectCashuRequestFundingSource(
+            mints = mutableState.value.mints,
+            targetMintUrl = trackedTargetMintUrl,
+            requiredAmountSats = mintAmount,
+        ) ?: return@withLoadingResult CashuRequestAcquireResult.NeedsExternalTopUp(
+            quote = targetQuote,
+            targetMintUrl = trackedTargetMintUrl,
+            requestedAmountSats = amountSats,
+        )
+
+        val sourceMeltQuote = try {
+            gateway.createMeltQuote(
+                request = targetQuote.request,
+                amountSats = null,
+                preferredMintURL = source.url,
+            )
+        } catch (cancellation: CancellationException) {
+            throw cancellation
+        } catch (failure: Throwable) {
+            if (failure.isInsufficientBalance) {
+                return@withLoadingResult CashuRequestAcquireResult.NeedsExternalTopUp(
+                    quote = targetQuote,
+                    targetMintUrl = trackedTargetMintUrl,
+                    requestedAmountSats = amountSats,
+                )
+            }
+            throw failure
+        }
+
+        if (sourceMeltQuote.totalAmount > source.balance) {
+            return@withLoadingResult CashuRequestAcquireResult.NeedsExternalTopUp(
+                quote = targetQuote,
+                targetMintUrl = trackedTargetMintUrl,
+                requestedAmountSats = amountSats,
             )
         }
+
+        val fundingConfirmation = gateway.meltTokens(sourceMeltQuote.id, source.url)
+        fundingConfirmation.pendingMelt?.let { watchPendingMelt(it, sourceMeltQuote.id) }
+        refreshBalance()
+        loadTransactions()
+
+        finishCashuRequestTopUpAndPayInternal(
+            encoded = encoded,
+            amountSats = amountSats,
+            targetMintUrl = trackedTargetMintUrl,
+            quoteId = targetQuote.id,
+        )
+        CashuRequestAcquireResult.Paid(fundingConfirmation.result)
+    }
+
+    /** Finish an externally-paid target quote, then pay the pending request. */
+    internal suspend fun finishCashuRequestTopUpAndPay(
+        encoded: String,
+        amountSats: Long,
+        targetMintUrl: String,
+        quoteId: String,
+    ) {
+        withLoading {
+            finishCashuRequestTopUpAndPayInternal(encoded, amountSats, targetMintUrl, quoteId)
+        }
+    }
+
+    private suspend fun finishCashuRequestTopUpAndPayInternal(
+        encoded: String,
+        amountSats: Long,
+        targetMintUrl: String,
+        quoteId: String,
+    ) {
+        mintCashuRequestTopUpWithRetries(quoteId)
+        try {
+            gateway.payCashuPaymentRequest(encoded, amountSats, targetMintUrl)
+        } catch (cancellation: CancellationException) {
+            throw cancellation
+        } catch (failure: Throwable) {
+            if (failure.isInsufficientBalance) throw CashuRequestMintSettling()
+            throw failure
+        }
+        refreshBalance()
+        loadTransactions()
+    }
+
+    private suspend fun mintCashuRequestTopUpWithRetries(quoteId: String) {
+        repeat(8) { attempt ->
+            val quote = try {
+                gateway.checkMintQuote(quoteId)
+            } catch (cancellation: CancellationException) {
+                throw cancellation
+            } catch (_: Throwable) {
+                null
+            }
+            when (quote?.state) {
+                MintQuoteState.Issued -> return
+                MintQuoteState.Paid -> {
+                    try {
+                        gateway.mintTokens(quoteId)
+                        return
+                    } catch (cancellation: CancellationException) {
+                        throw cancellation
+                    } catch (failure: Throwable) {
+                        if (mintQuoteSyncService.isAlreadyIssuedMintError(failure)) return
+                    }
+                }
+                else -> Unit
+            }
+            if (attempt < 7) delay(2_500)
+        }
+        throw CashuRequestMintSettling()
     }
 
     suspend fun loadTransactions() {

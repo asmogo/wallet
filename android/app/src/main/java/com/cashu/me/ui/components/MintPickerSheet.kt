@@ -57,6 +57,7 @@ fun MintPickerSheet(
     onDismiss: () -> Unit,
     title: String = "Choose mint",
     allowAnyMint: Boolean = false,
+    mintSubtitle: ((MintInfo) -> String)? = null,
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val formatter = remember { AmountFormatter() }
@@ -89,7 +90,8 @@ fun MintPickerSheet(
                     items(mints, key = { it.url }) { mint ->
                         MintPickerMintRow(
                             mint = mint,
-                            balanceText = formatter.formatSats(mint.balance),
+                            balanceText = mintSubtitle?.invoke(mint)
+                                ?: formatter.formatSats(mint.balance),
                             selected = mint.url == activeMintUrl,
                             onClick = { onSelect(mint) },
                         )

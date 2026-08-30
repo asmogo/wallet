@@ -40,6 +40,7 @@ import org.cashudevkit.BackupOptions as CdkBackupOptions
 import org.cashudevkit.BitcoinNetwork as CdkBitcoinNetwork
 import org.cashudevkit.CurrencyUnit as CdkCurrencyUnit
 import org.cashudevkit.FinalizedMelt as CdkFinalizedMelt
+import org.cashudevkit.KeysetLoadPolicy as CdkKeysetLoadPolicy
 import org.cashudevkit.MeltConfirmOutcome as CdkMeltConfirmOutcome
 import org.cashudevkit.MeltQuote as CdkMeltQuote
 import org.cashudevkit.MintInfo as CdkMintInfo
@@ -646,6 +647,13 @@ class CdkWalletGatewayImpl : WalletGateway {
             }
             (totalPpk + 999) / 1000
         }.getOrDefault(0L)
+    }
+
+    override suspend fun activeMintInputFeePpk(mintUrl: String): Long? = cdkCall {
+        val keysets = walletFor(mintUrl, CdkCurrencyUnit.Sat)
+            .keysets(CdkKeysetLoadPolicy.REFRESH)
+        val active = keysets.firstOrNull { it.active == true } ?: keysets.firstOrNull()
+        active?.inputFeePpk?.toLong()
     }
 
     override suspend fun estimateCashuPaymentRequestFee(amountSats: Long, mintUrl: String): Long = cdkCall {
