@@ -122,11 +122,14 @@ data class ForeignNfcSettlement(
 
 /**
  * Outcome of confirming a melt (iOS LightningService.MeltConfirmation parity).
- * Settled synchronously for most Lightning payments; carries a `PendingMelt`
- * handle when the mint accepted asynchronous (NUT-05) settlement, which
- * on-chain melts typically do. The handle's `wait()` completes when the mint
- * reaches a terminal state; it dies with the process, after which CDK's
- * durable saga (surfaced as a Pending transaction) is the reconciliation path.
+ * Lightning melts settle synchronously in the common case — an async-accepted
+ * (NUT-05) lightning melt is awaited in-lane via the handle's `wait()` for a
+ * bounded window before the gateway gives up on a terminal answer. A
+ * `PendingMelt` handle survives here only for on-chain melts (minutes-scale by
+ * nature) and lightning waits that outlived the cap; the manager re-arms
+ * `wait()` on it in the background. The handle dies with the process, after
+ * which CDK's durable saga (surfaced as a Pending transaction) is the
+ * reconciliation path.
  */
 data class MeltConfirmation(
     val result: MeltPaymentResult,

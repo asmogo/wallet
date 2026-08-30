@@ -8,6 +8,7 @@ import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import com.cashu.me.Core.LightningRequestParser
 import com.cashu.me.Core.NPCQuote
 import com.cashu.me.Core.mintQuoteAmountForDomain
@@ -38,6 +39,7 @@ import org.cashudevkit.Amount as CdkAmount
 import org.cashudevkit.BackupOptions as CdkBackupOptions
 import org.cashudevkit.BitcoinNetwork as CdkBitcoinNetwork
 import org.cashudevkit.CurrencyUnit as CdkCurrencyUnit
+import org.cashudevkit.FinalizedMelt as CdkFinalizedMelt
 import org.cashudevkit.MeltConfirmOutcome as CdkMeltConfirmOutcome
 import org.cashudevkit.MeltQuote as CdkMeltQuote
 import org.cashudevkit.MintInfo as CdkMintInfo
@@ -75,6 +77,37 @@ import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 
 private val sagaJsonFormat = kotlinx.serialization.json.Json { ignoreUnknownKeys = true }
+
+// Ceiling on how long a lightning melt may hold the gateway lane while CDK's
+// `PendingMelt.wait()` drives settlement. A fallback exit, not a polling knob —
+// `wait()` polls the mint internally; this only bounds how long the send
+// screen (and the serialized gateway) stay committed before the pending face
+// takes over (iOS `LightningService.MeltSettlementWait` parity).
+internal const val LIGHTNING_SETTLEMENT_WAIT_MS = 30_000L
+
+/**
+ * In-lane settlement wait for an async-accepted melt. Returns the
+ * [CdkFinalizedMelt] when the melt is a lightning method and CDK's `wait()`
+ * reaches a terminal state within [waitMs]; null when the method doesn't wait
+ * (on-chain/unknown), the cap expires, or the wait fails ambiguously — the
+ * caller then falls back to the pending result + handle, and never surfaces a
+ * false terminal failure. Cancellation propagates: Kotlin's CDK bindings drop
+ * the Rust future cleanly.
+ */
+internal suspend fun awaitLightningSettlementOrNull(
+    method: CdkPaymentMethod?,
+    waitMs: Long = LIGHTNING_SETTLEMENT_WAIT_MS,
+    wait: suspend () -> CdkFinalizedMelt,
+): CdkFinalizedMelt? {
+    if (method != CdkPaymentMethod.Bolt11 && method != CdkPaymentMethod.Bolt12) return null
+    return try {
+        withTimeoutOrNull(waitMs) { wait() }
+    } catch (cancelled: CancellationException) {
+        throw cancelled
+    } catch (_: Exception) {
+        null
+    }
+}
 
 class CdkWalletGatewayImpl : WalletGateway {
     private var database: CdkWalletSqliteDatabase? = null
@@ -423,21 +456,58 @@ class CdkWalletGatewayImpl : WalletGateway {
                     pendingMelt = null,
                 )
             }
-            is CdkMeltConfirmOutcome.Pending -> MeltConfirmation(
-                // Amount and fee aren't final until the payment settles; report
-                // the quote's numbers (fee = reserve upper bound) so the UI has
-                // facts to show.
-                result = MeltPaymentResult(
-                    preimage = null,
-                    amount = quote?.amount?.value?.toLong() ?: 0,
-                    feePaid = quote?.feeReserve?.value?.toLong() ?: 0,
-                    mintUrl = wallet.mintUrl().url,
-                    paymentMethod = quote?.paymentMethod?.toDomain(),
-                    request = quote?.request,
-                    settlement = MeltSettlement.Pending,
-                ),
-                pendingMelt = outcome.pending,
-            )
+            is CdkMeltConfirmOutcome.Pending -> {
+                // A lightning melt settles in seconds in the healthy case, so
+                // hold the lane and let CDK's `wait()` drive the saga to a
+                // terminal state — it polls the mint internally; the app adds
+                // no polling of its own. Kotlin's bindings cancel cleanly, so
+                // the cap is a plain timeout: on expiry the Rust future is
+                // dropped and the handle goes back to the manager, whose
+                // `watchPendingMelt` re-arms a fresh wait outside the lane
+                // (iOS `MeltSettlementWait` parity). On-chain melts genuinely
+                // take minutes and keep the immediate pending path.
+                val finalized = awaitLightningSettlementOrNull(method = quote?.paymentMethod) {
+                    outcome.pending.wait()
+                }
+                when {
+                    finalized != null &&
+                        (finalized.state == CdkQuoteState.PAID || finalized.state == CdkQuoteState.ISSUED) ->
+                        MeltConfirmation(
+                            result = MeltPaymentResult(
+                                preimage = finalized.preimage,
+                                amount = finalized.amount.value.toLong(),
+                                feePaid = finalized.feePaid.value.toLong(),
+                                mintUrl = wallet.mintUrl().url,
+                                paymentMethod = quote?.paymentMethod?.toDomain(),
+                                request = quote?.request,
+                                settlement = MeltSettlement.Settled,
+                            ),
+                            pendingMelt = null,
+                        )
+                    finalized != null ->
+                        // Wait finished UNPAID: the payment failed and CDK has
+                        // already compensated the proofs back. The quote can't
+                        // be reused.
+                        throw CdkGatewayUnavailable(
+                            "Payment failed — the mint returned your funds. Get a new quote and try again.",
+                        )
+                    else -> MeltConfirmation(
+                        // Amount and fee aren't final until the payment settles;
+                        // report the quote's numbers (fee = reserve upper bound)
+                        // so the UI has facts to show.
+                        result = MeltPaymentResult(
+                            preimage = null,
+                            amount = quote?.amount?.value?.toLong() ?: 0,
+                            feePaid = quote?.feeReserve?.value?.toLong() ?: 0,
+                            mintUrl = wallet.mintUrl().url,
+                            paymentMethod = quote?.paymentMethod?.toDomain(),
+                            request = quote?.request,
+                            settlement = MeltSettlement.Pending,
+                        ),
+                        pendingMelt = outcome.pending,
+                    )
+                }
+            }
         }
     }
 
