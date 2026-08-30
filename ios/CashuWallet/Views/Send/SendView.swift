@@ -1820,7 +1820,9 @@ struct UnifiedSendView: View {
                     Button(action: continueFromAmount) {
                         Text("Continue")
                     }
-                    .glassButton()
+                    // Quiet tonal fill, matching Android's gray keypad CTA —
+                    // the white ink stays reserved for the pay-confirm commit.
+                    .flatSheetSecondaryButton()
                     .disabled(amountSats == 0)
                     .padding(.horizontal)
                     .padding(.top, 12)
@@ -1908,31 +1910,41 @@ struct UnifiedSendView: View {
         let displayAmount = meltQuote?.amount ?? knownMeltAmount ?? 0
         let canPay = meltQuote.map { hasSufficientBalance(for: $0) } ?? false
         let quotePending = meltQuote == nil && errorMessage == nil
+        // A quote that landed but exceeds the mint's balance is the same user
+        // situation as a mint refusing the quote for balance — both wear the
+        // one centered caution face, never an inline banner on one platform
+        // and a face on the other.
+        let shortQuote = meltQuote.flatMap { hasSufficientBalance(for: $0) ? nil : $0 }
+        // Both shortfall shapes — the mint refusing the quote for balance, and
+        // a landed quote the balance can't cover — share one recovery CTA.
+        let shortfall = shortQuote != nil
+            || (meltQuote == nil && errorMessage != nil && errorShowsMintAction)
         return VStack(spacing: 0) {
             PayFlowScaffold {
-                if let quote = meltQuote {
+                if let quote = shortQuote {
+                    confirmCautionFace(
+                        message: "Not enough balance.",
+                        detail: mintInfo(for: quote).map { mint in
+                            "This mint holds \(AmountFormatter.sats(mint.balance, useBitcoinSymbol: settings.useBitcoinSymbol)); the payment reserves up to \(AmountFormatter.sats(quote.totalAmount, useBitcoinSymbol: settings.useBitcoinSymbol))."
+                        }
+                    )
+                    .transition(.opacity)
+                } else if let quote = meltQuote {
                     CurrencyAmountDisplay(sats: quote.amount, primary: $settings.amountDisplayPrimary)
                         .transition(.opacity)
                 } else if let errorMessage {
-                    quoteNoticeFace(errorMessage)
-                        .transition(.opacity)
+                    confirmCautionFace(
+                        message: errorMessage,
+                        detail: errorShowsMintAction ? meltInsufficientDetail : nil
+                    )
+                    .transition(.opacity)
                 } else {
                     SpinnerRing()
                         .transition(.opacity)
                 }
             } details: {
-                if let quote = meltQuote {
+                if let quote = meltQuote, shortQuote == nil {
                     meltConfirmRows(quote)
-
-                    if !hasSufficientBalance(for: quote),
-                       let balance = mintInfo(for: quote)?.balance {
-                        InlineNotice(
-                            message: "This mint holds \(AmountFormatter.sats(balance, useBitcoinSymbol: settings.useBitcoinSymbol)); the payment reserves up to \(AmountFormatter.sats(quote.totalAmount, useBitcoinSymbol: settings.useBitcoinSymbol)).",
-                            severity: .caution
-                        )
-                        .padding(.top, 12)
-                        .padding(.horizontal)
-                    }
 
                     // Post-payment-failure context (Try Again returns here with
                     // the quote intact) — the hero stays the amount, so the
@@ -1960,9 +1972,33 @@ struct UnifiedSendView: View {
                         .disabled(true)
                         .opacity(0)
                         .accessibilityHidden(true)
+                } else if shortfall {
+                    // A balance shortfall can never be fixed by re-fetching
+                    // the same quote. Offer the recovery that actually works:
+                    if !startedAtConfirm {
+                        // re-enter an amount that leaves room for the fee…
+                        Button(action: backToAmount) { Text("Change Amount") }
+                            .flatSheetSecondaryButton()
+                    } else if meltCompatibleMints.count > 1 {
+                        // …or, when the invoice fixes the amount, a mint that
+                        // can cover it (picking re-fetches the quote).
+                        Button(action: {
+                            HapticFeedback.selection()
+                            showingMintPicker = true
+                        }) { Text("Choose Another Mint") }
+                            .flatSheetSecondaryButton()
+                    } else {
+                        // Nothing actionable — the X closes; the ask stays
+                        // visible on the disabled commit.
+                        Button(action: payMelt) { Text("Pay \(displayAmount) sat") }
+                            .glassButton()
+                            .disabled(true)
+                    }
                 } else if meltQuote == nil {
+                    // Quiet secondary, kept only for transient failures
+                    // (network, mint down) where retrying can actually work.
                     Button(action: fetchMeltQuote) { Text("Retry Quote") }
-                        .glassButton()
+                        .flatSheetSecondaryButton()
                 } else {
                     Button(action: payMelt) { Text("Pay \(displayAmount) sat") }
                         .glassButton()
@@ -1976,20 +2012,23 @@ struct UnifiedSendView: View {
         .animation(.smooth(duration: 0.3), value: errorMessage != nil)
     }
 
-    /// Preflight (quote) failure, in the status screens' hero anatomy — glyph,
-    /// message, secondary detail — centered where the amount hero sits.
-    private func quoteNoticeFace(_ message: String) -> some View {
+    /// Preflight caution, in the status screens' hero anatomy — glyph, message,
+    /// secondary detail — centered where the amount hero sits. Always the
+    /// orange warning triangle: a quote failure or balance shortfall spends
+    /// nothing, so it never wears the terminal failures' red (Android renders
+    /// the identical face).
+    private func confirmCautionFace(message: String, detail: String?) -> some View {
         VStack(spacing: 16) {
-            Image(systemName: errorSeverity.icon)
+            Image(systemName: "exclamationmark.triangle.fill")
                 .font(.statusGlyph)
-                .foregroundStyle(errorSeverity.foreground)
+                .foregroundStyle(.orange)
 
             VStack(spacing: 8) {
                 Text(message)
                     .font(.title2.weight(.semibold))
                     .multilineTextAlignment(.center)
 
-                if errorShowsMintAction, let detail = meltInsufficientDetail {
+                if let detail {
                     Text(detail)
                         .font(.callout)
                         .foregroundStyle(.secondary)
