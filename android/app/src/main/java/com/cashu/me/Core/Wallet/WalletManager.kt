@@ -1234,59 +1234,73 @@ class WalletManager(
         val settingsSnapshot = replacementSnapshot.settings
         val nwcSnapshot = replacementSnapshot.nwc
 
-        runCatching {
-            // NwcService retains the native CDK wallet, so it must stop before
-            // the repository/database it is backed by is closed.
-            nwcManager.resetForWalletBoundary()
-            gateway.closeWalletRepository()
-            cashuRequestStore.resetForWalletBoundary()
-            walletStore.removeAllWalletData()
-            settingsManager.prepareForWalletReplacement()
-            nostrService.resetForWalletBoundary(deleteStoredKey = false)
-            npcService.resetForWalletBoundary()
-            openWalletRepositoryWithRecovery(mnemonic)
-            deriveNostrKey(mnemonic)
-            secureStorage.saveString(StorageKeys.secureWalletMnemonic, mnemonic)
-            settingsManager.deleteWalletScopedSecrets(settingsSnapshot, deleteNostrPrivateKey = true)
-            nostrMintBackupService.resetForWalletBoundary()
-            databasePathManager.removeWalletFileBackups(backups)
-            loadCachedState(needsOnboarding = needsOnboarding)
-            // A wallet installed during first-launch onboarding is incomplete
-            // until completeOnboarding(); installs from Settings skip
-            // onboarding entirely and are complete immediately.
-            settingsManager.onboardingCompleted = !needsOnboarding
-        }.onFailure { error ->
-            gateway.closeWalletRepository()
-            walletStore.restoreWalletScopedData(walletSnapshot)
-            cashuRequestStore.reload()
-            settingsManager.restoreWalletScopedData(settingsSnapshot)
-            nwcManager.restoreWalletScopedData(nwcSnapshot)
-            nostrMintBackupService.reloadStoredState()
-            databasePathManager.removeWalletDatabaseFiles()
-            databasePathManager.restoreWalletFileBackups(backups)
-            if (previousMnemonic != null) {
-                secureStorage.saveString(StorageKeys.secureWalletMnemonic, previousMnemonic)
-                runCatching {
-                    openWalletRepositoryWithRecovery(previousMnemonic)
-                    deriveNostrKey(previousMnemonic)
-                    loadCachedState(needsOnboarding = false)
-                    if (startNwc) nwcManager.startIfEnabled()
+        runWalletReplacementCommit(
+            installAndCommit = {
+                // NwcService retains the native CDK wallet, so it must stop before
+                // the repository/database it is backed by is closed.
+                nwcManager.resetForWalletBoundary()
+                gateway.closeWalletRepository()
+                cashuRequestStore.resetForWalletBoundary()
+                walletStore.removeAllWalletData()
+                settingsManager.prepareForWalletReplacement()
+                nostrService.resetForWalletBoundary(deleteStoredKey = false)
+                npcService.resetForWalletBoundary()
+                openWalletRepositoryWithRecovery(mnemonic)
+                deriveNostrKey(mnemonic)
+                secureStorage.saveString(StorageKeys.secureWalletMnemonic, mnemonic)
+                nostrMintBackupService.resetForWalletBoundary()
+                loadCachedState(needsOnboarding = needsOnboarding)
+                // A wallet installed during first-launch onboarding is incomplete
+                // until completeOnboarding(); installs from Settings skip
+                // onboarding entirely and are complete immediately. This durable
+                // marker is the final rollback-eligible commit step.
+                settingsManager.onboardingCompleted = !needsOnboarding
+            },
+            rollback = {
+                gateway.closeWalletRepository()
+                walletStore.restoreWalletScopedData(walletSnapshot)
+                cashuRequestStore.reload()
+                settingsManager.restoreWalletScopedData(settingsSnapshot)
+                nwcManager.restoreWalletScopedData(nwcSnapshot)
+                nostrMintBackupService.reloadStoredState()
+                databasePathManager.restoreWalletFileBackups(backups)
+                if (previousMnemonic != null) {
+                    secureStorage.saveString(StorageKeys.secureWalletMnemonic, previousMnemonic)
+                    runCatching {
+                        openWalletRepositoryWithRecovery(previousMnemonic)
+                        deriveNostrKey(previousMnemonic)
+                        loadCachedState(needsOnboarding = false)
+                        if (startNwc) nwcManager.startIfEnabled()
+                    }
+                    cashuRequestListener?.resetForWalletBoundary(restart = externalServicesEnabled)
+                } else {
+                    secureStorage.delete(StorageKeys.secureWalletMnemonic)
+                    update {
+                        WalletState(
+                            isInitialized = true,
+                            isRuntimeReady = true,
+                            needsOnboarding = true,
+                            canExitOnboarding = false,
+                        )
+                    }
+                    cashuRequestListener?.resetForWalletBoundary(restart = false)
                 }
-                cashuRequestListener?.resetForWalletBoundary(restart = externalServicesEnabled)
-            } else {
-                secureStorage.delete(StorageKeys.secureWalletMnemonic)
-                update {
-                    WalletState(
-                        isInitialized = true,
-                        isRuntimeReady = true,
-                        needsOnboarding = true,
-                        canExitOnboarding = false,
+            },
+            cleanupSteps = listOf(
+                WalletReplacementCleanupStep("old wallet secrets") {
+                    settingsManager.deleteWalletScopedSecrets(
+                        settingsSnapshot,
+                        deleteNostrPrivateKey = true,
                     )
-                }
-                cashuRequestListener?.resetForWalletBoundary(restart = false)
-            }
-            throw error
-        }
+                },
+                WalletReplacementCleanupStep("wallet database backups") {
+                    databasePathManager.removeWalletFileBackups(backups)
+                },
+            ),
+            onCleanupFailure = { description, error ->
+                AppLogger.wallet.error("Post-commit $description cleanup failed", error)
+            },
+        )
         cashuRequestListener?.resetForWalletBoundary(restart = externalServicesEnabled && !needsOnboarding)
     }
 
