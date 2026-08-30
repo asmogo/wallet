@@ -21,11 +21,15 @@ struct WalletReplacementFileOperations {
     let moveItem: (URL, URL) throws -> Void
     let removeItem: (URL) throws -> Void
 
-    static let live = WalletReplacementFileOperations(
-        fileExists: { FileManager.default.fileExists(atPath: $0.path) },
-        moveItem: { try FileManager.default.moveItem(at: $0, to: $1) },
-        removeItem: { try FileManager.default.removeItem(at: $0) }
-    )
+    static func using(_ fileManager: FileManager) -> WalletReplacementFileOperations {
+        WalletReplacementFileOperations(
+            fileExists: { fileManager.fileExists(atPath: $0.path) },
+            moveItem: { try fileManager.moveItem(at: $0, to: $1) },
+            removeItem: { try fileManager.removeItem(at: $0) }
+        )
+    }
+
+    static let live = WalletReplacementFileOperations.using(.default)
 }
 
 enum WalletReplacementFiles {
@@ -231,6 +235,169 @@ enum WalletReplacementFiles {
             try operations.removeItem(backup.backupURL)
         }
     }
+}
+
+struct WalletFileMove: Equatable {
+    let sourceURL: URL
+    let destinationURL: URL
+}
+
+enum WalletFileMoves {
+    private struct StagedDestination {
+        let destinationURL: URL
+        let displacedURL: URL
+    }
+
+    static func move(
+        _ moves: [WalletFileMove],
+        operations: WalletReplacementFileOperations = .live,
+        displacedURL: (URL) -> URL
+    ) throws {
+        guard !moves.isEmpty else { return }
+        try requireDistinctPaths(moves)
+        guard moves.allSatisfy({ operations.fileExists($0.sourceURL) }) else {
+            throw CocoaError(.fileNoSuchFile)
+        }
+
+        var stagedDestinations: [StagedDestination] = []
+        var completedMoves: [WalletFileMove] = []
+        do {
+            for move in moves where operations.fileExists(move.destinationURL) {
+                let staged = StagedDestination(
+                    destinationURL: move.destinationURL,
+                    displacedURL: displacedURL(move.destinationURL)
+                )
+                if operations.fileExists(staged.displacedURL) {
+                    try removeChecked(staged.displacedURL, operations: operations)
+                }
+                do {
+                    try moveChecked(
+                        staged.destinationURL,
+                        staged.displacedURL,
+                        operations: operations
+                    )
+                    stagedDestinations.append(staged)
+                } catch {
+                    if operations.fileExists(staged.displacedURL) {
+                        stagedDestinations.append(staged)
+                    }
+                    throw error
+                }
+            }
+
+            for move in moves {
+                do {
+                    try moveChecked(
+                        move.sourceURL,
+                        move.destinationURL,
+                        operations: operations
+                    )
+                    completedMoves.append(move)
+                } catch {
+                    if operations.fileExists(move.destinationURL) {
+                        completedMoves.append(move)
+                    }
+                    throw error
+                }
+            }
+        } catch {
+            rollBackMoves(completedMoves, operations: operations)
+            restoreDestinations(stagedDestinations, operations: operations)
+            throw error
+        }
+
+        for staged in stagedDestinations where operations.fileExists(staged.displacedURL) {
+            do {
+                try removeChecked(staged.displacedURL, operations: operations)
+            } catch {
+                AppLogger.wallet.error("Failed to remove a displaced wallet database destination: \(error)")
+                SentryService.capture(error)
+            }
+        }
+    }
+
+    private static func requireDistinctPaths(_ moves: [WalletFileMove]) throws {
+        let sources = moves.map { $0.sourceURL.standardizedFileURL.path }
+        let destinations = moves.map { $0.destinationURL.standardizedFileURL.path }
+        guard Set(sources).count == sources.count,
+              Set(destinations).count == destinations.count,
+              Set(sources).isDisjoint(with: Set(destinations)) else {
+            throw CocoaError(.fileWriteUnknown)
+        }
+    }
+
+    private static func rollBackMoves(
+        _ moves: [WalletFileMove],
+        operations: WalletReplacementFileOperations
+    ) {
+        for move in moves.reversed() where operations.fileExists(move.destinationURL) {
+            do {
+                if operations.fileExists(move.sourceURL) {
+                    try removeChecked(move.destinationURL, operations: operations)
+                } else {
+                    try moveChecked(
+                        move.destinationURL,
+                        move.sourceURL,
+                        operations: operations
+                    )
+                }
+            } catch {
+                AppLogger.wallet.error("Failed to roll back a wallet database move: \(error)")
+                SentryService.capture(error)
+            }
+        }
+    }
+
+    private static func restoreDestinations(
+        _ destinations: [StagedDestination],
+        operations: WalletReplacementFileOperations
+    ) {
+        for staged in destinations.reversed() where operations.fileExists(staged.displacedURL) {
+            do {
+                if !operations.fileExists(staged.destinationURL) {
+                    try moveChecked(
+                        staged.displacedURL,
+                        staged.destinationURL,
+                        operations: operations
+                    )
+                }
+            } catch {
+                AppLogger.wallet.error("Failed to restore a displaced wallet database destination: \(error)")
+                SentryService.capture(error)
+            }
+        }
+    }
+
+    private static func moveChecked(
+        _ sourceURL: URL,
+        _ destinationURL: URL,
+        operations: WalletReplacementFileOperations
+    ) throws {
+        guard operations.fileExists(sourceURL), !operations.fileExists(destinationURL) else {
+            throw CocoaError(.fileWriteUnknown)
+        }
+        try operations.moveItem(sourceURL, destinationURL)
+        guard !operations.fileExists(sourceURL), operations.fileExists(destinationURL) else {
+            throw CocoaError(.fileWriteUnknown)
+        }
+    }
+
+    private static func removeChecked(
+        _ url: URL,
+        operations: WalletReplacementFileOperations
+    ) throws {
+        try operations.removeItem(url)
+        guard !operations.fileExists(url) else {
+            throw CocoaError(.fileWriteUnknown)
+        }
+    }
+}
+
+private func walletMoveDisplacedURL(_ destinationURL: URL) -> URL {
+    destinationURL.deletingLastPathComponent()
+        .appendingPathComponent(
+            "\(destinationURL.lastPathComponent).move-displaced.\(UUID().uuidString)"
+        )
 }
 
 enum WalletMnemonicRollback {
@@ -1036,17 +1203,27 @@ extension WalletManager {
     ) throws {
         guard fileManager.fileExists(atPath: legacyURL.path) else { return }
         guard !fileManager.fileExists(atPath: databaseURL.path) else { return }
-        try fileManager.moveItem(at: legacyURL, to: databaseURL)
+        var moves = [
+            WalletFileMove(sourceURL: legacyURL, destinationURL: databaseURL)
+        ]
 
         for suffix in ["-wal", "-shm", "-journal"] {
             let legacySidecarURL = URL(fileURLWithPath: legacyURL.path + suffix)
             guard fileManager.fileExists(atPath: legacySidecarURL.path) else { continue }
             let currentSidecarURL = URL(fileURLWithPath: databaseURL.path + suffix)
-            if fileManager.fileExists(atPath: currentSidecarURL.path) {
-                try fileManager.removeItem(at: currentSidecarURL)
-            }
-            try fileManager.moveItem(at: legacySidecarURL, to: currentSidecarURL)
+            moves.append(
+                WalletFileMove(
+                    sourceURL: legacySidecarURL,
+                    destinationURL: currentSidecarURL
+                )
+            )
         }
+
+        try WalletFileMoves.move(
+            moves,
+            operations: .using(fileManager),
+            displacedURL: walletMoveDisplacedURL
+        )
     }
 
     nonisolated private static func shouldRecoverLaunchDatabase(
@@ -1068,20 +1245,27 @@ extension WalletManager {
         let timestamp = Int(Date().timeIntervalSince1970)
         let backupURL = databaseURL.deletingLastPathComponent()
             .appendingPathComponent("\(databaseFilename).corrupt.\(timestamp)")
-        if fileManager.fileExists(atPath: backupURL.path) {
-            try fileManager.removeItem(at: backupURL)
-        }
-        try fileManager.moveItem(at: databaseURL, to: backupURL)
+        var moves = [
+            WalletFileMove(sourceURL: databaseURL, destinationURL: backupURL)
+        ]
 
         for suffix in ["-wal", "-shm", "-journal"] {
             let sidecarURL = URL(fileURLWithPath: databaseURL.path + suffix)
             guard fileManager.fileExists(atPath: sidecarURL.path) else { continue }
             let backupSidecarURL = URL(fileURLWithPath: backupURL.path + suffix)
-            if fileManager.fileExists(atPath: backupSidecarURL.path) {
-                try fileManager.removeItem(at: backupSidecarURL)
-            }
-            try fileManager.moveItem(at: sidecarURL, to: backupSidecarURL)
+            moves.append(
+                WalletFileMove(
+                    sourceURL: sidecarURL,
+                    destinationURL: backupSidecarURL
+                )
+            )
         }
+
+        try WalletFileMoves.move(
+            moves,
+            operations: .using(fileManager),
+            displacedURL: walletMoveDisplacedURL
+        )
         return backupURL
     }
 
@@ -1099,24 +1283,26 @@ extension WalletManager {
         let timestamp = Int(Date().timeIntervalSince1970)
         let backupURL = databaseURL.deletingLastPathComponent()
             .appendingPathComponent("\(walletDatabaseFilename).corrupt.\(timestamp)")
-        
-        if FileManager.default.fileExists(atPath: backupURL.path) {
-            try FileManager.default.removeItem(at: backupURL)
-        }
-        
-        try FileManager.default.moveItem(at: databaseURL, to: backupURL)
-        
+        var moves = [
+            WalletFileMove(sourceURL: databaseURL, destinationURL: backupURL)
+        ]
+
         for suffix in ["-wal", "-shm", "-journal"] {
             let sidecarURL = URL(fileURLWithPath: databaseURL.path + suffix)
             guard FileManager.default.fileExists(atPath: sidecarURL.path) else { continue }
-            
             let sidecarBackupURL = URL(fileURLWithPath: backupURL.path + suffix)
-            if FileManager.default.fileExists(atPath: sidecarBackupURL.path) {
-                try FileManager.default.removeItem(at: sidecarBackupURL)
-            }
-            try FileManager.default.moveItem(at: sidecarURL, to: sidecarBackupURL)
+            moves.append(
+                WalletFileMove(
+                    sourceURL: sidecarURL,
+                    destinationURL: sidecarBackupURL
+                )
+            )
         }
-        
+
+        try WalletFileMoves.move(
+            moves,
+            displacedURL: walletMoveDisplacedURL
+        )
         return backupURL
     }
 

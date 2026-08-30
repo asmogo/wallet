@@ -170,7 +170,10 @@ internal object WalletReplacementFiles {
                 } catch (error: Throwable) {
                     // The previous seed/database pair has committed. Cleanup
                     // failure must not trigger an unsafe rollback.
-                    AppLogger.wallet.error("Failed to remove a displaced replacement database", error)
+                    reportWalletCleanupFailure(
+                        "Failed to remove a displaced replacement database",
+                        error,
+                    )
                 }
             }
     }
@@ -242,6 +245,157 @@ internal object WalletReplacementFiles {
     }
 }
 
+internal data class WalletFileMove(
+    val source: File,
+    val destination: File,
+)
+
+internal object WalletFileMoves {
+    private data class StagedDestination(
+        val destination: File,
+        val displaced: File,
+    )
+
+    fun move(
+        moves: List<WalletFileMove>,
+        operations: WalletReplacementFileOperations = WalletReplacementFileOperations.live,
+        displacedFile: (File) -> File,
+    ) {
+        if (moves.isEmpty()) return
+        requireDistinctPaths(moves)
+        moves.forEach { move ->
+            if (!operations.exists(move.source)) {
+                throw IOException("A wallet database move source is missing.")
+            }
+        }
+
+        val stagedDestinations = mutableListOf<StagedDestination>()
+        val completedMoves = mutableListOf<WalletFileMove>()
+        try {
+            moves.forEach { move ->
+                if (!operations.exists(move.destination)) return@forEach
+                val staged = StagedDestination(
+                    destination = move.destination,
+                    displaced = displacedFile(move.destination),
+                )
+                if (operations.exists(staged.displaced)) {
+                    removeChecked(staged.displaced, operations)
+                }
+                try {
+                    moveChecked(staged.destination, staged.displaced, operations)
+                    stagedDestinations += staged
+                } catch (error: Throwable) {
+                    if (operations.exists(staged.displaced)) stagedDestinations += staged
+                    throw error
+                }
+            }
+
+            moves.forEach { move ->
+                try {
+                    moveChecked(move.source, move.destination, operations)
+                    completedMoves += move
+                } catch (error: Throwable) {
+                    if (operations.exists(move.destination)) completedMoves += move
+                    throw error
+                }
+            }
+        } catch (error: Throwable) {
+            rollBackMoves(completedMoves, operations, error)
+            restoreDestinations(stagedDestinations, operations, error)
+            throw error
+        }
+
+        stagedDestinations.forEach { staged ->
+            if (!operations.exists(staged.displaced)) return@forEach
+            try {
+                removeChecked(staged.displaced, operations)
+            } catch (error: Throwable) {
+                reportWalletCleanupFailure(
+                    "Failed to remove a displaced wallet database destination",
+                    error,
+                )
+            }
+        }
+    }
+
+    private fun requireDistinctPaths(moves: List<WalletFileMove>) {
+        val sources = moves.map { it.source.absolutePath }
+        val destinations = moves.map { it.destination.absolutePath }
+        if (sources.distinct().size != sources.size || destinations.distinct().size != destinations.size) {
+            throw IOException("Wallet database moves contain duplicate paths.")
+        }
+        if (sources.toSet().intersect(destinations.toSet()).isNotEmpty()) {
+            throw IOException("Wallet database moves contain overlapping source and destination paths.")
+        }
+    }
+
+    private fun rollBackMoves(
+        moves: List<WalletFileMove>,
+        operations: WalletReplacementFileOperations,
+        originalError: Throwable,
+    ) {
+        moves.asReversed().forEach { move ->
+            if (!operations.exists(move.destination)) return@forEach
+            try {
+                if (operations.exists(move.source)) {
+                    removeChecked(move.destination, operations)
+                } else {
+                    moveChecked(move.destination, move.source, operations)
+                }
+            } catch (rollbackError: Throwable) {
+                originalError.addSuppressed(rollbackError)
+            }
+        }
+    }
+
+    private fun restoreDestinations(
+        destinations: List<StagedDestination>,
+        operations: WalletReplacementFileOperations,
+        originalError: Throwable,
+    ) {
+        destinations.asReversed().forEach { staged ->
+            if (!operations.exists(staged.displaced)) return@forEach
+            try {
+                if (!operations.exists(staged.destination)) {
+                    moveChecked(staged.displaced, staged.destination, operations)
+                }
+            } catch (rollbackError: Throwable) {
+                originalError.addSuppressed(rollbackError)
+            }
+        }
+    }
+
+    private fun moveChecked(
+        source: File,
+        destination: File,
+        operations: WalletReplacementFileOperations,
+    ) {
+        if (!operations.exists(source) || operations.exists(destination)) {
+            throw IOException("A wallet database move has invalid source or destination state.")
+        }
+        operations.moveItem(source, destination)
+        if (operations.exists(source) || !operations.exists(destination)) {
+            throw IOException("A wallet database move did not reach its destination.")
+        }
+    }
+
+    private fun removeChecked(
+        file: File,
+        operations: WalletReplacementFileOperations,
+    ) {
+        operations.removeItem(file)
+        if (operations.exists(file)) {
+            throw IOException("A wallet database file could not be removed.")
+        }
+    }
+}
+
+private fun reportWalletCleanupFailure(message: String, error: Throwable) {
+    // Cleanup runs after the new database state has committed. Neither cleanup
+    // nor diagnostics may make that successful transaction appear to fail.
+    runCatching { AppLogger.wallet.error(message, error) }
+}
+
 internal class WalletDatabaseFiles(
     private val filesDir: File,
     private val walletDirectoryName: String = "cashu-kotlin",
@@ -311,16 +465,20 @@ internal class WalletDatabaseFiles(
         val database = databaseFile
         if (!operations.exists(database)) return null
         val backup = File(walletDirectory, "$walletDatabaseFilename.corrupt.${System.currentTimeMillis() / 1000}")
-        if (operations.exists(backup)) operations.removeItem(backup)
-        operations.moveItem(database, backup)
-        sidecars.forEach { suffix ->
-            val sidecar = File(database.absolutePath + suffix)
-            if (operations.exists(sidecar)) {
-                val backupSidecar = File(backup.absolutePath + suffix)
-                if (operations.exists(backupSidecar)) operations.removeItem(backupSidecar)
-                operations.moveItem(sidecar, backupSidecar)
+        val moves = buildList {
+            add(WalletFileMove(database, backup))
+            sidecars.forEach { suffix ->
+                val sidecar = File(database.absolutePath + suffix)
+                if (operations.exists(sidecar)) {
+                    add(WalletFileMove(sidecar, File(backup.absolutePath + suffix)))
+                }
             }
         }
+        WalletFileMoves.move(
+            moves = moves,
+            operations = operations,
+            displacedFile = ::displacedMoveDestination,
+        )
         return backup
     }
 
@@ -328,16 +486,26 @@ internal class WalletDatabaseFiles(
         val legacy = File(filesDir, legacyDatabaseFilename)
         val current = databaseFile
         if (!operations.exists(legacy) || operations.exists(current)) return
-        operations.moveItem(legacy, current)
-        sidecars.forEach { suffix ->
-            val legacySidecar = File(legacy.absolutePath + suffix)
-            if (operations.exists(legacySidecar)) {
-                val currentSidecar = File(current.absolutePath + suffix)
-                if (operations.exists(currentSidecar)) operations.removeItem(currentSidecar)
-                operations.moveItem(legacySidecar, currentSidecar)
+        val moves = buildList {
+            add(WalletFileMove(legacy, current))
+            sidecars.forEach { suffix ->
+                val legacySidecar = File(legacy.absolutePath + suffix)
+                if (operations.exists(legacySidecar)) {
+                    add(WalletFileMove(legacySidecar, File(current.absolutePath + suffix)))
+                }
             }
         }
+        WalletFileMoves.move(
+            moves = moves,
+            operations = operations,
+            displacedFile = ::displacedMoveDestination,
+        )
     }
+
+    private fun displacedMoveDestination(destination: File): File = File(
+        destination.parentFile,
+        "${destination.name}.move-displaced.${UUID.randomUUID()}",
+    )
 
     private fun walletBoundaryFiles(): List<File> {
         val legacy = File(filesDir, legacyDatabaseFilename)

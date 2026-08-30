@@ -447,6 +447,7 @@ final class CashuRequestStoreTests: XCTestCase {
 
 final class WalletReplacementSafetyTests: XCTestCase {
     private enum TestError: Error {
+        case forcedDeleteFailure
         case forcedMoveFailure
         case forcedSeedFailure
     }
@@ -883,5 +884,148 @@ final class WalletReplacementSafetyTests: XCTestCase {
         XCTAssertEqual(try Data(contentsOf: secondBackup), Data("old second".utf8))
         XCTAssertFalse(FileManager.default.fileExists(atPath: firstDisplaced.path))
         XCTAssertFalse(FileManager.default.fileExists(atPath: secondDisplaced.path))
+    }
+
+    func testLaterDatabaseMoveFailureRestoresSourcesAndExistingDestination() throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(
+            at: directory,
+            withIntermediateDirectories: true
+        )
+        defer { try? FileManager.default.removeItem(at: directory) }
+
+        let firstSource = directory.appendingPathComponent("first-source.db")
+        let secondSource = directory.appendingPathComponent("second-source.db")
+        let firstDestination = directory.appendingPathComponent("first-destination.db")
+        let secondDestination = directory.appendingPathComponent("second-destination.db")
+        let displaced = secondDestination.appendingPathExtension("displaced")
+        try Data("first source".utf8).write(to: firstSource)
+        try Data("second source".utf8).write(to: secondSource)
+        try Data("existing destination".utf8).write(to: secondDestination)
+
+        let operations = WalletReplacementFileOperations(
+            fileExists: { FileManager.default.fileExists(atPath: $0.path) },
+            moveItem: { source, destination in
+                if source == secondSource {
+                    throw TestError.forcedMoveFailure
+                }
+                try FileManager.default.moveItem(at: source, to: destination)
+            },
+            removeItem: { try FileManager.default.removeItem(at: $0) }
+        )
+
+        XCTAssertThrowsError(
+            try WalletFileMoves.move(
+                [
+                    WalletFileMove(
+                        sourceURL: firstSource,
+                        destinationURL: firstDestination
+                    ),
+                    WalletFileMove(
+                        sourceURL: secondSource,
+                        destinationURL: secondDestination
+                    ),
+                ],
+                operations: operations,
+                displacedURL: { $0.appendingPathExtension("displaced") }
+            )
+        )
+
+        XCTAssertEqual(try Data(contentsOf: firstSource), Data("first source".utf8))
+        XCTAssertEqual(try Data(contentsOf: secondSource), Data("second source".utf8))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: firstDestination.path))
+        XCTAssertEqual(
+            try Data(contentsOf: secondDestination),
+            Data("existing destination".utf8)
+        )
+        XCTAssertFalse(FileManager.default.fileExists(atPath: displaced.path))
+    }
+
+    func testDatabaseMoveFailureReportedAfterMoveRestoresEverySource() throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(
+            at: directory,
+            withIntermediateDirectories: true
+        )
+        defer { try? FileManager.default.removeItem(at: directory) }
+
+        let firstSource = directory.appendingPathComponent("first-source.db")
+        let secondSource = directory.appendingPathComponent("second-source.db")
+        let firstDestination = directory.appendingPathComponent("first-destination.db")
+        let secondDestination = directory.appendingPathComponent("second-destination.db")
+        try Data("first source".utf8).write(to: firstSource)
+        try Data("second source".utf8).write(to: secondSource)
+
+        let operations = WalletReplacementFileOperations(
+            fileExists: { FileManager.default.fileExists(atPath: $0.path) },
+            moveItem: { source, destination in
+                try FileManager.default.moveItem(at: source, to: destination)
+                if source == secondSource {
+                    throw TestError.forcedMoveFailure
+                }
+            },
+            removeItem: { try FileManager.default.removeItem(at: $0) }
+        )
+
+        XCTAssertThrowsError(
+            try WalletFileMoves.move(
+                [
+                    WalletFileMove(
+                        sourceURL: firstSource,
+                        destinationURL: firstDestination
+                    ),
+                    WalletFileMove(
+                        sourceURL: secondSource,
+                        destinationURL: secondDestination
+                    ),
+                ],
+                operations: operations,
+                displacedURL: { $0.appendingPathExtension("displaced") }
+            )
+        )
+
+        XCTAssertEqual(try Data(contentsOf: firstSource), Data("first source".utf8))
+        XCTAssertEqual(try Data(contentsOf: secondSource), Data("second source".utf8))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: firstDestination.path))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: secondDestination.path))
+    }
+
+    func testCommittedDatabaseMoveSurvivesDisplacedCleanupFailure() throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(
+            at: directory,
+            withIntermediateDirectories: true
+        )
+        defer { try? FileManager.default.removeItem(at: directory) }
+
+        let source = directory.appendingPathComponent("source.db")
+        let destination = directory.appendingPathComponent("destination.db")
+        let displaced = destination.appendingPathExtension("displaced")
+        try Data("new".utf8).write(to: source)
+        try Data("old".utf8).write(to: destination)
+
+        let operations = WalletReplacementFileOperations(
+            fileExists: { FileManager.default.fileExists(atPath: $0.path) },
+            moveItem: { try FileManager.default.moveItem(at: $0, to: $1) },
+            removeItem: { url in
+                if url == displaced {
+                    throw TestError.forcedDeleteFailure
+                }
+                try FileManager.default.removeItem(at: url)
+            }
+        )
+
+        try WalletFileMoves.move(
+            [WalletFileMove(sourceURL: source, destinationURL: destination)],
+            operations: operations,
+            displacedURL: { _ in displaced }
+        )
+
+        XCTAssertFalse(FileManager.default.fileExists(atPath: source.path))
+        XCTAssertEqual(try Data(contentsOf: destination), Data("new".utf8))
+        XCTAssertEqual(try Data(contentsOf: displaced), Data("old".utf8))
     }
 }
