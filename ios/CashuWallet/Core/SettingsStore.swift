@@ -51,7 +51,33 @@ final class SettingsStore {
 
     var p2pkKeys: [P2PKKey] {
         get { value(StorageKeys.p2pkKeys, legacy: StorageKeys.Legacy.p2pkKeys) ?? [] }
-        set { set(newValue, forKey: StorageKeys.p2pkKeys) }
+        set {
+            do {
+                try saveP2PKKeys(newValue)
+            } catch {
+                AppLogger.wallet.error("Failed to save P2PK key metadata: \(error)")
+            }
+        }
+    }
+
+    /// Persist public P2PK metadata while retaining only legacy private keys that
+    /// could not yet be migrated to secure storage. Callers that need an atomic
+    /// secure-write → metadata-write flow use the throwing form directly.
+    func saveP2PKKeys(
+        _ keys: [P2PKKey],
+        preservingLegacySecrets legacySecrets: [UUID: String] = [:]
+    ) throws {
+        let records = keys.map { key in
+            P2PKSettingsRecord(
+                id: key.id,
+                publicKey: key.publicKey,
+                privateKey: legacySecrets[key.id],
+                used: key.used,
+                usedCount: key.usedCount,
+                nickname: key.nickname
+            )
+        }
+        try storage.set(records, forKey: StorageKeys.p2pkKeys)
     }
 
     var checkIncomingInvoices: Bool {
@@ -283,4 +309,16 @@ final class SettingsStore {
             }
         }
     }
+}
+
+/// Storage-only representation. New secrets are omitted; a private key is
+/// encoded solely while a legacy migration is pending, preventing a failed
+/// Keychain write from destroying the user's only copy.
+private struct P2PKSettingsRecord: Codable {
+    let id: UUID
+    let publicKey: String
+    let privateKey: String?
+    let used: Bool
+    let usedCount: Int
+    let nickname: String?
 }

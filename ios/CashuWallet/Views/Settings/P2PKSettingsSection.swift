@@ -426,8 +426,10 @@ private struct AdvancedKeysView: View {
     private func generateKey() {
         actionError = nil
         HapticFeedback.selection()
-        if !settings.generateP2PKKey() {
-            actionError = "Couldn't generate a key. Please try again."
+        do {
+            try settings.generateP2PKKey()
+        } catch {
+            actionError = error.localizedDescription
         }
     }
 
@@ -458,6 +460,7 @@ private struct DeviceKeyDetailView: View {
     @State private var privateKeyReveal: PrivateKeyReveal?
     @State private var nameText = ""
     @State private var showRemoveConfirm = false
+    @State private var actionError: String?
 
     private var key: P2PKKey? { settings.p2pkKeys.first { $0.id == keyId } }
 
@@ -490,7 +493,10 @@ private struct DeviceKeyDetailView: View {
                     }
 
                     SettingsSectionGroup(nil) {
-                        Button(role: .destructive, action: { showRemoveConfirm = true }) {
+                        Button(role: .destructive, action: {
+                            actionError = nil
+                            showRemoveConfirm = true
+                        }) {
                             HStack(spacing: 14) {
                                 SettingsRowIcon(systemName: "trash", tint: .red)
                                 Text("Remove Key")
@@ -507,6 +513,13 @@ private struct DeviceKeyDetailView: View {
                     SettingsSectionFooter {
                         Text("Ecash locked to this key can only be claimed with it. Removing it can't be undone — back it up first if you might still receive to it.")
                     }
+
+                    if let actionError {
+                        InlineNotice(message: actionError, severity: .error)
+                            .padding(.horizontal, 6)
+                            .padding(.top, 4)
+                            .transition(.opacity)
+                    }
                 }
                 .padding(.horizontal)
                 .padding(.bottom, 32)
@@ -518,6 +531,7 @@ private struct DeviceKeyDetailView: View {
         .onAppear { nameText = key?.nickname ?? "" }
         .onDisappear { saveName() }
         .onChange(of: key == nil) { _, removed in if removed { dismiss() } }
+        .animation(.easeInOut(duration: 0.2), value: actionError)
         .backdropSheet(item: $activeQR) { payload in
             QRCodeDetailSheet(title: payload.title, content: payload.content)
         }
@@ -526,7 +540,13 @@ private struct DeviceKeyDetailView: View {
         }
         .alert("Remove this key?", isPresented: $showRemoveConfirm) {
             Button("Remove Key", role: .destructive) {
-                if let key { settings.removeP2PKKey(key) }
+                guard let key else { return }
+                actionError = nil
+                do {
+                    try settings.removeP2PKKey(key)
+                } catch {
+                    actionError = error.localizedDescription
+                }
             }
             Button("Cancel", role: .cancel) {}
         } message: {

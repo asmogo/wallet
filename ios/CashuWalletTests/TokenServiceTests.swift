@@ -221,6 +221,373 @@ final class TokenServiceTests: XCTestCase {
 }
 
 @MainActor
+final class SettingsManagerP2PKStorageTests: XCTestCase {
+    private let privateKeyHex = String(repeating: "0", count: 63) + "1"
+    private let publicKeyHex = "0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798"
+
+    func testGenerateDoesNotPublishMetadataWhenSecureWriteFails() {
+        let storage = InMemoryStorage()
+        let settingsStore = SettingsStore(storage: storage)
+        let secureStorage = P2PKTestSecureStorage()
+        secureStorage.failSaves = true
+        let manager = SettingsManager(
+            settingsStore: settingsStore,
+            secureStorage: secureStorage
+        )
+
+        XCTAssertThrowsError(try manager.generateP2PKKey()) { error in
+            XCTAssertEqual(error as? SettingsFeatureError, .secureStorageUnavailable)
+        }
+        XCTAssertTrue(manager.p2pkKeys.isEmpty)
+        XCTAssertTrue(settingsStore.p2pkKeys.isEmpty)
+        XCTAssertTrue(secureStorage.secrets.isEmpty)
+    }
+
+    func testImportWritesSecureSecretBeforePublishingSanitizedMetadata() throws {
+        let storage = InMemoryStorage()
+        let settingsStore = SettingsStore(storage: storage)
+        let secureStorage = P2PKTestSecureStorage()
+        let manager = SettingsManager(
+            settingsStore: settingsStore,
+            secureStorage: secureStorage
+        )
+
+        try manager.importP2PKNsec(nsecForPrivateKeyOne())
+
+        let key = try XCTUnwrap(manager.p2pkKeys.first)
+        XCTAssertEqual(key.privateKey, privateKeyHex)
+        XCTAssertEqual(
+            secureStorage.secrets[secureStorageKey(for: key.id)],
+            privateKeyHex
+        )
+        XCTAssertEqual(settingsStore.p2pkKeys.first?.privateKey, "")
+        XCTAssertTrue(manager.isKnownP2PKPublicKey(publicKeyHex))
+    }
+
+    func testMetadataWriteFailureRollsBackNewSecureSecretAndPublishedState() throws {
+        let storage = P2PKFailingStorage()
+        let settingsStore = SettingsStore(storage: storage)
+        let secureStorage = P2PKTestSecureStorage()
+        let manager = SettingsManager(
+            settingsStore: settingsStore,
+            secureStorage: secureStorage
+        )
+        storage.failP2PKWrites = true
+
+        XCTAssertThrowsError(try manager.importP2PKNsec(nsecForPrivateKeyOne())) { error in
+            XCTAssertEqual(error as? SettingsFeatureError, .settingsPersistenceUnavailable)
+        }
+        XCTAssertTrue(manager.p2pkKeys.isEmpty)
+        XCTAssertTrue(secureStorage.secrets.isEmpty)
+        XCTAssertTrue(settingsStore.p2pkKeys.isEmpty)
+    }
+
+    func testFailedMetadataRepairDoesNotDeleteExistingSecureSecret() throws {
+        let id = UUID()
+        let storage = P2PKFailingStorage()
+        let settingsStore = SettingsStore(storage: storage)
+        try settingsStore.saveP2PKKeys([
+            P2PKKey(
+                id: id,
+                publicKey: publicKeyHex,
+                privateKey: "",
+                used: false,
+                usedCount: 0
+            )
+        ])
+        let secureStorage = P2PKTestSecureStorage()
+        let storageKey = secureStorageKey(for: id)
+        try secureStorage.saveSecret(privateKeyHex, forKey: storageKey)
+        secureStorage.failLoads = true
+        let manager = SettingsManager(
+            settingsStore: settingsStore,
+            secureStorage: secureStorage
+        )
+        storage.failP2PKWrites = true
+
+        XCTAssertThrowsError(try manager.importP2PKNsec(nsecForPrivateKeyOne())) { error in
+            XCTAssertEqual(error as? SettingsFeatureError, .settingsPersistenceUnavailable)
+        }
+        XCTAssertEqual(secureStorage.secrets[storageKey], privateKeyHex)
+        XCTAssertFalse(manager.isKnownP2PKPublicKey(publicKeyHex))
+    }
+
+    func testFailedLegacyMigrationPreservesOnlyCopyAcrossMetadataUpdates() throws {
+        let id = UUID()
+        let storage = InMemoryStorage()
+        try storage.set(
+            [legacyRecord(id: id, privateKey: privateKeyHex)],
+            forKey: StorageKeys.p2pkKeys
+        )
+        let settingsStore = SettingsStore(storage: storage)
+        let secureStorage = P2PKTestSecureStorage()
+        secureStorage.failSaves = true
+
+        let manager = SettingsManager(
+            settingsStore: settingsStore,
+            secureStorage: secureStorage
+        )
+
+        XCTAssertEqual(manager.p2pkKeys.first?.privateKey, privateKeyHex)
+        XCTAssertTrue(manager.isKnownP2PKPublicKey(publicKeyHex))
+        XCTAssertEqual(settingsStore.p2pkKeys.first?.privateKey, privateKeyHex)
+
+        manager.setP2PKKeyNickname("Legacy", for: id)
+
+        let persisted = try XCTUnwrap(settingsStore.p2pkKeys.first)
+        XCTAssertEqual(persisted.nickname, "Legacy")
+        XCTAssertEqual(persisted.privateKey, privateKeyHex)
+    }
+
+    func testSuccessfulLegacyMigrationMovesSecretAndScrubsMetadata() throws {
+        let id = UUID()
+        let storage = InMemoryStorage()
+        try storage.set(
+            [legacyRecord(id: id, privateKey: privateKeyHex)],
+            forKey: StorageKeys.p2pkKeys
+        )
+        let settingsStore = SettingsStore(storage: storage)
+        let secureStorage = P2PKTestSecureStorage()
+
+        let manager = SettingsManager(
+            settingsStore: settingsStore,
+            secureStorage: secureStorage
+        )
+
+        XCTAssertEqual(secureStorage.secrets[secureStorageKey(for: id)], privateKeyHex)
+        XCTAssertEqual(settingsStore.p2pkKeys.first?.privateKey, "")
+        XCTAssertTrue(manager.isKnownP2PKPublicKey(publicKeyHex))
+    }
+
+    func testKnownKeyCheckRejectsMetadataWithoutUsableSecret() throws {
+        let storage = InMemoryStorage()
+        let settingsStore = SettingsStore(storage: storage)
+        try settingsStore.saveP2PKKeys([
+            P2PKKey(
+                publicKey: publicKeyHex,
+                privateKey: "",
+                used: false,
+                usedCount: 0
+            )
+        ])
+        let manager = SettingsManager(
+            settingsStore: settingsStore,
+            secureStorage: P2PKTestSecureStorage()
+        )
+
+        XCTAssertFalse(manager.isKnownP2PKPublicKey(publicKeyHex))
+        XCTAssertFalse(manager.allP2PKSigningKeyHexes().contains(privateKeyHex))
+    }
+
+    func testImportRepairsMatchingMetadataOnlyKeyWithoutDuplicatingIt() throws {
+        let id = UUID()
+        let storage = InMemoryStorage()
+        let settingsStore = SettingsStore(storage: storage)
+        try settingsStore.saveP2PKKeys([
+            P2PKKey(
+                id: id,
+                publicKey: publicKeyHex,
+                privateKey: "",
+                used: true,
+                usedCount: 2,
+                nickname: "Recovered"
+            )
+        ])
+        let secureStorage = P2PKTestSecureStorage()
+        let manager = SettingsManager(
+            settingsStore: settingsStore,
+            secureStorage: secureStorage
+        )
+        XCTAssertFalse(manager.isKnownP2PKPublicKey(publicKeyHex))
+
+        try manager.importP2PKNsec(nsecForPrivateKeyOne())
+
+        XCTAssertEqual(manager.p2pkKeys.count, 1)
+        let repaired = try XCTUnwrap(manager.p2pkKeys.first)
+        XCTAssertEqual(repaired.id, id)
+        XCTAssertEqual(repaired.usedCount, 2)
+        XCTAssertEqual(repaired.nickname, "Recovered")
+        XCTAssertEqual(secureStorage.secrets[secureStorageKey(for: id)], privateKeyHex)
+        XCTAssertTrue(manager.isKnownP2PKPublicKey(publicKeyHex))
+    }
+
+    func testRemovalFirstMetadataWriteFailureKeepsPublishedAndSecureKey() throws {
+        let storage = P2PKFailingStorage()
+        let settingsStore = SettingsStore(storage: storage)
+        let secureStorage = P2PKTestSecureStorage()
+        let manager = SettingsManager(
+            settingsStore: settingsStore,
+            secureStorage: secureStorage
+        )
+        try manager.importP2PKNsec(nsecForPrivateKeyOne())
+        let key = try XCTUnwrap(manager.p2pkKeys.first)
+        storage.failP2PKWriteNumbers = [2]
+
+        XCTAssertThrowsError(try manager.removeP2PKKey(key)) { error in
+            XCTAssertEqual(error as? SettingsFeatureError, .keyRemovalFailed)
+        }
+
+        XCTAssertEqual(manager.p2pkKeys, [key])
+        XCTAssertEqual(settingsStore.p2pkKeys.first?.privateKey, "")
+        XCTAssertEqual(
+            secureStorage.secrets[secureStorageKey(for: key.id)],
+            privateKeyHex
+        )
+        XCTAssertTrue(manager.isKnownP2PKPublicKey(publicKeyHex))
+    }
+
+    func testRemovalSecureDeleteFailureKeepsDurableFallbackAndPublishedKey() throws {
+        let storage = P2PKFailingStorage()
+        let settingsStore = SettingsStore(storage: storage)
+        let secureStorage = P2PKTestSecureStorage()
+        let manager = SettingsManager(
+            settingsStore: settingsStore,
+            secureStorage: secureStorage
+        )
+        try manager.importP2PKNsec(nsecForPrivateKeyOne())
+        let key = try XCTUnwrap(manager.p2pkKeys.first)
+        secureStorage.failDeletes = true
+
+        XCTAssertThrowsError(try manager.removeP2PKKey(key)) { error in
+            XCTAssertEqual(error as? SettingsFeatureError, .keyRemovalFailed)
+        }
+
+        XCTAssertEqual(manager.p2pkKeys, [key])
+        XCTAssertEqual(settingsStore.p2pkKeys.first?.privateKey, privateKeyHex)
+        XCTAssertEqual(
+            secureStorage.secrets[secureStorageKey(for: key.id)],
+            privateKeyHex
+        )
+        XCTAssertTrue(manager.isKnownP2PKPublicKey(publicKeyHex))
+    }
+
+    func testRemovalFinalMetadataWriteFailureRestoresRecoverableKey() throws {
+        let storage = P2PKFailingStorage()
+        let settingsStore = SettingsStore(storage: storage)
+        let secureStorage = P2PKTestSecureStorage()
+        let manager = SettingsManager(
+            settingsStore: settingsStore,
+            secureStorage: secureStorage
+        )
+        try manager.importP2PKNsec(nsecForPrivateKeyOne())
+        let key = try XCTUnwrap(manager.p2pkKeys.first)
+        storage.failP2PKWriteNumbers = [3]
+
+        XCTAssertThrowsError(try manager.removeP2PKKey(key)) { error in
+            XCTAssertEqual(error as? SettingsFeatureError, .keyRemovalFailed)
+        }
+
+        XCTAssertEqual(manager.p2pkKeys, [key])
+        XCTAssertEqual(settingsStore.p2pkKeys.first?.privateKey, privateKeyHex)
+        XCTAssertEqual(
+            secureStorage.secrets[secureStorageKey(for: key.id)],
+            privateKeyHex
+        )
+
+        let reloaded = SettingsManager(
+            settingsStore: settingsStore,
+            secureStorage: secureStorage
+        )
+        XCTAssertTrue(reloaded.isKnownP2PKPublicKey(publicKeyHex))
+        XCTAssertEqual(reloaded.p2pkKeys.first?.privateKey, privateKeyHex)
+        XCTAssertEqual(settingsStore.p2pkKeys.first?.privateKey, "")
+    }
+
+    private func nsecForPrivateKeyOne() throws -> String {
+        var bytes = [UInt8](repeating: 0, count: 32)
+        bytes[31] = 1
+        return try Bech32.encode(hrp: "nsec", data: Data(bytes))
+    }
+
+    private func secureStorageKey(for id: UUID) -> String {
+        "settings.p2pk.\(id.uuidString).privateKey"
+    }
+
+    private func legacyRecord(id: UUID, privateKey: String) -> P2PKLegacyTestRecord {
+        P2PKLegacyTestRecord(
+            id: id,
+            publicKey: publicKeyHex,
+            privateKey: privateKey,
+            used: false,
+            usedCount: 0,
+            nickname: nil
+        )
+    }
+}
+
+private enum P2PKTestFailure: Error {
+    case expected
+}
+
+private final class P2PKTestSecureStorage: SecureStorageProtocol {
+    private(set) var secrets: [String: String] = [:]
+    var failLoads = false
+    var failSaves = false
+    var failDeletes = false
+
+    func saveSecret(_ secret: String, forKey key: String) throws {
+        if failSaves { throw P2PKTestFailure.expected }
+        secrets[key] = secret
+    }
+
+    func loadSecret(forKey key: String) throws -> String? {
+        if failLoads { throw P2PKTestFailure.expected }
+        return secrets[key]
+    }
+
+    func deleteSecret(forKey key: String) throws {
+        if failDeletes { throw P2PKTestFailure.expected }
+        secrets.removeValue(forKey: key)
+    }
+
+    func hasSecret(forKey key: String) -> Bool {
+        secrets[key] != nil
+    }
+}
+
+private final class P2PKFailingStorage: StorageProtocol {
+    private let backing = InMemoryStorage()
+    var failP2PKWrites = false
+    var failP2PKWriteNumbers: Set<Int> = []
+    private(set) var p2pkWriteCount = 0
+
+    func set<T: Codable>(_ value: T, forKey key: String) throws {
+        if key == StorageKeys.p2pkKeys {
+            p2pkWriteCount += 1
+            if failP2PKWrites || failP2PKWriteNumbers.contains(p2pkWriteCount) {
+                throw P2PKTestFailure.expected
+            }
+        }
+        try backing.set(value, forKey: key)
+    }
+
+    func get<T: Codable>(forKey key: String) throws -> T? {
+        try backing.get(forKey: key)
+    }
+
+    func remove(forKey key: String) throws {
+        try backing.remove(forKey: key)
+    }
+
+    func exists(forKey key: String) -> Bool {
+        backing.exists(forKey: key)
+    }
+
+    func keys(withPrefix prefix: String) -> [String] {
+        backing.keys(withPrefix: prefix)
+    }
+}
+
+private struct P2PKLegacyTestRecord: Codable {
+    let id: UUID
+    let publicKey: String
+    let privateKey: String
+    let used: Bool
+    let usedCount: Int
+    let nickname: String?
+}
+
+@MainActor
 final class WalletOperationCoordinatorTests: XCTestCase {
     private enum TestFailure: Error { case expected }
 
