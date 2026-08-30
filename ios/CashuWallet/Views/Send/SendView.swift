@@ -65,7 +65,11 @@ struct SendView: View {
                         tokenDisplayView(token: token)
                             .transition(reduceMotion ? .opacity : .asymmetric(
                                 insertion: .move(edge: .trailing).combined(with: .opacity),
-                                removal: .move(edge: .leading).combined(with: .opacity)
+                                // Fast opacity exit (DESIGN.md's subtler-exits
+                                // rule): when the claim lands, the QR clears
+                                // quickly so the success terminal's staged
+                                // check owns the moment.
+                                removal: .opacity.animation(.easeInOut(duration: 0.2))
                             ))
                     }
                 } else {
@@ -657,21 +661,14 @@ struct SendView: View {
                         )
                     }
 
-                    // Status — inline badge transition, then dismiss + toast.
+                    // Status — inline badge transition while pending/checking.
+                    // No `tokenClaimed` branch: the body swaps to the
+                    // full-screen success terminal the instant the claim
+                    // lands, so an inline Claimed badge here could never
+                    // render — the celebration lives in `PaymentStatusView`'s
+                    // staged entrance.
                     Group {
-                        if tokenClaimed {
-                            HStack(spacing: 6) {
-                                Image(systemName: "checkmark.circle.fill")
-                                    .symbolEffect(.bounce, value: reduceMotion ? false : tokenClaimed)
-                                Text("Claimed")
-                            }
-                            // Monochrome, not green: green is reserved for the 64pt
-                            // hero success checks (DESIGN.md retired the small worded
-                            // green ✓ badge). The settled state reads .primary.
-                            .font(.subheadline.weight(.medium))
-                            .foregroundStyle(.primary)
-                            .transition(reduceMotion ? .opacity : .asymmetric(insertion: .scale(scale: 0.9).combined(with: .opacity), removal: .opacity))
-                        } else if isCheckingClaim {
+                        if isCheckingClaim {
                             HStack(spacing: 6) {
                                 ProgressView().scaleEffect(0.8)
                                 Text("Checking...")

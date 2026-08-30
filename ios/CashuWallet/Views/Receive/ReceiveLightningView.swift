@@ -80,7 +80,10 @@ struct ReceiveLightningView: View {
                     requestDisplayView(quote: quote)
                         .transition(reduceMotion ? .opacity : .asymmetric(
                             insertion: .move(edge: .trailing).combined(with: .opacity),
-                            removal: .opacity
+                            // Fast exit: when the payment lands, the QR clears
+                            // quickly so the success terminal's staged check
+                            // owns the moment.
+                            removal: .opacity.animation(.easeInOut(duration: 0.2))
                         ))
                 } else if isCreatingRequest && (isAmountlessOffer || selectedMethod == .onchain) {
                     // Auto-creating requests (amountless BOLT12 or onchain) have no
@@ -856,18 +859,12 @@ struct ReceiveLightningView: View {
 
     @ViewBuilder
     private var statusBadge: some View {
+        // No `isPaid` branch: the body swaps to the full-screen success
+        // terminal the instant `isPaid` flips, so an inline received badge
+        // here could never render — the celebration lives in
+        // `PaymentStatusView`'s staged entrance.
         Group {
-            if isPaid {
-                HStack(spacing: 6) {
-                    Image(systemName: "checkmark.circle.fill")
-                        .symbolEffect(.bounce, value: reduceMotion ? false : isPaid)
-                        .accessibilityHidden(true)
-                    Text("Payment Received!")
-                }
-                .font(.subheadline.weight(.medium))
-                .foregroundStyle(.green)
-                .transition(reduceMotion ? .opacity : .asymmetric(insertion: .scale(scale: 0.9).combined(with: .opacity), removal: .opacity))
-            } else if isCheckingPayment || isMinting {
+            if isCheckingPayment || isMinting {
                 HStack(spacing: 6) {
                     ProgressView()
                         .tint(.accentColor)
