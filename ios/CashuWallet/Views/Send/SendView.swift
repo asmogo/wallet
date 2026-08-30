@@ -1339,9 +1339,13 @@ struct UnifiedSendView: View {
     var body: some View {
         NavigationStack {
             VStack(spacing: 0) {
-                // Amount-keypad step keeps the "To" row up here; the confirm step renders
-                // its own mint + "To" header in the scaffold's floating topAccessory.
-                if let locked, step == .amount, statusPhase == nil {
+                // The pinned "To" row is shared by the amount AND confirm steps,
+                // rendered once up here so the recipient is the swap's fixed
+                // anchor: it never travels, fades, or double-renders while the
+                // content below it changes. (It used to be re-rendered inside
+                // confirm's header, which read as the row escaping upward and
+                // reappearing lower down.)
+                if let locked, step == .amount || step == .confirm, statusPhase == nil {
                     toRow(locked)
                         .padding(.horizontal)
                         .padding(.top, 8)
@@ -1610,29 +1614,25 @@ struct UnifiedSendView: View {
         .accessibilityHint("Double-tap to change the recipient")
     }
 
-    /// Confirm-step header: the standard top mint selector stacked over the "To" row.
-    /// Lives in the scaffold's floating `topAccessory` so neither row shifts the
-    /// anchored amount hero (see `PayFlowScaffold`). The mint is `nil` for Cashu-request
-    /// states with no held mint — those keep an actionable row in the details instead.
+    /// Confirm-step mint selector, floated in the scaffold's `topAccessory` so
+    /// its presence (confirm) or absence (status) never shifts the anchored
+    /// amount hero (see `PayFlowScaffold`). It sits under the pinned "To" row
+    /// the step machine keeps outside the swap — the recipient holds still,
+    /// only this row arrives. The mint is `nil` for Cashu-request states with
+    /// no held mint — those keep an actionable row in the details instead.
     @ViewBuilder
-    private func confirmHeader(mint: MintInfo?, locked: SendAmountDestination?) -> some View {
-        if let locked {
-            VStack(spacing: 0) {
-                if let mint {
-                    MintSelectorRow(
-                        direction: .source,
-                        mint: mint,
-                        balanceText: AmountFormatter.sats(mint.balance, useBitcoinSymbol: settings.useBitcoinSymbol),
-                        onChooseMint: canChangeMint ? {
-                            HapticFeedback.selection()
-                            showingMintPicker = true
-                        } : nil
-                    )
-                }
-                toRow(locked)
-            }
+    private func confirmHeader(mint: MintInfo?) -> some View {
+        if let mint {
+            MintSelectorRow(
+                direction: .source,
+                mint: mint,
+                balanceText: AmountFormatter.sats(mint.balance, useBitcoinSymbol: settings.useBitcoinSymbol),
+                onChooseMint: canChangeMint ? {
+                    HapticFeedback.selection()
+                    showingMintPicker = true
+                } : nil
+            )
             .padding(.horizontal)
-            .padding(.top, 12)
         }
     }
 
@@ -1889,80 +1889,117 @@ struct UnifiedSendView: View {
         }
     }
 
-    /// Melt confirm: the amount is the only prominent element; the mint, fee, and
-    /// (on-chain) destination sit beneath as equal-weight detail rows.
+    /// Melt confirm. The quote lifecycle owns the hero slot with the status
+    /// screens' anatomy, so every wait and failure in the pay flow reads the
+    /// same: a lone centered spinner while the quote is in flight (no skeleton
+    /// rows), a centered glyph + message when the preflight fails (no corner
+    /// notice), and the amount over its fee/total rows once the quote lands.
     private var meltConfirmBody: some View {
         let displayAmount = meltQuote?.amount ?? knownMeltAmount ?? 0
         let canPay = meltQuote.map { hasSufficientBalance(for: $0) } ?? false
-        // One scaffold for both the in-flight and resolved states so the amount hero shows
-        // the instant paste → confirm lands and the fee rows fill in place (see
-        // `meltConfirmRows`) — no bare-spinner screen, no view swap, matching the Cashu-
-        // request confirm. Quote failures stay on this confirmation screen with an inline
-        // error and retry action; only an actual `meltTokens` attempt may enter the shared
-        // payment-failure screen.
+        let quotePending = meltQuote == nil && errorMessage == nil
         return VStack(spacing: 0) {
             PayFlowScaffold {
-                CurrencyAmountDisplay(sats: displayAmount, primary: $settings.amountDisplayPrimary)
-            } details: {
-                meltConfirmRows(meltQuote)
-
-                if let quote = meltQuote,
-                   !hasSufficientBalance(for: quote),
-                   let balance = mintInfo(for: quote)?.balance {
-                    InlineNotice(
-                        message: "This mint holds \(AmountFormatter.sats(balance, useBitcoinSymbol: settings.useBitcoinSymbol)); the payment reserves up to \(AmountFormatter.sats(quote.totalAmount, useBitcoinSymbol: settings.useBitcoinSymbol)).",
-                        severity: .caution
-                    )
-                    .padding(.top, 12)
-                    .padding(.horizontal)
+                if let quote = meltQuote {
+                    CurrencyAmountDisplay(sats: quote.amount, primary: $settings.amountDisplayPrimary)
+                        .transition(.opacity)
+                } else if let errorMessage {
+                    quoteNoticeFace(errorMessage)
+                        .transition(.opacity)
+                } else {
+                    SpinnerRing()
+                        .transition(.opacity)
                 }
+            } details: {
+                if let quote = meltQuote {
+                    meltConfirmRows(quote)
 
-                if let errorMessage {
-                    errorNotice(errorMessage)
+                    if !hasSufficientBalance(for: quote),
+                       let balance = mintInfo(for: quote)?.balance {
+                        InlineNotice(
+                            message: "This mint holds \(AmountFormatter.sats(balance, useBitcoinSymbol: settings.useBitcoinSymbol)); the payment reserves up to \(AmountFormatter.sats(quote.totalAmount, useBitcoinSymbol: settings.useBitcoinSymbol)).",
+                            severity: .caution
+                        )
                         .padding(.top, 12)
                         .padding(.horizontal)
+                    }
+
+                    // Post-payment-failure context (Try Again returns here with
+                    // the quote intact) — the hero stays the amount, so the
+                    // message rides inline under the rows.
+                    if let errorMessage {
+                        errorNotice(errorMessage)
+                            .padding(.top, 12)
+                            .padding(.horizontal)
+                    }
                 }
             } footer: {
                 EmptyView()
             } topAccessory: {
-                confirmHeader(mint: meltQuote.flatMap(mintInfo(for:)) ?? activeMeltMint, locked: locked)
+                confirmHeader(mint: meltQuote.flatMap(mintInfo(for:)) ?? activeMeltMint)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
 
-            Button(action: {
-                if meltQuote == nil {
-                    fetchMeltQuote()
-                } else {
-                    payMelt()
-                }
-            }) {
-                if isWorking {
-                    ProgressView()
+            Group {
+                if quotePending {
+                    // Reserve the CTA footprint while the hero spinner owns the
+                    // wait (PaymentStatusView.processing parity) — no second
+                    // spinner in the button.
+                    Button(action: {}) { Text(verbatim: " ") }
+                        .glassButton()
+                        .disabled(true)
+                        .opacity(0)
+                        .accessibilityHidden(true)
                 } else if meltQuote == nil {
-                    Text("Retry Quote")
+                    Button(action: fetchMeltQuote) { Text("Retry Quote") }
+                        .glassButton()
                 } else {
-                    Text("Pay \(displayAmount) sat")
+                    Button(action: payMelt) { Text("Pay \(displayAmount) sat") }
+                        .glassButton()
+                        .disabled(isWorking || !canPay)
                 }
             }
-            .glassButton()
-            .disabled(isWorking || (meltQuote != nil && !canPay))
             .padding(.horizontal)
             .padding(.bottom, 16)
         }
+        .animation(.smooth(duration: 0.3), value: meltQuote != nil)
+        .animation(.smooth(duration: 0.3), value: errorMessage != nil)
+    }
+
+    /// Preflight (quote) failure, in the status screens' hero anatomy — glyph,
+    /// message, secondary detail — centered where the amount hero sits.
+    private func quoteNoticeFace(_ message: String) -> some View {
+        VStack(spacing: 16) {
+            Image(systemName: errorSeverity.icon)
+                .font(.statusGlyph)
+                .foregroundStyle(errorSeverity.foreground)
+
+            VStack(spacing: 8) {
+                Text(message)
+                    .font(.title2.weight(.semibold))
+                    .multilineTextAlignment(.center)
+
+                if errorShowsMintAction, let detail = meltInsufficientDetail {
+                    Text(detail)
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.center)
+                }
+            }
+            .padding(.horizontal, 32)
+        }
+        .accessibilityElement(children: .combine)
     }
 
     private var meltCompatibleMints: [MintInfo] {
         availableMeltMints.filter { $0.supportedMeltMethods.contains(meltPaymentMethod) }
     }
 
-    /// Read-only summary rows: the on-chain destination (where the pill truncates), the
+    /// Read-only summary rows: the on-chain destination (where the row truncates), the
     /// network fee, and the total that leaves the balance — all equal-weight details
-    /// beneath the amount. The source mint now lives in the top header pill.
-    private func meltConfirmRows(_ quote: MeltQuoteInfo?) -> some View {
-        // While the mint quote is in flight (`quote == nil`) the fee + total render as
-        // skeleton placeholders that fill in place when it lands. The on-chain "To" row is
-        // driven by the locked mode (not the quote) so it holds its slot across the fill-in.
-        let isLoading = quote == nil
+    /// beneath the amount. Rendered only once the quote has landed; the in-flight
+    /// state is the hero spinner, never skeleton rows.
+    private func meltConfirmRows(_ quote: MeltQuoteInfo) -> some View {
         let isOnchain: Bool = { if case .melt(_, .onchain, _) = locked { return true } else { return false } }()
         return VStack(spacing: 0) {
             if isOnchain, case let .melt(request, _, _) = locked {
@@ -1973,18 +2010,15 @@ struct UnifiedSendView: View {
             }
             creqDetailRow(
                 label: "Network fee",
-                value: AmountFormatter.sats(quote?.feeReserve ?? 0, useBitcoinSymbol: settings.useBitcoinSymbol)
+                value: AmountFormatter.sats(quote.feeReserve, useBitcoinSymbol: settings.useBitcoinSymbol)
             )
-            .redacted(reason: isLoading ? .placeholder : [])
             creqDetailRow(
                 label: "Total",
-                value: AmountFormatter.sats(quote?.totalAmount ?? 0, useBitcoinSymbol: settings.useBitcoinSymbol)
+                value: AmountFormatter.sats(quote.totalAmount, useBitcoinSymbol: settings.useBitcoinSymbol)
             )
-            .redacted(reason: isLoading ? .placeholder : [])
         }
         .padding(.top, 16)
         .padding(.horizontal)
-        .animation(.smooth(duration: 0.3), value: isLoading)
     }
 
     /// Shared mint detail row (used by both the melt and Cashu-request confirms):
@@ -2379,7 +2413,7 @@ struct UnifiedSendView: View {
                 .environmentObject(walletManager)
             }
         } topAccessory: {
-            confirmHeader(mint: creqTopMint(creq), locked: .cashuRequest(creq))
+            confirmHeader(mint: creqTopMint(creq))
         }
     }
 

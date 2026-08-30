@@ -220,7 +220,10 @@ struct PaymentStatusView: View {
 /// 64pt loading ring that shares the checkmark's diameter, so the processing →
 /// success cross-fade reads as the ring "closing" into the check rather than a
 /// small pill spinner jumping to a large glyph.
-private struct SpinnerRing: View {
+/// Shared indeterminate ring, sized to the status glyph slot. Internal so the
+/// melt confirm can put the same spinner in its hero band while the quote is
+/// in flight — one wait animation across the whole pay flow.
+struct SpinnerRing: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var spinning = false
 
