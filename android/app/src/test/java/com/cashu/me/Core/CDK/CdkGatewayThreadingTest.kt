@@ -43,6 +43,24 @@ class CdkGatewayThreadingTest {
         assertTrue(source.contains("}.flowOn(Dispatchers.IO)"))
     }
 
+    @Test
+    fun safeMintRemovalEnumeratesAndRemovesInsideOneGatewayCall() {
+        val source = sourceFile(
+            "src/main/java/com/cashu/me/Core/CDK/CdkWalletGatewayImpl.kt",
+            "app/src/main/java/com/cashu/me/Core/CDK/CdkWalletGatewayImpl.kt",
+        ).readText()
+        val methodStart = source.indexOf("override suspend fun removeWalletIfSingleUnit")
+        assertTrue(methodStart >= 0)
+        val methodEnd = source.indexOf("\n    override suspend fun", methodStart + 1)
+            .takeIf { it >= 0 }
+            ?: source.length
+        val method = source.substring(methodStart, methodEnd)
+
+        assertTrue(method.contains("= cdkCall {"))
+        assertTrue(method.contains("getWallets()"))
+        assertTrue(method.contains("repository.removeWallet("))
+    }
+
     private fun sourceFile(vararg candidates: String): File {
         val roots = generateSequence(File("").absoluteFile) { it.parentFile }
         return roots

@@ -169,8 +169,24 @@ class CdkWalletGatewayImpl : WalletGateway {
         ensureWalletUnlocked(mintUrl, cdkUnit(unit))
     }
 
-    override suspend fun removeWallet(mintUrl: String, unit: String) = cdkCall {
-        requireRepository().removeWallet(CdkMintUrl(mintUrl), cdkUnit(unit))
+    override suspend fun removeWalletIfSingleUnit(mintUrl: String): Boolean = cdkCall {
+        val repository = requireRepository()
+        val registeredWallets = repository.getWallets()
+            .filter { wallet ->
+                mintRemovalUrlsMatch(wallet.mintUrl().url, mintUrl)
+            }
+        val registeredUnits = normalizedRegisteredWalletUnits(
+            registeredWallets.map { it.unit().toDomainUnit() },
+        )
+        if (registeredUnits.size > 1) {
+            throw MultiUnitWalletRemovalException(registeredUnits)
+        }
+        val registeredUnit = registeredUnits.singleOrNull() ?: return@cdkCall false
+        val wallet = registeredWallets.first { wallet ->
+            wallet.unit().toDomainUnit().trim().equals(registeredUnit, ignoreCase = true)
+        }
+        repository.removeWallet(wallet.mintUrl(), wallet.unit())
+        true
     }
 
     override suspend fun fetchMintInfo(mintUrl: String): MintInfo? = cdkCall {

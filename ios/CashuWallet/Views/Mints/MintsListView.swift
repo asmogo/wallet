@@ -7,10 +7,16 @@ struct MintsListView: View {
     @State private var showRemoveConfirmation = false
     @State private var showAddMintSheet = false
     @State private var showDiscoverySheet = false
+    @State private var removalError: String?
 
     var body: some View {
         NavigationStack {
             List {
+                if let removalError {
+                    Section {
+                        InlineNotice(message: removalError, severity: .error)
+                    }
+                }
                 if !walletManager.mints.isEmpty {
                     Section {
                         ForEach(walletManager.mints) { mint in
@@ -182,8 +188,11 @@ struct MintsListView: View {
 
     private func removeMint(_ mint: MintInfo) {
         Task {
-            if let index = walletManager.mints.firstIndex(where: { $0.url == mint.url }) {
-                await walletManager.removeMint(at: IndexSet(integer: index))
+            removalError = nil
+            let removed = await walletManager.removeMint(mint)
+            if !removed, !Task.isCancelled {
+                removalError = walletManager.errorMessage
+                    ?? "The mint could not be removed. Keep it connected and try again."
             }
         }
     }

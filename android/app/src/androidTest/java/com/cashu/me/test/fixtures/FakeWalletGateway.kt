@@ -2,6 +2,7 @@ package com.cashu.me.test.fixtures
 
 import com.cashu.me.Core.CDK.ForeignNfcSettlement
 import com.cashu.me.Core.CDK.MeltConfirmation
+import com.cashu.me.Core.CDK.MultiUnitWalletRemovalException
 import com.cashu.me.Core.CDK.NfcReceiveReceipt
 import com.cashu.me.Core.CDK.NwcServiceHandle
 import com.cashu.me.Core.CDK.SagaRecoveryReport
@@ -37,6 +38,7 @@ class FakeWalletGateway(
 ) : WalletGateway {
     private val sequence = AtomicInteger(1)
     private val walletUrls = linkedSetOf<String>()
+    private val walletUnits = linkedMapOf<String, MutableSet<String>>()
     private val mintInfo = linkedMapOf<String, MintInfo>()
     private val balances = initialBalances.toMutableMap()
     private val transactions = initialTransactions.toMutableList()
@@ -102,15 +104,21 @@ class FakeWalletGateway(
         check(repositoryOpen) { "Fake wallet repository is not open." }
         val normalized = normalize(mintUrl)
         walletUrls += normalized
+        walletUnits.getOrPut(normalized) { linkedSetOf() } += unit.trim().lowercase()
         balances.putIfAbsent(normalized, 0)
         mintInfo.putIfAbsent(normalized, defaultMint(normalized))
     }
 
-    override suspend fun removeWallet(mintUrl: String, unit: String) {
+    override suspend fun removeWalletIfSingleUnit(mintUrl: String): Boolean {
         val normalized = normalize(mintUrl)
+        val registeredUnits = walletUnits[normalized].orEmpty().toList()
+        if (registeredUnits.size > 1) throw MultiUnitWalletRemovalException(registeredUnits)
+        if (registeredUnits.isEmpty()) return false
         walletUrls -= normalized
+        walletUnits -= normalized
         mintInfo -= normalized
         balances -= normalized
+        return true
     }
 
     override suspend fun fetchMintInfo(mintUrl: String): MintInfo? {

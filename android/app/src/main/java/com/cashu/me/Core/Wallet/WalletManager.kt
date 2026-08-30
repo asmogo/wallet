@@ -413,14 +413,19 @@ class WalletManager(
 
     override suspend fun removeMint(mint: MintInfo) {
         withLoading {
-            runCatching { gateway.removeWallet(mint.url) }
-                .onFailure { AppLogger.wallet.error("CDK wallet removal is not available yet for ${mint.url}", it) }
-            val updated = mutableState.value.mints.filterNot { it.url == mint.url }
-            walletStore.saveMints(updated)
-            if (walletStore.activeMintURL == mint.url) {
-                walletStore.activeMintURL = updated.firstOrNull()?.url
+            val trackedMint = mutableState.value.mints.firstOrNull { it.url == mint.url }
+                ?: throw IllegalArgumentException("Mint is no longer tracked.")
+            removeMintWalletBeforeCommit(
+                mintUrl = trackedMint.url,
+                removeWalletIfSingleUnit = gateway::removeWalletIfSingleUnit,
+            ) {
+                val updated = mutableState.value.mints.filterNot { it.url == trackedMint.url }
+                walletStore.saveMints(updated)
+                if (walletStore.activeMintURL == trackedMint.url) {
+                    walletStore.activeMintURL = updated.firstOrNull()?.url
+                }
+                loadCachedState(needsOnboarding = false)
             }
-            loadCachedState(needsOnboarding = false)
             refreshBalance()
         }
         if (externalServicesEnabled) {
