@@ -36,6 +36,28 @@ enum WalletStartupPolicy {
     }
 }
 
+enum WalletDatabaseRecoveryPolicy {
+    // Moving the live database aside is safe only for definitive corruption signals.
+    // Busy, I/O, permission, and generic open failures must preserve it for retry.
+    private static let corruptionIndicators = [
+        "sqlite_corrupt",
+        "sqlite_notadb",
+        "database disk image is malformed",
+        "malformed database schema",
+        "database disk image is corrupt",
+        "file is not a database",
+        "database corruption",
+        "database is corrupt",
+        "database is corrupted",
+        "corrupt database",
+    ]
+
+    static func shouldRecover(errorDescription: String) -> Bool {
+        let normalized = errorDescription.lowercased()
+        return corruptionIndicators.contains(where: normalized.contains)
+    }
+}
+
 extension WalletManager {
     // MARK: - Public Initialization
 
@@ -776,12 +798,9 @@ extension WalletManager {
         fileManager: FileManager
     ) -> Bool {
         guard fileManager.fileExists(atPath: databaseURL.path) else { return false }
-        let description = String(describing: error).lowercased()
-        return description.contains("sqlite")
-            || description.contains("database")
-            || description.contains("corrupt")
-            || description.contains("malformed")
-            || description.contains("walletdb")
+        return WalletDatabaseRecoveryPolicy.shouldRecover(
+            errorDescription: String(describing: error)
+        )
     }
 
     nonisolated private static func backupLaunchDatabase(
@@ -814,12 +833,9 @@ extension WalletManager {
             return false
         }
         
-        let errorDescription = String(describing: error).lowercased()
-        return errorDescription.contains("sqlite")
-            || errorDescription.contains("database")
-            || errorDescription.contains("corrupt")
-            || errorDescription.contains("malformed")
-            || errorDescription.contains("walletdb")
+        return WalletDatabaseRecoveryPolicy.shouldRecover(
+            errorDescription: String(describing: error)
+        )
     }
 
     private func backupCorruptedDatabase(at databaseURL: URL) throws -> URL {

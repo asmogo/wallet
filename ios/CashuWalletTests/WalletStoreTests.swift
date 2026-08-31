@@ -169,6 +169,43 @@ final class WalletStoreTests: XCTestCase {
         ))
     }
 
+    func testDatabaseRecoveryPolicyAcceptsOnlyExplicitCorruptionErrors() {
+        let corruptionErrors = [
+            "SQLite error SQLITE_CORRUPT: database disk image is malformed",
+            "SQLite error SQLITE_NOTADB: file is not a database",
+            "malformed database schema (wallets)",
+            "database disk image is corrupt",
+        ]
+
+        for message in corruptionErrors {
+            XCTAssertTrue(
+                WalletDatabaseRecoveryPolicy.shouldRecover(errorDescription: message),
+                message
+            )
+        }
+    }
+
+    func testDatabaseRecoveryPolicyRejectsTransientPermissionAndIOErrors() {
+        let nonCorruptionErrors = [
+            "SQLite database is locked",
+            "SQLite database is busy",
+            "unable to open database file",
+            "attempt to write a readonly database",
+            "permission denied while opening WalletDB",
+            "SQLite disk I/O error",
+            "WalletDB open failed",
+            "Invalid seed phrase.",
+            "Couldn't reach the mint.",
+        ]
+
+        for message in nonCorruptionErrors {
+            XCTAssertFalse(
+                WalletDatabaseRecoveryPolicy.shouldRecover(errorDescription: message),
+                message
+            )
+        }
+    }
+
     func testIncompleteICloudRestoreSuppressesBackupWrites() {
         XCTAssertFalse(ICloudRestorePolicy.shouldPerformBackup(restoreIncomplete: true))
         XCTAssertTrue(ICloudRestorePolicy.shouldPerformBackup(restoreIncomplete: false))
