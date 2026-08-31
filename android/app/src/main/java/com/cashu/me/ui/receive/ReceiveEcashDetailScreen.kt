@@ -16,7 +16,6 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Close
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -54,6 +53,7 @@ import com.cashu.me.ui.components.PaymentStatusPhase
 import com.cashu.me.ui.components.PaymentStatusScreen
 import com.cashu.me.ui.components.PrimaryButton
 import com.cashu.me.ui.components.ToolbarIcon
+import com.cashu.me.ui.components.ghostButtonUnderCtaTextStyle
 import com.cashu.me.ui.theme.CashuTheme
 import com.cashu.me.ui.theme.withMonoDigits
 import com.cashu.me.ui.testing.UiTestTags
@@ -273,6 +273,8 @@ private fun ConfirmContent(
             info = info,
             fee = fee,
             p2pkLock = review?.p2pkLock,
+            formatter = formatter,
+            useBitcoinSymbol = useBitcoinSymbol,
             modifier = Modifier.padding(horizontal = CashuTheme.spacing.comfortable),
         )
         if (mintTrust?.showWarning == true) {
@@ -295,15 +297,16 @@ private fun ConfirmContent(
                 // Disabled until the fee/lock preview lands (net amount must be
                 // known before committing) and while P2PK-locked to foreign keys.
                 enabled = review?.canClaim == true,
-                // The app's one inverted-ink CTA — mirrors iOS's sole
-                // .glassButton(prominent: true) on the receive commit
-                // (ReceiveView.swift); every other bottom CTA is neutral gray.
-                colors = ButtonDefaults.buttonColors(),
+                // Neutral capsule, not inverted ink: iOS renders this commit as a
+                // .glassButton() frosted capsule, and solid ink stays reserved for
+                // the Send/Pay commit. PrimaryButton's default neutral fill is the
+                // Android analogue of that glass.
             )
             Spacer(Modifier.height(CashuTheme.spacing.snug))
             GhostButton(
                 text = secondaryActionText,
                 onClick = onSecondaryAction,
+                textStyle = ghostButtonUnderCtaTextStyle,
             )
             Spacer(Modifier.navigationBarsPadding())
         }

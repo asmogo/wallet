@@ -82,7 +82,7 @@ struct CashuRequestAmountPickerSheet: View {
                         NumberPadAmountInput(amountString: $amountString, decimals: unitDecimals)
                     }
                 }
-                .padding(.horizontal, 24)
+                .padding(.horizontal, NumberPadMetrics.gutter)
 
                 Button(action: confirm) {
                     Text("Done")

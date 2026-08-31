@@ -269,6 +269,8 @@ internal fun TokenInspectorRows(
     info: TokenInfo,
     fee: Long?,
     p2pkLock: P2PKLockState?,
+    formatter: AmountFormatter,
+    useBitcoinSymbol: Boolean,
     modifier: Modifier = Modifier,
 ) {
     val isSatToken = info.unit.equals("sat", ignoreCase = true)
@@ -282,7 +284,7 @@ internal fun TokenInspectorRows(
                 // Prospective charge (docs/product/copy-guidance.md): a
                 // charge-absence phrase, never a bare "0 sat".
                 fee == 0L -> "No fee"
-                isSatToken -> "$fee sat"
+                isSatToken -> formatter.formatWalletSats(fee, useBitcoinSymbol)
                 else -> CurrencyAmount(fee, tokenCurrency).formatted()
             },
             loading = fee == null,

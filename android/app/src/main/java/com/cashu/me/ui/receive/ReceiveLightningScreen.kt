@@ -446,8 +446,16 @@ fun ReceiveLightningScreen(
     }
 
     // The paid terminal replaces the sheet body while retaining the same header
-    // and explicit Done action as iOS.
-    Crossfade(targetState = successInfo, label = "receive-ln-terminal") { terminal ->
+    // and explicit Done action as iOS. Standard swap pair (not a bare
+    // Crossfade, whose slower symmetric tween buried the terminal's staged
+    // celebration): the waiting face exits fast, the terminal fades in and
+    // its own entrance stages the check → title → rows.
+    AnimatedContent(
+        targetState = successInfo,
+        transitionSpec = { fadeIn(tween(200)) togetherWith fadeOut(tween(150)) },
+        contentKey = { it != null },
+        label = "receive-ln-terminal",
+    ) { terminal ->
       if (terminal != null) {
         Column(
             modifier = Modifier

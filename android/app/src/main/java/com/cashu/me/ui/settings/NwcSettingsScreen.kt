@@ -221,7 +221,7 @@ fun NwcSettingsScreen(
                 }
             },
             onDismiss = { mintPickerOpen = false },
-            title = "Mint for Wallet Connect",
+            title = "Mint",
         )
     }
 

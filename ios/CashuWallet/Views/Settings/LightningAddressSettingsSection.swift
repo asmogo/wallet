@@ -3,6 +3,7 @@ import SwiftUI
 struct LightningAddressSettingsSection: View {
     @EnvironmentObject var walletManager: WalletManager
     @ObservedObject var npcService = NPCService.shared
+    @ObservedObject private var settings = SettingsManager.shared
 
     @Binding var isCheckingPayments: Bool
     @Binding var showMintPicker: Bool
@@ -41,6 +42,12 @@ struct LightningAddressSettingsSection: View {
                 SettingsSectionGroup(nil) {
                     checkForPaymentsRow
                 }
+
+                if !settings.checkIncomingInvoices {
+                    SettingsSectionFooter {
+                        Text("To check for payments, allow incoming invoice checks in Privacy settings.")
+                    }
+                }
             } else if npcService.isEnabled && !npcService.isInitialized {
                 SettingsSectionGroup(nil) {
                     HStack(spacing: 10) {
@@ -55,8 +62,14 @@ struct LightningAddressSettingsSection: View {
                 }
             }
         }
-        .sheet(isPresented: $showMintPicker) {
+        .animation(.easeInOut(duration: 0.2), value: npcService.isEnabled)
+        .animation(.easeInOut(duration: 0.2), value: npcService.errorMessage)
+        .animation(.easeInOut(duration: 0.2), value: settings.checkIncomingInvoices)
+        .backdropSheet(isPresented: $showMintPicker) {
+            // Titled after the row that opened it, so the sheet reads as a
+            // continuation of the tap rather than a new context.
             MintPickerSheet(
+                title: "Receiving mint",
                 mints: walletManager.mints,
                 selectedMintUrl: $npcService.selectedMintUrl,
                 onSelect: { mintUrl in
@@ -70,12 +83,11 @@ struct LightningAddressSettingsSection: View {
                 }
             )
         }
-        .sheet(isPresented: $showAddressQR) {
+        .backdropSheet(isPresented: $showAddressQR) {
             QRCodeDetailSheet(
                 title: "Lightning Address",
                 content: npcService.lightningAddress
             )
-            .presentationDetents([.medium, .large])
         }
     }
 
@@ -101,7 +113,7 @@ struct LightningAddressSettingsSection: View {
     // MARK: - Address row
 
     private var addressRow: some View {
-        Button { showAddressQR = true } label: {
+        Button { HapticFeedback.selection(); showAddressQR = true } label: {
             HStack(spacing: 12) {
                 Circle()
                     .fill(statusColor)
@@ -157,18 +169,17 @@ struct LightningAddressSettingsSection: View {
             showMintPicker = true
         } label: {
             HStack(spacing: 12) {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Receiving mint")
-                        .font(.body)
-                        .foregroundStyle(.primary)
-                    Text(selectedMintDisplayName)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
-                        .truncationMode(.tail)
-                }
+                Text("Receiving mint")
+                    .font(.body)
+                    .foregroundStyle(.primary)
 
                 Spacer(minLength: 8)
+
+                Text(selectedMintDisplayName)
+                    .font(.body)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
 
                 Image(systemName: "chevron.right")
                     .font(.caption.weight(.semibold))
@@ -212,11 +223,9 @@ struct LightningAddressSettingsSection: View {
                     Text("Check for payments")
                         .font(.body)
                         .foregroundStyle(.primary)
-                    if let lastCheck = npcService.lastCheck {
-                        Text("Last checked \(formatRelativeTime(lastCheck))")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
+                    Text(lastCheckedCaption)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                 }
 
                 Spacer(minLength: 8)
@@ -226,8 +235,16 @@ struct LightningAddressSettingsSection: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .disabled(isCheckingPayments)
-        .accessibilityLabel("Check for new payments")
+        .disabled(isCheckingPayments || !settings.checkIncomingInvoices)
+        .opacity(settings.checkIncomingInvoices ? 1.0 : 0.5)
+        .accessibilityLabel("Check for new payments. \(lastCheckedCaption).")
+    }
+
+    private var lastCheckedCaption: String {
+        if let lastCheck = npcService.lastCheck {
+            return "Last checked \(formatRelativeTime(lastCheck))"
+        }
+        return "Not checked yet"
     }
 
     // MARK: - Actions

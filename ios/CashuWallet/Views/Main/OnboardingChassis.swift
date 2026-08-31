@@ -134,7 +134,7 @@ struct OnboardingChassisView<Accessory: View>: View {
                         .id(action.label)
                         .transition(contentMorph(radius: 1.5))
                 }
-                .textLinkButton()
+                .ctaStackTextLinkButton()
                 .disabled(action.isDisabled)
                 // Same reason as the capsule slot above.
                 .accessibilityLabel(action.label)

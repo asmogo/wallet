@@ -127,9 +127,12 @@ struct ReceiveTokenDetailView: View {
             : CurrencyAmount(value: base, currency: unitCurrency).formatted()
     }
 
-    /// Fee formatted in the token's unit. Sats keep the terse "N sat" style.
+    /// Fee formatted in the token's unit, honoring the ₿-symbol setting exactly
+    /// as `formatAmount` does — a screen must never pair "₿1" with "1 sat".
     private func formatFee(_ base: UInt64) -> String {
-        isSatUnit ? "\(base) sat" : CurrencyAmount(value: base, currency: unitCurrency).formatted()
+        isSatUnit
+            ? AmountFormatter.sats(base, useBitcoinSymbol: settings.useBitcoinSymbol)
+            : CurrencyAmount(value: base, currency: unitCurrency).formatted()
     }
 
     var body: some View {
@@ -247,15 +250,13 @@ struct ReceiveTokenDetailView: View {
                 if let secondaryActionTitle, let onSecondaryAction {
                     Button(action: onSecondaryAction) {
                         Text(secondaryActionTitle)
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
                     }
+                    .ctaStackTextLinkButton()
                 } else {
                     Button(action: receiveLater) {
                         Text("Receive Later")
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
                     }
+                    .ctaStackTextLinkButton()
                 }
             }
             .padding(.horizontal)

@@ -125,7 +125,7 @@ class TypographyGuardTest {
     fun `role inventory is frozen`() {
         assertEquals(
             "Adding or removing a role is a design decision — update this count deliberately",
-            12,
+            13,
             allRoles().size,
         )
     }
@@ -144,7 +144,11 @@ class TypographyGuardTest {
     @Test
     fun `mono roles disambiguate zero`() {
         val roles = cashuTypeRoles(CashuFonts.Geist)
-        listOf("monoBody" to roles.monoBody, "monoCaption" to roles.monoCaption)
+        listOf(
+            "monoDisplay" to roles.monoDisplay,
+            "monoBody" to roles.monoBody,
+            "monoCaption" to roles.monoCaption,
+        )
             .forEach { (name, style) ->
                 assertTrue("$name lacks ss09", "ss09" in style.fontFeatureSettings.orEmpty())
                 assertEquals("$name is not Geist Mono", CashuFonts.Geist.mono, style.fontFamily)
@@ -163,6 +167,7 @@ class TypographyGuardTest {
             "sheetTitle" to r.sheetTitle,
             "numberPadKey" to r.numberPadKey,
             "metadata" to r.metadata,
+            "monoDisplay" to r.monoDisplay,
             "monoBody" to r.monoBody,
             "monoCaption" to r.monoCaption,
         )

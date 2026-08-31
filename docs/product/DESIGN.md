@@ -1343,7 +1343,21 @@ code must be).
    Request being watched) the badge dwells ~1.2s then the sheet slides down and
    dismisses; when *inspecting* an existing Cashu Request it instead holds 2.5s
    then steps back to the persistent line (N-payments-received). The home-balance
-   delta beat steps back to the fiat sub-amount.
+   delta beat steps back to the fiat sub-amount. *Amended 2026-08-30:* a payment
+   terminal **mounted directly at success** (a payment landing while a waiting
+   face was up — receive invoice, token claim, ecash claimed) plays the same
+   recipe as a **staged entrance**, because transitions and phase-keyed effects
+   never fire on a fresh subtree's initial content and the celebration was
+   silent there: beat 1 at ~100ms — the check materializes (blur 4→0, scale
+   0.92→1 on the celebration spring) with the single bounce and the success
+   haptic; beat 2 at ~220ms — title + message, opacity + an 8pt settle-rise on
+   `.smooth(0.3)`; beat 3 at ~300ms — detail rows (6pt settle-rise, **no blur —
+   money**) and the CTA (opacity only; hit-testable from frame 1 — the stage is
+   decorative). The waiting face exits fast (`.easeInOut(0.2)` opacity). Failure
+   and settlement-pending mounts stay deliberately still; morph-mounted
+   instances never re-stage; Reduce Motion collapses the stage to today's
+   single flat fade. The ≤8pt settle-rise is a *settle*, not a directional
+   slide — it does not extend the chooser cascade's direction monopoly (#3).
 7. **Waiting-pulse** — `.symbolEffect(.pulse, options: .repeating)` on a
    single SF Symbol while a system is waiting on external state: the empty-
    state History bolt, the Cashu Request "Waiting for payment…" clock, the

@@ -66,36 +66,37 @@ struct NostrKeysSettingsSection: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .animation(.easeInOut(duration: 0.2), value: nostrService.signerType)
         .animation(.easeInOut(duration: 0.2), value: nostrKeyError)
-        .alert("Generate New Key", isPresented: $showGenerateKeyConfirm) {
-            Button("Cancel", role: .cancel) {}
-            Button("Generate", role: .destructive) {
-                generateNewKey()
-            }
-        } message: {
-            Text(NostrIdentityReplacementWarning.generate)
+        .backdropSheet(isPresented: $showGenerateKeyConfirm) {
+            KeyActionConfirmSheet(
+                title: "Generate New Key?",
+                message: NostrIdentityReplacementWarning.generate,
+                actionLabel: "Generate",
+                action: generateNewKey
+            )
         }
-        .alert("Reset to Wallet Seed", isPresented: $showResetKeyConfirm) {
-            Button("Cancel", role: .cancel) {}
-            Button("Reset", role: .destructive) {
-                resetToSeedKey()
-            }
-        } message: {
-            Text(NostrIdentityReplacementWarning.reset)
+        .backdropSheet(isPresented: $showResetKeyConfirm) {
+            KeyActionConfirmSheet(
+                title: "Reset to Wallet Seed?",
+                message: NostrIdentityReplacementWarning.reset,
+                actionLabel: "Reset",
+                // Deletes the custom key — the commit wears destructive red.
+                destructive: true,
+                action: resetToSeedKey
+            )
         }
-        .sheet(isPresented: $showImportNsec) {
+        .backdropSheet(isPresented: $showImportNsec) {
             ImportNsecSheet(
                 nsecText: $importNsecText,
                 replacementWarning: NostrIdentityReplacementWarning.importKey,
                 onImport: importNsec
             )
         }
-        .sheet(isPresented: $showNsecReveal) {
+        .backdropSheet(isPresented: $showNsecReveal) {
             PrivateKeyRevealSheet(
                 title: "Nostr Private Key",
                 nsec: nostrService.getNsec(),
                 warning: "Anyone with this key can control your Lightning address. Never share it."
             )
-            .flatBottomSheetSurface()
         }
     }
 
@@ -186,7 +187,8 @@ struct NostrKeysSettingsSection: View {
         do {
             try nostrService.importNsec(nsec)
             importNsecText = ""
-            showImportNsec = false
+            // Don't dismiss here — the sheet morphs to its success face and
+            // dismisses itself from Done.
             return nil
         } catch {
             return error.localizedDescription
@@ -462,4 +464,49 @@ private func settingsActionRow(_ title: String, systemImage: String) -> some Vie
     .padding(.horizontal, 4)
     .padding(.vertical, 14)
     .contentShape(Rectangle())
+}
+
+/// Single-face confirmation sheet for a Nostr key mutation, on the same recipe
+/// as the import sheet's confirm face: in-content title, centered warning
+/// copy, and a Cancel/action row on a content-fit sheet dismissed by drag —
+/// instead of an alert stacked over the screen.
+private struct KeyActionConfirmSheet: View {
+    let title: String
+    let message: String
+    let actionLabel: String
+    /// Red commit button for the mutation that destroys a key outright
+    /// (Reset deletes the custom key); false keeps the neutral primary.
+    var destructive: Bool = false
+    let action: () -> Void
+
+    @Environment(\.dismiss) private var dismiss
+    @State private var contentHeight: CGFloat = 0
+
+    var body: some View {
+        VStack(spacing: 24) {
+            Text(title)
+                .font(.title2.weight(.semibold))
+
+            Text(message)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+
+            HStack(spacing: 12) {
+                Button("Cancel") { dismiss() }
+                    .flatSheetSecondaryButton()
+
+                Button(actionLabel) {
+                    dismiss()
+                    action()
+                }
+                .glassButton(destructive: destructive)
+            }
+        }
+        .padding(.horizontal, 24)
+        .padding(.vertical, 20)
+        .contentFitMeasured { contentHeight = $0 }
+        .contentFitDetent(contentHeight, estimate: 280, navigationBar: false)
+        .presentationDragIndicator(.visible)
+        .flatBottomSheetSurface()
+    }
 }
