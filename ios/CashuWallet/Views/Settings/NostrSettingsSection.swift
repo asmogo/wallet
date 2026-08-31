@@ -253,6 +253,8 @@ struct NostrRelaysSettingsSection: View {
                         Image(systemName: "arrow.up.circle.fill")
                             .font(.title3)
                             .foregroundStyle(canAdd ? Color.primary : Color.secondary)
+                            .frame(width: 44, height: 44)
+                            .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
                     .disabled(!canAdd)
@@ -305,11 +307,13 @@ struct NostrRelaysSettingsSection: View {
                 .lineLimit(1)
                 .truncationMode(.middle)
             Spacer(minLength: 8)
-            HStack(spacing: 18) {
+            HStack(spacing: 0) {
                 Button(action: { copyRelay(relay) }) {
                     Image(systemName: "doc.on.doc")
                         .font(.caption.weight(.semibold))
                         .foregroundStyle(Color.secondary)
+                        .frame(width: 44, height: 44)
+                        .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel("Copy relay URL")
@@ -318,6 +322,8 @@ struct NostrRelaysSettingsSection: View {
                     Image(systemName: "trash")
                         .font(.caption.weight(.semibold))
                         .foregroundStyle(.red)
+                        .frame(width: 44, height: 44)
+                        .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel("Remove relay")
@@ -380,7 +386,7 @@ struct NostrMintBackupSettingsSection: View {
                             .foregroundStyle(.secondary)
                     }
                     Spacer(minLength: 8)
-                    Toggle("", isOn: $settings.nostrMintBackupEnabled)
+                    Toggle("Automatic mint backup", isOn: $settings.nostrMintBackupEnabled)
                         .labelsHidden()
                 }
                 .padding(.horizontal, 4)

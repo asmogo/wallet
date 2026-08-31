@@ -72,6 +72,8 @@ struct AddMintFormView: View {
                         Image(systemName: "xmark.circle.fill")
                             .font(.body)
                             .foregroundStyle(.secondary)
+                            .frame(width: 44, height: 44)
+                            .contentShape(Rectangle())
                     }
                     .buttonStyle(.borderless)
                     .disabled(isAdding)
@@ -105,16 +107,12 @@ struct AddMintFormView: View {
                     .accessibilityIdentifier("mints-add-paste-button")
 
                 Button(action: addMint) {
-                    Group {
-                        if isAdding {
-                            ProgressView().tint(.primary)
-                        } else {
-                            Text("Add mint")
-                        }
-                    }
+                    LoadingButtonLabel(title: "Add mint", isLoading: isAdding)
                 }
                 .glassButton()
                 .disabled(!canSubmit)
+                .accessibilityLabel(isAdding ? "Adding mint" : "Add mint")
+                .accessibilityValue(isAdding ? "In progress" : "")
                 .accessibilityIdentifier("mints-add-submit-button")
             }
             .padding(.top, 24)

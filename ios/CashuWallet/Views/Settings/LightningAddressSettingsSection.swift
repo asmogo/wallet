@@ -4,6 +4,7 @@ struct LightningAddressSettingsSection: View {
     @EnvironmentObject var walletManager: WalletManager
     @ObservedObject var npcService = NPCService.shared
     @ObservedObject private var settings = SettingsManager.shared
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     @Binding var isCheckingPayments: Bool
     @Binding var showMintPicker: Bool
@@ -62,9 +63,9 @@ struct LightningAddressSettingsSection: View {
                 }
             }
         }
-        .animation(.easeInOut(duration: 0.2), value: npcService.isEnabled)
-        .animation(.easeInOut(duration: 0.2), value: npcService.errorMessage)
-        .animation(.easeInOut(duration: 0.2), value: settings.checkIncomingInvoices)
+        .animation(reduceMotion ? nil : .easeInOut(duration: 0.2), value: npcService.isEnabled)
+        .animation(reduceMotion ? nil : .easeInOut(duration: 0.2), value: npcService.errorMessage)
+        .animation(reduceMotion ? nil : .easeInOut(duration: 0.2), value: settings.checkIncomingInvoices)
         .backdropSheet(isPresented: $showMintPicker) {
             // Titled after the row that opened it, so the sheet reads as a
             // continuation of the tap rather than a new context.
@@ -120,11 +121,16 @@ struct LightningAddressSettingsSection: View {
                     .frame(width: 7, height: 7)
                     .accessibilityHidden(true)
 
-                Text(npcService.lightningAddress)
-                    .font(.system(.body, design: .monospaced))
-                    .foregroundStyle(.primary)
-                    .lineLimit(1)
-                    .truncationMode(.middle)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(npcService.lightningAddress)
+                        .font(.system(.body, design: .monospaced))
+                        .foregroundStyle(.primary)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                    Text(statusLabel)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
 
                 Spacer(minLength: 8)
 

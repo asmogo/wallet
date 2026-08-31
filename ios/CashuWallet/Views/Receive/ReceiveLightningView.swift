@@ -415,16 +415,17 @@ struct ReceiveLightningView: View {
             }
 
             Button(action: createRequest) {
-                if isCreatingRequest {
-                    ProgressView()
-                } else {
-                    Text(selectedMethod.createActionTitle)
-                }
+                LoadingButtonLabel(
+                    title: selectedMethod.createActionTitle,
+                    isLoading: isCreatingRequest
+                )
             }
             // Quiet tonal fill, matching Android's gray keypad CTA — the white
             // ink stays reserved for the pay-confirm commit.
             .flatSheetSecondaryButton()
             .accessibilityIdentifier("receive-lightning-create-request")
+            .accessibilityLabel(selectedMethod.createActionTitle)
+            .accessibilityValue(isCreatingRequest ? "In progress" : "")
             .disabled(!canCreateRequest)
             .padding(.horizontal)
             .padding(.top, 16)

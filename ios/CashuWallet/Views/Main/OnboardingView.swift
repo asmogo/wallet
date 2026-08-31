@@ -4,6 +4,7 @@ struct OnboardingView: View {
     @EnvironmentObject var walletManager: WalletManager
     @EnvironmentObject var handoff: OnboardingHandoffCoordinator
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @ObservedObject private var nostrBackupService = NostrMintBackupService.shared
 
     @State private var currentStep: OnboardingStep = .welcome
@@ -1067,7 +1068,8 @@ struct OnboardingView: View {
     // MARK: - Show Mnemonic Stage
 
     private var showMnemonicStage: some View {
-        VStack(spacing: 0) {
+        ScrollView {
+            VStack(spacing: 0) {
             OnboardingBackButton { retreat(to: .welcome) }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.horizontal, OnboardingMetrics.gutter)
@@ -1118,10 +1120,9 @@ struct OnboardingView: View {
                     .redacted(reason: seedRevealed ? [] : .placeholder)
                     .blur(radius: seedRevealed ? 0 : 9)
                     .allowsHitTesting(seedRevealed)
-                    // Keep the secret words out of the accessibility tree
-                    // until revealed — otherwise VoiceOver reads all 12
-                    // aloud while they're still blurred on screen.
-                    .accessibilityHidden(!seedRevealed)
+                    // The hidden branch contains masks rather than secrets, so
+                    // VoiceOver can verify that the phrase is concealed. The
+                    // actual words enter the tree only after reveal.
 
                 if !seedRevealed {
                     VStack(spacing: 6) {
@@ -1172,7 +1173,8 @@ struct OnboardingView: View {
             // is less than the 20 the bare grid needed.
             .padding(.top, 16)
 
-            Spacer(minLength: 0)
+            Spacer(minLength: 24)
+            }
         }
         .onAppear {
             mnemonicWords = walletManager.getMnemonicWords()
@@ -1199,7 +1201,7 @@ struct OnboardingView: View {
     /// window where the words sit unblurred.
     private func toggleSeedReveal() {
         HapticFeedback.selection()
-        withAnimation(.snappy(duration: 0.25)) {
+        withAnimation(reduceMotion ? nil : .snappy(duration: 0.25)) {
             seedRevealed.toggle()
         }
     }
@@ -1215,7 +1217,15 @@ struct OnboardingView: View {
         // whole grid carries the containment (see The Seed Card Exception),
         // so the words themselves stay quiet — no per-word material, no
         // per-word background.
-        LazyVGrid(columns: [GridItem(.flexible(), spacing: 12), GridItem(.flexible(), spacing: 12), GridItem(.flexible(), spacing: 12)], spacing: 14) {
+        LazyVGrid(
+            columns: Array(
+                repeating: GridItem(.flexible(), spacing: 12),
+                count: dynamicTypeSize >= .accessibility3
+                    ? 1
+                    : (dynamicTypeSize.isAccessibilitySize ? 2 : 3)
+            ),
+            spacing: 14
+        ) {
             ForEach(Array(words.enumerated()), id: \.offset) { index, word in
                 HStack(spacing: 6) {
                     Text(String(format: "%02d", index + 1))
@@ -1226,8 +1236,7 @@ struct OnboardingView: View {
                     Text(word)
                         .font(.system(.body, design: .monospaced).weight(.medium))
                         .frame(maxWidth: .infinity, alignment: .leading)
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.7)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
             }
         }

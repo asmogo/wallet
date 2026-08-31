@@ -279,17 +279,15 @@ struct SendView: View {
                 HapticFeedback.impact(.light)
                 generateToken()
             }) {
-                if isGenerating {
-                    ProgressView()
-                } else {
-                    Text("Send")
-                }
+                LoadingButtonLabel(title: "Send", isLoading: isGenerating)
             }
             // Quiet tonal fill, not the white primary — Android's keypad CTA
             // is the gray neutral, and the white ink stays reserved for the
             // pay-confirm commit.
             .flatSheetSecondaryButton()
             .disabled(!canSend || isGenerating)
+            .accessibilityLabel("Send")
+            .accessibilityValue(isGenerating ? "In progress" : "")
             .padding(.horizontal)
             .padding(.top, 16)
             .padding(.bottom, 16)
@@ -587,7 +585,7 @@ struct SendView: View {
                 Image(systemName: "xmark")
                     .font(.caption.weight(.bold))
                     .foregroundStyle(.secondary)
-                    .frame(width: 28, height: 28)
+                    .frame(width: 44, height: 44)
                     .contentShape(Circle())
             }
             .buttonStyle(.plain)
@@ -3336,6 +3334,8 @@ struct MeltView: View {
                         Image(systemName: "viewfinder")
                             .font(.title3)
                             .foregroundStyle(.primary)
+                            .frame(width: 44, height: 44)
+                            .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
                     .accessibilityLabel("Scan QR Code")
@@ -3344,6 +3344,8 @@ struct MeltView: View {
                         Image(systemName: "doc.on.clipboard")
                             .font(.title3)
                             .foregroundStyle(.primary)
+                            .frame(width: 44, height: 44)
+                            .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
                     .accessibilityLabel("Paste from clipboard")
@@ -3394,14 +3396,12 @@ struct MeltView: View {
             }
 
             Button(action: getQuote) {
-                if isGettingQuote {
-                    ProgressView()
-                } else {
-                    Text("Get Quote")
-                }
+                LoadingButtonLabel(title: "Get Quote", isLoading: isGettingQuote)
             }
             .glassButton()
             .disabled(!canGetQuote || isGettingQuote)
+            .accessibilityLabel("Get Quote")
+            .accessibilityValue(isGettingQuote ? "In progress" : "")
             .padding(.horizontal)
             .padding(.top, 12)
             .padding(.bottom, 16)

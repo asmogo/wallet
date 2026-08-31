@@ -883,6 +883,7 @@ struct FullWidthCapsuleButtonStyle: ButtonStyle {
     @Environment(\.isEnabled) private var isEnabled
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.bottomSheetSurfaceStyle) private var bottomSheetSurfaceStyle
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     func makeBody(configuration: Configuration) -> some View {
         let ink = destructive ? Color(.systemRed) : (colorScheme == .dark ? Color.white : Color.black)
@@ -909,18 +910,25 @@ struct FullWidthCapsuleButtonStyle: ButtonStyle {
             } else if solid {
                 label
                     .background(ink, in: Capsule())
-                    .scaleEffect(configuration.isPressed ? 0.97 : 1)
+                    .scaleEffect(!reduceMotion && configuration.isPressed ? 0.97 : 1)
             } else if #available(iOS 26, *) {
-                label.glassEffect(
-                    .regular.tint(Color.primary.opacity(0.15)).interactive(),
-                    in: Capsule()
-                )
+                if reduceMotion {
+                    label.glassEffect(
+                        .regular.tint(Color.primary.opacity(0.15)),
+                        in: Capsule()
+                    )
+                } else {
+                    label.glassEffect(
+                        .regular.tint(Color.primary.opacity(0.15)).interactive(),
+                        in: Capsule()
+                    )
+                }
             } else {
                 // iOS 26's `.interactive()` glass supplies its own press squish;
                 // the fallback surface gets a scale-on-press so the tactile
                 // feedback is at parity below iOS 26.
                 label.background(.quaternary, in: Capsule())
-                    .scaleEffect(configuration.isPressed ? 0.97 : 1)
+                    .scaleEffect(!reduceMotion && configuration.isPressed ? 0.97 : 1)
             }
         }
         .opacity(isEnabled && configuration.isPressed ? 0.85 : 1)
@@ -928,7 +936,9 @@ struct FullWidthCapsuleButtonStyle: ButtonStyle {
         // touch-down and has to feel immediate, while the release is the system
         // responding and can settle.
         .animation(
-            .snappy(duration: configuration.isPressed ? 0.09 : 0.18),
+            reduceMotion
+                ? nil
+                : .snappy(duration: configuration.isPressed ? 0.09 : 0.18),
             value: configuration.isPressed
         )
     }
@@ -939,6 +949,7 @@ struct FullWidthCapsuleButtonStyle: ButtonStyle {
 /// action, never to compete with the committing action alongside it.
 struct FlatSheetSecondaryButtonStyle: ButtonStyle {
     @Environment(\.isEnabled) private var isEnabled
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
@@ -953,12 +964,41 @@ struct FlatSheetSecondaryButtonStyle: ButtonStyle {
                 in: Capsule()
             )
             .contentShape(Capsule())
-            .scaleEffect(isEnabled && configuration.isPressed ? 0.97 : 1)
+            .scaleEffect(isEnabled && !reduceMotion && configuration.isPressed ? 0.97 : 1)
             .opacity(isEnabled && configuration.isPressed ? 0.85 : 1)
             .animation(
-                .snappy(duration: configuration.isPressed ? 0.09 : 0.18),
+                reduceMotion
+                    ? nil
+                    : .snappy(duration: configuration.isPressed ? 0.09 : 0.18),
                 value: configuration.isPressed
             )
+    }
+}
+
+/// Stable-geometry CTA content morph. The action label keeps the button's
+/// width while a system progress indicator resolves in over it. Semantics stay
+/// on the owning Button, whose accessibility label remains stable.
+struct LoadingButtonLabel: View {
+    let title: String
+    let isLoading: Bool
+
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    var body: some View {
+        ZStack {
+            Text(title)
+                .opacity(isLoading ? 0 : 1)
+                .blur(radius: !reduceMotion && isLoading ? 2 : 0)
+
+            ProgressView()
+                .opacity(isLoading ? 1 : 0)
+                .blur(radius: !reduceMotion && isLoading ? 0 : 2)
+        }
+        .animation(
+            reduceMotion ? .easeOut(duration: 0.15) : .smooth(duration: 0.26),
+            value: isLoading
+        )
+        .accessibilityHidden(true)
     }
 }
 

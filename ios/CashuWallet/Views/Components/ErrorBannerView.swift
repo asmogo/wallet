@@ -468,7 +468,6 @@ private struct ConfirmationToastView: View {
                 Capsule()
                     .stroke(Color(uiColor: .separator), lineWidth: 0.5)
             }
-            .shadow(color: .black.opacity(0.14), radius: 16, y: 6)
             .accessibilityElement(children: .ignore)
             .accessibilityLabel(message)
     }
@@ -582,23 +581,29 @@ struct ErrorBannerView: View {
 
     var body: some View {
         HStack(alignment: .firstTextBaseline, spacing: 10) {
-            Image(systemName: severity.icon)
-                .font(.subheadline.weight(.semibold))
-                .foregroundStyle(severity.foreground)
-                .accessibilityHidden(true)
+            HStack(alignment: .firstTextBaseline, spacing: 10) {
+                Image(systemName: severity.icon)
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(severity.foreground)
+                    .accessibilityHidden(true)
 
-            Text(message)
-                .font(.subheadline)
-                .foregroundStyle(.primary)
-                .multilineTextAlignment(.leading)
-                .fixedSize(horizontal: false, vertical: true)
-                .frame(maxWidth: .infinity, alignment: .leading)
+                Text(message)
+                    .font(.subheadline)
+                    .foregroundStyle(.primary)
+                    .multilineTextAlignment(.leading)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .accessibilityElement(children: .combine)
+            .accessibilityLabel(severity.announcementPrefix + message)
 
             if let retry {
                 Button("Retry", action: retry)
                     .font(.subheadline.weight(.semibold))
                     .buttonStyle(.plain)
                     .foregroundStyle(severity.foreground)
+                    .frame(minWidth: 44, minHeight: 44)
+                    .contentShape(Rectangle())
             }
 
             if let onDismiss {
@@ -606,7 +611,7 @@ struct ErrorBannerView: View {
                     Image(systemName: "xmark")
                         .font(.caption2.weight(.semibold))
                         .foregroundStyle(.secondary)
-                        .frame(width: 32, height: 32)
+                        .frame(width: 44, height: 44)
                         .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
@@ -615,8 +620,6 @@ struct ErrorBannerView: View {
         }
         .padding(12)
         .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel(severity.announcementPrefix + message)
         .onAppear {
             guard severity != .info else { return }
             AccessibilityNotification.Announcement(message).post()

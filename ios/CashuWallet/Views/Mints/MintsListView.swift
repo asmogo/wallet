@@ -8,6 +8,7 @@ struct MintsListView: View {
     @State private var showAddMintSheet = false
     @State private var showDiscoverySheet = false
     @State private var removalError: String?
+    @State private var actionError: String?
 
     var body: some View {
         NavigationStack {
@@ -54,7 +55,11 @@ struct MintsListView: View {
             .task {
                 await walletManager.refreshMintInfo()
             }
-            .alert("Remove Mint", isPresented: $showRemoveConfirmation) {
+            .confirmationDialog(
+                "Remove Mint",
+                isPresented: $showRemoveConfirmation,
+                titleVisibility: .visible
+            ) {
                 Button("Remove", role: .destructive) {
                     if let mint = mintToRemove {
                         removeMint(mint)
@@ -74,6 +79,7 @@ struct MintsListView: View {
             .bottomSheetBackdropHost()
         }
         .accessibilityIdentifier("mints-screen")
+        .errorBanner($actionError)
     }
 
     private func actionRow(title: String, systemImage: String) -> some View {
@@ -186,7 +192,15 @@ struct MintsListView: View {
     // MARK: - Actions
 
     private func setActive(_ mint: MintInfo) {
-        Task { try? await walletManager.setActiveMint(mint) }
+        actionError = nil
+        Task {
+            do {
+                try await walletManager.setActiveMint(mint)
+                ConfirmationToast.show("Default mint updated")
+            } catch {
+                actionError = error.userFacingWalletMessage
+            }
+        }
     }
 
     private func removeMint(_ mint: MintInfo) {
