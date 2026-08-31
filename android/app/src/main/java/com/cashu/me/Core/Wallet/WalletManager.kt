@@ -1234,7 +1234,7 @@ class WalletManager(
         val settingsSnapshot = replacementSnapshot.settings
         val nwcSnapshot = replacementSnapshot.nwc
 
-        runCatching {
+        try {
             // NwcService retains the native CDK wallet, so it must stop before
             // the repository/database it is backed by is closed.
             nwcManager.resetForWalletBoundary()
@@ -1249,43 +1249,73 @@ class WalletManager(
             secureStorage.saveString(StorageKeys.secureWalletMnemonic, mnemonic)
             settingsManager.deleteWalletScopedSecrets(settingsSnapshot, deleteNostrPrivateKey = true)
             nostrMintBackupService.resetForWalletBoundary()
-            databasePathManager.removeWalletFileBackups(backups)
             loadCachedState(needsOnboarding = needsOnboarding)
             // A wallet installed during first-launch onboarding is incomplete
             // until completeOnboarding(); installs from Settings skip
             // onboarding entirely and are complete immediately.
             settingsManager.onboardingCompleted = !needsOnboarding
-        }.onFailure { error ->
+        } catch (installError: Throwable) {
             gateway.closeWalletRepository()
-            walletStore.restoreWalletScopedData(walletSnapshot)
-            cashuRequestStore.reload()
-            settingsManager.restoreWalletScopedData(settingsSnapshot)
-            nwcManager.restoreWalletScopedData(nwcSnapshot)
-            nostrMintBackupService.reloadStoredState()
-            databasePathManager.removeWalletDatabaseFiles()
-            databasePathManager.restoreWalletFileBackups(backups)
-            if (previousMnemonic != null) {
-                secureStorage.saveString(StorageKeys.secureWalletMnemonic, previousMnemonic)
-                runCatching {
-                    openWalletRepositoryWithRecovery(previousMnemonic)
-                    deriveNostrKey(previousMnemonic)
-                    loadCachedState(needsOnboarding = false)
-                    if (startNwc) nwcManager.startIfEnabled()
+            val rollbackSucceeded = try {
+                databasePathManager.restoreWalletFileBackups(
+                    backups = backups,
+                    beforeCommit = {
+                        if (previousMnemonic != null) {
+                            secureStorage.saveString(StorageKeys.secureWalletMnemonic, previousMnemonic)
+                        } else {
+                            secureStorage.delete(StorageKeys.secureWalletMnemonic)
+                        }
+                    },
+                    onRollback = {
+                        secureStorage.saveString(StorageKeys.secureWalletMnemonic, mnemonic)
+                    },
+                )
+                true
+            } catch (rollbackError: Throwable) {
+                installError.addSuppressed(rollbackError)
+                AppLogger.wallet.error("Failed to restore the previous wallet transaction", rollbackError)
+                false
+            }
+
+            if (rollbackSucceeded) {
+                walletStore.restoreWalletScopedData(walletSnapshot)
+                cashuRequestStore.reload()
+                settingsManager.restoreWalletScopedData(settingsSnapshot)
+                nwcManager.restoreWalletScopedData(nwcSnapshot)
+                nostrMintBackupService.reloadStoredState()
+                if (previousMnemonic != null) {
+                    runCatching {
+                        openWalletRepositoryWithRecovery(previousMnemonic)
+                        deriveNostrKey(previousMnemonic)
+                        loadCachedState(needsOnboarding = false)
+                        if (startNwc) nwcManager.startIfEnabled()
+                    }
+                    cashuRequestListener?.resetForWalletBoundary(restart = externalServicesEnabled)
+                } else {
+                    update {
+                        WalletState(
+                            isInitialized = true,
+                            isRuntimeReady = true,
+                            needsOnboarding = true,
+                            canExitOnboarding = false,
+                        )
+                    }
+                    cashuRequestListener?.resetForWalletBoundary(restart = false)
                 }
-                cashuRequestListener?.resetForWalletBoundary(restart = externalServicesEnabled)
             } else {
-                secureStorage.delete(StorageKeys.secureWalletMnemonic)
-                update {
-                    WalletState(
-                        isInitialized = true,
-                        isRuntimeReady = true,
-                        needsOnboarding = true,
-                        canExitOnboarding = false,
-                    )
-                }
+                // The replacement seed/files were rolled forward as far as
+                // possible. Do not publish snapshots from the previous wallet.
                 cashuRequestListener?.resetForWalletBoundary(restart = false)
             }
-            throw error
+            throw installError
+        }
+
+        // Backup cleanup is post-commit. A cleanup error must not turn a valid
+        // replacement into a rollback after old backups were partly deleted.
+        try {
+            databasePathManager.removeWalletFileBackups(backups)
+        } catch (cleanupError: Throwable) {
+            AppLogger.wallet.error("Failed to remove committed wallet replacement backups", cleanupError)
         }
         cashuRequestListener?.resetForWalletBoundary(restart = externalServicesEnabled && !needsOnboarding)
     }

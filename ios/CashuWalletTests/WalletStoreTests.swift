@@ -411,6 +411,7 @@ final class CashuRequestStoreTests: XCTestCase {
 final class WalletReplacementSafetyTests: XCTestCase {
     private enum TestError: Error {
         case forcedMoveFailure
+        case forcedSeedFailure
     }
 
     private final class SecureStorageSpy: SecureStorageProtocol {
@@ -505,6 +506,48 @@ final class WalletReplacementSafetyTests: XCTestCase {
         )
     }
 
+    func testPartialBackupFailureReportedAfterMoveRestoresCurrentOriginal() throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(
+            at: directory,
+            withIntermediateDirectories: true
+        )
+        defer { try? FileManager.default.removeItem(at: directory) }
+
+        let first = directory.appendingPathComponent("first.db")
+        let second = directory.appendingPathComponent("second.db")
+        try Data("first".utf8).write(to: first)
+        try Data("second".utf8).write(to: second)
+
+        let operations = WalletReplacementFileOperations(
+            fileExists: { FileManager.default.fileExists(atPath: $0.path) },
+            moveItem: { source, destination in
+                try FileManager.default.moveItem(at: source, to: destination)
+                if source == second {
+                    throw TestError.forcedMoveFailure
+                }
+            },
+            removeItem: { try FileManager.default.removeItem(at: $0) }
+        )
+
+        XCTAssertThrowsError(
+            try WalletReplacementFiles.backup(
+                urls: [first, second],
+                operations: operations,
+                backupURL: { $0.appendingPathExtension("backup") }
+            )
+        )
+        XCTAssertEqual(try Data(contentsOf: first), Data("first".utf8))
+        XCTAssertEqual(try Data(contentsOf: second), Data("second".utf8))
+        XCTAssertFalse(FileManager.default.fileExists(
+            atPath: first.appendingPathExtension("backup").path
+        ))
+        XCTAssertFalse(FileManager.default.fileExists(
+            atPath: second.appendingPathExtension("backup").path
+        ))
+    }
+
     func testMissingBackupNeverDeletesReplacementDatabase() throws {
         let directory = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString, isDirectory: true)
@@ -520,6 +563,7 @@ final class WalletReplacementSafetyTests: XCTestCase {
 
         XCTAssertThrowsError(
             try WalletReplacementFiles.restore(
+                at: [original],
                 [WalletFileBackup(originalURL: original, backupURL: missingBackup)],
                 displacedURL: { $0.appendingPathExtension("displaced") }
             )
@@ -546,6 +590,7 @@ final class WalletReplacementSafetyTests: XCTestCase {
 
         XCTAssertThrowsError(
             try WalletReplacementFiles.restore(
+                at: [firstOriginal, secondOriginal],
                 [
                     WalletFileBackup(
                         originalURL: firstOriginal,
@@ -563,7 +608,7 @@ final class WalletReplacementSafetyTests: XCTestCase {
         XCTAssertEqual(try Data(contentsOf: secondBackup), Data("old second".utf8))
     }
 
-    func testRollbackRemovesDatabaseCreatedWithoutAnOriginalBackup() throws {
+    func testCommittedRestoreRemovesDatabaseCreatedWithoutAnOriginalBackup() throws {
         let directory = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString, isDirectory: true)
         try FileManager.default.createDirectory(
@@ -575,9 +620,10 @@ final class WalletReplacementSafetyTests: XCTestCase {
         let newlyCreatedDatabase = directory.appendingPathComponent("wallet.db")
         try Data("replacement".utf8).write(to: newlyCreatedDatabase)
 
-        try WalletReplacementFiles.removeUnbackedReplacements(
+        try WalletReplacementFiles.restore(
             at: [newlyCreatedDatabase],
-            backups: []
+            [],
+            displacedURL: { $0.appendingPathExtension("displaced") }
         )
 
         XCTAssertFalse(
@@ -614,6 +660,7 @@ final class WalletReplacementSafetyTests: XCTestCase {
 
         XCTAssertThrowsError(
             try WalletReplacementFiles.restore(
+                at: [original],
                 [WalletFileBackup(originalURL: original, backupURL: backup)],
                 operations: operations,
                 displacedURL: { $0.appendingPathExtension("displaced") }
@@ -621,6 +668,122 @@ final class WalletReplacementSafetyTests: XCTestCase {
         )
         XCTAssertEqual(try Data(contentsOf: original), Data("replacement".utf8))
         XCTAssertEqual(try Data(contentsOf: backup), Data("original".utf8))
+    }
+
+    func testDisplacementFailureReportedAfterMoveRestoresReplacement() throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(
+            at: directory,
+            withIntermediateDirectories: true
+        )
+        defer { try? FileManager.default.removeItem(at: directory) }
+
+        let original = directory.appendingPathComponent("wallet.db")
+        let backup = directory.appendingPathComponent("wallet.db.backup")
+        let displaced = original.appendingPathExtension("displaced")
+        try Data("replacement".utf8).write(to: original)
+        try Data("original".utf8).write(to: backup)
+
+        let operations = WalletReplacementFileOperations(
+            fileExists: { FileManager.default.fileExists(atPath: $0.path) },
+            moveItem: { source, destination in
+                try FileManager.default.moveItem(at: source, to: destination)
+                if source == original && destination == displaced {
+                    throw TestError.forcedMoveFailure
+                }
+            },
+            removeItem: { try FileManager.default.removeItem(at: $0) }
+        )
+
+        XCTAssertThrowsError(
+            try WalletReplacementFiles.restore(
+                at: [original],
+                [WalletFileBackup(originalURL: original, backupURL: backup)],
+                operations: operations,
+                displacedURL: { _ in displaced }
+            )
+        )
+        XCTAssertEqual(try Data(contentsOf: original), Data("replacement".utf8))
+        XCTAssertEqual(try Data(contentsOf: backup), Data("original".utf8))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: displaced.path))
+    }
+
+    func testRestoreFailureReportedAfterMoveRestoresReplacementAndBackup() throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(
+            at: directory,
+            withIntermediateDirectories: true
+        )
+        defer { try? FileManager.default.removeItem(at: directory) }
+
+        let original = directory.appendingPathComponent("wallet.db")
+        let backup = directory.appendingPathComponent("wallet.db.backup")
+        let displaced = original.appendingPathExtension("displaced")
+        try Data("replacement".utf8).write(to: original)
+        try Data("original".utf8).write(to: backup)
+
+        var didFail = false
+        let operations = WalletReplacementFileOperations(
+            fileExists: { FileManager.default.fileExists(atPath: $0.path) },
+            moveItem: { source, destination in
+                try FileManager.default.moveItem(at: source, to: destination)
+                if source == backup && !didFail {
+                    didFail = true
+                    throw TestError.forcedMoveFailure
+                }
+            },
+            removeItem: { try FileManager.default.removeItem(at: $0) }
+        )
+
+        XCTAssertThrowsError(
+            try WalletReplacementFiles.restore(
+                at: [original],
+                [WalletFileBackup(originalURL: original, backupURL: backup)],
+                operations: operations,
+                displacedURL: { _ in displaced }
+            )
+        )
+        XCTAssertEqual(try Data(contentsOf: original), Data("replacement".utf8))
+        XCTAssertEqual(try Data(contentsOf: backup), Data("original".utf8))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: displaced.path))
+    }
+
+    func testSeedCommitFailureRollsFilesAndSeedForwardToReplacement() throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(
+            at: directory,
+            withIntermediateDirectories: true
+        )
+        defer { try? FileManager.default.removeItem(at: directory) }
+
+        let original = directory.appendingPathComponent("wallet.db")
+        let backup = directory.appendingPathComponent("wallet.db.backup")
+        let displaced = original.appendingPathExtension("displaced")
+        try Data("replacement".utf8).write(to: original)
+        try Data("original".utf8).write(to: backup)
+        var activeSeed = "replacement seed"
+
+        XCTAssertThrowsError(
+            try WalletReplacementFiles.restore(
+                at: [original],
+                [WalletFileBackup(originalURL: original, backupURL: backup)],
+                displacedURL: { _ in displaced },
+                beforeCommit: {
+                    activeSeed = "original seed"
+                    throw TestError.forcedSeedFailure
+                },
+                onRollback: {
+                    activeSeed = "replacement seed"
+                }
+            )
+        )
+        XCTAssertEqual(activeSeed, "replacement seed")
+        XCTAssertEqual(try Data(contentsOf: original), Data("replacement".utf8))
+        XCTAssertEqual(try Data(contentsOf: backup), Data("original".utf8))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: displaced.path))
     }
 
     func testLaterRestoreFailureRestoresEveryReplacementAndBackup() throws {
@@ -660,6 +823,7 @@ final class WalletReplacementSafetyTests: XCTestCase {
 
         XCTAssertThrowsError(
             try WalletReplacementFiles.restore(
+                at: [firstOriginal, secondOriginal],
                 [
                     WalletFileBackup(
                         originalURL: firstOriginal,

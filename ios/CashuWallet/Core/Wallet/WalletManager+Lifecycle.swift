@@ -48,11 +48,22 @@ enum WalletReplacementFiles {
                     try operations.removeItem(candidate)
                 }
 
-                try operations.moveItem(originalURL, candidate)
-                backups.append(WalletFileBackup(
+                let backup = WalletFileBackup(
                     originalURL: originalURL,
                     backupURL: candidate
-                ))
+                )
+                do {
+                    try operations.moveItem(originalURL, candidate)
+                    backups.append(backup)
+                } catch {
+                    // A move implementation may report failure after the item
+                    // reached its destination. Track the observed state so the
+                    // current item participates in partial-backup rollback.
+                    if operations.fileExists(candidate) {
+                        backups.append(backup)
+                    }
+                    throw error
+                }
             }
         } catch {
             for backup in backups.reversed() where operations.fileExists(backup.backupURL) {
@@ -73,31 +84,47 @@ enum WalletReplacementFiles {
     }
 
     static func restore(
+        at urls: [URL],
         _ backups: [WalletFileBackup],
         operations: WalletReplacementFileOperations = .live,
-        displacedURL: (URL) -> URL
+        displacedURL: (URL) -> URL,
+        beforeCommit: () throws -> Void = {},
+        onRollback: () throws -> Void = {}
     ) throws {
         guard backups.allSatisfy({ operations.fileExists($0.backupURL) }) else {
+            performExternalRollback(onRollback)
             throw CocoaError(.fileNoSuchFile)
         }
 
         let restorationOrder = Array(backups.reversed())
         var stagedReplacements: [StagedReplacement] = []
+        let restorationURLs = uniqueURLs(urls + backups.map(\.originalURL))
 
         do {
-            for backup in restorationOrder where operations.fileExists(backup.originalURL) {
-                let displaced = displacedURL(backup.originalURL)
+            for originalURL in restorationURLs where operations.fileExists(originalURL) {
+                let displaced = displacedURL(originalURL)
                 if operations.fileExists(displaced) {
                     try operations.removeItem(displaced)
                 }
-                try operations.moveItem(backup.originalURL, displaced)
-                stagedReplacements.append(StagedReplacement(
-                    originalURL: backup.originalURL,
+                let replacement = StagedReplacement(
+                    originalURL: originalURL,
                     displacedURL: displaced
-                ))
+                )
+                do {
+                    try operations.moveItem(originalURL, displaced)
+                    stagedReplacements.append(replacement)
+                } catch {
+                    // Account for moves that completed before reporting an
+                    // error, just as the backup-restoration phase does below.
+                    if operations.fileExists(displaced) {
+                        stagedReplacements.append(replacement)
+                    }
+                    throw error
+                }
             }
         } catch {
             restoreStagedReplacements(stagedReplacements, operations: operations)
+            performExternalRollback(onRollback)
             throw error
         }
 
@@ -118,9 +145,15 @@ enum WalletReplacementFiles {
                     throw error
                 }
             }
+
+            // Keep every replacement file displaced until the previous seed
+            // has committed. If this throws, the catch below rolls the files
+            // forward to the replacement wallet before compensating its seed.
+            try beforeCommit()
         } catch {
             rollBackRestoredBackups(restoredBackups, operations: operations)
             restoreStagedReplacements(stagedReplacements, operations: operations)
+            performExternalRollback(onRollback)
             throw error
         }
 
@@ -132,6 +165,11 @@ enum WalletReplacementFiles {
                 SentryService.capture(error)
             }
         }
+    }
+
+    private static func uniqueURLs(_ urls: [URL]) -> [URL] {
+        var paths: Set<String> = []
+        return urls.filter { paths.insert($0.standardizedFileURL.path).inserted }
     }
 
     private static func rollBackRestoredBackups(
@@ -162,10 +200,13 @@ enum WalletReplacementFiles {
         for replacement in replacements.reversed()
         where operations.fileExists(replacement.displacedURL) {
             do {
-                guard !operations.fileExists(replacement.originalURL) else {
-                    throw CocoaError(.fileWriteFileExists)
+                if operations.fileExists(replacement.originalURL) {
+                    // A copy-style move may leave both paths present before
+                    // throwing. The live replacement already survives.
+                    try operations.removeItem(replacement.displacedURL)
+                } else {
+                    try operations.moveItem(replacement.displacedURL, replacement.originalURL)
                 }
-                try operations.moveItem(replacement.displacedURL, replacement.originalURL)
             } catch {
                 AppLogger.wallet.error("Failed to restore a displaced replacement database: \(error)")
                 SentryService.capture(error)
@@ -173,16 +214,12 @@ enum WalletReplacementFiles {
         }
     }
 
-    static func removeUnbackedReplacements(
-        at urls: [URL],
-        backups: [WalletFileBackup],
-        operations: WalletReplacementFileOperations = .live
-    ) throws {
-        let backedPaths = Set(backups.map { $0.originalURL.standardizedFileURL.path })
-
-        for url in urls where !backedPaths.contains(url.standardizedFileURL.path) {
-            guard operations.fileExists(url) else { continue }
-            try operations.removeItem(url)
+    private static func performExternalRollback(_ rollback: () throws -> Void) {
+        do {
+            try rollback()
+        } catch {
+            AppLogger.wallet.error("Failed to restore the replacement wallet seed: \(error)")
+            SentryService.capture(error)
         }
     }
 
@@ -559,27 +596,28 @@ extension WalletManager {
         } catch {
             SentryService.capture(error)
             resetRuntimeState()
-            var rollbackSucceeded = true
+            let rollbackSucceeded: Bool
             do {
-                try WalletMnemonicRollback.restore(
-                    previousMnemonic: previousMnemonic,
-                    secureStorage: keychainService
+                try restoreWalletFileBackups(
+                    fileBackups,
+                    beforeCommit: {
+                        try WalletMnemonicRollback.restore(
+                            previousMnemonic: previousMnemonic,
+                            secureStorage: keychainService
+                        )
+                    },
+                    onRollback: {
+                        try WalletMnemonicRollback.restore(
+                            previousMnemonic: newMnemonic,
+                            secureStorage: keychainService
+                        )
+                    }
                 )
+                rollbackSucceeded = true
             } catch {
                 rollbackSucceeded = false
-                AppLogger.wallet.error("Failed to restore the previous wallet seed: \(error)")
+                AppLogger.wallet.error("Failed to restore the previous wallet transaction: \(error)")
                 SentryService.capture(error)
-            }
-
-            if rollbackSucceeded {
-                do {
-                    try removeUnbackedWalletDatabaseFiles(fileBackups)
-                    try restoreWalletFileBackups(fileBackups)
-                } catch {
-                    rollbackSucceeded = false
-                    AppLogger.wallet.error("Failed to restore wallet database backups: \(error)")
-                    SentryService.capture(error)
-                }
             }
 
             if rollbackSucceeded {
@@ -845,19 +883,20 @@ extension WalletManager {
         }
     }
 
-    private func restoreWalletFileBackups(_ backups: [WalletFileBackup]) throws {
-        try WalletReplacementFiles.restore(backups) { originalURL in
-            originalURL.deletingLastPathComponent()
-                .appendingPathComponent("\(originalURL.lastPathComponent).rollback.\(UUID().uuidString)")
-        }
-    }
-
-    private func removeUnbackedWalletDatabaseFiles(
-        _ backups: [WalletFileBackup]
+    private func restoreWalletFileBackups(
+        _ backups: [WalletFileBackup],
+        beforeCommit: () throws -> Void,
+        onRollback: () throws -> Void
     ) throws {
-        try WalletReplacementFiles.removeUnbackedReplacements(
+        try WalletReplacementFiles.restore(
             at: walletDatabaseBoundaryURLs(),
-            backups: backups
+            backups,
+            displacedURL: { originalURL in
+                originalURL.deletingLastPathComponent()
+                    .appendingPathComponent("\(originalURL.lastPathComponent).rollback.\(UUID().uuidString)")
+            },
+            beforeCommit: beforeCommit,
+            onRollback: onRollback
         )
     }
 
