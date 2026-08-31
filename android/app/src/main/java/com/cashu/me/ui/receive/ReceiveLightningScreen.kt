@@ -34,7 +34,6 @@ import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.Bolt
 import androidx.compose.material.icons.outlined.CurrencyBitcoin
 import androidx.compose.material.icons.outlined.IosShare
-import androidx.compose.material.icons.outlined.Notes
 import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material.icons.outlined.Repeat
 import androidx.compose.material.icons.outlined.Schedule
@@ -1384,7 +1383,6 @@ private fun DisplayFace(
                         InspectorRow(
                             label = "Description",
                             value = descriptionLabel ?: "None",
-                            leadingIcon = Icons.Outlined.Notes,
                             editable = true,
                             onClick = onEditReusableDescription,
                         )

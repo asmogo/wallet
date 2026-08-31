@@ -664,7 +664,6 @@ struct ReceiveLightningView: View {
                         // advertised NUT-04 bolt12 MintMethodSettings.description.
                         if mintSupportsBolt12Description {
                             editableRow(
-                                icon: "text.alignleft",
                                 label: "Description",
                                 value: CashuRequestStore.shared.intent(forQuoteId: quote.id)?.memo
                                     ?? quote.description ?? "None",
