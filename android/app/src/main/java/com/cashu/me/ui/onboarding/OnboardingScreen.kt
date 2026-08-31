@@ -1120,13 +1120,13 @@ internal fun SeedWarningNotice(modifier: Modifier = Modifier) {
         Icon(
             imageVector = Icons.Filled.Warning,
             contentDescription = null,
-            tint = CashuTheme.colors.pending,
+            tint = CashuTheme.colors.onPendingContainer,
             modifier = Modifier.size(AckIconSize),
         )
         Text(
             text = "Never share these words with anyone.",
             style = MaterialTheme.typography.bodyMedium,
-            color = CashuTheme.colors.pending,
+            color = CashuTheme.colors.onPendingContainer,
         )
     }
 }

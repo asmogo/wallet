@@ -651,7 +651,7 @@ private fun NsecImportSheet(
                             Icon(
                                 imageVector = Icons.Filled.CheckCircle,
                                 contentDescription = "Success",
-                                tint = CashuTheme.colors.received,
+                                tint = CashuTheme.colors.onReceivedContainer,
                                 modifier = Modifier.size(ImportSuccessGlyphSize),
                             )
                             Text(

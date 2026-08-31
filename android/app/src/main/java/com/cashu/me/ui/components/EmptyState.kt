@@ -58,11 +58,12 @@ private val EntranceRise = 8.dp
 private const val EntranceDamping = 0.82f
 
 /**
- * Quiet tray empty state (iOS NativeEmptyState). Settles in on mount — fade,
- * scale from 0.96, and an 8dp rise on a gently-damped spring — and the glyph
- * bounces once. Reduce-motion keeps the fade only. The centering layout lives
- * outside the animated layer, so the entrance can't drag content in from the
- * top-left (see the 2026-07 fly-in bug history).
+ * Quiet tray empty state (iOS NativeEmptyState). Full-tab empty states render
+ * at rest because their navigation subtree can remount on an ordinary tab
+ * visit. Rarer section states settle in once: fade, scale from 0.96, an 8dp
+ * rise, and one glyph bounce. Reduce-motion keeps the section fade only. The
+ * centering layout lives outside the animated layer, so the entrance can't
+ * drag content in from the top-left (see the 2026-07 fly-in bug history).
  *
  * @param fillHeight when true (default), expands to fill the parent and
  *   centers its content — home/history empty trays. Set false for wrap-content
@@ -82,8 +83,9 @@ fun EmptyState(
     size: EmptyStateSize = EmptyStateSize.FullScreen,
 ) {
     val reduceMotion = rememberReducedMotion()
-    var appeared by remember { mutableStateOf(false) }
-    LaunchedEffect(Unit) { appeared = true }
+    val allowsEntranceMotion = size != EmptyStateSize.FullScreen
+    var appeared by remember(allowsEntranceMotion) { mutableStateOf(!allowsEntranceMotion) }
+    LaunchedEffect(allowsEntranceMotion) { appeared = true }
     val alpha by animateFloatAsState(
         targetValue = if (appeared) 1f else 0f,
         animationSpec = spring(stiffness = Spring.StiffnessMedium),
@@ -98,14 +100,17 @@ fun EmptyState(
         label = "empty-entrance-settle",
     )
     val risePx = with(LocalDensity.current) { EntranceRise.toPx() }
-    val iconBounce = rememberBounceScale(trigger = Unit, bounceOnEntry = true)
+    val iconBounce = rememberBounceScale(
+        trigger = Unit,
+        bounceOnEntry = allowsEntranceMotion,
+    )
     Column(
         modifier = modifier
             .then(if (fillHeight) Modifier.fillMaxSize() else Modifier.fillMaxWidth())
             .padding(horizontal = CashuTheme.spacing.comfortable)
             .graphicsLayer {
                 this.alpha = alpha
-                if (!reduceMotion) {
+                if (allowsEntranceMotion && !reduceMotion) {
                     val scale = EntranceInitialScale + (1f - EntranceInitialScale) * settle
                     scaleX = scale
                     scaleY = scale
@@ -122,8 +127,8 @@ fun EmptyState(
             modifier = Modifier
                 .size(size.iconSize)
                 .graphicsLayer {
-                    scaleX = iconBounce
-                    scaleY = iconBounce
+                    scaleX = if (allowsEntranceMotion) iconBounce else 1f
+                    scaleY = if (allowsEntranceMotion) iconBounce else 1f
                 },
         )
         Spacer(Modifier.height(size.iconGap))

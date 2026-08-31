@@ -571,7 +571,7 @@ private fun HeaderBlock(mint: MintInfo, isActive: Boolean) {
                     Icon(
                         imageVector = Icons.Outlined.Check,
                         contentDescription = "Active",
-                        tint = CashuTheme.colors.received,
+                        tint = CashuTheme.colors.onReceivedContainer,
                         modifier = Modifier.size(CashuTheme.spacing.default),
                     )
                 }

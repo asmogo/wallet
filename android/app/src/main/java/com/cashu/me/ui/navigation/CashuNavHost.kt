@@ -107,6 +107,7 @@ fun CashuNavHost(
             onSend = onSend,
             pendingMintScan = pendingMintScan,
             onPendingMintScanConsumed = onPendingMintScanConsumed,
+            onClaimReceiveToken = onClaimReceiveToken,
             // Every transaction detail — settled or live — opens as the same
             // receipt-family sheet over the originating list (iOS parity).
             onOpenTransaction = { transaction -> receiptTransaction = transaction },
@@ -300,6 +301,7 @@ private fun NavGraphBuilder.tabDestinations(
     pendingMintScan: String?,
     onPendingMintScanConsumed: () -> Unit,
     onOpenTransaction: (WalletTransaction) -> Unit,
+    onClaimReceiveToken: (String) -> Unit,
 ) {
     composable(
         route = Routes.HOME,
@@ -338,6 +340,7 @@ private fun NavGraphBuilder.tabDestinations(
             priceService = container.priceService,
             cashuRequestStore = container.cashuRequestStore,
             onOpenTransaction = onOpenTransaction,
+            onClaimReceiveToken = onClaimReceiveToken,
             onOpenCashuRequest = { req ->
                 navController.navigate(cashuRequestDetailRouteFor(req.id))
             },

@@ -302,9 +302,9 @@ internal fun TokenInspectorRows(
                 )
             }
             val statusColor = if (lock.claimable) {
-                CashuTheme.colors.received
+                CashuTheme.colors.onReceivedContainer
             } else {
-                CashuTheme.colors.pending
+                CashuTheme.colors.onPendingContainer
             }
             InspectorRow(
                 label = "Status",

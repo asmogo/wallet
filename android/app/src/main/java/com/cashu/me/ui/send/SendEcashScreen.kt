@@ -4,11 +4,7 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
-import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.Spring
-import androidx.compose.animation.core.animateFloat
-import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
@@ -123,6 +119,7 @@ import com.cashu.me.ui.components.ToolbarIcon
 import com.cashu.me.ui.components.TwoFaceScreen
 import com.cashu.me.ui.components.UnitPickerSheet
 import com.cashu.me.ui.components.neutralActionButtonColors
+import com.cashu.me.ui.components.rememberPendingPulseAlpha
 import com.cashu.me.ui.components.shareText
 import com.cashu.me.ui.settings.P2PKKeyDisplay
 import com.cashu.me.ui.testing.UiTestTags
@@ -937,7 +934,7 @@ internal fun P2pkLockSection(
                 Icon(
                     imageVector = Icons.Outlined.CheckCircle,
                     contentDescription = null,
-                    tint = CashuTheme.colors.received,
+                    tint = CashuTheme.colors.onReceivedContainer,
                     modifier = Modifier.size(CashuTheme.spacing.comfortable),
                 )
                 Column(modifier = Modifier.weight(1f)) {
@@ -1288,26 +1285,16 @@ private fun ClaimStatusRow(
     ) { state ->
         when (state) {
             ClaimState.Pending -> {
-                val reducedMotion = rememberReducedMotion()
-                val transition = rememberInfiniteTransition(label = "pending-pulse")
-                val pulseAlpha by transition.animateFloat(
-                    initialValue = 1f,
-                    targetValue = 0.4f,
-                    animationSpec = infiniteRepeatable(
-                        animation = tween(1100),
-                        repeatMode = RepeatMode.Reverse,
-                    ),
-                    label = "pending-alpha",
-                )
+                val pulseAlpha = rememberPendingPulseAlpha()
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(CashuTheme.spacing.tight),
-                    modifier = Modifier.alpha(if (reducedMotion) 1f else pulseAlpha),
+                    modifier = Modifier.alpha(pulseAlpha),
                 ) {
                     Icon(
                         imageVector = Icons.Outlined.Schedule,
                         contentDescription = null,
-                        tint = com.cashu.me.ui.theme.CashuTheme.colors.pending,
+                        tint = com.cashu.me.ui.theme.CashuTheme.colors.onPendingContainer,
                         modifier = Modifier.size(STATUS_ICON_SMALL),
                     )
                     Text(

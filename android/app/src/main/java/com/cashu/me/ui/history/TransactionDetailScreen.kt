@@ -200,7 +200,7 @@ fun TransactionReceiptSheet(
                             current.status == TransactionStatus.Completed -> Icon(
                                 imageVector = Icons.Filled.CheckCircle,
                                 contentDescription = "Completed",
-                                tint = CashuTheme.colors.received,
+                                tint = CashuTheme.colors.onReceivedContainer,
                                 modifier = Modifier.size(COMPLETED_RECEIPT_GLYPH_SIZE),
                             )
                             current.status == TransactionStatus.Failed -> Icon(

@@ -11,12 +11,8 @@ import android.nfc.tech.Ndef
 import android.provider.Settings
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.core.Spring
-import androidx.compose.animation.core.spring
-import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
-import androidx.compose.animation.scaleIn
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Arrangement
@@ -58,10 +54,14 @@ import com.cashu.me.Core.Services.NFCPaymentInput
 import com.cashu.me.Core.Services.NFCPaymentService
 import com.cashu.me.Core.Services.NFCReaderDelegate
 import com.cashu.me.Core.WalletManager
+import com.cashu.me.Core.Protocols.CurrencyAmount
+import com.cashu.me.Core.Protocols.CurrencyRegistry
 import com.cashu.me.ui.components.InlineNotice
 import com.cashu.me.ui.components.InlineNoticeHost
 import com.cashu.me.ui.components.NoticeSeverity
 import com.cashu.me.ui.components.PrimaryButton
+import com.cashu.me.ui.components.PaymentStatusPhase
+import com.cashu.me.ui.components.PaymentStatusScreen
 
 /**
  * Android has no system-owned NFC reader sheet, so reader mode renders as a
@@ -75,6 +75,7 @@ fun ContactlessPayView(
     walletManager: WalletManager,
     modifier: Modifier = Modifier,
     onLightningRequest: (String) -> Unit,
+    onDone: () -> Unit,
     onDismissLockChanged: (Boolean) -> Unit = {},
 ) {
     val context = LocalContext.current
@@ -90,6 +91,8 @@ fun ContactlessPayView(
     var isProcessing by remember { mutableStateOf(false) }
     var paymentComplete by remember { mutableStateOf(false) }
     var lastPaymentAmount by remember { mutableStateOf<Long?>(null) }
+    val currentIsProcessing by rememberUpdatedState(isProcessing)
+    val currentPaymentComplete by rememberUpdatedState(paymentComplete)
 
     DisposableEffect(lifecycleOwner, adapter) {
         val observer = LifecycleEventObserver { _, event ->
@@ -101,8 +104,8 @@ fun ContactlessPayView(
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
 
-    DisposableEffect(activity, adapter, service, nfcEnabled) {
-        if (activity != null && adapter != null && nfcEnabled) {
+    DisposableEffect(activity, adapter, service, nfcEnabled, paymentComplete) {
+        if (activity != null && adapter != null && nfcEnabled && !paymentComplete) {
             val flags = (
                 NfcAdapter.FLAG_READER_NFC_A or
                     NfcAdapter.FLAG_READER_NFC_B or
@@ -114,7 +117,7 @@ fun ContactlessPayView(
                 activity,
                 { tag ->
                     scope.launch {
-                        if (isProcessing) return@launch
+                        if (currentIsProcessing || currentPaymentComplete) return@launch
                         isProcessing = true
                         currentDismissLockChanged(true)
                         paymentComplete = false
@@ -174,6 +177,7 @@ fun ContactlessPayView(
         lastPaymentAmount = lastPaymentAmount,
         modifier = modifier,
         onOpenNfcSettings = { context.openNfcSettings() },
+        onDone = onDone,
     )
 }
 
@@ -189,8 +193,27 @@ internal fun ContactlessPayContent(
     paymentComplete: Boolean,
     lastPaymentAmount: Long?,
     onOpenNfcSettings: () -> Unit,
+    onDone: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    if (paymentComplete) {
+        PaymentStatusScreen(
+            phase = PaymentStatusPhase.Success,
+            title = "Payment sent",
+            detail = lastPaymentAmount?.let {
+                CurrencyAmount(
+                    value = it,
+                    currency = CurrencyRegistry.currencyForMintUnit("sat"),
+                ).formatted()
+            },
+            onDone = onDone,
+            modifier = modifier.testTag("contactlessSheetContent"),
+        )
+        return
+    }
+    val statusEnterSpec = MaterialTheme.motionScheme.defaultEffectsSpec<Float>()
+    val statusExitSpec = MaterialTheme.motionScheme.fastEffectsSpec<Float>()
+
     Column(
         modifier = modifier
             .fillMaxWidth()
@@ -235,14 +258,16 @@ internal fun ContactlessPayContent(
                     // instead of popping per read-stage.
                     AnimatedVisibility(
                         visible = isProcessing,
-                        enter = fadeIn(tween(200)),
-                        exit = fadeOut(tween(150)),
+                        enter = fadeIn(statusEnterSpec),
+                        exit = fadeOut(statusExitSpec),
                     ) {
                         LoadingIndicator(modifier = Modifier.size(24.dp))
                     }
                     AnimatedContent(
                         targetState = status,
-                        transitionSpec = { fadeIn(tween(200)) togetherWith fadeOut(tween(150)) },
+                        transitionSpec = {
+                            fadeIn(statusEnterSpec) togetherWith fadeOut(statusExitSpec)
+                        },
                         label = "contactless-status",
                     ) { currentStatus ->
                         Text(
@@ -255,29 +280,6 @@ internal fun ContactlessPayContent(
                 }
         }
 
-        // The success beat arrives with the same fade + scale-in the shared
-        // terminal glyph uses — a payment landing never pops in.
-        AnimatedVisibility(
-            visible = paymentComplete,
-            enter = fadeIn(tween(200)) + scaleIn(
-                animationSpec = spring(
-                    dampingRatio = 0.7f,
-                    stiffness = Spring.StiffnessMediumLow,
-                ),
-                initialScale = 0.9f,
-            ),
-            exit = fadeOut(tween(150)),
-        ) {
-            Column(
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(16.dp),
-            ) {
-                Text("Payment sent!", style = MaterialTheme.typography.titleMedium)
-                lastPaymentAmount?.let {
-                    Text("$it sat", style = MaterialTheme.typography.headlineSmall)
-                }
-            }
-        }
         InlineNoticeHost(text = error, severity = NoticeSeverity.Error)
 
         when (availability) {

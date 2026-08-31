@@ -40,8 +40,10 @@ import androidx.compose.material.icons.outlined.Timer
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LoadingIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
@@ -966,6 +968,7 @@ fun ReceiveLightningScreen(
 }
 
 /** iOS creatingOverlay parity for amountless BOLT12 / on-chain auto-create. */
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 private fun CreatingOverlay(method: PaymentMethodKind) {
     val label = if (method == PaymentMethodKind.Onchain) {
@@ -978,7 +981,7 @@ private fun CreatingOverlay(method: PaymentMethodKind) {
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
     ) {
-        androidx.compose.material3.CircularProgressIndicator()
+        LoadingIndicator(modifier = Modifier.size(48.dp))
         Spacer(Modifier.height(CashuTheme.spacing.comfortable))
         Text(
             text = label,
@@ -1321,13 +1324,13 @@ private fun ReusableOfferStatus(received: Boolean, receivedAmountLabel: String?)
                 Icon(
                     imageVector = Icons.Outlined.CheckCircle,
                     contentDescription = null,
-                    tint = CashuTheme.colors.received,
+                    tint = CashuTheme.colors.onReceivedContainer,
                     modifier = Modifier.size(CashuTheme.spacing.loose),
                 )
                 Text(
                     text = receivedAmountLabel?.let { "Received $it" } ?: "Payment received!",
                     style = MaterialTheme.typography.titleMedium,
-                    color = CashuTheme.colors.received,
+                    color = CashuTheme.colors.onReceivedContainer,
                 )
             }
         } else {

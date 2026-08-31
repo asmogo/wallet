@@ -102,6 +102,11 @@ fun CashuRequestRow(
             .combinedClickable(
                 onClick = onClick,
                 onLongClick = onLongClick,
+                onLongClickLabel = if (onLongClick != null) {
+                    "Remove request from history"
+                } else {
+                    null
+                },
             )
             .padding(horizontal = CashuTheme.spacing.comfortable, vertical = CashuTheme.spacing.comfortable),
         verticalAlignment = Alignment.CenterVertically,
@@ -130,7 +135,7 @@ fun CashuRequestRow(
                         .copy(fontWeight = FontWeight.Medium)
                         .withMonoDigits(),
                     color = if (received) {
-                        CashuTheme.colors.received
+                        CashuTheme.colors.onReceivedContainer
                     } else {
                         MaterialTheme.colorScheme.onSurfaceVariant
                     },

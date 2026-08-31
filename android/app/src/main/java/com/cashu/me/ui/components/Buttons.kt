@@ -42,6 +42,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
@@ -49,6 +51,7 @@ import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.cashu.me.ui.theme.CashuTheme
+import com.cashu.me.ui.theme.rememberReducedMotion
 
 // Full-width CTAs (incl. home Receive/Send). +10% over the original 58/16
 // iOS-large glass capsule sizing for a taller Android press target.
@@ -92,10 +95,11 @@ private val GhostLabelMorphBlur = 1.5.dp
 @Composable
 private fun rememberPressScale(interactionSource: MutableInteractionSource): Float {
     val pressed by interactionSource.collectIsPressedAsState()
+    val reduceMotion = rememberReducedMotion()
     val compress = MaterialTheme.motionScheme.fastEffectsSpec<Float>()
     val release = MaterialTheme.motionScheme.defaultEffectsSpec<Float>()
     val scale by animateFloatAsState(
-        targetValue = if (pressed) PressedScale else 1f,
+        targetValue = if (pressed && !reduceMotion) PressedScale else 1f,
         animationSpec = if (pressed) compress else release,
         label = "press-scale",
     )
@@ -187,7 +191,17 @@ fun PrimaryButton(
             .graphicsLayer {
                 scaleX = scale
                 scaleY = scale
-            },
+            }
+            .then(
+                if (loading) {
+                    Modifier.semantics {
+                        contentDescription = text
+                        stateDescription = "In progress"
+                    }
+                } else {
+                    Modifier
+                },
+            ),
         enabled = active,
         interactionSource = interactionSource,
         colors = ButtonColors(container, content, container, content),
@@ -230,7 +244,10 @@ fun PrimaryButton(
                 val morph = morphBlur()
                 if (current == null) {
                     LoadingIndicator(
-                        modifier = Modifier.size(ButtonProgressSize).then(morph),
+                        modifier = Modifier
+                            .size(ButtonProgressSize)
+                            .then(morph)
+                            .clearAndSetSemantics {},
                         color = LocalContentColor.current,
                     )
                 } else {

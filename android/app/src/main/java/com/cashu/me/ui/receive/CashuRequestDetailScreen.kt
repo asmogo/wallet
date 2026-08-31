@@ -560,13 +560,13 @@ private fun StatusBlock(received: Boolean, paymentCount: Int) {
                 Icon(
                     imageVector = Icons.Outlined.CheckCircle,
                     contentDescription = null,
-                    tint = CashuTheme.colors.received,
+                    tint = CashuTheme.colors.onReceivedContainer,
                     modifier = Modifier.size(CashuTheme.spacing.loose),
                 )
                 Text(
                     text = if (paymentCount == 1) "1 payment received" else "$paymentCount payments received",
                     style = MaterialTheme.typography.titleMedium,
-                    color = CashuTheme.colors.received,
+                    color = CashuTheme.colors.onReceivedContainer,
                 )
             }
         } else {

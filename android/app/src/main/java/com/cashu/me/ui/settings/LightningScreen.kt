@@ -20,12 +20,13 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.outlined.QrCode2
 import androidx.compose.material.icons.outlined.Refresh
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.ListItemDefaults
+import androidx.compose.material3.LoadingIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
@@ -263,6 +264,7 @@ fun LightningScreen(
     }
 }
 
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 internal fun LightningAddressSetupFeedback(
     status: LightningAddressSetupStatus,
@@ -287,9 +289,8 @@ internal fun LightningAddressSetupFeedback(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(CashuTheme.spacing.default),
         ) {
-            CircularProgressIndicator(
+            LoadingIndicator(
                 modifier = Modifier.size(CashuTheme.spacing.loose),
-                strokeWidth = 2.dp,
             )
             Text(
                 text = "Setting up Lightning address…",
@@ -367,6 +368,7 @@ private fun LightningAddressRow(
  * caption. Dimmed and inert while the Privacy invoice-check toggle is off —
  * the footer under it says why.
  */
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 private fun CheckForPaymentsRow(
     checking: Boolean,
@@ -388,9 +390,8 @@ private fun CheckForPaymentsRow(
                 contentAlignment = Alignment.Center,
             ) {
                 if (checking) {
-                    CircularProgressIndicator(
+                    LoadingIndicator(
                         modifier = Modifier.size(CashuTheme.spacing.loose),
-                        strokeWidth = 2.dp,
                     )
                 } else {
                     Icon(
