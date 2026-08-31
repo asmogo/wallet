@@ -1301,10 +1301,10 @@ struct QRCodeDetailSheet: View {
 // MARK: - Import P2PK Sheet
 
 struct ImportP2PKSheet: View {
-    @Binding var nsecText: String
-    let onImport: () -> Void
+    let onImport: (String) throws -> Void
 
     @Environment(\.dismiss) private var dismiss
+    @State private var nsecText = ""
     @State private var validationError: String?
 
     private var trimmed: String {
@@ -1353,7 +1353,7 @@ struct ImportP2PKSheet: View {
 
                 Spacer(minLength: 0)
 
-                Button(action: { if validate() { onImport() } }) {
+                Button(action: importKey) {
                     Text("Import key")
                 }
                 .glassButton()
@@ -1385,6 +1385,16 @@ struct ImportP2PKSheet: View {
         HapticFeedback.selection()
         nsecText = ""
         validationError = nil
+    }
+
+    private func importKey() {
+        guard validate() else { return }
+        do {
+            try onImport(trimmed)
+            dismiss()
+        } catch {
+            validationError = error.localizedDescription
+        }
     }
 
     private func validate() -> Bool {

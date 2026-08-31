@@ -80,6 +80,21 @@ final class SettingsStore {
         try storage.set(records, forKey: StorageKeys.p2pkKeys)
     }
 
+    var p2pkPendingDeletionIDs: Set<UUID> {
+        Set(value(StorageKeys.p2pkPendingDeletionIDs) ?? [UUID]())
+    }
+
+    func saveP2PKPendingDeletionIDs(_ ids: Set<UUID>) throws {
+        if ids.isEmpty {
+            try storage.remove(forKey: StorageKeys.p2pkPendingDeletionIDs)
+        } else {
+            try storage.set(
+                ids.sorted { $0.uuidString < $1.uuidString },
+                forKey: StorageKeys.p2pkPendingDeletionIDs
+            )
+        }
+    }
+
     var checkIncomingInvoices: Bool {
         get { bool(StorageKeys.checkIncomingInvoices, legacy: StorageKeys.Legacy.checkIncomingInvoices, default: true) }
         set { set(newValue, forKey: StorageKeys.checkIncomingInvoices) }
