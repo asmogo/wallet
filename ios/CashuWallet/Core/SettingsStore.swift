@@ -180,33 +180,49 @@ final class SettingsStore {
     }
 
     func cachedPrice(currency: String) -> Double? {
-        value(
-            StorageKeys.cachedBTCPrice(currency: currency),
-            legacyKeys: [
-                StorageKeys.Legacy.cachedBTCPrice(currency: currency),
-                StorageKeys.Legacy.cachedBTCPrice
-            ]
-        )
+        let key = StorageKeys.cachedBTCPrice(currency: currency)
+        if let cached: Double = value(
+            key,
+            legacy: StorageKeys.Legacy.cachedBTCPrice(currency: currency)
+        ) {
+            remove(keys: [StorageKeys.cachedBTCPrice, StorageKeys.Legacy.cachedBTCPrice])
+            return cached
+        }
+
+        guard let legacy: Double = try? storage.get(forKey: StorageKeys.Legacy.cachedBTCPrice) else {
+            return nil
+        }
+        set(legacy, forKey: key)
+        remove(keys: [StorageKeys.cachedBTCPrice, StorageKeys.Legacy.cachedBTCPrice])
+        return legacy
     }
 
     func setCachedPrice(_ price: Double, currency: String) {
         set(price, forKey: StorageKeys.cachedBTCPrice(currency: currency))
-        set(price, forKey: StorageKeys.cachedBTCPrice)
+        remove(keys: [StorageKeys.cachedBTCPrice, StorageKeys.Legacy.cachedBTCPrice])
     }
 
     func cachedPriceDate(currency: String) -> Date? {
-        value(
-            StorageKeys.cachedBTCPriceDate(currency: currency),
-            legacyKeys: [
-                StorageKeys.Legacy.cachedBTCPriceDate(currency: currency),
-                StorageKeys.Legacy.cachedBTCPriceDate
-            ]
-        )
+        let key = StorageKeys.cachedBTCPriceDate(currency: currency)
+        if let cached: Date = value(
+            key,
+            legacy: StorageKeys.Legacy.cachedBTCPriceDate(currency: currency)
+        ) {
+            remove(keys: [StorageKeys.cachedBTCPriceDate, StorageKeys.Legacy.cachedBTCPriceDate])
+            return cached
+        }
+
+        guard let legacy: Date = try? storage.get(forKey: StorageKeys.Legacy.cachedBTCPriceDate) else {
+            return nil
+        }
+        set(legacy, forKey: key)
+        remove(keys: [StorageKeys.cachedBTCPriceDate, StorageKeys.Legacy.cachedBTCPriceDate])
+        return legacy
     }
 
     func setCachedPriceDate(_ date: Date, currency: String) {
         set(date, forKey: StorageKeys.cachedBTCPriceDate(currency: currency))
-        set(date, forKey: StorageKeys.cachedBTCPriceDate)
+        remove(keys: [StorageKeys.cachedBTCPriceDate, StorageKeys.Legacy.cachedBTCPriceDate])
     }
 
     func clearWalletScopedData() {

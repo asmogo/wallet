@@ -116,6 +116,35 @@ class StorageDataStoreInstrumentedTest {
     }
 
     @Test
+    fun legacyGlobalPriceCacheMigratesOnceToSelectedCurrency() {
+        val storeName = uniqueStoreName("settings_store")
+        val rawStore = DataStorePreferenceStore(context, storeName)
+        rawStore.putString(StorageKeys.priceCachedBTC, "100000.0")
+        rawStore.putLong(StorageKeys.priceCachedBTCDate, 1_234L)
+        val store = SettingsStore(context, storeName)
+
+        assertEquals(100_000.0, store.cachedPrice("USD") ?: 0.0, 0.0)
+        assertEquals(1_234L, store.cachedPriceDate("USD"))
+        assertNull(rawStore.string(StorageKeys.priceCachedBTC))
+        assertEquals(Long.MIN_VALUE, rawStore.long(StorageKeys.priceCachedBTCDate, Long.MIN_VALUE))
+        assertNull(store.cachedPrice("EUR"))
+        assertNull(store.cachedPriceDate("EUR"))
+
+        rawStore.putString(StorageKeys.priceCachedBTC, "95000.0")
+        rawStore.putLong(StorageKeys.priceCachedBTCDate, 1_999L)
+        assertEquals(100_000.0, store.cachedPrice("USD") ?: 0.0, 0.0)
+        assertEquals(1_234L, store.cachedPriceDate("USD"))
+        assertNull(rawStore.string(StorageKeys.priceCachedBTC))
+        assertEquals(Long.MIN_VALUE, rawStore.long(StorageKeys.priceCachedBTCDate, Long.MIN_VALUE))
+
+        store.setCachedPrice(90_000.0, "EUR")
+        store.setCachedPriceDate(2_345L, "EUR")
+
+        assertNull(store.cachedPrice("GBP"))
+        assertNull(store.cachedPriceDate("GBP"))
+    }
+
+    @Test
     fun enablingAutomaticCashuRequestClaimsDrainsEligibleHeldPaymentsOnce() {
         val store = SettingsStore(context, uniqueStoreName("settings_store"))
         store.receivePaymentRequestsAutomatically = false

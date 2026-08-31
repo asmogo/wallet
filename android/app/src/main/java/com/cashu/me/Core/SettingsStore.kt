@@ -202,28 +202,41 @@ class SettingsStore(
 
     override fun cachedPrice(currency: String): Double? {
         val normalized = currency.uppercase()
-        return store.string(StorageKeys.priceCachedBTC(normalized))?.toDoubleOrNull()
-            ?: store.string(StorageKeys.priceCachedBTC)?.toDoubleOrNull()
+        val key = StorageKeys.priceCachedBTC(normalized)
+        store.string(key)?.toDoubleOrNull()?.let {
+            store.removeKeys(listOf(StorageKeys.priceCachedBTC))
+            return it
+        }
+
+        val legacy = store.string(StorageKeys.priceCachedBTC)?.toDoubleOrNull() ?: return null
+        store.putString(key, legacy.toString())
+        store.removeKeys(listOf(StorageKeys.priceCachedBTC))
+        return legacy
     }
 
     override fun setCachedPrice(price: Double, currency: String) {
         val normalized = currency.uppercase()
         store.putString(StorageKeys.priceCachedBTC(normalized), price.toString())
-        store.putString(StorageKeys.priceCachedBTC, price.toString())
     }
 
     override fun cachedPriceDate(currency: String): Long? {
         val normalized = currency.uppercase()
-        val dated = store.long(StorageKeys.priceCachedBTCDate(normalized), Long.MIN_VALUE)
-        if (dated != Long.MIN_VALUE) return dated
+        val key = StorageKeys.priceCachedBTCDate(normalized)
+        val dated = store.long(key, Long.MIN_VALUE)
+        if (dated != Long.MIN_VALUE) {
+            store.removeKeys(listOf(StorageKeys.priceCachedBTCDate))
+            return dated
+        }
         val legacy = store.long(StorageKeys.priceCachedBTCDate, Long.MIN_VALUE)
-        return legacy.takeIf { it != Long.MIN_VALUE }
+        if (legacy == Long.MIN_VALUE) return null
+        store.putLong(key, legacy)
+        store.removeKeys(listOf(StorageKeys.priceCachedBTCDate))
+        return legacy
     }
 
     override fun setCachedPriceDate(epochMillis: Long, currency: String) {
         val normalized = currency.uppercase()
         store.putLong(StorageKeys.priceCachedBTCDate(normalized), epochMillis)
-        store.putLong(StorageKeys.priceCachedBTCDate, epochMillis)
     }
 
     private fun <T> loadList(key: String, serializer: KSerializer<T>): List<T> {
