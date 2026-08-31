@@ -173,6 +173,7 @@ final class WalletStoreTests: XCTestCase {
         let corruptionErrors = [
             "SQLite error SQLITE_CORRUPT: database disk image is malformed",
             "SQLite error SQLITE_NOTADB: file is not a database",
+            "malformed database schema (wallets)",
             "database disk image is corrupt",
         ]
 

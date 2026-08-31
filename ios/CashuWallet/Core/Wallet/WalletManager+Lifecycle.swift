@@ -43,6 +43,7 @@ enum WalletDatabaseRecoveryPolicy {
         "sqlite_corrupt",
         "sqlite_notadb",
         "database disk image is malformed",
+        "malformed database schema",
         "database disk image is corrupt",
         "file is not a database",
         "database corruption",
