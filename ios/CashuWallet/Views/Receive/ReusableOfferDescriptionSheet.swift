@@ -26,21 +26,32 @@ struct ReusableOfferDescriptionSheet: View {
         VStack(spacing: 0) {
             header
 
-            TextField(
-                "e.g. Coffee tips",
-                text: $description,
-                axis: .vertical
-            )
-            .lineLimit(2...4)
-            .textFieldStyle(.roundedBorder)
+            // Same glass input as Receive/Send destination fields. Stock
+            // `.roundedBorder` is a different visual system next to the glass
+            // Done button and sheet chrome. Persistent label (not a
+            // placeholder doing double duty) matches Add mint / Android's
+            // floating CashuTextField label.
+            VStack(alignment: .leading, spacing: 0) {
+                Text("Description shown to the payer")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                    .padding(.bottom, 6)
+
+                TextField("e.g. Coffee tips", text: $description, axis: .vertical)
+                    .font(.body)
+                    .lineLimit(2...4)
+                    .accessibilityLabel("Description shown to the payer")
+                    .onChange(of: description) { _, newValue in
+                        if newValue.count > ReceiveLightningView.maxOfferDescriptionLength {
+                            description = String(newValue.prefix(ReceiveLightningView.maxOfferDescriptionLength))
+                        }
+                    }
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 14)
+                    .liquidGlassInput(in: RoundedRectangle(cornerRadius: 12))
+            }
             .padding(.horizontal)
             .padding(.top, 16)
-            .accessibilityLabel("Description shown to the payer")
-            .onChange(of: description) { _, newValue in
-                if newValue.count > ReceiveLightningView.maxOfferDescriptionLength {
-                    description = String(newValue.prefix(ReceiveLightningView.maxOfferDescriptionLength))
-                }
-            }
 
             Spacer(minLength: 0)
 
