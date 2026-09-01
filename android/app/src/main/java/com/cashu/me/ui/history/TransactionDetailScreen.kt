@@ -366,7 +366,7 @@ private fun HeroAmount(
     currencyCode: String,
     compact: Boolean,
 ) {
-    if (!transaction.unit.equals("sat", ignoreCase = true)) {
+    if (!CurrencyRegistry.isSatoshiUnit(transaction.unit)) {
         val formatted = CurrencyAmount(
             transaction.amount,
             CurrencyRegistry.currencyForMintUnit(transaction.unit),

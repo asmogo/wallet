@@ -126,7 +126,7 @@ object TransactionDisplay {
         if (value.length > 16) "${value.take(8)}…${value.takeLast(6)}" else value
 
     private fun formatNativeAmount(amount: Long, unit: String): String =
-        if (unit.equals("sat", ignoreCase = true)) {
+        if (CurrencyRegistry.isSatoshiUnit(unit)) {
             "$amount sat"
         } else {
             CurrencyAmount(amount, CurrencyRegistry.currencyForMintUnit(unit)).formatted()

@@ -354,7 +354,7 @@ fun AmountFormatter.displayMintUnitAmount(
     currencyCode: String,
     useBitcoinSymbol: Boolean,
 ): AmountDisplayText {
-    if (unit.equals("sat", ignoreCase = true)) {
+    if (CurrencyRegistry.isSatoshiUnit(unit)) {
         return displayText(
             amountSats = amount,
             preferredPrimary = preferredPrimary,

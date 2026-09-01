@@ -50,14 +50,33 @@ class CurrencyProtocolTest {
         val display = AmountFormatter().displayMintUnitAmount(
             amount = 500,
             unit = "usd",
-            preferredPrimary = "sats",
+            preferredPrimary = "fiat",
             showFiat = true,
-            btcPrice = 100_000.0,
-            currencyCode = "USD",
+            btcPrice = 20_000.0,
+            currencyCode = "EUR",
             useBitcoinSymbol = false,
         )
 
         assertEquals("\$5.00", display.primary)
         assertNull(display.secondary)
+    }
+
+    @Test
+    fun historyAmountsConvertEverySatoshiUnitAlias() {
+        listOf("sat", "SAT", " sats ", "satoshi", "satoshis").forEach { unit ->
+            val display = AmountFormatter().displayMintUnitAmount(
+                amount = 300_000,
+                unit = unit,
+                preferredPrimary = "fiat",
+                showFiat = true,
+                btcPrice = 20_000.0,
+                currencyCode = "USD",
+                useBitcoinSymbol = false,
+            )
+
+            assertEquals("Failed for unit: $unit", "\$60.00", display.primary)
+            assertEquals("Failed for unit: $unit", "300,000 sat", display.secondary)
+            assertEquals("Failed for unit: $unit", AmountDisplayPrimary.Fiat, display.effectivePrimary)
+        }
     }
 }

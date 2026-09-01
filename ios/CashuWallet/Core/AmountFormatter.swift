@@ -190,6 +190,40 @@ enum AmountFormatter {
         }
     }
 
+    /// Formats an amount in its native mint unit. Bitcoin-denominated aliases
+    /// share the Home balance's sats/fiat ordering; fiat and custom mint units
+    /// remain in their native denomination because a BTC spot price cannot
+    /// convert them correctly.
+    static func displayMintUnitAmount(
+        amount: UInt64,
+        unit: String,
+        preferredPrimary: AmountDisplayPrimary,
+        showFiat: Bool,
+        btcPrice: Double?,
+        currencyCode: String,
+        useBitcoinSymbol: Bool
+    ) -> AmountDisplayText {
+        guard CurrencyRegistry.isSatoshiUnit(unit) else {
+            return AmountDisplayText(
+                primary: CurrencyAmount(
+                    value: amount,
+                    currency: CurrencyRegistry.currency(forMintUnit: unit)
+                ).formatted(),
+                secondary: nil,
+                effectivePrimary: .sats
+            )
+        }
+
+        return displayText(
+            amountSats: amount,
+            preferredPrimary: preferredPrimary,
+            showFiat: showFiat,
+            btcPrice: btcPrice,
+            currencyCode: currencyCode,
+            useBitcoinSymbol: useBitcoinSymbol
+        )
+    }
+
     // MARK: - Live amount entry (sats or fiat)
     //
     // The keypad writes a single `amountString` that types left-to-right like a

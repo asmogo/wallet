@@ -29,21 +29,10 @@ struct CashuRequestAmountColumn: View {
         // "any amount" + waiting: no trailing element.
     }
 
-    private var isSatRequest: Bool { request.unit.lowercased() == "sat" }
-
     private func amountDisplay(_ amount: UInt64) -> AmountDisplayText {
-        guard isSatRequest else {
-            return AmountDisplayText(
-                primary: CurrencyAmount(
-                    value: amount,
-                    currency: CurrencyRegistry.currency(forMintUnit: request.unit)
-                ).formatted(),
-                secondary: nil,
-                effectivePrimary: .sats
-            )
-        }
-        return AmountFormatter.displayText(
-            amountSats: amount,
+        AmountFormatter.displayMintUnitAmount(
+            amount: amount,
+            unit: request.unit,
             preferredPrimary: settings.homeBalancePrimary,
             showFiat: settings.showFiatBalance,
             btcPrice: priceService.btcPriceUSD,

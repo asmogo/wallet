@@ -753,6 +753,39 @@ final class MultiUnitSupportTests: XCTestCase {
         XCTAssertEqual(display.effectivePrimary, .sats)
     }
 
+    func testHistoryAmountConvertsEverySatoshiUnitAlias() {
+        for unit in ["sat", "SAT", " sats ", "satoshi", "satoshis"] {
+            let display = AmountFormatter.displayMintUnitAmount(
+                amount: 300_000,
+                unit: unit,
+                preferredPrimary: .fiat,
+                showFiat: true,
+                btcPrice: 20_000,
+                currencyCode: "USD",
+                useBitcoinSymbol: false
+            )
+
+            XCTAssertEqual(display.primary, "$60.00", "Failed for unit: \(unit)")
+            XCTAssertEqual(display.secondary, "300,000 sat", "Failed for unit: \(unit)")
+            XCTAssertEqual(display.effectivePrimary, .fiat, "Failed for unit: \(unit)")
+        }
+    }
+
+    func testHistoryAmountKeepsNonBitcoinMintUnitNative() {
+        let display = AmountFormatter.displayMintUnitAmount(
+            amount: 500,
+            unit: "usd",
+            preferredPrimary: .fiat,
+            showFiat: true,
+            btcPrice: 20_000,
+            currencyCode: "EUR",
+            useBitcoinSymbol: false
+        )
+
+        XCTAssertEqual(display.primary, "$5.00")
+        XCTAssertNil(display.secondary)
+    }
+
     func testHomeBalancePrimaryDefaultsToSatsAndPersistsIndependently() {
         let store = SettingsStore(storage: InMemoryStorage())
 

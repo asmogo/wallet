@@ -375,7 +375,7 @@ struct TransactionDetailView: View {
     }
 
     private var isSatUnit: Bool {
-        transaction.unit.caseInsensitiveCompare("sat") == .orderedSame
+        CurrencyRegistry.isSatoshiUnit(transaction.unit)
     }
 
     private var formattedNativeAmount: String {
