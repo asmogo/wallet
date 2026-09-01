@@ -344,7 +344,11 @@ fun AmountFormatter.displayText(
     }
 }
 
-/** Format an amount in its native mint unit; BTC-price conversion only applies to sats. */
+/**
+ * Format an amount in its native mint unit; BTC-price conversion only applies
+ * to sats. Positive sub-cent Bitcoin amounts use a "less than one cent" label
+ * so a fiat preference never silently flips an individual transaction to sats.
+ */
 fun AmountFormatter.displayMintUnitAmount(
     amount: Long,
     unit: String,
@@ -355,7 +359,7 @@ fun AmountFormatter.displayMintUnitAmount(
     useBitcoinSymbol: Boolean,
 ): AmountDisplayText {
     if (CurrencyRegistry.isSatoshiUnit(unit)) {
-        return displayText(
+        val display = displayText(
             amountSats = amount,
             preferredPrimary = preferredPrimary,
             showFiat = showFiat,
@@ -363,6 +367,41 @@ fun AmountFormatter.displayMintUnitAmount(
             currencyCode = currencyCode,
             useBitcoinSymbol = useBitcoinSymbol,
         )
+        val price = btcPrice?.takeIf { it.isFinite() && it > 0 }
+        val fiatValue = price?.let { amount.toDouble() / 100_000_000.0 * it }
+        if (!showFiat || amount <= 0 || fiatValue == null || fiatValue >= 0.01) {
+            return display
+        }
+
+        val thresholdParts = when (val affix = currencyAffix(currencyCode)) {
+            is AmountParts.Affix.Prefix -> AmountParts(
+                value = "0.01",
+                affix = AmountParts.Affix.Prefix("<${affix.symbol}"),
+            )
+            is AmountParts.Affix.Suffix -> AmountParts(
+                value = "<0.01",
+                affix = affix,
+            )
+            AmountParts.Affix.None -> AmountParts(
+                value = "<0.01",
+                affix = AmountParts.Affix.None,
+            )
+        }
+        val satsParts = satsParts(amount, useBitcoinSymbol)
+        return when (AmountDisplayPrimary.fromRaw(preferredPrimary)) {
+            AmountDisplayPrimary.Fiat -> AmountDisplayText(
+                primary = thresholdParts.joined,
+                secondary = satsParts.joined,
+                effectivePrimary = AmountDisplayPrimary.Fiat,
+                primaryParts = thresholdParts,
+            )
+            AmountDisplayPrimary.Sats -> AmountDisplayText(
+                primary = satsParts.joined,
+                secondary = thresholdParts.joined,
+                effectivePrimary = AmountDisplayPrimary.Sats,
+                primaryParts = satsParts,
+            )
+        }
     }
     return AmountDisplayText(
         primary = CurrencyAmount(amount, CurrencyRegistry.currencyForMintUnit(unit)).formatted(),

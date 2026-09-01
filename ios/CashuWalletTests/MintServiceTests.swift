@@ -786,6 +786,31 @@ final class MultiUnitSupportTests: XCTestCase {
         XCTAssertNil(display.secondary)
     }
 
+    func testLightningReceiptUsesHomeFiatPreference() {
+        let transaction = WalletTransaction(
+            id: "lightning-receive",
+            amount: 1,
+            type: .incoming,
+            kind: .lightning,
+            date: Date(),
+            memo: nil,
+            status: .completed
+        )
+
+        let display = TransactionReceiptAmountPair.display(
+            transaction: transaction,
+            preferredPrimary: .fiat,
+            showFiat: true,
+            btcPrice: 20_000,
+            currencyCode: "USD",
+            useBitcoinSymbol: false
+        )
+
+        XCTAssertEqual(display.primary, "<$0.01")
+        XCTAssertEqual(display.secondary, "1 sat")
+        XCTAssertEqual(display.effectivePrimary, .fiat)
+    }
+
     func testHomeBalancePrimaryDefaultsToSatsAndPersistsIndependently() {
         let store = SettingsStore(storage: InMemoryStorage())
 

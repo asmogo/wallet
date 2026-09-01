@@ -128,36 +128,17 @@ struct TransactionDetailView: View {
                         // nothing while a no-QR transaction is still pending.
                         heroSlot
 
-                        // Amount hero — always crisp `.primary`; the glyph above
-                        // carries the state colour.
-                        Group {
-                            if !isSatUnit {
-                                AmountLockup(
-                                    parts: AmountParts.parse(formattedNativeAmount),
-                                    role: showsQR ? .amountCompact : .amountConfirm,
-                                    value: Double(transaction.amount),
-                                    accessibilityPrefix: "Amount"
-                                )
-                            } else if transaction.kind == .onchain {
-                                AmountLockup(
-                                    parts: AmountFormatter.satsParts(
-                                        transaction.amount, useBitcoinSymbol: settings.useBitcoinSymbol
-                                    ),
-                                    role: showsQR ? .amountCompact : .amountConfirm,
-                                    value: Double(transaction.amount),
-                                    accessibilityPrefix: "Amount"
-                                )
-                            } else {
-                                TransactionReceiptAmountPair(
-                                    sats: transaction.amount,
-                                    role: showsQR ? .amountCompact : .amountConfirm,
-                                    showFiat: settings.showFiatBalance,
-                                    btcPrice: priceService.btcPriceUSD,
-                                    currencyCode: priceService.currencyCode,
-                                    useBitcoinSymbol: settings.useBitcoinSymbol
-                                )
-                            }
-                        }
+                        // Receipt amounts use the same primary/secondary ordering
+                        // as Home and History. The glyph above carries state colour.
+                        TransactionReceiptAmountPair(
+                            transaction: transaction,
+                            role: showsQR ? .amountCompact : .amountConfirm,
+                            preferredPrimary: settings.homeBalancePrimary,
+                            showFiat: settings.showFiatBalance,
+                            btcPrice: priceService.btcPriceUSD,
+                            currencyCode: settings.bitcoinPriceCurrency,
+                            useBitcoinSymbol: settings.useBitcoinSymbol
+                        )
                         .padding(.top, heroSlotIsEmpty ? 32 : 0)
 
                         // Detail rows on canvas, led by Status + Date. Type is
@@ -378,13 +359,6 @@ struct TransactionDetailView: View {
         CurrencyRegistry.isSatoshiUnit(transaction.unit)
     }
 
-    private var formattedNativeAmount: String {
-        CurrencyAmount(
-            value: transaction.amount,
-            currency: CurrencyRegistry.currency(forMintUnit: transaction.unit)
-        ).formatted()
-    }
-
     private var formattedNativeFee: String {
         if isSatUnit { return "\(transaction.fee) sat" }
         return CurrencyAmount(
@@ -543,41 +517,62 @@ struct TransactionDetailView: View {
     }
 }
 
-/// A receipt is a settled sat amount with an optional live fiat reference — not
-/// an entry control. Keeping the pair static prevents a historical transaction
-/// from changing hierarchy with the home or keypad display preferences.
-private struct TransactionReceiptAmountPair: View {
-    let sats: UInt64
+/// A receipt follows the same amount hierarchy selected from the Home balance.
+/// It remains a static display rather than an independent entry-mode control.
+struct TransactionReceiptAmountPair: View {
+    let transaction: WalletTransaction
     let role: CashuTextRole
+    let preferredPrimary: AmountDisplayPrimary
     let showFiat: Bool
-    let btcPrice: Double
+    let btcPrice: Double?
     let currencyCode: String
     let useBitcoinSymbol: Bool
 
-    private var fiatText: String? {
-        guard showFiat else { return nil }
-        return AmountFormatter.fiat(
-            sats: sats,
+    static func display(
+        transaction: WalletTransaction,
+        preferredPrimary: AmountDisplayPrimary,
+        showFiat: Bool,
+        btcPrice: Double?,
+        currencyCode: String,
+        useBitcoinSymbol: Bool
+    ) -> AmountDisplayText {
+        AmountFormatter.displayMintUnitAmount(
+            amount: transaction.amount,
+            unit: transaction.unit,
+            preferredPrimary: preferredPrimary,
+            showFiat: showFiat,
             btcPrice: btcPrice,
-            currencyCode: currencyCode
+            currencyCode: currencyCode,
+            useBitcoinSymbol: useBitcoinSymbol
+        )
+    }
+
+    private var amountDisplay: AmountDisplayText {
+        Self.display(
+            transaction: transaction,
+            preferredPrimary: preferredPrimary,
+            showFiat: showFiat,
+            btcPrice: btcPrice,
+            currencyCode: currencyCode,
+            useBitcoinSymbol: useBitcoinSymbol
         )
     }
 
     var body: some View {
         VStack(spacing: AmountPairMetrics.spacing) {
             AmountLockup(
-                parts: AmountFormatter.satsParts(sats, useBitcoinSymbol: useBitcoinSymbol),
+                parts: amountDisplay.primaryParts,
                 role: role,
-                value: Double(sats),
+                value: Double(transaction.amount),
                 accessibilityPrefix: "Amount"
             )
 
-            if let fiatText {
-                Text(fiatText)
+            if let secondary = amountDisplay.secondary {
+                Text(secondary)
                     .cashuText(.bodyEmphasis)
                     .monospacedDigit()
                     .foregroundStyle(.secondary)
-                    .accessibilityLabel("Fiat equivalent: \(fiatText)")
+                    .accessibilityLabel("Alternate amount: \(secondary)")
             }
         }
     }

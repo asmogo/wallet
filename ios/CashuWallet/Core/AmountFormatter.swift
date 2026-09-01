@@ -193,7 +193,9 @@ enum AmountFormatter {
     /// Formats an amount in its native mint unit. Bitcoin-denominated aliases
     /// share the Home balance's sats/fiat ordering; fiat and custom mint units
     /// remain in their native denomination because a BTC spot price cannot
-    /// convert them correctly.
+    /// convert them correctly. A positive sub-cent Bitcoin amount uses a
+    /// "less than one cent" label so a fiat preference never silently flips
+    /// an individual transaction back to sats.
     static func displayMintUnitAmount(
         amount: UInt64,
         unit: String,
@@ -214,7 +216,7 @@ enum AmountFormatter {
             )
         }
 
-        return displayText(
+        let display = displayText(
             amountSats: amount,
             preferredPrimary: preferredPrimary,
             showFiat: showFiat,
@@ -222,6 +224,32 @@ enum AmountFormatter {
             currencyCode: currencyCode,
             useBitcoinSymbol: useBitcoinSymbol
         )
+
+        guard showFiat,
+              amount > 0,
+              let btcPrice,
+              btcPrice.isFinite,
+              btcPrice > 0,
+              Double(amount) / 100_000_000.0 * btcPrice < 0.01 else {
+            return display
+        }
+
+        let fiatThreshold = "<\(fiat(0.01, currencyCode: currencyCode))"
+        let satsText = sats(amount, useBitcoinSymbol: useBitcoinSymbol)
+        switch preferredPrimary {
+        case .fiat:
+            return AmountDisplayText(
+                primary: fiatThreshold,
+                secondary: satsText,
+                effectivePrimary: .fiat
+            )
+        case .sats:
+            return AmountDisplayText(
+                primary: satsText,
+                secondary: fiatThreshold,
+                effectivePrimary: .sats
+            )
+        }
     }
 
     // MARK: - Live amount entry (sats or fiat)
