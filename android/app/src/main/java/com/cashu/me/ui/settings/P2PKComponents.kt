@@ -63,6 +63,7 @@ import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.disabled
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
@@ -129,6 +130,7 @@ enum class KeyCardStatus(val text: String?) {
     SeedBacked("Backed up by your seed phrase"),
     Custom(null),
     DeviceOnly("On this device only — not in your seed backup"),
+    RepairRequired("Repair required before this key can be used"),
 }
 
 data class KeyCardAction(
@@ -161,6 +163,7 @@ fun KeyCard(
     actions: List<KeyCardAction>,
     modifier: Modifier = Modifier,
     copyOptions: List<KeyCardCopyOption> = emptyList(),
+    copyEnabled: Boolean = true,
 ) {
     val clipboard = LocalClipboardManager.current
     val confirmationToastController = LocalConfirmationToastController.current
@@ -207,11 +210,15 @@ fun KeyCard(
                         val statusTint = when (status) {
                             KeyCardStatus.SeedBacked -> MaterialTheme.colorScheme.onSurfaceVariant
                             KeyCardStatus.Custom, KeyCardStatus.DeviceOnly -> CashuTheme.colors.pending
+                            KeyCardStatus.RepairRequired -> MaterialTheme.colorScheme.error
                         }
                         Icon(
                             imageVector = when (status) {
                                 KeyCardStatus.SeedBacked -> Icons.Filled.Verified
-                                KeyCardStatus.Custom, KeyCardStatus.DeviceOnly -> Icons.Filled.Warning
+                                KeyCardStatus.Custom,
+                                KeyCardStatus.DeviceOnly,
+                                KeyCardStatus.RepairRequired,
+                                -> Icons.Filled.Warning
                             },
                             contentDescription = null,
                             tint = statusTint,
@@ -235,7 +242,16 @@ fun KeyCard(
                     .fillMaxWidth()
                     .then(
                         if (copyOptions.isEmpty()) {
-                            Modifier.clickable {
+                            Modifier
+                                .semantics {
+                                    contentDescription = if (copyEnabled) {
+                                        "Copy this key"
+                                    } else {
+                                        "Key unavailable"
+                                    }
+                                    if (!copyEnabled) disabled()
+                                }
+                                .clickable(enabled = copyEnabled) {
                                 clipboard.setText(AnnotatedString(P2PKKeyDisplay.canonical(pubkey)))
                                 confirmationToastController?.show("Copied key")
                             }
@@ -246,6 +262,7 @@ fun KeyCard(
                                         "$title. Long press for more copy options."
                                 }
                                 .combinedClickable(
+                                    enabled = copyEnabled,
                                     onClick = {
                                         clipboard.setText(
                                             AnnotatedString(P2PKKeyDisplay.canonical(pubkey)),
@@ -272,8 +289,12 @@ fun KeyCard(
                 )
                 Icon(
                     imageVector = Icons.Outlined.ContentCopy,
-                    contentDescription = "Copy this key",
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    contentDescription = if (copyEnabled) "Copy this key" else "Key unavailable",
+                    tint = if (copyEnabled) {
+                        MaterialTheme.colorScheme.onSurfaceVariant
+                    } else {
+                        MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.38f)
+                    },
                     modifier = Modifier.size(CashuTheme.spacing.comfortable),
                 )
             }

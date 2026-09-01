@@ -11,6 +11,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.outlined.Delete
+import androidx.compose.material.icons.outlined.FileDownload
 import androidx.compose.material.icons.outlined.Key
 import androidx.compose.material.icons.outlined.QrCode
 import androidx.compose.material3.AlertDialog
@@ -35,6 +36,8 @@ import com.cashu.me.Core.AppLockManager
 import com.cashu.me.Core.SettingsManager
 import com.cashu.me.ui.components.CashuTextField
 import com.cashu.me.ui.components.DestructiveTextButton
+import com.cashu.me.ui.components.InlineNotice
+import com.cashu.me.ui.components.NoticeSeverity
 import com.cashu.me.ui.components.SectionHeader
 import com.cashu.me.ui.components.SettingsFooterText
 import com.cashu.me.ui.components.ToolbarIcon
@@ -60,6 +63,8 @@ fun DeviceKeyDetailScreen(
     var activeQr by remember { mutableStateOf<String?>(null) }
     var showPrivateKeyBackup by remember { mutableStateOf(false) }
     var showRemoveConfirm by remember { mutableStateOf(false) }
+    var showRepair by remember { mutableStateOf(false) }
+    var actionError by remember { mutableStateOf<String?>(null) }
 
     // Pop when the key is removed underneath us (iOS onChange dismiss).
     LaunchedEffect(key == null) {
@@ -68,6 +73,7 @@ fun DeviceKeyDetailScreen(
     if (key == null) return
 
     val displayName = key.label.ifBlank { "Device key" }
+    val isUsable = key.id !in settings.p2pkUnavailableKeyIds
 
     Scaffold(
         topBar = {
@@ -94,17 +100,50 @@ fun DeviceKeyDetailScreen(
             KeyCard(
                 title = displayName,
                 pubkey = key.publicKey,
-                status = KeyCardStatus.DeviceOnly,
-                actions = listOf(
-                    KeyCardAction("Show QR", Icons.Outlined.QrCode) {
-                        activeQr = P2PKKeyDisplay.canonical(key.publicKey)
-                    },
-                    KeyCardAction("Back up key", Icons.Outlined.Key) {
-                        showPrivateKeyBackup = true
-                    },
-                ),
+                status = if (isUsable) KeyCardStatus.DeviceOnly else KeyCardStatus.RepairRequired,
+                actions = if (isUsable) {
+                    listOf(
+                        KeyCardAction("Show QR", Icons.Outlined.QrCode) {
+                            activeQr = P2PKKeyDisplay.canonical(key.publicKey)
+                        },
+                        KeyCardAction("Back up key", Icons.Outlined.Key) {
+                            showPrivateKeyBackup = true
+                        },
+                    )
+                } else {
+                    listOf(
+                        KeyCardAction("Repair key", Icons.Outlined.FileDownload) {
+                            actionError = null
+                            showRepair = true
+                        },
+                    )
+                },
+                copyEnabled = isUsable,
                 modifier = Modifier.padding(horizontal = CashuTheme.spacing.comfortable),
             )
+
+            if (!isUsable) {
+                InlineNotice(
+                    text = "This key's encrypted private key is unavailable. Import its nsec to " +
+                        "repair it before sharing the public key or receiving locked ecash.",
+                    modifier = Modifier.padding(
+                        horizontal = CashuTheme.spacing.comfortable,
+                        vertical = CashuTheme.spacing.snug,
+                    ),
+                    severity = NoticeSeverity.Error,
+                )
+            }
+
+            actionError?.let { error ->
+                InlineNotice(
+                    text = error,
+                    modifier = Modifier.padding(
+                        horizontal = CashuTheme.spacing.comfortable,
+                        vertical = CashuTheme.spacing.snug,
+                    ),
+                    severity = NoticeSeverity.Error,
+                )
+            }
 
             Spacer(Modifier.height(CashuTheme.spacing.default))
             SectionHeader("Name")
@@ -112,7 +151,10 @@ fun DeviceKeyDetailScreen(
                 value = nameText,
                 onValueChange = {
                     nameText = it
-                    settingsManager.setP2PKKeyNickname(key.id, it)
+                    runCatching { settingsManager.setP2PKKeyNickname(key.id, it) }
+                        .onFailure { error ->
+                            actionError = error.message ?: "Could not rename the key."
+                        }
                 },
                 label = "Add a name",
                 modifier = Modifier
@@ -149,6 +191,12 @@ fun DeviceKeyDetailScreen(
             onDismiss = { showPrivateKeyBackup = false },
         )
     }
+    if (showRepair) {
+        ImportP2PKDialog(
+            onImport = { nsec -> runCatching { settingsManager.importP2PKNsec(nsec) } },
+            onDismiss = { showRepair = false },
+        )
+    }
     if (showRemoveConfirm) {
         AlertDialog(
             onDismissRequest = { showRemoveConfirm = false },
@@ -162,7 +210,11 @@ fun DeviceKeyDetailScreen(
             confirmButton = {
                 TextButton(onClick = {
                     showRemoveConfirm = false
-                    settingsManager.removeP2PKKey(key.id)
+                    actionError = null
+                    runCatching { settingsManager.removeP2PKKey(key.id) }
+                        .onFailure { error ->
+                            actionError = error.message ?: "Could not remove the key."
+                        }
                 }) {
                     Text("Remove Key", color = MaterialTheme.colorScheme.error)
                 }

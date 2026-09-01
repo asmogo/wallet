@@ -6,7 +6,12 @@ import P256K
 @MainActor
 class SettingsManager: ObservableObject {
     static let shared = SettingsManager()
-    private let settingsStore = SettingsStore.shared
+    private let settingsStore: SettingsStore
+    private let secureStorage: SecureStorageProtocol
+    /// Legacy UserDefaults secrets that must remain encoded until their secure
+    /// storage migration succeeds. This is intentionally separate from the
+    /// published model so metadata updates cannot accidentally erase them.
+    private var pendingLegacyP2PKSecrets: [UUID: String]
     private var suppressPaymentRequestSideEffects = false
     
     static let supportedFiatCurrencies: [String] = [
@@ -68,11 +73,7 @@ class SettingsManager: ObservableObject {
         }
     }
 
-    @Published var p2pkKeys: [P2PKKey] {
-        didSet {
-            persistP2PKKeys()
-        }
-    }
+    @Published private(set) var p2pkKeys: [P2PKKey]
 
     @Published var checkIncomingInvoices: Bool {
         didSet {
@@ -166,7 +167,21 @@ class SettingsManager: ObservableObject {
 
     // MARK: - Initialization
     
-    init() {
+    init(
+        settingsStore: SettingsStore = .shared,
+        secureStorage: SecureStorageProtocol = KeychainService()
+    ) {
+        self.settingsStore = settingsStore
+        self.secureStorage = secureStorage
+        Self.recoverInterruptedP2PKRemovals(
+            settingsStore: settingsStore,
+            secureStorage: secureStorage
+        )
+        let loadedP2PKKeys = Self.loadP2PKKeys(
+            settingsStore: settingsStore,
+            secureStorage: secureStorage
+        )
+        self.pendingLegacyP2PKSecrets = loadedP2PKKeys.pendingLegacySecrets
         self.useBitcoinSymbol = settingsStore.useBitcoinSymbol
         self.showFiatBalance = settingsStore.showFiatBalance
         self.bitcoinPriceCurrency = settingsStore.bitcoinPriceCurrency
@@ -174,7 +189,7 @@ class SettingsManager: ObservableObject {
         self.autoPasteEcashReceive = settingsStore.autoPasteEcashReceive
         self.useWebsockets = settingsStore.useWebsockets
         self.showP2PKButtonInDrawer = settingsStore.showP2PKButtonInDrawer
-        self.p2pkKeys = Self.loadP2PKKeys()
+        self.p2pkKeys = loadedP2PKKeys.keys
         self.checkIncomingInvoices = settingsStore.checkIncomingInvoices
         self.periodicallyCheckIncomingInvoices = settingsStore.periodicallyCheckIncomingInvoices
         self.enablePaymentRequests = settingsStore.enablePaymentRequests
@@ -186,7 +201,20 @@ class SettingsManager: ObservableObject {
         self.appLockEnabled = settingsStore.appLockEnabled
         self.sentryEnabled = settingsStore.sentryEnabled
 
-        persistP2PKKeys()
+        if loadedP2PKKeys.encounteredLegacySecrets {
+            do {
+                try settingsStore.saveP2PKKeys(
+                    p2pkKeys,
+                    preservingLegacySecrets: pendingLegacyP2PKSecrets
+                )
+            } catch {
+                // The existing record still contains every legacy secret, so a
+                // failed cleanup is safe to retry on the next metadata change.
+                AppLogger.security.error(
+                    "Failed to finalize P2PK secure-storage migration error_type=\(String(reflecting: type(of: error)), privacy: .public)"
+                )
+            }
+        }
         
         let priceService = PriceService.shared
         if !priceService.isEnabled, priceService.currencyCode != bitcoinPriceCurrency {
@@ -214,14 +242,10 @@ class SettingsManager: ObservableObject {
     }
 
     @discardableResult
-    func generateP2PKKey() -> Bool {
-        do {
-            let key = try createP2PKKey(privateKeyBytes: generateRandomPrivateKeyBytes())
-            p2pkKeys.append(key)
-            return true
-        } catch {
-            return false
-        }
+    func generateP2PKKey() throws -> P2PKKey {
+        let key = try createP2PKKey(privateKeyBytes: generateRandomPrivateKeyBytes())
+        try storeP2PKKey(key)
+        return key
     }
 
     func importP2PKNsec(_ nsec: String) throws {
@@ -234,37 +258,158 @@ class SettingsManager: ObservableObject {
         let key = try createP2PKKey(privateKeyBytes: privateKeyBytes)
         let normalizedImportedKey = normalizeP2PKPublicKeyForComparison(key.publicKey)
 
-        guard !p2pkKeys.contains(where: { normalizeP2PKPublicKeyForComparison($0.publicKey) == normalizedImportedKey }) else {
-            throw SettingsFeatureError.duplicateP2PKKey
+        if let existingIndex = p2pkKeys.firstIndex(where: {
+            normalizeP2PKPublicKeyForComparison($0.publicKey) == normalizedImportedKey
+        }) {
+            let existing = p2pkKeys[existingIndex]
+            guard !Self.hasUsablePrivateKey(existing) else {
+                throw SettingsFeatureError.duplicateP2PKKey
+            }
+
+            // A metadata-only row must not prevent its owner from repairing it
+            // by importing the corresponding private key.
+            let repaired = P2PKKey(
+                id: existing.id,
+                publicKey: key.publicKey,
+                privateKey: key.privateKey,
+                used: existing.used,
+                usedCount: existing.usedCount,
+                nickname: existing.nickname
+            )
+            try storeP2PKKey(repaired, replacing: existingIndex)
+            return
         }
 
-        p2pkKeys.append(key)
+        try storeP2PKKey(key)
     }
 
     func markP2PKKeyUsed(publicKey: String) {
         let normalizedTargetKey = normalizeP2PKPublicKeyForComparison(publicKey)
         guard let index = p2pkKeys.firstIndex(where: {
-            normalizeP2PKPublicKeyForComparison($0.publicKey) == normalizedTargetKey
+            Self.hasUsablePrivateKey($0)
+                && normalizeP2PKPublicKeyForComparison($0.publicKey) == normalizedTargetKey
         }) else { return }
         p2pkKeys[index].used = true
         p2pkKeys[index].usedCount += 1
+        persistP2PKMetadata()
     }
 
-    func removeP2PKKey(_ key: P2PKKey) {
-        try? KeychainService().deleteSecret(forKey: Self.secureP2PKPrivateKey(key.id))
-        p2pkKeys.removeAll { $0.id == key.id }
+    func removeP2PKKey(_ key: P2PKKey) throws {
+        guard let storedKey = p2pkKeys.first(where: { $0.id == key.id }) else { return }
+
+        let storageKey = Self.secureP2PKPrivateKey(storedKey.id)
+        let fallbackStorageKey = Self.secureP2PKRemovalFallback(storedKey.id)
+        let fallbackSecret: String?
+        if !storedKey.privateKey.isEmpty {
+            fallbackSecret = storedKey.privateKey
+        } else if let pendingSecret = pendingLegacyP2PKSecrets[storedKey.id] {
+            fallbackSecret = pendingSecret
+        } else {
+            do {
+                fallbackSecret = try secureStorage.loadSecret(forKey: storageKey)
+            } catch {
+                AppLogger.security.error(
+                    "Failed to load P2PK private key before removal error_type=\(String(reflecting: type(of: error)), privacy: .public)"
+                )
+                throw SettingsFeatureError.keyRemovalFailed
+            }
+        }
+
+        // Journal only the identifier in regular settings. Rollback material
+        // remains under Keychain's ThisDeviceOnly protection at every point.
+        var pendingDeletionIDs = settingsStore.p2pkPendingDeletionIDs
+        pendingDeletionIDs.insert(storedKey.id)
+        do {
+            try settingsStore.saveP2PKPendingDeletionIDs(pendingDeletionIDs)
+        } catch {
+            AppLogger.security.error(
+                "Failed to journal P2PK key removal error_type=\(String(reflecting: type(of: error)), privacy: .public)"
+            )
+            throw SettingsFeatureError.keyRemovalFailed
+        }
+
+        if let fallbackSecret, !fallbackSecret.isEmpty {
+            do {
+                try secureStorage.saveSecret(fallbackSecret, forKey: fallbackStorageKey)
+            } catch {
+                if (try? secureStorage.deleteSecret(forKey: fallbackStorageKey)) != nil {
+                    try? clearP2PKRemovalJournal(for: storedKey.id)
+                }
+                AppLogger.security.error(
+                    "Failed to stage secure P2PK key removal fallback error_type=\(String(reflecting: type(of: error)), privacy: .public)"
+                )
+                throw SettingsFeatureError.keyRemovalFailed
+            }
+        }
+
+        do {
+            try secureStorage.deleteSecret(forKey: storageKey)
+        } catch {
+            if (try? secureStorage.deleteSecret(forKey: fallbackStorageKey)) != nil {
+                try? clearP2PKRemovalJournal(for: storedKey.id)
+            }
+            AppLogger.security.error(
+                "Failed to delete P2PK private key error_type=\(String(reflecting: type(of: error)), privacy: .public)"
+            )
+            throw SettingsFeatureError.keyRemovalFailed
+        }
+
+        let updatedKeys = p2pkKeys.filter { $0.id != storedKey.id }
+        var updatedLegacySecrets = pendingLegacyP2PKSecrets
+        updatedLegacySecrets.removeValue(forKey: storedKey.id)
+        do {
+            try settingsStore.saveP2PKKeys(
+                updatedKeys,
+                preservingLegacySecrets: updatedLegacySecrets
+            )
+        } catch {
+            var restored = fallbackSecret == nil || fallbackSecret?.isEmpty == true
+            if let fallbackSecret, !fallbackSecret.isEmpty {
+                do {
+                    try secureStorage.saveSecret(fallbackSecret, forKey: storageKey)
+                    restored = true
+                } catch {
+                    // Keep both the secure fallback and journal for launch-time
+                    // recovery if Keychain is temporarily unavailable.
+                }
+            }
+            if restored {
+                if (try? secureStorage.deleteSecret(forKey: fallbackStorageKey)) != nil {
+                    try? clearP2PKRemovalJournal(for: storedKey.id)
+                }
+            }
+            AppLogger.security.error(
+                "Failed to finalize P2PK key removal error_type=\(String(reflecting: type(of: error)), privacy: .public)"
+            )
+            throw SettingsFeatureError.keyRemovalFailed
+        }
+
+        pendingLegacyP2PKSecrets = updatedLegacySecrets
+        p2pkKeys = updatedKeys
+
+        // Metadata removal is the commit point. Cleanup is idempotent and the
+        // journal lets the next launch finish it if either operation fails.
+        do {
+            try secureStorage.deleteSecret(forKey: fallbackStorageKey)
+            try clearP2PKRemovalJournal(for: storedKey.id)
+        } catch {
+            AppLogger.security.error(
+                "Failed to finalize P2PK removal cleanup error_type=\(String(reflecting: type(of: error)), privacy: .public)"
+            )
+        }
     }
 
     func resetWalletScopedData(resetRuntimeServices: Bool = true) {
-        let keychain = KeychainService()
-
-        for key in p2pkKeys {
-            try? keychain.deleteSecret(forKey: Self.secureP2PKPrivateKey(key.id))
+        let p2pkIDs = Set(p2pkKeys.map(\.id)).union(settingsStore.p2pkPendingDeletionIDs)
+        for id in p2pkIDs {
+            try? secureStorage.deleteSecret(forKey: Self.secureP2PKPrivateKey(id))
+            try? secureStorage.deleteSecret(forKey: Self.secureP2PKRemovalFallback(id))
         }
 
-        try? keychain.deleteNostrPrivateKey()
+        try? KeychainService().deleteNostrPrivateKey()
 
         showP2PKButtonInDrawer = false
+        pendingLegacyP2PKSecrets = [:]
         p2pkKeys = []
         nostrMintBackupEnabled = true
         let previousSuppression = suppressPaymentRequestSideEffects
@@ -281,15 +426,57 @@ class SettingsManager: ObservableObject {
         settingsStore.clearWalletScopedData()
     }
     
-    private static func loadP2PKKeys() -> [P2PKKey] {
-        let decoded = SettingsStore.shared.p2pkKeys
-        let keychain = KeychainService()
-        return decoded.map { key in
-            let privateKey = secureSecret(
-                key: secureP2PKPrivateKey(key.id),
-                legacyValue: key.privateKey,
-                keychain: keychain
-            )
+    private struct LoadedP2PKKeys {
+        let keys: [P2PKKey]
+        let pendingLegacySecrets: [UUID: String]
+        let encounteredLegacySecrets: Bool
+    }
+
+    private static func loadP2PKKeys(
+        settingsStore: SettingsStore,
+        secureStorage: SecureStorageProtocol
+    ) -> LoadedP2PKKeys {
+        let decoded = settingsStore.p2pkKeys
+        var pendingLegacySecrets: [UUID: String] = [:]
+        var encounteredLegacySecrets = false
+
+        let keys = decoded.map { key in
+            let storageKey = secureP2PKPrivateKey(key.id)
+            var privateKey = ""
+
+            do {
+                if let storedSecret = try secureStorage.loadSecret(forKey: storageKey),
+                   hasUsablePrivateKey(publicKey: key.publicKey, privateKey: storedSecret) {
+                    privateKey = storedSecret
+                }
+            } catch {
+                AppLogger.security.error(
+                    "Failed to load P2PK private key error_type=\(String(reflecting: type(of: error)), privacy: .public)"
+                )
+            }
+
+            let legacySecret = key.privateKey
+            if !legacySecret.isEmpty {
+                encounteredLegacySecrets = true
+            }
+
+            if privateKey.isEmpty, !legacySecret.isEmpty {
+                if hasUsablePrivateKey(publicKey: key.publicKey, privateKey: legacySecret) {
+                    do {
+                        try secureStorage.saveSecret(legacySecret, forKey: storageKey)
+                        privateKey = legacySecret
+                    } catch {
+                        // Keep the legacy field in UserDefaults and the usable
+                        // value in memory. A later metadata write retries migration.
+                        privateKey = legacySecret
+                        pendingLegacySecrets[key.id] = legacySecret
+                        AppLogger.security.error(
+                            "Failed to migrate legacy P2PK private key error_type=\(String(reflecting: type(of: error)), privacy: .public)"
+                        )
+                    }
+                }
+            }
+
             return P2PKKey(
                 id: key.id,
                 publicKey: key.publicKey,
@@ -299,28 +486,167 @@ class SettingsManager: ObservableObject {
                 nickname: key.nickname
             )
         }
+
+        return LoadedP2PKKeys(
+            keys: keys,
+            pendingLegacySecrets: pendingLegacySecrets,
+            encounteredLegacySecrets: encounteredLegacySecrets
+        )
     }
 
-    private func persistP2PKKeys() {
-        let keychain = KeychainService()
-        for key in p2pkKeys {
-            try? keychain.saveSecret(key.privateKey, forKey: Self.secureP2PKPrivateKey(key.id))
+    private static func recoverInterruptedP2PKRemovals(
+        settingsStore: SettingsStore,
+        secureStorage: SecureStorageProtocol
+    ) {
+        let pendingIDs = settingsStore.p2pkPendingDeletionIDs
+        guard !pendingIDs.isEmpty else { return }
+
+        let persistedKeys = Dictionary(
+            uniqueKeysWithValues: settingsStore.p2pkKeys.map { ($0.id, $0) }
+        )
+        var unresolvedIDs = pendingIDs
+
+        for id in pendingIDs {
+            let storageKey = secureP2PKPrivateKey(id)
+            let fallbackStorageKey = secureP2PKRemovalFallback(id)
+            do {
+                if let persistedKey = persistedKeys[id] {
+                    let currentSecret = try secureStorage.loadSecret(forKey: storageKey)
+                    let currentIsUsable = currentSecret.map {
+                        hasUsablePrivateKey(publicKey: persistedKey.publicKey, privateKey: $0)
+                    } ?? false
+                    let fallbackSecret = try secureStorage.loadSecret(forKey: fallbackStorageKey)
+                    let fallbackIsUsable = fallbackSecret.map {
+                        hasUsablePrivateKey(publicKey: persistedKey.publicKey, privateKey: $0)
+                    } ?? false
+                    if !currentIsUsable, fallbackIsUsable, let fallbackSecret {
+                        try secureStorage.saveSecret(fallbackSecret, forKey: storageKey)
+                    }
+                    guard currentIsUsable || fallbackIsUsable else { continue }
+                    try secureStorage.deleteSecret(forKey: fallbackStorageKey)
+                } else {
+                    try secureStorage.deleteSecret(forKey: storageKey)
+                    try secureStorage.deleteSecret(forKey: fallbackStorageKey)
+                }
+                unresolvedIDs.remove(id)
+            } catch {
+                AppLogger.security.error(
+                    "Failed to recover interrupted P2PK removal error_type=\(String(reflecting: type(of: error)), privacy: .public)"
+                )
+            }
         }
-        settingsStore.p2pkKeys = p2pkKeys
+
+        guard unresolvedIDs != pendingIDs else { return }
+        do {
+            try settingsStore.saveP2PKPendingDeletionIDs(unresolvedIDs)
+        } catch {
+            AppLogger.security.error(
+                "Failed to persist P2PK removal recovery state error_type=\(String(reflecting: type(of: error)), privacy: .public)"
+            )
+        }
     }
 
-    private static func secureSecret(key: String, legacyValue: String, keychain: KeychainService) -> String {
-        if let secret = try? keychain.loadSecret(forKey: key) {
-            return secret
+    /// Store the secret before either durable metadata or observable state. If
+    /// metadata persistence fails, remove the newly-written secret so the caller
+    /// receives a failure instead of an unreachable half-created key.
+    private func storeP2PKKey(_ key: P2PKKey, replacing index: Int? = nil) throws {
+        guard Self.hasUsablePrivateKey(key) else {
+            throw SettingsFeatureError.invalidNsec
         }
-        if !legacyValue.isEmpty {
-            try? keychain.saveSecret(legacyValue, forKey: key)
+
+        let storageKey = Self.secureP2PKPrivateKey(key.id)
+        do {
+            try secureStorage.saveSecret(key.privateKey, forKey: storageKey)
+        } catch {
+            AppLogger.security.error(
+                "Failed to store P2PK private key error_type=\(String(reflecting: type(of: error)), privacy: .public)"
+            )
+            throw SettingsFeatureError.secureStorageUnavailable
         }
-        return legacyValue
+
+        var updatedKeys = p2pkKeys
+        let replacedPendingLegacySecret = pendingLegacyP2PKSecrets[key.id]
+        if let index {
+            updatedKeys[index] = key
+            pendingLegacyP2PKSecrets.removeValue(forKey: key.id)
+        } else {
+            updatedKeys.append(key)
+        }
+
+        migratePendingLegacyP2PKSecrets(using: updatedKeys)
+        do {
+            try settingsStore.saveP2PKKeys(
+                updatedKeys,
+                preservingLegacySecrets: pendingLegacyP2PKSecrets
+            )
+        } catch {
+            // Only a brand-new key needs rollback deletion. A repair reuses an
+            // existing metadata row and storage identifier, so deleting here
+            // could destroy a secret that predated this attempt (for example,
+            // after a transient Keychain read failure).
+            if index == nil {
+                try? secureStorage.deleteSecret(forKey: storageKey)
+            }
+            if let replacedPendingLegacySecret {
+                pendingLegacyP2PKSecrets[key.id] = replacedPendingLegacySecret
+            }
+            AppLogger.security.error(
+                "Failed to store P2PK metadata error_type=\(String(reflecting: type(of: error)), privacy: .public)"
+            )
+            throw SettingsFeatureError.settingsPersistenceUnavailable
+        }
+
+        p2pkKeys = updatedKeys
+    }
+
+    private func persistP2PKMetadata() {
+        migratePendingLegacyP2PKSecrets(using: p2pkKeys)
+        do {
+            try settingsStore.saveP2PKKeys(
+                p2pkKeys,
+                preservingLegacySecrets: pendingLegacyP2PKSecrets
+            )
+        } catch {
+            AppLogger.security.error(
+                "Failed to persist P2PK metadata error_type=\(String(reflecting: type(of: error)), privacy: .public)"
+            )
+        }
+    }
+
+    private func migratePendingLegacyP2PKSecrets(using keys: [P2PKKey]) {
+        var migratedIDs: [UUID] = []
+        for (id, legacySecret) in pendingLegacyP2PKSecrets {
+            guard let key = keys.first(where: { $0.id == id }),
+                  Self.hasUsablePrivateKey(publicKey: key.publicKey, privateKey: legacySecret) else {
+                continue
+            }
+            do {
+                try secureStorage.saveSecret(
+                    legacySecret,
+                    forKey: Self.secureP2PKPrivateKey(id)
+                )
+                migratedIDs.append(id)
+            } catch {
+                // Retain the legacy value in the next metadata write.
+            }
+        }
+        for id in migratedIDs {
+            pendingLegacyP2PKSecrets.removeValue(forKey: id)
+        }
     }
 
     private static func secureP2PKPrivateKey(_ id: UUID) -> String {
         "settings.p2pk.\(id.uuidString).privateKey"
+    }
+
+    private static func secureP2PKRemovalFallback(_ id: UUID) -> String {
+        "\(secureP2PKPrivateKey(id)).removalFallback"
+    }
+
+    private func clearP2PKRemovalJournal(for id: UUID) throws {
+        var pendingIDs = settingsStore.p2pkPendingDeletionIDs
+        pendingIDs.remove(id)
+        try settingsStore.saveP2PKPendingDeletionIDs(pendingIDs)
     }
 
     private func generateRandomPrivateKeyBytes() throws -> [UInt8] {
@@ -360,12 +686,39 @@ class SettingsManager: ObservableObject {
         return (privateKeyHex: privateKeyHex, publicKeyHex: publicKeyHex)
     }
 
-    private func normalizeP2PKPublicKeyForComparison(_ publicKey: String) -> String {
+    private static func hasUsablePrivateKey(_ key: P2PKKey) -> Bool {
+        hasUsablePrivateKey(publicKey: key.publicKey, privateKey: key.privateKey)
+    }
+
+    private static func hasUsablePrivateKey(publicKey: String, privateKey: String) -> Bool {
+        guard privateKey.count == 64 else { return false }
+        var bytes: [UInt8] = []
+        bytes.reserveCapacity(32)
+        var offset = privateKey.startIndex
+        for _ in 0..<32 {
+            let next = privateKey.index(offset, offsetBy: 2)
+            guard let byte = UInt8(privateKey[offset..<next], radix: 16) else { return false }
+            bytes.append(byte)
+            offset = next
+        }
+        guard let secret = try? P256K.Schnorr.PrivateKey(dataRepresentation: bytes) else {
+            return false
+        }
+        let derivedPublicKey = "02" + secret.xonly.bytes.map { String(format: "%02x", $0) }.joined()
+        return normalizeP2PKPublicKeyForComparison(derivedPublicKey)
+            == normalizeP2PKPublicKeyForComparison(publicKey)
+    }
+
+    private static func normalizeP2PKPublicKeyForComparison(_ publicKey: String) -> String {
         let normalized = publicKey.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         if normalized.count == 66, normalized.hasPrefix("02") || normalized.hasPrefix("03") {
             return String(normalized.dropFirst(2))
         }
         return normalized
+    }
+
+    private func normalizeP2PKPublicKeyForComparison(_ publicKey: String) -> String {
+        Self.normalizeP2PKPublicKeyForComparison(publicKey)
     }
     
     // MARK: - Formatting Helpers
@@ -493,7 +846,10 @@ extension SettingsManager {
     func allP2PKSigningKeyHexes() -> [String] {
         var seen = Set<String>()
         var result: [String] = []
-        for hex in [primaryP2PKPrivateKeyHex].compactMap({ $0 }) + p2pkKeys.map({ $0.privateKey }) {
+        let storedKeys = p2pkKeys.compactMap { key in
+            Self.hasUsablePrivateKey(key) ? key.privateKey : nil
+        }
+        for hex in [primaryP2PKPrivateKeyHex].compactMap({ $0 }) + storedKeys {
             guard !hex.isEmpty, seen.insert(hex.lowercased()).inserted else { continue }
             result.append(hex)
         }
@@ -507,7 +863,10 @@ extension SettingsManager {
            normalizeP2PKPublicKeyForComparison(primary) == target {
             return true
         }
-        return p2pkKeys.contains { normalizeP2PKPublicKeyForComparison($0.publicKey) == target }
+        return p2pkKeys.contains {
+            Self.hasUsablePrivateKey($0)
+                && normalizeP2PKPublicKeyForComparison($0.publicKey) == target
+        }
     }
 
     /// Assign or clear a human label for a stored key.
@@ -515,6 +874,12 @@ extension SettingsManager {
         guard let index = p2pkKeys.firstIndex(where: { $0.id == id }) else { return }
         let trimmed = nickname?.trimmingCharacters(in: .whitespacesAndNewlines)
         p2pkKeys[index].nickname = (trimmed?.isEmpty == false) ? trimmed : nil
+        persistP2PKMetadata()
+    }
+
+    func isP2PKKeyUsable(_ id: UUID) -> Bool {
+        guard let key = p2pkKeys.first(where: { $0.id == id }) else { return false }
+        return Self.hasUsablePrivateKey(key)
     }
 }
 
@@ -527,10 +892,13 @@ enum AmountDisplayPrimary: String, Codable {
     }
 }
 
-enum SettingsFeatureError: LocalizedError {
+enum SettingsFeatureError: LocalizedError, Equatable {
     case invalidNsec
     case duplicateP2PKKey
     case randomGenerationFailed
+    case secureStorageUnavailable
+    case settingsPersistenceUnavailable
+    case keyRemovalFailed
 
     var errorDescription: String? {
         switch self {
@@ -540,6 +908,12 @@ enum SettingsFeatureError: LocalizedError {
             return "Key already exists"
         case .randomGenerationFailed:
             return "Failed to generate secure key"
+        case .secureStorageUnavailable:
+            return "Couldn't store the private key securely. Unlock your device and try again."
+        case .settingsPersistenceUnavailable:
+            return "Couldn't save the key. Please try again."
+        case .keyRemovalFailed:
+            return "Couldn't remove the key safely. It is still available; please try again."
         }
     }
 }

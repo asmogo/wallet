@@ -2,6 +2,7 @@ package com.cashu.me.Core
 
 import android.content.Context
 import kotlinx.serialization.KSerializer
+import kotlinx.serialization.Serializable
 import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.builtins.serializer
 import kotlinx.serialization.json.Json
@@ -160,7 +161,35 @@ class SettingsStore(
 
     var p2pkKeys: List<P2PKKeyInfo>
         get() = loadList(StorageKeys.settingsP2PKKeys, P2PKKeyInfo.serializer())
-        set(value) = saveList(StorageKeys.settingsP2PKKeys, P2PKKeyInfo.serializer(), value)
+        set(value) = saveP2PKKeys(value)
+
+    internal fun saveP2PKKeys(
+        keys: List<P2PKKeyInfo>,
+        preservingLegacySecrets: Map<String, String> = emptyMap(),
+    ) {
+        val records = keys.map { key ->
+            P2PKSettingsRecord(
+                id = key.id,
+                publicKey = key.publicKey,
+                label = key.label,
+                createdAtEpochMillis = key.createdAtEpochMillis,
+                used = key.used,
+                usedCount = key.usedCount,
+                privateKey = preservingLegacySecrets[key.id],
+            )
+        }
+        saveList(StorageKeys.settingsP2PKKeys, P2PKSettingsRecord.serializer(), records)
+    }
+
+    internal var p2pkPendingDeletionIds: Set<String>
+        get() = loadList(StorageKeys.settingsP2PKPendingDeletionIds, String.serializer()).toSet()
+        set(value) {
+            if (value.isEmpty()) {
+                store.remove(StorageKeys.settingsP2PKPendingDeletionIds)
+            } else {
+                saveList(StorageKeys.settingsP2PKPendingDeletionIds, String.serializer(), value.sorted())
+            }
+        }
 
     internal fun loadP2PKKeysWithLegacySecrets(): List<LegacyP2PKKeyRecord> =
         LegacySettingsSecretParser.p2pkKeys(store.string(StorageKeys.settingsP2PKKeys))
@@ -252,6 +281,7 @@ class SettingsStore(
         StorageKeys.settingsEnablePaymentRequests,
         StorageKeys.settingsReceivePaymentRequestsAutomatically,
         StorageKeys.settingsP2PKKeys,
+        StorageKeys.settingsP2PKPendingDeletionIds,
         StorageKeys.settingsNostrSignerType,
         StorageKeys.settingsNostrMintBackupEnabled,
         StorageKeys.cashuRequestsProcessedNip17Ids,
@@ -266,6 +296,17 @@ class SettingsStore(
         StorageKeys.onboardingCompleted,
     )
 }
+
+@Serializable
+private data class P2PKSettingsRecord(
+    val id: String,
+    val publicKey: String,
+    val label: String,
+    val createdAtEpochMillis: Long,
+    val used: Boolean,
+    val usedCount: Int,
+    val privateKey: String? = null,
+)
 
 internal data class LegacyP2PKKeyRecord(
     val metadata: P2PKKeyInfo,

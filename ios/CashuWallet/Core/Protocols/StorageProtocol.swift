@@ -120,6 +120,7 @@ enum StorageKeys {
     static let receivePaymentRequestsAutomatically = "settings.receivePaymentRequestsAutomatically"
     static let showP2PKButtonInDrawer = "settings.showP2PKButtonInDrawer"
     static let p2pkKeys = "settings.p2pkKeys"
+    static let p2pkPendingDeletionIDs = "settings.p2pkPendingDeletionIDs"
     static let checkIncomingInvoices = "settings.checkIncomingInvoices"
     static let periodicallyCheckIncomingInvoices = "settings.periodicallyCheckIncomingInvoices"
     static let nostrRelays = "settings.nostrRelays"
@@ -252,6 +253,7 @@ enum StorageKeys {
         receivePaymentRequestsAutomatically,
         showP2PKButtonInDrawer,
         p2pkKeys,
+        p2pkPendingDeletionIDs,
         nostrSignerType,
         nostrMintBackupEnabled,
         npcEnabled,

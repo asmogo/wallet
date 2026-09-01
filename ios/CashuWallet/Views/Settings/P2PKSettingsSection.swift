@@ -206,6 +206,7 @@ struct KeyCard: View {
         case seedBacked     // recoverable from the seed phrase
         case custom         // a custom key the user must back up themselves
         case deviceOnly     // a random device-only key, not in the seed backup
+        case repairRequired // metadata exists but the matching secret is unavailable
 
         /// nil renders no status line — a custom key's backup burden is carried
         /// by the import confirmation, not a permanent orange badge on the card.
@@ -214,18 +215,20 @@ struct KeyCard: View {
             case .seedBacked: return "Backed up by your seed phrase"
             case .custom:     return nil
             case .deviceOnly: return "On this device only — not in your seed backup"
+            case .repairRequired: return "Repair required before this key can be used"
             }
         }
         var systemImage: String {
             switch self {
             case .seedBacked: return "checkmark.seal.fill"
-            case .custom, .deviceOnly: return "exclamationmark.triangle.fill"
+            case .custom, .deviceOnly, .repairRequired: return "exclamationmark.triangle.fill"
             }
         }
         var tint: Color {
             switch self {
             case .seedBacked: return .secondary
             case .custom, .deviceOnly: return .orange
+            case .repairRequired: return .red
             }
         }
     }
@@ -242,6 +245,7 @@ struct KeyCard: View {
     let status: Status
     let onCopy: () -> Void
     let actions: [Action]
+    var isCopyEnabled = true
     /// Overrides the displayed short value. The Nostr hub passes a pre-truncated
     /// npub so a bech32 key isn't routed through the P2PK compressed-hex formatter.
     var displayLabel: String? = nil
@@ -285,7 +289,12 @@ struct KeyCard: View {
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            .accessibilityLabel("Copy this key")
+            .disabled(!isCopyEnabled)
+            .accessibilityLabel(
+                isCopyEnabled
+                    ? "Copy this key"
+                    : "Key unavailable. Import its private key to repair it."
+            )
 
             if !actions.isEmpty {
                 HStack(spacing: 0) {
@@ -321,7 +330,6 @@ private struct AdvancedKeysView: View {
     @ObservedObject private var settings = SettingsManager.shared
 
     @State private var showImport = false
-    @State private var importText = ""
     @State private var actionError: String?
 
     var body: some View {
@@ -333,7 +341,7 @@ private struct AdvancedKeysView: View {
                     }
                     .buttonStyle(.plain)
 
-                    Button(action: { actionError = nil; importText = ""; showImport = true }) {
+                    Button(action: { actionError = nil; showImport = true }) {
                         actionRow("Import a key", systemImage: "square.and.arrow.down")
                     }
                     .buttonStyle(.plain)
@@ -370,7 +378,9 @@ private struct AdvancedKeysView: View {
         .animation(.easeInOut(duration: 0.2), value: settings.p2pkKeys)
         .animation(.easeInOut(duration: 0.2), value: actionError)
         .backdropSheet(isPresented: $showImport) {
-            ImportP2PKSheet(nsecText: $importText) { importKey() }
+            ImportP2PKSheet { nsec in
+                try settings.importP2PKNsec(nsec)
+            }
         }
         .bottomSheetBackdropHost()
     }
@@ -389,7 +399,8 @@ private struct AdvancedKeysView: View {
     }
 
     private func keyRow(_ key: P2PKKey) -> some View {
-        NavigationLink {
+        let isUsable = settings.isP2PKKeyUsable(key.id)
+        return NavigationLink {
             DeviceKeyDetailView(keyId: key.id)
         } label: {
             HStack(spacing: 14) {
@@ -401,8 +412,8 @@ private struct AdvancedKeysView: View {
                         .lineLimit(1)
                         .truncationMode(.middle)
                     HStack(spacing: 6) {
-                        Text("Device only")
-                        if key.usedCount > 0 {
+                        Text(isUsable ? "Device only" : "Repair required")
+                        if isUsable, key.usedCount > 0 {
                             Text("·")
                             Text(key.usedCount == 1 ? "Used once" : "Used \(key.usedCount) times")
                         }
@@ -426,21 +437,13 @@ private struct AdvancedKeysView: View {
     private func generateKey() {
         actionError = nil
         HapticFeedback.selection()
-        if !settings.generateP2PKKey() {
-            actionError = "Couldn't generate a key. Please try again."
-        }
-    }
-
-    private func importKey() {
-        actionError = nil
         do {
-            try settings.importP2PKNsec(importText)
-            importText = ""
-            showImport = false
+            try settings.generateP2PKKey()
         } catch {
             actionError = error.localizedDescription
         }
     }
+
 }
 
 // MARK: - Device key detail
@@ -458,8 +461,11 @@ private struct DeviceKeyDetailView: View {
     @State private var privateKeyReveal: PrivateKeyReveal?
     @State private var nameText = ""
     @State private var showRemoveConfirm = false
+    @State private var showRepair = false
+    @State private var actionError: String?
 
     private var key: P2PKKey? { settings.p2pkKeys.first { $0.id == keyId } }
+    private var isUsable: Bool { settings.isP2PKKeyUsable(keyId) }
 
     var body: some View {
         ScrollView {
@@ -468,16 +474,32 @@ private struct DeviceKeyDetailView: View {
                     KeyCard(
                         title: key.nickname?.isEmpty == false ? key.nickname! : "Device key",
                         pubkey: key.publicKey,
-                        status: .deviceOnly,
+                        status: isUsable ? .deviceOnly : .repairRequired,
                         onCopy: { copy(P2PKKeyDisplay.canonical(forPubkey: key.publicKey), label: key.publicKey) },
-                        actions: [
-                            .init(title: "Show QR", systemImage: "qrcode") {
-                                activeQR = QRPayload(title: "Key", content: P2PKKeyDisplay.canonical(forPubkey: key.publicKey))
-                            },
-                            .init(title: "Back up key", systemImage: "key") { backUp(key) },
-                        ]
+                        actions: isUsable
+                            ? [
+                                .init(title: "Show QR", systemImage: "qrcode") {
+                                    activeQR = QRPayload(title: "Key", content: P2PKKeyDisplay.canonical(forPubkey: key.publicKey))
+                                },
+                                .init(title: "Back up key", systemImage: "key") { backUp(key) },
+                            ]
+                            : [
+                                .init(title: "Repair key", systemImage: "square.and.arrow.down") {
+                                    showRepair = true
+                                },
+                            ],
+                        isCopyEnabled: isUsable
                     )
                     .padding(.top, 8)
+
+                    if !isUsable {
+                        InlineNotice(
+                            message: "This key's private key is unavailable. Import its nsec to repair it before sharing or receiving locked ecash.",
+                            severity: .error
+                        )
+                        .padding(.horizontal, 6)
+                        .padding(.top, 12)
+                    }
 
                     SettingsSectionGroup("Name") {
                         TextField("Add a name", text: $nameText)
@@ -490,7 +512,10 @@ private struct DeviceKeyDetailView: View {
                     }
 
                     SettingsSectionGroup(nil) {
-                        Button(role: .destructive, action: { showRemoveConfirm = true }) {
+                        Button(role: .destructive, action: {
+                            actionError = nil
+                            showRemoveConfirm = true
+                        }) {
                             HStack(spacing: 14) {
                                 SettingsRowIcon(systemName: "trash", tint: .red)
                                 Text("Remove Key")
@@ -507,6 +532,13 @@ private struct DeviceKeyDetailView: View {
                     SettingsSectionFooter {
                         Text("Ecash locked to this key can only be claimed with it. Removing it can't be undone — back it up first if you might still receive to it.")
                     }
+
+                    if let actionError {
+                        InlineNotice(message: actionError, severity: .error)
+                            .padding(.horizontal, 6)
+                            .padding(.top, 4)
+                            .transition(.opacity)
+                    }
                 }
                 .padding(.horizontal)
                 .padding(.bottom, 32)
@@ -518,15 +550,27 @@ private struct DeviceKeyDetailView: View {
         .onAppear { nameText = key?.nickname ?? "" }
         .onDisappear { saveName() }
         .onChange(of: key == nil) { _, removed in if removed { dismiss() } }
+        .animation(.easeInOut(duration: 0.2), value: actionError)
         .backdropSheet(item: $activeQR) { payload in
             QRCodeDetailSheet(title: payload.title, content: payload.content)
         }
         .backdropSheet(item: $privateKeyReveal) { reveal in
             PrivateKeyRevealSheet(title: reveal.title, nsec: reveal.nsec)
         }
+        .backdropSheet(isPresented: $showRepair) {
+            ImportP2PKSheet { nsec in
+                try settings.importP2PKNsec(nsec)
+            }
+        }
         .alert("Remove this key?", isPresented: $showRemoveConfirm) {
             Button("Remove Key", role: .destructive) {
-                if let key { settings.removeP2PKKey(key) }
+                guard let key else { return }
+                actionError = nil
+                do {
+                    try settings.removeP2PKKey(key)
+                } catch {
+                    actionError = error.localizedDescription
+                }
             }
             Button("Cancel", role: .cancel) {}
         } message: {
