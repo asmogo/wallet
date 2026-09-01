@@ -22,7 +22,7 @@ interface NostrSignerSettings {
 class SettingsStore(
     context: Context,
     storeName: String = "settings_store",
-) : NostrSignerSettings {
+) : NostrSignerSettings, PriceSettingsStore {
     companion object {
         val defaultNostrRelays = listOf(
             "wss://relay.damus.io",
@@ -38,11 +38,11 @@ class SettingsStore(
         get() = store.boolean(StorageKeys.settingsUseBitcoinSymbol, true)
         set(value) = store.putBoolean(StorageKeys.settingsUseBitcoinSymbol, value)
 
-    var showFiatBalance: Boolean
+    override var showFiatBalance: Boolean
         get() = store.boolean(StorageKeys.settingsShowFiatBalance, false)
         set(value) = store.putBoolean(StorageKeys.settingsShowFiatBalance, value)
 
-    var bitcoinPriceCurrency: String
+    override var bitcoinPriceCurrency: String
         get() = store.string(StorageKeys.settingsBitcoinPriceCurrency) ?: "USD"
         set(value) = store.putString(StorageKeys.settingsBitcoinPriceCurrency, value)
 
@@ -192,38 +192,51 @@ class SettingsStore(
         nostrRelays = defaultNostrRelays
     }
 
-    var priceEnabled: Boolean
+    override var priceEnabled: Boolean
         get() = store.boolean(StorageKeys.priceEnabled, showFiatBalance)
         set(value) = store.putBoolean(StorageKeys.priceEnabled, value)
 
-    var priceCurrencyCode: String
+    override var priceCurrencyCode: String
         get() = store.string(StorageKeys.priceCurrencyCode) ?: bitcoinPriceCurrency
         set(value) = store.putString(StorageKeys.priceCurrencyCode, value.uppercase())
 
-    fun cachedPrice(currency: String): Double? {
+    override fun cachedPrice(currency: String): Double? {
         val normalized = currency.uppercase()
-        return store.string(StorageKeys.priceCachedBTC(normalized))?.toDoubleOrNull()
-            ?: store.string(StorageKeys.priceCachedBTC)?.toDoubleOrNull()
+        val key = StorageKeys.priceCachedBTC(normalized)
+        store.string(key)?.toDoubleOrNull()?.let {
+            store.removeKeys(listOf(StorageKeys.priceCachedBTC))
+            return it
+        }
+
+        val legacy = store.string(StorageKeys.priceCachedBTC)?.toDoubleOrNull() ?: return null
+        store.putString(key, legacy.toString())
+        store.removeKeys(listOf(StorageKeys.priceCachedBTC))
+        return legacy
     }
 
-    fun setCachedPrice(price: Double, currency: String) {
+    override fun setCachedPrice(price: Double, currency: String) {
         val normalized = currency.uppercase()
         store.putString(StorageKeys.priceCachedBTC(normalized), price.toString())
-        store.putString(StorageKeys.priceCachedBTC, price.toString())
     }
 
-    fun cachedPriceDate(currency: String): Long? {
+    override fun cachedPriceDate(currency: String): Long? {
         val normalized = currency.uppercase()
-        val dated = store.long(StorageKeys.priceCachedBTCDate(normalized), Long.MIN_VALUE)
-        if (dated != Long.MIN_VALUE) return dated
+        val key = StorageKeys.priceCachedBTCDate(normalized)
+        val dated = store.long(key, Long.MIN_VALUE)
+        if (dated != Long.MIN_VALUE) {
+            store.removeKeys(listOf(StorageKeys.priceCachedBTCDate))
+            return dated
+        }
         val legacy = store.long(StorageKeys.priceCachedBTCDate, Long.MIN_VALUE)
-        return legacy.takeIf { it != Long.MIN_VALUE }
+        if (legacy == Long.MIN_VALUE) return null
+        store.putLong(key, legacy)
+        store.removeKeys(listOf(StorageKeys.priceCachedBTCDate))
+        return legacy
     }
 
-    fun setCachedPriceDate(epochMillis: Long, currency: String) {
+    override fun setCachedPriceDate(epochMillis: Long, currency: String) {
         val normalized = currency.uppercase()
         store.putLong(StorageKeys.priceCachedBTCDate(normalized), epochMillis)
-        store.putLong(StorageKeys.priceCachedBTCDate, epochMillis)
     }
 
     private fun <T> loadList(key: String, serializer: KSerializer<T>): List<T> {

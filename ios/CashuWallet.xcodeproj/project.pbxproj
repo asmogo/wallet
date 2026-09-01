@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		323A00000000000000000001 /* PriceServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 323A00000000000000000002 /* PriceServiceTests.swift */; };
 		1100000000000001 /* CashuWalletApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2100000000000001 /* CashuWalletApp.swift */; };
 		1100000000000002 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2100000000000002 /* ContentView.swift */; };
 		1100000000000004 /* WalletManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2100000000000004 /* WalletManager.swift */; };
@@ -189,6 +190,7 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
+		323A00000000000000000002 /* PriceServiceTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = PriceServiceTests.swift; path = CashuWalletTests/PriceServiceTests.swift; sourceTree = "<group>"; };
 		0100000000000001 /* CashuWallet.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = CashuWallet.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		2100000000000001 /* CashuWalletApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CashuWalletApp.swift; sourceTree = "<group>"; };
 		2100000000000002 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
@@ -385,6 +387,7 @@
 		172BA94269E4241413C46309 /* CashuWalletTests */ = {
 			isa = PBXGroup;
 			children = (
+				323A00000000000000000002 /* PriceServiceTests.swift */,
 				F1CF8C0C2E1379BCD23CF8C6 /* IntegrationTestBase.swift */,
 				72DD529F60A8D9D1A81E3FBB /* NutshellIntegrationTests.swift */,
 				T1B0000000000001 /* InMemoryStorage.swift */,
@@ -971,6 +974,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				323A00000000000000000001 /* PriceServiceTests.swift in Sources */,
 				BF36C01CE0AB810E1B462448 /* IntegrationTestBase.swift in Sources */,
 				349E3802577110813AC1A9E3 /* NutshellIntegrationTests.swift in Sources */,
 				T2B0000000000001 /* InMemoryStorage.swift in Sources */,
