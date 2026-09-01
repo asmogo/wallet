@@ -119,16 +119,14 @@ struct P2PKSettingsSection: View {
                 .accessibilityLabel("How locking works")
             }
         }
-        .sheet(isPresented: $showExplainer) {
+        .backdropSheet(isPresented: $showExplainer) {
             LockedEcashExplainerSheet()
         }
-        .sheet(item: $activeQR) { payload in
+        .backdropSheet(item: $activeQR) { payload in
             QRCodeDetailSheet(title: payload.title, content: payload.content)
-                .flatBottomSheetSurface()
         }
-        .sheet(item: $privateKeyReveal) { reveal in
+        .backdropSheet(item: $privateKeyReveal) { reveal in
             PrivateKeyRevealSheet(title: reveal.title, nsec: reveal.nsec)
-                .flatBottomSheetSurface()
         }
     }
 
@@ -208,24 +206,29 @@ struct KeyCard: View {
         case seedBacked     // recoverable from the seed phrase
         case custom         // a custom key the user must back up themselves
         case deviceOnly     // a random device-only key, not in the seed backup
+        case repairRequired // metadata exists but the matching secret is unavailable
 
-        var text: String {
+        /// nil renders no status line — a custom key's backup burden is carried
+        /// by the import confirmation, not a permanent orange badge on the card.
+        var text: String? {
             switch self {
             case .seedBacked: return "Backed up by your seed phrase"
-            case .custom:     return "Custom key — back it up yourself"
+            case .custom:     return nil
             case .deviceOnly: return "On this device only — not in your seed backup"
+            case .repairRequired: return "Repair required before this key can be used"
             }
         }
         var systemImage: String {
             switch self {
             case .seedBacked: return "checkmark.seal.fill"
-            case .custom, .deviceOnly: return "exclamationmark.triangle.fill"
+            case .custom, .deviceOnly, .repairRequired: return "exclamationmark.triangle.fill"
             }
         }
         var tint: Color {
             switch self {
             case .seedBacked: return .secondary
             case .custom, .deviceOnly: return .orange
+            case .repairRequired: return .red
             }
         }
     }
@@ -242,6 +245,7 @@ struct KeyCard: View {
     let status: Status
     let onCopy: () -> Void
     let actions: [Action]
+    var isCopyEnabled = true
     /// Overrides the displayed short value. The Nostr hub passes a pre-truncated
     /// npub so a bech32 key isn't routed through the P2PK compressed-hex formatter.
     var displayLabel: String? = nil
@@ -260,10 +264,12 @@ struct KeyCard: View {
                         .font(.body.weight(.semibold))
                         .lineLimit(1)
                         .truncationMode(.middle)
-                    Label(status.text, systemImage: status.systemImage)
-                        .font(.caption)
-                        .foregroundStyle(status.tint)
-                        .labelStyle(.titleAndIcon)
+                    if let statusText = status.text {
+                        Label(statusText, systemImage: status.systemImage)
+                            .font(.caption)
+                            .foregroundStyle(status.tint)
+                            .labelStyle(.titleAndIcon)
+                    }
                 }
                 Spacer(minLength: 0)
             }
@@ -283,7 +289,12 @@ struct KeyCard: View {
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            .accessibilityLabel("Copy this key")
+            .disabled(!isCopyEnabled)
+            .accessibilityLabel(
+                isCopyEnabled
+                    ? "Copy this key"
+                    : "Key unavailable. Import its private key to repair it."
+            )
 
             if !actions.isEmpty {
                 HStack(spacing: 0) {
@@ -319,7 +330,6 @@ private struct AdvancedKeysView: View {
     @ObservedObject private var settings = SettingsManager.shared
 
     @State private var showImport = false
-    @State private var importText = ""
     @State private var actionError: String?
 
     var body: some View {
@@ -331,7 +341,7 @@ private struct AdvancedKeysView: View {
                     }
                     .buttonStyle(.plain)
 
-                    Button(action: { actionError = nil; importText = ""; showImport = true }) {
+                    Button(action: { actionError = nil; showImport = true }) {
                         actionRow("Import a key", systemImage: "square.and.arrow.down")
                     }
                     .buttonStyle(.plain)
@@ -367,9 +377,12 @@ private struct AdvancedKeysView: View {
         .toolbarBackground(.hidden, for: .navigationBar)
         .animation(.easeInOut(duration: 0.2), value: settings.p2pkKeys)
         .animation(.easeInOut(duration: 0.2), value: actionError)
-        .sheet(isPresented: $showImport) {
-            ImportP2PKSheet(nsecText: $importText) { importKey() }
+        .backdropSheet(isPresented: $showImport) {
+            ImportP2PKSheet { nsec in
+                try settings.importP2PKNsec(nsec)
+            }
         }
+        .bottomSheetBackdropHost()
     }
 
     private func actionRow(_ title: String, systemImage: String) -> some View {
@@ -386,7 +399,8 @@ private struct AdvancedKeysView: View {
     }
 
     private func keyRow(_ key: P2PKKey) -> some View {
-        NavigationLink {
+        let isUsable = settings.isP2PKKeyUsable(key.id)
+        return NavigationLink {
             DeviceKeyDetailView(keyId: key.id)
         } label: {
             HStack(spacing: 14) {
@@ -398,8 +412,8 @@ private struct AdvancedKeysView: View {
                         .lineLimit(1)
                         .truncationMode(.middle)
                     HStack(spacing: 6) {
-                        Text("Device only")
-                        if key.usedCount > 0 {
+                        Text(isUsable ? "Device only" : "Repair required")
+                        if isUsable, key.usedCount > 0 {
                             Text("·")
                             Text(key.usedCount == 1 ? "Used once" : "Used \(key.usedCount) times")
                         }
@@ -423,21 +437,13 @@ private struct AdvancedKeysView: View {
     private func generateKey() {
         actionError = nil
         HapticFeedback.selection()
-        if !settings.generateP2PKKey() {
-            actionError = "Couldn't generate a key. Please try again."
-        }
-    }
-
-    private func importKey() {
-        actionError = nil
         do {
-            try settings.importP2PKNsec(importText)
-            importText = ""
-            showImport = false
+            try settings.generateP2PKKey()
         } catch {
             actionError = error.localizedDescription
         }
     }
+
 }
 
 // MARK: - Device key detail
@@ -455,8 +461,11 @@ private struct DeviceKeyDetailView: View {
     @State private var privateKeyReveal: PrivateKeyReveal?
     @State private var nameText = ""
     @State private var showRemoveConfirm = false
+    @State private var showRepair = false
+    @State private var actionError: String?
 
     private var key: P2PKKey? { settings.p2pkKeys.first { $0.id == keyId } }
+    private var isUsable: Bool { settings.isP2PKKeyUsable(keyId) }
 
     var body: some View {
         ScrollView {
@@ -465,16 +474,32 @@ private struct DeviceKeyDetailView: View {
                     KeyCard(
                         title: key.nickname?.isEmpty == false ? key.nickname! : "Device key",
                         pubkey: key.publicKey,
-                        status: .deviceOnly,
+                        status: isUsable ? .deviceOnly : .repairRequired,
                         onCopy: { copy(P2PKKeyDisplay.canonical(forPubkey: key.publicKey), label: key.publicKey) },
-                        actions: [
-                            .init(title: "Show QR", systemImage: "qrcode") {
-                                activeQR = QRPayload(title: "Key", content: P2PKKeyDisplay.canonical(forPubkey: key.publicKey))
-                            },
-                            .init(title: "Back up key", systemImage: "key") { backUp(key) },
-                        ]
+                        actions: isUsable
+                            ? [
+                                .init(title: "Show QR", systemImage: "qrcode") {
+                                    activeQR = QRPayload(title: "Key", content: P2PKKeyDisplay.canonical(forPubkey: key.publicKey))
+                                },
+                                .init(title: "Back up key", systemImage: "key") { backUp(key) },
+                            ]
+                            : [
+                                .init(title: "Repair key", systemImage: "square.and.arrow.down") {
+                                    showRepair = true
+                                },
+                            ],
+                        isCopyEnabled: isUsable
                     )
                     .padding(.top, 8)
+
+                    if !isUsable {
+                        InlineNotice(
+                            message: "This key's private key is unavailable. Import its nsec to repair it before sharing or receiving locked ecash.",
+                            severity: .error
+                        )
+                        .padding(.horizontal, 6)
+                        .padding(.top, 12)
+                    }
 
                     SettingsSectionGroup("Name") {
                         TextField("Add a name", text: $nameText)
@@ -487,7 +512,10 @@ private struct DeviceKeyDetailView: View {
                     }
 
                     SettingsSectionGroup(nil) {
-                        Button(role: .destructive, action: { showRemoveConfirm = true }) {
+                        Button(role: .destructive, action: {
+                            actionError = nil
+                            showRemoveConfirm = true
+                        }) {
                             HStack(spacing: 14) {
                                 SettingsRowIcon(systemName: "trash", tint: .red)
                                 Text("Remove Key")
@@ -504,6 +532,13 @@ private struct DeviceKeyDetailView: View {
                     SettingsSectionFooter {
                         Text("Ecash locked to this key can only be claimed with it. Removing it can't be undone — back it up first if you might still receive to it.")
                     }
+
+                    if let actionError {
+                        InlineNotice(message: actionError, severity: .error)
+                            .padding(.horizontal, 6)
+                            .padding(.top, 4)
+                            .transition(.opacity)
+                    }
                 }
                 .padding(.horizontal)
                 .padding(.bottom, 32)
@@ -515,22 +550,33 @@ private struct DeviceKeyDetailView: View {
         .onAppear { nameText = key?.nickname ?? "" }
         .onDisappear { saveName() }
         .onChange(of: key == nil) { _, removed in if removed { dismiss() } }
-        .sheet(item: $activeQR) { payload in
+        .animation(.easeInOut(duration: 0.2), value: actionError)
+        .backdropSheet(item: $activeQR) { payload in
             QRCodeDetailSheet(title: payload.title, content: payload.content)
-                .flatBottomSheetSurface()
         }
-        .sheet(item: $privateKeyReveal) { reveal in
+        .backdropSheet(item: $privateKeyReveal) { reveal in
             PrivateKeyRevealSheet(title: reveal.title, nsec: reveal.nsec)
-                .flatBottomSheetSurface()
+        }
+        .backdropSheet(isPresented: $showRepair) {
+            ImportP2PKSheet { nsec in
+                try settings.importP2PKNsec(nsec)
+            }
         }
         .alert("Remove this key?", isPresented: $showRemoveConfirm) {
             Button("Remove Key", role: .destructive) {
-                if let key { settings.removeP2PKKey(key) }
+                guard let key else { return }
+                actionError = nil
+                do {
+                    try settings.removeP2PKKey(key)
+                } catch {
+                    actionError = error.localizedDescription
+                }
             }
             Button("Cancel", role: .cancel) {}
         } message: {
             Text("Ecash locked to this key can only be claimed with it. This can't be undone.")
         }
+        .bottomSheetBackdropHost()
     }
 
     private func backUp(_ key: P2PKKey) {
@@ -559,41 +605,45 @@ private struct LockedEcashExplainerSheet: View {
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 20) {
-                Text("Locked ecash")
-                    .font(.title.weight(.heavy))
-                    .tracking(-0.3)
-                    .padding(.top, 8)
+        // Pinned-CTA layout (the receipt-sheet shape): the scroll region ends
+        // above the button, so the last point can never crowd or run under it.
+        VStack(spacing: 0) {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 20) {
+                    Text("Locked ecash")
+                        .font(.title.weight(.heavy))
+                        .tracking(-0.3)
+                        .padding(.top, 8)
 
-                VStack(alignment: .leading, spacing: 16) {
-                    explainerPoint(
-                        "lock.open",
-                        "Ecash is bearer cash. Whoever holds a token can spend it — like a banknote."
-                    )
-                    explainerPoint(
-                        "lock",
-                        "Locking ties a token to a key. Even if it's intercepted in transit, only the key's holder can claim it."
-                    )
-                    explainerPoint(
-                        "key.fill",
-                        "Your key comes from your seed phrase, so it's backed up automatically. Share your key or QR, and anyone can send you locked ecash."
-                    )
-                    explainerPoint(
-                        "paperplane",
-                        "When you send, you can lock ecash to someone else's key so only they can claim it."
-                    )
+                    VStack(alignment: .leading, spacing: 16) {
+                        explainerPoint(
+                            "lock.open",
+                            "Ecash is bearer cash. Whoever holds a token can spend it — like a banknote."
+                        )
+                        explainerPoint(
+                            "lock",
+                            "Locking ties a token to a key. Even if it's intercepted in transit, only the key's holder can claim it."
+                        )
+                        explainerPoint(
+                            "key.fill",
+                            "Your key comes from your seed phrase, so it's backed up automatically. Share your key or QR, and anyone can send you locked ecash."
+                        )
+                        explainerPoint(
+                            "paperplane",
+                            "When you send, you can lock ecash to someone else's key so only they can claim it."
+                        )
+                    }
                 }
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(28)
-            .padding(.bottom, 80)
-        }
-        .safeAreaInset(edge: .bottom) {
-            Button(action: { dismiss() }) { Text("Got it") }
-                .glassButton()
+                .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.horizontal, 28)
-                .padding(.bottom, 12)
+                .padding(.top, 28)
+                .padding(.bottom, 24)
+            }
+
+            Button(action: { dismiss() }) { Text("Got it") }
+                .flatSheetSecondaryButton()
+                .padding(.horizontal, 28)
+                .padding(.bottom, 16)
         }
         .presentationDetents([.medium, .large])
         .presentationDragIndicator(.visible)
@@ -616,88 +666,72 @@ private struct LockedEcashExplainerSheet: View {
 
 // MARK: - Private-key reveal sheet
 
-/// Reveals a key's nsec behind authentication, mirroring the seed-phrase backup
-/// pattern: hidden by default, reveal and copy both require auth. Shared by the
-/// Locked Ecash hub and the Nostr settings hub — the caveat line is caller-supplied
-/// so each reads accurately (ecash-claim vs. Lightning-address control).
+/// Reveals a key's nsec behind authentication, matching `BackupView` (the
+/// seed-phrase reveal) beat for beat: in-content title, warning copy, and one
+/// CTA that flips from Reveal to Copy once the key is showing, on a
+/// content-fit sheet dismissed by drag. Shared by the Locked Ecash hub and the
+/// Nostr settings hub — the caveat line is caller-supplied so each reads
+/// accurately (ecash-claim vs. Lightning-address control).
 struct PrivateKeyRevealSheet: View {
     let title: String
     let nsec: String
     var warning: String = "Anyone with this key can claim ecash locked to it. Never share it."
 
-    @Environment(\.dismiss) private var dismiss
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var revealed = false
-
-    private var hidden: String {
-        String(repeating: "•", count: 24)
-    }
+    @State private var contentHeight: CGFloat = 0
 
     var body: some View {
-        NavigationStack {
-            ScrollView {
-                VStack(spacing: 24) {
-                    VStack(spacing: 12) {
-                        Image(systemName: "exclamationmark.triangle.fill")
-                            .font(.title)
-                            .foregroundStyle(.orange)
-                        Text("Keep this key secret")
-                            .font(.headline)
-                        Text(warning)
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
-                            .multilineTextAlignment(.center)
-                    }
-                    .padding()
+        VStack(spacing: 24) {
+            Text(title)
+                .font(.title2.weight(.semibold))
 
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text("Private key (nsec)")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                            .textCase(.uppercase)
-                        HStack(spacing: 10) {
-                            Text(revealed ? nsec : hidden)
-                                .font(.system(.body, design: .monospaced))
-                                .foregroundStyle(revealed ? .primary : .secondary)
-                                .lineLimit(3)
-                                .multilineTextAlignment(.leading)
-                            Spacer(minLength: 0)
-                            VStack(spacing: 8) {
-                                Button(action: toggleReveal) {
-                                    Image(systemName: revealed ? "eye.slash" : "eye")
-                                }
-                                Button(action: copyKey) {
-                                    Image(systemName: "doc.on.doc")
-                                        .foregroundStyle(Color.accentColor)
-                                }
-                            }
-                        }
-                    }
+            Text(warning)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+
+            if revealed {
+                Text(nsec)
+                    .font(.system(.footnote, design: .monospaced).weight(.medium))
+                    .multilineTextAlignment(.leading)
+                    .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(12)
-                    .liquidGlass(in: RoundedRectangle(cornerRadius: 10))
-                    .padding(.horizontal)
-
-                    Spacer(minLength: 40)
-
-                    Button(action: { dismiss() }) { Text("Done") }
-                        .glassButton()
-                        .padding(.horizontal)
-                        .padding(.bottom, 24)
-                }
+                    .background(.quaternary.opacity(0.55), in: RoundedRectangle(cornerRadius: 12))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 12)
+                            .stroke(Color(uiColor: .separator), lineWidth: 0.5)
+                    )
+                    .transition(.opacity.combined(with: .move(edge: .bottom)))
+                    .accessibilityLabel("Private key, \(nsec)")
             }
-            .navigationTitle(title)
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbarBackground(.hidden, for: .navigationBar)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") { dismiss() }
-                }
+
+            // Reveal is the sheet's one primary action; once the key is showing,
+            // Copy is a quieter follow-up and drops to the secondary style.
+            if revealed {
+                Button("Copy Private Key") { copyKey() }
+                    .flatSheetSecondaryButton()
+            } else {
+                Button("Reveal Private Key") { revealKey() }
+                    .glassButton()
             }
         }
+        .padding(.horizontal, 24)
+        .padding(.vertical, 20)
+        .contentFitMeasured { contentHeight = $0 }
+        .contentFitDetent(
+            contentHeight,
+            estimate: revealed ? 340 : 250,
+            navigationBar: false,
+            step: revealed,
+            stepResize: .milliseconds(300)
+        )
+        .presentationDragIndicator(.visible)
         .flatBottomSheetSurface()
+        .animation(reduceMotion ? nil : .snappy(duration: 0.25), value: revealed)
     }
 
-    private func toggleReveal() {
-        if revealed { revealed = false; return }
+    /// Revealing always requires authentication, regardless of the App Lock setting.
+    private func revealKey() {
         Task {
             if await AppLockManager.shared.authenticate(reason: "Reveal this private key") {
                 revealed = true

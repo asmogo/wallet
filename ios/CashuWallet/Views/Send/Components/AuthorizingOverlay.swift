@@ -40,6 +40,13 @@ struct PaymentStatusView: View {
     var successTitle: String = "Payment Sent!"
     var failureTitle: String = "Payment Failed"
 
+    /// The mint accepted the payment for asynchronous settlement (NUT-05) and
+    /// pays out in the background. The success face then must not claim
+    /// completion: the glyph becomes a pending clock instead of the green
+    /// check (no celebration bounce), and the message slot explains what is
+    /// still happening.
+    var settlementPending: Bool = false
+
     /// Optional custom failure CTA (overrides the default Done / Try Again button).
     var failureCTA: FailureCTA? = nil
 
@@ -48,6 +55,47 @@ struct PaymentStatusView: View {
     let onRetry: () -> Void
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    /// True when this instance was MOUNTED already at `.success` (a payment
+    /// that landed while a waiting face was up — receive invoice, token claim,
+    /// ecash claimed). Transitions and phase-keyed effects never fire on a
+    /// fresh subtree's initial content, so DESIGN.md §6's celebration was
+    /// structurally silent on those surfaces; this gate drives the staged
+    /// entrance that restores it. Seeded once — a later phase flip (the morph
+    /// path) never turns it on, and `@State` keeps the seed across re-inits.
+    @State private var mountedCelebrating: Bool
+    /// Flipped ~100ms after appear (celebration mounts only): beat 1 (glyph
+    /// materialize + bounce + haptic), with the title and details bands riding
+    /// delayed animations off the same flip.
+    @State private var entered = false
+
+    init(
+        details: [DetailRow],
+        phase: Phase,
+        processingTitle: String = "Processing…",
+        successTitle: String = "Payment Sent!",
+        failureTitle: String = "Payment Failed",
+        settlementPending: Bool = false,
+        failureCTA: FailureCTA? = nil,
+        onDone: @escaping () -> Void,
+        onRetry: @escaping () -> Void
+    ) {
+        self.details = details
+        self.phase = phase
+        self.processingTitle = processingTitle
+        self.successTitle = successTitle
+        self.failureTitle = failureTitle
+        self.settlementPending = settlementPending
+        self.failureCTA = failureCTA
+        self.onDone = onDone
+        self.onRetry = onRetry
+        // Failure and settlement-pending mounts stay deliberately still — the
+        // staged entrance is the celebration's, and only the celebration's.
+        _mountedCelebrating = State(initialValue: {
+            if case .success = phase { return !settlementPending }
+            return false
+        }())
+    }
 
     private var phaseKey: Int {
         switch phase {
@@ -65,10 +113,20 @@ struct PaymentStatusView: View {
         }
     }
 
-    private var failureMessage: String? {
+    private var statusMessage: String? {
         if case .failure(let message, _, _) = phase, !message.isEmpty { return message }
+        if case .success = phase, settlementPending {
+            return "The mint accepted this payment and is settling it. Your balance will update automatically."
+        }
         return nil
     }
+
+    /// The staged entrance is active for this instance. Reduce Motion keeps
+    /// today's single flat fade instead.
+    private var staged: Bool { mountedCelebrating && !reduceMotion }
+    /// A band is visible when staging is off, or once beat 1 has fired (each
+    /// band's own delayed animation supplies its cadence).
+    private var bandVisible: Bool { !staged || entered }
 
     var body: some View {
         // Same vertical scaffold as the confirm screens (`PayFlowScaffold`), so the
@@ -79,6 +137,9 @@ struct PaymentStatusView: View {
             VStack(spacing: 16) {
                 iconSlot
 
+                // Beat 2: the title band settles in after the check has
+                // landed. Inert (opacity 1, offset 0) outside a celebration
+                // mount, so the morph path renders byte-identically.
                 VStack(spacing: 8) {
                     Text(statusTitle)
                         .font(.title2.weight(.semibold))
@@ -86,15 +147,18 @@ struct PaymentStatusView: View {
                         .multilineTextAlignment(.center)
 
                     // Reserved slot so success ↔ failure never nudges the icon above it.
-                    Text(failureMessage ?? " ")
+                    Text(statusMessage ?? " ")
                         .font(.callout)
                         .foregroundStyle(.secondary)
                         .multilineTextAlignment(.center)
                         .lineLimit(3)
-                        .opacity(failureMessage == nil ? 0 : 1)
+                        .opacity(statusMessage == nil ? 0 : 1)
                         .padding(.horizontal, 32)
                         .frame(minHeight: 44)
                 }
+                .opacity(bandVisible ? 1 : 0)
+                .offset(y: staged && !entered ? 8 : 0)
+                .animation(.smooth(duration: 0.3).delay(0.12), value: entered)
             }
         } details: {
             // Payment facts are terminal-only: processing shows just the spinner
@@ -106,16 +170,34 @@ struct PaymentStatusView: View {
                     }
                 }
                 .padding(.horizontal)
+                // Beat 3: the receipt settles in last. Opacity + a 6pt rise —
+                // never blur; these rows are money values.
+                .opacity(bandVisible ? 1 : 0)
+                .offset(y: staged && !entered ? 6 : 0)
+                .animation(.smooth(duration: 0.3).delay(0.2), value: entered)
             }
         } footer: {
             actionButton
                 .padding(.horizontal)
                 .padding(.bottom, 16)
+                // Rides beat 3 as opacity only — the hit target never moves,
+                // and opacity keeps hit-testing, so Done works from frame 1.
+                .opacity(bandVisible ? 1 : 0)
+                .animation(.smooth(duration: 0.3).delay(0.2), value: entered)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .animation(.smooth(duration: 0.3), value: phaseKey)
         .onChange(of: phase) { _, newPhase in handlePhase(newPhase) }
         .onAppear { handlePhase(phase) }
+        .task {
+            // Beat 1, ~100ms after mount so the check materializes once the
+            // parent swap's fade has mostly cleared — the haptic lands WITH
+            // the check instead of before it.
+            guard staged, !entered else { return }
+            try? await Task.sleep(for: .milliseconds(100))
+            entered = true
+            HapticFeedback.notification(.success)
+        }
     }
 
     // MARK: Morphing icon slot (fixed footprint — never moves or resizes)
@@ -128,20 +210,43 @@ struct PaymentStatusView: View {
                 SpinnerRing()
                     .transition(reduceMotion ? .opacity : .opacity.combined(with: .scale(scale: 0.9)))
             case .success:
-                // Blur-to-sharp materialize (DESIGN.md §6 carve-out): the check comes
-                // *into focus* as it scales in, riding the same `.smooth(0.3)`. Reduce
-                // Motion drops both blur and scale to a plain fade.
-                Image(systemName: "checkmark.circle.fill")
-                    .font(.system(size: 64))
-                    .foregroundStyle(.green)
-                    .symbolEffect(.bounce, value: reduceMotion ? 0 : phaseKey)
-                    .transition(reduceMotion ? .opacity : .scale(scale: 0.92).combined(with: .opacity).combined(with: .materializeBlur))
+                if settlementPending {
+                    // Async settlement isn't the celebration beat: a pending
+                    // clock in the app's pending orange, entering like the
+                    // failure glyph — no bounce, no green check yet.
+                    Image(systemName: "clock.fill")
+                        .font(.statusGlyph)
+                        .foregroundStyle(.orange)
+                        .transition(reduceMotion ? .opacity : .scale(scale: 0.92).combined(with: .opacity))
+                } else {
+                    // Blur-to-sharp materialize (DESIGN.md §6 carve-out): the check comes
+                    // *into focus* as it scales in, riding the same `.smooth(0.3)`. Reduce
+                    // Motion drops both blur and scale to a plain fade.
+                    //
+                    // Two delivery paths for one recipe: the morph (mounted at
+                    // processing) gets it via the transition + phaseKey bounce;
+                    // a celebration MOUNT gets the state-driven twin below,
+                    // because transitions and change-keyed effects never fire
+                    // on a fresh subtree's initial content.
+                    Image(systemName: "checkmark.circle.fill")
+                        .font(.statusGlyph)
+                        .foregroundStyle(.green)
+                        .symbolEffect(
+                            .bounce,
+                            value: reduceMotion ? 0 : (mountedCelebrating ? (entered ? 1 : 0) : phaseKey)
+                        )
+                        .opacity(bandVisible ? 1 : 0)
+                        .scaleEffect(staged && !entered ? 0.92 : 1)
+                        .blur(radius: staged && !entered ? 4 : 0)
+                        .animation(.spring(response: 0.5, dampingFraction: 0.7), value: entered)
+                        .transition(reduceMotion ? .opacity : .scale(scale: 0.92).combined(with: .opacity).combined(with: .materializeBlur))
+                }
             case .failure(_, let isCaution, _):
                 // No `.symbolEffect(.bounce)` here — bounce is the payment-received
                 // celebration beat (DESIGN.md §6); a failure/caution glyph must not
                 // borrow it. It still scales + fades in, just without the delight.
                 Image(systemName: isCaution ? "exclamationmark.triangle.fill" : "xmark.circle.fill")
-                    .font(.system(size: 64))
+                    .font(.statusGlyph)
                     .foregroundStyle(isCaution ? .orange : .red)
                     .transition(reduceMotion ? .opacity : .scale(scale: 0.92).combined(with: .opacity))
             }
@@ -160,15 +265,19 @@ struct PaymentStatusView: View {
                 .opacity(0)
                 .accessibilityHidden(true)
         case .success:
+            // Quiet secondary, not the white primary: the payment already
+            // happened, Done just closes the screen (matches Android's neutral
+            // Done and the Key Imported success face).
             Button(action: onDone) { Text("Done") }
-                .glassButton()
+                .flatSheetSecondaryButton()
         case .failure(_, _, let isTerminal):
             if let failureCTA {
                 Button(action: failureCTA.action) { Text(failureCTA.title) }
                     .glassButton()
             } else if isTerminal {
+                // Same demotion as success — there is nothing left to do here.
                 Button(action: onDone) { Text("Done") }
-                    .glassButton()
+                    .flatSheetSecondaryButton()
             } else {
                 Button(action: onRetry) { Text("Try Again") }
                     .glassButton()
@@ -204,6 +313,9 @@ struct PaymentStatusView: View {
     private func handlePhase(_ newPhase: Phase) {
         switch newPhase {
         case .success:
+            // On a staged celebration mount the haptic belongs to beat 1 (the
+            // `.task` fires it with the check, ~100ms in) — not to onAppear.
+            guard !staged else { break }
             HapticFeedback.notification(.success)
         case .failure(_, let isCaution, _):
             HapticFeedback.notification(isCaution ? .warning : .error)
@@ -216,7 +328,10 @@ struct PaymentStatusView: View {
 /// 64pt loading ring that shares the checkmark's diameter, so the processing →
 /// success cross-fade reads as the ring "closing" into the check rather than a
 /// small pill spinner jumping to a large glyph.
-private struct SpinnerRing: View {
+/// Shared indeterminate ring, sized to the status glyph slot. Internal so the
+/// melt confirm can put the same spinner in its hero band while the quote is
+/// in flight — one wait animation across the whole pay flow.
+struct SpinnerRing: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var spinning = false
 

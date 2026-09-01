@@ -20,12 +20,39 @@ enum FlowRowMetrics {
     static let gap: CGFloat = 8
     static let actionInset: CGFloat = 8
     static let verticalPadding: CGFloat = 6
+
+    /// The chevron's drawn width. A 48pt frame around an ~12pt glyph left 18pt
+    /// of dead space on each side, which is what pushed the glyph a third of
+    /// the way in from the trailing margin while inflating its gap to Send Max
+    /// to three times the gap inside the identity. The hit area stays 44pt via
+    /// `hitSlop`; only the layout box shrinks.
+    static let chevronBox: CGFloat = 20
+
+    /// Added to a control's hit area without costing layout width.
+    static let hitSlop: CGFloat = 12
 }
 
-/// The one mint selector for every value flow, on both platforms: a quiet
-/// directional label and mint identity, with an optional "Send Max" action and
-/// picker chevron. The row deliberately has no fill, border, or divider so the
-/// amount remains the screen's focal point.
+extension View {
+    /// Grow a control's touch target beyond its drawn box: pad, claim the
+    /// padded region as the hit shape, then undo the padding's layout cost.
+    /// Lets a small glyph sit on the margin while still being comfortably
+    /// tappable.
+    func hitSlop(_ inset: CGFloat) -> some View {
+        self
+            .padding(.horizontal, inset)
+            .contentShape(Rectangle())
+            .padding(.horizontal, -inset)
+    }
+}
+
+/// The one mint selector for every value flow, on both platforms: a quiet mint
+/// identity with an optional "Send Max" action and picker chevron. The row
+/// deliberately has no fill, border, or divider so the amount remains the
+/// screen's focal point.
+///
+/// The direction label is not drawn — the mint name, balance and chevron say
+/// what the row is. It survives in the accessibility label, so `direction` is
+/// still required and a receiving flow cannot describe its mint as a source.
 ///
 /// `onChooseMint` is nil when the wallet holds a single mint. In that state the
 /// chevron disappears and the identity becomes information rather than a
@@ -58,15 +85,8 @@ struct MintSelectorRow: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: dynamicTypeSize.isAccessibilitySize ? 2 : 0) {
-            if dynamicTypeSize.isAccessibilitySize {
-                Text(direction.label)
-                    .cashuText(.textLink)
-                    .foregroundStyle(.secondary)
-                    .accessibilityHidden(true)
-            }
-
             HStack(spacing: 0) {
-                identity(showsDirection: !dynamicTypeSize.isAccessibilitySize)
+                identity()
                 if let onUseMax {
                     sendMaxAction(action: onUseMax)
                 }
@@ -78,14 +98,8 @@ struct MintSelectorRow: View {
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
-    private func identityContent(showsDirection: Bool) -> some View {
+    private func identityContent() -> some View {
         HStack(alignment: .firstTextBaseline, spacing: FlowRowMetrics.gap) {
-            if showsDirection {
-                Text(direction.label)
-                    .cashuText(.textLink)
-                    .foregroundStyle(.secondary)
-            }
-
             if showsBalance && dynamicTypeSize.isAccessibilitySize {
                 VStack(alignment: .leading, spacing: 2) {
                     mintName
@@ -104,25 +118,29 @@ struct MintSelectorRow: View {
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
+    // The row speaks in one voice: mint name, balance and Send Max all share
+    // `.textLink` + semibold + primary ink, so the whole row is a single
+    // treatment rather than three competing ones. Mirrors Android's
+    // MintSelectorRow.
     private var mintName: some View {
         Text(mint.name)
-            .cashuText(.body)
-            .fontWeight(.medium)
+            .cashuText(.textLink)
+            .fontWeight(.semibold)
             .lineLimit(1)
             .truncationMode(.tail)
     }
 
     private var balance: some View {
         Text(balanceText)
-            .cashuText(.metadata)
-            .foregroundStyle(.secondary)
+            .cashuText(.textLink)
+            .fontWeight(.semibold)
             .lineLimit(1)
             .truncationMode(.tail)
     }
 
     @ViewBuilder
-    private func identity(showsDirection: Bool) -> some View {
-        let content = identityContent(showsDirection: showsDirection)
+    private func identity() -> some View {
+        let content = identityContent()
             .padding(.vertical, FlowRowMetrics.verticalPadding)
             .frame(minHeight: FlowRowMetrics.minHeight)
             .contentShape(Rectangle())
@@ -146,7 +164,7 @@ struct MintSelectorRow: View {
                 .cashuText(.textLink)
                 .fontWeight(.semibold)
                 .lineLimit(1)
-                .padding(.horizontal, FlowRowMetrics.actionInset)
+                .padding(.leading, FlowRowMetrics.actionInset)
                 .frame(minHeight: FlowRowMetrics.minHeight)
                 .contentShape(Rectangle())
         }
@@ -160,8 +178,8 @@ struct MintSelectorRow: View {
             Image(systemName: "chevron.down")
                 .font(.caption.weight(.semibold))
                 .foregroundStyle(.secondary)
-                .frame(width: FlowRowMetrics.minHeight, height: FlowRowMetrics.minHeight)
-                .contentShape(Rectangle())
+                .frame(width: FlowRowMetrics.chevronBox, height: FlowRowMetrics.minHeight)
+                .hitSlop(FlowRowMetrics.hitSlop)
         }
         .buttonStyle(.plain)
         // The identity already exposes the picker as one coherent control.

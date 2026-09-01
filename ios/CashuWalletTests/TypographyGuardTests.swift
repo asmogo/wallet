@@ -91,7 +91,7 @@ final class TypographyGuardTests: XCTestCase {
     ///
     /// Lower this number. Never raise it.
     func testHardcodedPointSizesDoNotSpread() throws {
-        let ceiling = 18
+        let ceiling = 14
         let counts = try sources()
             .map { (path: $0.path, n: occurrences(of: #"\.font\(\.system\(size:"#, in: $0.text)) }
             .filter { $0.n > 0 }
@@ -145,14 +145,15 @@ final class TypographyGuardTests: XCTestCase {
         ("title", .title), ("title3", .title3),
         ("bodyEmphasis", .bodyEmphasis), ("body", .body), ("callout", .callout),
         ("textLink", .textLink), ("metadata", .metadata), ("caption", .caption),
-        ("overline", .overline), ("monoBody", .monoBody), ("monoCaption", .monoCaption),
+        ("overline", .overline), ("monoDisplay", .monoDisplay), ("monoBody", .monoBody),
+        ("monoCaption", .monoCaption),
     ]
 
     /// The role budget, mirroring Android's. An unbounded vocabulary is the old
     /// drift wearing a nicer API, so growing it should be a reviewed act.
     func testRoleInventoryIsFrozen() {
         XCTAssertEqual(
-            Self.roles.count, 17,
+            Self.roles.count, 18,
             "Adding or removing a role is a design decision — update this count deliberately"
         )
     }

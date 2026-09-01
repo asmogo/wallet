@@ -4,6 +4,7 @@ import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import com.cashu.me.Core.AmountFormatter
 import com.cashu.me.Models.TokenInfo
 import com.cashu.me.ui.setCashuContent
 import org.junit.Assert.assertEquals
@@ -60,6 +61,8 @@ class ReceiveP2PKLockReviewComposeTest {
                 ),
                 fee = 0,
                 p2pkLock = lock,
+                formatter = AmountFormatter(),
+                useBitcoinSymbol = false,
             )
         }
     }

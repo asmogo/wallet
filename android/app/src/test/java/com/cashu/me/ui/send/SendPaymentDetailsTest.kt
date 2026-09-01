@@ -210,12 +210,14 @@ class SendPaymentDetailsTest {
     }
 
     @Test
-    fun cashuAddMintRouteUsesRequestedMintIdentityWithoutClaimingAnUnknownName() {
+    fun cashuTopUpRouteUsesRequestedMintIdentityWithoutClaimingAnUnknownName() {
         val details = buildSendPaymentDetails(
             rail = cashuRail(),
-            cashuRoute = CashuPaymentRequestRoute.AddMintToPay(
+            cashuRoute = CashuPaymentRequestRoute.AcquireThenPay(
                 mintUrls = listOf("https://requested.example/path"),
+                targetMintUrl = "https://requested.example/path",
                 amountSats = 21,
+                addsNewMint = true,
             ),
             amountSats = 21,
             mint = Mint,
@@ -229,6 +231,10 @@ class SendPaymentDetailsTest {
         assertEquals(
             SendPaymentDetailValue.Text("Add requested mint"),
             details.value(SendPaymentDetailKey.Route),
+        )
+        assertEquals(
+            SendPaymentDetailValue.Pending,
+            details.value(SendPaymentDetailKey.NetworkFee),
         )
     }
 

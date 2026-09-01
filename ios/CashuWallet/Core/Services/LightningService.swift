@@ -770,6 +770,107 @@ class LightningService: ObservableObject {
     /// reconciled by the manager's serialized foreground poll.
     struct MeltConfirmation {
         let result: MeltPaymentResult
+        /// Set when a lightning settlement wait outlived its cap: the
+        /// still-running `PendingMelt.wait()` task (Swift's CDK bindings can't
+        /// cancel a Rust future, so the racer abandons it rather than stopping
+        /// it). The manager observes it to refresh balance/history the moment
+        /// settlement lands; durable reconciliation stays with the coordinated
+        /// foreground poll.
+        var deferredSettlement: Task<FinalizedMelt, any Error>? = nil
+    }
+
+    /// Ceiling on how long a lightning melt may hold the repository lane while
+    /// CDK's `PendingMelt.wait()` drives settlement. A fallback exit, not a
+    /// polling knob — `wait()` polls the mint internally; this only bounds how
+    /// long the send screen (and the exclusive wallet lane) stay committed
+    /// before the pending face takes over. Kept under the coordinator's 30s
+    /// log-only watchdog plus the confirm round-trips already spent.
+    private enum MeltSettlementWait {
+        static let cap: Duration = .seconds(30)
+    }
+
+    /// How a bounded settlement wait ended.
+    enum BoundedMeltWaitOutcome {
+        case finalized(FinalizedMelt)
+        case failed(any Error)
+        /// The cap fired first. The wait task keeps running — see
+        /// `MeltConfirmation.deferredSettlement` — and becomes the post-cap
+        /// settlement watcher (the shape Android has always run in
+        /// `watchPendingMelt`).
+        case capExpired(residual: Task<FinalizedMelt, any Error>)
+    }
+
+    /// Race CDK's settlement wait against a cap. No app-side polling — the
+    /// injected `wait` (CDK's `PendingMelt.wait()`) polls internally; the cap
+    /// exists only so a genuinely stuck payment (a held HTLC can hang for
+    /// minutes) hands the screen back to the pending face instead of pinning
+    /// the wallet lane. Injected as a closure so tests can drive all three
+    /// outcomes without a CDK runtime.
+    func awaitMeltSettlementBounded(
+        cap: Duration,
+        wait: @escaping () async throws -> FinalizedMelt
+    ) async -> BoundedMeltWaitOutcome {
+        // Both racers inherit this service's MainActor isolation, so the gate
+        // is serialized; it exists because both will reach it.
+        final class ResumeGate { var resumed = false }
+        let gate = ResumeGate()
+        let waitTask = Task { try await wait() }
+        return await withCheckedContinuation { continuation in
+            func resumeOnce(_ outcome: BoundedMeltWaitOutcome) {
+                guard !gate.resumed else { return }
+                gate.resumed = true
+                continuation.resume(returning: outcome)
+            }
+            Task {
+                do {
+                    let finalized = try await waitTask.value
+                    resumeOnce(.finalized(finalized))
+                } catch {
+                    resumeOnce(.failed(error))
+                }
+            }
+            Task {
+                try? await Task.sleep(for: cap)
+                resumeOnce(.capExpired(residual: waitTask))
+            }
+        }
+    }
+
+    /// Terminal-melt mapping shared by the immediate `.paid` confirmation and a
+    /// settlement wait that finished within the cap.
+    private func settledMeltConfirmation(
+        from finalized: FinalizedMelt,
+        mintURLString: String
+    ) -> MeltConfirmation {
+        MeltConfirmation(
+            result: MeltPaymentResult(
+                preimage: finalized.preimage,
+                amount: finalized.amount.value,
+                feePaid: finalized.feePaid.value,
+                mintUrl: mintURLString,
+                settlement: .settled
+            )
+        )
+    }
+
+    /// Pending result built from the stored quote's numbers. Amount and fee
+    /// aren't final until the payment settles, so the fee is the reserve upper
+    /// bound — the UI still gets facts to show.
+    private func pendingMeltConfirmation(
+        storedMeltQuote: MeltQuote?,
+        mintURLString: String,
+        deferredSettlement: Task<FinalizedMelt, any Error>? = nil
+    ) -> MeltConfirmation {
+        MeltConfirmation(
+            result: MeltPaymentResult(
+                preimage: nil,
+                amount: storedMeltQuote?.amount.value ?? 0,
+                feePaid: storedMeltQuote?.feeReserve.value ?? 0,
+                mintUrl: mintURLString,
+                settlement: .pending
+            ),
+            deferredSettlement: deferredSettlement
+        )
     }
 
     /// Pay a Lightning invoice or on-chain address (melt tokens)
@@ -841,31 +942,53 @@ class LightningService: ObservableObject {
             )
             switch try await preparedMelt.confirmPreferAsync() {
             case .paid(let finalized):
-                return MeltConfirmation(
-                    result: MeltPaymentResult(
-                        preimage: finalized.preimage,
-                        amount: finalized.amount.value,
-                        feePaid: finalized.feePaid.value,
-                        mintUrl: mintURLString,
-                        settlement: .settled
-                    )
-                )
-            case .pending:
-                // Do not run `pendingMelt.wait()` after leaving the repository
-                // lane. That native future can live for minutes and may update
-                // the same store beside an interactive operation. Dropping the
-                // handle is intentional: the manager persists the quote and its
-                // coordinated foreground poll drives terminal reconciliation.
-                // Amount and fee aren't final until the payment settles; report the
-                // quote's numbers (fee = reserve upper bound) so the UI has facts to show.
-                return MeltConfirmation(
-                    result: MeltPaymentResult(
-                        preimage: nil,
-                        amount: storedMeltQuote?.amount.value ?? 0,
-                        feePaid: storedMeltQuote?.feeReserve.value ?? 0,
-                        mintUrl: mintURLString,
-                        settlement: .pending
-                    )
+                return settledMeltConfirmation(from: finalized, mintURLString: mintURLString)
+            case .pending(let pendingMelt):
+                // A lightning melt settles in seconds in the healthy case, so
+                // stay in the lane and let CDK's `wait()` drive the saga to a
+                // terminal state — it polls the mint internally; the app adds
+                // no polling of its own. The old rule ("never run wait() after
+                // leaving the repository lane") still holds: this wait runs
+                // *inside* the lease, and the only wait that outlives it is
+                // the post-cap residual, which is the sanctioned settlement
+                // watcher. On-chain melts genuinely take minutes and keep the
+                // immediate pending path.
+                let method = storedMeltQuote?.paymentMethod
+                if method == .bolt11 || method == .bolt12 {
+                    switch await awaitMeltSettlementBounded(
+                        cap: MeltSettlementWait.cap,
+                        wait: { try await pendingMelt.wait() }
+                    ) {
+                    case .finalized(let finalized) where finalized.state == .paid || finalized.state == .issued:
+                        AppLogger.wallet.info(
+                            "wallet-op melt settled via wait operation=\(WalletOperationCoordinator.privacySafeIdentifier(operationID), privacy: .public)"
+                        )
+                        return settledMeltConfirmation(from: finalized, mintURLString: mintURLString)
+                    case .finalized, .failed:
+                        // A wait that ends any other way carries the same
+                        // ambiguity as a thrown confirmation: resolve it
+                        // against the mint through the recovery path.
+                        return try await resolveMeltAfterAmbiguousFailure(
+                            wallet: wallet,
+                            quoteId: quoteId,
+                            mintURLString: mintURLString,
+                            operationID: operationID,
+                            fallbackQuote: storedMeltQuote
+                        )
+                    case .capExpired(let residual):
+                        AppLogger.wallet.info(
+                            "wallet-op melt wait cap expired operation=\(WalletOperationCoordinator.privacySafeIdentifier(operationID), privacy: .public)"
+                        )
+                        return pendingMeltConfirmation(
+                            storedMeltQuote: storedMeltQuote,
+                            mintURLString: mintURLString,
+                            deferredSettlement: residual
+                        )
+                    }
+                }
+                return pendingMeltConfirmation(
+                    storedMeltQuote: storedMeltQuote,
+                    mintURLString: mintURLString
                 )
             }
         } catch {

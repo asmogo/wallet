@@ -16,7 +16,9 @@ class PriceService: ObservableObject {
         didSet {
             guard currencyCode != oldValue else { return }
             settingsStore.priceCurrencyCode = currencyCode
-            if isEnabled {
+            invalidatePendingRequests()
+            loadCachedPrice()
+            if enableAutoRefresh && isEnabled {
                 startAutoRefresh()
             }
         }
@@ -27,7 +29,8 @@ class PriceService: ObservableObject {
         didSet {
             guard isEnabled != oldValue else { return }
             settingsStore.priceEnabled = isEnabled
-            if isEnabled {
+            invalidatePendingRequests()
+            if enableAutoRefresh && isEnabled {
                 startAutoRefresh()
             } else {
                 stopAutoRefresh()
@@ -46,27 +49,30 @@ class PriceService: ObservableObject {
     
     // MARK: - Private Properties
     
-    private var coinbaseSpotURL: String {
-        "https://api.coinbase.com/v2/prices/BTC-\(currencyCode)/spot"
-    }
-    private let settingsStore = SettingsStore.shared
+    private let settingsStore: SettingsStore
+    private let priceFetcher: (String) async throws -> Double
+    private let now: () -> Date
+    private let enableAutoRefresh: Bool
     private var refreshTimer: Timer?
     private var initialFetchTask: Task<Void, Never>?
     private let refreshInterval: TimeInterval = 60 // Refresh every 60 seconds
+    private var requestGeneration = 0
 
     // MARK: - Initialization
     
-    init() {
+    init(
+        settingsStore: SettingsStore = .shared,
+        priceFetcher: @escaping (String) async throws -> Double = fetchCoinbasePrice,
+        now: @escaping () -> Date = Date.init,
+        enableAutoRefresh: Bool = true
+    ) {
+        self.settingsStore = settingsStore
+        self.priceFetcher = priceFetcher
+        self.now = now
+        self.enableAutoRefresh = enableAutoRefresh
         self.isEnabled = settingsStore.priceEnabled
         self.currencyCode = settingsStore.priceCurrencyCode
-
-        if let cachedPrice = settingsStore.cachedPrice(currency: currencyCode) {
-            self.btcPriceUSD = cachedPrice
-        }
-
-        if let cachedDate = settingsStore.cachedPriceDate(currency: currencyCode) {
-            self.lastUpdated = cachedDate
-        }
+        loadCachedPrice()
         
         // The first network refresh is started by SettingsManager after the
         // initial wallet UI has had a chance to render cached values.
@@ -77,42 +83,53 @@ class PriceService: ObservableObject {
     /// Fetch current BTC price from Coinbase
     func fetchPrice() async {
         guard isEnabled else { return }
-        
+
+        requestGeneration += 1
+        let request = PriceRequest(
+            generation: requestGeneration,
+            currencyCode: currencyCode
+        )
         isFetching = true
         errorMessage = nil
-        
-        defer { isFetching = false }
-        
+
         do {
-            guard let url = URL(string: coinbaseSpotURL) else {
-                throw PriceError.invalidURL
-            }
-            
-            let (data, response) = try await URLSession.shared.data(from: url)
-            
-            guard let httpResponse = response as? HTTPURLResponse,
-                  httpResponse.statusCode == 200 else {
-                throw PriceError.invalidResponse
-            }
-            
-            let priceResponse = try JSONDecoder().decode(CoinbasePriceResponse.self, from: data)
-            
-            guard let price = Double(priceResponse.data.amount) else {
-                throw PriceError.invalidData
-            }
-            
+            let price = try await priceFetcher(request.currencyCode)
+            guard isCurrent(request) else { return }
+
             btcPriceUSD = price
-            let now = Date()
-            lastUpdated = now
-            
+            let updatedAt = now()
+            lastUpdated = updatedAt
+            isFetching = false
+
             // Cache the price
-            settingsStore.setCachedPrice(price, currency: currencyCode)
-            settingsStore.setCachedPriceDate(now, currency: currencyCode)
-            
+            settingsStore.setCachedPrice(price, currency: request.currencyCode)
+            settingsStore.setCachedPriceDate(updatedAt, currency: request.currencyCode)
         } catch {
+            guard isCurrent(request) else { return }
+            isFetching = false
+            if error is CancellationError || (error as? URLError)?.code == .cancelled || Task.isCancelled {
+                return
+            }
             errorMessage = error.localizedDescription
             print("Price fetch error: \(error)")
         }
+    }
+
+    private func invalidatePendingRequests() {
+        requestGeneration += 1
+        isFetching = false
+        errorMessage = nil
+    }
+
+    private func isCurrent(_ request: PriceRequest) -> Bool {
+        request.generation == requestGeneration &&
+            isEnabled &&
+            currencyCode == request.currencyCode
+    }
+
+    private func loadCachedPrice() {
+        btcPriceUSD = settingsStore.cachedPrice(currency: currencyCode) ?? 0
+        lastUpdated = settingsStore.cachedPriceDate(currency: currencyCode)
     }
     
     /// Convert satoshis to selected fiat currency
@@ -171,6 +188,32 @@ class PriceService: ObservableObject {
         initialFetchTask?.cancel()
         refreshTimer?.invalidate()
     }
+}
+
+private struct PriceRequest {
+    let generation: Int
+    let currencyCode: String
+}
+
+private func fetchCoinbasePrice(currency: String) async throws -> Double {
+    guard let url = URL(string: "https://api.coinbase.com/v2/prices/BTC-\(currency)/spot") else {
+        throw PriceError.invalidURL
+    }
+
+    let (data, response) = try await URLSession.shared.data(from: url)
+
+    guard let httpResponse = response as? HTTPURLResponse,
+          httpResponse.statusCode == 200 else {
+        throw PriceError.invalidResponse
+    }
+
+    let priceResponse = try JSONDecoder().decode(CoinbasePriceResponse.self, from: data)
+
+    guard let price = Double(priceResponse.data.amount) else {
+        throw PriceError.invalidData
+    }
+
+    return price
 }
 
 // MARK: - Error Types

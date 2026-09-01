@@ -140,7 +140,7 @@ class CashuPaymentRequestMintSelectorTest {
     }
 
     @Test
-    fun routeOffersAddMintWhenRequestedMintIsNotTracked() {
+    fun routeRequestsTopUpWhenRequestedMintIsNotTracked() {
         val route = routeForCashuPaymentRequest(
             rawRequest = "creqa-test",
             request = request(mints = listOf("https://target.example.com")).copy(amount = 25),
@@ -151,7 +151,12 @@ class CashuPaymentRequestMintSelectorTest {
         )
 
         assertEquals(
-            CashuPaymentRequestRoute.AddMintToPay(listOf("https://target.example.com"), 25),
+            CashuPaymentRequestRoute.AcquireThenPay(
+                mintUrls = listOf("https://target.example.com"),
+                targetMintUrl = "https://target.example.com",
+                amountSats = 25,
+                addsNewMint = true,
+            ),
             route,
         )
     }
@@ -168,11 +173,63 @@ class CashuPaymentRequestMintSelectorTest {
             amountSats = null,
         )
 
-        assertEquals(CashuPaymentRequestRoute.NeedsExternalTopUp(mint.url, 25), route)
+        assertEquals(
+            CashuPaymentRequestRoute.AcquireThenPay(
+                mintUrls = listOf(mint.url),
+                targetMintUrl = mint.url,
+                amountSats = 25,
+                addsNewMint = false,
+            ),
+            route,
+        )
     }
 
     @Test
-    fun routeUsesLightningFallbackBeforeAddMint() {
+    fun routePreservesMultipleRequestedMintsUntilUserSelectsTarget() {
+        val first = "https://first.example.com"
+        val second = "https://second.example.com"
+        val request = request(mints = listOf(first, second)).copy(amount = 25)
+
+        val unselected = routeForCashuPaymentRequest(
+            rawRequest = "creqa-test",
+            request = request,
+            mints = emptyList(),
+            selectedMintUrl = null,
+            activeMintUrl = null,
+            amountSats = null,
+        )
+        val selected = routeForCashuPaymentRequest(
+            rawRequest = "creqa-test",
+            request = request,
+            mints = emptyList(),
+            selectedMintUrl = null,
+            activeMintUrl = null,
+            amountSats = null,
+            selectedTargetMintUrl = "$second/",
+        )
+
+        assertEquals(
+            CashuPaymentRequestRoute.AcquireThenPay(
+                mintUrls = listOf(first, second),
+                targetMintUrl = null,
+                amountSats = 25,
+                addsNewMint = false,
+            ),
+            unselected,
+        )
+        assertEquals(
+            CashuPaymentRequestRoute.AcquireThenPay(
+                mintUrls = listOf(first, second),
+                targetMintUrl = second,
+                amountSats = 25,
+                addsNewMint = true,
+            ),
+            selected,
+        )
+    }
+
+    @Test
+    fun routeUsesLightningFallbackBeforeExternalTopUp() {
         val route = routeForCashuPaymentRequest(
             rawRequest = "bitcoin:bc1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq9e75rs?lightning=lnbc10u1ptest&creq=creqa-test",
             request = request(mints = listOf("https://target.example.com")).copy(amount = 25),

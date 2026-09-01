@@ -1,5 +1,13 @@
 import SwiftUI
 
+/// Horizontal gutter every amount-entry screen lays its number pad on, and the
+/// one the mint selector above it aligns to. The pad is the widest, heaviest
+/// block on these screens, so it — not the narrower bottom CTA — is what the
+/// eye reads the row's left and right edges against.
+enum NumberPadMetrics {
+    static let gutter: CGFloat = 24
+}
+
 /// Family-style digit-only number pad.
 ///
 /// Used to drive a `UInt64`-shaped amount string for both Ecash and Melt flows.

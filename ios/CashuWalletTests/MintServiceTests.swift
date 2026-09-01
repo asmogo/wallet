@@ -3,6 +3,31 @@ import XCTest
 
 @MainActor
 final class MintServiceTests: XCTestCase {
+    private enum RepositoryFailure: Error {
+        case unavailable
+    }
+
+    private actor NativeRemovalGate {
+        private var started = false
+        private var releaseContinuation: CheckedContinuation<Void, Never>?
+
+        func suspendUntilReleased() async {
+            started = true
+            await withCheckedContinuation { continuation in
+                releaseContinuation = continuation
+            }
+        }
+
+        func hasStarted() -> Bool {
+            started
+        }
+
+        func release() {
+            releaseContinuation?.resume()
+            releaseContinuation = nil
+        }
+    }
+
     private var service: MintService!
 
     override func setUp() {
@@ -114,6 +139,189 @@ final class MintServiceTests: XCTestCase {
         let s = MintService(walletRepository: { nil }, walletStore: ws)
         s.loadCachedMints()
         XCTAssertEqual(s.activeMint?.url, "https://mint1.example.com")
+    }
+
+    // MARK: - Safe mint removal
+
+    func testRegisteredRemovalUnitsNormalizeAndDeduplicate() {
+        XCTAssertEqual(
+            MintRemovalPolicy.normalizedUnits([" EUR ", "eur", "EuR", " "]),
+            ["eur"]
+        )
+        XCTAssertTrue(MintRemovalPolicy.normalizedUnits([]).isEmpty)
+    }
+
+    func testMintIdentityFoldsHostButPreservesCaseSensitivePath() {
+        XCTAssertTrue(MintRemovalPolicy.matches(
+            "https://MINT.example.com/Mint/",
+            "HTTPS://mint.example.com/Mint"
+        ))
+        XCTAssertFalse(MintRemovalPolicy.matches(
+            "https://mint.example.com/Mint",
+            "https://mint.example.com/mint"
+        ))
+        XCTAssertFalse(MintRemovalPolicy.matches(
+            "https://mint.example.com/foo%2F",
+            "https://mint.example.com/foo/"
+        ))
+
+        let upperPath = mint("https://mint.example.com/Mint", name: "Upper")
+        let lowerPath = mint("https://mint.example.com/mint", name: "Lower")
+        XCTAssertEqual(
+            MintRemovalPolicy.removingMint(withURL: upperPath.url, from: [upperPath, lowerPath]),
+            [lowerPath]
+        )
+    }
+
+    func testMultiUnitRemovalRefusesBeforeNativeCallOrMetadataCommit() async {
+        var multiUnitMint = mint("https://mint.example.com", name: "Test")
+        multiUnitMint.units = ["sat", " EUR ", "eur"]
+        var nativeCalls: [String] = []
+        var metadataCommitted = false
+
+        do {
+            try await MintRemovalPolicy.removeBeforeCommit(
+                mint: multiUnitMint,
+                registeredUnits: ["sat", " EUR ", "eur"],
+                removeWallet: { _, unit in nativeCalls.append(unit) },
+                commitMetadata: { metadataCommitted = true }
+            )
+            XCTFail("Expected multi-unit removal to be refused")
+        } catch MintRemovalPolicyError.multipleUnits {
+            // Expected: validation runs before the repository is touched.
+        } catch {
+            XCTFail("Unexpected error: \(error)")
+        }
+
+        XCTAssertTrue(nativeCalls.isEmpty)
+        XCTAssertFalse(metadataCommitted)
+    }
+
+    func testSingleNonSatUnitIsRemovedBeforeMetadataCommit() async throws {
+        var euroMint = mint("https://mint.example.com", name: "Test")
+        // Advertised metadata can differ from wallets actually registered in CDK.
+        euroMint.units = ["sat"]
+        var events: [String] = []
+
+        try await MintRemovalPolicy.removeBeforeCommit(
+            mint: euroMint,
+            registeredUnits: [" EUR ", "eur"],
+            removeWallet: { _, unit in events.append("remove:\(unit)") },
+            commitMetadata: { events.append("commit") }
+        )
+
+        XCTAssertEqual(events, ["remove:eur", "commit"])
+    }
+
+    func testMissingNativeWalletCommitsMetadataWithoutInventingSatWallet() async throws {
+        let advertisedSatMint = mint("https://mint.example.com", name: "Test")
+        var events: [String] = []
+
+        try await MintRemovalPolicy.removeBeforeCommit(
+            mint: advertisedSatMint,
+            registeredUnits: [],
+            removeWallet: { _, unit in events.append("remove:\(unit)") },
+            commitMetadata: { events.append("commit") }
+        )
+
+        XCTAssertEqual(events, ["commit"])
+    }
+
+    func testNativeRemovalFailurePreservesMetadata() async {
+        var dollarMint = mint("https://mint.example.com", name: "Test")
+        dollarMint.units = ["usd"]
+        var metadataCommitted = false
+
+        do {
+            try await MintRemovalPolicy.removeBeforeCommit(
+                mint: dollarMint,
+                registeredUnits: ["usd"],
+                removeWallet: { _, _ in throw RepositoryFailure.unavailable },
+                commitMetadata: { metadataCommitted = true }
+            )
+            XCTFail("Expected repository failure")
+        } catch RepositoryFailure.unavailable {
+            // Expected.
+        } catch {
+            XCTFail("Unexpected error: \(error)")
+        }
+
+        XCTAssertFalse(metadataCommitted)
+    }
+
+    func testRemovalPreservesCancellationWithoutMetadataCommit() async {
+        let satMint = mint("https://mint.example.com", name: "Test")
+        var metadataCommitted = false
+
+        do {
+            try await MintRemovalPolicy.removeBeforeCommit(
+                mint: satMint,
+                registeredUnits: ["sat"],
+                removeWallet: { _, _ in throw CancellationError() },
+                commitMetadata: { metadataCommitted = true }
+            )
+            XCTFail("Expected cancellation")
+        } catch is CancellationError {
+            // Expected.
+        } catch {
+            XCTFail("Unexpected error: \(error)")
+        }
+
+        XCTAssertFalse(metadataCommitted)
+    }
+
+    func testCancellationAfterNativeSuccessStillCommitsMetadata() async {
+        let satMint = mint("https://mint.example.com", name: "Test")
+        let gate = NativeRemovalGate()
+        var metadataCommitted = false
+
+        let request = Task { @MainActor in
+            try await MintRemovalPolicy.removeBeforeCommit(
+                mint: satMint,
+                registeredUnits: ["sat"],
+                removeWallet: { _, _ in
+                    await gate.suspendUntilReleased()
+                },
+                commitMetadata: { metadataCommitted = true }
+            )
+        }
+
+        for _ in 0..<100 {
+            if await gate.hasStarted() { break }
+            await Task.yield()
+        }
+        let nativeRemovalStarted = await gate.hasStarted()
+        XCTAssertTrue(nativeRemovalStarted)
+        request.cancel()
+        await gate.release()
+
+        do {
+            try await request.value
+            XCTFail("Expected cancellation after the commit boundary")
+        } catch is CancellationError {
+            // Expected after the local metadata follows the native commit.
+        } catch {
+            XCTFail("Unexpected error: \(error)")
+        }
+
+        XCTAssertTrue(metadataCommitted)
+    }
+
+    func testStableMintIdentityDoesNotShiftAfterEarlierRemoval() {
+        let first = mint("https://first.example.com", name: "First")
+        let second = mint("https://second.example.com", name: "Second")
+        let third = mint("https://third.example.com", name: "Third")
+
+        let afterFirst = MintRemovalPolicy.removingMint(
+            withURL: first.url,
+            from: [first, second, third]
+        )
+        let afterSecond = MintRemovalPolicy.removingMint(
+            withURL: second.url,
+            from: afterFirst
+        )
+
+        XCTAssertEqual(afterSecond.map(\.url), [third.url])
     }
 
     // MARK: - updateMintBalances

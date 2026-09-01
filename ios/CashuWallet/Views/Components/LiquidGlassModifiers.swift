@@ -17,6 +17,21 @@ enum BottomSheetSurfaceStyle {
     case compact
 }
 
+/// Disabled control pair (fill / content), mirroring Android's M3 disabled
+/// tokens (onSurface at 12% / 38%). A deliberate grey pair, not a translucency
+/// wash of the enabled colors — dimming inverse ink over a dark sheet
+/// collapsed the fill and label into nearly the same grey.
+enum DisabledControlOpacity {
+    static let fill: Double = 0.12
+    static let content: Double = 0.38
+
+    /// Disabled fill for controls whose *enabled* state is already a quiet
+    /// translucency rather than inverse ink. `fill` (0.12) demotes solid ink,
+    /// but it sits above the secondary button's enabled 0.11 — reusing it there
+    /// made a disabled control brighter than an active one. This stays below.
+    static let secondaryFill: Double = 0.06
+}
+
 enum CompactSheetPalette {
     static func sheet(for colorScheme: ColorScheme) -> Color {
         colorScheme == .dark
@@ -66,8 +81,12 @@ extension View {
     /// Pass `prominent: true` for the inverted-ink fill (black in light / white
     /// in dark) used by the enabled primary action — matches Android
     /// `PrimaryButton`.
-    func glassButton(prominent: Bool = false) -> some View {
-        self.buttonStyle(FullWidthCapsuleButtonStyle(prominent: prominent))
+    ///
+    /// Pass `destructive: true` for a solid system-red fill with a white label —
+    /// the commit button of a confirm sheet whose action destroys something
+    /// (key reset). Matches Android's error-colored confirm.
+    func glassButton(prominent: Bool = false, destructive: Bool = false) -> some View {
+        self.buttonStyle(FullWidthCapsuleButtonStyle(prominent: prominent, destructive: destructive))
     }
 
     /// A quiet, filled action for the secondary slot beside a sheet's single
@@ -81,6 +100,15 @@ extension View {
     /// text-link vocabulary in the app — see `TextLinkButtonStyle`.
     func textLinkButton() -> some View {
         self.buttonStyle(TextLinkButtonStyle())
+    }
+
+    /// The tertiary action sitting directly beneath a full-width CTA
+    /// ("Receive Later", the onboarding chassis' skip slot). It carries the
+    /// capsule's own label type, so the pair differs by fill and ink alone and
+    /// never by type — see `CtaStackTextLinkButtonStyle`. Inline links keep
+    /// `textLinkButton()`.
+    func ctaStackTextLinkButton() -> some View {
+        self.buttonStyle(CtaStackTextLinkButtonStyle())
     }
 
     /// Make a presented sheet/cover read as the same flat canvas as the home
@@ -849,26 +877,39 @@ struct SettingsSectionFooter<Content: View>: View {
 /// `systemBackground`) so sheets don't resolve to elevated greys.
 struct FullWidthCapsuleButtonStyle: ButtonStyle {
     var prominent: Bool = false
+    /// Solid system-red fill + white label in every scheme — the destructive
+    /// confirm. Disabled still falls to the neutral grey pair.
+    var destructive: Bool = false
     @Environment(\.isEnabled) private var isEnabled
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.bottomSheetSurfaceStyle) private var bottomSheetSurfaceStyle
 
     func makeBody(configuration: Configuration) -> some View {
-        let ink = colorScheme == .dark ? Color.white : Color.black
-        let onInk = colorScheme == .dark ? Color.black : Color.white
+        let ink = destructive ? Color(.systemRed) : (colorScheme == .dark ? Color.white : Color.black)
+        let onInk = destructive ? Color.white : (colorScheme == .dark ? Color.black : Color.white)
+        let solid = prominent || destructive || bottomSheetSurfaceStyle != .glass
 
         let label = configuration.label
             .font(.body.weight(.semibold))
             .frame(maxWidth: .infinity)
             .padding(.vertical, 18)
-            .foregroundStyle(prominent || bottomSheetSurfaceStyle != .glass ? onInk : Color.primary)
+            .foregroundStyle(
+                isEnabled
+                    ? (solid ? onInk : Color.primary)
+                    : Color.primary.opacity(DisabledControlOpacity.content)
+            )
             .contentShape(Capsule())
 
         return Group {
-            if prominent || bottomSheetSurfaceStyle != .glass {
+            if !isEnabled {
+                // Disabled swaps to the grey pair regardless of surface — a
+                // dimmed inverse-ink or glass ghost reads muddier than a
+                // deliberate quiet fill with a muted label.
+                label.background(Color.primary.opacity(DisabledControlOpacity.fill), in: Capsule())
+            } else if solid {
                 label
                     .background(ink, in: Capsule())
-                    .scaleEffect(isEnabled && configuration.isPressed ? 0.97 : 1)
+                    .scaleEffect(configuration.isPressed ? 0.97 : 1)
             } else if #available(iOS 26, *) {
                 label.glassEffect(
                     .regular.tint(Color.primary.opacity(0.15)).interactive(),
@@ -879,10 +920,10 @@ struct FullWidthCapsuleButtonStyle: ButtonStyle {
                 // the fallback surface gets a scale-on-press so the tactile
                 // feedback is at parity below iOS 26.
                 label.background(.quaternary, in: Capsule())
-                    .scaleEffect(isEnabled && configuration.isPressed ? 0.97 : 1)
+                    .scaleEffect(configuration.isPressed ? 0.97 : 1)
             }
         }
-        .opacity(isEnabled ? (configuration.isPressed ? 0.85 : 1) : 0.4)
+        .opacity(isEnabled && configuration.isPressed ? 0.85 : 1)
         // Asymmetric, matching PressableButtonStyle: feedback belongs on
         // touch-down and has to feel immediate, while the release is the system
         // responding and can settle.
@@ -904,11 +945,16 @@ struct FlatSheetSecondaryButtonStyle: ButtonStyle {
             .font(.body.weight(.semibold))
             .frame(maxWidth: .infinity)
             .padding(.vertical, 18)
-            .foregroundStyle(.primary)
-            .background(Color.primary.opacity(0.11), in: Capsule())
+            .foregroundStyle(
+                isEnabled ? Color.primary : Color.primary.opacity(DisabledControlOpacity.content)
+            )
+            .background(
+                Color.primary.opacity(isEnabled ? 0.11 : DisabledControlOpacity.secondaryFill),
+                in: Capsule()
+            )
             .contentShape(Capsule())
             .scaleEffect(isEnabled && configuration.isPressed ? 0.97 : 1)
-            .opacity(isEnabled ? (configuration.isPressed ? 0.85 : 1) : 0.4)
+            .opacity(isEnabled && configuration.isPressed ? 0.85 : 1)
             .animation(
                 .snappy(duration: configuration.isPressed ? 0.09 : 0.18),
                 value: configuration.isPressed
@@ -931,6 +977,28 @@ struct TextLinkButtonStyle: ButtonStyle {
         configuration.label
             .font(.subheadline.weight(.medium))
             .foregroundStyle(.secondary)
+            .contentShape(Rectangle())
+            .opacity(isEnabled ? (configuration.isPressed ? 0.6 : 1) : 0.4)
+            .animation(
+                .snappy(duration: configuration.isPressed ? 0.09 : 0.18),
+                value: configuration.isPressed
+            )
+    }
+}
+
+/// A text link that reads as the CTA's sibling: same `.body.weight(.semibold)`
+/// as `FullWidthCapsuleButtonStyle`, separated from it by ink and the absent
+/// fill rather than by a second type size. Stacking a 15pt regular label under a
+/// 17pt semibold capsule made the pair look like two unrelated controls.
+struct CtaStackTextLinkButtonStyle: ButtonStyle {
+    @Environment(\.isEnabled) private var isEnabled
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .font(.body.weight(.semibold))
+            .foregroundStyle(.secondary)
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 18)
             .contentShape(Rectangle())
             .opacity(isEnabled ? (configuration.isPressed ? 0.6 : 1) : 0.4)
             .animation(

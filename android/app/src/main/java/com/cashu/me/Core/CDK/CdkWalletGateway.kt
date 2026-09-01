@@ -1,5 +1,6 @@
 package com.cashu.me.Core.CDK
 
+import java.net.URI
 import kotlinx.coroutines.flow.Flow
 import org.cashudevkit.PendingMelt
 import com.cashu.me.Core.NPCQuote
@@ -29,7 +30,14 @@ interface CdkWalletGateway {
     /** NUT-27: fetch the newest mint-list backup for the open seed; returns the backed-up mint URLs. */
     suspend fun fetchMintBackup(relays: List<String>, timeoutSecs: ULong): List<String>
     suspend fun ensureWallet(mintUrl: String, unit: String = "sat")
-    suspend fun removeWallet(mintUrl: String, unit: String = "sat")
+
+    /**
+     * Atomically inspects the native repository and removes [mintUrl] only when
+     * it has at most one registered unit. Returns false when no native wallet
+     * existed and throws [MultiUnitWalletRemovalException] before changing the
+     * repository when multiple units are registered.
+     */
+    suspend fun removeWalletIfSingleUnit(mintUrl: String): Boolean
     suspend fun fetchMintInfo(mintUrl: String): MintInfo?
     suspend fun restoreMint(mintUrl: String): RestoreMintResult
     suspend fun totalBalance(mintUrl: String): Long
@@ -70,6 +78,9 @@ interface CdkWalletGateway {
     ): NfcReceiveReceipt
     suspend fun settleForeignNfcToken(tokenString: String, settlementMintUrl: String): ForeignNfcSettlement
     suspend fun calculateReceiveFee(tokenString: String): Long
+
+    /** Active sat keyset input fee in parts per thousand, or null when unavailable. */
+    suspend fun activeMintInputFeePpk(mintUrl: String): Long?
 
     /**
      * Exact input fee for paying a Cashu Request from [mintUrl].
@@ -112,6 +123,34 @@ interface CdkWalletGateway {
     suspend fun pendingSendTokenFromSaga(operationId: String): String?
 }
 
+class MultiUnitWalletRemovalException(
+    val registeredUnits: List<String>,
+) : IllegalStateException(
+    "This mint uses multiple currency units and cannot be removed safely yet. Keep it connected and try again after updating the app.",
+)
+
+internal fun normalizedRegisteredWalletUnits(units: List<String>): List<String> =
+    units
+        .map { it.trim().lowercase() }
+        .filter(String::isNotEmpty)
+        .distinct()
+
+internal fun mintRemovalUrlsMatch(lhs: String, rhs: String): Boolean {
+    fun identity(raw: String): List<Any?>? = runCatching {
+        val uri = URI(raw.trim())
+        val scheme = uri.scheme?.lowercase() ?: return@runCatching null
+        val authority = uri.rawAuthority?.lowercase() ?: return@runCatching null
+        var path = uri.rawPath.orEmpty()
+        while (path.length > 1 && path.endsWith('/')) path = path.dropLast(1)
+        if (path == "/") path = ""
+        listOf(scheme, authority, path, uri.rawQuery, uri.rawFragment)
+    }.getOrNull()
+
+    val left = identity(lhs) ?: return lhs.trim() == rhs.trim()
+    val right = identity(rhs) ?: return false
+    return left == right
+}
+
 data class ForeignNfcSettlement(
     val amountReceived: Long,
     val transactionId: String,
@@ -122,11 +161,14 @@ data class ForeignNfcSettlement(
 
 /**
  * Outcome of confirming a melt (iOS LightningService.MeltConfirmation parity).
- * Settled synchronously for most Lightning payments; carries a `PendingMelt`
- * handle when the mint accepted asynchronous (NUT-05) settlement, which
- * on-chain melts typically do. The handle's `wait()` completes when the mint
- * reaches a terminal state; it dies with the process, after which CDK's
- * durable saga (surfaced as a Pending transaction) is the reconciliation path.
+ * Lightning melts settle synchronously in the common case — an async-accepted
+ * (NUT-05) lightning melt is awaited in-lane via the handle's `wait()` for a
+ * bounded window before the gateway gives up on a terminal answer. A
+ * `PendingMelt` handle survives here only for on-chain melts (minutes-scale by
+ * nature) and lightning waits that outlived the cap; the manager re-arms
+ * `wait()` on it in the background. The handle dies with the process, after
+ * which CDK's durable saga (surfaced as a Pending transaction) is the
+ * reconciliation path.
  */
 data class MeltConfirmation(
     val result: MeltPaymentResult,

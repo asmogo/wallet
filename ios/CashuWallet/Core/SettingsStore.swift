@@ -51,7 +51,48 @@ final class SettingsStore {
 
     var p2pkKeys: [P2PKKey] {
         get { value(StorageKeys.p2pkKeys, legacy: StorageKeys.Legacy.p2pkKeys) ?? [] }
-        set { set(newValue, forKey: StorageKeys.p2pkKeys) }
+        set {
+            do {
+                try saveP2PKKeys(newValue)
+            } catch {
+                AppLogger.wallet.error("Failed to save P2PK key metadata: \(error)")
+            }
+        }
+    }
+
+    /// Persist public P2PK metadata while retaining only legacy private keys that
+    /// could not yet be migrated to secure storage. Callers that need an atomic
+    /// secure-write → metadata-write flow use the throwing form directly.
+    func saveP2PKKeys(
+        _ keys: [P2PKKey],
+        preservingLegacySecrets legacySecrets: [UUID: String] = [:]
+    ) throws {
+        let records = keys.map { key in
+            P2PKSettingsRecord(
+                id: key.id,
+                publicKey: key.publicKey,
+                privateKey: legacySecrets[key.id],
+                used: key.used,
+                usedCount: key.usedCount,
+                nickname: key.nickname
+            )
+        }
+        try storage.set(records, forKey: StorageKeys.p2pkKeys)
+    }
+
+    var p2pkPendingDeletionIDs: Set<UUID> {
+        Set(value(StorageKeys.p2pkPendingDeletionIDs) ?? [UUID]())
+    }
+
+    func saveP2PKPendingDeletionIDs(_ ids: Set<UUID>) throws {
+        if ids.isEmpty {
+            try storage.remove(forKey: StorageKeys.p2pkPendingDeletionIDs)
+        } else {
+            try storage.set(
+                ids.sorted { $0.uuidString < $1.uuidString },
+                forKey: StorageKeys.p2pkPendingDeletionIDs
+            )
+        }
     }
 
     var checkIncomingInvoices: Bool {
@@ -180,33 +221,49 @@ final class SettingsStore {
     }
 
     func cachedPrice(currency: String) -> Double? {
-        value(
-            StorageKeys.cachedBTCPrice(currency: currency),
-            legacyKeys: [
-                StorageKeys.Legacy.cachedBTCPrice(currency: currency),
-                StorageKeys.Legacy.cachedBTCPrice
-            ]
-        )
+        let key = StorageKeys.cachedBTCPrice(currency: currency)
+        if let cached: Double = value(
+            key,
+            legacy: StorageKeys.Legacy.cachedBTCPrice(currency: currency)
+        ) {
+            remove(keys: [StorageKeys.cachedBTCPrice, StorageKeys.Legacy.cachedBTCPrice])
+            return cached
+        }
+
+        guard let legacy: Double = try? storage.get(forKey: StorageKeys.Legacy.cachedBTCPrice) else {
+            return nil
+        }
+        set(legacy, forKey: key)
+        remove(keys: [StorageKeys.cachedBTCPrice, StorageKeys.Legacy.cachedBTCPrice])
+        return legacy
     }
 
     func setCachedPrice(_ price: Double, currency: String) {
         set(price, forKey: StorageKeys.cachedBTCPrice(currency: currency))
-        set(price, forKey: StorageKeys.cachedBTCPrice)
+        remove(keys: [StorageKeys.cachedBTCPrice, StorageKeys.Legacy.cachedBTCPrice])
     }
 
     func cachedPriceDate(currency: String) -> Date? {
-        value(
-            StorageKeys.cachedBTCPriceDate(currency: currency),
-            legacyKeys: [
-                StorageKeys.Legacy.cachedBTCPriceDate(currency: currency),
-                StorageKeys.Legacy.cachedBTCPriceDate
-            ]
-        )
+        let key = StorageKeys.cachedBTCPriceDate(currency: currency)
+        if let cached: Date = value(
+            key,
+            legacy: StorageKeys.Legacy.cachedBTCPriceDate(currency: currency)
+        ) {
+            remove(keys: [StorageKeys.cachedBTCPriceDate, StorageKeys.Legacy.cachedBTCPriceDate])
+            return cached
+        }
+
+        guard let legacy: Date = try? storage.get(forKey: StorageKeys.Legacy.cachedBTCPriceDate) else {
+            return nil
+        }
+        set(legacy, forKey: key)
+        remove(keys: [StorageKeys.cachedBTCPriceDate, StorageKeys.Legacy.cachedBTCPriceDate])
+        return legacy
     }
 
     func setCachedPriceDate(_ date: Date, currency: String) {
         set(date, forKey: StorageKeys.cachedBTCPriceDate(currency: currency))
-        set(date, forKey: StorageKeys.cachedBTCPriceDate)
+        remove(keys: [StorageKeys.cachedBTCPriceDate, StorageKeys.Legacy.cachedBTCPriceDate])
     }
 
     func clearWalletScopedData() {
@@ -267,4 +324,16 @@ final class SettingsStore {
             }
         }
     }
+}
+
+/// Storage-only representation. New secrets are omitted; a private key is
+/// encoded solely while a legacy migration is pending, preventing a failed
+/// Keychain write from destroying the user's only copy.
+private struct P2PKSettingsRecord: Codable {
+    let id: UUID
+    let publicKey: String
+    let privateKey: String?
+    let used: Bool
+    let usedCount: Int
+    let nickname: String?
 }

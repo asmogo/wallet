@@ -69,11 +69,38 @@ data class SettingsState(
     val nostrRelays: List<String> = emptyList(),
     val nostrMintBackupEnabled: Boolean = true,
     val p2pkKeys: List<P2PKKeyInfo> = emptyList(),
+    val p2pkUnavailableKeyIds: Set<String> = emptySet(),
 )
 
 internal data class LegacySettingsSecretMigration(
     val p2pkKeysToPersist: List<P2PKKeyInfo>?,
+    val pendingLegacySecrets: Map<String, String>,
 )
+
+internal interface P2PKMetadataStore {
+    val keys: List<P2PKKeyInfo>
+    var pendingDeletionIds: Set<String>
+    fun saveKeys(keys: List<P2PKKeyInfo>, preservingLegacySecrets: Map<String, String> = emptyMap())
+}
+
+private class SettingsP2PKMetadataStore(
+    private val settingsStore: SettingsStore,
+) : P2PKMetadataStore {
+    override val keys: List<P2PKKeyInfo> get() = settingsStore.p2pkKeys
+    override var pendingDeletionIds: Set<String>
+        get() = settingsStore.p2pkPendingDeletionIds
+        set(value) { settingsStore.p2pkPendingDeletionIds = value }
+
+    override fun saveKeys(
+        keys: List<P2PKKeyInfo>,
+        preservingLegacySecrets: Map<String, String>,
+    ) {
+        settingsStore.saveP2PKKeys(keys, preservingLegacySecrets)
+    }
+}
+
+private class P2PKStorageException(message: String, cause: Throwable? = null) :
+    IllegalStateException(message, cause)
 
 /** The wallet's seed-derived P2PK identity: compressed 02-prefixed pubkey + private hex. */
 data class PrimaryP2PKKey(
@@ -84,6 +111,7 @@ data class PrimaryP2PKKey(
 internal data class SettingsWalletScopedSnapshot(
     val preferences: PreferenceSnapshot,
     val p2pkKeys: List<P2PKKeyInfo>,
+    val pendingP2PKDeletionIds: Set<String> = emptySet(),
 )
 
 internal object LegacySettingsSecretMigrator {
@@ -91,42 +119,50 @@ internal object LegacySettingsSecretMigrator {
         p2pkRecords: List<LegacyP2PKKeyRecord>,
         loadSecret: (String) -> String?,
         saveSecret: (String, String) -> Unit,
+        isUsableSecret: (P2PKKeyInfo, String) -> Boolean,
     ): LegacySettingsSecretMigration {
         var shouldPersistP2PK = false
+        val pendingLegacySecrets = mutableMapOf<String, String>()
         val p2pkMetadata = p2pkRecords.map { record ->
-            migrateSecret(
-                key = secureP2PKPrivateKey(record.metadata.id),
-                legacyValue = record.privateKey,
-                loadSecret = loadSecret,
-                saveSecret = saveSecret,
-            )
+            val storageKey = secureP2PKPrivateKey(record.metadata.id)
+            val storedSecret = runCatching { loadSecret(storageKey) }.getOrNull()
+            val hasUsableStoredSecret = storedSecret != null &&
+                isUsableSecret(record.metadata, storedSecret)
+
+            if (!hasUsableStoredSecret && record.privateKey.isNotBlank()) {
+                if (isUsableSecret(record.metadata, record.privateKey)) {
+                    runCatching { saveSecret(storageKey, record.privateKey) }
+                        .onFailure {
+                            pendingLegacySecrets[record.metadata.id] = record.privateKey
+                        }
+                }
+            }
             shouldPersistP2PK = shouldPersistP2PK || record.shouldRewriteMetadata || record.hasLegacySecret
             record.metadata
         }
 
         return LegacySettingsSecretMigration(
             p2pkKeysToPersist = p2pkMetadata.takeIf { shouldPersistP2PK },
+            pendingLegacySecrets = pendingLegacySecrets,
         )
-    }
-
-    private fun migrateSecret(
-        key: String,
-        legacyValue: String,
-        loadSecret: (String) -> String?,
-        saveSecret: (String, String) -> Unit,
-    ) {
-        if (legacyValue.isBlank() || loadSecret(key) != null) return
-        saveSecret(key, legacyValue)
     }
 
     fun secureP2PKPrivateKey(id: String): String = "settings.p2pk.$id.privateKey"
 }
 
-class SettingsManager(
+class SettingsManager internal constructor(
     private val settingsStore: SettingsStore,
     private val secureStorage: SecureStorage,
+    private val p2pkStore: P2PKMetadataStore,
 ) : MintDiscoverySettings {
     private val secureRandom = SecureRandom()
+    private val pendingLegacyP2PKSecrets = mutableMapOf<String, String>()
+
+    constructor(settingsStore: SettingsStore, secureStorage: SecureStorage) : this(
+        settingsStore = settingsStore,
+        secureStorage = secureStorage,
+        p2pkStore = SettingsP2PKMetadataStore(settingsStore),
+    )
 
     companion object {
         /** The relay list a fresh install starts with, and what "reset" restores. */
@@ -168,6 +204,7 @@ class SettingsManager(
     }
 
     init {
+        recoverInterruptedP2PKRemovals()
         migrateLegacyStoredSecrets()
     }
 
@@ -191,14 +228,17 @@ class SettingsManager(
     fun primaryP2PKKeyInfo(): PrimaryP2PKKey? = primaryP2PKKey()
 
     /** Stored private key hex for a device key — used only for nsec backup/reveal. */
-    fun p2pkPrivateKeyHex(id: String): String? =
-        secureStorage.loadString(secureP2PKPrivateKey(id))
+    fun p2pkPrivateKeyHex(id: String): String? {
+        val key = p2pkStore.keys.firstOrNull { it.id == id } ?: return null
+        return availableP2PKPrivateKey(key)
+    }
 
     /** Rename a device key (iOS setP2PKKeyNickname). */
-    fun setP2PKKeyNickname(id: String, label: String) = update {
-        settingsStore.p2pkKeys = settingsStore.p2pkKeys.map {
+    fun setP2PKKeyNickname(id: String, label: String) {
+        val updated = p2pkStore.keys.map {
             if (it.id == id) it.copy(label = label.trim()) else it
         }
+        persistP2PKMetadata(updated)
     }
 
     fun setUseBitcoinSymbol(value: Boolean) = update { settingsStore.useBitcoinSymbol = value }
@@ -281,14 +321,10 @@ class SettingsManager(
             publicKey = normalized,
             label = label,
         )
-        update { settingsStore.p2pkKeys = settingsStore.p2pkKeys + key }
+        persistP2PKMetadata(p2pkStore.keys + key)
     }
 
-    fun generateP2PKKey(): Boolean =
-        runCatching {
-            val privateKey = generateRandomPrivateKey()
-            addP2PKPrivateKey(privateKey)
-        }.isSuccess
+    fun generateP2PKKey(): P2PKKeyInfo = addP2PKPrivateKey(generateRandomPrivateKey())
 
     fun importP2PKNsec(nsec: String) {
         val trimmed = nsec.trim()
@@ -298,9 +334,59 @@ class SettingsManager(
         addP2PKPrivateKey(privateKey)
     }
 
-    fun removeP2PKKey(id: String) = update {
-        secureStorage.delete(secureP2PKPrivateKey(id))
-        settingsStore.p2pkKeys = settingsStore.p2pkKeys.filterNot { it.id == id }
+    fun removeP2PKKey(id: String) {
+        val key = p2pkStore.keys.firstOrNull { it.id == id } ?: return
+        val privateKey = availableP2PKPrivateKey(key)
+        val primaryStorageKey = secureP2PKPrivateKey(id)
+        val fallbackStorageKey = secureP2PKRemovalFallback(id)
+        val previousPendingIds = p2pkStore.pendingDeletionIds
+        val pendingIdsAfterCleanup = previousPendingIds - id
+        val pendingIds = previousPendingIds + id
+
+        try {
+            p2pkStore.pendingDeletionIds = pendingIds
+        } catch (error: Throwable) {
+            throw P2PKStorageException("Could not prepare the key removal.", error)
+        }
+
+        try {
+            if (privateKey != null) {
+                secureStorage.saveString(fallbackStorageKey, privateKey)
+            }
+            secureStorage.delete(primaryStorageKey)
+        } catch (error: Throwable) {
+            val fallbackWasRemoved = runCatching { secureStorage.delete(fallbackStorageKey) }.isSuccess
+            if (fallbackWasRemoved) {
+                runCatching { p2pkStore.pendingDeletionIds = pendingIdsAfterCleanup }
+            }
+            throw P2PKStorageException("Could not remove the encrypted key.", error)
+        }
+
+        val previousLegacySecret = pendingLegacyP2PKSecrets.remove(id)
+        try {
+            p2pkStore.saveKeys(
+                keys = p2pkStore.keys.filterNot { it.id == id },
+                preservingLegacySecrets = pendingLegacyP2PKSecrets,
+            )
+            mutableState.value = loadState()
+        } catch (error: Throwable) {
+            if (previousLegacySecret != null) pendingLegacyP2PKSecrets[id] = previousLegacySecret
+            val primaryWasRestored = privateKey == null || runCatching {
+                secureStorage.saveString(primaryStorageKey, privateKey)
+            }.isSuccess
+            if (primaryWasRestored) {
+                val fallbackWasRemoved = runCatching { secureStorage.delete(fallbackStorageKey) }.isSuccess
+                if (fallbackWasRemoved) {
+                    runCatching { p2pkStore.pendingDeletionIds = pendingIdsAfterCleanup }
+                }
+            }
+            throw P2PKStorageException("Could not save the key removal.", error)
+        }
+
+        val fallbackWasRemoved = runCatching { secureStorage.delete(fallbackStorageKey) }.isSuccess
+        if (fallbackWasRemoved) {
+            runCatching { p2pkStore.pendingDeletionIds = pendingIdsAfterCleanup }
+        }
     }
 
     fun p2pkSigningKeysFor(pubkeys: List<String>): List<String> {
@@ -309,12 +395,12 @@ class SettingsManager(
         val primary = primaryP2PKKey()
         val primaryMatches = primary != null &&
             normalizeP2PKForComparison(primary.publicKey) in tokenPubkeys
-        val availableKeys = settingsStore.p2pkKeys
+        val availableKeys = p2pkStore.keys
         val matching = availableKeys.filter { normalizeP2PKForComparison(it.publicKey) in tokenPubkeys }
         require(primaryMatches || matching.isNotEmpty()) {
             "This token is locked to a P2PK key that is not stored on this device."
         }
-        require(primaryMatches || matching.any { secureStorage.loadString(secureP2PKPrivateKey(it.id)) != null }) {
+        require(primaryMatches || matching.any { availableP2PKPrivateKey(it) != null }) {
             "Missing encrypted P2PK private key."
         }
         // Pass the full signing set (primary + device keys) and let CDK pick,
@@ -324,25 +410,27 @@ class SettingsManager(
 
     /** Primary seed-derived key + every device key with a stored secret, deduped (iOS parity). */
     fun allP2PKSigningKeyHexes(): List<String> {
-        val stored = settingsStore.p2pkKeys.mapNotNull {
-            secureStorage.loadString(secureP2PKPrivateKey(it.id))
-        }
+        val stored = p2pkStore.keys.mapNotNull(::availableP2PKPrivateKey)
         return (listOfNotNull(primaryP2PKKey()?.privateKeyHex) + stored).distinct()
     }
 
-    fun markP2PKKeyUsed(publicKey: String) = update {
+    fun markP2PKKeyUsed(publicKey: String) {
         val comparable = normalizeP2PKForComparison(publicKey)
-        settingsStore.p2pkKeys = settingsStore.p2pkKeys.map {
-            if (normalizeP2PKForComparison(it.publicKey) == comparable) {
+        val updated = p2pkStore.keys.map {
+            if (availableP2PKPrivateKey(it) != null &&
+                normalizeP2PKForComparison(it.publicKey) == comparable
+            ) {
                 it.copy(used = true, usedCount = it.usedCount + 1)
             } else {
                 it
             }
         }
+        persistP2PKMetadata(updated)
     }
 
     fun resetWalletScopedData() = update {
         deleteWalletScopedSecrets(snapshotWalletScopedData(), deleteNostrPrivateKey = true)
+        pendingLegacyP2PKSecrets.clear()
         settingsStore.clearWalletScopedData()
     }
 
@@ -358,10 +446,12 @@ class SettingsManager(
     internal fun snapshotWalletScopedData(): SettingsWalletScopedSnapshot =
         SettingsWalletScopedSnapshot(
             preferences = settingsStore.snapshotWalletScopedData(),
-            p2pkKeys = settingsStore.p2pkKeys,
+            p2pkKeys = p2pkStore.keys,
+            pendingP2PKDeletionIds = p2pkStore.pendingDeletionIds,
         )
 
     internal fun prepareForWalletReplacement() = update {
+        pendingLegacyP2PKSecrets.clear()
         settingsStore.clearWalletScopedData()
         settingsStore.nostrSignerType = NostrSignerType.Seed.rawValue
     }
@@ -375,7 +465,12 @@ class SettingsManager(
         snapshot: SettingsWalletScopedSnapshot,
         deleteNostrPrivateKey: Boolean,
     ) {
-        snapshot.p2pkKeys.forEach { secureStorage.delete(secureP2PKPrivateKey(it.id)) }
+        val p2pkIds = snapshot.p2pkKeys.mapTo(mutableSetOf()) { it.id }
+            .apply { addAll(snapshot.pendingP2PKDeletionIds) }
+        p2pkIds.forEach {
+            secureStorage.delete(secureP2PKPrivateKey(it))
+            secureStorage.delete(secureP2PKRemovalFallback(it))
+        }
         if (deleteNostrPrivateKey) secureStorage.delete(StorageKeys.secureNostrPrivateKey)
     }
 
@@ -384,8 +479,17 @@ class SettingsManager(
             p2pkRecords = settingsStore.loadP2PKKeysWithLegacySecrets(),
             loadSecret = secureStorage::loadString,
             saveSecret = secureStorage::saveString,
+            isUsableSecret = ::isUsableP2PKSecret,
         )
-        migration.p2pkKeysToPersist?.let { settingsStore.p2pkKeys = it }
+        pendingLegacyP2PKSecrets.clear()
+        pendingLegacyP2PKSecrets.putAll(migration.pendingLegacySecrets)
+        migration.p2pkKeysToPersist?.let { keys ->
+            runCatching {
+                p2pkStore.saveKeys(keys, pendingLegacyP2PKSecrets)
+            }.onFailure {
+                AppLogger.security.error("Failed to sanitize legacy P2PK metadata", it)
+            }
+        }
     }
 
     private fun update(block: () -> Unit) {
@@ -414,29 +518,140 @@ class SettingsManager(
         nostrSignerType = settingsStore.nostrSignerType,
         nostrRelays = settingsStore.nostrRelays,
         nostrMintBackupEnabled = settingsStore.nostrMintBackupEnabled,
-        p2pkKeys = settingsStore.p2pkKeys,
+        p2pkKeys = p2pkStore.keys,
+        p2pkUnavailableKeyIds = p2pkStore.keys
+            .filter { availableP2PKPrivateKey(it) == null }
+            .mapTo(mutableSetOf()) { it.id },
     )
 
     private fun normalizeP2PKForComparison(pubkey: String): String {
         return normalizeP2PKPublicKeyForComparison(pubkey)
     }
 
-    private fun addP2PKPrivateKey(privateKey: ByteArray) {
+    private fun addP2PKPrivateKey(privateKey: ByteArray): P2PKKeyInfo {
         require(privateKey.size == 32) { "Invalid nsec format." }
         val privateKeyHex = privateKey.toHex()
         val publicKey = "02${NostrService.publicKeyHex(privateKeyHex)}"
         val comparable = normalizeP2PKForComparison(publicKey)
-        require(settingsStore.p2pkKeys.none { normalizeP2PKForComparison(it.publicKey) == comparable }) {
+        val existingKey = p2pkStore.keys.firstOrNull {
+            normalizeP2PKForComparison(it.publicKey) == comparable
+        }
+        require(existingKey == null || availableP2PKPrivateKey(existingKey) == null) {
             "Key already exists."
         }
-        val id = UUID.randomUUID().toString()
-        val key = P2PKKeyInfo(
-            id = id,
+        val key = existingKey ?: P2PKKeyInfo(
+            id = UUID.randomUUID().toString(),
             publicKey = publicKey,
             label = "P2PK key",
         )
-        secureStorage.saveString(secureP2PKPrivateKey(id), privateKeyHex)
-        update { settingsStore.p2pkKeys = settingsStore.p2pkKeys + key }
+        val isRepair = existingKey != null
+
+        try {
+            secureStorage.saveString(secureP2PKPrivateKey(key.id), privateKeyHex)
+        } catch (error: Throwable) {
+            throw P2PKStorageException("Could not save the encrypted key.", error)
+        }
+
+        try {
+            if (isRepair) {
+                persistP2PKMetadata(p2pkStore.keys)
+            } else {
+                persistP2PKMetadata(p2pkStore.keys + key)
+            }
+        } catch (error: Throwable) {
+            if (!isRepair) {
+                runCatching { secureStorage.delete(secureP2PKPrivateKey(key.id)) }
+            }
+            throw P2PKStorageException("Could not save the key metadata.", error)
+        }
+        return key
+    }
+
+    private fun persistP2PKMetadata(keys: List<P2PKKeyInfo>) {
+        retryPendingLegacyP2PKSecrets(keys)
+        p2pkStore.saveKeys(keys, pendingLegacyP2PKSecrets)
+        mutableState.value = loadState()
+    }
+
+    private fun retryPendingLegacyP2PKSecrets(keys: List<P2PKKeyInfo>) {
+        val metadataById = keys.associateBy { it.id }
+        val iterator = pendingLegacyP2PKSecrets.iterator()
+        while (iterator.hasNext()) {
+            val (id, secret) = iterator.next()
+            val metadata = metadataById[id]
+            if (metadata == null || !isUsableP2PKSecret(metadata, secret)) {
+                iterator.remove()
+                continue
+            }
+            if (runCatching { secureStorage.saveString(secureP2PKPrivateKey(id), secret) }.isSuccess) {
+                iterator.remove()
+            }
+        }
+    }
+
+    private fun availableP2PKPrivateKey(key: P2PKKeyInfo): String? {
+        val secureSecret = runCatching {
+            secureStorage.loadString(secureP2PKPrivateKey(key.id))
+        }.getOrNull()
+        if (secureSecret != null && isUsableP2PKSecret(key, secureSecret)) return secureSecret
+
+        pendingLegacyP2PKSecrets[key.id]?.let { legacySecret ->
+            if (isUsableP2PKSecret(key, legacySecret)) return legacySecret
+        }
+
+        if (key.id in runCatching { p2pkStore.pendingDeletionIds }.getOrDefault(emptySet())) {
+            val fallbackSecret = runCatching {
+                secureStorage.loadString(secureP2PKRemovalFallback(key.id))
+            }.getOrNull()
+            if (fallbackSecret != null && isUsableP2PKSecret(key, fallbackSecret)) return fallbackSecret
+        }
+        return null
+    }
+
+    private fun isUsableP2PKSecret(key: P2PKKeyInfo, secret: String): Boolean {
+        val normalizedSecret = secret.trim().lowercase()
+        if (normalizedSecret.length != 64 || normalizedSecret.any { it !in '0'..'9' && it !in 'a'..'f' }) {
+            return false
+        }
+        val derivedPublicKey = runCatching {
+            "02${NostrService.publicKeyHex(normalizedSecret)}"
+        }.getOrNull() ?: return false
+        return normalizeP2PKForComparison(derivedPublicKey) ==
+            normalizeP2PKForComparison(key.publicKey)
+    }
+
+    private fun recoverInterruptedP2PKRemovals() {
+        val pendingIds = runCatching { p2pkStore.pendingDeletionIds }.getOrDefault(emptySet())
+        if (pendingIds.isEmpty()) return
+        val metadataById = p2pkStore.keys.associateBy { it.id }
+        val unresolvedIds = pendingIds.toMutableSet()
+
+        pendingIds.forEach { id ->
+            val key = metadataById[id]
+            val primaryStorageKey = secureP2PKPrivateKey(id)
+            val fallbackStorageKey = secureP2PKRemovalFallback(id)
+            if (key == null) {
+                val primaryRemoved = runCatching { secureStorage.delete(primaryStorageKey) }.isSuccess
+                val fallbackRemoved = runCatching { secureStorage.delete(fallbackStorageKey) }.isSuccess
+                if (primaryRemoved && fallbackRemoved) unresolvedIds.remove(id)
+                return@forEach
+            }
+
+            val primarySecret = runCatching { secureStorage.loadString(primaryStorageKey) }.getOrNull()
+            val primaryIsUsable = primarySecret != null && isUsableP2PKSecret(key, primarySecret)
+            val fallbackSecret = runCatching { secureStorage.loadString(fallbackStorageKey) }.getOrNull()
+            val fallbackIsUsable = fallbackSecret != null && isUsableP2PKSecret(key, fallbackSecret)
+            val restored = primaryIsUsable || (fallbackIsUsable && runCatching {
+                secureStorage.saveString(primaryStorageKey, fallbackSecret)
+            }.isSuccess)
+            if (restored && runCatching { secureStorage.delete(fallbackStorageKey) }.isSuccess) {
+                unresolvedIds.remove(id)
+            }
+        }
+
+        if (unresolvedIds != pendingIds) {
+            runCatching { p2pkStore.pendingDeletionIds = unresolvedIds }
+        }
     }
 
     private fun generateRandomPrivateKey(): ByteArray {
@@ -451,6 +666,9 @@ class SettingsManager(
 
     private fun secureP2PKPrivateKey(id: String): String =
         LegacySettingsSecretMigrator.secureP2PKPrivateKey(id)
+
+    private fun secureP2PKRemovalFallback(id: String): String =
+        "${secureP2PKPrivateKey(id)}.removalFallback"
 
     private fun ByteArray.toHex(): String = joinToString("") { "%02x".format(it) }
 }

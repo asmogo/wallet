@@ -743,10 +743,11 @@ struct MainWalletView: View {
         }
     }
 
-    /// All Send faces share one implementation, but amount entry is a separate
-    /// native sheet presentation. Dismissing the compact input before opening
-    /// the large amount sheet avoids racing keyboard removal against a detent
-    /// resize, and mirrors the already-smooth Send Ecash handoff.
+    /// All Send faces share one implementation, but the payment steps (amount,
+    /// confirm, status) live in a separate fixed-`.large` sheet presentation —
+    /// the Receive-modal convention, with an X / back arrow for chrome.
+    /// Dismissing the compact input before opening it avoids racing keyboard
+    /// removal against a detent resize, and mirrors the Send Ecash handoff.
     private func unifiedSendSheet(
         initialDestination: String? = nil,
         initialAmountDestination: SendAmountDestination? = nil,
@@ -772,7 +773,7 @@ struct MainWalletView: View {
                 navigationManager.present(.cover(.receiveToken(token)))
             },
             onSendEcash: { navigationManager.activeWalletSheet = .sendEcash },
-            onRequestAmount: { destination in
+            onRoutePayment: { destination in
                 navigationManager.present(.sheet(.sendAmount(destination)))
             },
             onEditDestination: onEditDestination

@@ -89,9 +89,10 @@ fun AdvancedKeysScreen(
                 showChevron = false,
                 onClick = {
                     actionError = null
-                    if (!settingsManager.generateP2PKKey()) {
-                        actionError = "Couldn't generate a key. Please try again."
-                    }
+                    runCatching { settingsManager.generateP2PKKey() }
+                        .onFailure {
+                            actionError = it.message ?: "Couldn't generate a key. Please try again."
+                        }
                 },
             )
             NavRow(
@@ -131,7 +132,11 @@ fun AdvancedKeysScreen(
                         .animateContentSize(spring(stiffness = Spring.StiffnessMediumLow)),
                 ) {
                     settings.p2pkKeys.forEachIndexed { index, key ->
-                        DeviceKeyRow(key = key, onClick = { onOpenKey(key.id) })
+                        DeviceKeyRow(
+                            key = key,
+                            isUsable = key.id !in settings.p2pkUnavailableKeyIds,
+                            onClick = { onOpenKey(key.id) },
+                        )
                     }
                 }
                 SettingsFooterText(
@@ -146,8 +151,6 @@ fun AdvancedKeysScreen(
         ImportP2PKDialog(
             onImport = { nsec ->
                 runCatching { settingsManager.importP2PKNsec(nsec) }
-                    .onSuccess { showImport = false }
-                    .onFailure { actionError = it.message ?: "Could not import key." }
             },
             onDismiss = { showImport = false },
         )
@@ -155,12 +158,12 @@ fun AdvancedKeysScreen(
 }
 
 @Composable
-private fun DeviceKeyRow(key: P2PKKeyInfo, onClick: () -> Unit) {
+private fun DeviceKeyRow(key: P2PKKeyInfo, isUsable: Boolean, onClick: () -> Unit) {
     NavRow(
         title = key.label.ifBlank { P2PKKeyDisplay.shortLabel(key.publicKey) },
         subtitle = buildString {
-            append("Device only")
-            if (key.usedCount > 0) {
+            append(if (isUsable) "Device only" else "Repair required")
+            if (isUsable && key.usedCount > 0) {
                 append(" · ")
                 append(if (key.usedCount == 1) "Used once" else "Used ${key.usedCount} times")
             }
@@ -173,7 +176,7 @@ private fun DeviceKeyRow(key: P2PKKeyInfo, onClick: () -> Unit) {
 /** nsec import dialog (iOS ImportP2PKSheet). */
 @Composable
 internal fun ImportP2PKDialog(
-    onImport: (String) -> Unit,
+    onImport: (String) -> Result<Unit>,
     onDismiss: () -> Unit,
 ) {
     var input by remember { mutableStateOf("") }
@@ -207,6 +210,8 @@ internal fun ImportP2PKDialog(
                     return@TextButton
                 }
                 onImport(trimmed)
+                    .onSuccess { onDismiss() }
+                    .onFailure { inputError = it.message ?: "Could not import key." }
             }) { Text("Import") }
         },
         dismissButton = {

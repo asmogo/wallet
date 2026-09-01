@@ -97,14 +97,22 @@ like a port, make the Android-native choice instead.
   (`android:enableOnBackInvokedCallback`).
 - **No hard cuts**: full-screen overlays (scanner, contactless) slide over the
   shell (`CashuApp.kt`); the bottom bar animates away on push
-  (`WalletScaffold.kt`); the payment terminal fades/settles in
-  (`PaymentStatusScreen.kt`). The success check carries the one celebration
-  beat (bounce + materialize); failures stay deliberately still. **Every**
-  completion routes through the shared `PaymentStatusScreen` — including Receive
-  Lightning (paid invoice) and a fresh Cashu Request's first payment, which
-  cross-fade the whole sheet body to the terminal and auto-dismiss after ~1.8s
-  with no Done button (Android carve-out; iOS keeps Done). A Cashu Request opened
-  from *history* stays inline/persistent — it's reusable and multi-payment.
+  (`WalletScaffold.kt`). The payment terminal's entrance splits by mount:
+  processing/failure mounts fade + settle in as one unit
+  (`PaymentStatusScreen.kt`'s root layer), while a terminal **mounted directly
+  at success** (payment landed while a waiting face was up) plays the staged
+  celebration — check materializes at ~100ms (bounce + blur + 0.92 grow, with
+  the success haptic), title band at ~220ms (opacity + 8dp settle-rise), rows
+  + Done at ~300ms (6dp rise on rows only — never blur, they're money; Done is
+  tappable from frame 1). The success check carries the one celebration beat;
+  failures stay deliberately still; reduce-motion collapses the stage to a
+  flat fade. **Every** completion routes through the shared
+  `PaymentStatusScreen` — including Receive Lightning (paid invoice) and a
+  fresh Cashu Request's first payment, which swap the sheet body to the
+  terminal with the standard `fadeIn(200)/fadeOut(150)` pair and keep an
+  explicit Done (both platforms; an older note claimed a ~1.8s auto-dismiss
+  carve-out that never shipped). A Cashu Request opened from *history* stays
+  inline/persistent — it's reusable and multi-payment.
 - **Touch responds physically**: CTAs and number-pad keys spring-scale on press
   (`Buttons.kt`, `NumberPad.kt`); text buttons dim to 0.6 while pressed
   (iOS `TextLinkButtonStyle`). The response is **asymmetric** — a spring carries

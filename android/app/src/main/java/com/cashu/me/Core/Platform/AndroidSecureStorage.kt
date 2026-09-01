@@ -34,19 +34,24 @@ class AndroidSecureStorage(context: Context) : SecureStorage {
         val payload = Base64.encodeToString(cipher.iv, Base64.NO_WRAP) +
             ":" +
             Base64.encodeToString(encrypted, Base64.NO_WRAP)
-        prefs.edit().putString(key, payload).apply()
+        check(prefs.edit().putString(key, payload).commit()) {
+            "Failed to persist secure value."
+        }
     }
 
     override fun delete(key: String) {
-        prefs.edit().remove(key).apply()
+        check(prefs.edit().remove(key).commit()) {
+            "Failed to remove secure value."
+        }
     }
 
     override fun deletePrefix(prefix: String) {
         val matchingKeys = prefs.all.keys.filter { it.startsWith(prefix) }
         if (matchingKeys.isEmpty()) return
-        prefs.edit().apply {
+        val committed = prefs.edit().apply {
             matchingKeys.forEach(::remove)
-        }.apply()
+        }.commit()
+        check(committed) { "Failed to remove secure values." }
     }
 
     override fun contains(key: String): Boolean = prefs.contains(key)

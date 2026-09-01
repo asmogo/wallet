@@ -138,8 +138,10 @@ fun neutralActionButtonColors(): ButtonColors = ButtonDefaults.buttonColors(
  * iOS bottom CTA is the non-prominent gray glass capsule), spring press-scale,
  * expressive loading indicator.
  *
- * Pass [colors] to override — the sole inverted-ink case is the Receive Ecash
- * commit button, mirroring iOS's single `.glassButton(prominent: true)`.
+ * Pass [colors] to override. Inverted ink (`ButtonDefaults.buttonColors()`) is
+ * used only where a sheet's CTA is that sheet's single irreversible commit:
+ * Add Mint, and the Nostr / P2PK key sheets. Every payment CTA — Pay, Receive —
+ * stays on this neutral fill, matching iOS's non-prominent glass capsule.
  */
 @OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
@@ -272,6 +274,17 @@ fun SecondaryButton(
         )
     }
 }
+
+/**
+ * Text style for a [GhostButton] used as the tertiary action directly beneath a
+ * full-width CTA ("Receive later", the onboarding chassis' skip slot). It is
+ * [PrimaryButton]'s own label style, so the pair differs by fill and ink alone
+ * and never by type — a 14sp Medium label under an 18sp SemiBold capsule read as
+ * two unrelated controls. Inline ghosts ("Paste", "Discover mints") keep
+ * [GhostButton]'s smaller default.
+ */
+val ghostButtonUnderCtaTextStyle: TextStyle
+    @Composable get() = CashuTheme.type.buttonLabel
 
 /** Inline non-emphasized action (Copy, Paste, Restore from seed, etc.). */
 @Composable

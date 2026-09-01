@@ -103,15 +103,15 @@ struct TransactionDetailView: View {
         }
     }
 
-    /// Settled transactions are receipts, not active payment workspaces. Open
-    /// those at a compact detent while preserving the large canvas for QR and
-    /// claim/check flows that need it.
-    private var isCompactReceipt: Bool {
-        transaction.status == .completed
-    }
-
+    /// Every transaction detail opens as a member of the same receipt-sheet
+    /// family; only the height varies with content. A QR hero needs most of the
+    /// screen, an onchain receipt carries an extra explorer row, and everything
+    /// else fits the standard receipt detent. `.large` stays reachable by drag.
+    /// The QR fraction is sized so the scroll content — including its 24pt
+    /// bottom padding, the row-to-CTA gap every receipt shows — fits without
+    /// clipping; any tighter and that gap is the first thing cut.
     private var presentationDetents: Set<PresentationDetent> {
-        guard isCompactReceipt else { return [.large] }
+        if showsQR { return [.fraction(0.94), .large] }
         return transaction.kind == .onchain
             ? [.fraction(0.78), .large]
             : [.fraction(0.68), .large]
@@ -236,22 +236,11 @@ struct TransactionDetailView: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbarBackground(.hidden, for: .navigationBar)
             .toolbar {
-                if !isCompactReceipt {
-                    ToolbarItem(placement: .navigationBarLeading) {
-                        SheetCloseButton()
-                    }
-                }
+                // Title only — no close or share chrome. Like every receipt
+                // sheet, dismissal is the drag indicator / swipe, and sharing
+                // stays on the QR itself (context menu + VoiceOver action).
                 ToolbarItem(placement: .principal) {
                     Text(transaction.displayTitle).font(.headline)
-                }
-                if showsQR {
-                    ToolbarItem(placement: .topBarTrailing) {
-                        Button(action: { showShareSheet = true }) {
-                            Image(systemName: "square.and.arrow.up")
-                                .toolbarIconTapTarget()
-                        }
-                        .accessibilityLabel("Share")
-                    }
                 }
             }
             .sheet(isPresented: $showShareSheet) {
@@ -272,16 +261,9 @@ struct TransactionDetailView: View {
                 manualClaimCheckTask?.cancel()
             }
         }
-        .environment(\.bottomSheetSurfaceStyle, isCompactReceipt ? .compact : .flat)
+        .compactBottomSheetSurface()
         .presentationDetents(presentationDetents)
         .presentationDragIndicator(.visible)
-        .presentationBackground {
-            if isCompactReceipt {
-                CompactSheetBackground()
-            } else {
-                Color(uiColor: .systemBackground)
-            }
-        }
     }
 
     // MARK: - Subviews
@@ -321,13 +303,13 @@ struct TransactionDetailView: View {
             // severity vocabulary, so it takes the same tokens rather than
             // raw .green/.red.
             Image(systemName: "checkmark.circle.fill")
-                .font(.system(size: 64))
+                .font(.statusGlyph)
                 .foregroundStyle(ErrorSeverity.success.foreground)
                 .padding(.top, 24)
                 .accessibilityLabel("Completed")
         } else if transaction.status == .failed {
             Image(systemName: "xmark.circle.fill")
-                .font(.system(size: 64))
+                .font(.statusGlyph)
                 .foregroundStyle(ErrorSeverity.error.foreground)
                 .padding(.top, 24)
                 .accessibilityLabel("Failed")

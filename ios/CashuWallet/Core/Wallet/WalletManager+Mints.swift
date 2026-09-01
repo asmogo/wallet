@@ -56,22 +56,27 @@ extension WalletManager {
         }
     }
 
-    func removeMint(at offsets: IndexSet) async {
+    @discardableResult
+    func removeMint(_ mint: MintInfo) async -> Bool {
+        errorMessage = nil
         do {
-            try await operationCoordinator.perform(kind: .addMint) {
-                await self.mintService.removeMint(at: offsets)
+            try await operationCoordinator.perform(kind: .removeMint) {
+                try await self.mintService.removeMint(mint)
             }
         } catch is CancellationError {
-            return
+            return false
         } catch {
+            errorMessage = error.userFacingWalletMessage
             AppLogger.wallet.error(
                 "remove mint failed error_type=\(String(reflecting: type(of: error)), privacy: .public)"
             )
+            return false
         }
         await refreshBalance()
         performICloudBackup()
         Task { await NostrMintBackupService.shared.backupCurrentMintsIfEnabled() }
         SentryService.breadcrumb("Mint removed", category: "wallet.mint")
+        return true
     }
 
     func setActiveMint(_ mint: MintInfo) async throws {

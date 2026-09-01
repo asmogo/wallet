@@ -31,36 +31,6 @@ class WalletCashuRequestPaymentTest {
     }
 
     @Test
-    fun addMintAndPayUsesTrackedMintUrlBeforeRefreshing() = runBlocking {
-        val events = mutableListOf<String>()
-
-        addMintAndPayCashuPaymentRequestAndRefresh(
-            encoded = "creq1payment",
-            customAmountSats = null,
-            mintUrl = "https://mint.example/",
-            ensureMintTracked = { mintUrl ->
-                events += "ensure:$mintUrl"
-                "https://mint.example"
-            },
-            payCashuPaymentRequest = { encoded, amount, mintUrl ->
-                events += "pay:$encoded:$amount:$mintUrl"
-            },
-            refreshBalance = { events += "refreshBalance" },
-            loadTransactions = { events += "loadTransactions" },
-        )
-
-        assertEquals(
-            listOf(
-                "ensure:https://mint.example/",
-                "pay:creq1payment:null:https://mint.example",
-                "refreshBalance",
-                "loadTransactions",
-            ),
-            events,
-        )
-    }
-
-    @Test
     fun paymentFailureDoesNotRefreshBalanceOrTransactions() {
         val events = mutableListOf<String>()
 
