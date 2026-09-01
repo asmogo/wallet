@@ -13,6 +13,7 @@ struct TransactionDetailView: View {
     @State private var isCheckingClaim = false
     @State private var manualClaimCheckResult: PendingTokenClaimCheckResult?
     @State private var manualClaimCheckTask: Task<Void, Never>?
+    @State private var contentHeight: CGFloat = 0
 
     init(transaction: WalletTransaction) {
         self.seed = transaction
@@ -104,81 +105,68 @@ struct TransactionDetailView: View {
     }
 
     /// Every transaction detail opens as a member of the same receipt-sheet
-    /// family; only the height varies with content. A QR hero needs most of the
-    /// screen, an onchain receipt carries an extra explorer row, and everything
-    /// else fits the standard receipt detent. `.large` stays reachable by drag.
-    /// The QR fraction is sized so the scroll content — including its 24pt
-    /// bottom padding, the row-to-CTA gap every receipt shows — fits without
-    /// clipping; any tighter and that gap is the first thing cut.
-    private var presentationDetents: Set<PresentationDetent> {
-        if showsQR { return [.fraction(0.94), .large] }
-        return transaction.kind == .onchain
-            ? [.fraction(0.78), .large]
-            : [.fraction(0.68), .large]
-    }
-
+    /// family. The sheet hugs its measured content (capped at 90% of the
+    /// screen, scrolling past that) instead of guessing a screen fraction:
+    /// fixed fractions clipped the rows behind the bottom actions on smaller
+    /// devices whenever the receipt grew — a Fee row, the fiat conversion
+    /// line, a second CTA — while fitting content on larger ones. Same
+    /// contract as `QRCodeDetailSheet` and the other content-fit receipts.
     var body: some View {
         NavigationStack {
-            VStack(spacing: 0) {
-                ScrollView {
-                    VStack(spacing: 24) {
-                        // Hero: an actionable QR (unclaimed token / pending or
-                        // reusable invoice), else a state glyph that bounces in on
-                        // open — green check when completed, red X when failed;
-                        // nothing while a no-QR transaction is still pending.
-                        heroSlot
+            VStack(spacing: 24) {
+                // Hero: an actionable QR (unclaimed token / pending or
+                // reusable invoice), else a state glyph that bounces in on
+                // open — green check when completed, red X when failed;
+                // nothing while a no-QR transaction is still pending.
+                heroSlot
 
-                        // Receipt amounts use the same primary/secondary ordering
-                        // as Home and History. The glyph above carries state colour.
-                        TransactionReceiptAmountPair(
-                            transaction: transaction,
-                            role: showsQR ? .amountCompact : .amountConfirm,
-                            preferredPrimary: settings.homeBalancePrimary,
-                            showFiat: settings.showFiatBalance,
-                            btcPrice: priceService.btcPriceUSD,
-                            currencyCode: settings.bitcoinPriceCurrency,
-                            useBitcoinSymbol: settings.useBitcoinSymbol
-                        )
-                        .padding(.top, heroSlotIsEmpty ? 32 : 0)
+                // Receipt amounts use the same primary/secondary ordering
+                // as Home and History. The glyph above carries state colour.
+                TransactionReceiptAmountPair(
+                    transaction: transaction,
+                    role: showsQR ? .amountCompact : .amountConfirm,
+                    preferredPrimary: settings.homeBalancePrimary,
+                    showFiat: settings.showFiatBalance,
+                    btcPrice: priceService.btcPriceUSD,
+                    currencyCode: settings.bitcoinPriceCurrency,
+                    useBitcoinSymbol: settings.useBitcoinSymbol
+                )
+                .padding(.top, heroSlotIsEmpty ? 32 : 0)
 
-                        // Detail rows on canvas, led by Status + Date. Type is
-                        // omitted — the nav title names it.
-                        VStack(spacing: 0) {
-                            ForEach(Array(detailRows.enumerated()), id: \.offset) { _, row in
-                                if let copyValue = row.copyValue {
-                                    copyableRow(label: row.label, value: row.value, copyValue: copyValue)
-                                } else {
-                                    detailRow(label: row.label, value: row.value)
-                                }
-                            }
-                            if let explorerURL = onchainExplorerURL {
-                                explorerLinkRow(label: "View in block explorer", url: explorerURL)
-                            }
-                        }
-                        .padding(.top, 8)
-                        .padding(.horizontal, 4)
-
-                        if offersManualClaimCheck {
-                            switch manualClaimCheckResult {
-                            case .notClaimed:
-                                InlineNotice(
-                                    message: "This token has not been claimed yet.",
-                                    title: "Status checked",
-                                    severity: .info
-                                )
-                            case .failed(let message):
-                                InlineNotice(
-                                    message: message.text,
-                                    title: "Couldn't check status",
-                                    severity: message.severity
-                                )
-                            case .claimed, nil:
-                                EmptyView()
-                            }
+                // Detail rows on canvas, led by Status + Date. Type is
+                // omitted — the nav title names it.
+                VStack(spacing: 0) {
+                    ForEach(Array(detailRows.enumerated()), id: \.offset) { _, row in
+                        if let copyValue = row.copyValue {
+                            copyableRow(label: row.label, value: row.value, copyValue: copyValue)
+                        } else {
+                            detailRow(label: row.label, value: row.value)
                         }
                     }
-                    .padding(.horizontal)
-                    .padding(.bottom, copyableContent == nil ? 0 : 24)
+                    if let explorerURL = onchainExplorerURL {
+                        explorerLinkRow(label: "View in block explorer", url: explorerURL)
+                    }
+                }
+                .padding(.top, 8)
+                .padding(.horizontal, 4)
+
+                if offersManualClaimCheck {
+                    switch manualClaimCheckResult {
+                    case .notClaimed:
+                        InlineNotice(
+                            message: "This token has not been claimed yet.",
+                            title: "Status checked",
+                            severity: .info
+                        )
+                    case .failed(let message):
+                        InlineNotice(
+                            message: message.text,
+                            title: "Couldn't check status",
+                            severity: message.severity
+                        )
+                    case .claimed, nil:
+                        EmptyView()
+                    }
                 }
 
                 // Pending outgoing ecash gains the same one-off status action as
@@ -210,10 +198,11 @@ struct TransactionDetailView: View {
                             .accessibilityInputLabels(["Check Status"])
                         }
                     }
-                    .padding(.horizontal)
-                    .padding(.bottom, 16)
                 }
             }
+            .padding(.horizontal)
+            .padding(.bottom, 16)
+            .contentFitMeasured { contentHeight = $0 }
             .navigationBarTitleDisplayMode(.inline)
             .toolbarBackground(.hidden, for: .navigationBar)
             .toolbar {
@@ -243,7 +232,7 @@ struct TransactionDetailView: View {
             }
         }
         .compactBottomSheetSurface()
-        .presentationDetents(presentationDetents)
+        .contentFitDetent(contentHeight, estimate: 500, navigationBar: true)
         .presentationDragIndicator(.visible)
     }
 
