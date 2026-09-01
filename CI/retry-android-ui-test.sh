@@ -19,7 +19,10 @@ MAX_ATTEMPTS="${MAX_ATTEMPTS:-3}"
 LOG_FILE="${LOG_FILE:-android-ui-test.log}"
 TRANSIENT_PATTERN="device offline|Failed to retrieve additional test outputs|emulator: ERROR|INSTALL_FAILED_DEVICE|DEVICE_UNAVAILABLE|adb: device .* not found|Emulator.*crashed|Failed to (install|push).*device"
 RESULTS_GLOB="app/build/outputs/androidTest-results/managedDevice/debug/*/TEST-*.xml"
-PASSED_CLASSES_FILE="$(mktemp -t android-ui-passed-classes)"
+PASSED_CLASSES_FILE="$(mktemp "${TMPDIR:-/tmp}/android-ui-passed-classes.XXXXXX")" || {
+  echo "Failed to create the passed-class ledger." >&2
+  exit 1
+}
 trap 'rm -f "$PASSED_CLASSES_FILE"' EXIT
 
 reset_device_state() {
