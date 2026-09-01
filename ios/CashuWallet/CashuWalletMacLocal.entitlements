@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!--
+	  LOCAL DEVELOPMENT ONLY. Never ship this file.
+
+	  Used by Scripts/build-macos.sh when it falls back to ad-hoc signing, i.e.
+	  when no DEV_TEAM is supplied. CashuWalletMac.entitlements remains the real,
+	  sandboxed configuration and is what the Xcode project references.
+
+	  Why the sandbox is off here rather than on:
+
+	  A sandboxed app reaches the Keychain through a keychain access group, and
+	  that group is derived from the team identifier in the code signature. An
+	  ad-hoc signature has no team identifier, so a sandboxed ad-hoc build cannot
+	  reach *either* keychain — the wallet fails to create a seed with "Failed to
+	  save to Keychain". This machine has no Mac Development certificate, so
+	  ad-hoc is the only option and switching the sandbox off is what makes a
+	  runnable local build possible at all.
+
+	  The consequences are real and worth stating: this build is not sandboxed,
+	  so it is not a faithful test of file-access or network-permission
+	  behaviour. Anything being validated for release must be built with
+	  DEV_TEAM=... so it picks up the sandboxed entitlements instead.
+	-->
+	<key>com.apple.security.app-sandbox</key>
+	<false/>
+</dict>
+</plist>

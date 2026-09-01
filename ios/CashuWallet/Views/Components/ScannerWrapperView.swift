@@ -1,5 +1,8 @@
 import SwiftUI
 import AVFoundation
+#if canImport(AppKit)
+import AppKit
+#endif
 import Cdk
 
 class ScannerViewModel: ObservableObject {
@@ -338,7 +341,16 @@ struct ScannerWrapperView: View {
     }
 
     private func openCameraSettings() {
+        #if os(iOS)
         guard let settingsURL = URL(string: UIApplication.openSettingsURLString) else { return }
+        #else
+        // Deep-links straight to Privacy & Security › Camera. macOS has no
+        // per-app settings page, so this is the closest equivalent to the iOS
+        // behaviour of dropping the user where the switch actually is.
+        guard let settingsURL = URL(
+            string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Camera"
+        ) else { return }
+        #endif
         openURL(settingsURL)
     }
 
@@ -368,8 +380,7 @@ struct ScannerWrapperView: View {
         if content.lowercased().hasPrefix("ur:") {
             if let result = scannerModel.processFragment(content) {
                 // Success!
-                let generator = UIImpactFeedbackGenerator(style: .medium)
-                generator.impactOccurred()
+                HapticFeedback.impact(.medium)
                 processCompleteContent(result)
             }
         } else {
@@ -383,8 +394,7 @@ struct ScannerWrapperView: View {
 
         switch classify?(content) ?? .accept {
         case .accept:
-            let generator = UINotificationFeedbackGenerator()
-            generator.notificationOccurred(.success)
+            HapticFeedback.notification(.success)
             onScanned(content)
             dismiss()
         case .reject(let message):
@@ -394,8 +404,7 @@ struct ScannerWrapperView: View {
                 scannerModel.reset()
             }
         case .notice(let message):
-            let generator = UINotificationFeedbackGenerator()
-            generator.notificationOccurred(.success)
+            HapticFeedback.notification(.success)
             // A confirmation, not a failure — render it on a neutral toast.
             scannerModel.noticeSeverity = .info
             scannerModel.errorMessage = message
@@ -1302,6 +1311,7 @@ struct CashuPaymentRequestPayView: View {
     }
 }
 
+#if os(iOS)
 struct LegacyQRScannerView: UIViewControllerRepresentable {
     var onResult: (String) -> Void
     var onFailure: (String) -> Void
@@ -1491,6 +1501,183 @@ class QRScannerViewController: UIViewController, AVCaptureMetadataOutputObjectsD
         return .portrait
     }
 }
+
+#else
+
+// MARK: - macOS scanner
+//
+// Same job, different toolkit: AppKit has no view controller in the SwiftUI
+// representable, so the capture session lives on the coordinator and the view
+// is a thin layer host. Mac webcams feed AVCaptureMetadataOutput exactly as
+// iPhone cameras do, so the scan path itself is unchanged — which is why this
+// is a port rather than a stub.
+
+/// Layer-backed preview surface. Reports window attachment so the coordinator
+/// can start and stop the camera with the sheet rather than leaving it running.
+final class MacQRPreviewView: NSView {
+    var onWindowChange: ((Bool) -> Void)?
+    private var previewLayer: AVCaptureVideoPreviewLayer?
+
+    override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        wantsLayer = true
+        layer?.backgroundColor = NSColor.black.cgColor
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    func attach(session: AVCaptureSession) {
+        guard previewLayer == nil else { return }
+        let preview = AVCaptureVideoPreviewLayer(session: session)
+        preview.videoGravity = .resizeAspectFill
+        preview.frame = bounds
+        layer?.addSublayer(preview)
+        previewLayer = preview
+    }
+
+    override func layout() {
+        super.layout()
+        previewLayer?.frame = bounds
+    }
+
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        onWindowChange?(window != nil)
+    }
+}
+
+struct LegacyQRScannerView: NSViewRepresentable {
+    var onResult: (String) -> Void
+    var onFailure: (String) -> Void
+    var onAppear: () -> Void
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(onResult: onResult, onFailure: onFailure, onAppear: onAppear)
+    }
+
+    func makeNSView(context: Context) -> MacQRPreviewView {
+        let view = MacQRPreviewView()
+        context.coordinator.attach(to: view)
+        return view
+    }
+
+    func updateNSView(_ nsView: MacQRPreviewView, context: Context) {
+        context.coordinator.onResult = onResult
+        context.coordinator.onFailure = onFailure
+        context.coordinator.onAppear = onAppear
+    }
+
+    static func dismantleNSView(_ nsView: MacQRPreviewView, coordinator: Coordinator) {
+        coordinator.stop()
+    }
+
+    final class Coordinator: NSObject, AVCaptureMetadataOutputObjectsDelegate {
+        var onResult: (String) -> Void
+        var onFailure: (String) -> Void
+        var onAppear: () -> Void
+
+        private let session = AVCaptureSession()
+        private let sessionQueue = DispatchQueue(
+            label: "com.cashu.me.qr-scanner-session",
+            qos: .userInitiated
+        )
+        private var isConfigured = false
+
+        init(
+            onResult: @escaping (String) -> Void,
+            onFailure: @escaping (String) -> Void,
+            onAppear: @escaping () -> Void
+        ) {
+            self.onResult = onResult
+            self.onFailure = onFailure
+            self.onAppear = onAppear
+        }
+
+        func attach(to view: MacQRPreviewView) {
+            configureIfNeeded()
+            guard isConfigured else { return }
+            view.attach(session: session)
+            view.onWindowChange = { [weak self] hasWindow in
+                if hasWindow {
+                    self?.onAppear()
+                    self?.start()
+                } else {
+                    self?.stop()
+                }
+            }
+        }
+
+        private func configureIfNeeded() {
+            guard !isConfigured else { return }
+
+            guard let device = AVCaptureDevice.default(for: .video) else {
+                onFailure("No camera is available on this Mac.")
+                return
+            }
+
+            let input: AVCaptureDeviceInput
+            do {
+                input = try AVCaptureDeviceInput(device: device)
+            } catch {
+                onFailure(error.localizedDescription)
+                return
+            }
+
+            session.beginConfiguration()
+            defer { session.commitConfiguration() }
+
+            guard session.canAddInput(input) else {
+                onFailure("Could not add video input.")
+                return
+            }
+            session.addInput(input)
+
+            let metadataOutput = AVCaptureMetadataOutput()
+            guard session.canAddOutput(metadataOutput) else {
+                onFailure("Could not add metadata output.")
+                return
+            }
+            session.addOutput(metadataOutput)
+            metadataOutput.setMetadataObjectsDelegate(self, queue: .main)
+            metadataOutput.metadataObjectTypes = [.qr]
+
+            isConfigured = true
+        }
+
+        func start() {
+            guard isConfigured else { return }
+            sessionQueue.async { [session] in
+                guard !session.isRunning else { return }
+                session.startRunning()
+            }
+        }
+
+        func stop() {
+            guard isConfigured else { return }
+            sessionQueue.async { [session] in
+                guard session.isRunning else { return }
+                session.stopRunning()
+            }
+        }
+
+        func metadataOutput(
+            _ output: AVCaptureMetadataOutput,
+            didOutput metadataObjects: [AVMetadataObject],
+            from connection: AVCaptureConnection
+        ) {
+            guard
+                let readable = metadataObjects.first as? AVMetadataMachineReadableCodeObject,
+                let value = readable.stringValue
+            else { return }
+            onResult(value)
+        }
+    }
+}
+
+#endif
 
 /// Context for the Lightning top-up sheet: fund a freshly-added mint by paying
 /// its invoice, then mint proofs and pay the pending Cashu request.

@@ -2,6 +2,13 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+	<!--
+	  macOS only (iOS ignores it): run as an accessory app so the wallet lives
+	  in the menu bar with no Dock icon and no app menu. Set here rather than
+	  via NSApp.setActivationPolicy so there is no Dock-icon flash at launch.
+	-->
+	<key>LSUIElement</key>
+	<true/>
 	<key>CFBundleURLTypes</key>
 	<array>
 		<dict>

@@ -259,7 +259,11 @@ func connectMintDestination(
             onAdded: onAdded,
             onHeightChange: onHeightChange
         )
+        #if os(iOS)
+        // `ContainerBackgroundPlacement.navigation` has no macOS counterpart.
+        // The sheet's own canvas background already covers this on the Mac.
         .containerBackground(.clear, for: .navigation)
+        #endif
     case .discover:
         MintDiscoveryList(onMintAdded: onAdded)
             .navigationTitle(route.navigationTitle)

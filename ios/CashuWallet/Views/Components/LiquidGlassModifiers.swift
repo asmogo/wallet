@@ -1,5 +1,9 @@
 import SwiftUI
+#if canImport(UIKit)
 import UIKit
+#else
+import AppKit
+#endif
 
 // MARK: - Liquid Glass Adaptive Modifiers
 // iOS 26+ Liquid Glass with graceful fallbacks for earlier versions.
@@ -268,7 +272,7 @@ private struct AdaptiveGlassSurface<S: InsettableShape>: ViewModifier {
             content.background(CompactSheetPalette.control(for: colorScheme), in: shape)
         } else if bottomSheetSurfaceStyle == .flat {
             content.background(Color.primary.opacity(0.11), in: shape)
-        } else if #available(iOS 26, *) {
+        } else if #available(iOS 26, macOS 26, *) {
             content.glassEffect(interactive ? .regular.interactive() : .regular, in: shape)
         } else if let fallbackMaterial {
             content.background(fallbackMaterial, in: shape)
@@ -494,15 +498,30 @@ private struct CanvasSheetBackground: ViewModifier {
 
     func body(content: Content) -> some View {
         content.presentationBackground {
-            Color(uiColor: UIColor.systemBackground.resolvedColor(
-                with: UITraitCollection(traitsFrom: [
-                    UITraitCollection(userInterfaceStyle: colorScheme == .dark ? .dark : .light),
-                    UITraitCollection(userInterfaceLevel: .base),
-                ])
-            ))
-            .ignoresSafeArea()
+            canvasColor
+                .ignoresSafeArea()
         }
     }
+
+    #if os(iOS)
+    /// Resolved against `.base` rather than the ambient level, which is the
+    /// whole point: inside a sheet the ambient level is `.elevated`, and that is
+    /// exactly the grey this modifier exists to defeat.
+    private var canvasColor: Color {
+        Color(uiColor: UIColor.systemBackground.resolvedColor(
+            with: UITraitCollection(traitsFrom: [
+                UITraitCollection(userInterfaceStyle: colorScheme == .dark ? .dark : .light),
+                UITraitCollection(userInterfaceLevel: .base),
+            ])
+        ))
+    }
+    #else
+    /// macOS has no elevated-vs-base trait, so there is no elevation to undo —
+    /// the window background is already the flat canvas colour.
+    private var canvasColor: Color {
+        Color(nsColor: .windowBackgroundColor)
+    }
+    #endif
 }
 
 // MARK: - Content-Fit Sheet Measurement
@@ -764,6 +783,7 @@ enum ContentFitSheetMetrics {
         hasNavigationBar: Bool = true
     ) -> CGFloat {
         let body = contentHeight > 0 ? contentHeight : estimate
+        #if os(iOS)
         let window = activeWindow
         let bottomInset: CGFloat
         if #available(iOS 26, *) {
@@ -775,19 +795,38 @@ enum ContentFitSheetMetrics {
         } else {
             bottomInset = window?.safeAreaInsets.bottom ?? 0
         }
+        #else
+        let bottomInset = bottomSafeAreaInset
+        #endif
         let wanted = body + chrome(hasNavigationBar: hasNavigationBar) + bottomInset
         // Read the ceiling from the *screen*, never from the sheet's own
         // geometry — the latter would reintroduce the feedback loop this whole
         // mechanism exists to avoid.
-        guard let screenHeight = window?.screen.bounds.height, screenHeight > 0 else { return wanted }
+        guard let screenHeight, screenHeight > 0 else { return wanted }
         return min(wanted, screenHeight * maxScreenFraction)
     }
 
+    #if os(iOS)
     private static var activeWindow: UIWindow? {
         let scenes = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }
         let scene = scenes.first { $0.activationState == .foregroundActive } ?? scenes.first
         return scene?.keyWindow ?? scene?.windows.first
     }
+
+    private static var bottomSafeAreaInset: CGFloat { activeWindow?.safeAreaInsets.bottom ?? 0 }
+
+    private static var screenHeight: CGFloat? { activeWindow?.screen.bounds.height }
+    #else
+    /// macOS has no home indicator to clear.
+    private static var bottomSafeAreaInset: CGFloat { 0 }
+
+    /// The ceiling is the menu bar panel, not the display: a sheet presented in
+    /// a 700pt panel cannot use the height of a 1200pt screen. Falling back to
+    /// the screen keeps the value sane if the panel is not up yet.
+    private static var screenHeight: CGFloat? {
+        NSApp?.keyWindow?.frame.height ?? NSScreen.main?.visibleFrame.height
+    }
+    #endif
 }
 
 // MARK: - Settings Row Icon
@@ -911,7 +950,7 @@ struct FullWidthCapsuleButtonStyle: ButtonStyle {
                 label
                     .background(ink, in: Capsule())
                     .scaleEffect(!reduceMotion && configuration.isPressed ? 0.97 : 1)
-            } else if #available(iOS 26, *) {
+            } else if #available(iOS 26, macOS 26, *) {
                 if reduceMotion {
                     label.glassEffect(
                         .regular.tint(Color.primary.opacity(0.15)),

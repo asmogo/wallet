@@ -11,8 +11,14 @@ enum SentryService {
         SentrySDK.start { options in
             options.dsn = Self.dsn
             options.sendDefaultPii = false
+            #if os(iOS)
+            // UIKit-only capture options; sentry-cocoa does not expose them on
+            // macOS. Both are off anyway — they are set explicitly so a future
+            // SDK default flipping to `true` cannot start shipping screenshots
+            // of a wallet.
             options.attachScreenshot = false
             options.attachViewHierarchy = false
+            #endif
             options.enableAutoSessionTracking = true
             options.tracesSampleRate = 0.1
         }

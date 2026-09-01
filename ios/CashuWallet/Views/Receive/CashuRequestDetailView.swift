@@ -1,5 +1,7 @@
 import SwiftUI
+#if canImport(UIKit)
 import UIKit
+#endif
 
 struct CashuRequestDetailView: View {
     @Environment(\.dismiss) private var dismiss

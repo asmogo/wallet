@@ -1,4 +1,6 @@
+#if canImport(CoreNFC)
 import CoreNFC
+#endif
 import SwiftUI
 
 enum HomeActionAccessibility {
@@ -29,7 +31,9 @@ struct MainWalletView: View {
 
     @State private var receivedDelta: ReceivedDelta?
     @State private var deltaDismissTask: Task<Void, Never>?
+    #if canImport(CoreNFC)
     @State private var contactlessCoordinator = ContactlessPaymentCoordinator()
+    #endif
     @State private var selectedTransaction: WalletTransaction?
     @State private var isSheetDismissing = false
     @State private var topInsetHeight: CGFloat = 0
@@ -222,7 +226,12 @@ struct MainWalletView: View {
                                     .tag(unit)
                             }
                         }
+                        #if os(iOS)
+                        // Swipeable pager for multi-unit balances. macOS has no
+                        // page style; the dots below still drive the selection,
+                        // so the pager degrades to a plain tab switch.
                         .tabViewStyle(.page(indexDisplayMode: .never))
+                        #endif
                     }
                 }
                 .frame(height: heroPagerHeight, alignment: .top)
@@ -398,7 +407,7 @@ struct MainWalletView: View {
     /// falls back to the in-house `glassButton()` capsule.
     @ViewBuilder
     private var actionButtons: some View {
-        if #available(iOS 26, *) {
+        if #available(iOS 26, macOS 26, *) {
             GlassEffectContainer(spacing: 12) {
                 HStack(spacing: 12) {
                     actionButton(
@@ -437,7 +446,7 @@ struct MainWalletView: View {
 
     /// A single home action button rendered with Apple's native neutral
     /// Liquid Glass style, sized to fill half the action row.
-    @available(iOS 26, *)
+    @available(iOS 26, macOS 26, *)
     private func actionButton(
         _ title: String,
         identifier: String,
@@ -775,10 +784,12 @@ struct MainWalletView: View {
             onReceive: { navigationManager.activeWalletSheet = .receive },
             onContactless: {
                 navigationManager.activeWalletSheet = nil
+                #if canImport(CoreNFC)
                 contactlessCoordinator.start(
                     walletManager: walletManager,
                     navigationManager: navigationManager
                 )
+                #endif
             },
             // A token pasted into Send is a receive: bounce it to the
             // full-screen claim page, closing the Send sheet first.

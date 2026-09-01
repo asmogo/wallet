@@ -1,7 +1,11 @@
 import Foundation
 import Security
 
-/// Secure storage for the mnemonic seed phrase using iOS Keychain
+/// Secure storage for the mnemonic seed phrase using the platform Keychain.
+///
+/// All access goes through the wrappers at the bottom of this file rather than
+/// calling `SecItem*` directly, so every query picks the right keychain on
+/// macOS. See ``runWithPreferredKeychain(_:_:)`` for why that is not a constant.
 class KeychainService: SecureStorageProtocol {
     private let serviceName = "com.cashu.me"
     private let mnemonicKey = "wallet_mnemonic"
@@ -25,7 +29,7 @@ class KeychainService: SecureStorageProtocol {
         ]
         
         var result: AnyObject?
-        let status = SecItemCopyMatching(query as CFDictionary, &result)
+        let status = Self.copyMatching(query, &result)
         
         if status == errSecItemNotFound {
             return nil
@@ -51,7 +55,7 @@ class KeychainService: SecureStorageProtocol {
             kSecAttrAccount as String: mnemonicKey
         ]
         
-        let status = SecItemDelete(query as CFDictionary)
+        let status = Self.delete(query)
         
         guard status == errSecSuccess || status == errSecItemNotFound else {
             throw KeychainError.deleteFailed(status)
@@ -107,7 +111,7 @@ class KeychainService: SecureStorageProtocol {
             kSecAttrAccessible as String: kSecAttrAccessibleWhenUnlockedThisDeviceOnly
         ]
 
-        let updateStatus = SecItemUpdate(query as CFDictionary, update as CFDictionary)
+        let updateStatus = Self.update(query, update)
         if updateStatus == errSecSuccess {
             return
         }
@@ -120,7 +124,7 @@ class KeychainService: SecureStorageProtocol {
         addQuery[kSecValueData as String] = data
         addQuery[kSecAttrAccessible as String] = kSecAttrAccessibleWhenUnlockedThisDeviceOnly
 
-        let status = SecItemAdd(addQuery as CFDictionary, nil)
+        let status = Self.add(addQuery)
 
         guard status == errSecSuccess else {
             throw KeychainError.saveFailed(status)
@@ -137,7 +141,7 @@ class KeychainService: SecureStorageProtocol {
         ]
         
         var result: AnyObject?
-        let status = SecItemCopyMatching(query as CFDictionary, &result)
+        let status = Self.copyMatching(query, &result)
         
         if status == errSecItemNotFound {
             return nil
@@ -162,7 +166,7 @@ class KeychainService: SecureStorageProtocol {
             kSecAttrAccount as String: key
         ]
         
-        let status = SecItemDelete(query as CFDictionary)
+        let status = Self.delete(query)
         
         guard status == errSecSuccess || status == errSecItemNotFound else {
             throw KeychainError.deleteFailed(status)
@@ -198,7 +202,7 @@ class KeychainService: SecureStorageProtocol {
             kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlock
         ]
 
-        let updateStatus = SecItemUpdate(query as CFDictionary, update as CFDictionary)
+        let updateStatus = Self.update(query, update)
         if updateStatus == errSecSuccess { return }
 
         guard updateStatus == errSecItemNotFound else {
@@ -209,7 +213,7 @@ class KeychainService: SecureStorageProtocol {
         addQuery[kSecValueData as String] = data
         addQuery[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlock
 
-        let status = SecItemAdd(addQuery as CFDictionary, nil)
+        let status = Self.add(addQuery)
         guard status == errSecSuccess else {
             throw KeychainError.saveFailed(status)
         }
@@ -226,7 +230,7 @@ class KeychainService: SecureStorageProtocol {
         ]
 
         var result: AnyObject?
-        let status = SecItemCopyMatching(query as CFDictionary, &result)
+        let status = Self.copyMatching(query, &result)
 
         if status == errSecItemNotFound { return nil }
 
@@ -250,7 +254,7 @@ class KeychainService: SecureStorageProtocol {
             kSecAttrSynchronizable as String: kCFBooleanTrue!
         ]
 
-        let status = SecItemDelete(query as CFDictionary)
+        let status = Self.delete(query)
         guard status == errSecSuccess || status == errSecItemNotFound else {
             throw KeychainError.deleteFailed(status)
         }
@@ -263,6 +267,71 @@ class KeychainService: SecureStorageProtocol {
             return false
         }
     }
+
+    // MARK: - Keychain access
+
+    /// Runs a keychain call against the modern data-protection keychain, falling
+    /// back to the legacy one when this build is not entitled to it.
+    ///
+    /// The data-protection keychain is the one iOS uses and the right home for a
+    /// sandboxed Mac app — items are scoped to the app rather than shared, and
+    /// reads do not prompt. Reaching it requires a keychain access group, which
+    /// comes from the team identifier in the code signature.
+    ///
+    /// An ad-hoc signed local build has no team identifier, so the OS rejects the
+    /// request outright and wallet creation fails with "failed to save keychain".
+    /// Falling back keeps `Scripts/build-macos.sh` usable with no Apple Developer
+    /// account, at the cost of using the legacy keychain on those builds only.
+    ///
+    /// On iOS there is only one keychain, the flag is inert, and the fallback
+    /// never fires.
+    private static func runWithPreferredKeychain(
+        _ query: [String: Any],
+        _ perform: ([String: Any]) -> OSStatus
+    ) -> OSStatus {
+        var preferred = query
+        preferred[kSecUseDataProtectionKeychain as String] = true
+
+        let status = perform(preferred)
+        // Only these two mean "you may not use that keychain". Anything else is
+        // a real failure and must not be retried against a different store.
+        guard status == errSecMissingEntitlement || status == errSecNotAvailable else {
+            return status
+        }
+
+        AppLogger.security.notice(
+            "data-protection keychain unavailable (status=\(status, privacy: .public)); using legacy keychain"
+        )
+        let fallback = perform(query)
+        if fallback != errSecSuccess && fallback != errSecItemNotFound {
+            AppLogger.security.error(
+                "legacy keychain also refused the request (status=\(fallback, privacy: .public))"
+            )
+        }
+        return fallback
+    }
+
+    private static func copyMatching(_ query: [String: Any], _ result: inout AnyObject?) -> OSStatus {
+        var found: AnyObject?
+        let status = runWithPreferredKeychain(query) {
+            SecItemCopyMatching($0 as CFDictionary, &found)
+        }
+        result = found
+        return status
+    }
+
+    private static func add(_ attributes: [String: Any]) -> OSStatus {
+        runWithPreferredKeychain(attributes) { SecItemAdd($0 as CFDictionary, nil) }
+    }
+
+    private static func update(_ query: [String: Any], _ attributes: [String: Any]) -> OSStatus {
+        runWithPreferredKeychain(query) { SecItemUpdate($0 as CFDictionary, attributes as CFDictionary) }
+    }
+
+    private static func delete(_ query: [String: Any]) -> OSStatus {
+        runWithPreferredKeychain(query) { SecItemDelete($0 as CFDictionary) }
+    }
+
 }
 
 // MARK: - Errors

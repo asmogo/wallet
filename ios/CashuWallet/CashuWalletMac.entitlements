@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!--
+	  macOS entitlements. Deliberately not a copy of the iOS file.
+
+	  Absent by design:
+
+	  - NFC. CoreNFC does not exist on macOS and the reader-session format
+	    would fail provisioning.
+	  - iCloud key-value storage. Everything below is grantable by an ad-hoc
+	    signature, which is what lets Scripts/build-macos.sh produce a running
+	    app with no Apple Developer setup at all. `ubiquity-kvstore-identifier`
+	    is the one entitlement here that requires a real provisioning profile,
+	    so including it by default would break that. To restore iCloud seed
+	    backup on a signed build, add:
+
+	        <key>com.apple.developer.ubiquity-kvstore-identifier</key>
+	        <string>$(TeamIdentifierPrefix)$(CFBundleIdentifier)</string>
+
+	    and build with DEV_TEAM=... Without it, NSUbiquitousKeyValueStore
+	    reads and writes are dropped and backup falls back to local only.
+
+	  Present by design:
+
+	  - The sandbox is on, so outbound network access must be requested
+	    explicitly. Without `network.client` every mint and relay call fails,
+	    which is the single most confusing way for this app to break.
+	  - Camera, for scanning QR codes with the built-in webcam.
+	-->
+	<key>com.apple.security.app-sandbox</key>
+	<true/>
+	<key>com.apple.security.network.client</key>
+	<true/>
+	<key>com.apple.security.device.camera</key>
+	<true/>
+</dict>
+</plist>

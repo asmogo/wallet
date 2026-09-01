@@ -16,6 +16,16 @@
 
 set -eu
 
+# macOS ships the framework in versioned layout and Apple's upload validation
+# does not apply, so there is nothing to patch. Bail before touching
+# IPHONEOS_DEPLOYMENT_TARGET, which is unset on that platform.
+case "${PLATFORM_NAME:-}" in
+    macosx)
+        echo "note: macOS build; skipping iOS upload-validation plist fix-up"
+        exit 0
+        ;;
+esac
+
 FRAMEWORK="${TARGET_BUILD_DIR}/${FRAMEWORKS_FOLDER_PATH}/CashuDevKitFFI.framework"
 PLIST="${FRAMEWORK}/Info.plist"
 
