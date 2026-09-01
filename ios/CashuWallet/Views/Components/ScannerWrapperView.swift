@@ -219,7 +219,7 @@ struct ScannerWrapperView: View {
                             VStack(spacing: 8) {
                                 Text("Scanning Animated QR...")
                                     .font(.headline)
-                                    .foregroundStyle(.primary)
+                                    .foregroundStyle(.white)
 
                                 ProgressView(value: scannerModel.scanProgress, total: 1.0)
                                     .progressViewStyle(LinearProgressViewStyle(tint: .accentColor))
@@ -247,7 +247,7 @@ struct ScannerWrapperView: View {
                                             Text(fill.title)
                                         }
                                         .font(.subheadline.weight(.semibold))
-                                        .foregroundStyle(.primary)
+                                        .foregroundStyle(.white)
                                         .padding(.horizontal, 18)
                                         .padding(.vertical, 11)
                                         .background(.ultraThinMaterial, in: Capsule())
@@ -257,7 +257,7 @@ struct ScannerWrapperView: View {
                                 }
 
                                 Text(promptText ?? "Scan Cashu Token, Payment Request, or Bitcoin Address")
-                                    .foregroundStyle(.primary)
+                                    .foregroundStyle(.white)
                                     .font(.caption)
                                     .padding()
                                     .background(Color.black.opacity(0.6))
@@ -287,6 +287,10 @@ struct ScannerWrapperView: View {
                     }
                 }
             }
+            // The scanner canvas is always dark, independent of the app's
+            // appearance. Resolve materials and semantic foregrounds against
+            // that surface so light mode cannot produce dark-on-dark labels.
+            .environment(\.colorScheme, .dark)
             .navigationTitle("Scan QR Code")
             .navigationBarTitleDisplayMode(.inline)
             .toolbarColorScheme(.dark, for: .navigationBar)
@@ -519,14 +523,12 @@ struct CashuPaymentRequestPayView: View {
                         }
 
                         Button(action: payRequest) {
-                            if isPaying {
-                                ProgressView()
-                            } else {
-                                Text(payButtonTitle)
-                            }
+                            LoadingButtonLabel(title: payButtonTitle, isLoading: isPaying)
                         }
                         .glassButton()
                         .disabled(!canPay)
+                        .accessibilityLabel(payButtonTitle)
+                        .accessibilityValue(isPaying ? "In progress" : "")
                         .padding(.horizontal)
                         .padding(.bottom, 16)
                         .sheet(isPresented: $addMintChooserPresented) {

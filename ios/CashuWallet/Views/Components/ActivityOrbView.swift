@@ -141,6 +141,13 @@ struct NativeEmptyState: View {
     @State private var isPresented = false
     @State private var symbolTrigger = false
 
+    private var allowsEntranceMotion: Bool {
+        switch style {
+        case .fullScreen: return false
+        case .section, .compact: return true
+        }
+    }
+
     var body: some View {
         VStack(spacing: style.spacing) {
             VStack(spacing: style.spacing) {
@@ -172,10 +179,17 @@ struct NativeEmptyState: View {
         }
         .padding(.horizontal, 32)
         .padding(.vertical, style.verticalPadding)
-        .opacity(isPresented ? 1 : 0)
-        .scaleEffect(reduceMotion ? 1 : (isPresented ? 1 : 0.96))
-        .offset(y: reduceMotion ? 0 : (isPresented ? 0 : 8))
-        .animation(.spring(response: 0.36, dampingFraction: 0.82), value: isPresented)
+        .opacity(!allowsEntranceMotion || isPresented ? 1 : 0)
+        .scaleEffect(
+            reduceMotion || !allowsEntranceMotion ? 1 : (isPresented ? 1 : 0.96)
+        )
+        .offset(
+            y: reduceMotion || !allowsEntranceMotion ? 0 : (isPresented ? 0 : 8)
+        )
+        .animation(
+            allowsEntranceMotion ? .spring(response: 0.36, dampingFraction: 0.82) : nil,
+            value: isPresented
+        )
         // Centering frame lives OUTSIDE the .animation scope: on a fresh mount
         // (e.g. the History tab remounting) the spring must not interpolate this
         // full-screen frame's origin, or the whole block flies in from the
@@ -183,7 +197,10 @@ struct NativeEmptyState: View {
         .frame(maxWidth: .infinity, maxHeight: style.maxHeight)
         .task {
             isPresented = true
-            guard !reduceMotion else { return }
+            // Full-tab empty states remount during ordinary navigation. Keep
+            // those still; reserve the one-shot entrance for rarer section
+            // and compact states caused by an explicit user action.
+            guard allowsEntranceMotion, !reduceMotion else { return }
             symbolTrigger.toggle()
         }
     }

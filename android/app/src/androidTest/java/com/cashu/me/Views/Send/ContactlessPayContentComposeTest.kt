@@ -39,6 +39,7 @@ class ContactlessPayContentComposeTest {
                     paymentComplete = false,
                     lastPaymentAmount = null,
                     onOpenNfcSettings = { settingsClicks += 1 },
+                    onDone = {},
                 )
             }
         }
@@ -66,6 +67,7 @@ class ContactlessPayContentComposeTest {
                     paymentComplete = false,
                     lastPaymentAmount = null,
                     onOpenNfcSettings = {},
+                    onDone = {},
                 )
             }
         }
@@ -75,6 +77,31 @@ class ContactlessPayContentComposeTest {
         compose.onNodeWithText("Close").assertDoesNotExist()
         compose.onNodeWithText("Reset").assertDoesNotExist()
         compose.onNodeWithTag("contactlessLargeFont").captureToImage().assertNonEmpty()
+    }
+
+    @Test
+    fun successUsesSharedTerminalAndExposesDone() {
+        var doneClicks = 0
+
+        compose.setCashuContent {
+            Box(Modifier.width(360.dp)) {
+                ContactlessPayContent(
+                    availability = ContactlessAvailability.Ready,
+                    status = "Payment sent.",
+                    error = null,
+                    isProcessing = false,
+                    paymentComplete = true,
+                    lastPaymentAmount = 42,
+                    onOpenNfcSettings = {},
+                    onDone = { doneClicks += 1 },
+                )
+            }
+        }
+
+        compose.onNodeWithText("Payment sent").assertIsDisplayed()
+        compose.onNodeWithText("₿42").assertIsDisplayed()
+        compose.onNodeWithText("Done").performClick()
+        compose.runOnIdle { assertEquals(1, doneClicks) }
     }
 
     private fun ImageBitmap.assertNonEmpty() {

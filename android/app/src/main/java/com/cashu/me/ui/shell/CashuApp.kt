@@ -699,6 +699,7 @@ private fun AuthenticatedShell(container: AppContainer) {
 
             WalletFlow.Contactless -> ContactlessPayView(
                 walletManager = container.walletManager,
+                onDone = close,
                 onLightningRequest = { invoice ->
                     // A read bolt11 is a Send: swap the sheet content, pre-filled.
                     pendingSendScan = invoice

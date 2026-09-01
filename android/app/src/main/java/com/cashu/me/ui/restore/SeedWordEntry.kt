@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -309,7 +310,7 @@ private fun HelperLine(state: SeedPhraseEntryState, rejected: Boolean) {
         state.isComplete -> Text(
             text = SeedEntryCopy.COMPLETE,
             style = MaterialTheme.typography.bodyMedium,
-            color = CashuTheme.colors.received,
+            color = CashuTheme.colors.onReceivedContainer,
         )
     }
 }
@@ -602,6 +603,7 @@ private fun PasteChip(onPaste: () -> Unit) {
             .clip(RoundedCornerShape(ChipRadius))
             .background(MaterialTheme.colorScheme.surfaceContainerHigh)
             .clickable(onClick = onPaste)
+            .heightIn(min = 48.dp)
             .padding(horizontal = CashuTheme.spacing.default, vertical = CashuTheme.spacing.snug),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(CashuTheme.spacing.tight),
@@ -629,6 +631,7 @@ private fun ChipLabel(word: String, modifier: Modifier = Modifier) {
         style = CashuTheme.type.monoBody,
         color = MaterialTheme.colorScheme.onSurface,
         modifier = modifier
+            .heightIn(min = 48.dp)
             .clip(RoundedCornerShape(ChipRadius))
             .background(MaterialTheme.colorScheme.surfaceContainerHigh)
             .padding(horizontal = CashuTheme.spacing.default, vertical = CashuTheme.spacing.snug),

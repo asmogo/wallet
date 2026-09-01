@@ -167,8 +167,8 @@ fun MintDiscoveryContent(
         if (!settings.useWebsockets) {
             EmptyState(
                 icon = Icons.Outlined.SignalCellularConnectedNoInternet0Bar,
-                title = "Discovery disabled",
-                supporting = "Discovery uses Nostr relays over WebSockets. Enable it in Settings → Privacy.",
+                title = "WebSockets Required",
+                supporting = "Discovery uses Nostr relays over WebSockets. Enable them in Settings → Privacy.",
             )
             return@Column
         }
@@ -188,8 +188,9 @@ fun MintDiscoveryContent(
                 ) {
                     when {
                         query.isNotBlank() -> EmptyState(
-                            icon = Icons.Outlined.SignalCellularConnectedNoInternet0Bar,
-                            title = "No matches",
+                            icon = Icons.Outlined.SearchOff,
+                            title = "No Results",
+                            supporting = "No mint matches \"$query\".",
                             fillHeight = false,
                         )
                         discoveryState.hasCompletedDiscovery -> EmptyState(

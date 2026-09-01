@@ -6,6 +6,8 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.semantics
 import com.cashu.me.ui.theme.CashuTheme
 
 /** Uppercase, letter-spaced overline used for section group headers.
@@ -29,6 +31,8 @@ fun SectionHeader(
         text = text.uppercase(),
         style = CashuTheme.type.overline,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
-        modifier = modifier.padding(contentPadding),
+        modifier = modifier
+            .semantics { heading() }
+            .padding(contentPadding),
     )
 }

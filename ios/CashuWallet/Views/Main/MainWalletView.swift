@@ -95,6 +95,8 @@ struct MainWalletView: View {
         NavigationStack {
             ScrollView {
                 recentContent
+                    .frame(maxWidth: 760)
+                    .frame(maxWidth: .infinity)
             }
             .scrollIndicators(.hidden)
             // Rows dissolve into the pinned top section as they scroll up.
@@ -194,6 +196,8 @@ struct MainWalletView: View {
                 .padding(.horizontal, 16)
                 .padding(.bottom, 16)
         }
+        .frame(maxWidth: 760)
+        .frame(maxWidth: .infinity)
     }
 
     // MARK: - Balance Section

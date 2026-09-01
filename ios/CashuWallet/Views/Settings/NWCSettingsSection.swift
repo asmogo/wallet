@@ -12,6 +12,7 @@ struct NWCSettingsView: View {
     @EnvironmentObject var walletManager: WalletManager
     @ObservedObject var nwc = NWCManager.shared
     @ObservedObject private var settings = SettingsManager.shared
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     @State private var showMintPicker = false
     @State private var showBudgetSheet = false
@@ -87,9 +88,9 @@ struct NWCSettingsView: View {
         }
         .navigationTitle("Wallet Connect")
         .toolbarBackground(.hidden, for: .navigationBar)
-        .animation(.easeInOut(duration: 0.2), value: nwc.isEnabled)
-        .animation(.easeInOut(duration: 0.2), value: nwc.connectionUri)
-        .animation(.easeInOut(duration: 0.2), value: nwc.errorMessage)
+        .animation(reduceMotion ? nil : .easeInOut(duration: 0.2), value: nwc.isEnabled)
+        .animation(reduceMotion ? nil : .easeInOut(duration: 0.2), value: nwc.connectionUri)
+        .animation(reduceMotion ? nil : .easeInOut(duration: 0.2), value: nwc.errorMessage)
         .backdropSheet(isPresented: $showMintPicker) {
             MintPickerSheet(
                 title: "Mint",
@@ -133,11 +134,16 @@ struct NWCSettingsView: View {
                     .frame(width: 7, height: 7)
                     .accessibilityHidden(true)
 
-                Text(uri)
-                    .font(.system(.body, design: .monospaced))
-                    .foregroundStyle(.primary)
-                    .lineLimit(1)
-                    .truncationMode(.middle)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(uri)
+                        .font(.system(.body, design: .monospaced))
+                        .foregroundStyle(.primary)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                    Text(nwc.isRunning ? "Connected" : "Connecting")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
 
                 Spacer(minLength: 8)
 

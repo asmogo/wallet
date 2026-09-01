@@ -4,8 +4,6 @@ import android.graphics.Color as AndroidColor
 import android.graphics.drawable.ColorDrawable
 import android.view.WindowManager
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.core.FastOutSlowInEasing
-import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
@@ -16,6 +14,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -37,6 +36,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.compose.ui.window.DialogWindowProvider
@@ -67,10 +67,13 @@ val LocalConfirmationToastController = staticCompositionLocalOf<ConfirmationToas
     null
 }
 
+private const val ToastExitSettleMs = 220L
+
 /**
  * Quiet top-center feedback for completed actions. It intentionally has no icon
  * or bounce: the message is the only confirmation and copy affordances stay put.
  */
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 fun ConfirmationToastHost(
     controller: ConfirmationToastController,
@@ -83,7 +86,7 @@ fun ConfirmationToastHost(
         val current = message
         if (current == null) {
             visible = false
-            delay(130)
+            delay(ToastExitSettleMs)
             displayedMessage = null
             return@LaunchedEffect
         }
@@ -97,12 +100,15 @@ fun ConfirmationToastHost(
         visible = true
         delay(2_200)
         visible = false
-        delay(130)
+        delay(ToastExitSettleMs)
         controller.dismiss(current.id)
         displayedMessage = null
     }
 
     displayedMessage?.let { current ->
+        val enterEffects = MaterialTheme.motionScheme.defaultEffectsSpec<Float>()
+        val enterSpatial = MaterialTheme.motionScheme.defaultSpatialSpec<IntOffset>()
+        val exitEffects = MaterialTheme.motionScheme.fastEffectsSpec<Float>()
         Dialog(
             onDismissRequest = {},
             properties = DialogProperties(
@@ -132,22 +138,18 @@ fun ConfirmationToastHost(
             ) {
                 AnimatedVisibility(
                     visible = visible,
-                    enter = fadeIn(tween(durationMillis = 150)) +
+                    enter = fadeIn(enterEffects) +
                         slideInVertically(
-                            animationSpec = tween(
-                                durationMillis = 240,
-                                easing = FastOutSlowInEasing,
-                            ),
+                            animationSpec = enterSpatial,
                             initialOffsetY = { -it },
                         ),
-                    exit = fadeOut(tween(durationMillis = 130)),
+                    exit = fadeOut(exitEffects),
                 ) {
                     Surface(
                         shape = CircleShape,
                         color = MaterialTheme.colorScheme.surfaceContainerHigh,
                         contentColor = MaterialTheme.colorScheme.onSurface,
                         tonalElevation = 6.dp,
-                        shadowElevation = 8.dp,
                         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
                         modifier = Modifier.semantics {
                             liveRegion = LiveRegionMode.Polite

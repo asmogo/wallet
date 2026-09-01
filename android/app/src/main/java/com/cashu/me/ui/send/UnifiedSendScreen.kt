@@ -1501,7 +1501,7 @@ private fun ConfirmCautionFace(message: String, detail: String? = null) {
             Icon(
                 imageVector = Icons.Rounded.Warning,
                 contentDescription = null,
-                tint = CashuTheme.colors.pending,
+                tint = CashuTheme.colors.onPendingContainer,
                 modifier = Modifier.size(ConfirmGlyphSize),
             )
         }

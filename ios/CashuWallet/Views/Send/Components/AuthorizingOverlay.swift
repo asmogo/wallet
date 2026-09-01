@@ -187,8 +187,10 @@ struct PaymentStatusView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .animation(.smooth(duration: 0.3), value: phaseKey)
-        .onChange(of: phase) { _, newPhase in handlePhase(newPhase) }
-        .onAppear { handlePhase(phase) }
+        .onChange(of: phase) { _, newPhase in
+            handlePhase(newPhase, announce: true)
+        }
+        .onAppear { handlePhase(phase, announce: false) }
         .task {
             // Beat 1, ~100ms after mount so the check materializes once the
             // parent swap's fade has mostly cleared — the haptic lands WITH
@@ -310,15 +312,21 @@ struct PaymentStatusView: View {
         .accessibilityElement(children: .combine)
     }
 
-    private func handlePhase(_ newPhase: Phase) {
+    private func handlePhase(_ newPhase: Phase, announce: Bool) {
         switch newPhase {
         case .success:
             // On a staged celebration mount the haptic belongs to beat 1 (the
             // `.task` fires it with the check, ~100ms in) — not to onAppear.
             guard !staged else { break }
             HapticFeedback.notification(.success)
+            if announce {
+                AccessibilityNotification.Announcement(successTitle).post()
+            }
         case .failure(_, let isCaution, _):
             HapticFeedback.notification(isCaution ? .warning : .error)
+            if announce {
+                AccessibilityNotification.Announcement(failureTitle).post()
+            }
         case .processing:
             break
         }

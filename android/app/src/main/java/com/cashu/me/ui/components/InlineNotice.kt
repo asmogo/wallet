@@ -1,7 +1,6 @@
 package com.cashu.me.ui.components
 
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
@@ -19,6 +18,7 @@ import androidx.compose.material.icons.filled.Error
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.Icon
+import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -36,6 +36,7 @@ import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.IntOffset
 import com.cashu.me.ui.theme.CashuTheme
 
 private val NoticeIconSize = 18.dp
@@ -160,6 +161,7 @@ fun InlineNotice(
  * Show/hide wrapper with the canonical entrance (slide up + fade) and quiet exit
  * (fade only — exits are subtler than entrances).
  */
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 fun InlineNoticeHost(
     text: String?,
@@ -168,6 +170,9 @@ fun InlineNoticeHost(
     severity: NoticeSeverity,
     detail: String? = null,
 ) {
+    val enterSpatial = MaterialTheme.motionScheme.defaultSpatialSpec<IntOffset>()
+    val enterEffects = MaterialTheme.motionScheme.defaultEffectsSpec<Float>()
+    val exitEffects = MaterialTheme.motionScheme.fastEffectsSpec<Float>()
     // Keep the last non-null text so the exit fade shows content, not a blank.
     var lastText by remember { mutableStateOf(text) }
     LaunchedEffect(text) {
@@ -176,8 +181,8 @@ fun InlineNoticeHost(
     AnimatedVisibility(
         visible = text != null,
         modifier = modifier,
-        enter = slideInVertically(tween(220)) { it / 2 } + fadeIn(tween(220)),
-        exit = fadeOut(tween(180)),
+        enter = slideInVertically(enterSpatial) { it / 2 } + fadeIn(enterEffects),
+        exit = fadeOut(exitEffects),
     ) {
         InlineNotice(
             text = (text ?: lastText).orEmpty(),

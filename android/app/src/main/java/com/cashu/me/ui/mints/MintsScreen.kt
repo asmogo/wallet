@@ -326,7 +326,9 @@ private fun SwipeableMintRow(
             when (dir) {
                 SwipeToDismissBoxValue.StartToEnd -> {
                     bg = CashuTheme.colors.received
-                    fg = Color.White
+                    // Black is the accessible on-fill role for the saturated
+                    // system green in both schemes; white is only 2.2:1.
+                    fg = Color.Black
                     icon = Icons.Outlined.Check
                     label = "Set as Default"
                     align = Alignment.CenterStart
@@ -397,6 +399,7 @@ private fun MintRow(
             .combinedClickable(
                 onClick = onClick,
                 onLongClick = { menuOpen = true },
+                onLongClickLabel = "Show mint actions",
             ),
     ) {
         Row(

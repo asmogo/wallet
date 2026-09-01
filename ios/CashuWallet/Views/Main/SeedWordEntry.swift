@@ -283,6 +283,7 @@ struct SeedWordEntryField: View {
 private struct SeedWordProgressRail: View {
     let entry: SeedPhraseEntry
     let onSelect: (Int) -> Void
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         VStack(spacing: 0) {
@@ -303,8 +304,8 @@ private struct SeedWordProgressRail: View {
                     )
             }
         }
-        .animation(.snappy(duration: 0.25), value: entry.index)
-        .animation(.smooth(duration: 0.3), value: entry.isComplete)
+        .animation(reduceMotion ? nil : .snappy(duration: 0.25), value: entry.index)
+        .animation(reduceMotion ? nil : .smooth(duration: 0.3), value: entry.isComplete)
         // Tap jumps; press-and-hold then drag scrubs through the words, the
         // focused word tracking the finger live, releasing wherever it is
         // (jumps are live, so release needs no handler). UIKit recognizers
@@ -409,6 +410,7 @@ private struct SeedWordChipRow: View {
                         .foregroundStyle(.primary)
                         .padding(.horizontal, SeedEntryMetrics.chipPaddingH)
                         .padding(.vertical, SeedEntryMetrics.chipPaddingV)
+                        .frame(minHeight: 44)
                         .background(.quaternary, in: RoundedRectangle(cornerRadius: SeedEntryMetrics.chipRadius))
                     }
                     .buttonStyle(PressableButtonStyle())
@@ -431,6 +433,7 @@ private struct SeedWordChipRow: View {
             .foregroundStyle(.primary)
             .padding(.horizontal, SeedEntryMetrics.chipPaddingH)
             .padding(.vertical, SeedEntryMetrics.chipPaddingV)
+            .frame(minHeight: 44)
             .background(.quaternary, in: RoundedRectangle(cornerRadius: SeedEntryMetrics.chipRadius))
     }
 }
@@ -444,7 +447,14 @@ private struct SeedWordReviewGrid: View {
     let words: [String]
     let onSelect: (Int) -> Void
 
-    private let columns = Array(repeating: GridItem(.flexible(), spacing: 12), count: 3)
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
+    private var columns: [GridItem] {
+        let count = dynamicTypeSize >= .accessibility3
+            ? 1
+            : (dynamicTypeSize.isAccessibilitySize ? 2 : 3)
+        return Array(repeating: GridItem(.flexible(), spacing: 12), count: count)
+    }
 
     var body: some View {
         LazyVGrid(columns: columns, spacing: 14) {
@@ -460,9 +470,9 @@ private struct SeedWordReviewGrid: View {
                             .font(.system(.body, design: .monospaced).weight(.medium))
                             .foregroundStyle(.primary)
                             .frame(maxWidth: .infinity, alignment: .leading)
-                            .lineLimit(1)
-                            .minimumScaleFactor(0.7)
+                            .fixedSize(horizontal: false, vertical: true)
                     }
+                    .frame(minHeight: 44)
                     .contentShape(Rectangle())
                 }
                 .buttonStyle(PressableButtonStyle())

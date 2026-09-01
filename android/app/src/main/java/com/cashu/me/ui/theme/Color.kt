@@ -114,11 +114,10 @@ data class CashuColors(
     val pending: Color,
     val receivedContainer: Color,
     val pendingContainer: Color,
-    // Content roles for the two containers above. Material pairs every container
-    // fill with an `on*Container` colour; these hues live outside
-    // MaterialColorScheme, so the pair has to be declared here. Without them
-    // callers reach for the full-strength hue as text, which is the fill colour,
-    // not the content colour.
+    // Accessible foreground roles for the canvas and the two containers above.
+    // Material pairs every fill with an `on*` colour; these hues live outside
+    // MaterialColorScheme, so the pair has to be declared here. The saturated
+    // state hues remain fills, never normal-size text or meaningful line icons.
     val onPendingContainer: Color,
     val onReceivedContainer: Color,
     val canvasDivider: Color,

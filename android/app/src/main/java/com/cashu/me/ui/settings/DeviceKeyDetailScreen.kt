@@ -192,7 +192,7 @@ fun DeviceKeyDetailScreen(
         )
     }
     if (showRepair) {
-        ImportP2PKDialog(
+        ImportP2PKSheet(
             onImport = { nsec -> runCatching { settingsManager.importP2PKNsec(nsec) } },
             onDismiss = { showRepair = false },
         )

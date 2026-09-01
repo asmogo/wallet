@@ -2,7 +2,6 @@ import SwiftUI
 import LocalAuthentication
 
 struct SettingsView: View {
-    @Environment(\.dismiss) private var dismiss
     @EnvironmentObject var walletManager: WalletManager
     @ObservedObject var settings = SettingsManager.shared
     @ObservedObject var npcService = NPCService.shared
@@ -88,21 +87,11 @@ struct SettingsView: View {
                     .padding(.bottom, 32)
             }
             .padding(.horizontal)
+            .frame(maxWidth: 720)
+            .frame(maxWidth: .infinity)
         }
         .navigationTitle("Settings")
         .accessibilityIdentifier("settings-screen")
-        .navigationBarBackButtonHidden()
-        .toolbar {
-            ToolbarItem(placement: .topBarLeading) {
-                Button {
-                    dismiss()
-                } label: {
-                    Label("Wallet", systemImage: "chevron.backward")
-                }
-                .accessibilityLabel("Back to Wallet")
-                .accessibilityIdentifier("settings-back-button")
-            }
-        }
         .backdropSheet(isPresented: $showCurrencySheet) {
             CurrencyPickerSheet()
                 .presentationDetents([.medium, .large])
@@ -300,7 +289,7 @@ struct SettingsView: View {
 
             Spacer(minLength: 8)
 
-            Toggle("", isOn: isOn)
+            Toggle(title, isOn: isOn)
                 .labelsHidden()
         }
         .padding(.horizontal, 4)
@@ -629,15 +618,12 @@ struct RestoreWalletView: View {
             }
 
             Button(action: initializeAndProceed) {
-                if isRestoringSeed {
-                    ProgressView()
-                        .tint(.primary)
-                } else {
-                    Text("Next")
-                }
+                LoadingButtonLabel(title: "Next", isLoading: isRestoringSeed)
             }
             .glassButton()
             .disabled(!canContinue)
+            .accessibilityLabel("Next")
+            .accessibilityValue(isRestoringSeed ? "In progress" : "")
             .padding(.horizontal)
             .padding(.bottom, 32)
         }

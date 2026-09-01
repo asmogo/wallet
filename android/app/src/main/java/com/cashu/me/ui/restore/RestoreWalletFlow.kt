@@ -1094,7 +1094,7 @@ fun RestoreRecoveredTotal(
         Icon(
             imageVector = Icons.Filled.CheckCircle,
             contentDescription = null,
-            tint = CashuTheme.colors.received,
+            tint = CashuTheme.colors.onReceivedContainer,
             modifier = Modifier.size(18.dp),
         )
         Text(
@@ -1102,7 +1102,7 @@ fun RestoreRecoveredTotal(
             style = MaterialTheme.typography.bodyMedium
                 .copy(fontWeight = FontWeight.SemiBold)
                 .withMonoDigits(),
-            color = CashuTheme.colors.received,
+            color = CashuTheme.colors.onReceivedContainer,
         )
         if (centered) {
             Spacer(Modifier.weight(1f))
@@ -1320,7 +1320,7 @@ private fun RestoreProgressRow(
                         },
                         contentDescription = null,
                         tint = if (phase.result.totalRecovered > 0) {
-                            CashuTheme.colors.received
+                            CashuTheme.colors.onReceivedContainer
                         } else {
                             MaterialTheme.colorScheme.onSurfaceVariant
                         },

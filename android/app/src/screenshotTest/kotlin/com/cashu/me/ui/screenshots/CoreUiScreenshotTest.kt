@@ -369,6 +369,7 @@ fun contactlessUnavailableScreenshot() {
             paymentComplete = false,
             lastPaymentAmount = null,
             onOpenNfcSettings = {},
+            onDone = {},
         )
     }
 }

@@ -5,11 +5,15 @@ import SwiftUI
 /// while the release stays organic. No color or shadow change — the surface just
 /// acknowledges the press.
 struct PressableButtonStyle: ButtonStyle {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .scaleEffect(configuration.isPressed ? 0.97 : 1.0)
+            .scaleEffect(!reduceMotion && configuration.isPressed ? 0.97 : 1.0)
             .animation(
-                .snappy(duration: configuration.isPressed ? 0.09 : 0.18),
+                reduceMotion
+                    ? nil
+                    : .snappy(duration: configuration.isPressed ? 0.09 : 0.18),
                 value: configuration.isPressed
             )
     }
