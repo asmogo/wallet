@@ -1,6 +1,9 @@
 package com.cashu.me.ui.settings
 
 import android.content.ClipData
+import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.spring
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -25,9 +28,8 @@ import androidx.compose.material.icons.filled.Verified
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material.icons.outlined.ContentCopy
 import androidx.compose.material.icons.outlined.Lock
-import androidx.compose.material.icons.outlined.LockOpen
-import androidx.compose.material.icons.outlined.Visibility
-import androidx.compose.material.icons.outlined.VisibilityOff
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -48,7 +50,12 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.graphics.vector.path
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.ClipEntry
 import androidx.compose.ui.platform.LocalClipboard
@@ -58,24 +65,27 @@ import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
 import com.cashu.me.Core.AppLockManager
 import com.cashu.me.Core.Bech32
-import com.cashu.me.ui.components.IconSwap
 import com.cashu.me.ui.components.LocalConfirmationToastController
 import com.cashu.me.ui.components.PrimaryButton
 import com.cashu.me.ui.components.QrCard
+import com.cashu.me.ui.components.SecondaryButton
+import com.cashu.me.ui.components.SheetHeader
 import com.cashu.me.ui.components.shareText
 import com.cashu.me.ui.security.rememberWalletAuthenticationLauncher
 import com.cashu.me.ui.theme.CashuTheme
+import com.cashu.me.ui.theme.tracked
 import com.cashu.me.ui.theme.withSlashedZero
 
 // iOS KeyCard geometry: 34pt glyph circle, rounded-14 card.
 private val KeyGlyphSize = 36.dp
 private val KeyGlyphIconSize = 18.dp
-private const val HiddenKeyDots = 24
 
 /**
  * Formatting for P2PK keys so they read the same everywhere (the Locked Ecash
@@ -110,10 +120,14 @@ object P2PKKeyDisplay {
     }
 }
 
-/** Backup status line on a KeyCard (iOS KeyCard.Status). */
-enum class KeyCardStatus(val text: String) {
+/**
+ * Backup status line on a KeyCard (iOS KeyCard.Status). A null text renders no
+ * line — a custom key's backup burden is carried by the import confirmation,
+ * not a permanent warning badge on the card.
+ */
+enum class KeyCardStatus(val text: String?) {
     SeedBacked("Backed up by your seed phrase"),
-    Custom("Custom key — back it up yourself"),
+    Custom(null),
     DeviceOnly("On this device only — not in your seed backup"),
 }
 
@@ -184,28 +198,31 @@ fun KeyCard(
                     maxLines = 1,
                     overflow = TextOverflow.MiddleEllipsis,
                 )
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(CashuTheme.spacing.micro),
-                ) {
-                    val statusTint = when (status) {
-                        KeyCardStatus.SeedBacked -> MaterialTheme.colorScheme.onSurfaceVariant
-                        KeyCardStatus.Custom, KeyCardStatus.DeviceOnly -> CashuTheme.colors.pending
+                val statusText = status.text
+                if (statusText != null) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(CashuTheme.spacing.micro),
+                    ) {
+                        val statusTint = when (status) {
+                            KeyCardStatus.SeedBacked -> MaterialTheme.colorScheme.onSurfaceVariant
+                            KeyCardStatus.Custom, KeyCardStatus.DeviceOnly -> CashuTheme.colors.pending
+                        }
+                        Icon(
+                            imageVector = when (status) {
+                                KeyCardStatus.SeedBacked -> Icons.Filled.Verified
+                                KeyCardStatus.Custom, KeyCardStatus.DeviceOnly -> Icons.Filled.Warning
+                            },
+                            contentDescription = null,
+                            tint = statusTint,
+                            modifier = Modifier.size(CashuTheme.spacing.default),
+                        )
+                        Text(
+                            text = statusText,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = statusTint,
+                        )
                     }
-                    Icon(
-                        imageVector = when (status) {
-                            KeyCardStatus.SeedBacked -> Icons.Filled.Verified
-                            KeyCardStatus.Custom, KeyCardStatus.DeviceOnly -> Icons.Filled.Warning
-                        },
-                        contentDescription = null,
-                        tint = statusTint,
-                        modifier = Modifier.size(CashuTheme.spacing.default),
-                    )
-                    Text(
-                        text = status.text,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = statusTint,
-                    )
                 }
             }
         }
@@ -333,71 +350,75 @@ fun QrDetailSheet(
     ) {
         Box(modifier = Modifier.fillMaxWidth()) {
             Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = CashuTheme.spacing.comfortable)
-                .navigationBarsPadding()
-                .verticalScroll(rememberScrollState()),
-            horizontalAlignment = Alignment.CenterHorizontally,
-        ) {
-            Text(
-                text = title,
-                style = MaterialTheme.typography.titleMedium,
-                color = MaterialTheme.colorScheme.onSurface,
-            )
-            Spacer(Modifier.height(CashuTheme.spacing.loose))
-            QrCard(
-                content = content,
-                staticOnly = true,
-                shareSubject = title,
-                confirmationMessage = "Copied ${title.lowercase()}",
-            )
-            Spacer(Modifier.height(CashuTheme.spacing.default))
-            Text(
-                text = content,
-                style = MaterialTheme.typography.bodySmall.copy(fontFamily = CashuTheme.fonts.mono).withSlashedZero(),
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
-            )
-            Spacer(Modifier.height(CashuTheme.spacing.default))
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(CashuTheme.spacing.default),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = CashuTheme.spacing.comfortable)
+                    .navigationBarsPadding()
+                    .verticalScroll(rememberScrollState()),
+                horizontalAlignment = Alignment.CenterHorizontally,
             ) {
-                FilledTonalButton(
-                    onClick = {
-                        clipboardScope.launch {
-                            clipboard.setClipEntry(
-                                ClipEntry(ClipData.newPlainText(title, content)),
-                            )
-                            confirmationToastController?.show("Copied ${title.lowercase()}")
-                        }
-                    },
-                    modifier = Modifier.weight(1f),
+                // Canonical sheet chrome, like the sibling reveal sheet —
+                // not a bare titleMedium line.
+                SheetHeader(title = title)
+                Spacer(Modifier.height(CashuTheme.spacing.snug))
+                QrCard(
+                    content = content,
+                    // 248 code + 16 cushion = the 280 card iOS draws, so both
+                    // sheets carry the same code-to-sheet proportion.
+                    size = 248.dp,
+                    staticOnly = true,
+                    shareSubject = title,
+                    confirmationMessage = "Copied ${title.lowercase()}",
+                )
+                Spacer(Modifier.height(CashuTheme.spacing.comfortable))
+                // One middle-truncated line at full body size and primary ink —
+                // the sheet's second focal point, not a footnote. The full
+                // value travels via Copy/Share.
+                Text(
+                    text = content,
+                    style = CashuTheme.type.monoDisplay,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    maxLines = 1,
+                    overflow = TextOverflow.MiddleEllipsis,
+                )
+                Spacer(Modifier.height(CashuTheme.spacing.section))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(CashuTheme.spacing.default),
                 ) {
-                    Icon(Icons.Outlined.ContentCopy, contentDescription = null)
-                    Spacer(Modifier.size(CashuTheme.spacing.micro))
-                    Text("Copy")
+                    SecondaryButton(
+                        text = "Copy",
+                        onClick = {
+                            clipboardScope.launch {
+                                clipboard.setClipEntry(
+                                    ClipEntry(ClipData.newPlainText(title, content)),
+                                )
+                                confirmationToastController?.show("Copied ${title.lowercase()}")
+                            }
+                        },
+                        modifier = Modifier.weight(1f),
+                    )
+                    PrimaryButton(
+                        text = "Share",
+                        onClick = { context.shareText(content, title) },
+                        // Inverted ink, matching the confirm sheets' action button
+                        // and iOS's white Share pill (PrimaryButton is gray by default).
+                        colors = ButtonDefaults.buttonColors(),
+                        modifier = Modifier.weight(1f),
+                    )
                 }
-                FilledTonalButton(
-                    onClick = { context.shareText(content, title) },
-                    modifier = Modifier.weight(1f),
-                ) {
-                    Icon(Icons.AutoMirrored.Outlined.Send, contentDescription = null)
-                    Spacer(Modifier.size(CashuTheme.spacing.micro))
-                    Text("Share")
-                }
-            }
-            Spacer(Modifier.height(CashuTheme.spacing.comfortable))
+                Spacer(Modifier.height(CashuTheme.spacing.comfortable))
             }
         }
     }
 }
 
 /**
- * Reveals a key's nsec, mirroring the seed-phrase backup pattern: the key is
- * loaded only after device authentication, independently for reveal and copy.
+ * Reveals a key's nsec, matching the seed-phrase backup sheet beat for beat
+ * (iOS `PrivateKeyRevealSheet` parity): sheet title, warning copy, and one CTA
+ * that flips from Reveal to Copy once the key is showing, on a sheet dismissed
+ * by drag. The key is loaded only after device authentication, independently
+ * for reveal and copy.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -418,12 +439,8 @@ fun PrivateKeyRevealSheet(
                 title = title,
                 warning = warning,
                 revealedNsec = revealedNsec,
-                onToggleReveal = {
-                    if (revealedNsec != null) {
-                        revealedNsec = null
-                    } else {
-                        authenticate("Reveal this private key") { revealedNsec = loadNsec() }
-                    }
+                onReveal = {
+                    authenticate("Reveal this private key") { revealedNsec = loadNsec() }
                 },
                 onCopy = {
                     authenticate("Copy this private key") {
@@ -433,7 +450,6 @@ fun PrivateKeyRevealSheet(
                         }
                     }
                 },
-                onDone = onDismiss,
             )
         }
     }
@@ -448,91 +464,66 @@ internal fun PrivateKeyRevealContent(
     title: String,
     warning: String,
     revealedNsec: String?,
-    onToggleReveal: () -> Unit,
+    onReveal: () -> Unit,
     onCopy: () -> Unit,
-    onDone: () -> Unit,
 ) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
+            .navigationBarsPadding()
             .padding(horizontal = CashuTheme.spacing.comfortable)
-            .navigationBarsPadding(),
-        horizontalAlignment = Alignment.CenterHorizontally,
+            .padding(bottom = CashuTheme.spacing.section)
+            .animateContentSize(
+                animationSpec = spring(
+                    dampingRatio = Spring.DampingRatioNoBouncy,
+                    stiffness = Spring.StiffnessMediumLow,
+                ),
+            ),
+        verticalArrangement = Arrangement.spacedBy(CashuTheme.spacing.section),
     ) {
-        Icon(
-            imageVector = Icons.Filled.Warning,
-            contentDescription = null,
-            tint = CashuTheme.colors.pending,
-            modifier = Modifier.size(CashuTheme.spacing.page),
-        )
-        Spacer(Modifier.height(CashuTheme.spacing.snug))
         // Names which key is on screen — the app holds a Nostr key, a primary
         // P2PK key, and any number of device keys.
-        Text(
-            text = title.uppercase(),
-            style = CashuTheme.type.overline,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-        Spacer(Modifier.height(CashuTheme.spacing.micro))
-        Text(
-            text = "Keep this key secret",
-            style = MaterialTheme.typography.titleMedium,
-            color = MaterialTheme.colorScheme.onSurface,
-        )
-        Spacer(Modifier.height(CashuTheme.spacing.snug))
+        SheetHeader(title = title)
+
         Text(
             text = warning,
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
+            textAlign = TextAlign.Center,
+            modifier = Modifier.fillMaxWidth(),
         )
-        Spacer(Modifier.height(CashuTheme.spacing.section))
 
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .background(MaterialTheme.colorScheme.surfaceContainerHigh, MaterialTheme.shapes.small)
-                .padding(CashuTheme.spacing.default),
-            verticalArrangement = Arrangement.spacedBy(CashuTheme.spacing.snug),
-        ) {
+        if (revealedNsec != null) {
+            // Same container treatment the revealed seed words use.
             Text(
-                text = "Private key (nsec)",
-                style = CashuTheme.type.overline,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                text = revealedNsec,
+                style = MaterialTheme.typography.bodyMedium
+                    .copy(fontFamily = CashuTheme.fonts.mono)
+                    .withSlashedZero(),
+                color = MaterialTheme.colorScheme.onSurface,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(MaterialTheme.colorScheme.surfaceContainer, MaterialTheme.shapes.medium)
+                    .padding(CashuTheme.spacing.default),
             )
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(CashuTheme.spacing.snug),
-            ) {
-                Text(
-                    text = revealedNsec ?: "\u2022".repeat(HiddenKeyDots),
-                    style = MaterialTheme.typography.bodyMedium.copy(fontFamily = CashuTheme.fonts.mono).withSlashedZero(),
-                    color = if (revealedNsec != null) MaterialTheme.colorScheme.onSurface
-                    else MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 3,
-                    modifier = Modifier.weight(1f),
-                )
-                Column(verticalArrangement = Arrangement.spacedBy(CashuTheme.spacing.micro)) {
-                    IconButton(onClick = onToggleReveal) {
-                        IconSwap(
-                            icon = if (revealedNsec != null) Icons.Outlined.VisibilityOff
-                            else Icons.Outlined.Visibility,
-                            contentDescription = if (revealedNsec != null) "Hide key" else "Reveal key",
-                        )
-                    }
-                    IconButton(onClick = onCopy) {
-                        Icon(
-                            imageVector = Icons.Outlined.ContentCopy,
-                            contentDescription = "Copy key",
-                            tint = MaterialTheme.colorScheme.onSurface,
-                        )
-                    }
-                }
-            }
         }
 
-        Spacer(Modifier.height(CashuTheme.spacing.section))
-        PrimaryButton(text = "Done", onClick = onDone)
-        Spacer(Modifier.height(CashuTheme.spacing.comfortable))
+        // Reveal is the sheet's one primary action; once the key is showing,
+        // Copy is a quieter follow-up and drops to the secondary style.
+        if (revealedNsec != null) {
+            SecondaryButton(
+                text = "Copy Private Key",
+                onClick = onCopy,
+                modifier = Modifier.fillMaxWidth(),
+            )
+        } else {
+            PrimaryButton(
+                text = "Reveal Private Key",
+                onClick = onReveal,
+                colors = ButtonDefaults.buttonColors(),
+                modifier = Modifier.fillMaxWidth(),
+            )
+        }
     }
 }
 
@@ -553,12 +544,17 @@ fun LockedEcashExplainerSheet(onDismiss: () -> Unit) {
         ) {
             Text(
                 text = "Locked ecash",
-                style = MaterialTheme.typography.headlineMedium,
+                // iOS's `.title.weight(.heavy)` with tightened tracking — the
+                // bare headlineMedium renders regular-weight and reads off-brand
+                // next to every other bold surface title.
+                style = MaterialTheme.typography.headlineMedium
+                    .copy(fontWeight = FontWeight.Bold)
+                    .tracked(-0.01f),
                 color = MaterialTheme.colorScheme.onSurface,
             )
             Spacer(Modifier.height(CashuTheme.spacing.loose))
             ExplainerPoint(
-                icon = Icons.Outlined.LockOpen,
+                icon = LockOpenClear,
                 text = "Ecash is bearer cash. Whoever holds a token can spend it — like a banknote.",
             )
             ExplainerPoint(
@@ -574,7 +570,8 @@ fun LockedEcashExplainerSheet(onDismiss: () -> Unit) {
                 text = "When you send, you can lock ecash to someone else's key so only they can claim it.",
             )
             Spacer(Modifier.height(CashuTheme.spacing.section))
-            PrimaryButton(text = "Got it", onClick = onDismiss)
+            // Dismissal-only CTA — secondary on both platforms.
+            SecondaryButton(text = "Got it", onClick = onDismiss)
             Spacer(Modifier.height(CashuTheme.spacing.comfortable))
         }
     }
@@ -596,9 +593,67 @@ private fun ExplainerPoint(icon: ImageVector, text: String) {
         )
         Text(
             text = text,
-            style = MaterialTheme.typography.bodyMedium,
+            // iOS `.callout` (16pt) — bodyMedium's 14sp made the prose read a
+            // size class smaller than the iOS sheet.
+            style = MaterialTheme.typography.bodyLarge,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.weight(1f),
         )
     }
+}
+
+/**
+ * An unlocked padlock whose shackle is swung open with a visible gap (SF
+ * `lock.open` parity). Material's `Outlined.LockOpen` keeps the shackle arched
+ * over the body, so at 24dp it reads as locked — defeating the one bullet whose
+ * whole point is "unlocked".
+ */
+private val LockOpenClear: ImageVector by lazy {
+    ImageVector.Builder(
+        name = "LockOpenClear",
+        defaultWidth = 24.dp,
+        defaultHeight = 24.dp,
+        viewportWidth = 24f,
+        viewportHeight = 24f,
+    ).apply {
+        // Body
+        path(
+            fill = null,
+            stroke = SolidColor(Color.Black),
+            strokeLineWidth = 2f,
+            strokeLineCap = StrokeCap.Round,
+            strokeLineJoin = StrokeJoin.Round,
+        ) {
+            moveTo(6f, 10f)
+            horizontalLineTo(12f)
+            arcTo(2f, 2f, 0f, false, true, 14f, 12f)
+            verticalLineTo(19f)
+            arcTo(2f, 2f, 0f, false, true, 12f, 21f)
+            horizontalLineTo(6f)
+            arcTo(2f, 2f, 0f, false, true, 4f, 19f)
+            verticalLineTo(12f)
+            arcTo(2f, 2f, 0f, false, true, 6f, 10f)
+            close()
+        }
+        // Keyhole
+        path(fill = SolidColor(Color.Black)) {
+            moveTo(9f, 14f)
+            arcToRelative(1.5f, 1.5f, 0f, true, true, 0f, 3f)
+            arcToRelative(1.5f, 1.5f, 0f, true, true, 0f, -3f)
+            close()
+        }
+        // Shackle, attached on the left and hanging open past the body's edge
+        path(
+            fill = null,
+            stroke = SolidColor(Color.Black),
+            strokeLineWidth = 2f,
+            strokeLineCap = StrokeCap.Round,
+            strokeLineJoin = StrokeJoin.Round,
+        ) {
+            moveTo(9f, 10f)
+            verticalLineTo(6.5f)
+            arcTo(3.5f, 3.5f, 0f, false, true, 16f, 6.5f)
+            verticalLineTo(8f)
+        }
+    }.build()
 }

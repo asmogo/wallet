@@ -41,12 +41,17 @@ private val MorphBlurRadius = 2.dp
  * a no-op — the paired fade/scale enter still carries the moment.
  */
 @Composable
-fun Modifier.materializeBlur(): Modifier {
+fun Modifier.materializeBlur(delayMillis: Int = 0): Modifier {
     if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S || rememberReducedMotion()) {
         return this
     }
     var materialized by remember { mutableStateOf(false) }
-    LaunchedEffect(Unit) { materialized = true }
+    // The optional delay lets a staged entrance hold the blur until its beat
+    // (the celebration mount's glyph waits ~100ms for the container fade).
+    LaunchedEffect(Unit) {
+        if (delayMillis > 0) kotlinx.coroutines.delay(delayMillis.toLong())
+        materialized = true
+    }
     val radiusPx by animateFloatAsState(
         targetValue = if (materialized) 0f else with(LocalDensity.current) {
             MaterializeBlurRadius.toPx()

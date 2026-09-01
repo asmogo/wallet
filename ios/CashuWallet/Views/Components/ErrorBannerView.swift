@@ -166,6 +166,111 @@ extension View {
             .frame(width: 0, height: 0)
         }
     }
+
+    /// `.sheet(isPresented:)` that also softens the presenting screen.
+    ///
+    /// Home and History hand-wire `bottomSheetBackdrop` because they own every
+    /// presentation flag at the screen root. Settings (and any screen built
+    /// from self-contained sections) can't: the flags live in nested sections
+    /// that never see the page root. This wrapper reports its effective
+    /// presentation upward as a preference — dismissal-synced through the same
+    /// observer Home uses — and `bottomSheetBackdropHost()` on the page root
+    /// turns any reported sheet into the canvas blur. One vocabulary, every
+    /// bottom sheet.
+    func backdropSheet<C: View>(
+        isPresented: Binding<Bool>,
+        onDismiss: (() -> Void)? = nil,
+        @ViewBuilder content: @escaping () -> C
+    ) -> some View {
+        modifier(BackdropSheetModifier(
+            isPresented: isPresented,
+            onDismiss: onDismiss,
+            sheetContent: content
+        ))
+    }
+
+    /// Item-backed twin of `backdropSheet(isPresented:)`.
+    func backdropSheet<Item: Identifiable, C: View>(
+        item: Binding<Item?>,
+        onDismiss: (() -> Void)? = nil,
+        @ViewBuilder content: @escaping (Item) -> C
+    ) -> some View {
+        modifier(BackdropSheetItemModifier(
+            item: item,
+            onDismiss: onDismiss,
+            sheetContent: content
+        ))
+    }
+
+    /// Apply at a page's root: softens the whole page while any
+    /// `backdropSheet` presented from its subtree is up.
+    func bottomSheetBackdropHost() -> some View {
+        modifier(BottomSheetBackdropHost())
+    }
+}
+
+/// Count of effectively-presented `backdropSheet`s below a host. A count, not
+/// a Bool, so sibling sheets on one chain accumulate via `transformPreference`
+/// instead of the last `.preference` silently winning.
+private struct BottomSheetPresenceKey: PreferenceKey {
+    static var defaultValue = 0
+    static func reduce(value: inout Int, nextValue: () -> Int) {
+        value += nextValue()
+    }
+}
+
+private struct BackdropSheetModifier<C: View>: ViewModifier {
+    @Binding var isPresented: Bool
+    let onDismiss: (() -> Void)?
+    @ViewBuilder let sheetContent: () -> C
+
+    @State private var isDismissing = false
+
+    func body(content: Content) -> some View {
+        content
+            .sheet(isPresented: $isPresented, onDismiss: onDismiss) {
+                sheetContent()
+                    .observeBottomSheetDismissal { isDismissing = $0 }
+            }
+            .transformPreference(BottomSheetPresenceKey.self) {
+                $0 += (isPresented && !isDismissing) ? 1 : 0
+            }
+            .onChange(of: isPresented) { _, presented in
+                if presented { isDismissing = false }
+            }
+    }
+}
+
+private struct BackdropSheetItemModifier<Item: Identifiable, C: View>: ViewModifier {
+    @Binding var item: Item?
+    let onDismiss: (() -> Void)?
+    @ViewBuilder let sheetContent: (Item) -> C
+
+    @State private var isDismissing = false
+
+    func body(content: Content) -> some View {
+        content
+            .sheet(item: $item, onDismiss: onDismiss) { value in
+                sheetContent(value)
+                    .observeBottomSheetDismissal { isDismissing = $0 }
+            }
+            .transformPreference(BottomSheetPresenceKey.self) {
+                $0 += (item != nil && !isDismissing) ? 1 : 0
+            }
+            .onChange(of: item != nil) { _, presented in
+                if presented { isDismissing = false }
+            }
+    }
+}
+
+private struct BottomSheetBackdropHost: ViewModifier {
+    @State private var presentedCount = 0
+
+    func body(content: Content) -> some View {
+        content
+            .onPreferenceChange(BottomSheetPresenceKey.self) { presentedCount = $0 }
+            .bottomSheetBackdrop(isPresented: presentedCount > 0)
+    }
 }
 
 private struct BottomSheetBackdropModifier: ViewModifier {

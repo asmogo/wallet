@@ -31,10 +31,8 @@ import androidx.navigation.compose.composable
 import androidx.navigation.navArgument
 import com.cashu.me.App.AppContainer
 import com.cashu.me.Core.Platform.ConnectivityState
-import com.cashu.me.Models.TransactionStatus
 import com.cashu.me.Models.WalletTransaction
 import com.cashu.me.ui.history.HistoryScreen
-import com.cashu.me.ui.history.TransactionDetailScreen
 import com.cashu.me.ui.history.TransactionReceiptSheet
 import com.cashu.me.ui.home.HomeScreen
 import com.cashu.me.ui.mints.MintDetailScreen
@@ -109,13 +107,9 @@ fun CashuNavHost(
             onSend = onSend,
             pendingMintScan = pendingMintScan,
             onPendingMintScanConsumed = onPendingMintScanConsumed,
-            onOpenTransaction = { transaction ->
-                if (transaction.status == TransactionStatus.Completed) {
-                    receiptTransaction = transaction
-                } else {
-                    navController.navigate(transactionDetailRouteFor(transaction.id))
-                }
-            },
+            // Every transaction detail — settled or live — opens as the same
+            // receipt-family sheet over the originating list (iOS parity).
+            onOpenTransaction = { transaction -> receiptTransaction = transaction },
         )
         composable(
             route = Routes.MINT_DETAIL,
@@ -129,21 +123,6 @@ fun CashuNavHost(
                 priceService = container.priceService,
                 mintUrl = mintUrl,
                 onClose = { navController.popBackStack() },
-            )
-        }
-        composable(
-            route = Routes.TRANSACTION_DETAIL,
-            arguments = listOf(navArgument("transactionId") { type = NavType.StringType }),
-        ) { entry ->
-            val encoded = entry.arguments?.getString("transactionId").orEmpty()
-            val txId = URLDecoder.decode(encoded, StandardCharsets.UTF_8.name())
-            TransactionDetailScreen(
-                walletManager = container.walletManager,
-                settingsManager = container.settingsManager,
-                priceService = container.priceService,
-                transactionId = txId,
-                onClose = { navController.popBackStack() },
-                onClaimReceiveToken = onClaimReceiveToken,
             )
         }
         composable(
@@ -213,6 +192,7 @@ fun CashuNavHost(
             LightningScreen(
                 walletManager = container.walletManager,
                 npcService = container.npcService,
+                settingsManager = container.settingsManager,
                 onClose = { navController.popBackStack() },
             )
         }
@@ -284,9 +264,15 @@ fun CashuNavHost(
     receiptTransaction?.let { transaction ->
         TransactionReceiptSheet(
             transaction = transaction,
+            walletManager = container.walletManager,
             settingsManager = container.settingsManager,
             priceService = container.priceService,
             onDismissRequest = { receiptTransaction = null },
+            // The claim flow presents at app level; the sheet steps aside first.
+            onClaimReceiveToken = { token ->
+                receiptTransaction = null
+                onClaimReceiveToken(token)
+            },
         )
     }
 }
@@ -294,11 +280,6 @@ fun CashuNavHost(
 internal fun mintDetailRouteFor(mintUrl: String): String {
     val encoded = URLEncoder.encode(mintUrl, StandardCharsets.UTF_8.name())
     return Routes.MINT_DETAIL.replace("{mintUrl}", encoded)
-}
-
-internal fun transactionDetailRouteFor(transactionId: String): String {
-    val encoded = URLEncoder.encode(transactionId, StandardCharsets.UTF_8.name())
-    return Routes.TRANSACTION_DETAIL.replace("{transactionId}", encoded)
 }
 
 internal fun cashuRequestDetailRouteFor(requestId: String): String {

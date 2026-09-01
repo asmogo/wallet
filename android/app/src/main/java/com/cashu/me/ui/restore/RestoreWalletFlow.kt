@@ -75,6 +75,7 @@ import com.cashu.me.ui.components.MintAvatar
 import com.cashu.me.ui.components.NoticeSeverity
 import com.cashu.me.ui.components.PrimaryButton
 import com.cashu.me.ui.components.ScrollFadeBand
+import com.cashu.me.ui.components.ghostButtonUnderCtaTextStyle
 import com.cashu.me.ui.components.scrollEdgeFade
 import com.cashu.me.ui.testing.UiTestTags
 import com.cashu.me.ui.theme.CapsuleShape
@@ -378,7 +379,12 @@ fun RestoreSeedStep(
                 loading = restoring,
             )
             if (onBack != null) {
-                GhostButton(text = "Back", onClick = onBack, enabled = !restoring)
+                GhostButton(
+                    text = "Back",
+                    onClick = onBack,
+                    enabled = !restoring,
+                    textStyle = ghostButtonUnderCtaTextStyle,
+                )
             }
         }
     }
@@ -822,6 +828,7 @@ fun RestoreMintsStep(
                         staging.reset()
                         onBack()
                     },
+                    textStyle = ghostButtonUnderCtaTextStyle,
                 )
             }
         }

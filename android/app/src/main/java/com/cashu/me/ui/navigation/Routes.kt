@@ -18,7 +18,6 @@ object Routes {
 
     // With arguments
     const val MINT_DETAIL = "mints/{mintUrl}"
-    const val TRANSACTION_DETAIL = "history/transaction/{transactionId}"
     // Keep the legacy `fresh` query in the route pattern so restored back stacks
     // from earlier builds continue to resolve. Success behavior is now uniform.
     const val CASHU_REQUEST_DETAIL = "request/{requestId}?fresh={fresh}"

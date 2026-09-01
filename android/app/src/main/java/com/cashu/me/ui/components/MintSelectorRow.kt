@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
@@ -23,6 +24,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.layout.layout
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
@@ -32,6 +34,7 @@ import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.cashu.me.Models.MintInfo
 import com.cashu.me.ui.theme.CashuTheme
@@ -46,15 +49,40 @@ private val ChevronSize = 18.dp
 private val RowMinHeight = 56.dp
 private val MinimumTouchTarget = 48.dp
 private val RowVerticalPadding = 6.dp
-private val ActionPadding = PaddingValues(horizontal = 8.dp)
 
 /**
- * The shared value-flow mint selector: an unboxed directional label and mint
- * identity, with an optional plain-text Send Max action and picker chevron.
- * The resting state deliberately has no fill, border, or divider.
+ * Half the slack a 48dp touch target leaves around an 18dp glyph. Trimming it
+ * from the chevron's *layout* box (never its hit area) stops the dead space
+ * from pushing the glyph a third of the way in from the trailing margin, and
+ * from inflating its gap to Send Max to several times the gap inside the
+ * identity. Mirrors iOS's FlowRowMetrics.chevronBox + hitSlop.
+ */
+private val ChevronBoxTrim = 14.dp
+
+/**
+ * Report a narrower box than was measured, placing the content centred so it
+ * overhangs on both sides. The touch target keeps its full size; only the space
+ * it claims in the row shrinks. Compose has no negative padding, so this is the
+ * layout-modifier equivalent.
+ */
+private fun Modifier.trimHorizontal(trim: Dp) = this.layout { measurable, constraints ->
+    val placeable = measurable.measure(constraints)
+    val trimPx = trim.roundToPx()
+    val width = (placeable.width - trimPx * 2).coerceAtLeast(0)
+    layout(width, placeable.height) { placeable.place(-trimPx, 0) }
+}
+private val ActionPadding = PaddingValues(start = 8.dp, end = 0.dp)
+
+/**
+ * The shared value-flow mint selector: an unboxed mint identity with an optional
+ * plain-text Send Max action and picker chevron. The resting state deliberately
+ * has no fill, border, or divider.
  *
- * [direction] is required so receiving flows cannot accidentally describe the
- * destination mint as a source. [showBalance] is reserved for amount entry.
+ * The direction label is not drawn — the mint name, its balance and the chevron
+ * say what the row is, and every screen using it already names the flow. It
+ * survives in the accessibility description, so [direction] is still required
+ * and receiving flows still cannot describe the destination mint as a source.
+ * [showBalance] is reserved for amount entry.
  */
 @Composable
 fun MintSelectorRow(
@@ -81,25 +109,14 @@ fun MintSelectorRow(
         modifier = modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(if (isAccessibilityLayout) 2.dp else 0.dp),
     ) {
-        if (isAccessibilityLayout) {
-            Text(
-                text = direction.label,
-                style = MaterialTheme.typography.bodyLarge,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.clearAndSetSemantics { },
-            )
-        }
-
         Row(
             verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier.fillMaxWidth(),
         ) {
             MintIdentity(
-                direction = direction,
                 mint = mint,
                 balanceText = balanceText,
                 showBalance = showBalance,
-                showDirection = !isAccessibilityLayout,
                 stacksBalance = isAccessibilityLayout,
                 description = description,
                 onPickMint = onPickMint,
@@ -110,6 +127,7 @@ fun MintSelectorRow(
                 TextButton(
                     onClick = onUseMax,
                     modifier = Modifier
+                        .defaultMinSize(minWidth = 0.dp, minHeight = MinimumTouchTarget)
                         .heightIn(min = MinimumTouchTarget)
                         .semantics { contentDescription = "Send maximum" },
                     contentPadding = ActionPadding,
@@ -128,6 +146,7 @@ fun MintSelectorRow(
                 Box(
                     contentAlignment = Alignment.Center,
                     modifier = Modifier
+                        .trimHorizontal(ChevronBoxTrim)
                         .size(MinimumTouchTarget)
                         .clickable(role = Role.Button, onClick = onPickMint)
                         // The identity already exposes the picker as one control.
@@ -147,11 +166,9 @@ fun MintSelectorRow(
 
 @Composable
 private fun MintIdentity(
-    direction: MintSelectorDirection,
     mint: MintInfo,
     balanceText: String?,
     showBalance: Boolean,
-    showDirection: Boolean,
     stacksBalance: Boolean,
     description: String,
     onPickMint: (() -> Unit)?,
@@ -190,16 +207,6 @@ private fun MintIdentity(
         verticalAlignment = Alignment.CenterVertically,
         modifier = identityModifier,
     ) {
-        if (showDirection) {
-            Text(
-                text = direction.label,
-                style = MaterialTheme.typography.bodyLarge,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = 1,
-            )
-            Spacer(Modifier.width(CashuTheme.spacing.snug))
-        }
-
         if (showBalance && balanceText != null && stacksBalance) {
             Column(modifier = Modifier.weight(1f)) {
                 MintName(mint.name)
@@ -208,8 +215,8 @@ private fun MintIdentity(
         } else {
             Text(
                 text = mint.name,
-                style = MaterialTheme.typography.bodyLarge,
-                fontWeight = FontWeight.Medium,
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = FontWeight.SemiBold,
                 color = MaterialTheme.colorScheme.onSurface,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
@@ -228,20 +235,28 @@ private fun MintIdentity(
 private fun MintName(name: String) {
     Text(
         text = name,
-        style = MaterialTheme.typography.bodyLarge,
-        fontWeight = FontWeight.Medium,
+        style = MaterialTheme.typography.bodyMedium,
+        fontWeight = FontWeight.SemiBold,
         color = MaterialTheme.colorScheme.onSurface,
         maxLines = 1,
         overflow = TextOverflow.Ellipsis,
     )
 }
 
+/**
+ * The row speaks in one voice: mint name, balance and Send Max all share
+ * `bodyMedium` + SemiBold + `onSurface`, so the whole row is a single treatment
+ * rather than three competing ones. It previously ran three sizes across two
+ * inks and two weights, with the balance at the 12sp floor *under* secondary
+ * ink — a double demotion.
+ */
 @Composable
 private fun MintBalance(balanceText: String) {
     Text(
         text = balanceText,
-        style = MaterialTheme.typography.bodySmall,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        style = MaterialTheme.typography.bodyMedium,
+        fontWeight = FontWeight.SemiBold,
+        color = MaterialTheme.colorScheme.onSurface,
         maxLines = 1,
         overflow = TextOverflow.Ellipsis,
     )

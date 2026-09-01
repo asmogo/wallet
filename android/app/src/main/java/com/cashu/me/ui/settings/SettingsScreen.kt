@@ -127,7 +127,6 @@ fun SettingsScreen(
             item("btc-symbol") {
                 ToggleRow(
                     title = "Use ₿ symbol",
-                    subtitle = "Use ₿ symbol instead of sats.",
                     leadingIcon = Icons.Outlined.CurrencyBitcoin,
                     checked = settings.useBitcoinSymbol,
                     onCheckedChange = settingsManager::setUseBitcoinSymbol,
@@ -171,7 +170,6 @@ fun SettingsScreen(
             item("nostr") {
                 NavRow(
                     title = "Nostr",
-                    subtitle = "Your key, relays, and connected apps",
                     leadingIcon = Icons.Outlined.AccountCircle,
                     onClick = onOpenNostr,
                 )

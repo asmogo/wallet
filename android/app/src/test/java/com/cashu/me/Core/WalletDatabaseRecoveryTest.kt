@@ -15,16 +15,32 @@ class WalletDatabaseRecoveryTest {
     val temporaryFolder = TemporaryFolder()
 
     @Test
-    fun recoveryIsAttemptedForDatabaseOpenErrors() {
-        assertTrue(shouldAttemptWalletDatabaseRecovery(IllegalStateException("SQLite database is malformed")))
-        assertTrue(shouldAttemptWalletDatabaseRecovery(IllegalStateException("WalletDB open failed")))
-        assertTrue(shouldAttemptWalletDatabaseRecovery(IllegalStateException("database disk image is corrupt")))
+    fun recoveryIsAttemptedOnlyForExplicitCorruptionErrors() {
+        listOf(
+            "SQLite error SQLITE_CORRUPT: database disk image is malformed",
+            "SQLite error SQLITE_NOTADB: file is not a database",
+            "malformed database schema (wallets)",
+            "database disk image is corrupt",
+        ).forEach { message ->
+            assertTrue(message, shouldAttemptWalletDatabaseRecovery(IllegalStateException(message)))
+        }
     }
 
     @Test
-    fun recoveryIsNotAttemptedForNonDatabaseErrors() {
-        assertFalse(shouldAttemptWalletDatabaseRecovery(IllegalArgumentException("Invalid seed phrase.")))
-        assertFalse(shouldAttemptWalletDatabaseRecovery(IllegalStateException("Couldn't reach the mint.")))
+    fun recoveryIsNotAttemptedForTransientPermissionOrIoErrors() {
+        listOf(
+            "SQLite database is locked",
+            "SQLite database is busy",
+            "unable to open database file",
+            "attempt to write a readonly database",
+            "permission denied while opening WalletDB",
+            "SQLite disk I/O error",
+            "WalletDB open failed",
+            "Invalid seed phrase.",
+            "Couldn't reach the mint.",
+        ).forEach { message ->
+            assertFalse(message, shouldAttemptWalletDatabaseRecovery(IllegalStateException(message)))
+        }
     }
 
     @Test

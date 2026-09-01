@@ -747,10 +747,14 @@ class WalletManager(
     // MARK: - Asynchronous melt settlement (NUT-05, iOS WalletManager+PendingMelts parity)
 
     /**
-     * Wait in the background for an async-accepted melt. One waiter per quote;
-     * the waiter dies with the process and [syncPendingMeltQuotes] takes over
-     * after relaunch. Settlement facts (preimage, actual fee) persist on the
-     * CDK transaction itself — no app-side metadata to write.
+     * Wait in the background for an async-accepted melt that is still pending
+     * after the gateway's in-lane lightning wait gave up (or is on-chain,
+     * which never waits in-lane). Re-`wait()`ing the same handle creates a
+     * fresh Rust future, so re-arming after the capped wait is sound. One
+     * waiter per quote; the waiter dies with the process and
+     * [syncPendingMeltQuotes] takes over after relaunch. Settlement facts
+     * (preimage, actual fee) persist on the CDK transaction itself — no
+     * app-side metadata to write.
      */
     private fun watchPendingMelt(pendingMelt: PendingMelt, quoteId: String) {
         if (pendingMeltWaiters[quoteId]?.isActive == true) return
@@ -1257,33 +1261,51 @@ class WalletManager(
                 settingsManager.onboardingCompleted = !needsOnboarding
             },
             rollback = {
-                gateway.closeWalletRepository()
-                walletStore.restoreWalletScopedData(walletSnapshot)
-                cashuRequestStore.reload()
-                settingsManager.restoreWalletScopedData(settingsSnapshot)
-                nwcManager.restoreWalletScopedData(nwcSnapshot)
-                nostrMintBackupService.reloadStoredState()
-                databasePathManager.restoreWalletFileBackups(backups)
-                if (previousMnemonic != null) {
-                    secureStorage.saveString(StorageKeys.secureWalletMnemonic, previousMnemonic)
+                try {
+                    gateway.closeWalletRepository()
+                    databasePathManager.restoreWalletFileBackups(
+                        backups = backups,
+                        beforeCommit = {
+                            if (previousMnemonic != null) {
+                                secureStorage.saveString(StorageKeys.secureWalletMnemonic, previousMnemonic)
+                            } else {
+                                secureStorage.delete(StorageKeys.secureWalletMnemonic)
+                            }
+                        },
+                        onRollback = {
+                            secureStorage.saveString(StorageKeys.secureWalletMnemonic, mnemonic)
+                        },
+                    )
+                    walletStore.restoreWalletScopedData(walletSnapshot)
+                    cashuRequestStore.reload()
+                    settingsManager.restoreWalletScopedData(settingsSnapshot)
+                    nwcManager.restoreWalletScopedData(nwcSnapshot)
+                    nostrMintBackupService.reloadStoredState()
+                    if (previousMnemonic != null) {
+                        runCatching {
+                            openWalletRepositoryWithRecovery(previousMnemonic)
+                            deriveNostrKey(previousMnemonic)
+                            loadCachedState(needsOnboarding = false)
+                            if (startNwc) nwcManager.startIfEnabled()
+                        }
+                        cashuRequestListener?.resetForWalletBoundary(restart = externalServicesEnabled)
+                    } else {
+                        update {
+                            WalletState(
+                                isInitialized = true,
+                                isRuntimeReady = true,
+                                needsOnboarding = true,
+                                canExitOnboarding = false,
+                            )
+                        }
+                        cashuRequestListener?.resetForWalletBoundary(restart = false)
+                    }
+                } catch (rollbackError: Throwable) {
+                    AppLogger.wallet.error("Failed to restore the previous wallet transaction", rollbackError)
                     runCatching {
-                        openWalletRepositoryWithRecovery(previousMnemonic)
-                        deriveNostrKey(previousMnemonic)
-                        loadCachedState(needsOnboarding = false)
-                        if (startNwc) nwcManager.startIfEnabled()
-                    }
-                    cashuRequestListener?.resetForWalletBoundary(restart = externalServicesEnabled)
-                } else {
-                    secureStorage.delete(StorageKeys.secureWalletMnemonic)
-                    update {
-                        WalletState(
-                            isInitialized = true,
-                            isRuntimeReady = true,
-                            needsOnboarding = true,
-                            canExitOnboarding = false,
-                        )
-                    }
-                    cashuRequestListener?.resetForWalletBoundary(restart = false)
+                        cashuRequestListener?.resetForWalletBoundary(restart = false)
+                    }.exceptionOrNull()?.let(rollbackError::addSuppressed)
+                    throw rollbackError
                 }
             },
             cleanupSteps = listOf(

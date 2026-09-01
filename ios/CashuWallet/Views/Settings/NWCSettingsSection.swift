@@ -90,8 +90,9 @@ struct NWCSettingsView: View {
         .animation(.easeInOut(duration: 0.2), value: nwc.isEnabled)
         .animation(.easeInOut(duration: 0.2), value: nwc.connectionUri)
         .animation(.easeInOut(duration: 0.2), value: nwc.errorMessage)
-        .sheet(isPresented: $showMintPicker) {
+        .backdropSheet(isPresented: $showMintPicker) {
             MintPickerSheet(
+                title: "Mint",
                 mints: walletManager.mints,
                 selectedMintUrl: Binding(
                     get: { nwc.selectedMintUrl },
@@ -99,16 +100,14 @@ struct NWCSettingsView: View {
                 ),
                 onSelect: { nwc.selectedMintUrl = $0 }
             )
-            .presentationDetents([.medium, .large])
         }
-        .sheet(isPresented: $showBudgetSheet) {
+        .backdropSheet(isPresented: $showBudgetSheet) {
             NWCBudgetSheet()
                 .presentationDetents([.medium])
                 .presentationDragIndicator(.visible)
         }
-        .sheet(isPresented: $showConnectionQR) {
+        .backdropSheet(isPresented: $showConnectionQR) {
             QRCodeDetailSheet(title: "Wallet Connect", content: nwc.connectionUri ?? "")
-                .presentationDetents([.medium, .large])
         }
         .alert("Reset Connection", isPresented: $showRegenerateConfirm) {
             Button("Cancel", role: .cancel) {}
@@ -118,6 +117,7 @@ struct NWCSettingsView: View {
         } message: {
             Text("This creates a new connection code. Any app paired with the current one will stop working until you share the new code.")
         }
+        .bottomSheetBackdropHost()
     }
 
     // MARK: - Rows

@@ -45,8 +45,16 @@ struct CashuRequestDetailView: View {
         Group {
             if showPaymentSuccess {
                 paymentSuccessView
+                    .transition(.opacity)
             } else if let request {
                 content(request: request)
+                    // Fast exit: when the payment lands, the request face
+                    // clears quickly so the success terminal's staged check
+                    // owns the moment.
+                    .transition(.asymmetric(
+                        insertion: .opacity,
+                        removal: .opacity.animation(.easeInOut(duration: 0.2))
+                    ))
             } else {
                 Text("Request not found")
                     .foregroundStyle(.secondary)
