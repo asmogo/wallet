@@ -79,7 +79,7 @@ struct CashuWalletApp: App {
                         await walletManager.initialize()
                         guard !IntegrationTestConfig.shouldUseDeterministicUIRuntime else { return }
                         CashuRequestListener.shared.attach(walletManager: walletManager)
-                        await CashuRequestListener.shared.start()
+                        CashuRequestListener.shared.requestStart()
                         if SettingsManager.shared.checkSentTokens {
                             await walletManager.checkAllPendingTokens()
                         }
@@ -112,7 +112,7 @@ struct CashuWalletApp: App {
                 switch newPhase {
                 case .active:
                     appLockManager.appBecameActive()
-                    Task { await CashuRequestListener.shared.start() }
+                    CashuRequestListener.shared.requestStart()
                     if SettingsManager.shared.checkSentTokens {
                         Task { await walletManager.checkAllPendingTokens() }
                     }
@@ -131,7 +131,7 @@ struct CashuWalletApp: App {
                     appLockManager.appResignedActive()
                 case .background:
                     appLockManager.appResignedActive()
-                    Task { await CashuRequestListener.shared.stop() }
+                    CashuRequestListener.shared.requestStop()
                     // Quiesce the timers so no fresh mint network + wallet-DB write kicks
                     // off during the brief background-transition window before suspension.
                     NPCService.shared.stopBackgroundRefresh()

@@ -548,7 +548,7 @@ extension WalletManager {
         needsOnboarding = false
         guard !IntegrationTestConfig.shouldUseDeterministicUIRuntime else { return }
         CashuRequestListener.shared.attach(walletManager: self)
-        Task { await CashuRequestListener.shared.start() }
+        CashuRequestListener.shared.requestStart()
     }
 
     /// Legacy restore for backward compatibility (initializes + completes without NUT-09)
@@ -561,6 +561,9 @@ extension WalletManager {
         isLoading = true
         defer { isLoading = false }
 
+        // Stop accepting listener work and let an already-started token receive
+        // finish all attribution/cache side effects before removing its wallet.
+        await CashuRequestListener.shared.resetForWalletBoundary()
         resetRuntimeState()
         try keychainService.deleteMnemonic()
         try? keychainService.deleteNostrPrivateKey()
@@ -570,7 +573,6 @@ extension WalletManager {
         SettingsManager.shared.resetWalletScopedData()
         NWCManager.shared.resetForWalletBoundary()
         CashuRequestStore.shared.resetForWalletBoundary()
-        CashuRequestListener.shared.resetForWalletBoundary()
         MintLogoCache.shared.clear()
         processedQuotes.removeAll()
         // iCloud backup survives a local deletion — the user can restore it from
@@ -594,7 +596,21 @@ extension WalletManager {
             previousMnemonic = try keychainService.loadMnemonic()
         }
         let defaultsSnapshot = walletBoundaryDefaultsSnapshot()
-        let fileBackups = try backupWalletDatabaseFiles()
+
+        // The database backup is a mutation too: drain listener-owned receives
+        // before any live wallet file can be displaced.
+        await CashuRequestListener.shared.resetForWalletBoundary()
+        let fileBackups: [WalletFileBackup]
+        do {
+            fileBackups = try backupWalletDatabaseFiles()
+        } catch {
+            // The transactional backup helper restores any files moved before
+            // the failure. Runtime state has not changed, so reopen listener
+            // intake for the still-attached wallet.
+            restoreWalletBoundaryDefaults(defaultsSnapshot)
+            resumeCashuRequestListenerAfterWalletBoundaryRollback()
+            throw error
+        }
 
         do {
             resetRuntimeState()
@@ -605,7 +621,6 @@ extension WalletManager {
             NPCService.shared.resetForWalletBoundary()
             NWCManager.shared.resetForWalletBoundary()
             CashuRequestStore.shared.resetForWalletBoundary()
-            CashuRequestListener.shared.resetForWalletBoundary()
             SettingsStore.shared.clearWalletScopedData()
 
             try initializeWalletForCreation(mnemonic: newMnemonic)
@@ -642,6 +657,7 @@ extension WalletManager {
                 SentryService.capture(error)
             }
 
+            var reopenedPreviousWallet = false
             if rollbackSucceeded {
                 restoreWalletBoundaryDefaults(defaultsSnapshot)
                 CashuRequestStore.shared.reloadFromDefaults()
@@ -651,10 +667,15 @@ extension WalletManager {
                     do {
                         try initializeWalletForLaunch(mnemonic: previousMnemonic)
                         startDeferredStartupMaintenance()
+                        reopenedPreviousWallet = true
                     } catch {
                         AppLogger.wallet.error("Failed to reopen previous wallet after replacement error: \(error)")
                     }
                 }
+            }
+
+            if reopenedPreviousWallet {
+                resumeCashuRequestListenerAfterWalletBoundaryRollback()
             }
 
             throw error
@@ -673,6 +694,13 @@ extension WalletManager {
         if !IntegrationTestConfig.shouldUseDeterministicUIRuntime {
             performICloudBackup()
         }
+    }
+
+    private func resumeCashuRequestListenerAfterWalletBoundaryRollback() {
+        guard walletRepository != nil else { return }
+        CashuRequestListener.shared.attach(walletManager: self)
+        guard !IntegrationTestConfig.shouldUseDeterministicUIRuntime else { return }
+        CashuRequestListener.shared.requestStart()
     }
 
     /// Open only local state needed for an immediately usable wallet. Network
@@ -1137,12 +1165,9 @@ extension WalletManager {
 
     private func startDeferredStartupMaintenance() {
         // Arm the foreground quote poll from the runtime path that provably
-        // runs on every launch. App-level wiring alone is not enough: the
-        // scenePhase `.active` onChange is unreliable at cold launch (hence the
-        // duplicated CashuRequestListener start), and the ContentView `.task`
-        // chain parks behind `await CashuRequestListener.shared.start()` (a
-        // Nostr connect that can hang), so anything queued after it may never
-        // run. Guard-protected — the scenePhase handler only stops/restarts it.
+        // runs on every launch. App-level wiring alone is not enough because
+        // scenePhase `.active` onChange is unreliable at cold launch.
+        // Guard-protected — the scenePhase handler only stops/restarts it.
         startPendingQuoteForegroundPolling()
         guard startupMaintenanceTask == nil else { return }
 
