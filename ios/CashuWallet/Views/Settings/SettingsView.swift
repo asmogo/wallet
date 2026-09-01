@@ -2,7 +2,6 @@ import SwiftUI
 import LocalAuthentication
 
 struct SettingsView: View {
-    @Environment(\.dismiss) private var dismiss
     @EnvironmentObject var walletManager: WalletManager
     @ObservedObject var settings = SettingsManager.shared
     @ObservedObject var npcService = NPCService.shared
@@ -10,7 +9,6 @@ struct SettingsView: View {
 
     @State private var showBackup = false
     @State private var showDeleteConfirm = false
-    @State private var copiedLightningAddress = false
     @State private var isCheckingPayments = false
     @State private var showMintPicker = false
     @State private var showCurrencySheet = false
@@ -27,7 +25,6 @@ struct SettingsView: View {
                     currencyRow
                     toggleRow(
                         "Use ₿ symbol",
-                        subtitle: "Use ₿ symbol instead of sats.",
                         icon: "bitcoinsign",
                         isOn: $settings.useBitcoinSymbol
                     )
@@ -90,27 +87,12 @@ struct SettingsView: View {
                     .padding(.bottom, 32)
             }
             .padding(.horizontal)
+            .frame(maxWidth: 720)
+            .frame(maxWidth: .infinity)
         }
         .navigationTitle("Settings")
         .accessibilityIdentifier("settings-screen")
-        .navigationBarBackButtonHidden()
-        .toolbar {
-            ToolbarItem(placement: .topBarLeading) {
-                Button {
-                    dismiss()
-                } label: {
-                    Label("Wallet", systemImage: "chevron.backward")
-                }
-                .accessibilityLabel("Back to Wallet")
-                .accessibilityIdentifier("settings-back-button")
-            }
-        }
-        .sheet(isPresented: $showBackup) {
-            BackupView()
-                .environmentObject(walletManager)
-                .presentationDetents([.medium, .large])
-        }
-        .sheet(isPresented: $showCurrencySheet) {
+        .backdropSheet(isPresented: $showCurrencySheet) {
             CurrencyPickerSheet()
                 .presentationDetents([.medium, .large])
                 .presentationDragIndicator(.visible)
@@ -124,6 +106,9 @@ struct SettingsView: View {
             Text("Are you sure you want to delete your wallet? This action cannot be undone. Make sure you have backed up your seed phrase!")
         }
         .errorBanner($walletActionError)
+        // Softens this page while any sheet reported from its subtree is up —
+        // the same canvas blur Home and History wear behind their sheets.
+        .bottomSheetBackdropHost()
     }
 
     // MARK: - Section + Row Helpers
@@ -304,7 +289,7 @@ struct SettingsView: View {
 
             Spacer(minLength: 8)
 
-            Toggle("", isOn: isOn)
+            Toggle(title, isOn: isOn)
                 .labelsHidden()
         }
         .padding(.horizontal, 4)
@@ -321,12 +306,18 @@ struct SettingsView: View {
         }
         .navigationTitle("Backup & Restore")
         .toolbarBackground(.hidden, for: .navigationBar)
+        // Presented here, not on the root page: this pushed page is what is
+        // visible behind the sheet, so it owns the presentation and the blur.
+        .backdropSheet(isPresented: $showBackup) {
+            BackupView()
+                .environmentObject(walletManager)
+        }
+        .bottomSheetBackdropHost()
     }
 
     private var lightningDetailView: some View {
         ScrollView {
             LightningAddressSettingsSection(
-                copiedLightningAddress: $copiedLightningAddress,
                 isCheckingPayments: $isCheckingPayments,
                 showMintPicker: $showMintPicker
             )
@@ -338,6 +329,7 @@ struct SettingsView: View {
         }
         .navigationTitle("Lightning")
         .toolbarBackground(.hidden, for: .navigationBar)
+        .bottomSheetBackdropHost()
     }
 
     private var nostrDetailView: some View {
@@ -373,6 +365,7 @@ struct SettingsView: View {
         }
         .navigationTitle("Nostr")
         .toolbarBackground(.hidden, for: .navigationBar)
+        .bottomSheetBackdropHost()
     }
 
     private var p2pkDetailView: some View {
@@ -383,6 +376,7 @@ struct SettingsView: View {
         }
         .navigationTitle("Locked Ecash")
         .toolbarBackground(.hidden, for: .navigationBar)
+        .bottomSheetBackdropHost()
     }
 
     private var privacyDetailView: some View {
@@ -624,15 +618,12 @@ struct RestoreWalletView: View {
             }
 
             Button(action: initializeAndProceed) {
-                if isRestoringSeed {
-                    ProgressView()
-                        .tint(.primary)
-                } else {
-                    Text("Next")
-                }
+                LoadingButtonLabel(title: "Next", isLoading: isRestoringSeed)
             }
             .glassButton()
             .disabled(!canContinue)
+            .accessibilityLabel("Next")
+            .accessibilityValue(isRestoringSeed ? "In progress" : "")
             .padding(.horizontal)
             .padding(.bottom, 32)
         }
@@ -1237,70 +1228,69 @@ struct QRCodeDetailSheet: View {
     let title: String
     let content: String
 
-    @State private var copied = false
+    @State private var contentHeight: CGFloat = 0
 
     var body: some View {
-        NavigationStack {
-            VStack(spacing: 20) {
-                QRCodeView(content: content, showControls: false)
-                    .padding()
-                    .frame(width: 280, height: 280)
-                    .background(Color.white)
-                    .clipShape(.rect(cornerRadius: 12))
+        // Content-fit receipt, not a .medium detent: the medium sheet cut the
+        // value line off below the fold, so the one thing the QR encodes was
+        // invisible until the user dragged. The sheet now hugs title + QR +
+        // value + actions exactly, matching Android's content-height sheet.
+        VStack(spacing: 0) {
+            // In-content title — like every receipt sheet, dismissal is the
+            // drag indicator / swipe, not a floating close-X.
+            Text(title)
+                .font(.title2.weight(.semibold))
 
-                Text(content)
-                    .font(.system(.caption, design: .monospaced))
-                    .multilineTextAlignment(.center)
-                    .lineLimit(2)
-                    .truncationMode(.middle)
-                    .padding(.horizontal)
+            QRCodeView(content: content, showControls: false)
+                .padding()
+                .frame(width: 280, height: 280)
+                .background(Color.white)
+                .clipShape(.rect(cornerRadius: 16))
+                .padding(.top, 24)
 
-                HStack(spacing: 12) {
-                    Button(action: copyToClipboard) {
-                        Text(copied ? "Copied" : "Copy")
-                    }
-                    .glassButton()
+            // One middle-truncated line at full body size and primary ink —
+            // this is the sheet's second focal point, not a footnote. The full
+            // value travels via Copy/Share.
+            Text(content)
+                .cashuText(.monoDisplay)
+                .truncationMode(.middle)
+                .padding(.top, 16)
 
-                    ShareLink(item: content) {
-                        Text("Share")
-                    }
-                    .glassButton()
+            HStack(spacing: 12) {
+                Button(action: copyToClipboard) {
+                    Text("Copy")
                 }
-                .padding(.horizontal)
+                .flatSheetSecondaryButton()
 
-                Spacer()
-            }
-            // Extra top clearance so the wide, centered QR card doesn't tuck
-            // under the floating close-X (its column overlaps the card's
-            // top-left corner at this width).
-            .padding(.top, 44)
-            .navigationTitle(title)
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbarBackground(.hidden, for: .navigationBar)
-            .toolbar {
-                ToolbarItem(placement: .navigationBarLeading) {
-                    SheetCloseButton()
+                ShareLink(item: content) {
+                    Text("Share")
                 }
+                .glassButton()
             }
+            .padding(.top, 24)
         }
+        .padding(.horizontal, 24)
+        .padding(.top, 20)
+        .padding(.bottom, 16)
+        .contentFitMeasured { contentHeight = $0 }
+        .contentFitDetent(contentHeight, estimate: 480, navigationBar: false)
+        .compactBottomSheetSurface()
+        .presentationDragIndicator(.visible)
     }
 
     private func copyToClipboard() {
         UIPasteboard.general.string = content
-        copied = true
-        DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
-            copied = false
-        }
+        ConfirmationToast.show("Copied \(title.lowercased())")
     }
 }
 
 // MARK: - Import P2PK Sheet
 
 struct ImportP2PKSheet: View {
-    @Binding var nsecText: String
-    let onImport: () -> Void
+    let onImport: (String) throws -> Void
 
     @Environment(\.dismiss) private var dismiss
+    @State private var nsecText = ""
     @State private var validationError: String?
 
     private var trimmed: String {
@@ -1349,7 +1339,7 @@ struct ImportP2PKSheet: View {
 
                 Spacer(minLength: 0)
 
-                Button(action: { if validate() { onImport() } }) {
+                Button(action: importKey) {
                     Text("Import key")
                 }
                 .glassButton()
@@ -1367,6 +1357,7 @@ struct ImportP2PKSheet: View {
                 }
             }
         }
+        .flatBottomSheetSurface()
     }
 
     private func paste() {
@@ -1380,6 +1371,16 @@ struct ImportP2PKSheet: View {
         HapticFeedback.selection()
         nsecText = ""
         validationError = nil
+    }
+
+    private func importKey() {
+        guard validate() else { return }
+        do {
+            try onImport(trimmed)
+            dismiss()
+        } catch {
+            validationError = error.localizedDescription
+        }
     }
 
     private func validate() -> Bool {
@@ -1396,83 +1397,83 @@ struct ImportP2PKSheet: View {
 
 struct BackupView: View {
     @EnvironmentObject var walletManager: WalletManager
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     @State private var showWords = false
-    @State private var copiedToClipboard = false
+    @State private var contentHeight: CGFloat = 0
+
+    private let columns = Array(repeating: GridItem(.flexible(), spacing: 10), count: 3)
 
     var body: some View {
-        NavigationStack {
-            ScrollView {
-                VStack(spacing: 24) {
-                    VStack(spacing: 12) {
-                        Image(systemName: "exclamationmark.triangle.fill")
-                            .font(.title)
-                            .foregroundStyle(.orange)
+        let words = walletManager.getMnemonicWords()
 
-                        Text("Keep Your Seed Phrase Safe")
-                            .font(.headline)
+        VStack(spacing: 24) {
+            Text("Backup Wallet")
+                .font(.title2.weight(.semibold))
 
-                        Text("Anyone with these words can access your funds. Never share them with anyone.")
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
-                            .multilineTextAlignment(.center)
-                    }
-                    .padding()
+            Text(showWords
+                 ? "Write down these words in order and store them somewhere safe. Do not share them with anyone."
+                 : "Your recovery phrase is the only way to restore your wallet. Keep it private and stored somewhere safe. Never share it with anyone.")
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
 
-                    let words = walletManager.getMnemonicWords()
-                    let mnemonic = words.joined(separator: " ")
-                    let hiddenMnemonic = words.map { String(repeating: "\u{2022}", count: max(3, $0.count)) }.joined(separator: " ")
-
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text("Seed phrase")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                            .textCase(.uppercase)
-                        HStack(spacing: 10) {
-                            Text(showWords ? mnemonic : hiddenMnemonic)
-                                .font(.system(.body, design: .monospaced))
-                                .foregroundStyle(showWords ? .primary : .secondary)
-                                .lineLimit(4)
-                                .multilineTextAlignment(.leading)
-
-                            Spacer(minLength: 0)
-
-                            VStack(spacing: 8) {
-                                Button(action: toggleReveal) {
-                                    Image(systemName: showWords ? "eye.slash" : "eye")
-                                }
-
-                                Button(action: copyToClipboard) {
-                                    Image(systemName: copiedToClipboard ? "checkmark" : "doc.on.doc")
-                                        .foregroundStyle(copiedToClipboard ? .green : Color.accentColor)
-                                        .contentTransition(.symbolEffect(.replace))
-                                        .animation(.snappy(duration: 0.18), value: copiedToClipboard)
-                                }
+            if showWords {
+                ScrollView {
+                    LazyVGrid(columns: columns, spacing: 10) {
+                        ForEach(Array(words.enumerated()), id: \.offset) { index, word in
+                            HStack(spacing: 6) {
+                                Text("\(index + 1).")
+                                    .font(.caption2)
+                                    .foregroundStyle(.secondary)
+                                Text(word)
+                                    .font(.caption2.weight(.medium))
+                                    .fixedSize(horizontal: false, vertical: true)
+                                    .multilineTextAlignment(.leading)
+                                Spacer(minLength: 0)
                             }
+                            .padding(.horizontal, 12)
+                            .frame(maxWidth: .infinity, minHeight: 48, alignment: .leading)
+                            .background(.quaternary.opacity(0.55), in: RoundedRectangle(cornerRadius: 12))
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 12)
+                                    .stroke(Color(uiColor: .separator), lineWidth: 0.5)
+                            )
+                            .accessibilityElement(children: .combine)
+                            .accessibilityLabel("Word \(index + 1), \(word)")
                         }
                     }
-                    .padding(12)
-                    .liquidGlass(in: RoundedRectangle(cornerRadius: 10))
-                    .padding(.horizontal)
-                    .padding(.bottom, 24)
+                }
+                .frame(maxHeight: 260)
+                .transition(.opacity.combined(with: .move(edge: .bottom)))
+            }
+
+            Button(showWords ? "Copy Recovery Phrase" : "Reveal Recovery Phrase") {
+                if showWords {
+                    copyToClipboard()
+                } else {
+                    revealWords()
                 }
             }
-            // No Cancel / Done buttons — this is a modal; swipe down or tap
-            // outside to dismiss. Dropping them also removes the tall spacer
-            // that pushed "Done" below the medium detent (the drag-to-see jank).
-            .navigationTitle("Backup")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbarBackground(.hidden, for: .navigationBar)
+            .glassButton()
+            .contentTransition(.opacity)
         }
+        .padding(.horizontal, 24)
+        .padding(.vertical, 20)
+        .contentFitMeasured { contentHeight = $0 }
+        .contentFitDetent(
+            contentHeight,
+            estimate: showWords ? 460 : 250,
+            navigationBar: false,
+            step: showWords,
+            stepResize: .milliseconds(300)
+        )
+        .presentationDragIndicator(.visible)
+        .flatBottomSheetSurface()
+        .animation(reduceMotion ? nil : .snappy(duration: 0.25), value: showWords)
     }
 
-    /// Hiding is free; revealing always requires authentication, regardless of
-    /// the App Lock setting.
-    private func toggleReveal() {
-        if showWords {
-            showWords = false
-            return
-        }
+    /// Revealing always requires authentication, regardless of the App Lock setting.
+    private func revealWords() {
         Task {
             if await AppLockManager.shared.authenticate(reason: "Reveal your seed phrase") {
                 showWords = true
@@ -1485,10 +1486,7 @@ struct BackupView: View {
             guard await AppLockManager.shared.authenticate(reason: "Copy your seed phrase") else { return }
             let words = walletManager.getMnemonicWords().joined(separator: " ")
             UIPasteboard.general.string = words
-            copiedToClipboard = true
-            DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
-                copiedToClipboard = false
-            }
+            ConfirmationToast.show("Copied recovery phrase")
         }
     }
 }
@@ -1626,6 +1624,7 @@ struct ICloudBackupSettingsView: View {
 // MARK: - Mint Picker Sheet
 
 struct MintPickerSheet: View {
+    var title: String = "Select Mint"
     let mints: [MintInfo]
     @Binding var selectedMintUrl: String?
     let onSelect: (String) -> Void
@@ -1639,17 +1638,18 @@ struct MintPickerSheet: View {
                     // Selection is confirmed by the server round-trip in
                     // onSelect; writing it here would show a mint the server
                     // never accepted.
+                    HapticFeedback.selection()
                     onSelect(mint.url)
                     dismiss()
                 } label: {
-                    HStack {
-                        VStack(alignment: .leading, spacing: 4) {
+                    HStack(spacing: 12) {
+                        MintAvatarView(iconUrl: mint.iconUrl, name: mint.name, size: 40)
+                        VStack(alignment: .leading, spacing: 2) {
                             Text(mint.name)
-                            Text(mint.url)
-                                .font(.caption)
+                                .font(.body.weight(.medium))
+                            Text(SettingsManager.shared.formatAmountBalance(mint.balance) + " sat")
+                                .font(.subheadline)
                                 .foregroundStyle(.secondary)
-                                .lineLimit(1)
-                                .truncationMode(.middle)
                         }
                         Spacer()
                         if selectedMintUrl == mint.url {
@@ -1657,21 +1657,30 @@ struct MintPickerSheet: View {
                                 .foregroundStyle(Color.accentColor)
                         }
                     }
+                    .contentShape(Rectangle())
                 }
+                .listRowSeparator(.hidden)
+                .listRowBackground(Color.clear)
+                .buttonStyle(.plain)
             }
-            .navigationTitle("Select Mint")
+            .listStyle(.plain)
+            .scrollContentBackground(.hidden)
+            .background(Color.clear)
+            .navigationTitle(title)
             .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") { dismiss() }
-                }
-            }
         }
+        .compactBottomSheetSurface()
+        .presentationDetents([.medium, .large])
     }
 }
 
 // MARK: - Import Nsec Sheet
 
+/// Imports a custom Nostr key on the same content-fit sheet recipe as
+/// `BackupView` and `PrivateKeyRevealSheet`: in-content title, secondary copy,
+/// one primary CTA, dismissed by drag. Two faces on one sheet — entry and the
+/// replace-key confirmation — cross-fade while the sheet resizes between them,
+/// instead of stacking an alert on top of the sheet.
 struct ImportNsecSheet: View {
     @Binding var nsecText: String
     let replacementWarning: String
@@ -1679,85 +1688,171 @@ struct ImportNsecSheet: View {
     /// a decode failure visible instead of leaving it on the screen behind us.
     let onImport: () -> String?
 
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.dismiss) private var dismiss
     @State private var errorMessage: String?
-    @State private var showReplacementConfirm = false
+    @State private var step: Step = .entry
+    @State private var contentHeight: CGFloat = 0
+    @FocusState private var fieldFocused: Bool
+
+    private enum Step: Hashable { case entry, confirm, success }
 
     private var canImport: Bool {
         !nsecText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
     var body: some View {
-        NavigationStack {
-            ScrollView {
-                LazyVStack(spacing: 0) {
-                    SettingsSectionGroup("Nostr private key") {
-                        HStack(spacing: 10) {
-                            TextField("nsec1…", text: $nsecText)
-                                .font(.system(.body, design: .monospaced))
-                                .textInputAutocapitalization(.never)
-                                .autocorrectionDisabled()
-                                .onSubmit(review)
+        VStack(spacing: 24) {
+            switch step {
+            case .entry: entryFace
+            case .confirm: confirmFace
+            case .success: successFace
+            }
+        }
+        .padding(.horizontal, 24)
+        .padding(.vertical, 20)
+        .contentFitMeasured { contentHeight = $0 }
+        .contentFitDetent(
+            contentHeight,
+            estimate: 300,
+            navigationBar: false,
+            step: [AnyHashable(step), AnyHashable(errorMessage)],
+            stepResize: .milliseconds(300)
+        )
+        .presentationDragIndicator(.visible)
+        .flatBottomSheetSurface()
+        .animation(reduceMotion ? nil : .snappy(duration: 0.25), value: step)
+        .animation(reduceMotion ? nil : .snappy(duration: 0.25), value: errorMessage)
+    }
 
-                            Button(action: pasteFromClipboard) {
-                                Image(systemName: "doc.on.clipboard")
-                                    .font(.title3)
-                                    .foregroundStyle(Color.primary)
-                            }
-                            .buttonStyle(.plain)
-                            .accessibilityLabel("Paste from clipboard")
+    @ViewBuilder private var entryFace: some View {
+        Group {
+            Text("Import Key")
+                .font(.title2.weight(.semibold))
+
+            Text("Enter your nsec (Nostr private key) to use it for your Lightning address.")
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+
+            VStack(spacing: 12) {
+                // Field and action row copy the Add Mint form: a clear affordance
+                // in the field, Paste as the secondary button beside the CTA.
+                HStack(spacing: 10) {
+                    TextField("nsec1…", text: $nsecText)
+                        .font(.system(.body, design: .monospaced))
+                        .accessibilityLabel("Nostr private key")
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled()
+                        .focused($fieldFocused)
+                        .onSubmit(review)
+                        .onChange(of: nsecText) {
+                            if errorMessage != nil { errorMessage = nil }
                         }
-                        .padding(14)
-                        .liquidGlass(in: RoundedRectangle(cornerRadius: 14))
-                    }
 
-                    if let errorMessage {
-                        InlineNotice(message: errorMessage, severity: .error)
-                            .padding(.horizontal, 6)
-                            .padding(.top, 4)
-                            .transition(.opacity)
+                    if !nsecText.isEmpty {
+                        Button {
+                            nsecText = ""
+                            errorMessage = nil
+                        } label: {
+                            Image(systemName: "xmark.circle.fill")
+                                .font(.body)
+                                .foregroundStyle(.secondary)
+                        }
+                        .buttonStyle(.borderless)
+                        .accessibilityLabel("Clear")
                     }
-
-                    SettingsSectionFooter {
-                        Text("Enter your nsec (Nostr private key) to use it for your Lightning address.")
-                    }
-
-                    Button("Review Import", action: review)
-                        .glassButton()
-                        .disabled(!canImport)
-                        .padding(.top, 8)
                 }
-                .padding(.horizontal)
-                .padding(.bottom, 32)
+                .animation(.smooth(duration: 0.2), value: nsecText.isEmpty)
+                .padding(.horizontal, 16)
+                .padding(.vertical, 14)
+                .background(.quaternary.opacity(0.5), in: RoundedRectangle(cornerRadius: 12))
+
+                if let errorMessage {
+                    InlineNotice(message: errorMessage, severity: .error)
+                        .transition(.opacity)
+                }
             }
-            .animation(.easeInOut(duration: 0.2), value: errorMessage)
-            .navigationTitle("Import Key")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbarBackground(.hidden, for: .navigationBar)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") { dismiss() }
-                }
+
+            HStack(spacing: 12) {
+                Button("Paste", action: pasteFromClipboard)
+                    .flatSheetSecondaryButton()
+                    .accessibilityHint("Pastes an nsec key from the clipboard")
+
+                Button("Review Import", action: review)
+                    .glassButton()
+                    .disabled(!canImport)
             }
         }
-        .alert("Replace Nostr Key?", isPresented: $showReplacementConfirm) {
-            Button("Cancel", role: .cancel) {}
-            Button("Import", role: .destructive) { errorMessage = onImport() }
-        } message: {
+        .transition(.opacity)
+    }
+
+    @ViewBuilder private var confirmFace: some View {
+        Group {
+            Text("Replace Nostr Key?")
+                .font(.title2.weight(.semibold))
+
             Text(replacementWarning)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+
+            HStack(spacing: 12) {
+                Button("Cancel") { step = .entry }
+                    .flatSheetSecondaryButton()
+
+                Button("Import", action: confirmImport)
+                    .glassButton()
+            }
         }
+        .transition(.opacity)
+    }
+
+    @ViewBuilder private var successFace: some View {
+        Group {
+            Text("Key Imported")
+                .font(.title2.weight(.semibold))
+
+            Image(systemName: "checkmark.circle.fill")
+                .font(.statusGlyph)
+                .foregroundStyle(ErrorSeverity.success.foreground)
+                .accessibilityLabel("Success")
+
+            Text("Your Nostr key was replaced with the imported key. Your Lightning address and npub.cash now come from this key.")
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+
+            Button("Done") { dismiss() }
+                .flatSheetSecondaryButton()
+        }
+        .transition(.opacity)
     }
 
     private func pasteFromClipboard() {
-        if let text = UIPasteboard.general.string {
-            nsecText = text.trimmingCharacters(in: .whitespacesAndNewlines)
-            errorMessage = nil
+        guard let text = UIPasteboard.general.string,
+              !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            errorMessage = "Clipboard is empty."
+            return
         }
+        nsecText = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        errorMessage = nil
     }
 
     private func review() {
-        guard canImport else { return }
-        if validateNsec() { showReplacementConfirm = true }
+        guard canImport, validateNsec() else { return }
+        // Resign concurrently with the face swap — sequencing behind the
+        // keyboard leaves the morph waiting on keyboard-blind geometry.
+        fieldFocused = false
+        step = .confirm
+    }
+
+    private func confirmImport() {
+        if let failure = onImport() {
+            // Import failed: morph back to the entry face with the error
+            // inline, where the field is available to fix it.
+            errorMessage = failure
+            step = .entry
+        } else {
+            step = .success
+        }
     }
 
     private func validateNsec() -> Bool {

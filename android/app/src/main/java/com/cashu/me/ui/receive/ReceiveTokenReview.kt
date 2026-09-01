@@ -3,11 +3,7 @@ package com.cashu.me.ui.receive
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.AccountBalance
 import androidx.compose.material.icons.outlined.CheckCircle
-import androidx.compose.material.icons.outlined.Lock
-import androidx.compose.material.icons.outlined.Payments
-import androidx.compose.material.icons.outlined.Receipt
 import androidx.compose.material.icons.outlined.WarningAmber
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
@@ -273,6 +269,8 @@ internal fun TokenInspectorRows(
     info: TokenInfo,
     fee: Long?,
     p2pkLock: P2PKLockState?,
+    formatter: AmountFormatter,
+    useBitcoinSymbol: Boolean,
     modifier: Modifier = Modifier,
 ) {
     val isSatToken = info.unit.equals("sat", ignoreCase = true)
@@ -286,30 +284,27 @@ internal fun TokenInspectorRows(
                 // Prospective charge (docs/product/copy-guidance.md): a
                 // charge-absence phrase, never a bare "0 sat".
                 fee == 0L -> "No fee"
-                isSatToken -> "$fee sat"
+                isSatToken -> formatter.formatWalletSats(fee, useBitcoinSymbol)
                 else -> CurrencyAmount(fee, tokenCurrency).formatted()
             },
-            leadingIcon = Icons.Outlined.Receipt,
             loading = fee == null,
         )
         InspectorRow(
             label = "Mint",
             value = info.mint,
-            leadingIcon = Icons.Outlined.AccountBalance,
         )
         lockPresentation?.let { lock ->
             lock.targetLabels.forEachIndexed { index, target ->
                 InspectorRow(
                     label = if (index == 0) "Locked to" else "Also locked to",
                     value = target,
-                    leadingIcon = Icons.Outlined.Lock,
                     valueMonospaced = true,
                 )
             }
             val statusColor = if (lock.claimable) {
-                CashuTheme.colors.received
+                CashuTheme.colors.onReceivedContainer
             } else {
-                CashuTheme.colors.pending
+                CashuTheme.colors.onPendingContainer
             }
             InspectorRow(
                 label = "Status",
@@ -395,20 +390,17 @@ internal fun TokenClaimTerminal(
                 InspectorRow(
                     label = "Amount",
                     value = formatted(data.amount),
-                    leadingIcon = Icons.Outlined.Payments,
                 )
                 if (data.fee > 0L) {
                     InspectorRow(
                         label = "Fee",
                         value = formatted(data.fee),
-                        leadingIcon = Icons.Outlined.Receipt,
                     )
                 }
                 if (data.mint.isNotEmpty()) {
                     InspectorRow(
                         label = "Mint",
                         value = data.mint,
-                        leadingIcon = Icons.Outlined.AccountBalance,
                     )
                 }
             }

@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		323A00000000000000000001 /* PriceServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 323A00000000000000000002 /* PriceServiceTests.swift */; };
 		1100000000000001 /* CashuWalletApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2100000000000001 /* CashuWalletApp.swift */; };
 		1100000000000002 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2100000000000002 /* ContentView.swift */; };
 		1100000000000004 /* WalletManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2100000000000004 /* WalletManager.swift */; };
@@ -41,6 +42,7 @@
 		6AF1E1D02F310A010058C21B /* AsciiField.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6AF1E1D12F310A010058C21B /* AsciiField.swift */; };
 		6A8EC9462F257FFB0058C21B /* AnimatedBalanceView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6A8EC9442F257FFB0058C21B /* AnimatedBalanceView.swift */; };
 		6A8EC9472F257FFB0058C21B /* AmountEntryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6A8EC9432F257FFB0058C21B /* AmountEntryView.swift */; };
+		AB00000000000061 /* MintSelectorRow.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB00000000000060 /* MintSelectorRow.swift */; };
 		6A8EC9482F2580000058C21B /* TransactionIcon.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6A8EC9492F2580000058C21B /* TransactionIcon.swift */; };
 		6A8EC94A2F2590000058C21B /* PriceService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6A8EC94B2F2590000058C21B /* PriceService.swift */; };
 		6A8EC94C2F25A0000058C21B /* NostrService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6A8EC94D2F25A0000058C21B /* NostrService.swift */; };
@@ -72,7 +74,9 @@
 		AB00000000000051 /* CashuRequestAmountColumn.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB00000000000053 /* CashuRequestAmountColumn.swift */; };
 		AV00000000000001 /* AppVersion.swift in Sources */ = {isa = PBXBuildFile; fileRef = AV00000000000011 /* AppVersion.swift */; };
 		AV00000000000002 /* AppVersionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AV00000000000012 /* AppVersionTests.swift */; };
+		MW00000000000001 /* MeltSettlementWaitTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = MW00000000000011 /* MeltSettlementWaitTests.swift */; };
 		TG00000000000002 /* TypographyGuardTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = TG00000000000012 /* TypographyGuardTests.swift */; };
+		WE00000000000002 /* WalletErrorMessageTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = WE00000000000012 /* WalletErrorMessageTests.swift */; };
 		SE00000000000003 /* SeedPhraseEntryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = SE00000000000013 /* SeedPhraseEntryTests.swift */; };
 		B1790D26812303E8F31BC782 /* AmountLockup.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4F131731BE27EACCD69C8AFA /* AmountLockup.swift */; };
 		BB00000000000001 /* MintService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000011 /* MintService.swift */; };
@@ -90,6 +94,8 @@
 		CC00000000000007 /* AdvancedSettingsSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC00000000000017 /* AdvancedSettingsSection.swift */; };
 		CC00000000000008 /* LightningAddressSettingsSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC00000000000018 /* LightningAddressSettingsSection.swift */; };
 		CC00000000000020 /* PressableButtonStyle.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC00000000000021 /* PressableButtonStyle.swift */; };
+		MA00000000000001 /* MethodActionRow.swift in Sources */ = {isa = PBXBuildFile; fileRef = MA00000000000011 /* MethodActionRow.swift */; };
+		MA00000000000002 /* MethodActionRowButtonStyle.swift in Sources */ = {isa = PBXBuildFile; fileRef = MA00000000000012 /* MethodActionRowButtonStyle.swift */; };
 		CC000000000000A1 /* NWCManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC000000000000A2 /* NWCManager.swift */; };
 		CC000000000000B1 /* NWCSettingsSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC000000000000B2 /* NWCSettingsSection.swift */; };
 		D200000000000101 /* WalletManager+Lifecycle.swift in Sources */ = {isa = PBXBuildFile; fileRef = D100000000000101 /* WalletManager+Lifecycle.swift */; };
@@ -184,6 +190,7 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
+		323A00000000000000000002 /* PriceServiceTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = PriceServiceTests.swift; path = CashuWalletTests/PriceServiceTests.swift; sourceTree = "<group>"; };
 		0100000000000001 /* CashuWallet.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = CashuWallet.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		2100000000000001 /* CashuWalletApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CashuWalletApp.swift; sourceTree = "<group>"; };
 		2100000000000002 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
@@ -220,6 +227,7 @@
 		6A8EC9422F257FFB0058C21B /* ActivityOrbView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActivityOrbView.swift; sourceTree = "<group>"; };
 		6AF1E1D12F310A010058C21B /* AsciiField.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AsciiField.swift; sourceTree = "<group>"; };
 		6A8EC9432F257FFB0058C21B /* AmountEntryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AmountEntryView.swift; sourceTree = "<group>"; };
+		AB00000000000060 /* MintSelectorRow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MintSelectorRow.swift; sourceTree = "<group>"; };
 		6A8EC9492F2580000058C21B /* TransactionIcon.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TransactionIcon.swift; sourceTree = "<group>"; };
 		6A8EC94B2F2590000058C21B /* PriceService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PriceService.swift; sourceTree = "<group>"; };
 		6A8EC94D2F25A0000058C21B /* NostrService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NostrService.swift; sourceTree = "<group>"; };
@@ -248,7 +256,9 @@
 		AC0000000000000C /* NostrMintBackupService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NostrMintBackupService.swift; sourceTree = "<group>"; };
 		AV00000000000011 /* AppVersion.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppVersion.swift; sourceTree = "<group>"; };
 		AV00000000000012 /* AppVersionTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = AppVersionTests.swift; path = CashuWalletTests/AppVersionTests.swift; sourceTree = "<group>"; };
+		MW00000000000011 /* MeltSettlementWaitTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = MeltSettlementWaitTests.swift; path = CashuWalletTests/MeltSettlementWaitTests.swift; sourceTree = "<group>"; };
 		TG00000000000012 /* TypographyGuardTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = TypographyGuardTests.swift; path = CashuWalletTests/TypographyGuardTests.swift; sourceTree = "<group>"; };
+		WE00000000000012 /* WalletErrorMessageTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = WalletErrorMessageTests.swift; path = CashuWalletTests/WalletErrorMessageTests.swift; sourceTree = "<group>"; };
 		SE00000000000013 /* SeedPhraseEntryTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = SeedPhraseEntryTests.swift; path = CashuWalletTests/SeedPhraseEntryTests.swift; sourceTree = "<group>"; };
 		BB00000000000011 /* MintService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MintService.swift; sourceTree = "<group>"; };
 		BB00000000000012 /* TransactionService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TransactionService.swift; sourceTree = "<group>"; };
@@ -263,6 +273,8 @@
 		CC00000000000017 /* AdvancedSettingsSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AdvancedSettingsSection.swift; sourceTree = "<group>"; };
 		CC00000000000018 /* LightningAddressSettingsSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LightningAddressSettingsSection.swift; sourceTree = "<group>"; };
 		CC00000000000021 /* PressableButtonStyle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PressableButtonStyle.swift; sourceTree = "<group>"; };
+		MA00000000000011 /* MethodActionRow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MethodActionRow.swift; sourceTree = "<group>"; };
+		MA00000000000012 /* MethodActionRowButtonStyle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MethodActionRowButtonStyle.swift; sourceTree = "<group>"; };
 		CC000000000000A2 /* NWCManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NWCManager.swift; sourceTree = "<group>"; };
 		CC000000000000B2 /* NWCSettingsSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NWCSettingsSection.swift; sourceTree = "<group>"; };
 		D100000000000101 /* WalletManager+Lifecycle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "WalletManager+Lifecycle.swift"; sourceTree = "<group>"; };
@@ -375,6 +387,7 @@
 		172BA94269E4241413C46309 /* CashuWalletTests */ = {
 			isa = PBXGroup;
 			children = (
+				323A00000000000000000002 /* PriceServiceTests.swift */,
 				F1CF8C0C2E1379BCD23CF8C6 /* IntegrationTestBase.swift */,
 				72DD529F60A8D9D1A81E3FBB /* NutshellIntegrationTests.swift */,
 				T1B0000000000001 /* InMemoryStorage.swift */,
@@ -395,9 +408,10 @@
 				T1B000000000000E /* CrashReportSanitizerTests.swift */,
 				T1B000000000000F /* HistorySearchTests.swift */,
 				AV00000000000012 /* AppVersionTests.swift */,
+				MW00000000000011 /* MeltSettlementWaitTests.swift */,
 				TG00000000000012 /* TypographyGuardTests.swift */,
+				WE00000000000012 /* WalletErrorMessageTests.swift */,
 				SE00000000000013 /* SeedPhraseEntryTests.swift */,
-				T1B000000000000F /* HistorySearchTests.swift */,
 				T1B0000000000010 /* WalletSurfaceCoordinatorTests.swift */,
 				T1B0000000000011 /* ScanRouterTests.swift */,
 				T1B0000000000012 /* AsciiFieldTerrainTests.swift */,
@@ -612,6 +626,7 @@
 				6A8EC9422F257FFB0058C21B /* ActivityOrbView.swift */,
 				6AF1E1D12F310A010058C21B /* AsciiField.swift */,
 				6A8EC9432F257FFB0058C21B /* AmountEntryView.swift */,
+				AB00000000000060 /* MintSelectorRow.swift */,
 				6A8EC9492F2580000058C21B /* TransactionIcon.swift */,
 				6A8EC9332F244BD80058C21B /* ScannerWrapperView.swift */,
 				2100000000000010 /* QRCodeView.swift */,
@@ -619,6 +634,8 @@
 				3DC08FE85DFC643906176894 /* LiquidGlassModifiers.swift */,
 				21000000000000CF /* MintMethodIcons.swift */,
 				CC00000000000021 /* PressableButtonStyle.swift */,
+				MA00000000000011 /* MethodActionRow.swift */,
+				MA00000000000012 /* MethodActionRowButtonStyle.swift */,
 				AB00000000000052 /* TransactionAmountColumn.swift */,
 				AB00000000000053 /* CashuRequestAmountColumn.swift */,
 			);
@@ -957,6 +974,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				323A00000000000000000001 /* PriceServiceTests.swift in Sources */,
 				BF36C01CE0AB810E1B462448 /* IntegrationTestBase.swift in Sources */,
 				349E3802577110813AC1A9E3 /* NutshellIntegrationTests.swift in Sources */,
 				T2B0000000000001 /* InMemoryStorage.swift in Sources */,
@@ -977,9 +995,10 @@
 				T2B000000000000E /* CrashReportSanitizerTests.swift in Sources */,
 				T2B000000000000F /* HistorySearchTests.swift in Sources */,
 				AV00000000000002 /* AppVersionTests.swift in Sources */,
+				MW00000000000001 /* MeltSettlementWaitTests.swift in Sources */,
 				TG00000000000002 /* TypographyGuardTests.swift in Sources */,
+				WE00000000000002 /* WalletErrorMessageTests.swift in Sources */,
 				SE00000000000003 /* SeedPhraseEntryTests.swift in Sources */,
-				T2B000000000000F /* HistorySearchTests.swift in Sources */,
 				T2B0000000000010 /* WalletSurfaceCoordinatorTests.swift in Sources */,
 				T2B0000000000011 /* ScanRouterTests.swift in Sources */,
 				T2B0000000000012 /* AsciiFieldTerrainTests.swift in Sources */,
@@ -1035,6 +1054,7 @@
 				6AF1E1D02F310A010058C21B /* AsciiField.swift in Sources */,
 				6A8EC9462F257FFB0058C21B /* AnimatedBalanceView.swift in Sources */,
 				6A8EC9472F257FFB0058C21B /* AmountEntryView.swift in Sources */,
+				AB00000000000061 /* MintSelectorRow.swift in Sources */,
 				110000000000000A /* ReceiveLightningView.swift in Sources */,
 				110000000000000B /* SendView.swift in Sources */,
 				110000000000000C /* MintsListView.swift in Sources */,
@@ -1070,6 +1090,8 @@
 				CC00000000000006 /* PrivacySettingsSection.swift in Sources */,
 				CC00000000000007 /* AdvancedSettingsSection.swift in Sources */,
 				CC00000000000020 /* PressableButtonStyle.swift in Sources */,
+				MA00000000000001 /* MethodActionRow.swift in Sources */,
+				MA00000000000002 /* MethodActionRowButtonStyle.swift in Sources */,
 				AB00000000000050 /* TransactionAmountColumn.swift in Sources */,
 				AB00000000000051 /* CashuRequestAmountColumn.swift in Sources */,
 				CC00000000000008 /* LightningAddressSettingsSection.swift in Sources */,
@@ -1459,7 +1481,7 @@
 			repositoryURL = "https://github.com/cashubtc/cdk-swift";
 			requirement = {
 				kind = exactVersion;
-				version = "0.18.0-rc.0";
+				version = "0.18.0-rc.1";
 			};
 		};
 		AACC000000000001 /* XCRemoteSwiftPackageReference "sentry-cocoa" */ = {

@@ -95,6 +95,7 @@ fun HistoryScreen(
     priceService: PriceService,
     cashuRequestStore: CashuRequestStore,
     onOpenTransaction: (WalletTransaction) -> Unit,
+    onClaimReceiveToken: (String) -> Unit,
     onOpenCashuRequest: (CashuRequest) -> Unit,
     contentPadding: PaddingValues,
 ) {
@@ -111,6 +112,7 @@ fun HistoryScreen(
     var query by remember { mutableStateOf("") }
     var refreshing by remember { mutableStateOf(false) }
     var requestPendingDelete by remember { mutableStateOf<CashuRequest?>(null) }
+    var receiveTokenPendingDelete by remember { mutableStateOf<WalletTransaction?>(null) }
     val searchFocusRequester = remember { FocusRequester() }
     val keyboardController = LocalSoftwareKeyboardController.current
 
@@ -299,7 +301,7 @@ fun HistoryScreen(
                                         val amountDisplay = formatter.displayMintUnitAmount(
                                             amount = tx.amount,
                                             unit = tx.unit,
-                                            preferredPrimary = settings.amountDisplayPrimary,
+                                            preferredPrimary = settings.homeBalancePrimary,
                                             showFiat = settings.showFiatBalance,
                                             btcPrice = priceState.btcPrice,
                                             currencyCode = settings.bitcoinPriceCurrency,
@@ -313,7 +315,25 @@ fun HistoryScreen(
                                                 primaryAmount = amountDisplay.primary,
                                                 secondaryAmount = amountDisplay.secondary,
                                             ),
-                                            onClick = { onOpenTransaction(tx) },
+                                            onClick = {
+                                                val pending = walletState.pendingReceiveTokens
+                                                    .firstOrNull { it.tokenId == tx.id }
+                                                if (tx.isPendingReceiveToken && pending != null) {
+                                                    onClaimReceiveToken(pending.token)
+                                                } else {
+                                                    onOpenTransaction(tx)
+                                                }
+                                            },
+                                            onLongClick = if (tx.isPendingReceiveToken) {
+                                                { receiveTokenPendingDelete = tx }
+                                            } else {
+                                                null
+                                            },
+                                            onLongClickLabel = if (tx.isPendingReceiveToken) {
+                                                "Remove unclaimed ecash"
+                                            } else {
+                                                null
+                                            },
                                             modifier = Modifier.testTag(
                                                 UiTestTags.transactionRow(tx.id),
                                             ),
@@ -323,7 +343,7 @@ fun HistoryScreen(
                                         val amountDisplay = requestRowDisplay(
                                             request = item.request,
                                             formatter = formatter,
-                                            preferredPrimary = settings.amountDisplayPrimary,
+                                            preferredPrimary = settings.homeBalancePrimary,
                                             showFiat = settings.showFiatBalance,
                                             btcPrice = priceState.btcPrice,
                                             currencyCode = settings.bitcoinPriceCurrency,
@@ -368,6 +388,33 @@ fun HistoryScreen(
             },
             dismissButton = {
                 TextButton(onClick = { requestPendingDelete = null }) { Text("Cancel") }
+            },
+        )
+    }
+
+    receiveTokenPendingDelete?.let { transaction ->
+        AlertDialog(
+            onDismissRequest = { receiveTokenPendingDelete = null },
+            title = { Text("Remove this unclaimed ecash?") },
+            text = {
+                Text(
+                    "This ecash hasn't been claimed. Removing it discards the token. Only the sender can re-issue it.",
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    walletManager.removePendingReceiveToken(transaction.id)
+                    receiveTokenPendingDelete = null
+                    scope.launch { walletManager.loadTransactions() }
+                }) {
+                    Text("Remove", color = MaterialTheme.colorScheme.error)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { receiveTokenPendingDelete = null }) {
+                    Text("Cancel")
+                }
             },
         )
     }

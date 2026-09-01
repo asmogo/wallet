@@ -4,15 +4,56 @@ import UIKit
 // MARK: - Liquid Glass Adaptive Modifiers
 // iOS 26+ Liquid Glass with graceful fallbacks for earlier versions.
 
+extension EnvironmentValues {
+    /// Identifies the presentation surface shared controls are rendered on.
+    /// Compact sheets use an explicit tonal hierarchy; large flat sheets retain
+    /// their existing semantic fills, and the wallet canvas keeps Liquid Glass.
+    @Entry var bottomSheetSurfaceStyle: BottomSheetSurfaceStyle = .glass
+}
+
+enum BottomSheetSurfaceStyle {
+    case glass
+    case flat
+    case compact
+}
+
+/// Disabled control pair (fill / content), mirroring Android's M3 disabled
+/// tokens (onSurface at 12% / 38%). A deliberate grey pair, not a translucency
+/// wash of the enabled colors — dimming inverse ink over a dark sheet
+/// collapsed the fill and label into nearly the same grey.
+enum DisabledControlOpacity {
+    static let fill: Double = 0.12
+    static let content: Double = 0.38
+
+    /// Disabled fill for controls whose *enabled* state is already a quiet
+    /// translucency rather than inverse ink. `fill` (0.12) demotes solid ink,
+    /// but it sits above the secondary button's enabled 0.11 — reusing it there
+    /// made a disabled control brighter than an active one. This stays below.
+    static let secondaryFill: Double = 0.06
+}
+
+enum CompactSheetPalette {
+    static func sheet(for colorScheme: ColorScheme) -> Color {
+        colorScheme == .dark
+            ? Color(red: 20 / 255, green: 20 / 255, blue: 20 / 255)
+            : Color(red: 247 / 255, green: 247 / 255, blue: 247 / 255)
+    }
+
+    static func control(for colorScheme: ColorScheme) -> Color {
+        colorScheme == .dark
+            ? Color(red: 28 / 255, green: 28 / 255, blue: 28 / 255)
+            : Color(red: 237 / 255, green: 237 / 255, blue: 237 / 255)
+    }
+
+    static func iconInset(for colorScheme: ColorScheme) -> Color {
+        colorScheme == .dark ? .black : .white
+    }
+}
+
 extension View {
     /// Applies Liquid Glass on iOS 26+; falls back to `.quaternary` background.
-    @ViewBuilder
     func liquidGlass<S: InsettableShape>(in shape: S, interactive: Bool = false) -> some View {
-        if #available(iOS 26, *) {
-            self.glassEffect(interactive ? .regular.interactive() : .regular, in: shape)
-        } else {
-            self.background(.quaternary, in: shape)
-        }
+        modifier(AdaptiveGlassSurface(shape: shape, interactive: interactive))
     }
 
     /// Liquid Glass treatment for text-entry containers. The semantic separator
@@ -29,24 +70,29 @@ extension View {
     }
 
     /// Applies Liquid Glass on iOS 26+; falls back to the given material.
-    @ViewBuilder
     func liquidGlassMaterial<S: InsettableShape>(in shape: S, material: Material = .ultraThinMaterial) -> some View {
-        if #available(iOS 26, *) {
-            self.glassEffect(.regular, in: shape)
-        } else {
-            self.background(material, in: shape)
-        }
+        modifier(AdaptiveGlassSurface(shape: shape, interactive: false, fallbackMaterial: material))
     }
 
-    /// Full-width Liquid Glass capsule. Used for all primary CTAs in the app.
-    /// Matches the home-screen action row (Receive / Scan / Send) — neutral
-    /// glass with a primary-color label, readable in both light and dark mode.
+    /// Full-width CTA capsule. Outside a flat bottom sheet it matches the
+    /// home-screen's neutral Liquid Glass action; inside one it becomes a
+    /// solid inverse-ink primary action.
     ///
     /// Pass `prominent: true` for the inverted-ink fill (black in light / white
     /// in dark) used by the enabled primary action — matches Android
     /// `PrimaryButton`.
-    func glassButton(prominent: Bool = false) -> some View {
-        self.buttonStyle(FullWidthCapsuleButtonStyle(prominent: prominent))
+    ///
+    /// Pass `destructive: true` for a solid system-red fill with a white label —
+    /// the commit button of a confirm sheet whose action destroys something
+    /// (key reset). Matches Android's error-colored confirm.
+    func glassButton(prominent: Bool = false, destructive: Bool = false) -> some View {
+        self.buttonStyle(FullWidthCapsuleButtonStyle(prominent: prominent, destructive: destructive))
+    }
+
+    /// A quiet, filled action for the secondary slot beside a sheet's single
+    /// primary CTA (for example, Add Mint's Paste action).
+    func flatSheetSecondaryButton() -> some View {
+        self.buttonStyle(FlatSheetSecondaryButtonStyle())
     }
 
     /// Canonical borderless text-link button for tertiary actions
@@ -54,6 +100,15 @@ extension View {
     /// text-link vocabulary in the app — see `TextLinkButtonStyle`.
     func textLinkButton() -> some View {
         self.buttonStyle(TextLinkButtonStyle())
+    }
+
+    /// The tertiary action sitting directly beneath a full-width CTA
+    /// ("Receive Later", the onboarding chassis' skip slot). It carries the
+    /// capsule's own label type, so the pair differs by fill and ink alone and
+    /// never by type — see `CtaStackTextLinkButtonStyle`. Inline links keep
+    /// `textLinkButton()`.
+    func ctaStackTextLinkButton() -> some View {
+        self.buttonStyle(CtaStackTextLinkButtonStyle())
     }
 
     /// Make a presented sheet/cover read as the same flat canvas as the home
@@ -73,6 +128,26 @@ extension View {
     /// behind it in dark mode, leaving only a rounded corner to separate them.
     func canvasSheetBackground(whenFillingScreen fillsScreen: Bool) -> some View {
         modifier(ConditionalCanvasSheetBackground(fillsScreen: fillsScreen))
+    }
+
+    /// Gives an app-designed bottom sheet the same opaque, adaptive surface as
+    /// the mint selector. The environment flag also converts shared glass
+    /// controls contained by this presentation into quiet semantic fills.
+    func flatBottomSheetSurface() -> some View {
+        self
+            .environment(\.bottomSheetSurfaceStyle, .flat)
+            .presentationBackground(Color(uiColor: .systemBackground))
+    }
+
+    /// Opaque, elevated surface for content-fit and fixed-height sheets. The
+    /// perimeter catches a restrained amount of light without replacing the
+    /// native sheet's shape, detents, dimming, or gesture behavior.
+    func compactBottomSheetSurface() -> some View {
+        self
+            .environment(\.bottomSheetSurfaceStyle, .compact)
+            .presentationBackground {
+                CompactSheetBackground()
+            }
     }
 
     /// One-shot, opacity-only fade for a full screen's content on entry. Plays
@@ -174,6 +249,79 @@ extension View {
         }
     }
 
+}
+
+/// Shared implementation for the legacy glass modifiers. Bottom sheets opt
+/// into an opaque surface vocabulary through the environment; all other views
+/// retain their existing iOS 26 Liquid Glass behavior and earlier-OS fallback.
+private struct AdaptiveGlassSurface<S: InsettableShape>: ViewModifier {
+    @Environment(\.bottomSheetSurfaceStyle) private var bottomSheetSurfaceStyle
+    @Environment(\.colorScheme) private var colorScheme
+
+    let shape: S
+    let interactive: Bool
+    var fallbackMaterial: Material?
+
+    @ViewBuilder
+    func body(content: Content) -> some View {
+        if bottomSheetSurfaceStyle == .compact {
+            content.background(CompactSheetPalette.control(for: colorScheme), in: shape)
+        } else if bottomSheetSurfaceStyle == .flat {
+            content.background(Color.primary.opacity(0.11), in: shape)
+        } else if #available(iOS 26, *) {
+            content.glassEffect(interactive ? .regular.interactive() : .regular, in: shape)
+        } else if let fallbackMaterial {
+            content.background(fallbackMaterial, in: shape)
+        } else {
+            content.background(.quaternary, in: shape)
+        }
+    }
+}
+
+struct CompactSheetBackground: View {
+    @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.colorSchemeContrast) private var colorSchemeContrast
+
+    private var rimMultiplier: Double {
+        colorSchemeContrast == .increased ? 1.35 : 1
+    }
+
+    private var rimColor: Color {
+        colorScheme == .dark ? .white : .black
+    }
+
+    private var rimOpacities: (top: Double, middle: Double, bottom: Double) {
+        colorScheme == .dark ? (0.24, 0.10, 0.04) : (0.16, 0.07, 0.03)
+    }
+
+    var body: some View {
+        CompactSheetPalette.sheet(for: colorScheme)
+            .overlay {
+                ContainerRelativeShape()
+                    .strokeBorder(
+                        LinearGradient(
+                            stops: [
+                                .init(
+                                    color: rimColor.opacity(min(rimOpacities.top * rimMultiplier, 1)),
+                                    location: 0
+                                ),
+                                .init(
+                                    color: rimColor.opacity(min(rimOpacities.middle * rimMultiplier, 1)),
+                                    location: 0.45
+                                ),
+                                .init(
+                                    color: rimColor.opacity(min(rimOpacities.bottom * rimMultiplier, 1)),
+                                    location: 1
+                                ),
+                            ],
+                            startPoint: .top,
+                            endPoint: .bottom
+                        ),
+                        lineWidth: colorSchemeContrast == .increased ? 1 : 0.5
+                    )
+                    .allowsHitTesting(false)
+            }
+    }
 }
 
 // MARK: - Scroll Edge Fade
@@ -719,9 +867,9 @@ struct SettingsSectionFooter<Content: View>: View {
 // MARK: - Full Width Capsule Button Style
 
 /// Full-width capsule rendered as subtly-frosted Liquid Glass on iOS 26+,
-/// with a `.quaternary` fill fallback on iOS 18–25. The 15% primary-color
-/// tint keeps the surface visible even when sitting over an empty dark
-/// canvas (where untinted `.regular` glass would nearly disappear).
+/// with a `.quaternary` fill fallback on iOS 18–25. In a flat bottom sheet,
+/// the same control becomes opaque inverse ink so its commit action remains
+/// unmistakable against the quiet sheet surface.
 ///
 /// `prominent` swaps to inverted ink — pure black fill / white label in light
 /// mode, pure white fill / black label in dark — matching Android
@@ -729,46 +877,128 @@ struct SettingsSectionFooter<Content: View>: View {
 /// `systemBackground`) so sheets don't resolve to elevated greys.
 struct FullWidthCapsuleButtonStyle: ButtonStyle {
     var prominent: Bool = false
+    /// Solid system-red fill + white label in every scheme — the destructive
+    /// confirm. Disabled still falls to the neutral grey pair.
+    var destructive: Bool = false
     @Environment(\.isEnabled) private var isEnabled
     @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.bottomSheetSurfaceStyle) private var bottomSheetSurfaceStyle
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     func makeBody(configuration: Configuration) -> some View {
-        let ink = colorScheme == .dark ? Color.white : Color.black
-        let onInk = colorScheme == .dark ? Color.black : Color.white
+        let ink = destructive ? Color(.systemRed) : (colorScheme == .dark ? Color.white : Color.black)
+        let onInk = destructive ? Color.white : (colorScheme == .dark ? Color.black : Color.white)
+        let solid = prominent || destructive || bottomSheetSurfaceStyle != .glass
 
         let label = configuration.label
             .font(.body.weight(.semibold))
             .frame(maxWidth: .infinity)
             .padding(.vertical, 18)
-            .foregroundStyle(prominent ? onInk : Color.primary)
+            .foregroundStyle(
+                isEnabled
+                    ? (solid ? onInk : Color.primary)
+                    : Color.primary.opacity(DisabledControlOpacity.content)
+            )
             .contentShape(Capsule())
 
         return Group {
-            if prominent {
+            if !isEnabled {
+                // Disabled swaps to the grey pair regardless of surface — a
+                // dimmed inverse-ink or glass ghost reads muddier than a
+                // deliberate quiet fill with a muted label.
+                label.background(Color.primary.opacity(DisabledControlOpacity.fill), in: Capsule())
+            } else if solid {
                 label
                     .background(ink, in: Capsule())
-                    .scaleEffect(isEnabled && configuration.isPressed ? 0.97 : 1)
+                    .scaleEffect(!reduceMotion && configuration.isPressed ? 0.97 : 1)
             } else if #available(iOS 26, *) {
-                label.glassEffect(
-                    .regular.tint(Color.primary.opacity(0.15)).interactive(),
-                    in: Capsule()
-                )
+                if reduceMotion {
+                    label.glassEffect(
+                        .regular.tint(Color.primary.opacity(0.15)),
+                        in: Capsule()
+                    )
+                } else {
+                    label.glassEffect(
+                        .regular.tint(Color.primary.opacity(0.15)).interactive(),
+                        in: Capsule()
+                    )
+                }
             } else {
                 // iOS 26's `.interactive()` glass supplies its own press squish;
                 // the fallback surface gets a scale-on-press so the tactile
                 // feedback is at parity below iOS 26.
                 label.background(.quaternary, in: Capsule())
-                    .scaleEffect(isEnabled && configuration.isPressed ? 0.97 : 1)
+                    .scaleEffect(!reduceMotion && configuration.isPressed ? 0.97 : 1)
             }
         }
-        .opacity(isEnabled ? (configuration.isPressed ? 0.85 : 1) : 0.4)
+        .opacity(isEnabled && configuration.isPressed ? 0.85 : 1)
         // Asymmetric, matching PressableButtonStyle: feedback belongs on
         // touch-down and has to feel immediate, while the release is the system
         // responding and can settle.
         .animation(
-            .snappy(duration: configuration.isPressed ? 0.09 : 0.18),
+            reduceMotion
+                ? nil
+                : .snappy(duration: configuration.isPressed ? 0.09 : 0.18),
             value: configuration.isPressed
         )
+    }
+}
+
+/// Equal-weight secondary companion to the solid primary sheet CTA. This is
+/// intentionally opaque and quiet: sheets use it for a reversible helper
+/// action, never to compete with the committing action alongside it.
+struct FlatSheetSecondaryButtonStyle: ButtonStyle {
+    @Environment(\.isEnabled) private var isEnabled
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .font(.body.weight(.semibold))
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 18)
+            .foregroundStyle(
+                isEnabled ? Color.primary : Color.primary.opacity(DisabledControlOpacity.content)
+            )
+            .background(
+                Color.primary.opacity(isEnabled ? 0.11 : DisabledControlOpacity.secondaryFill),
+                in: Capsule()
+            )
+            .contentShape(Capsule())
+            .scaleEffect(isEnabled && !reduceMotion && configuration.isPressed ? 0.97 : 1)
+            .opacity(isEnabled && configuration.isPressed ? 0.85 : 1)
+            .animation(
+                reduceMotion
+                    ? nil
+                    : .snappy(duration: configuration.isPressed ? 0.09 : 0.18),
+                value: configuration.isPressed
+            )
+    }
+}
+
+/// Stable-geometry CTA content morph. The action label keeps the button's
+/// width while a system progress indicator resolves in over it. Semantics stay
+/// on the owning Button, whose accessibility label remains stable.
+struct LoadingButtonLabel: View {
+    let title: String
+    let isLoading: Bool
+
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    var body: some View {
+        ZStack {
+            Text(title)
+                .opacity(isLoading ? 0 : 1)
+                .blur(radius: !reduceMotion && isLoading ? 2 : 0)
+
+            ProgressView()
+                .opacity(isLoading ? 1 : 0)
+                .blur(radius: !reduceMotion && isLoading ? 0 : 2)
+        }
+        .animation(
+            reduceMotion ? .easeOut(duration: 0.15) : .smooth(duration: 0.26),
+            value: isLoading
+        )
+        .accessibilityHidden(true)
     }
 }
 
@@ -787,6 +1017,28 @@ struct TextLinkButtonStyle: ButtonStyle {
         configuration.label
             .font(.subheadline.weight(.medium))
             .foregroundStyle(.secondary)
+            .contentShape(Rectangle())
+            .opacity(isEnabled ? (configuration.isPressed ? 0.6 : 1) : 0.4)
+            .animation(
+                .snappy(duration: configuration.isPressed ? 0.09 : 0.18),
+                value: configuration.isPressed
+            )
+    }
+}
+
+/// A text link that reads as the CTA's sibling: same `.body.weight(.semibold)`
+/// as `FullWidthCapsuleButtonStyle`, separated from it by ink and the absent
+/// fill rather than by a second type size. Stacking a 15pt regular label under a
+/// 17pt semibold capsule made the pair look like two unrelated controls.
+struct CtaStackTextLinkButtonStyle: ButtonStyle {
+    @Environment(\.isEnabled) private var isEnabled
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .font(.body.weight(.semibold))
+            .foregroundStyle(.secondary)
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 18)
             .contentShape(Rectangle())
             .opacity(isEnabled ? (configuration.isPressed ? 0.6 : 1) : 0.4)
             .animation(

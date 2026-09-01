@@ -137,9 +137,9 @@ class MainActivityJourneyTest {
         robot.awaitTag(UiTestTags.WalletScreen)
             .tapText("Receive")
             .awaitTag(UiTestTags.ReceiveSheet)
-            .awaitText("Ecash requests and token scans still work without one.", substring = true)
-        compose.onNodeWithContentDescription("Bitcoin").assertIsNotEnabled()
-        robot.tapDescription("Ecash")
+            .awaitText("Mint needed")
+        compose.onNodeWithContentDescription("Bitcoin. Receive over Lightning or on-chain").assertIsNotEnabled()
+        robot.tapDescription("Ecash. Create a Cashu request")
             .awaitText("Any mint")
     }
 
@@ -150,7 +150,7 @@ class MainActivityJourneyTest {
         robot.awaitTag(UiTestTags.WalletScreen)
             .tapText("Receive")
             .awaitTag(UiTestTags.ReceiveSheet)
-            .tapDescription("Ecash")
+            .tapDescription("Ecash. Create a Cashu request")
             .awaitText("Any mint")
     }
 
@@ -161,7 +161,7 @@ class MainActivityJourneyTest {
         robot.awaitTag(UiTestTags.WalletScreen)
             .tapText("Receive")
             .awaitTag(UiTestTags.ReceiveSheet)
-            .tapDescription("Bitcoin")
+            .tapDescription("Bitcoin. Receive over Lightning or on-chain")
             .awaitTag(UiTestTags.ReceiveLightningScreen)
             .awaitDescription("Close")
             .awaitText("Create invoice")

@@ -1,6 +1,34 @@
 import Foundation
 import Cdk
 
+struct MintQuoteWalletContext: Equatable {
+    let mintURL: String
+    let unit: Cdk.CurrencyUnit
+}
+
+/// Keeps every operation on the wallet that owns the quote. Missing persisted
+/// context fails closed rather than guessing from mutable active-wallet state.
+enum MintQuoteContextPolicy {
+    static func context(for quote: MintQuote) -> MintQuoteWalletContext {
+        MintQuoteWalletContext(mintURL: quote.mintUrl.url, unit: quote.unit)
+    }
+
+    static func existingAmountlessOffer(
+        in quotes: [MintQuote],
+        requestedContext: MintQuoteWalletContext
+    ) -> MintQuote? {
+        quotes.first {
+            PaymentMethodKind.from($0.paymentMethod) == .bolt12
+                && $0.amount == nil
+                && context(for: $0) == requestedContext
+        }
+    }
+
+    static func walletContext(storedQuote: MintQuote?) -> MintQuoteWalletContext? {
+        storedQuote.map { context(for: $0) }
+    }
+}
+
 // MARK: - Lightning Service
 
 /// Service responsible for Lightning Network operations (NUT-04/NUT-05).
@@ -54,7 +82,7 @@ class LightningService: ObservableObject {
     /// - Parameter targetMintURL: mint the quote is created at. Defaults to the
     ///   active mint (existing callers). Pass an explicit URL to mint at a
     ///   specific mint — e.g. funding a freshly-added mint to pay a Cashu request.
-    ///   Only honored for the bolt11 path; onchain still uses the active mint.
+    ///   Honored for bolt11 and bolt12; onchain still uses the active mint.
     func createMintQuote(
         amount: UInt64?,
         method: PaymentMethodKind = .bolt11,
@@ -103,14 +131,20 @@ class LightningService: ObservableObject {
         return mintQuoteInfo(from: quote, fallbackAmount: amount, paymentMethod: method)
     }
 
-    /// Returns the first pending amountless BOLT12 offer stored in the DB, or nil if none exists.
-    /// Used to avoid creating a new offer on every visit to the Reusable Invoice screen.
-    func existingAmountlessOffer() async throws -> MintQuoteInfo? {
+    /// Returns the pending amountless BOLT12 offer for one mint and unit, or nil
+    /// if that wallet has none. Offers from another account must never be
+    /// reopened merely because they appeared first in the shared database.
+    func existingAmountlessOffer(
+        mintURL: String,
+        unit: Cdk.CurrencyUnit
+    ) async throws -> MintQuoteInfo? {
         guard let db = walletDatabase() else { return nil }
         let pendingQuotes = try await db.getUnissuedMintQuotes()
-        guard let match = pendingQuotes.first(where: {
-            PaymentMethodKind.from($0.paymentMethod) == .bolt12 && $0.amount == nil
-        }) else { return nil }
+        let requestedContext = MintQuoteWalletContext(mintURL: mintURL, unit: unit)
+        guard let match = MintQuoteContextPolicy.existingAmountlessOffer(
+            in: pendingQuotes,
+            requestedContext: requestedContext
+        ) else { return nil }
         return mintQuoteInfo(from: match, fallbackAmount: nil, paymentMethod: .bolt12)
     }
 
@@ -154,8 +188,11 @@ class LightningService: ObservableObject {
                 await persistMintQuoteIfNeeded(existingQuote, paymentMethod: .bolt12)
             }
 
-            // Poll through the quote's own unit wallet, not an assumed sat one.
-            let wallet = try await repo.getWallet(mintUrl: existingQuote.mintUrl, unit: existingQuote.unit)
+            let context = MintQuoteContextPolicy.context(for: existingQuote)
+            let wallet = try await repo.getWallet(
+                mintUrl: MintUrl(url: context.mintURL),
+                unit: context.unit
+            )
             let quote = try await wallet.checkMintQuote(quoteId: quoteId)
             let paymentMethod = PaymentMethodKind.from(quote.paymentMethod) ?? storedPaymentMethod ?? .bolt11
             let refreshedQuote = mintQuoteForLocalStorage(
@@ -171,16 +208,9 @@ class LightningService: ObservableObject {
             )
         }
 
-        guard let activeMint = getActiveMint() else {
-            throw WalletError.notInitialized
-        }
-
-        let mintUrl = MintUrl(url: activeMint.url)
-        let wallet = try await repo.getWallet(mintUrl: mintUrl, unit: .sat)
-        let quote = try await wallet.checkMintQuote(quoteId: quoteId)
-        let paymentMethod = PaymentMethodKind.from(quote.paymentMethod) ?? .bolt11
-        await persistMintQuote(quote, paymentMethod: paymentMethod)
-        return mintQuoteInfo(from: quote, fallbackAmount: nil, paymentMethod: paymentMethod)
+        throw WalletError.networkError(
+            "The mint context for this receive request is unavailable. Create a new request and try again."
+        )
     }
     
     /// Mint tokens after invoice is paid
@@ -206,7 +236,7 @@ class LightningService: ObservableObject {
         let mintUrl: MintUrl
         let amountSplitTarget: SplitTarget
         // Redeem into the quote's own unit wallet (also makes resuming a
-        // persisted non-sat quote correct). Defaults to sat when no stored quote.
+        // persisted non-sat quote correct). Never guess from the active wallet.
         let quoteUnit: Cdk.CurrencyUnit
 
         if let walletDatabase = walletDatabase(),
@@ -263,12 +293,10 @@ class LightningService: ObservableObject {
                     )
                 }
             }
-        } else if let activeMint = getActiveMint() {
-            mintUrl = MintUrl(url: activeMint.url)
-            amountSplitTarget = .none
-            quoteUnit = .sat
         } else {
-            throw WalletError.notInitialized
+            throw WalletError.networkError(
+                "The mint context for this receive request is unavailable. Create a new request and try again."
+            )
         }
 
         let wallet = try await repo.getWallet(mintUrl: mintUrl, unit: quoteUnit)
@@ -594,12 +622,27 @@ class LightningService: ObservableObject {
         quoteId: String,
         paymentMethod: PaymentMethodKind
     ) async throws -> ActiveSubscription? {
-        guard let repo = walletRepository(), let activeMint = getActiveMint() else {
+        guard let repo = walletRepository() else {
             throw WalletError.notInitialized
         }
 
-        let mintUrl = MintUrl(url: activeMint.url)
-        let wallet = try await repo.getWallet(mintUrl: mintUrl, unit: .sat)
+        let storedQuote: MintQuote?
+        if let database = walletDatabase() {
+            storedQuote = try await database.getMintQuote(quoteId: quoteId)
+        } else {
+            storedQuote = nil
+        }
+
+        guard let context = MintQuoteContextPolicy.walletContext(storedQuote: storedQuote) else {
+            throw WalletError.networkError(
+                "The mint context for this receive request is unavailable. Create a new request and try again."
+            )
+        }
+
+        let wallet = try await repo.getWallet(
+            mintUrl: MintUrl(url: context.mintURL),
+            unit: context.unit
+        )
         let params = SubscribeParams(kind: paymentMethod.subscriptionKind, filters: [quoteId], id: nil)
         return try await wallet.subscribe(params: params)
     }
@@ -705,6 +748,107 @@ class LightningService: ObservableObject {
     /// reconciled by the manager's serialized foreground poll.
     struct MeltConfirmation {
         let result: MeltPaymentResult
+        /// Set when a lightning settlement wait outlived its cap: the
+        /// still-running `PendingMelt.wait()` task (Swift's CDK bindings can't
+        /// cancel a Rust future, so the racer abandons it rather than stopping
+        /// it). The manager observes it to refresh balance/history the moment
+        /// settlement lands; durable reconciliation stays with the coordinated
+        /// foreground poll.
+        var deferredSettlement: Task<FinalizedMelt, any Error>? = nil
+    }
+
+    /// Ceiling on how long a lightning melt may hold the repository lane while
+    /// CDK's `PendingMelt.wait()` drives settlement. A fallback exit, not a
+    /// polling knob — `wait()` polls the mint internally; this only bounds how
+    /// long the send screen (and the exclusive wallet lane) stay committed
+    /// before the pending face takes over. Kept under the coordinator's 30s
+    /// log-only watchdog plus the confirm round-trips already spent.
+    private enum MeltSettlementWait {
+        static let cap: Duration = .seconds(30)
+    }
+
+    /// How a bounded settlement wait ended.
+    enum BoundedMeltWaitOutcome {
+        case finalized(FinalizedMelt)
+        case failed(any Error)
+        /// The cap fired first. The wait task keeps running — see
+        /// `MeltConfirmation.deferredSettlement` — and becomes the post-cap
+        /// settlement watcher (the shape Android has always run in
+        /// `watchPendingMelt`).
+        case capExpired(residual: Task<FinalizedMelt, any Error>)
+    }
+
+    /// Race CDK's settlement wait against a cap. No app-side polling — the
+    /// injected `wait` (CDK's `PendingMelt.wait()`) polls internally; the cap
+    /// exists only so a genuinely stuck payment (a held HTLC can hang for
+    /// minutes) hands the screen back to the pending face instead of pinning
+    /// the wallet lane. Injected as a closure so tests can drive all three
+    /// outcomes without a CDK runtime.
+    func awaitMeltSettlementBounded(
+        cap: Duration,
+        wait: @escaping () async throws -> FinalizedMelt
+    ) async -> BoundedMeltWaitOutcome {
+        // Both racers inherit this service's MainActor isolation, so the gate
+        // is serialized; it exists because both will reach it.
+        final class ResumeGate { var resumed = false }
+        let gate = ResumeGate()
+        let waitTask = Task { try await wait() }
+        return await withCheckedContinuation { continuation in
+            func resumeOnce(_ outcome: BoundedMeltWaitOutcome) {
+                guard !gate.resumed else { return }
+                gate.resumed = true
+                continuation.resume(returning: outcome)
+            }
+            Task {
+                do {
+                    let finalized = try await waitTask.value
+                    resumeOnce(.finalized(finalized))
+                } catch {
+                    resumeOnce(.failed(error))
+                }
+            }
+            Task {
+                try? await Task.sleep(for: cap)
+                resumeOnce(.capExpired(residual: waitTask))
+            }
+        }
+    }
+
+    /// Terminal-melt mapping shared by the immediate `.paid` confirmation and a
+    /// settlement wait that finished within the cap.
+    private func settledMeltConfirmation(
+        from finalized: FinalizedMelt,
+        mintURLString: String
+    ) -> MeltConfirmation {
+        MeltConfirmation(
+            result: MeltPaymentResult(
+                preimage: finalized.preimage,
+                amount: finalized.amount.value,
+                feePaid: finalized.feePaid.value,
+                mintUrl: mintURLString,
+                settlement: .settled
+            )
+        )
+    }
+
+    /// Pending result built from the stored quote's numbers. Amount and fee
+    /// aren't final until the payment settles, so the fee is the reserve upper
+    /// bound — the UI still gets facts to show.
+    private func pendingMeltConfirmation(
+        storedMeltQuote: MeltQuote?,
+        mintURLString: String,
+        deferredSettlement: Task<FinalizedMelt, any Error>? = nil
+    ) -> MeltConfirmation {
+        MeltConfirmation(
+            result: MeltPaymentResult(
+                preimage: nil,
+                amount: storedMeltQuote?.amount.value ?? 0,
+                feePaid: storedMeltQuote?.feeReserve.value ?? 0,
+                mintUrl: mintURLString,
+                settlement: .pending
+            ),
+            deferredSettlement: deferredSettlement
+        )
     }
 
     /// Pay a Lightning invoice or on-chain address (melt tokens)
@@ -776,31 +920,53 @@ class LightningService: ObservableObject {
             )
             switch try await preparedMelt.confirmPreferAsync() {
             case .paid(let finalized):
-                return MeltConfirmation(
-                    result: MeltPaymentResult(
-                        preimage: finalized.preimage,
-                        amount: finalized.amount.value,
-                        feePaid: finalized.feePaid.value,
-                        mintUrl: mintURLString,
-                        settlement: .settled
-                    )
-                )
-            case .pending:
-                // Do not run `pendingMelt.wait()` after leaving the repository
-                // lane. That native future can live for minutes and may update
-                // the same store beside an interactive operation. Dropping the
-                // handle is intentional: the manager persists the quote and its
-                // coordinated foreground poll drives terminal reconciliation.
-                // Amount and fee aren't final until the payment settles; report the
-                // quote's numbers (fee = reserve upper bound) so the UI has facts to show.
-                return MeltConfirmation(
-                    result: MeltPaymentResult(
-                        preimage: nil,
-                        amount: storedMeltQuote?.amount.value ?? 0,
-                        feePaid: storedMeltQuote?.feeReserve.value ?? 0,
-                        mintUrl: mintURLString,
-                        settlement: .pending
-                    )
+                return settledMeltConfirmation(from: finalized, mintURLString: mintURLString)
+            case .pending(let pendingMelt):
+                // A lightning melt settles in seconds in the healthy case, so
+                // stay in the lane and let CDK's `wait()` drive the saga to a
+                // terminal state — it polls the mint internally; the app adds
+                // no polling of its own. The old rule ("never run wait() after
+                // leaving the repository lane") still holds: this wait runs
+                // *inside* the lease, and the only wait that outlives it is
+                // the post-cap residual, which is the sanctioned settlement
+                // watcher. On-chain melts genuinely take minutes and keep the
+                // immediate pending path.
+                let method = storedMeltQuote?.paymentMethod
+                if method == .bolt11 || method == .bolt12 {
+                    switch await awaitMeltSettlementBounded(
+                        cap: MeltSettlementWait.cap,
+                        wait: { try await pendingMelt.wait() }
+                    ) {
+                    case .finalized(let finalized) where finalized.state == .paid || finalized.state == .issued:
+                        AppLogger.wallet.info(
+                            "wallet-op melt settled via wait operation=\(WalletOperationCoordinator.privacySafeIdentifier(operationID), privacy: .public)"
+                        )
+                        return settledMeltConfirmation(from: finalized, mintURLString: mintURLString)
+                    case .finalized, .failed:
+                        // A wait that ends any other way carries the same
+                        // ambiguity as a thrown confirmation: resolve it
+                        // against the mint through the recovery path.
+                        return try await resolveMeltAfterAmbiguousFailure(
+                            wallet: wallet,
+                            quoteId: quoteId,
+                            mintURLString: mintURLString,
+                            operationID: operationID,
+                            fallbackQuote: storedMeltQuote
+                        )
+                    case .capExpired(let residual):
+                        AppLogger.wallet.info(
+                            "wallet-op melt wait cap expired operation=\(WalletOperationCoordinator.privacySafeIdentifier(operationID), privacy: .public)"
+                        )
+                        return pendingMeltConfirmation(
+                            storedMeltQuote: storedMeltQuote,
+                            mintURLString: mintURLString,
+                            deferredSettlement: residual
+                        )
+                    }
+                }
+                return pendingMeltConfirmation(
+                    storedMeltQuote: storedMeltQuote,
+                    mintURLString: mintURLString
                 )
             }
         } catch {
@@ -985,7 +1151,8 @@ class LightningService: ObservableObject {
             state: mintQuoteState(from: quote, paymentMethod: paymentMethod),
             expiry: displayExpiry(quote.expiry),
             createdAt: createdAt,
-            unit: PaymentRequestDecoder.unitDescription(quote.unit)
+            unit: PaymentRequestDecoder.unitDescription(quote.unit),
+            mintURL: quote.mintUrl.url
         )
     }
 

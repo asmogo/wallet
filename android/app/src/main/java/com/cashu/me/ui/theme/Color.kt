@@ -10,7 +10,10 @@ import androidx.compose.ui.graphics.Color
 // the only chromatic colors in the app. Everything else is the monochrome
 // "inverted ink" scheme below.
 val ReceivedGreen = Color(0xFF34C759)
-val PendingOrange = Color(0xFFEF6C00)
+// Apple's systemOrange, the way ReceivedGreen is already Apple's systemGreen.
+// Was Material Orange 800 (#EF6C00) — the only state hue that had drifted off
+// iOS, which showed as a muddy orange next to an iOS-matched green.
+val PendingOrange = Color(0xFFFF9500)
 val ErrorRed = Color(0xFFC62828)
 
 // ---------------------------------------------------------------------------
@@ -111,14 +114,14 @@ data class CashuColors(
     val pending: Color,
     val receivedContainer: Color,
     val pendingContainer: Color,
-    // Content roles for the two containers above. Material pairs every container
-    // fill with an `on*Container` colour; these hues live outside
-    // MaterialColorScheme, so the pair has to be declared here. Without them
-    // callers reach for the full-strength hue as text, which is the fill colour,
-    // not the content colour.
+    // Accessible foreground roles for the canvas and the two containers above.
+    // Material pairs every fill with an `on*` colour; these hues live outside
+    // MaterialColorScheme, so the pair has to be declared here. The saturated
+    // state hues remain fills, never normal-size text or meaningful line icons.
     val onPendingContainer: Color,
     val onReceivedContainer: Color,
     val canvasDivider: Color,
+    val compactSheetContainer: Color,
 )
 
 internal val LightCashuColors = CashuColors(
@@ -126,19 +129,27 @@ internal val LightCashuColors = CashuColors(
     pending = PendingOrange,
     receivedContainer = ReceivedGreen.copy(alpha = 0.12f),
     pendingContainer = PendingOrange.copy(alpha = 0.10f),
-    onPendingContainer = Color(0xFF7A3A00),
+    // Light mode can't use systemOrange as text: #FF9500 is 2.2:1 on white, far
+    // under AA. Same hue, darkened until it passes (6.1:1 on the canvas, 5.6:1
+    // on the container above).
+    onPendingContainer = Color(0xFF96500A),
     onReceivedContainer = Color(0xFF0B5227),
     canvasDivider = Color(0xFFEBEBEB),
+    compactSheetContainer = Color(0xFFF7F7F7),
 )
 
 internal val DarkCashuColors = CashuColors(
     received = Color(0xFF30D158),
-    pending = Color(0xFFFFB74D),
+    pending = Color(0xFFFF9F0A),
     receivedContainer = ReceivedGreen.copy(alpha = 0.20f),
     pendingContainer = PendingOrange.copy(alpha = 0.18f),
-    onPendingContainer = Color(0xFFFFDCB0),
+    // Dark mode carries systemOrange itself — 10.2:1 on the canvas, 7.1:1 on the
+    // container — so caution text reads as orange rather than the pale cream
+    // (#FFDCB0) it used to be.
+    onPendingContainer = Color(0xFFFF9F0A),
     onReceivedContainer = Color(0xFFB7F0C8),
     canvasDivider = Color(0xFF262626),
+    compactSheetContainer = Color(0xFF141414),
 )
 
 val LocalCashuColors = compositionLocalOf { LightCashuColors }

@@ -2,7 +2,7 @@ import SwiftUI
 
 // MARK: - Amount Entry View
 /// Full-screen amount entry matching cashu.me's SendTokenDialog/CreateInvoiceDialog
-/// Features: Close button, title, unit toggle, mint selector, amount display, keyboard
+/// Features: Close button, title, unit toggle, amount display, keyboard
 
 struct AmountEntryView: View {
     @Environment(\.dismiss) private var dismiss
@@ -10,7 +10,6 @@ struct AmountEntryView: View {
     // Configuration
     let title: String
     let buttonLabel: String
-    var showMintSelector: Bool = true
     var maxAmount: UInt64?
     var isLoading: Bool = false
     var onSubmit: ((UInt64) -> Void)?
@@ -41,13 +40,6 @@ struct AmountEntryView: View {
         VStack(spacing: 0) {
             // Header
             headerSection
-
-            // Mint selector
-            if showMintSelector {
-                mintSelectorSection
-                    .padding(.horizontal, 20)
-                    .padding(.top, 8)
-            }
 
             // Amount display area
             Spacer()
@@ -90,45 +82,6 @@ struct AmountEntryView: View {
         }
         .padding(.horizontal, 20)
         .padding(.top, 16)
-    }
-    
-    // MARK: - Mint Selector Section
-    
-    private var mintSelectorSection: some View {
-        Button(action: { showMintPicker = true }) {
-            HStack(spacing: 12) {
-                Image(systemName: "bitcoinsign.bank.building")
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
-                    .frame(width: 40, height: 40)
-
-                VStack(alignment: .leading, spacing: 2) {
-                    if let mint = walletManager.activeMint {
-                        Text(mint.name)
-                            .font(.subheadline)
-                            .fontWeight(.medium)
-
-                        if let maxAmount = maxAmount {
-                            Text("\(settings.formatAmountShort(maxAmount)) \(settings.unitSuffix) available")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
-                    } else {
-                        Text("Select Mint")
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
-                    }
-                }
-
-                Spacer()
-
-                Image(systemName: "chevron.down")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-            .padding(12)
-            .liquidGlass(in: RoundedRectangle(cornerRadius: 10), interactive: true)
-        }
     }
     
     // MARK: - Amount Display Section
@@ -280,7 +233,6 @@ struct SendAmountEntryView: View {
                 AmountEntryView(
                     title: "Send Ecash",
                     buttonLabel: "Send",
-                    showMintSelector: true,
                     maxAmount: walletManager.activeMint?.balance ?? 0,
                     isLoading: isGenerating,
                     onSubmit: generateToken
@@ -315,7 +267,6 @@ struct TokenDisplayView: View {
     let amount: UInt64
     var onDismiss: (() -> Void)?
     
-    @State private var copied = false
     @ObservedObject var settings = SettingsManager.shared
 
     var body: some View {
@@ -364,7 +315,7 @@ struct TokenDisplayView: View {
                 
                 // Copy button
                 Button(action: copyToken) {
-                    Text(copied ? "Copied" : "Copy")
+                    Text("Copy")
                 }
                 .glassButton()
                 .padding(.horizontal, 20)
@@ -374,14 +325,8 @@ struct TokenDisplayView: View {
 
     private func copyToken() {
         UIPasteboard.general.string = token
-        copied = true
-        
-        let generator = UINotificationFeedbackGenerator()
-        generator.notificationOccurred(.success)
-        
-        DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
-            copied = false
-        }
+        HapticFeedback.notification(.success)
+        ConfirmationToast.show("Copied ecash token")
     }
 }
 

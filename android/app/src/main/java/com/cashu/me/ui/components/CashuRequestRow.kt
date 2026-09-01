@@ -102,6 +102,11 @@ fun CashuRequestRow(
             .combinedClickable(
                 onClick = onClick,
                 onLongClick = onLongClick,
+                onLongClickLabel = if (onLongClick != null) {
+                    "Remove request from history"
+                } else {
+                    null
+                },
             )
             .padding(horizontal = CashuTheme.spacing.comfortable, vertical = CashuTheme.spacing.comfortable),
         verticalAlignment = Alignment.CenterVertically,
@@ -124,23 +129,27 @@ fun CashuRequestRow(
         }
         Column(horizontalAlignment = Alignment.End) {
             if (primaryAmountText != null) {
-                Text(
+                AmountText(
                     text = if (received) "+$primaryAmountText" else primaryAmountText,
-                    style = MaterialTheme.typography.bodyLarge.withMonoDigits(),
-                    fontWeight = FontWeight.Medium,
+                    style = MaterialTheme.typography.bodyLarge
+                        .copy(fontWeight = FontWeight.Medium)
+                        .withMonoDigits(),
                     color = if (received) {
-                        CashuTheme.colors.received
+                        CashuTheme.colors.onReceivedContainer
                     } else {
                         MaterialTheme.colorScheme.onSurfaceVariant
                     },
+                    maxLines = 1,
                 )
             }
             if (secondaryAmountText != null) {
-                Text(
+                AmountText(
                     text = secondaryAmountText,
-                    style = MaterialTheme.typography.bodyMedium.withMonoDigits(),
-                    fontWeight = FontWeight.Normal,
+                    style = MaterialTheme.typography.bodyMedium
+                        .copy(fontWeight = FontWeight.Normal)
+                        .withMonoDigits(),
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
                 )
             }
         }

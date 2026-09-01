@@ -16,6 +16,10 @@ struct MintQuoteInfo: Identifiable {
     /// in this unit's base units. Defaults to "sat" for older/sat quotes.
     var unit: String = "sat"
 
+    /// Mint wallet that owns the quote. Quote follow-up work must use this
+    /// instead of mutable active-mint state.
+    var mintURL: String? = nil
+
     var isExpired: Bool {
         guard let expiry = expiry, expiry > 0 else { return false }
         return Date().timeIntervalSince1970 > Double(expiry)
@@ -24,9 +28,9 @@ struct MintQuoteInfo: Identifiable {
 
 /// Remembers when each reusable (amountless BOLT12) offer was first materialized.
 /// The CDK `MintQuote` has no creation timestamp, and the same offer is reused
-/// across opens via `LightningService.existingAmountlessOffer()`, so without a
-/// stable record the "Created" row would drift to "now" on every visit. Keyed by
-/// quote id; stamped once, read back forever after.
+/// across opens via `LightningService.existingAmountlessOffer(mintURL:unit:)`.
+/// Without a stable record, the "Created" row would drift to "now" on every
+/// visit. Keyed by quote id; stamped once, read back forever after.
 enum MintQuoteCreatedAtStore {
     private static let storageKey = "mintQuoteCreatedAt.v1"
 

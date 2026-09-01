@@ -25,9 +25,15 @@ extension WalletManager {
         }
     }
 
-    func existingAmountlessOffer() async throws -> MintQuoteInfo? {
-        try await operationCoordinator.perform(kind: .mintQuote) {
-            try await self.lightningService.existingAmountlessOffer()
+    func existingAmountlessOffer(
+        mintURL: String,
+        unit: String
+    ) async throws -> MintQuoteInfo? {
+        try await operationCoordinator.perform(kind: .mintQuote, resourceID: mintURL) {
+            try await self.lightningService.existingAmountlessOffer(
+                mintURL: mintURL,
+                unit: PaymentRequestDecoder.currencyUnit(from: unit)
+            )
         }
     }
 
@@ -194,11 +200,24 @@ extension WalletManager {
         }
         let result = confirmation.result
         if result.settlement == .pending {
-            // Mint accepted the payment for asynchronous NUT-05 settlement (the
-            // usual case for on-chain melts). CDK tracks the pending
-            // transaction; the coordinated foreground poll and startup recovery
-            // drive terminal reconciliation, including after relaunch.
+            // Mint accepted the payment for asynchronous NUT-05 settlement and
+            // it outlived the in-lane lightning wait (or is on-chain). CDK
+            // tracks the pending transaction; the coordinated foreground poll
+            // and startup recovery drive terminal reconciliation, including
+            // after relaunch.
             SentryService.breadcrumb("Melt accepted for async settlement", category: "wallet.lightning")
+
+            // A capped lightning wait hands back the still-running settlement
+            // watcher. Observe it so balance/history refresh the moment the
+            // melt lands, instead of waiting for the next poll tick. Coordinated
+            // re-entry — never the AssumingLease variants.
+            if let deferred = confirmation.deferredSettlement {
+                Task { [weak self] in
+                    guard (try? await deferred.value) != nil else { return }
+                    await self?.refreshBalance()
+                    await self?.loadTransactions()
+                }
+            }
         } else {
             SentryService.breadcrumb("Lightning payment sent", category: "wallet.lightning")
         }

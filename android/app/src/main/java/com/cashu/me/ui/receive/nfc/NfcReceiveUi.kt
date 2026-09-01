@@ -187,7 +187,7 @@ internal fun NfcReceiveIndicatorContent(state: NfcReceiveState, modifier: Modifi
                 Icon(
                     imageVector = Icons.Outlined.Nfc,
                     contentDescription = null,
-                    tint = if (active) CashuTheme.colors.pending else MaterialTheme.colorScheme.onSurfaceVariant,
+                    tint = if (active) CashuTheme.colors.onPendingContainer else MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.size(18.dp),
                 )
                 AnimatedContent(
@@ -349,7 +349,7 @@ private fun NfcTransferScreen() {
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.Center,
             ) {
-                SpinnerRing(size = 64.dp, color = CashuTheme.colors.pending)
+                SpinnerRing(size = 64.dp, color = CashuTheme.colors.onPendingContainer)
                 Spacer(Modifier.height(CashuTheme.spacing.section))
                 Text(
                     text = "Keep phones together",

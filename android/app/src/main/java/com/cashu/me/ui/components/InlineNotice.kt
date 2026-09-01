@@ -1,7 +1,6 @@
 package com.cashu.me.ui.components
 
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
@@ -19,9 +18,15 @@ import androidx.compose.material.icons.filled.Error
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.Icon
+import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -29,7 +34,9 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.IntOffset
 import com.cashu.me.ui.theme.CashuTheme
 
 private val NoticeIconSize = 18.dp
@@ -73,6 +80,13 @@ enum class NoticeSeverity { Error, Caution, Info, Success }
  * the fill colour as the text colour.
  *
  * @param detail optional second line for amounts and supporting specifics
+ * @param showsContainer drop the tonal fill and padding, leaving glyph + text.
+ *   For notices that float on a bare surface rather than sitting inside a list
+ *   or card — the Send amount faces, where the only other things on screen are
+ *   the amount and the keypad, and a filled box reads as a foreign object.
+ *   Matches iOS `InlineNotice`, which never fills.
+ * @param centered centre the glyph + text as a group, for a notice that floats
+ *   under a centred amount rather than sitting in a left-aligned form.
  */
 @Composable
 fun InlineNotice(
@@ -80,13 +94,20 @@ fun InlineNotice(
     modifier: Modifier = Modifier,
     severity: NoticeSeverity,
     detail: String? = null,
+    showsContainer: Boolean = true,
+    centered: Boolean = false,
 ) {
     val (icon, content, container) = noticeColors(severity)
     Column(
         modifier = modifier
             .fillMaxWidth()
-            .background(container, NoticeCorner)
-            .padding(NoticePadding)
+            .then(
+                if (showsContainer) {
+                    Modifier.background(container, NoticeCorner).padding(NoticePadding)
+                } else {
+                    Modifier
+                },
+            )
             // Announced on appearance without stealing focus. The component owns
             // this so a call site cannot forget it.
             .semantics { liveRegion = LiveRegionMode.Polite },
@@ -94,7 +115,10 @@ fun InlineNotice(
         Row(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.Top,
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            horizontalArrangement = Arrangement.spacedBy(
+                8.dp,
+                if (centered) Alignment.CenterHorizontally else Alignment.Start,
+            ),
         ) {
             Icon(
                 imageVector = icon,
@@ -103,19 +127,29 @@ fun InlineNotice(
                 modifier = Modifier.size(NoticeIconSize),
             )
             Column(
-                modifier = Modifier.weight(1f),
+                // `fill = false` when centred: a filling child leaves no free
+                // space for the row to centre the group into.
+                modifier = Modifier.weight(1f, fill = !centered),
                 verticalArrangement = Arrangement.spacedBy(2.dp),
+                horizontalAlignment = if (centered) {
+                    Alignment.CenterHorizontally
+                } else {
+                    Alignment.Start
+                },
             ) {
+                val align = if (centered) TextAlign.Center else TextAlign.Start
                 Text(
                     text = text,
                     style = MaterialTheme.typography.bodyMedium,
                     color = content,
+                    textAlign = align,
                 )
                 if (detail != null) {
                     Text(
                         text = detail,
                         style = MaterialTheme.typography.bodySmall,
                         color = content.copy(alpha = 0.78f),
+                        textAlign = align,
                     )
                 }
             }
@@ -127,24 +161,32 @@ fun InlineNotice(
  * Show/hide wrapper with the canonical entrance (slide up + fade) and quiet exit
  * (fade only — exits are subtler than entrances).
  */
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 fun InlineNoticeHost(
     text: String?,
     modifier: Modifier = Modifier,
+    contentModifier: Modifier = Modifier,
     severity: NoticeSeverity,
     detail: String? = null,
 ) {
+    val enterSpatial = MaterialTheme.motionScheme.defaultSpatialSpec<IntOffset>()
+    val enterEffects = MaterialTheme.motionScheme.defaultEffectsSpec<Float>()
+    val exitEffects = MaterialTheme.motionScheme.fastEffectsSpec<Float>()
     // Keep the last non-null text so the exit fade shows content, not a blank.
-    var lastText = text
+    var lastText by remember { mutableStateOf(text) }
+    LaunchedEffect(text) {
+        if (text != null) lastText = text
+    }
     AnimatedVisibility(
         visible = text != null,
         modifier = modifier,
-        enter = slideInVertically(tween(220)) { it / 2 } + fadeIn(tween(220)),
-        exit = fadeOut(tween(180)),
+        enter = slideInVertically(enterSpatial) { it / 2 } + fadeIn(enterEffects),
+        exit = fadeOut(exitEffects),
     ) {
-        text?.let { lastText = it }
         InlineNotice(
-            text = lastText.orEmpty(),
+            text = (text ?: lastText).orEmpty(),
+            modifier = contentModifier,
             severity = severity,
             detail = detail,
         )

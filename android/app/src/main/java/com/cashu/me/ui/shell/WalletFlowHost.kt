@@ -9,20 +9,29 @@ import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
+import androidx.compose.animation.core.FiniteAnimationSpec
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.MotionScheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.SheetValue
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.launch
+import com.cashu.me.ui.components.CompactSheetContent
 import com.cashu.me.ui.navigation.TopTab
+import com.cashu.me.ui.theme.CashuTheme
 
 /**
  * The money flows presented over the shell (iOS `WalletFlow` sheets).
@@ -95,51 +104,125 @@ internal class WalletFlowHandoffCoordinator {
  * clearing the flow — callbacks must use it instead of clearing state
  * directly, or the sheet vanishes with a hard cut.
  */
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 fun WalletFlowSheetHost(
     flow: WalletFlow?,
     dismissLocked: Boolean,
+    onBackdropVisibilityChanged: (Boolean) -> Unit,
     onDismissed: () -> Unit,
     snackbarHostState: SnackbarHostState,
     content: @Composable (flow: WalletFlow, close: () -> Unit) -> Unit,
 ) {
     if (flow == null) return
     val locked by rememberUpdatedState(dismissLocked)
+    val backdropVisibilityChanged by rememberUpdatedState(onBackdropVisibilityChanged)
     // Stable lambda: rememberModalBottomSheetState keys its saver on it.
     val confirmValueChange = remember {
-        { value: SheetValue -> value != SheetValue.Hidden || !locked }
+        { value: SheetValue ->
+            val canChange = value != SheetValue.Hidden || !locked
+            if (canChange && value == SheetValue.Hidden) {
+                // This is the earliest common point for scrim taps, back,
+                // swipes, and programmatic closes. Release the blur before
+                // the sheet starts travelling instead of waiting for a later
+                // snapshot observation or the completed dismissal callback.
+                backdropVisibilityChanged(false)
+            }
+            canChange
+        }
     }
     val sheetState = rememberModalBottomSheetState(
         skipPartiallyExpanded = true,
         confirmValueChange = confirmValueChange,
     )
+    LaunchedEffect(sheetState) {
+        var hasBeenVisible = false
+        snapshotFlow { sheetState.targetValue }.collect { target ->
+            if (target != SheetValue.Hidden) {
+                hasBeenVisible = true
+                backdropVisibilityChanged(true)
+            } else if (hasBeenVisible) {
+                // Target state changes at dismissal start, before the sheet's
+                // slide-out finishes. Clearing here keeps the blur from
+                // lingering for a second animation after the sheet disappears.
+                backdropVisibilityChanged(false)
+            }
+        }
+    }
     val scope = rememberCoroutineScope()
     val close: () -> Unit = {
         scope.launch { sheetState.hide() }.invokeOnCompletion { onDismissed() }
     }
-    ModalBottomSheet(
-        onDismissRequest = onDismissed,
-        sheetState = sheetState,
-    ) {
-        Box(modifier = Modifier.fillMaxWidth()) {
-            AnimatedContent(
-                targetState = flow,
-                transitionSpec = {
-                    fadeIn(spring(stiffness = Spring.StiffnessMedium))
-                        .togetherWith(fadeOut(spring(stiffness = Spring.StiffnessMedium)))
-                },
-                label = "wallet-flow",
-            ) { current ->
-                content(current, close)
+    // Dismissal motion. Material3 animates hide() with `fastEffectsSpec` — an
+    // *effects* spring (expressive: stiffness 3800, damping 1.0), tuned for 0..1
+    // alpha, applied here to a full-screen translation. Measured on device it
+    // crossed the screen in 23ms over three frames: the sheet read as deleted
+    // rather than dismissed, on every close button, back press and scrim tap in
+    // the app. A drag settles through a *spatial* spring instead, which is why
+    // swipe-to-dismiss always felt right.
+    //
+    // BottomSheet.kt is what reads the spec, and it re-reads it on every
+    // recomposition, so overriding the value it reads is the only assignment
+    // that sticks — and it covers every dismissal path rather than just ours.
+    // `fastEffectsSpec` is read in exactly one place in the whole sheet
+    // implementation (BottomSheet.kt, for hideMotionSpec), so scoping the
+    // override to the sheet changes the dismissal and nothing else. The content
+    // gets the real scheme back below, since its buttons and morphs use these
+    // same specs for their own motion.
+    val baseMotion = MaterialTheme.motionScheme
+    WithMotionScheme(SheetDismissMotionScheme(baseMotion)) {
+        ModalBottomSheet(
+            onDismissRequest = onDismissed,
+            sheetState = sheetState,
+            containerColor = CashuTheme.colors.compactSheetContainer,
+        ) {
+            // The sheet's *content* keeps the app's real motion scheme — its
+            // buttons and morphs animate with these same specs.
+            WithMotionScheme(baseMotion) {
+                CompactSheetContent {
+                    Box(modifier = Modifier.fillMaxWidth()) {
+                        AnimatedContent(
+                            targetState = flow,
+                            transitionSpec = {
+                                fadeIn(spring(stiffness = Spring.StiffnessMedium))
+                                    .togetherWith(fadeOut(spring(stiffness = Spring.StiffnessMedium)))
+                            },
+                            label = "wallet-flow",
+                        ) { current ->
+                            content(current, close)
+                        }
+                        // Errors remain local to the active flow; confirmation
+                        // toasts use the app-level pass-through overlay window.
+                        SnackbarHost(
+                            hostState = snackbarHostState,
+                            modifier = Modifier.align(Alignment.BottomCenter),
+                        )
+                    }
+                }
             }
-            // Sheet renders in its own Android Window — the root-mounted host
-            // in CashuApp.kt can't reach here, so mount a second one observing
-            // the same SnackbarHostState.
-            SnackbarHost(
-                hostState = snackbarHostState,
-                modifier = Modifier.align(Alignment.BottomCenter),
-            )
         }
     }
+}
+
+/** Runs [content] under [scheme], leaving the rest of the theme untouched. */
+@Composable
+private fun WithMotionScheme(scheme: MotionScheme, content: @Composable () -> Unit) {
+    MaterialTheme(
+        colorScheme = MaterialTheme.colorScheme,
+        motionScheme = scheme,
+        shapes = MaterialTheme.shapes,
+        typography = MaterialTheme.typography,
+        content = content,
+    )
+}
+
+/**
+ * The motion scheme the sheet itself composes under: the real scheme, except that
+ * `fastEffectsSpec` — the one spec Material3's BottomSheet uses for its hide
+ * animation — returns a spatial spring, so a dismissal travels instead of snapping.
+ * Delete once Material3 picks a spatial spec for `hideMotionSpec` upstream.
+ */
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
+private class SheetDismissMotionScheme(private val base: MotionScheme) : MotionScheme by base {
+    override fun <T> fastEffectsSpec(): FiniteAnimationSpec<T> = base.slowSpatialSpec()
 }

@@ -1,7 +1,8 @@
 package com.cashu.me.ui.components
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -48,18 +49,21 @@ data class TransactionRowModel(
  * the ledger signal: received is green with a plus, sent is primary with no
  * sign, and pending/expired is muted with no sign.
  */
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun TransactionRow(
     model: TransactionRowModel,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
+    onLongClick: (() -> Unit)? = null,
+    onLongClickLabel: String? = null,
 ) {
     val tx = model.transaction
     val incoming = tx.type == TransactionType.Incoming
     val unsettled = tx.isUnsettled
     val amountColor = when {
         unsettled -> MaterialTheme.colorScheme.onSurfaceVariant
-        incoming -> CashuTheme.colors.received
+        incoming -> CashuTheme.colors.onReceivedContainer
         else -> MaterialTheme.colorScheme.onSurface
     }
     val amountText = if (!unsettled && incoming) "+${model.primaryAmount}" else model.primaryAmount
@@ -78,7 +82,11 @@ fun TransactionRow(
             .semantics {
                 contentDescription = semanticParts.joinToString(", ")
             }
-            .clickable(onClick = onClick)
+            .combinedClickable(
+                onClick = onClick,
+                onLongClick = onLongClick,
+                onLongClickLabel = onLongClickLabel,
+            )
             // Slightly looser than the original 16pt so home Recent + History
             // breathe between rows without going sparse.
             .padding(horizontal = CashuTheme.spacing.comfortable, vertical = 18.dp),
@@ -101,18 +109,22 @@ fun TransactionRow(
             )
         }
         Column(horizontalAlignment = Alignment.End) {
-            Text(
+            AmountText(
                 text = amountText,
-                style = MaterialTheme.typography.bodyLarge.withMonoDigits(),
-                fontWeight = FontWeight.Medium,
+                style = MaterialTheme.typography.bodyLarge
+                    .copy(fontWeight = FontWeight.Medium)
+                    .withMonoDigits(),
                 color = amountColor,
+                maxLines = 1,
             )
             if (model.secondaryAmount != null) {
-                Text(
+                AmountText(
                     text = model.secondaryAmount,
-                    style = MaterialTheme.typography.bodyMedium.withMonoDigits(),
-                    fontWeight = FontWeight.Normal,
+                    style = MaterialTheme.typography.bodyMedium
+                        .copy(fontWeight = FontWeight.Normal)
+                        .withMonoDigits(),
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
                 )
             }
         }

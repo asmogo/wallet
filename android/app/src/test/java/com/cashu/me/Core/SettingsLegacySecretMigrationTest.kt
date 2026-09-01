@@ -84,6 +84,7 @@ class SettingsLegacySecretMigrationTest {
             p2pkRecords = p2pk,
             loadSecret = secureValues::get,
             saveSecret = { key, value -> secureValues[key] = value },
+            isUsableSecret = { _, _ -> true },
         )
 
         assertEquals(
@@ -96,5 +97,62 @@ class SettingsLegacySecretMigrationTest {
         )
         assertNotNull(migration.p2pkKeysToPersist)
         assertEquals(listOf("p2pk-1", "p2pk-2"), migration.p2pkKeysToPersist?.map { it.id })
+        assertTrue(migration.pendingLegacySecrets.isEmpty())
+    }
+
+    @Test
+    fun migratorRetainsUsableLegacySecretOnlyWhenSecureWriteFails() {
+        val p2pk = LegacySettingsSecretParser.p2pkKeys(
+            """
+                [
+                  {
+                    "id": "p2pk-1",
+                    "publicKey": "02${"c".repeat(64)}",
+                    "privateKey": "legacy-p2pk-private",
+                    "used": false,
+                    "usedCount": 0
+                  }
+                ]
+            """.trimIndent(),
+        )
+
+        val migration = LegacySettingsSecretMigrator.migrate(
+            p2pkRecords = p2pk,
+            loadSecret = { null },
+            saveSecret = { _, _ -> error("secure storage unavailable") },
+            isUsableSecret = { _, secret -> secret == "legacy-p2pk-private" },
+        )
+
+        assertEquals(
+            mapOf("p2pk-1" to "legacy-p2pk-private"),
+            migration.pendingLegacySecrets,
+        )
+    }
+
+    @Test
+    fun migratorDoesNotRetainMalformedLegacySecret() {
+        val p2pk = LegacySettingsSecretParser.p2pkKeys(
+            """
+                [
+                  {
+                    "id": "p2pk-1",
+                    "publicKey": "02${"c".repeat(64)}",
+                    "privateKey": "not-the-matching-key",
+                    "used": false,
+                    "usedCount": 0
+                  }
+                ]
+            """.trimIndent(),
+        )
+
+        val migration = LegacySettingsSecretMigrator.migrate(
+            p2pkRecords = p2pk,
+            loadSecret = { null },
+            saveSecret = { _, _ -> error("must not be called") },
+            isUsableSecret = { _, _ -> false },
+        )
+
+        assertTrue(migration.pendingLegacySecrets.isEmpty())
+        assertNotNull(migration.p2pkKeysToPersist)
     }
 }

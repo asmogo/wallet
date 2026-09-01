@@ -12,6 +12,14 @@ private let unitGapEm: CGFloat = 0.15
 /// keeps full ink and weight, drops only slightly in size, and tucks tight.
 private let symbolScale: CGFloat = 0.85
 
+/// Shared vertical rhythm for a primary amount and its supporting conversion.
+/// Interactive secondary values keep a full tap target below the visible line,
+/// so the optical gap remains identical to a static receipt amount pair.
+enum AmountPairMetrics {
+    static let spacing: CGFloat = 4
+    static let minimumTapTarget: CGFloat = 44
+}
+
 /// The one hero numeral.
 ///
 /// Owns the value/unit lockup, tabular figures, the digit transition, the line
@@ -79,8 +87,12 @@ struct AmountLockup: View {
         case .suffix(let word):
             return Text(parts.value) + gap + unitRun(word)
         case .prefix(let symbol):
+            // The Bitcoin sign is the unit's primary mark, not a subordinate
+            // currency prefix. At the symbol scale it reads visibly smaller
+            // than the numeral lockup, so retain the full point size for ₿.
+            let symbolSize = symbol == "₿" ? pointSize : pointSize * symbolScale
             return Text(symbol).font(
-                fonts.font(.sans, size: pointSize * symbolScale, weight: role.weight)
+                fonts.font(.sans, size: symbolSize, weight: role.weight)
             ) + Text(parts.value)
         }
     }

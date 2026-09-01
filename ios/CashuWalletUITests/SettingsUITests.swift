@@ -29,7 +29,7 @@ final class SettingsUITests: UITestBase {
         XCTAssertEqual(tabBar.buttons.count, 3)
         XCTAssertFalse(tabBar.buttons["Settings"].exists)
 
-        let back = app.buttons["settings-back-button"]
+        let back = app.navigationBars.buttons.element(boundBy: 0)
         tapWhenReady(back)
         XCTAssertTrue(app.buttons["wallet-settings-button"].waitForExistence(timeout: 5))
         waitForSelectedTab("Wallet")

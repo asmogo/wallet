@@ -57,6 +57,7 @@ import com.cashu.me.Core.SettingsManager
 import com.cashu.me.Core.WalletManager
 import com.cashu.me.ui.components.CashuTextField
 import com.cashu.me.ui.components.InlineNotice
+import com.cashu.me.ui.components.LocalConfirmationToastController
 import com.cashu.me.ui.components.MintPickerSheet
 import com.cashu.me.ui.components.NavRow
 import com.cashu.me.ui.components.NoticeSeverity
@@ -82,6 +83,7 @@ fun NwcSettingsScreen(
     val settings by settingsManager.state.collectAsState()
     val nwcState by nwcManager.state.collectAsState()
     val clipboard = LocalClipboard.current
+    val confirmationToastController = LocalConfirmationToastController.current
     val clipboardScope = rememberCoroutineScope()
     val amountFormatter = remember { AmountFormatter() }
 
@@ -164,6 +166,7 @@ fun NwcSettingsScreen(
                             clipboard.setClipEntry(
                                 ClipEntry(ClipData.newPlainText("Wallet Connect", connectionUri)),
                             )
+                            confirmationToastController?.show("Copied connection code")
                         }
                     },
                 )
@@ -218,7 +221,7 @@ fun NwcSettingsScreen(
                 }
             },
             onDismiss = { mintPickerOpen = false },
-            title = "Mint for Wallet Connect",
+            title = "Mint",
         )
     }
 

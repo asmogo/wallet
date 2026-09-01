@@ -4,11 +4,7 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
-import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.Spring
-import androidx.compose.animation.core.animateFloat
-import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
@@ -43,7 +39,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.filled.Key
 import androidx.compose.material.icons.filled.Lock
-import androidx.compose.material.icons.outlined.AccountBalance
 import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.ContentPaste
@@ -51,8 +46,6 @@ import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.IosShare
 import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material.icons.outlined.LockOpen
-import androidx.compose.material.icons.outlined.Payments
-import androidx.compose.material.icons.outlined.Receipt
 import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material.icons.outlined.Schedule
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -92,6 +85,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.cashu.me.Core.AmountFormatter
+import com.cashu.me.Core.AmountDisplayPrimary
 import com.cashu.me.Core.PendingTokenClaimCheckResult
 import com.cashu.me.Core.Protocols.CurrencyAmount
 import com.cashu.me.Core.Protocols.CurrencyRegistry
@@ -106,11 +100,14 @@ import com.cashu.me.Models.SendTokenResult
 import com.cashu.me.Views.Components.ScannerQuickAction
 import com.cashu.me.ui.components.SectionHeader
 import com.cashu.me.ui.components.AmountEntryHero
+import com.cashu.me.ui.components.AmountFlipDisplay
 import com.cashu.me.ui.components.CashuTextField
 import com.cashu.me.ui.components.GhostButton
 import com.cashu.me.ui.components.InlineNotice
+import com.cashu.me.ui.components.LocalConfirmationToastController
 import com.cashu.me.ui.components.MintPickerSheet
 import com.cashu.me.ui.components.MintSelectorRow
+import com.cashu.me.ui.components.MintSelectorDirection
 import com.cashu.me.ui.components.NoticeSeverity
 import com.cashu.me.ui.components.PaymentStatusPhase
 import com.cashu.me.ui.components.PaymentStatusScreen
@@ -122,6 +119,7 @@ import com.cashu.me.ui.components.ToolbarIcon
 import com.cashu.me.ui.components.TwoFaceScreen
 import com.cashu.me.ui.components.UnitPickerSheet
 import com.cashu.me.ui.components.neutralActionButtonColors
+import com.cashu.me.ui.components.rememberPendingPulseAlpha
 import com.cashu.me.ui.components.shareText
 import com.cashu.me.ui.settings.P2PKKeyDisplay
 import com.cashu.me.ui.testing.UiTestTags
@@ -202,7 +200,6 @@ fun SendEcashScreen(
     walletManager: WalletManager,
     settingsManager: SettingsManager,
     priceService: com.cashu.me.Core.PriceService,
-    onBack: () -> Unit,
     onClose: () -> Unit,
     onScanP2pk: (SendEcashDraft) -> Unit = {},
     initialDraft: SendEcashDraft? = null,
@@ -251,11 +248,14 @@ fun SendEcashScreen(
     }
     val currency = CurrencyRegistry.currencyForMintUnit(effectiveUnit)
     val isSatUnit = effectiveUnit.equals("sat", ignoreCase = true)
+    val entryFiatPrice = priceState.btcPrice.takeIf {
+        settings.showFiatBalance && it > 0
+    }
     val amountEntryContext = SendEcashAmountEntry.context(
         unit = effectiveUnit,
         unitDecimals = currency.decimals,
         preferredPrimary = settings.amountDisplayPrimary,
-        btcPrice = priceState.btcPrice,
+        btcPrice = entryFiatPrice ?: 0.0,
     )
     var previousAmountEntryContext by remember { mutableStateOf(amountEntryContext) }
     val amountValue = amountEntryContext.amountBaseUnits(amount)
@@ -327,10 +327,10 @@ fun SendEcashScreen(
     // Generation counts as money-in-motion: block sheet dismissal.
     LaunchedEffect(sending) { onDismissLockChanged(sending) }
 
-// Dismissal contract: system back = swipe = abandon to the wallet, so the
-    // sheet handles it. The header chevron owns internal step-back (Generated →
-    // Input → Send, and Failure → Input). Swallow back only while a token is
-    // being generated.
+    // Dismissal contract: system back = swipe = abandon to the wallet, so the
+    // sheet handles it. The header owns internal step-back (Generated → Input,
+    // Failure → Input) and shows a close on Input itself, which has nowhere to
+    // step back to. Swallow back only while a token is being generated.
     BackHandler(enabled = sending) {}
 
     Column(
@@ -344,11 +344,18 @@ fun SendEcashScreen(
                 is SendFace.Generated -> "Pending Ecash"
                 is SendFace.Failure -> "Send Ecash"
             },
-            navigationIcon = Icons.AutoMirrored.Outlined.ArrowBack,
-            navigationContentDescription = "Back",
+            // Input has no parent step — leaving it lands on the wallet — so it
+            // gets a close. The result faces really do step back, and keep the
+            // arrow. The glyph matches what the control does.
+            navigationIcon = if (face == SendFace.Input) {
+                Icons.Outlined.Close
+            } else {
+                Icons.AutoMirrored.Outlined.ArrowBack
+            },
+            navigationContentDescription = if (face == SendFace.Input) "Close" else "Back",
             onNavigationClick = {
                 when (face) {
-                    SendFace.Input -> onBack()
+                    SendFace.Input -> onClose()
                     is SendFace.Generated -> face = SendFace.Input
                     is SendFace.Failure -> face = SendFace.Input
                 }
@@ -397,7 +404,9 @@ fun SendEcashScreen(
                         errorText = null
                     },
                     activeMint = activeMint,
-                    onPickMint = { pickerOpen = true },
+                    // One mint means nothing to choose between, so the row drops
+                    // its chevron and stops opening a single-row picker.
+                    onPickMint = { pickerOpen = true }.takeIf { walletState.mints.size > 1 },
                     onUseMax = {
                         if (mintBalance > 0L) {
                             amount = amountEntryContext.maxRawForBalance(mintBalance)
@@ -407,25 +416,26 @@ fun SendEcashScreen(
                     amountValue = amountValue,
                     mintBalance = mintBalance,
                     balanceLoading = balanceLoading,
-                    // Per-mint spendable balance, shown under the mint name
-                    // inside the selector card (iOS MintAmountSelectorRow).
+                    // Per-mint spendable balance. No longer rendered in the
+                    // selector row — it feeds the row's accessibility label and
+                    // the insufficient-balance notice.
                     balanceText = when {
                         balanceLoading -> "…"
                         isSatUnit -> formatter.formatWalletSats(mintBalance, settings.useBitcoinSymbol)
                         else -> CurrencyAmount(mintBalance, currency).formatted()
                     },
-                    isSat = isSatUnit && !amountEntryContext.isFiatEntry,
-                    unit = if (amountEntryContext.isFiatEntry) {
-                        priceState.currencyCode
-                    } else {
-                        effectiveUnit
+                    isSatUnit = isSatUnit,
+                    unit = effectiveUnit,
+                    amountSats = amountValue,
+                    entryPrimary = amountEntryContext.satEntry.primary,
+                    onFlipEntryPrimary = {
+                        settingsManager.setAmountDisplayPrimary(it.rawValue)
                     },
+                    btcPrice = entryFiatPrice,
                     useBitcoinSymbol = settings.useBitcoinSymbol,
                     formatter = formatter,
                     decimals = amountEntryContext.keypadDecimals,
-                    fiatCurrencyCode = priceState.currencyCode.takeIf {
-                        amountEntryContext.isFiatEntry
-                    },
+                    fiatCurrencyCode = priceState.currencyCode,
                     sending = sending,
                     errorText = errorText,
                     confirmedP2pkPubkey = validatedP2pkPubkey,
@@ -563,19 +573,23 @@ private fun InputFace(
     amount: String,
     onAmountChange: (String) -> Unit,
     activeMint: com.cashu.me.Models.MintInfo?,
-    onPickMint: () -> Unit,
+    onPickMint: (() -> Unit)?,
     onUseMax: () -> Unit,
     canUseMax: Boolean,
     amountValue: Long,
     mintBalance: Long,
     balanceLoading: Boolean,
     balanceText: String,
-    isSat: Boolean,
+    isSatUnit: Boolean,
     unit: String,
+    amountSats: Long,
+    entryPrimary: AmountDisplayPrimary,
+    onFlipEntryPrimary: (AmountDisplayPrimary) -> Unit,
+    btcPrice: Double?,
     useBitcoinSymbol: Boolean,
     formatter: AmountFormatter,
     decimals: Int,
-    fiatCurrencyCode: String?,
+    fiatCurrencyCode: String,
     sending: Boolean,
     errorText: String?,
     confirmedP2pkPubkey: String?,
@@ -589,7 +603,6 @@ private fun InputFace(
     val insufficient = !balanceLoading && amountValue > 0 && amountValue > mintBalance
     BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
         val compactHeight = maxHeight < 600.dp
-        val noticeVisible = insufficient || errorText != null
         Column(
             modifier = Modifier
                 .fillMaxSize()
@@ -601,23 +614,7 @@ private fun InputFace(
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
         Spacer(Modifier.height(CashuTheme.spacing.micro))
-        // One card: avatar + name + balance + Send Max pill + chevron
-        // (iOS MintAmountSelectorRow parity).
-        if (activeMint != null) {
-            MintSelectorRow(
-                mint = activeMint,
-                balanceText = balanceText,
-                onPickMint = onPickMint,
-                onUseMax = if (canUseMax) onUseMax else null,
-            )
-        }
 
-        // iOS SendView: mint row on top, amount vertically centered between
-        // spacers, keypad pinned below. On compact sheets a visible notice
-        // receives the upper flexible space so it cannot be clipped.
-        if (!noticeVisible) {
-            Spacer(Modifier.weight(1f, fill = true))
-        }
         val amountColor by animateColorAsState(
             targetValue = if (insufficient) {
                 MaterialTheme.colorScheme.onSurfaceVariant
@@ -627,31 +624,51 @@ private fun InputFace(
             animationSpec = spring(stiffness = Spring.StiffnessMedium),
             label = "amount-color",
         )
-        AmountEntryHero(
-            entryRaw = amount,
-            isSat = isSat,
-            unit = unit,
-            decimals = decimals,
-            useBitcoinSymbol = useBitcoinSymbol,
-            formatter = formatter,
-            fiatCurrencyCode = fiatCurrencyCode,
-            color = amountColor,
-        )
-
-        confirmedP2pkPubkey?.let { pubkey ->
-            P2pkRecipientConfirmation(
-                confirmedPubkey = pubkey,
-                recipientIsPrimaryKey = p2pkRecipientIsPrimaryKey,
-                onEditRecipient = onEditP2pkRecipient,
-                onRemoveRecipient = onRemoveP2pkRecipient,
-            )
-        }
-
         val reduceMotion = rememberReducedMotion()
-        Box(modifier = Modifier.weight(1f, fill = true).fillMaxWidth()) {
+        // One flexible cell between the mint row and the keypad: the amount
+        // centered in it, the notice *overlaid* at its bottom (iOS SendView's
+        // ZStack). As siblings the notice pushed the amount upward the instant
+        // it appeared — a jump you now hit on the first over-balance keystroke.
+        Box(
+            modifier = Modifier.weight(1f, fill = true).fillMaxWidth(),
+            contentAlignment = Alignment.Center,
+        ) {
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                if (isSatUnit) {
+                    AmountFlipDisplay(
+                        amountSats = amountSats,
+                        primary = entryPrimary,
+                        onFlip = onFlipEntryPrimary,
+                        btcPrice = btcPrice,
+                        currencyCode = fiatCurrencyCode,
+                        useBitcoinSymbol = useBitcoinSymbol,
+                        entryRaw = amount,
+                        primaryAccessibilityPrefix = "Send amount",
+                        color = amountColor,
+                    )
+                } else {
+                    AmountEntryHero(
+                        entryRaw = amount,
+                        isSat = false,
+                        unit = unit,
+                        useBitcoinSymbol = useBitcoinSymbol,
+                        formatter = formatter,
+                        color = amountColor,
+                    )
+                }
+
+                confirmedP2pkPubkey?.let { pubkey ->
+                    P2pkRecipientConfirmation(
+                        confirmedPubkey = pubkey,
+                        recipientIsPrimaryKey = p2pkRecipientIsPrimaryKey,
+                        onEditRecipient = onEditP2pkRecipient,
+                        onRemoveRecipient = onRemoveP2pkRecipient,
+                    )
+                }
+            }
+
             // Fade+scale warning (iOS .transition(.opacity.combined(with: .scale))),
-            // reduce-motion collapses to a plain fade. Drawn at the bottom of the
-            // flexible gap so the amount above stays pinned.
+            // reduce-motion collapses to a plain fade.
             Column(
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
@@ -670,16 +687,14 @@ private fun InputFace(
                     },
                     exit = fadeOut(spring(stiffness = Spring.StiffnessMedium)),
                 ) {
-                    // iOS SendView: tinted caution InlineNotice with balance detail.
-                    val mintName = activeMint?.name
+                    // The mint selector states the available balance, so
+                    // repeating it in this notice would add visual noise.
                     InlineNotice(
                         text = "Insufficient balance",
+                        detail = null,
                         severity = NoticeSeverity.Caution,
-                        detail = if (!compactHeight && mintName != null) {
-                            "You have $balanceText in $mintName."
-                        } else {
-                            null
-                        },
+                        showsContainer = false,
+                        centered = true,
                         modifier = Modifier.padding(bottom = CashuTheme.spacing.snug),
                     )
                 }
@@ -691,6 +706,21 @@ private fun InputFace(
                     )
                 }
             }
+        }
+
+        // The selector sits under the amount and over the keypad, not under the
+        // toolbar: it qualifies the amount, so it reads as a setting on the way
+        // to the action rather than a second header competing with the title.
+        if (activeMint != null) {
+            MintSelectorRow(
+                direction = MintSelectorDirection.Source,
+                mint = activeMint,
+                balanceText = balanceText,
+                showBalance = true,
+                onPickMint = onPickMint,
+                onUseMax = if (canUseMax) onUseMax else null,
+            )
+            Spacer(Modifier.height(CashuTheme.spacing.snug))
         }
 
         NumberPadFooter(
@@ -904,7 +934,7 @@ internal fun P2pkLockSection(
                 Icon(
                     imageVector = Icons.Outlined.CheckCircle,
                     contentDescription = null,
-                    tint = CashuTheme.colors.received,
+                    tint = CashuTheme.colors.onReceivedContainer,
                     modifier = Modifier.size(CashuTheme.spacing.comfortable),
                 )
                 Column(modifier = Modifier.weight(1f)) {
@@ -1011,17 +1041,11 @@ private fun GeneratedFace(
     onDone: () -> Unit,
 ) {
     val clipboard = LocalClipboardManager.current
+    val confirmationToastController = LocalConfirmationToastController.current
     val scope = rememberCoroutineScope()
-    var copied by remember { mutableStateOf(false) }
     var claimState: ClaimState by remember(result.token) { mutableStateOf(ClaimState.Pending) }
     var manualCheckResult: PendingTokenClaimCheckResult? by remember(result.token) {
         mutableStateOf(null)
-    }
-    LaunchedEffect(copied) {
-        if (copied) {
-            delay(2000)
-            copied = false
-        }
     }
     // Poll the mint to detect when the recipient redeems the token. Mirrors
     // iOS startClaimPolling: the spinner shows for the whole watch session
@@ -1074,20 +1098,17 @@ private fun GeneratedFace(
                     com.cashu.me.ui.components.InspectorRow(
                         label = "Amount",
                         value = amountPresentation.primary,
-                        leadingIcon = Icons.Outlined.Payments,
                     )
                     receipt.fee?.let { feeLabel ->
                         com.cashu.me.ui.components.InspectorRow(
                             label = "Fee",
                             value = feeLabel,
                             valueMonospaced = true,
-                            leadingIcon = Icons.Outlined.Receipt,
                         )
                     }
                     com.cashu.me.ui.components.InspectorRow(
                         label = "Mint",
                         value = receipt.mint,
-                        leadingIcon = Icons.Outlined.AccountBalance,
                     )
                 },
             )
@@ -1111,6 +1132,7 @@ private fun GeneratedFace(
             QrCard(
                 content = result.token,
                 shareSubject = "Cashu token",
+                confirmationMessage = "Copied ecash token",
             )
             GeneratedEcashAmount(presentation = amountPresentation)
             ClaimStatusRow(claimState = claimState)
@@ -1172,10 +1194,10 @@ private fun GeneratedFace(
             // Gray tonal fill instead of the inverted-ink primary — the analog of
             // iOS's non-prominent glass capsule; adapts to light/dark.
             PrimaryButton(
-                text = if (copied) "Copied" else "Copy",
+                text = "Copy",
                 onClick = {
                     clipboard.setText(AnnotatedString(result.token))
-                    copied = true
+                    confirmationToastController?.show("Copied ecash token")
                 },
                 colors = neutralActionButtonColors(),
             )
@@ -1263,26 +1285,16 @@ private fun ClaimStatusRow(
     ) { state ->
         when (state) {
             ClaimState.Pending -> {
-                val reducedMotion = rememberReducedMotion()
-                val transition = rememberInfiniteTransition(label = "pending-pulse")
-                val pulseAlpha by transition.animateFloat(
-                    initialValue = 1f,
-                    targetValue = 0.4f,
-                    animationSpec = infiniteRepeatable(
-                        animation = tween(1100),
-                        repeatMode = RepeatMode.Reverse,
-                    ),
-                    label = "pending-alpha",
-                )
+                val pulseAlpha = rememberPendingPulseAlpha()
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(CashuTheme.spacing.tight),
-                    modifier = Modifier.alpha(if (reducedMotion) 1f else pulseAlpha),
+                    modifier = Modifier.alpha(pulseAlpha),
                 ) {
                     Icon(
                         imageVector = Icons.Outlined.Schedule,
                         contentDescription = null,
-                        tint = com.cashu.me.ui.theme.CashuTheme.colors.pending,
+                        tint = com.cashu.me.ui.theme.CashuTheme.colors.onPendingContainer,
                         modifier = Modifier.size(STATUS_ICON_SMALL),
                     )
                     Text(

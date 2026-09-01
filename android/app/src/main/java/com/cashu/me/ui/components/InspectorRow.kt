@@ -79,7 +79,10 @@ fun InspectorRow(
         }
         Text(
             text = label,
-            style = MaterialTheme.typography.bodyMedium,
+            // bodyLarge, not bodyMedium: every neighboring row vocabulary
+            // (settings rows, MintSelectorRow, the flow rows) reads at 16sp,
+            // and 14sp here made payment facts look like fine print.
+            style = MaterialTheme.typography.bodyLarge,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         // Value fills the remaining width and right-aligns its text so it sits
@@ -90,8 +93,8 @@ fun InspectorRow(
                     Text(
                         text = value,
                         style = if (valueMonospaced) {
-                            MaterialTheme.typography.bodyMedium.withMonoDigits()
-                        } else MaterialTheme.typography.bodyMedium,
+                            MaterialTheme.typography.bodyLarge.withMonoDigits()
+                        } else MaterialTheme.typography.bodyLarge,
                         color = valueColor ?: MaterialTheme.colorScheme.onSurface,
                         maxLines = 1,
                         overflow = TextOverflow.MiddleEllipsis,
@@ -101,8 +104,8 @@ fun InspectorRow(
                         Text(
                             text = secondaryValue,
                             style = if (valueMonospaced) {
-                                MaterialTheme.typography.bodySmall.withMonoDigits()
-                            } else MaterialTheme.typography.bodySmall,
+                                MaterialTheme.typography.bodyMedium.withMonoDigits()
+                            } else MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             maxLines = 1,
                             overflow = TextOverflow.MiddleEllipsis,

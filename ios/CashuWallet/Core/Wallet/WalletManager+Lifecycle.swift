@@ -11,6 +11,411 @@ private enum WalletStartupInstrumentation {
     static let signposter = OSSignposter(subsystem: "com.cashu.me", category: "wallet.startup")
 }
 
+struct WalletFileBackup: Equatable {
+    let originalURL: URL
+    let backupURL: URL
+}
+
+struct WalletReplacementFileOperations {
+    let fileExists: (URL) -> Bool
+    let moveItem: (URL, URL) throws -> Void
+    let removeItem: (URL) throws -> Void
+
+    static func using(_ fileManager: FileManager) -> WalletReplacementFileOperations {
+        WalletReplacementFileOperations(
+            fileExists: { fileManager.fileExists(atPath: $0.path) },
+            moveItem: { try fileManager.moveItem(at: $0, to: $1) },
+            removeItem: { try fileManager.removeItem(at: $0) }
+        )
+    }
+
+    static let live = WalletReplacementFileOperations.using(.default)
+}
+
+enum WalletReplacementFiles {
+    private struct StagedReplacement {
+        let originalURL: URL
+        let displacedURL: URL
+    }
+
+    static func backup(
+        urls: [URL],
+        operations: WalletReplacementFileOperations = .live,
+        backupURL: (URL) -> URL
+    ) throws -> [WalletFileBackup] {
+        var backups: [WalletFileBackup] = []
+
+        do {
+            for originalURL in urls where operations.fileExists(originalURL) {
+                let candidate = backupURL(originalURL)
+                if operations.fileExists(candidate) {
+                    try operations.removeItem(candidate)
+                }
+
+                let backup = WalletFileBackup(
+                    originalURL: originalURL,
+                    backupURL: candidate
+                )
+                do {
+                    try operations.moveItem(originalURL, candidate)
+                    backups.append(backup)
+                } catch {
+                    // A move implementation may report failure after the item
+                    // reached its destination. Track the observed state so the
+                    // current item participates in partial-backup rollback.
+                    if operations.fileExists(candidate) {
+                        backups.append(backup)
+                    }
+                    throw error
+                }
+            }
+        } catch {
+            for backup in backups.reversed() where operations.fileExists(backup.backupURL) {
+                do {
+                    if operations.fileExists(backup.originalURL) {
+                        try operations.removeItem(backup.originalURL)
+                    }
+                    try operations.moveItem(backup.backupURL, backup.originalURL)
+                } catch {
+                    AppLogger.wallet.error("Failed to roll back a partial wallet database backup: \(error)")
+                    SentryService.capture(error)
+                }
+            }
+            throw error
+        }
+
+        return backups
+    }
+
+    static func restore(
+        at urls: [URL],
+        _ backups: [WalletFileBackup],
+        operations: WalletReplacementFileOperations = .live,
+        displacedURL: (URL) -> URL,
+        beforeCommit: () throws -> Void = {},
+        onRollback: () throws -> Void = {}
+    ) throws {
+        guard backups.allSatisfy({ operations.fileExists($0.backupURL) }) else {
+            performExternalRollback(onRollback)
+            throw CocoaError(.fileNoSuchFile)
+        }
+
+        let restorationOrder = Array(backups.reversed())
+        var stagedReplacements: [StagedReplacement] = []
+        let restorationURLs = uniqueURLs(urls + backups.map(\.originalURL))
+
+        do {
+            for originalURL in restorationURLs where operations.fileExists(originalURL) {
+                let displaced = displacedURL(originalURL)
+                if operations.fileExists(displaced) {
+                    try operations.removeItem(displaced)
+                }
+                let replacement = StagedReplacement(
+                    originalURL: originalURL,
+                    displacedURL: displaced
+                )
+                do {
+                    try operations.moveItem(originalURL, displaced)
+                    stagedReplacements.append(replacement)
+                } catch {
+                    // Account for moves that completed before reporting an
+                    // error, just as the backup-restoration phase does below.
+                    if operations.fileExists(displaced) {
+                        stagedReplacements.append(replacement)
+                    }
+                    throw error
+                }
+            }
+        } catch {
+            restoreStagedReplacements(stagedReplacements, operations: operations)
+            performExternalRollback(onRollback)
+            throw error
+        }
+
+        var restoredBackups: [WalletFileBackup] = []
+        do {
+            for backup in restorationOrder {
+                do {
+                    try operations.moveItem(backup.backupURL, backup.originalURL)
+                    restoredBackups.append(backup)
+                } catch {
+                    // FileManager moves are atomic, but injected or future
+                    // implementations may report failure after moving. Include
+                    // that backup in state-based rollback when its live path
+                    // appeared before the error surfaced.
+                    if operations.fileExists(backup.originalURL) {
+                        restoredBackups.append(backup)
+                    }
+                    throw error
+                }
+            }
+
+            // Keep every replacement file displaced until the previous seed
+            // has committed. If this throws, the catch below rolls the files
+            // forward to the replacement wallet before compensating its seed.
+            try beforeCommit()
+        } catch {
+            rollBackRestoredBackups(restoredBackups, operations: operations)
+            restoreStagedReplacements(stagedReplacements, operations: operations)
+            performExternalRollback(onRollback)
+            throw error
+        }
+
+        for replacement in stagedReplacements where operations.fileExists(replacement.displacedURL) {
+            do {
+                try operations.removeItem(replacement.displacedURL)
+            } catch {
+                AppLogger.wallet.error("Failed to remove a displaced replacement database: \(error)")
+                SentryService.capture(error)
+            }
+        }
+    }
+
+    private static func uniqueURLs(_ urls: [URL]) -> [URL] {
+        var paths: Set<String> = []
+        return urls.filter { paths.insert($0.standardizedFileURL.path).inserted }
+    }
+
+    private static func rollBackRestoredBackups(
+        _ backups: [WalletFileBackup],
+        operations: WalletReplacementFileOperations
+    ) {
+        for backup in backups.reversed() where operations.fileExists(backup.originalURL) {
+            do {
+                if operations.fileExists(backup.backupURL) {
+                    // A move implementation may have copied before throwing.
+                    // The backup already survives, so remove only the restored
+                    // live copy before putting the replacement back.
+                    try operations.removeItem(backup.originalURL)
+                } else {
+                    try operations.moveItem(backup.originalURL, backup.backupURL)
+                }
+            } catch {
+                AppLogger.wallet.error("Failed to roll back a restored wallet database backup: \(error)")
+                SentryService.capture(error)
+            }
+        }
+    }
+
+    private static func restoreStagedReplacements(
+        _ replacements: [StagedReplacement],
+        operations: WalletReplacementFileOperations
+    ) {
+        for replacement in replacements.reversed()
+        where operations.fileExists(replacement.displacedURL) {
+            do {
+                if operations.fileExists(replacement.originalURL) {
+                    // A copy-style move may leave both paths present before
+                    // throwing. The live replacement already survives.
+                    try operations.removeItem(replacement.displacedURL)
+                } else {
+                    try operations.moveItem(replacement.displacedURL, replacement.originalURL)
+                }
+            } catch {
+                AppLogger.wallet.error("Failed to restore a displaced replacement database: \(error)")
+                SentryService.capture(error)
+            }
+        }
+    }
+
+    private static func performExternalRollback(_ rollback: () throws -> Void) {
+        do {
+            try rollback()
+        } catch {
+            AppLogger.wallet.error("Failed to restore the replacement wallet seed: \(error)")
+            SentryService.capture(error)
+        }
+    }
+
+    static func removeBackups(
+        _ backups: [WalletFileBackup],
+        operations: WalletReplacementFileOperations = .live
+    ) throws {
+        for backup in backups where operations.fileExists(backup.backupURL) {
+            try operations.removeItem(backup.backupURL)
+        }
+    }
+}
+
+struct WalletFileMove: Equatable {
+    let sourceURL: URL
+    let destinationURL: URL
+}
+
+enum WalletFileMoves {
+    private struct StagedDestination {
+        let destinationURL: URL
+        let displacedURL: URL
+    }
+
+    static func move(
+        _ moves: [WalletFileMove],
+        operations: WalletReplacementFileOperations = .live,
+        displacedURL: (URL) -> URL
+    ) throws {
+        guard !moves.isEmpty else { return }
+        try requireDistinctPaths(moves)
+        guard moves.allSatisfy({ operations.fileExists($0.sourceURL) }) else {
+            throw CocoaError(.fileNoSuchFile)
+        }
+
+        var stagedDestinations: [StagedDestination] = []
+        var completedMoves: [WalletFileMove] = []
+        do {
+            for move in moves where operations.fileExists(move.destinationURL) {
+                let staged = StagedDestination(
+                    destinationURL: move.destinationURL,
+                    displacedURL: displacedURL(move.destinationURL)
+                )
+                if operations.fileExists(staged.displacedURL) {
+                    try removeChecked(staged.displacedURL, operations: operations)
+                }
+                do {
+                    try moveChecked(
+                        staged.destinationURL,
+                        staged.displacedURL,
+                        operations: operations
+                    )
+                    stagedDestinations.append(staged)
+                } catch {
+                    if operations.fileExists(staged.displacedURL) {
+                        stagedDestinations.append(staged)
+                    }
+                    throw error
+                }
+            }
+
+            for move in moves {
+                do {
+                    try moveChecked(
+                        move.sourceURL,
+                        move.destinationURL,
+                        operations: operations
+                    )
+                    completedMoves.append(move)
+                } catch {
+                    if operations.fileExists(move.destinationURL) {
+                        completedMoves.append(move)
+                    }
+                    throw error
+                }
+            }
+        } catch {
+            rollBackMoves(completedMoves, operations: operations)
+            restoreDestinations(stagedDestinations, operations: operations)
+            throw error
+        }
+
+        for staged in stagedDestinations where operations.fileExists(staged.displacedURL) {
+            do {
+                try removeChecked(staged.displacedURL, operations: operations)
+            } catch {
+                AppLogger.wallet.error("Failed to remove a displaced wallet database destination: \(error)")
+                SentryService.capture(error)
+            }
+        }
+    }
+
+    private static func requireDistinctPaths(_ moves: [WalletFileMove]) throws {
+        let sources = moves.map { $0.sourceURL.standardizedFileURL.path }
+        let destinations = moves.map { $0.destinationURL.standardizedFileURL.path }
+        guard Set(sources).count == sources.count,
+              Set(destinations).count == destinations.count,
+              Set(sources).isDisjoint(with: Set(destinations)) else {
+            throw CocoaError(.fileWriteUnknown)
+        }
+    }
+
+    private static func rollBackMoves(
+        _ moves: [WalletFileMove],
+        operations: WalletReplacementFileOperations
+    ) {
+        for move in moves.reversed() where operations.fileExists(move.destinationURL) {
+            do {
+                if operations.fileExists(move.sourceURL) {
+                    try removeChecked(move.destinationURL, operations: operations)
+                } else {
+                    try moveChecked(
+                        move.destinationURL,
+                        move.sourceURL,
+                        operations: operations
+                    )
+                }
+            } catch {
+                AppLogger.wallet.error("Failed to roll back a wallet database move: \(error)")
+                SentryService.capture(error)
+            }
+        }
+    }
+
+    private static func restoreDestinations(
+        _ destinations: [StagedDestination],
+        operations: WalletReplacementFileOperations
+    ) {
+        for staged in destinations.reversed() where operations.fileExists(staged.displacedURL) {
+            do {
+                if !operations.fileExists(staged.destinationURL) {
+                    try moveChecked(
+                        staged.displacedURL,
+                        staged.destinationURL,
+                        operations: operations
+                    )
+                }
+            } catch {
+                AppLogger.wallet.error("Failed to restore a displaced wallet database destination: \(error)")
+                SentryService.capture(error)
+            }
+        }
+    }
+
+    private static func moveChecked(
+        _ sourceURL: URL,
+        _ destinationURL: URL,
+        operations: WalletReplacementFileOperations
+    ) throws {
+        guard operations.fileExists(sourceURL), !operations.fileExists(destinationURL) else {
+            throw CocoaError(.fileWriteUnknown)
+        }
+        try operations.moveItem(sourceURL, destinationURL)
+        guard !operations.fileExists(sourceURL), operations.fileExists(destinationURL) else {
+            throw CocoaError(.fileWriteUnknown)
+        }
+    }
+
+    private static func removeChecked(
+        _ url: URL,
+        operations: WalletReplacementFileOperations
+    ) throws {
+        try operations.removeItem(url)
+        guard !operations.fileExists(url) else {
+            throw CocoaError(.fileWriteUnknown)
+        }
+    }
+}
+
+private func walletMoveDisplacedURL(_ destinationURL: URL) -> URL {
+    destinationURL.deletingLastPathComponent()
+        .appendingPathComponent(
+            "\(destinationURL.lastPathComponent).move-displaced.\(UUID().uuidString)"
+        )
+}
+
+enum WalletMnemonicRollback {
+    static func restore(
+        previousMnemonic: String?,
+        secureStorage: SecureStorageProtocol
+    ) throws {
+        if let previousMnemonic {
+            try secureStorage.saveSecret(
+                previousMnemonic,
+                forKey: StorageKeys.Secure.mnemonic
+            )
+        } else {
+            try secureStorage.deleteSecret(forKey: StorageKeys.Secure.mnemonic)
+        }
+    }
+}
+
 enum WalletStartupPolicy {
     /// Keysets are persisted by CDK. Refresh them periodically in the
     /// background instead of making every cold launch depend on every mint.
@@ -33,6 +438,28 @@ enum WalletStartupPolicy {
         iCloudRestoreIncomplete: Bool = false
     ) -> Bool {
         iCloudRestoreIncomplete || !cachedWalletPublished
+    }
+}
+
+enum WalletDatabaseRecoveryPolicy {
+    // Moving the live database aside is safe only for definitive corruption signals.
+    // Busy, I/O, permission, and generic open failures must preserve it for retry.
+    private static let corruptionIndicators = [
+        "sqlite_corrupt",
+        "sqlite_notadb",
+        "database disk image is malformed",
+        "malformed database schema",
+        "database disk image is corrupt",
+        "file is not a database",
+        "database corruption",
+        "database is corrupt",
+        "database is corrupted",
+        "corrupt database",
+    ]
+
+    static func shouldRecover(errorDescription: String) -> Bool {
+        let normalized = errorDescription.lowercased()
+        return corruptionIndicators.contains(where: normalized.contains)
     }
 }
 
@@ -288,7 +715,7 @@ extension WalletManager {
         needsOnboarding = false
         guard !IntegrationTestConfig.shouldUseDeterministicUIRuntime else { return }
         CashuRequestListener.shared.attach(walletManager: self)
-        Task { await CashuRequestListener.shared.start() }
+        CashuRequestListener.shared.requestStart()
     }
 
     /// Legacy restore for backward compatibility (initializes + completes without NUT-09)
@@ -301,6 +728,9 @@ extension WalletManager {
         isLoading = true
         defer { isLoading = false }
 
+        // Stop accepting listener work and let an already-started token receive
+        // finish all attribution/cache side effects before removing its wallet.
+        await CashuRequestListener.shared.resetForWalletBoundary()
         resetRuntimeState()
         try keychainService.deleteMnemonic()
         try? keychainService.deleteNostrPrivateKey()
@@ -310,7 +740,6 @@ extension WalletManager {
         SettingsManager.shared.resetWalletScopedData()
         NWCManager.shared.resetForWalletBoundary()
         CashuRequestStore.shared.resetForWalletBoundary()
-        CashuRequestListener.shared.resetForWalletBoundary()
         MintLogoCache.shared.clear()
         processedQuotes.removeAll()
         // iCloud backup survives a local deletion — the user can restore it from
@@ -326,15 +755,29 @@ extension WalletManager {
         let values: [String: Any]
     }
 
-    private struct WalletFileBackup {
-        let originalURL: URL
-        let backupURL: URL
-    }
-
     private func installCleanWallet(mnemonic newMnemonic: String) async throws {
-        let previousMnemonic = mnemonic ?? (try? keychainService.loadMnemonic())
+        let previousMnemonic: String?
+        if let mnemonic {
+            previousMnemonic = mnemonic
+        } else {
+            previousMnemonic = try keychainService.loadMnemonic()
+        }
         let defaultsSnapshot = walletBoundaryDefaultsSnapshot()
-        let fileBackups = try backupWalletDatabaseFiles()
+
+        // The database backup is a mutation too: drain listener-owned receives
+        // before any live wallet file can be displaced.
+        await CashuRequestListener.shared.resetForWalletBoundary()
+        let fileBackups: [WalletFileBackup]
+        do {
+            fileBackups = try backupWalletDatabaseFiles()
+        } catch {
+            // The transactional backup helper restores any files moved before
+            // the failure. Runtime state has not changed, so reopen listener
+            // intake for the still-attached wallet.
+            restoreWalletBoundaryDefaults(defaultsSnapshot)
+            resumeCashuRequestListenerAfterWalletBoundaryRollback()
+            throw error
+        }
 
         do {
             resetRuntimeState()
@@ -345,7 +788,6 @@ extension WalletManager {
             NPCService.shared.resetForWalletBoundary()
             NWCManager.shared.resetForWalletBoundary()
             CashuRequestStore.shared.resetForWalletBoundary()
-            CashuRequestListener.shared.resetForWalletBoundary()
             SettingsStore.shared.clearWalletScopedData()
 
             try initializeWalletForCreation(mnemonic: newMnemonic)
@@ -355,30 +797,77 @@ extension WalletManager {
             // completeOnboarding()/completeRestore() may flip this to done.
             OnboardingCompletionState.setCompleted(false)
             SettingsManager.shared.resetWalletScopedData(resetRuntimeServices: false)
-            try removeWalletFileBackups(fileBackups)
-            if !IntegrationTestConfig.shouldUseDeterministicUIRuntime {
-                performICloudBackup()
-            }
         } catch {
             SentryService.capture(error)
             resetRuntimeState()
-            restoreWalletBoundaryDefaults(defaultsSnapshot)
-            CashuRequestStore.shared.reloadFromDefaults()
-            try? removeWalletDatabaseFiles()
-            try? restoreWalletFileBackups(fileBackups)
+            let rollbackSucceeded: Bool
+            do {
+                try restoreWalletFileBackups(
+                    fileBackups,
+                    beforeCommit: {
+                        try WalletMnemonicRollback.restore(
+                            previousMnemonic: previousMnemonic,
+                            secureStorage: keychainService
+                        )
+                    },
+                    onRollback: {
+                        try WalletMnemonicRollback.restore(
+                            previousMnemonic: newMnemonic,
+                            secureStorage: keychainService
+                        )
+                    }
+                )
+                rollbackSucceeded = true
+            } catch {
+                rollbackSucceeded = false
+                AppLogger.wallet.error("Failed to restore the previous wallet transaction: \(error)")
+                SentryService.capture(error)
+            }
 
-            if let previousMnemonic {
+            var reopenedPreviousWallet = false
+            if rollbackSucceeded {
+                restoreWalletBoundaryDefaults(defaultsSnapshot)
+                CashuRequestStore.shared.reloadFromDefaults()
                 mnemonic = previousMnemonic
-                do {
-                    try initializeWalletForLaunch(mnemonic: previousMnemonic)
-                    startDeferredStartupMaintenance()
-                } catch {
-                    AppLogger.wallet.error("Failed to reopen previous wallet after replacement error: \(error)")
+
+                if let previousMnemonic {
+                    do {
+                        try initializeWalletForLaunch(mnemonic: previousMnemonic)
+                        startDeferredStartupMaintenance()
+                        reopenedPreviousWallet = true
+                    } catch {
+                        AppLogger.wallet.error("Failed to reopen previous wallet after replacement error: \(error)")
+                    }
                 }
+            }
+
+            if reopenedPreviousWallet {
+                resumeCashuRequestListenerAfterWalletBoundaryRollback()
             }
 
             throw error
         }
+
+        // The new seed/database pair is committed. Backup cleanup must never
+        // turn an otherwise successful replacement into a rollback after some
+        // of the only old-wallet backups have already been deleted.
+        do {
+            try removeWalletFileBackups(fileBackups)
+        } catch {
+            AppLogger.wallet.error("Failed to remove committed wallet replacement backups: \(error)")
+            SentryService.capture(error)
+        }
+
+        if !IntegrationTestConfig.shouldUseDeterministicUIRuntime {
+            performICloudBackup()
+        }
+    }
+
+    private func resumeCashuRequestListenerAfterWalletBoundaryRollback() {
+        guard walletRepository != nil else { return }
+        CashuRequestListener.shared.attach(walletManager: self)
+        guard !IntegrationTestConfig.shouldUseDeterministicUIRuntime else { return }
+        CashuRequestListener.shared.requestStart()
     }
 
     /// Open only local state needed for an immediately usable wallet. Network
@@ -604,47 +1093,32 @@ extension WalletManager {
     }
 
     private func backupWalletDatabaseFiles() throws -> [WalletFileBackup] {
-        let fileManager = FileManager.default
         let timestamp = Int(Date().timeIntervalSince1970)
-        var backups: [WalletFileBackup] = []
-
-        for originalURL in try walletDatabaseBoundaryURLs() {
-            guard fileManager.fileExists(atPath: originalURL.path) else { continue }
-
-            let backupURL = originalURL.deletingLastPathComponent()
+        return try WalletReplacementFiles.backup(urls: walletDatabaseBoundaryURLs()) { originalURL in
+            originalURL.deletingLastPathComponent()
                 .appendingPathComponent("\(originalURL.lastPathComponent).replacing.\(timestamp).\(UUID().uuidString)")
-
-            if fileManager.fileExists(atPath: backupURL.path) {
-                try fileManager.removeItem(at: backupURL)
-            }
-
-            try fileManager.moveItem(at: originalURL, to: backupURL)
-            backups.append(WalletFileBackup(originalURL: originalURL, backupURL: backupURL))
         }
-
-        return backups
     }
 
-    private func restoreWalletFileBackups(_ backups: [WalletFileBackup]) throws {
-        let fileManager = FileManager.default
-
-        for backup in backups.reversed() {
-            if fileManager.fileExists(atPath: backup.originalURL.path) {
-                try fileManager.removeItem(at: backup.originalURL)
-            }
-
-            guard fileManager.fileExists(atPath: backup.backupURL.path) else { continue }
-            try fileManager.moveItem(at: backup.backupURL, to: backup.originalURL)
-        }
+    private func restoreWalletFileBackups(
+        _ backups: [WalletFileBackup],
+        beforeCommit: () throws -> Void,
+        onRollback: () throws -> Void
+    ) throws {
+        try WalletReplacementFiles.restore(
+            at: walletDatabaseBoundaryURLs(),
+            backups,
+            displacedURL: { originalURL in
+                originalURL.deletingLastPathComponent()
+                    .appendingPathComponent("\(originalURL.lastPathComponent).rollback.\(UUID().uuidString)")
+            },
+            beforeCommit: beforeCommit,
+            onRollback: onRollback
+        )
     }
 
     private func removeWalletFileBackups(_ backups: [WalletFileBackup]) throws {
-        let fileManager = FileManager.default
-
-        for backup in backups {
-            guard fileManager.fileExists(atPath: backup.backupURL.path) else { continue }
-            try fileManager.removeItem(at: backup.backupURL)
-        }
+        try WalletReplacementFiles.removeBackups(backups)
     }
 
     private func removeWalletDatabaseFiles() throws {
@@ -757,17 +1231,27 @@ extension WalletManager {
     ) throws {
         guard fileManager.fileExists(atPath: legacyURL.path) else { return }
         guard !fileManager.fileExists(atPath: databaseURL.path) else { return }
-        try fileManager.moveItem(at: legacyURL, to: databaseURL)
+        var moves = [
+            WalletFileMove(sourceURL: legacyURL, destinationURL: databaseURL)
+        ]
 
         for suffix in ["-wal", "-shm", "-journal"] {
             let legacySidecarURL = URL(fileURLWithPath: legacyURL.path + suffix)
             guard fileManager.fileExists(atPath: legacySidecarURL.path) else { continue }
             let currentSidecarURL = URL(fileURLWithPath: databaseURL.path + suffix)
-            if fileManager.fileExists(atPath: currentSidecarURL.path) {
-                try fileManager.removeItem(at: currentSidecarURL)
-            }
-            try fileManager.moveItem(at: legacySidecarURL, to: currentSidecarURL)
+            moves.append(
+                WalletFileMove(
+                    sourceURL: legacySidecarURL,
+                    destinationURL: currentSidecarURL
+                )
+            )
         }
+
+        try WalletFileMoves.move(
+            moves,
+            operations: .using(fileManager),
+            displacedURL: walletMoveDisplacedURL
+        )
     }
 
     nonisolated private static func shouldRecoverLaunchDatabase(
@@ -776,12 +1260,9 @@ extension WalletManager {
         fileManager: FileManager
     ) -> Bool {
         guard fileManager.fileExists(atPath: databaseURL.path) else { return false }
-        let description = String(describing: error).lowercased()
-        return description.contains("sqlite")
-            || description.contains("database")
-            || description.contains("corrupt")
-            || description.contains("malformed")
-            || description.contains("walletdb")
+        return WalletDatabaseRecoveryPolicy.shouldRecover(
+            errorDescription: String(describing: error)
+        )
     }
 
     nonisolated private static func backupLaunchDatabase(
@@ -792,20 +1273,27 @@ extension WalletManager {
         let timestamp = Int(Date().timeIntervalSince1970)
         let backupURL = databaseURL.deletingLastPathComponent()
             .appendingPathComponent("\(databaseFilename).corrupt.\(timestamp)")
-        if fileManager.fileExists(atPath: backupURL.path) {
-            try fileManager.removeItem(at: backupURL)
-        }
-        try fileManager.moveItem(at: databaseURL, to: backupURL)
+        var moves = [
+            WalletFileMove(sourceURL: databaseURL, destinationURL: backupURL)
+        ]
 
         for suffix in ["-wal", "-shm", "-journal"] {
             let sidecarURL = URL(fileURLWithPath: databaseURL.path + suffix)
             guard fileManager.fileExists(atPath: sidecarURL.path) else { continue }
             let backupSidecarURL = URL(fileURLWithPath: backupURL.path + suffix)
-            if fileManager.fileExists(atPath: backupSidecarURL.path) {
-                try fileManager.removeItem(at: backupSidecarURL)
-            }
-            try fileManager.moveItem(at: sidecarURL, to: backupSidecarURL)
+            moves.append(
+                WalletFileMove(
+                    sourceURL: sidecarURL,
+                    destinationURL: backupSidecarURL
+                )
+            )
         }
+
+        try WalletFileMoves.move(
+            moves,
+            operations: .using(fileManager),
+            displacedURL: walletMoveDisplacedURL
+        )
         return backupURL
     }
 
@@ -814,36 +1302,35 @@ extension WalletManager {
             return false
         }
         
-        let errorDescription = String(describing: error).lowercased()
-        return errorDescription.contains("sqlite")
-            || errorDescription.contains("database")
-            || errorDescription.contains("corrupt")
-            || errorDescription.contains("malformed")
-            || errorDescription.contains("walletdb")
+        return WalletDatabaseRecoveryPolicy.shouldRecover(
+            errorDescription: String(describing: error)
+        )
     }
 
     private func backupCorruptedDatabase(at databaseURL: URL) throws -> URL {
         let timestamp = Int(Date().timeIntervalSince1970)
         let backupURL = databaseURL.deletingLastPathComponent()
             .appendingPathComponent("\(walletDatabaseFilename).corrupt.\(timestamp)")
-        
-        if FileManager.default.fileExists(atPath: backupURL.path) {
-            try FileManager.default.removeItem(at: backupURL)
-        }
-        
-        try FileManager.default.moveItem(at: databaseURL, to: backupURL)
-        
+        var moves = [
+            WalletFileMove(sourceURL: databaseURL, destinationURL: backupURL)
+        ]
+
         for suffix in ["-wal", "-shm", "-journal"] {
             let sidecarURL = URL(fileURLWithPath: databaseURL.path + suffix)
             guard FileManager.default.fileExists(atPath: sidecarURL.path) else { continue }
-            
             let sidecarBackupURL = URL(fileURLWithPath: backupURL.path + suffix)
-            if FileManager.default.fileExists(atPath: sidecarBackupURL.path) {
-                try FileManager.default.removeItem(at: sidecarBackupURL)
-            }
-            try FileManager.default.moveItem(at: sidecarURL, to: sidecarBackupURL)
+            moves.append(
+                WalletFileMove(
+                    sourceURL: sidecarURL,
+                    destinationURL: sidecarBackupURL
+                )
+            )
         }
-        
+
+        try WalletFileMoves.move(
+            moves,
+            displacedURL: walletMoveDisplacedURL
+        )
         return backupURL
     }
 
@@ -864,12 +1351,9 @@ extension WalletManager {
 
     private func startDeferredStartupMaintenance() {
         // Arm the foreground quote poll from the runtime path that provably
-        // runs on every launch. App-level wiring alone is not enough: the
-        // scenePhase `.active` onChange is unreliable at cold launch (hence the
-        // duplicated CashuRequestListener start), and the ContentView `.task`
-        // chain parks behind `await CashuRequestListener.shared.start()` (a
-        // Nostr connect that can hang), so anything queued after it may never
-        // run. Guard-protected — the scenePhase handler only stops/restarts it.
+        // runs on every launch. App-level wiring alone is not enough because
+        // scenePhase `.active` onChange is unreliable at cold launch.
+        // Guard-protected — the scenePhase handler only stops/restarts it.
         startPendingQuoteForegroundPolling()
         guard startupMaintenanceTask == nil else { return }
 

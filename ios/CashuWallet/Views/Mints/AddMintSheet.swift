@@ -64,23 +64,7 @@ struct AddMintFormView: View {
                     }
                     .accessibilityIdentifier("mints-add-url-field")
 
-                // Paste ↔ Clear, the same trailing face as the Receive and Send
-                // inputs — and the same bare secondary glyph the scanner button
-                // used to be. `PasteButton` would suppress iOS's "pasted from …"
-                // banner, but it only renders as a filled capsule, which shouts
-                // in a field whose whole job is to stay quiet.
-                if mintUrl.isEmpty {
-                    Button(action: pasteFromClipboard) {
-                        Image(systemName: "doc.on.clipboard")
-                            .font(.body.weight(.semibold))
-                            .foregroundStyle(.secondary)
-                    }
-                    .buttonStyle(.borderless)
-                    .disabled(isAdding)
-                    .accessibilityLabel("Paste")
-                    .accessibilityHint("Pastes a mint URL from the clipboard")
-                    .accessibilityIdentifier("mints-add-paste-button")
-                } else {
+                if !mintUrl.isEmpty {
                     Button {
                         mintUrl = ""
                         errorMessage = nil
@@ -88,6 +72,8 @@ struct AddMintFormView: View {
                         Image(systemName: "xmark.circle.fill")
                             .font(.body)
                             .foregroundStyle(.secondary)
+                            .frame(width: 44, height: 44)
+                            .contentShape(Rectangle())
                     }
                     .buttonStyle(.borderless)
                     .disabled(isAdding)
@@ -113,18 +99,22 @@ struct AddMintFormView: View {
                     .padding(.top, 12)
             }
 
-            Button(action: addMint) {
-                Group {
-                    if isAdding {
-                        ProgressView().tint(.primary)
-                    } else {
-                        Text("Add mint")
-                    }
+            HStack(spacing: 12) {
+                Button("Paste", action: pasteFromClipboard)
+                    .flatSheetSecondaryButton()
+                    .disabled(isAdding)
+                    .accessibilityHint("Pastes a mint URL from the clipboard")
+                    .accessibilityIdentifier("mints-add-paste-button")
+
+                Button(action: addMint) {
+                    LoadingButtonLabel(title: "Add mint", isLoading: isAdding)
                 }
+                .glassButton()
+                .disabled(!canSubmit)
+                .accessibilityLabel(isAdding ? "Adding mint" : "Add mint")
+                .accessibilityValue(isAdding ? "In progress" : "")
+                .accessibilityIdentifier("mints-add-submit-button")
             }
-            .glassButton()
-            .disabled(!canSubmit)
-            .accessibilityIdentifier("mints-add-submit-button")
             .padding(.top, 24)
 
         }
@@ -212,6 +202,7 @@ struct AddMintSheet: View {
         // Hugs the form, like every other content-fit sheet in the app.
         .contentFitDetent(contentHeight, estimate: 260)
         .presentationDragIndicator(.visible)
+        .compactBottomSheetSurface()
     }
 }
 

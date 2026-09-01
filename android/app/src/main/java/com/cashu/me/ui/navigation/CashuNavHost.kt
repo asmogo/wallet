@@ -6,6 +6,7 @@ import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.core.FastOutLinearInEasing
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.LinearOutSlowInEasing
+import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -14,7 +15,13 @@ import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.blur
+import androidx.compose.ui.unit.dp
 import androidx.navigation.NavBackStackEntry
 import androidx.navigation.NavGraphBuilder
 import androidx.navigation.NavHostController
@@ -24,8 +31,9 @@ import androidx.navigation.compose.composable
 import androidx.navigation.navArgument
 import com.cashu.me.App.AppContainer
 import com.cashu.me.Core.Platform.ConnectivityState
+import com.cashu.me.Models.WalletTransaction
 import com.cashu.me.ui.history.HistoryScreen
-import com.cashu.me.ui.history.TransactionDetailScreen
+import com.cashu.me.ui.history.TransactionReceiptSheet
 import com.cashu.me.ui.home.HomeScreen
 import com.cashu.me.ui.mints.MintDetailScreen
 import com.cashu.me.ui.mints.MintsScreen
@@ -48,7 +56,8 @@ import java.net.URLEncoder
 import java.nio.charset.StandardCharsets
 
 /**
- * The NavHost. Tabs + pushed detail destinations only — the money flows
+ * The NavHost. Tabs + pushed active-detail destinations, with completed
+ * transaction receipts overlaid as native bottom sheets. The money flows
  * (Send, Send Ecash, Receive Ecash, Receive Lightning) are native modal
  * bottom sheets hosted by the shell (see `ui.shell.WalletFlowSheetHost`),
  * and Scanner/Contactless are shell overlays.
@@ -69,10 +78,17 @@ fun CashuNavHost(
     onClaimReceiveToken: (String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    var receiptTransaction by remember { mutableStateOf<WalletTransaction?>(null) }
+    val receiptBackdropBlur by animateDpAsState(
+        targetValue = if (receiptTransaction != null) 2.dp else 0.dp,
+        animationSpec = tween(durationMillis = 180),
+        label = "transaction-receipt-backdrop-blur",
+    )
+
     NavHost(
         navController = navController,
         startDestination = Routes.HOME,
-        modifier = modifier,
+        modifier = modifier.blur(receiptBackdropBlur),
         // Shared-axis X for pushed destinations, spring-driven (M3 Expressive).
         enterTransition = pushEnter,
         exitTransition = pushExit,
@@ -91,6 +107,10 @@ fun CashuNavHost(
             onSend = onSend,
             pendingMintScan = pendingMintScan,
             onPendingMintScanConsumed = onPendingMintScanConsumed,
+            onClaimReceiveToken = onClaimReceiveToken,
+            // Every transaction detail — settled or live — opens as the same
+            // receipt-family sheet over the originating list (iOS parity).
+            onOpenTransaction = { transaction -> receiptTransaction = transaction },
         )
         composable(
             route = Routes.MINT_DETAIL,
@@ -104,21 +124,6 @@ fun CashuNavHost(
                 priceService = container.priceService,
                 mintUrl = mintUrl,
                 onClose = { navController.popBackStack() },
-            )
-        }
-        composable(
-            route = Routes.TRANSACTION_DETAIL,
-            arguments = listOf(navArgument("transactionId") { type = NavType.StringType }),
-        ) { entry ->
-            val encoded = entry.arguments?.getString("transactionId").orEmpty()
-            val txId = URLDecoder.decode(encoded, StandardCharsets.UTF_8.name())
-            TransactionDetailScreen(
-                walletManager = container.walletManager,
-                settingsManager = container.settingsManager,
-                transactionId = txId,
-                onClose = { navController.popBackStack() },
-                onClaimReceiveToken = onClaimReceiveToken,
-                snackbarHostState = container.snackbarHostState,
             )
         }
         composable(
@@ -138,7 +143,6 @@ fun CashuNavHost(
                 nfcReceiveCoordinator = container.nfcReceiveCoordinator,
                 requestId = requestId,
                 onClose = { navController.popBackStack() },
-                snackbarHostState = container.snackbarHostState,
             )
         }
 
@@ -189,6 +193,7 @@ fun CashuNavHost(
             LightningScreen(
                 walletManager = container.walletManager,
                 npcService = container.npcService,
+                settingsManager = container.settingsManager,
                 onClose = { navController.popBackStack() },
             )
         }
@@ -256,16 +261,26 @@ fun CashuNavHost(
             LicensesScreen(onClose = { navController.popBackStack() })
         }
     }
+
+    receiptTransaction?.let { transaction ->
+        TransactionReceiptSheet(
+            transaction = transaction,
+            walletManager = container.walletManager,
+            settingsManager = container.settingsManager,
+            priceService = container.priceService,
+            onDismissRequest = { receiptTransaction = null },
+            // The claim flow presents at app level; the sheet steps aside first.
+            onClaimReceiveToken = { token ->
+                receiptTransaction = null
+                onClaimReceiveToken(token)
+            },
+        )
+    }
 }
 
 internal fun mintDetailRouteFor(mintUrl: String): String {
     val encoded = URLEncoder.encode(mintUrl, StandardCharsets.UTF_8.name())
     return Routes.MINT_DETAIL.replace("{mintUrl}", encoded)
-}
-
-internal fun transactionDetailRouteFor(transactionId: String): String {
-    val encoded = URLEncoder.encode(transactionId, StandardCharsets.UTF_8.name())
-    return Routes.TRANSACTION_DETAIL.replace("{transactionId}", encoded)
 }
 
 internal fun cashuRequestDetailRouteFor(requestId: String): String {
@@ -285,6 +300,8 @@ private fun NavGraphBuilder.tabDestinations(
     onSend: () -> Unit,
     pendingMintScan: String?,
     onPendingMintScanConsumed: () -> Unit,
+    onOpenTransaction: (WalletTransaction) -> Unit,
+    onClaimReceiveToken: (String) -> Unit,
 ) {
     composable(
         route = Routes.HOME,
@@ -297,11 +314,8 @@ private fun NavGraphBuilder.tabDestinations(
             walletManager = container.walletManager,
             settingsManager = container.settingsManager,
             priceService = container.priceService,
-            onOpenMints = { navController.navigateToTab(TopTab.Mints) },
             onOpenHistory = { navController.navigateToTab(TopTab.History) },
-            onOpenTransaction = { tx ->
-                navController.navigate(transactionDetailRouteFor(tx.id))
-            },
+            onOpenTransaction = onOpenTransaction,
             // Receive goes straight to the unified surface — no chooser (iOS
             // parity). Bitcoin is now a button inside that sheet, not a chooser row.
             onAddMint = onAddMint,
@@ -325,9 +339,8 @@ private fun NavGraphBuilder.tabDestinations(
             settingsManager = container.settingsManager,
             priceService = container.priceService,
             cashuRequestStore = container.cashuRequestStore,
-            onOpenTransaction = { tx ->
-                navController.navigate(transactionDetailRouteFor(tx.id))
-            },
+            onOpenTransaction = onOpenTransaction,
+            onClaimReceiveToken = onClaimReceiveToken,
             onOpenCashuRequest = { req ->
                 navController.navigate(cashuRequestDetailRouteFor(req.id))
             },

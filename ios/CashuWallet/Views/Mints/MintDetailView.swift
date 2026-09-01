@@ -6,18 +6,25 @@ struct MintDetailView: View {
     @ObservedObject private var settings = SettingsManager.shared
     @ObservedObject private var priceService = PriceService.shared
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     let mint: MintInfo
+
+    /// Navigation carries a stable URL, while balances and metadata keep
+    /// following WalletManager publications after this screen is open.
+    private var liveMint: MintInfo {
+        walletManager.mints.first(where: { $0.url == mint.url }) ?? mint
+    }
 
     @State private var cdkInfo: Cdk.MintInfo?
     @State private var isLoading = true
     @State private var errorMessage: String?
     @State private var showRemoveConfirmation = false
-    @State private var copiedUrl = false
     @State private var nutsExpanded = false
     @State private var aboutExpanded = false
     @State private var showNavTitle = false
     @State private var isSettingDefault = false
+    @State private var isRemovingMint = false
     @State private var actionError: String?
     /// Balances for the mint's non-sat units, loaded on demand (the sat balance
     /// is the cached `mint.balance`). Where a freshly-minted eur/usd shows up.
@@ -25,11 +32,11 @@ struct MintDetailView: View {
 
     /// The mint's non-sat units (sat is shown by `balanceRow`).
     private var nonSatUnits: [String] {
-        mint.units.filter { $0.lowercased() != "sat" }.sorted()
+        liveMint.units.filter { $0.lowercased() != "sat" }.sorted()
     }
 
     private var isDefaultMint: Bool {
-        walletManager.activeMint?.url == mint.url
+        walletManager.activeMint?.url == liveMint.url
     }
 
     private enum Connection { case checking, online, offline }
@@ -52,7 +59,11 @@ struct MintDetailView: View {
                     .padding(.bottom, 24)
 
                 if let errorMessage {
-                    ErrorBannerView(message: errorMessage, severity: .error)
+                    ErrorBannerView(
+                        message: errorMessage,
+                        severity: .error,
+                        retry: { Task { await loadMintInfo() } }
+                    )
                         .padding(.bottom, 12)
                 }
 
@@ -68,16 +79,19 @@ struct MintDetailView: View {
                 .padding(.bottom, 24)
 
                 // Remote metadata fills in after the fetch.
-                if cdkInfo == nil && isLoading {
-                    loadingRow
-                } else {
-                    aboutSection
-                    motdSection
-                    capabilitiesSection
-                    paymentMethodsSection
-                    contactSection
-                    detailsSection
+                Group {
+                    if cdkInfo == nil && isLoading {
+                        loadingRow
+                    } else {
+                        aboutSection
+                        motdSection
+                        capabilitiesSection
+                        paymentMethodsSection
+                        contactSection
+                        detailsSection
+                    }
                 }
+                .animation(reduceMotion ? nil : .easeOut(duration: 0.2), value: isLoading)
 
                 footerNote
 
@@ -94,13 +108,13 @@ struct MintDetailView: View {
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .principal) {
-                Text(mint.name)
+                Text(liveMint.name)
                     .font(.headline)
                     .opacity(showNavTitle ? 1 : 0)
                     .animation(.easeInOut(duration: 0.2), value: showNavTitle)
             }
             ToolbarItem(placement: .topBarTrailing) {
-                ShareLink(item: mint.url) {
+                ShareLink(item: liveMint.url) {
                     Image(systemName: "square.and.arrow.up")
                         .toolbarIconTapTarget()
                 }
@@ -109,11 +123,15 @@ struct MintDetailView: View {
         }
         .task { await loadMintInfo() }
         .task { await loadUnitBalances() }
-        .alert("Remove Mint", isPresented: $showRemoveConfirmation) {
+        .confirmationDialog(
+            "Remove Mint",
+            isPresented: $showRemoveConfirmation,
+            titleVisibility: .visible
+        ) {
             Button("Remove", role: .destructive) { removeMint() }
             Button("Cancel", role: .cancel) {}
         } message: {
-            Text("Remove \(mint.name)? Any unspent ecash will need to be restored from your seed phrase.")
+            Text("Remove \(liveMint.name)? Any unspent ecash will need to be restored from your seed phrase.")
         }
     }
 
@@ -125,7 +143,7 @@ struct MintDetailView: View {
                 .overlay(alignment: .bottomTrailing) {
                     if isDefaultMint { defaultDot }
                 }
-            Text(mint.name)
+            Text(liveMint.name)
                 .font(.title3.weight(.semibold))
                 .multilineTextAlignment(.center)
             copyUrlChip
@@ -159,7 +177,7 @@ struct MintDetailView: View {
     private var mintIcon: some View {
         // Prefer live CDK info, but fall back to the persisted mint icon so the
         // header doesn't blank while `loadMintInfo()` is in flight.
-        let iconURLString = cdkInfo?.iconUrl ?? mint.iconUrl
+        let iconURLString = cdkInfo?.iconUrl ?? liveMint.iconUrl
         if let iconURLString, let url = URL(string: iconURLString) {
             CachedAsyncImage(url: url) { image in
                 image
@@ -178,19 +196,19 @@ struct MintDetailView: View {
     private var copyUrlChip: some View {
         Button(action: copyUrl) {
             HStack(spacing: 4) {
-                Text(mint.url)
+                Text(liveMint.url)
                     .font(.caption)
                     .lineLimit(1)
                     .truncationMode(.middle)
-                Image(systemName: copiedUrl ? "checkmark" : "doc.on.doc")
+                Image(systemName: "doc.on.doc")
                     .font(.caption2)
-                    .contentTransition(.symbolEffect(.replace))
-                    .animation(.snappy(duration: 0.18), value: copiedUrl)
             }
             .foregroundStyle(.secondary)
+            .frame(minHeight: 44)
+            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .accessibilityLabel(copiedUrl ? "Copied mint URL" : "Copy mint URL")
+        .accessibilityLabel("Copy mint URL")
     }
 
     // MARK: - Identity stats
@@ -201,9 +219,9 @@ struct MintDetailView: View {
                 .foregroundStyle(.secondary)
             Spacer()
             VStack(alignment: .trailing, spacing: 2) {
-                Text(AmountFormatter.sats(mint.balance, useBitcoinSymbol: settings.useBitcoinSymbol))
+                Text(AmountFormatter.sats(liveMint.balance, useBitcoinSymbol: settings.useBitcoinSymbol))
                     .monospacedDigit()
-                if showFiat, let fiatBalance = priceService.formatSatsAsFiat(mint.balance) {
+                if showFiat, let fiatBalance = priceService.formatSatsAsFiat(liveMint.balance) {
                     Text(fiatBalance)
                         .font(.caption)
                         .monospacedDigit()
@@ -266,7 +284,7 @@ struct MintDetailView: View {
 
     @ViewBuilder
     private var aboutSection: some View {
-        let shortDesc = cdkInfo?.description ?? mint.description
+        let shortDesc = cdkInfo?.description ?? liveMint.description
         let longDesc = cdkInfo?.descriptionLong
         if (shortDesc?.isEmpty == false) || (longDesc?.isEmpty == false) {
             section("About") {
@@ -282,7 +300,9 @@ struct MintDetailView: View {
                             .lineLimit(aboutExpanded ? nil : 3)
                         if longDesc.count > 160 {
                             Button(aboutExpanded ? "Show less" : "Read more") {
-                                withAnimation(.easeInOut(duration: 0.2)) { aboutExpanded.toggle() }
+                                withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.2)) {
+                                    aboutExpanded.toggle()
+                                }
                             }
                             .font(.caption.weight(.medium))
                             .foregroundStyle(Color.accentColor)
@@ -337,7 +357,11 @@ struct MintDetailView: View {
     }
 
     private func nutDisclosure(_ nuts: Cdk.Nuts) -> some View {
-        DisclosureGroup(isExpanded: $nutsExpanded.animation(.easeInOut(duration: 0.2))) {
+        DisclosureGroup(
+            isExpanded: $nutsExpanded.animation(
+                reduceMotion ? nil : .easeInOut(duration: 0.2)
+            )
+        ) {
             VStack(spacing: 0) {
                 nutRow("NUT-04", "Mint", true)
                 nutRow("NUT-05", "Melt", true)
@@ -454,7 +478,7 @@ struct MintDetailView: View {
     @ViewBuilder
     private var detailsSection: some View {
         let version = cdkInfo?.version
-        let showUnits = !mint.units.isEmpty
+        let showUnits = !liveMint.units.isEmpty
         let tosUrl = cdkInfo?.tosUrl.flatMap { URL(string: $0) }
         if version != nil || showUnits || tosUrl != nil {
             section("Details") {
@@ -465,8 +489,8 @@ struct MintDetailView: View {
                     }
                     if showUnits {
                         detailRow(icon: "ruler",
-                                  label: mint.units.count > 1 ? "Units" : "Unit",
-                                  value: mint.units.joined(separator: ", ").uppercased())
+                                  label: liveMint.units.count > 1 ? "Units" : "Unit",
+                                  value: liveMint.units.joined(separator: ", ").uppercased())
                     }
                     if let tosUrl {
                         Link(destination: tosUrl) {
@@ -531,7 +555,8 @@ struct MintDetailView: View {
                     actionError = nil
                     Task {
                         do {
-                            try await walletManager.setActiveMint(mint)
+                            try await walletManager.setActiveMint(liveMint)
+                            ConfirmationToast.show("Default mint updated")
                         } catch {
                             actionError = error.userFacingWalletMessage
                         }
@@ -551,13 +576,19 @@ struct MintDetailView: View {
             Button(role: .destructive) {
                 showRemoveConfirmation = true
             } label: {
-                Text("Remove Mint")
-                    .font(.body)
-                    .foregroundStyle(.red)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 14)
+                HStack(spacing: 8) {
+                    Text("Remove Mint")
+                    if isRemovingMint {
+                        ProgressView().tint(.red)
+                    }
+                }
+                .font(.body)
+                .foregroundStyle(.red)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 14)
             }
             .buttonStyle(.plain)
+            .disabled(isRemovingMint)
         }
     }
 
@@ -647,41 +678,44 @@ struct MintDetailView: View {
     /// used by `MintService.supportedMintPaymentMethods`.
     private var receiveMethods: [PaymentMethodKind] {
         let kinds = cdkInfo?.nuts.nut04.methods.compactMap { PaymentMethodKind.from($0.method) }
-            ?? mint.supportedMintMethods
+            ?? liveMint.supportedMintMethods
         return PaymentMethodKind.allCases.filter { kinds.contains($0) }
     }
 
     /// Deduped send rails (see `receiveMethods`).
     private var sendMethods: [PaymentMethodKind] {
         let kinds = cdkInfo?.nuts.nut05.methods.compactMap { PaymentMethodKind.from($0.method) }
-            ?? mint.supportedMeltMethods
+            ?? liveMint.supportedMeltMethods
         return PaymentMethodKind.allCases.filter { kinds.contains($0) }
     }
 
     // MARK: - Actions
 
     private func copyUrl() {
-        UIPasteboard.general.string = mint.url
-        copiedUrl = true
-        DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
-            copiedUrl = false
-        }
+        UIPasteboard.general.string = liveMint.url
+        ConfirmationToast.show("Copied mint URL")
     }
 
     private func loadMintInfo() async {
+        withAnimation(reduceMotion ? nil : .easeOut(duration: 0.15)) {
+            isLoading = true
+            errorMessage = nil
+        }
         do {
-            cdkInfo = try await walletManager.fetchFullMintInfo(mintUrl: mint.url)
+            cdkInfo = try await walletManager.fetchFullMintInfo(mintUrl: liveMint.url)
         } catch {
             errorMessage = error.userFacingWalletMessage
         }
-        isLoading = false
+        withAnimation(reduceMotion ? nil : .easeOut(duration: 0.2)) {
+            isLoading = false
+        }
     }
 
     /// Fetch each non-sat unit's balance so a minted eur/usd is visible here
     /// (the app's aggregate balance is sat-only).
     private func loadUnitBalances() async {
         for unit in nonSatUnits {
-            if let balance = await walletManager.unitBalance(mintURL: mint.url, unit: unit) {
+            if let balance = await walletManager.unitBalance(mintURL: liveMint.url, unit: unit) {
                 unitBalances[unit] = balance
             }
         }
@@ -689,9 +723,15 @@ struct MintDetailView: View {
 
     private func removeMint() {
         Task {
-            if let index = walletManager.mints.firstIndex(where: { $0.url == mint.url }) {
-                await walletManager.removeMint(at: IndexSet(integer: index))
+            isRemovingMint = true
+            actionError = nil
+            let removed = await walletManager.removeMint(mint)
+            isRemovingMint = false
+            if removed {
                 dismiss()
+            } else if !Task.isCancelled {
+                actionError = walletManager.errorMessage
+                    ?? "The mint could not be removed. Keep it connected and try again."
             }
         }
     }

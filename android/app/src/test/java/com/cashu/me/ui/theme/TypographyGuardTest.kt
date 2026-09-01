@@ -2,6 +2,7 @@ package com.cashu.me.ui.theme
 
 import androidx.compose.material3.Typography
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.unit.sp
 import java.io.File
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -90,6 +91,12 @@ class TypographyGuardTest {
         }
     }
 
+    /** Keep the shared Home and entry hero aligned with iOS's 64pt base. */
+    @Test
+    fun `amount hero matches the cross-platform scale`() {
+        assertEquals(64.sp, cashuTypeRoles(CashuFonts.Geist).amountHero.fontSize)
+    }
+
     /**
      * Fires when a Material upgrade moves a token underneath the explicit
      * scale. The scale is written out in full precisely so this can be checked:
@@ -118,7 +125,7 @@ class TypographyGuardTest {
     fun `role inventory is frozen`() {
         assertEquals(
             "Adding or removing a role is a design decision — update this count deliberately",
-            12,
+            13,
             allRoles().size,
         )
     }
@@ -137,7 +144,11 @@ class TypographyGuardTest {
     @Test
     fun `mono roles disambiguate zero`() {
         val roles = cashuTypeRoles(CashuFonts.Geist)
-        listOf("monoBody" to roles.monoBody, "monoCaption" to roles.monoCaption)
+        listOf(
+            "monoDisplay" to roles.monoDisplay,
+            "monoBody" to roles.monoBody,
+            "monoCaption" to roles.monoCaption,
+        )
             .forEach { (name, style) ->
                 assertTrue("$name lacks ss09", "ss09" in style.fontFeatureSettings.orEmpty())
                 assertEquals("$name is not Geist Mono", CashuFonts.Geist.mono, style.fontFamily)
@@ -156,6 +167,7 @@ class TypographyGuardTest {
             "sheetTitle" to r.sheetTitle,
             "numberPadKey" to r.numberPadKey,
             "metadata" to r.metadata,
+            "monoDisplay" to r.monoDisplay,
             "monoBody" to r.monoBody,
             "monoCaption" to r.monoCaption,
         )

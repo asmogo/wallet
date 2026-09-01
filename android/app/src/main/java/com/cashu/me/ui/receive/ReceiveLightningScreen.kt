@@ -29,24 +29,21 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.MoreVert
-import androidx.compose.material.icons.outlined.AccountBalance
-import androidx.compose.material.icons.outlined.AccountBalanceWallet
-import androidx.compose.material.icons.outlined.CalendarToday
 import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.Bolt
 import androidx.compose.material.icons.outlined.CurrencyBitcoin
 import androidx.compose.material.icons.outlined.IosShare
-import androidx.compose.material.icons.outlined.Payments
 import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material.icons.outlined.Repeat
 import androidx.compose.material.icons.outlined.Timer
-import androidx.compose.material.icons.outlined.UnfoldMore
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LoadingIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
@@ -66,7 +63,6 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import java.text.DateFormat
 import java.util.Date
@@ -101,8 +97,10 @@ import com.cashu.me.ui.components.FlowSheetTitle
 import com.cashu.me.ui.components.IconSwap
 import com.cashu.me.ui.components.InlineNotice
 import com.cashu.me.ui.components.InspectorRow
-import com.cashu.me.ui.components.MintAvatar
+import com.cashu.me.ui.components.LocalConfirmationToastController
 import com.cashu.me.ui.components.MintPickerSheet
+import com.cashu.me.ui.components.MintSelectorDirection
+import com.cashu.me.ui.components.MintSelectorRow
 import com.cashu.me.ui.components.NoticeSeverity
 import com.cashu.me.ui.components.NumberPadFooter
 import com.cashu.me.ui.components.PaymentStatusPhase
@@ -450,8 +448,16 @@ fun ReceiveLightningScreen(
     }
 
     // The paid terminal replaces the sheet body while retaining the same header
-    // and explicit Done action as iOS.
-    Crossfade(targetState = successInfo, label = "receive-ln-terminal") { terminal ->
+    // and explicit Done action as iOS. Standard swap pair (not a bare
+    // Crossfade, whose slower symmetric tween buried the terminal's staged
+    // celebration): the waiting face exits fast, the terminal fades in and
+    // its own entrance stages the check → title → rows.
+    AnimatedContent(
+        targetState = successInfo,
+        transitionSpec = { fadeIn(tween(200)) togetherWith fadeOut(tween(150)) },
+        contentKey = { it != null },
+        label = "receive-ln-terminal",
+    ) { terminal ->
       if (terminal != null) {
         Column(
             modifier = Modifier
@@ -620,7 +626,10 @@ fun ReceiveLightningScreen(
                             mintBalanceText = activeMint?.let {
                                 formatter.formatWalletSats(it.balance, settings.useBitcoinSymbol)
                             },
-                            onPickMint = { mintPickerOpen = true },
+                            // One mint means nothing to choose between, so the
+                            // row drops its chevron and stops opening a picker.
+                            onPickMint = { mintPickerOpen = true }
+                                .takeIf { walletState.mints.size > 1 },
                             isSatUnit = isSatUnit,
                             unit = effectiveUnit,
                             amountSats = ReceiveAmountEntry.amountBaseUnits(amount, amountEntryContext),
@@ -959,6 +968,7 @@ fun ReceiveLightningScreen(
 }
 
 /** iOS creatingOverlay parity for amountless BOLT12 / on-chain auto-create. */
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 private fun CreatingOverlay(method: PaymentMethodKind) {
     val label = if (method == PaymentMethodKind.Onchain) {
@@ -971,7 +981,7 @@ private fun CreatingOverlay(method: PaymentMethodKind) {
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
     ) {
-        androidx.compose.material3.CircularProgressIndicator()
+        LoadingIndicator(modifier = Modifier.size(48.dp))
         Spacer(Modifier.height(CashuTheme.spacing.comfortable))
         Text(
             text = label,
@@ -994,7 +1004,7 @@ private fun InputFace(
     creating: Boolean,
     mint: MintInfo?,
     mintBalanceText: String?,
-    onPickMint: () -> Unit,
+    onPickMint: (() -> Unit)?,
     isSatUnit: Boolean,
     unit: String,
     amountSats: Long,
@@ -1017,13 +1027,6 @@ private fun InputFace(
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         Spacer(Modifier.height(CashuTheme.spacing.default))
-        if (mint != null) {
-            MintSelectorRow(
-                mint = mint,
-                balanceText = mintBalanceText,
-                onClick = onPickMint,
-            )
-        }
         Spacer(Modifier.weight(1f))
         if (selectedMethod == PaymentMethodKind.Onchain) {
             Text(
@@ -1061,7 +1064,6 @@ private fun InputFace(
                 entryRaw = amount,
                 isSat = false,
                 unit = unit,
-                decimals = decimals,
                 useBitcoinSymbol = useBitcoinSymbol,
                 formatter = formatter,
             )
@@ -1071,6 +1073,17 @@ private fun InputFace(
             InlineNotice(text = errorText, severity = NoticeSeverity.Error)
         }
         Spacer(Modifier.weight(1f))
+        // Under the amount, over the keypad — the same slot the send flows use.
+        if (mint != null) {
+            MintSelectorRow(
+                direction = MintSelectorDirection.Destination,
+                mint = mint,
+                balanceText = mintBalanceText,
+                showBalance = true,
+                onPickMint = onPickMint,
+            )
+            Spacer(Modifier.height(CashuTheme.spacing.snug))
+        }
         NumberPadFooter(
             amount = amount,
             onAmountChange = onAmountChange,
@@ -1079,48 +1092,6 @@ private fun InputFace(
             onButtonClick = onCreate,
             buttonEnabled = !creating && (!selectedMethod.requiresMintAmount || amountValid),
             buttonLoading = creating,
-        )
-    }
-}
-
-/** Mint row: avatar + name + balance + change affordance (iOS mintSelector). */
-@Composable
-private fun MintSelectorRow(
-    mint: MintInfo,
-    balanceText: String?,
-    onClick: () -> Unit,
-) {
-    Row(
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(CashuTheme.spacing.default),
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(onClick = onClick)
-            .padding(vertical = CashuTheme.spacing.snug),
-    ) {
-        MintAvatar(mint = mint)
-        Column(modifier = Modifier.weight(1f)) {
-            Text(
-                text = mint.name,
-                style = MaterialTheme.typography.bodyLarge,
-                fontWeight = FontWeight.Medium,
-                color = MaterialTheme.colorScheme.onSurface,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-            if (balanceText != null) {
-                Text(
-                    text = "Balance $balanceText",
-                    style = MaterialTheme.typography.bodySmall.withMonoDigits(),
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-        }
-        Icon(
-            imageVector = Icons.Outlined.UnfoldMore,
-            contentDescription = "Change mint",
-            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.size(CashuTheme.spacing.loose),
         )
     }
 }
@@ -1158,13 +1129,7 @@ private fun DisplayFace(
     onEditReusableAmount: (() -> Unit)?,
     onOpenExplorer: (() -> Unit)?,
 ) {
-    var copied by remember { mutableStateOf(false) }
-    LaunchedEffect(copied) {
-        if (copied) {
-            delay(2000)
-            copied = false
-        }
-    }
+    val confirmationToastController = LocalConfirmationToastController.current
     val isReusable = quote.paymentMethod == PaymentMethodKind.Bolt12
     Column(modifier = Modifier.fillMaxSize()) {
         // Scrolling content region; the copy CTA is pinned to the bottom (iOS
@@ -1178,7 +1143,16 @@ private fun DisplayFace(
             verticalArrangement = Arrangement.spacedBy(CashuTheme.spacing.comfortable),
         ) {
             Spacer(Modifier.height(CashuTheme.spacing.comfortable))
-            QrCard(content = quote.request, shareSubject = "Payment request", staticOnly = true)
+            QrCard(
+                content = quote.request,
+                shareSubject = "Payment request",
+                staticOnly = true,
+                confirmationMessage = if (quote.paymentMethod == PaymentMethodKind.Onchain) {
+                    "Copied Bitcoin address"
+                } else {
+                    "Copied payment request"
+                },
+            )
             if (amountLabel != null) {
                 GeneratedInvoiceAmount(
                     amount = quote.amount ?: 0L,
@@ -1211,13 +1185,11 @@ private fun DisplayFace(
                         InspectorRow(
                             label = "Mint",
                             value = mintName,
-                            leadingIcon = Icons.Outlined.AccountBalance,
                         )
                     }
                     InspectorRow(
                         label = "Amount",
                         value = amountLabel ?: "Any",
-                        leadingIcon = Icons.Outlined.AccountBalanceWallet,
                         valueMonospaced = amountLabel != null,
                         editable = onEditReusableAmount != null,
                         onClick = onEditReusableAmount,
@@ -1226,14 +1198,12 @@ private fun DisplayFace(
                         InspectorRow(
                             label = "Created",
                             value = formatReusableCreatedAt(createdAtEpochMillis),
-                            leadingIcon = Icons.Outlined.CalendarToday,
                         )
                     }
                     if (receivedAmountLabel != null) {
                         InspectorRow(
                             label = "Total received",
                             value = receivedAmountLabel,
-                            leadingIcon = Icons.Outlined.CheckCircle,
                             valueMonospaced = true,
                         )
                     }
@@ -1244,7 +1214,6 @@ private fun DisplayFace(
                         InspectorRow(
                             label = "Mint",
                             value = mintName,
-                            leadingIcon = Icons.Outlined.AccountBalance,
                         )
                     }
                     if (onOpenExplorer != null) {
@@ -1260,10 +1229,16 @@ private fun DisplayFace(
             // Copy is a secondary convenience, not a primary action — quiet
             // neutral tonal fill (iOS gray .glassButton() parity on every rail).
             PrimaryButton(
-                text = if (copied) "Copied" else quote.paymentMethod.copyActionTitle,
+                text = quote.paymentMethod.copyActionTitle,
                 onClick = {
                     onCopy()
-                    copied = true
+                    confirmationToastController?.show(
+                        if (quote.paymentMethod == PaymentMethodKind.Onchain) {
+                            "Copied Bitcoin address"
+                        } else {
+                            "Copied payment request"
+                        },
+                    )
                 },
                 colors = neutralActionButtonColors(),
             )
@@ -1349,13 +1324,13 @@ private fun ReusableOfferStatus(received: Boolean, receivedAmountLabel: String?)
                 Icon(
                     imageVector = Icons.Outlined.CheckCircle,
                     contentDescription = null,
-                    tint = CashuTheme.colors.received,
+                    tint = CashuTheme.colors.onReceivedContainer,
                     modifier = Modifier.size(CashuTheme.spacing.loose),
                 )
                 Text(
                     text = receivedAmountLabel?.let { "Received $it" } ?: "Payment received!",
                     style = MaterialTheme.typography.titleMedium,
-                    color = CashuTheme.colors.received,
+                    color = CashuTheme.colors.onReceivedContainer,
                 )
             }
         } else {
@@ -1427,7 +1402,6 @@ private fun ReusableAmountEditSheet(
                     entryRaw = amount,
                     isSat = false,
                     unit = unit,
-                    decimals = entryContext.entryDecimals,
                     useBitcoinSymbol = useBitcoinSymbol,
                     formatter = formatter,
                 )
@@ -1583,7 +1557,6 @@ private fun ReceiveSuccessTerminal(
                 InspectorRow(
                     label = "Amount",
                     value = info.amountLabel,
-                    leadingIcon = Icons.Outlined.Payments,
                     valueMonospaced = true,
                 )
             }
@@ -1591,7 +1564,6 @@ private fun ReceiveSuccessTerminal(
                 InspectorRow(
                     label = "Mint",
                     value = info.mintName,
-                    leadingIcon = Icons.Outlined.AccountBalance,
                 )
             }
         },

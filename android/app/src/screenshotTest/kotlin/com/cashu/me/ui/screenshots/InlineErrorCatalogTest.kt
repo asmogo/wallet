@@ -44,7 +44,7 @@ private const val INSUFFICIENT = "Insufficient balance"
 private const val INSUFFICIENT_DETAIL = "You have 21,000 sat in Testnut mint."
 
 @PreviewTest
-@Preview(name = "inline-notice-matrix", widthDp = 390, heightDp = 640, showBackground = true)
+@Preview(name = "inline-notice-matrix", widthDp = 390, heightDp = 760, showBackground = true)
 @Composable
 fun inlineNoticeMatrixLightScreenshot() {
     CatalogFrame { NoticeMatrix() }
@@ -54,7 +54,7 @@ fun inlineNoticeMatrixLightScreenshot() {
 @Preview(
     name = "inline-notice-matrix-dark",
     widthDp = 390,
-    heightDp = 640,
+    heightDp = 760,
     uiMode = Configuration.UI_MODE_NIGHT_YES,
 )
 @Composable
@@ -110,13 +110,24 @@ private fun NoticeMatrix() {
     }
 
     CatalogSection("Detail line present vs absent — same state, two call sites") {
-        // SendEcashScreen.kt:656 passes detail; UnifiedSendScreen.kt:935 does not.
         InlineNotice(
             text = INSUFFICIENT,
             severity = NoticeSeverity.Caution,
             detail = INSUFFICIENT_DETAIL,
         )
         InlineNotice(text = INSUFFICIENT, severity = NoticeSeverity.Caution)
+    }
+
+    CatalogSection("Bare + centred — the Send amount faces") {
+        // No card to sit in and a centred amount above it, so the fill comes off
+        // and the glyph + text centre as a group. Everything else keeps the
+        // tonal container.
+        InlineNotice(
+            text = INSUFFICIENT,
+            severity = NoticeSeverity.Caution,
+            showsContainer = false,
+            centered = true,
+        )
     }
 }
 

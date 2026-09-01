@@ -73,6 +73,9 @@ struct InlineNotice: View {
     var detail: String? = nil
     /// Hide the leading glyph, for footers that read as plain text.
     var showsIcon: Bool = true
+    /// Centre the glyph + text as a group, for a notice that floats under a
+    /// centred amount rather than sitting in a left-aligned form.
+    var isCentered: Bool = false
 
     var body: some View {
         HStack(alignment: .top, spacing: 6) {
@@ -83,7 +86,7 @@ struct InlineNotice: View {
                     .accessibilityHidden(true)
             }
 
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: isCentered ? .center : .leading, spacing: 2) {
                 if let title {
                     Text(title)
                         .font(.caption.weight(.semibold))
@@ -104,9 +107,12 @@ struct InlineNotice: View {
                 }
             }
 
-            Spacer(minLength: 0)
+            if !isCentered {
+                Spacer(minLength: 0)
+            }
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
+        .multilineTextAlignment(isCentered ? .center : .leading)
+        .frame(maxWidth: .infinity, alignment: isCentered ? .center : .leading)
         .accessibilityElement(children: .combine)
         .accessibilityLabel(accessibilityText)
         .onAppear {
@@ -140,6 +146,425 @@ extension View {
     ) -> some View {
         modifier(ErrorBannerModifier(message: message, severity: severity, retry: retry))
     }
+
+    /// Softens the presenting canvas while a native bottom sheet is visible.
+    /// The system scrim still owns separation; this deliberately stays subtle.
+    func bottomSheetBackdrop(isPresented: Bool) -> some View {
+        modifier(BottomSheetBackdropModifier(isPresented: isPresented))
+    }
+
+    /// Reports user-driven native sheet dismissal before its animation begins.
+    /// SwiftUI updates an item-backed sheet binding later for outside taps, so
+    /// the presenting canvas uses this signal to release its blur in sync.
+    func observeBottomSheetDismissal(
+        _ onDismissalStateChanged: @escaping (Bool) -> Void
+    ) -> some View {
+        background {
+            BottomSheetDismissalObserver(
+                onDismissalStateChanged: onDismissalStateChanged
+            )
+            .frame(width: 0, height: 0)
+        }
+    }
+
+    /// `.sheet(isPresented:)` that also softens the presenting screen.
+    ///
+    /// Home and History hand-wire `bottomSheetBackdrop` because they own every
+    /// presentation flag at the screen root. Settings (and any screen built
+    /// from self-contained sections) can't: the flags live in nested sections
+    /// that never see the page root. This wrapper reports its effective
+    /// presentation upward as a preference — dismissal-synced through the same
+    /// observer Home uses — and `bottomSheetBackdropHost()` on the page root
+    /// turns any reported sheet into the canvas blur. One vocabulary, every
+    /// bottom sheet.
+    func backdropSheet<C: View>(
+        isPresented: Binding<Bool>,
+        onDismiss: (() -> Void)? = nil,
+        @ViewBuilder content: @escaping () -> C
+    ) -> some View {
+        modifier(BackdropSheetModifier(
+            isPresented: isPresented,
+            onDismiss: onDismiss,
+            sheetContent: content
+        ))
+    }
+
+    /// Item-backed twin of `backdropSheet(isPresented:)`.
+    func backdropSheet<Item: Identifiable, C: View>(
+        item: Binding<Item?>,
+        onDismiss: (() -> Void)? = nil,
+        @ViewBuilder content: @escaping (Item) -> C
+    ) -> some View {
+        modifier(BackdropSheetItemModifier(
+            item: item,
+            onDismiss: onDismiss,
+            sheetContent: content
+        ))
+    }
+
+    /// Apply at a page's root: softens the whole page while any
+    /// `backdropSheet` presented from its subtree is up.
+    func bottomSheetBackdropHost() -> some View {
+        modifier(BottomSheetBackdropHost())
+    }
+}
+
+/// Count of effectively-presented `backdropSheet`s below a host. A count, not
+/// a Bool, so sibling sheets on one chain accumulate via `transformPreference`
+/// instead of the last `.preference` silently winning.
+private struct BottomSheetPresenceKey: PreferenceKey {
+    static var defaultValue = 0
+    static func reduce(value: inout Int, nextValue: () -> Int) {
+        value += nextValue()
+    }
+}
+
+private struct BackdropSheetModifier<C: View>: ViewModifier {
+    @Binding var isPresented: Bool
+    let onDismiss: (() -> Void)?
+    @ViewBuilder let sheetContent: () -> C
+
+    @State private var isDismissing = false
+
+    func body(content: Content) -> some View {
+        content
+            .sheet(isPresented: $isPresented, onDismiss: onDismiss) {
+                sheetContent()
+                    .observeBottomSheetDismissal { isDismissing = $0 }
+            }
+            .transformPreference(BottomSheetPresenceKey.self) {
+                $0 += (isPresented && !isDismissing) ? 1 : 0
+            }
+            .onChange(of: isPresented) { _, presented in
+                if presented { isDismissing = false }
+            }
+    }
+}
+
+private struct BackdropSheetItemModifier<Item: Identifiable, C: View>: ViewModifier {
+    @Binding var item: Item?
+    let onDismiss: (() -> Void)?
+    @ViewBuilder let sheetContent: (Item) -> C
+
+    @State private var isDismissing = false
+
+    func body(content: Content) -> some View {
+        content
+            .sheet(item: $item, onDismiss: onDismiss) { value in
+                sheetContent(value)
+                    .observeBottomSheetDismissal { isDismissing = $0 }
+            }
+            .transformPreference(BottomSheetPresenceKey.self) {
+                $0 += (item != nil && !isDismissing) ? 1 : 0
+            }
+            .onChange(of: item != nil) { _, presented in
+                if presented { isDismissing = false }
+            }
+    }
+}
+
+private struct BottomSheetBackdropHost: ViewModifier {
+    @State private var presentedCount = 0
+
+    func body(content: Content) -> some View {
+        content
+            .onPreferenceChange(BottomSheetPresenceKey.self) { presentedCount = $0 }
+            .bottomSheetBackdrop(isPresented: presentedCount > 0)
+    }
+}
+
+private struct BottomSheetBackdropModifier: ViewModifier {
+    let isPresented: Bool
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    func body(content: Content) -> some View {
+        let animation: Animation? = if reduceMotion {
+            nil
+        } else if isPresented {
+            .easeOut(duration: 0.14)
+        } else {
+            .easeOut(duration: 0.03)
+        }
+
+        content
+            .blur(radius: isPresented ? 2.5 : 0)
+            .animation(animation, value: isPresented)
+    }
+}
+
+private struct BottomSheetDismissalObserver: UIViewControllerRepresentable {
+    let onDismissalStateChanged: (Bool) -> Void
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(onDismissalStateChanged: onDismissalStateChanged)
+    }
+
+    func makeUIViewController(context: Context) -> ObserverViewController {
+        let controller = ObserverViewController()
+        controller.coordinator = context.coordinator
+        return controller
+    }
+
+    func updateUIViewController(_ controller: ObserverViewController, context: Context) {
+        context.coordinator.onDismissalStateChanged = onDismissalStateChanged
+        controller.coordinator = context.coordinator
+        context.coordinator.attach(from: controller)
+    }
+
+    static func dismantleUIViewController(
+        _ controller: ObserverViewController,
+        coordinator: Coordinator
+    ) {
+        coordinator.detach()
+    }
+
+    final class ObserverViewController: UIViewController {
+        weak var coordinator: Coordinator?
+
+        override func didMove(toParent parent: UIViewController?) {
+            super.didMove(toParent: parent)
+            coordinator?.attach(from: self)
+        }
+
+        override func viewDidAppear(_ animated: Bool) {
+            super.viewDidAppear(animated)
+            coordinator?.presentationDidAppear()
+            coordinator?.attach(from: self)
+        }
+
+        override func viewWillDisappear(_ animated: Bool) {
+            super.viewWillDisappear(animated)
+            coordinator?.presentationWillDisappear(from: self)
+        }
+    }
+
+    final class Coordinator: NSObject, UIAdaptivePresentationControllerDelegate {
+        var onDismissalStateChanged: (Bool) -> Void
+        private weak var presentationController: UIPresentationController?
+        private weak var forwardingDelegate: UIAdaptivePresentationControllerDelegate?
+        private var isDismissalReported = false
+
+        init(onDismissalStateChanged: @escaping (Bool) -> Void) {
+            self.onDismissalStateChanged = onDismissalStateChanged
+        }
+
+        func attach(from controller: UIViewController) {
+            var ancestor: UIViewController? = controller
+            while let current = ancestor {
+                if let presentationController = current.presentationController {
+                    attach(to: presentationController)
+                    return
+                }
+                ancestor = current.parent
+            }
+        }
+
+        func detach() {
+            if presentationController?.delegate === self {
+                presentationController?.delegate = forwardingDelegate
+            }
+            presentationController = nil
+            forwardingDelegate = nil
+        }
+
+        func presentationDidAppear() {
+            guard isDismissalReported else { return }
+            isDismissalReported = false
+            onDismissalStateChanged(false)
+        }
+
+        func presentationWillDisappear(from controller: UIViewController) {
+            var ancestor: UIViewController? = controller
+            while let current = ancestor {
+                if current.isBeingDismissed || current.navigationController?.isBeingDismissed == true {
+                    beginDismissal(using: current.transitionCoordinator)
+                    return
+                }
+                ancestor = current.parent
+            }
+        }
+
+        private func attach(to presentationController: UIPresentationController) {
+            guard presentationController.delegate !== self else { return }
+            detach()
+            self.presentationController = presentationController
+            forwardingDelegate = presentationController.delegate
+            presentationController.delegate = self
+        }
+
+        func presentationControllerShouldDismiss(
+            _ presentationController: UIPresentationController
+        ) -> Bool {
+            forwardingDelegate?.presentationControllerShouldDismiss?(presentationController) ?? true
+        }
+
+        func presentationControllerWillDismiss(
+            _ presentationController: UIPresentationController
+        ) {
+            beginDismissal(
+                using: presentationController.presentedViewController.transitionCoordinator
+            )
+            forwardingDelegate?.presentationControllerWillDismiss?(presentationController)
+        }
+
+        private func beginDismissal(
+            using transitionCoordinator: UIViewControllerTransitionCoordinator?
+        ) {
+            guard !isDismissalReported else { return }
+            isDismissalReported = true
+            onDismissalStateChanged(true)
+
+            transitionCoordinator?
+                .notifyWhenInteractionChanges { [weak self] context in
+                    guard context.isCancelled, let self else { return }
+                    self.isDismissalReported = false
+                    self.onDismissalStateChanged(false)
+                }
+        }
+
+        func presentationControllerDidDismiss(
+            _ presentationController: UIPresentationController
+        ) {
+            forwardingDelegate?.presentationControllerDidDismiss?(presentationController)
+        }
+
+        func presentationControllerDidAttemptToDismiss(
+            _ presentationController: UIPresentationController
+        ) {
+            forwardingDelegate?.presentationControllerDidAttemptToDismiss?(presentationController)
+        }
+    }
+}
+
+// MARK: - Confirmation toast (the transient success channel)
+
+/// Brief confirmation feedback is rendered in one pass-through overlay window.
+/// That gives the app exactly one toast at the physical top center, above native
+/// sheets, their system scrims, and the presenting canvas blur.
+@MainActor
+enum ConfirmationToast {
+    static func show(_ message: String) {
+        ConfirmationToastPresenter.shared.show(message)
+    }
+}
+
+private struct ConfirmationToastMessage: Equatable {
+    let text: String
+}
+
+private struct ConfirmationToastView: View {
+    let message: String
+
+    var body: some View {
+        Text(message)
+            .font(.subheadline.weight(.semibold))
+            .foregroundStyle(.primary)
+            .lineLimit(2)
+            .multilineTextAlignment(.center)
+            .padding(.horizontal, 20)
+            .padding(.vertical, 12)
+            .background(.regularMaterial, in: Capsule())
+            .overlay {
+                Capsule()
+                    .stroke(Color(uiColor: .separator), lineWidth: 0.5)
+            }
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(message)
+    }
+}
+
+@MainActor
+private final class ConfirmationToastPresenter: ObservableObject {
+    static let shared = ConfirmationToastPresenter()
+
+    @Published private(set) var toast: ConfirmationToastMessage?
+
+    private var dismissTask: Task<Void, Never>?
+    private var overlayWindow: ConfirmationToastWindow?
+
+    private init() {}
+
+    func show(_ message: String) {
+        ensureOverlayWindow()
+        dismissTask?.cancel()
+
+        let animation: Animation? = UIAccessibility.isReduceMotionEnabled
+            ? nil
+            : .spring(response: 0.38, dampingFraction: 0.9)
+        withAnimation(animation) {
+            toast = ConfirmationToastMessage(text: message)
+        }
+        AccessibilityNotification.Announcement(message).post()
+
+        dismissTask = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(2.2))
+            guard !Task.isCancelled, let self else { return }
+            withAnimation(UIAccessibility.isReduceMotionEnabled ? nil : .easeOut(duration: 0.14)) {
+                self.toast = nil
+            }
+        }
+    }
+
+    private func ensureOverlayWindow() {
+        guard let windowScene = UIApplication.shared.connectedScenes
+            .compactMap({ $0 as? UIWindowScene })
+            .first(where: { $0.activationState == .foregroundActive })
+        else { return }
+
+        if overlayWindow?.windowScene === windowScene {
+            return
+        }
+
+        overlayWindow?.isHidden = true
+
+        let window = ConfirmationToastWindow(windowScene: windowScene)
+        window.windowLevel = UIWindow.Level(rawValue: UIWindow.Level.normal.rawValue + 1)
+        window.backgroundColor = .clear
+
+        let hostingController = UIHostingController(
+            rootView: ConfirmationToastOverlay(presenter: self)
+        )
+        hostingController.view.backgroundColor = .clear
+        window.rootViewController = hostingController
+        window.isHidden = false
+        overlayWindow = window
+    }
+}
+
+private final class ConfirmationToastWindow: UIWindow {
+    override var canBecomeKey: Bool { false }
+
+    override func hitTest(_ point: CGPoint, with event: UIEvent?) -> UIView? {
+        nil
+    }
+}
+
+private struct ConfirmationToastOverlay: View {
+    @ObservedObject var presenter: ConfirmationToastPresenter
+
+    var body: some View {
+        ZStack(alignment: .top) {
+            Color.clear
+
+            if let toast = presenter.toast {
+                ConfirmationToastView(message: toast.text)
+                    .padding(.horizontal, 24)
+                    .padding(.top, 8)
+                    .transition(
+                        UIAccessibility.isReduceMotionEnabled
+                            ? .opacity
+                            : .asymmetric(
+                                insertion: .move(edge: .top).combined(with: .opacity),
+                                removal: .opacity
+                            )
+                    )
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .safeAreaPadding(.top, 8)
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
+    }
 }
 
 /// The floating banner. Not a general-purpose inline component — reach it only
@@ -156,23 +581,29 @@ struct ErrorBannerView: View {
 
     var body: some View {
         HStack(alignment: .firstTextBaseline, spacing: 10) {
-            Image(systemName: severity.icon)
-                .font(.subheadline.weight(.semibold))
-                .foregroundStyle(severity.foreground)
-                .accessibilityHidden(true)
+            HStack(alignment: .firstTextBaseline, spacing: 10) {
+                Image(systemName: severity.icon)
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(severity.foreground)
+                    .accessibilityHidden(true)
 
-            Text(message)
-                .font(.subheadline)
-                .foregroundStyle(.primary)
-                .multilineTextAlignment(.leading)
-                .fixedSize(horizontal: false, vertical: true)
-                .frame(maxWidth: .infinity, alignment: .leading)
+                Text(message)
+                    .font(.subheadline)
+                    .foregroundStyle(.primary)
+                    .multilineTextAlignment(.leading)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .accessibilityElement(children: .combine)
+            .accessibilityLabel(severity.announcementPrefix + message)
 
             if let retry {
                 Button("Retry", action: retry)
                     .font(.subheadline.weight(.semibold))
                     .buttonStyle(.plain)
                     .foregroundStyle(severity.foreground)
+                    .frame(minWidth: 44, minHeight: 44)
+                    .contentShape(Rectangle())
             }
 
             if let onDismiss {
@@ -180,7 +611,7 @@ struct ErrorBannerView: View {
                     Image(systemName: "xmark")
                         .font(.caption2.weight(.semibold))
                         .foregroundStyle(.secondary)
-                        .frame(width: 32, height: 32)
+                        .frame(width: 44, height: 44)
                         .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
@@ -189,8 +620,6 @@ struct ErrorBannerView: View {
         }
         .padding(12)
         .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel(severity.announcementPrefix + message)
         .onAppear {
             guard severity != .info else { return }
             AccessibilityNotification.Announcement(message).post()

@@ -219,7 +219,7 @@ struct ScannerWrapperView: View {
                             VStack(spacing: 8) {
                                 Text("Scanning Animated QR...")
                                     .font(.headline)
-                                    .foregroundStyle(.primary)
+                                    .foregroundStyle(.white)
 
                                 ProgressView(value: scannerModel.scanProgress, total: 1.0)
                                     .progressViewStyle(LinearProgressViewStyle(tint: .accentColor))
@@ -247,7 +247,7 @@ struct ScannerWrapperView: View {
                                             Text(fill.title)
                                         }
                                         .font(.subheadline.weight(.semibold))
-                                        .foregroundStyle(.primary)
+                                        .foregroundStyle(.white)
                                         .padding(.horizontal, 18)
                                         .padding(.vertical, 11)
                                         .background(.ultraThinMaterial, in: Capsule())
@@ -257,7 +257,7 @@ struct ScannerWrapperView: View {
                                 }
 
                                 Text(promptText ?? "Scan Cashu Token, Payment Request, or Bitcoin Address")
-                                    .foregroundStyle(.primary)
+                                    .foregroundStyle(.white)
                                     .font(.caption)
                                     .padding()
                                     .background(Color.black.opacity(0.6))
@@ -287,6 +287,10 @@ struct ScannerWrapperView: View {
                     }
                 }
             }
+            // The scanner canvas is always dark, independent of the app's
+            // appearance. Resolve materials and semantic foregrounds against
+            // that surface so light mode cannot produce dark-on-dark labels.
+            .environment(\.colorScheme, .dark)
             .navigationTitle("Scan QR Code")
             .navigationBarTitleDisplayMode(.inline)
             .toolbarColorScheme(.dark, for: .navigationBar)
@@ -409,7 +413,7 @@ struct CashuRequestRouteExplanationRow: View {
 
     var body: some View {
         HStack {
-            Label("Route", systemImage: "arrow.triangle.branch")
+            Text("Route")
                 .foregroundStyle(.secondary)
             Spacer()
             Text(explanation.localizedValue)
@@ -515,18 +519,16 @@ struct CashuPaymentRequestPayView: View {
                     VStack(spacing: 16) {
                         if request.amount == nil {
                             NumberPadAmountInput(amountString: $customAmountString, unit: entryUnit)
-                                .padding(.horizontal, 24)
+                                .padding(.horizontal, NumberPadMetrics.gutter)
                         }
 
                         Button(action: payRequest) {
-                            if isPaying {
-                                ProgressView()
-                            } else {
-                                Text(payButtonTitle)
-                            }
+                            LoadingButtonLabel(title: payButtonTitle, isLoading: isPaying)
                         }
                         .glassButton()
                         .disabled(!canPay)
+                        .accessibilityLabel(payButtonTitle)
+                        .accessibilityValue(isPaying ? "In progress" : "")
                         .padding(.horizontal)
                         .padding(.bottom, 16)
                         .sheet(isPresented: $addMintChooserPresented) {
@@ -541,9 +543,21 @@ struct CashuPaymentRequestPayView: View {
                     }
                 } topAccessory: {
                     if request.isSatUnit, let selected = pickerSelectedMint {
-                        MintConfirmSelectorRow(mint: selected, onTap: { showingMintPicker = true })
-                            .padding(.horizontal)
-                            .padding(.top, 8)
+                        MintSelectorRow(
+                            direction: .source,
+                            mint: selected,
+                            balanceText: AmountFormatter.sats(
+                                selected.balance,
+                                useBitcoinSymbol: settings.useBitcoinSymbol
+                            ),
+                            onChooseMint: candidateMints.count > 1 ? {
+                                HapticFeedback.selection()
+                                showingMintPicker = true
+                            } : nil
+                        )
+                        // Aligned to the number pad below, not the CTA.
+                        .padding(.horizontal, NumberPadMetrics.gutter)
+                        .padding(.top, 8)
                     }
                 }
               }
@@ -734,7 +748,7 @@ struct CashuPaymentRequestPayView: View {
                     CashuRequestRouteExplanationRow(explanation: routeExplanation)
                 }
                 if let memo {
-                    detailRow(icon: "quote.bubble", label: "Memo", value: memo)
+                    detailRow(label: "Memo", value: memo)
                 }
                 feesRow
             }
@@ -791,7 +805,7 @@ struct CashuPaymentRequestPayView: View {
     /// the exact fee for a fee-charging mint; "—" before an amount exists.
     private var feesRow: some View {
         HStack {
-            Label("Fees", systemImage: "arrow.up.arrow.down")
+            Text("Fees")
                 .foregroundStyle(.secondary)
             Spacer()
             feeValueText
@@ -875,9 +889,9 @@ struct CashuPaymentRequestPayView: View {
     /// Read-only detail row matching the app's `detailRow` vocabulary
     /// (TransactionDetailView, CashuRequestDetailView). Memo text is prose, so it
     /// wraps once and tail-truncates rather than middle-truncating like an ID.
-    private func detailRow(icon: String, label: String, value: String) -> some View {
+    private func detailRow(label: String, value: String) -> some View {
         HStack {
-            Label(label, systemImage: icon)
+            Text(label)
                 .foregroundStyle(.secondary)
             Spacer()
             Text(value)
@@ -1143,7 +1157,6 @@ struct CashuPaymentRequestPayView: View {
         // slot in place instead of inserting and shoving the rows below them.
         var rows: [PaymentStatusView.DetailRow] = [
             .init(
-                icon: "bitcoinsign",
                 label: "Amount",
                 value: paymentAmount.map { "\($0) sat" } ?? "",
                 isPending: paymentAmount == nil
@@ -1152,14 +1165,13 @@ struct CashuPaymentRequestPayView: View {
         ]
         if let explanation = activeRouteExplanation {
             rows.append(.init(
-                icon: "arrow.triangle.branch",
                 label: "Route",
                 value: explanation.localizedValue
             ))
         }
         rows.append(statusFeeRow)
         if let memo = requestMemo {
-            rows.append(.init(icon: "quote.bubble", label: "Memo", value: memo))
+            rows.append(.init(label: "Memo", value: memo))
         }
         return PaymentStatusView(
             details: rows,
@@ -1176,37 +1188,34 @@ struct CashuPaymentRequestPayView: View {
     /// the held mint's name; in the acquire path (mint not held yet) it shows the
     /// target host so the slot still has a real value, and only spins if neither is known.
     private var statusMintRow: PaymentStatusView.DetailRow {
-        let icon = "bitcoinsign.bank.building"
         if let mint = selectedPaymentMint {
-            return .init(icon: icon, label: "Mint", value: mint.name)
+            return .init(label: "Mint", value: mint.name)
         }
         if let host = acquireTargetHost {
-            return .init(icon: icon, label: "Mint", value: host)
+            return .init(label: "Mint", value: host)
         }
-        return .init(icon: icon, label: "Mint", value: "", isPending: true)
+        return .init(label: "Mint", value: "", isPending: true)
     }
 
     /// The swap fee as a detail row, always present so its slot is reserved. Mirrors
     /// the confirm screen's `feeValueText`: a spinner while the fee computes, then the
     /// value; acquiring a mint routes over Lightning, whose reserve is confirmed later.
     private var statusFeeRow: PaymentStatusView.DetailRow {
-        let icon = "arrow.up.arrow.down"
         if needsAcquire {
-            return .init(icon: icon, label: "Fees", value: "Network fee")
+            return .init(label: "Fees", value: "Network fee")
         }
         switch feeState {
         case .loading:
-            return .init(icon: icon, label: "Fees", value: "", isPending: true)
+            return .init(label: "Fees", value: "", isPending: true)
         case .free:
-            return .init(icon: icon, label: "Fees", value: "No fee")
+            return .init(label: "Fees", value: "No fee")
         case .amount(let fee):
             return .init(
-                icon: icon,
                 label: "Fees",
                 value: AmountFormatter.sats(fee, useBitcoinSymbol: settings.useBitcoinSymbol)
             )
         case .idle, .unavailable:
-            return .init(icon: icon, label: "Fees", value: "—")
+            return .init(label: "Fees", value: "—")
         }
     }
 }
@@ -1507,6 +1516,7 @@ struct CashuTopUpInvoiceSheet: View {
             .onAppear { startMonitoring() }
             .onDisappear { monitorTask?.cancel() }
         }
+        .flatBottomSheetSurface()
     }
 
     private var header: some View {
@@ -1554,6 +1564,7 @@ struct CashuTopUpInvoiceSheet: View {
     private func copyInvoice() {
         UIPasteboard.general.string = context.quote.request
         HapticFeedback.notification(.success)
+        ConfirmationToast.show("Copied payment request")
     }
 
     /// Poll the target mint quote until it's paid, then mint + pay the request.

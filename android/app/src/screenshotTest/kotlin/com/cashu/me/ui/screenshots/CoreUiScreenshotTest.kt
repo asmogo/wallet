@@ -9,6 +9,9 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.CurrencyBitcoin
 import androidx.compose.material.icons.outlined.Lock
+import androidx.compose.material.icons.outlined.Nfc
+import androidx.compose.material.icons.outlined.Payments
+import androidx.compose.material.icons.outlined.QrCodeScanner
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -31,8 +34,14 @@ import com.cashu.me.Views.Send.ContactlessAvailability
 import com.cashu.me.Views.Send.ContactlessPayContent
 import com.cashu.me.ui.components.AmountEntryHero
 import com.cashu.me.ui.components.BalanceDisplay
+import com.cashu.me.ui.components.CashuTextField
+import com.cashu.me.ui.components.CompactSheetContent
+import com.cashu.me.ui.components.MethodActionRow
 import com.cashu.me.ui.components.MintAvatar
+import com.cashu.me.ui.components.MintSelectorRow
+import com.cashu.me.ui.components.MintSelectorDirection
 import com.cashu.me.ui.components.NavRow
+import com.cashu.me.ui.components.NumberPad
 import com.cashu.me.ui.components.PaymentStatusPhase
 import com.cashu.me.ui.components.PaymentStatusScreen
 import com.cashu.me.ui.components.QrCard
@@ -89,10 +98,69 @@ fun amountEntryScreenshot() {
             entryRaw = "12500",
             isSat = true,
             unit = "sat",
-            decimals = 0,
             useBitcoinSymbol = false,
             formatter = AmountFormatter(),
         )
+    }
+}
+
+/** Guards Android's explicit Bitcoin glyph fallback against system-font drift. */
+@PreviewTest
+@Preview(name = "amount-entry-bitcoin", widthDp = 390, heightDp = 180, showBackground = true)
+@Composable
+fun amountEntryBitcoinScreenshot() {
+    PreviewFrame {
+        AmountEntryHero(
+            entryRaw = "12500",
+            isSat = true,
+            unit = "sat",
+            useBitcoinSymbol = true,
+            formatter = AmountFormatter(),
+        )
+    }
+}
+
+/**
+ * The whole-number-first hero, keystroke by keystroke. "21" must read as
+ * twenty-one dollars — the empty pad shows no fraction at all, and the
+ * fraction only appears once the decimal key is pressed.
+ */
+@PreviewTest
+@Preview(name = "amount-entry-fiat", widthDp = 390, heightDp = 400, showBackground = true)
+@Composable
+fun amountEntryFiatScreenshot() {
+    PreviewFrame {
+        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            listOf("", "21", "21.", "21.5", "21.50").forEach { raw ->
+                AmountEntryHero(
+                    entryRaw = raw,
+                    isSat = false,
+                    unit = "USD",
+                    useBitcoinSymbol = false,
+                    formatter = AmountFormatter(),
+                    fiatCurrencyCode = "USD",
+                )
+            }
+        }
+    }
+}
+
+/** The decimal key exists only where the unit actually has a fraction. */
+@PreviewTest
+@Preview(name = "number-pad-decimals", widthDp = 390, heightDp = 260, showBackground = true)
+@Composable
+fun numberPadDecimalsScreenshot() {
+    PreviewFrame {
+        NumberPad(amount = "21.50", onAmountChange = {}, decimals = 2)
+    }
+}
+
+@PreviewTest
+@Preview(name = "number-pad-integer", widthDp = 390, heightDp = 260, showBackground = true)
+@Composable
+fun numberPadIntegerScreenshot() {
+    PreviewFrame {
+        NumberPad(amount = "12500", onAmountChange = {}, decimals = 0)
     }
 }
 
@@ -221,6 +289,74 @@ fun settingsControlsScreenshot() {
 }
 
 @PreviewTest
+@Preview(name = "compact-method-sheet", widthDp = 390, heightDp = 500, showBackground = true)
+@Composable
+fun compactMethodSheetLightScreenshot() {
+    PreviewFrame {
+        CompactMethodSheetPreview()
+    }
+}
+
+@PreviewTest
+@Preview(
+    name = "compact-method-sheet-dark",
+    widthDp = 390,
+    heightDp = 500,
+    uiMode = Configuration.UI_MODE_NIGHT_YES,
+)
+@Composable
+fun compactMethodSheetDarkScreenshot() {
+    PreviewFrame(darkTheme = true) {
+        CompactMethodSheetPreview()
+    }
+}
+
+@Composable
+private fun CompactMethodSheetPreview() {
+    CompactSheetContent {
+        Surface(
+            color = CashuTheme.colors.compactSheetContainer,
+            shape = MaterialTheme.shapes.extraLarge,
+        ) {
+            Column(
+                modifier = Modifier.padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                CashuTextField(
+                    value = "",
+                    onValueChange = {},
+                    placeholder = "Address, invoice, or Cashu Request",
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                MethodActionRow(
+                    icon = Icons.Outlined.QrCodeScanner,
+                    title = "Scan",
+                    subtitle = "Scan an invoice, address, or request",
+                    accessibilityLabel = "Scan. Scan QR code",
+                    onClick = {},
+                )
+                MethodActionRow(
+                    icon = Icons.Outlined.Payments,
+                    title = "Ecash",
+                    subtitle = "Create ecash to share",
+                    accessibilityLabel = "Ecash. Create ecash",
+                    onClick = {},
+                )
+                MethodActionRow(
+                    icon = Icons.Outlined.Nfc,
+                    title = "Tap",
+                    subtitle = "Pay contactlessly with NFC",
+                    accessibilityLabel = "Tap. Contactless, tap to pay nearby",
+                    enabled = false,
+                    status = "Unavailable",
+                    onClick = {},
+                )
+            }
+        }
+    }
+}
+
+@PreviewTest
 @Preview(name = "contactless-unavailable", widthDp = 390, heightDp = 360, showBackground = true)
 @Composable
 fun contactlessUnavailableScreenshot() {
@@ -233,6 +369,7 @@ fun contactlessUnavailableScreenshot() {
             paymentComplete = false,
             lastPaymentAmount = null,
             onOpenNfcSettings = {},
+            onDone = {},
         )
     }
 }
@@ -269,6 +406,107 @@ fun largeFontLongMintScreenshot() {
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
+    }
+}
+
+private val ScreenshotMint = MintInfo(
+    url = "https://deterministic.example",
+    name = "Testnut mint",
+)
+
+private val ScreenshotLongMint = MintInfo(
+    url = "https://deterministic.example",
+    name = "A deliberately long deterministic mint name",
+)
+
+/**
+ * Every state of the flow-top selector in one frame: source and destination,
+ * with and without Send Max, the single-mint variant with no picker, and a
+ * name long enough to truncate. This row has no test tag and no instrumented
+ * coverage, so the golden is the regression net.
+ */
+@PreviewTest
+@Preview(name = "mint-selector-light", widthDp = 390, heightDp = 320, showBackground = true)
+@Composable
+fun mintSelectorRowLightScreenshot() {
+    PreviewFrame {
+        MintSelectorRowCatalog()
+    }
+}
+
+@PreviewTest
+@Preview(
+    name = "mint-selector-dark",
+    widthDp = 390,
+    heightDp = 320,
+    uiMode = Configuration.UI_MODE_NIGHT_YES,
+)
+@Composable
+fun mintSelectorRowDarkScreenshot() {
+    PreviewFrame(darkTheme = true) {
+        MintSelectorRowCatalog()
+    }
+}
+
+@PreviewTest
+@Preview(name = "mint-selector-large-font", widthDp = 390, heightDp = 560, fontScale = 2f)
+@Composable
+fun mintSelectorRowLargeFontScreenshot() {
+    PreviewFrame {
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            MintSelectorRow(
+                direction = MintSelectorDirection.Source,
+                mint = ScreenshotLongMint,
+                balanceText = "\u20bf27,096",
+                showBalance = true,
+                onPickMint = {},
+                onUseMax = {},
+            )
+            MintSelectorRow(
+                direction = MintSelectorDirection.Destination,
+                mint = ScreenshotLongMint,
+                balanceText = null,
+                onPickMint = {},
+            )
+        }
+    }
+}
+
+@Composable
+private fun MintSelectorRowCatalog() {
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        // Multi-mint source with a spendable balance, Max, and chevron.
+        MintSelectorRow(
+            direction = MintSelectorDirection.Source,
+            mint = ScreenshotMint,
+            balanceText = "\u20bf27,096",
+            showBalance = true,
+            onPickMint = {},
+            onUseMax = {},
+        )
+        // Destination with an empty balance and no Max action.
+        MintSelectorRow(
+            direction = MintSelectorDirection.Destination,
+            mint = ScreenshotMint,
+            balanceText = "\u20bf0",
+            showBalance = true,
+            onPickMint = {},
+        )
+        // Single mint: no chevron, not a control.
+        MintSelectorRow(
+            direction = MintSelectorDirection.Source,
+            mint = ScreenshotMint,
+            balanceText = "\u20bf27,096",
+            onUseMax = {},
+        )
+        // Long name truncates.
+        MintSelectorRow(
+            direction = MintSelectorDirection.Source,
+            mint = ScreenshotLongMint,
+            balanceText = "\u20bf27,096",
+            onPickMint = {},
+            onUseMax = {},
+        )
     }
 }
 

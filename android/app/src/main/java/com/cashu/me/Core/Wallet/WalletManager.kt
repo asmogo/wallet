@@ -34,11 +34,13 @@ import com.cashu.me.Core.Platform.WalletFileBackup
 import com.cashu.me.Core.Protocols.SecureStorage
 import com.cashu.me.Core.Protocols.StorageKeys
 import com.cashu.me.Core.Protocols.WalletServiceProtocol
+import com.cashu.me.Core.Wallet.isInsufficientBalance
 import com.cashu.me.Models.MeltPaymentResult
 import com.cashu.me.Models.MeltQuoteInfo
 import com.cashu.me.Models.MeltQuoteState
 import com.cashu.me.Models.MintInfo
 import com.cashu.me.Models.MintQuoteInfo
+import com.cashu.me.Models.MintQuoteState
 import com.cashu.me.Models.PaymentMethodKind
 import com.cashu.me.Models.PendingReceiveToken
 import com.cashu.me.Models.RestoreMintResult
@@ -414,14 +416,19 @@ class WalletManager(
 
     override suspend fun removeMint(mint: MintInfo) {
         withLoading {
-            runCatching { gateway.removeWallet(mint.url) }
-                .onFailure { AppLogger.wallet.error("CDK wallet removal is not available yet for ${mint.url}", it) }
-            val updated = mutableState.value.mints.filterNot { it.url == mint.url }
-            walletStore.saveMints(updated)
-            if (walletStore.activeMintURL == mint.url) {
-                walletStore.activeMintURL = updated.firstOrNull()?.url
+            val trackedMint = mutableState.value.mints.firstOrNull { it.url == mint.url }
+                ?: throw IllegalArgumentException("Mint is no longer tracked.")
+            removeMintWalletBeforeCommit(
+                mintUrl = trackedMint.url,
+                removeWalletIfSingleUnit = gateway::removeWalletIfSingleUnit,
+            ) {
+                val updated = mutableState.value.mints.filterNot { it.url == trackedMint.url }
+                walletStore.saveMints(updated)
+                if (walletStore.activeMintURL == trackedMint.url) {
+                    walletStore.activeMintURL = updated.firstOrNull()?.url
+                }
+                loadCachedState(needsOnboarding = false)
             }
-            loadCachedState(needsOnboarding = false)
             refreshBalance()
         }
         if (externalServicesEnabled) {
@@ -748,10 +755,14 @@ class WalletManager(
     // MARK: - Asynchronous melt settlement (NUT-05, iOS WalletManager+PendingMelts parity)
 
     /**
-     * Wait in the background for an async-accepted melt. One waiter per quote;
-     * the waiter dies with the process and [syncPendingMeltQuotes] takes over
-     * after relaunch. Settlement facts (preimage, actual fee) persist on the
-     * CDK transaction itself — no app-side metadata to write.
+     * Wait in the background for an async-accepted melt that is still pending
+     * after the gateway's in-lane lightning wait gave up (or is on-chain,
+     * which never waits in-lane). Re-`wait()`ing the same handle creates a
+     * fresh Rust future, so re-arming after the capped wait is sound. One
+     * waiter per quote; the waiter dies with the process and
+     * [syncPendingMeltQuotes] takes over after relaunch. Settlement facts
+     * (preimage, actual fee) persist on the CDK transaction itself — no
+     * app-side metadata to write.
      */
     private fun watchPendingMelt(pendingMelt: PendingMelt, quoteId: String) {
         if (pendingMeltWaiters[quoteId]?.isActive == true) return
@@ -1149,20 +1160,142 @@ class WalletManager(
         }
     }
 
-    suspend fun addMintAndPayCashuPaymentRequest(encoded: String, customAmountSats: Long?, mintUrl: String) {
-        withLoading {
-            addMintAndPayCashuPaymentRequestAndRefresh(
-                encoded = encoded,
-                customAmountSats = customAmountSats,
-                mintUrl = mintUrl,
-                ensureMintTracked = { ensureMintTracked(it) },
-                payCashuPaymentRequest = { request, amount, trackedMintUrl ->
-                    gateway.payCashuPaymentRequest(request, amount, trackedMintUrl)
-                },
-                refreshBalance = { refreshBalance() },
-                loadTransactions = { loadTransactions() },
+    /**
+     * Acquire ecash at the requested mint, then pay the Cashu Request.
+     *
+     * A different held mint funds the target over BOLT11 when possible. If no
+     * held mint can cover the transfer and its fee reserve, return the already
+     * created target quote so the UI can collect an explicit external top-up.
+     */
+    internal suspend fun acquireAndPayCashuPaymentRequest(
+        encoded: String,
+        amountSats: Long,
+        targetMintUrl: String,
+    ): CashuRequestAcquireResult = withLoadingResult {
+        val trackedTargetMintUrl = ensureMintTracked(targetMintUrl)
+        val inputFeePpk = try {
+            gateway.activeMintInputFeePpk(trackedTargetMintUrl)
+        } catch (cancellation: CancellationException) {
+            throw cancellation
+        } catch (_: Throwable) {
+            null
+        }
+        val mintAmount = cashuRequestTopUpAmount(amountSats, inputFeePpk)
+        val targetQuote = gateway.createMintQuote(
+            amount = mintAmount,
+            method = PaymentMethodKind.Bolt11,
+            mintUrl = trackedTargetMintUrl,
+            unit = "sat",
+        ).also { mintQuoteSyncService.rememberMintQuoteTimestamp(it.id) }
+
+        val source = selectCashuRequestFundingSource(
+            mints = mutableState.value.mints,
+            targetMintUrl = trackedTargetMintUrl,
+            requiredAmountSats = mintAmount,
+        ) ?: return@withLoadingResult CashuRequestAcquireResult.NeedsExternalTopUp(
+            quote = targetQuote,
+            targetMintUrl = trackedTargetMintUrl,
+            requestedAmountSats = amountSats,
+        )
+
+        val sourceMeltQuote = try {
+            gateway.createMeltQuote(
+                request = targetQuote.request,
+                amountSats = null,
+                preferredMintURL = source.url,
+            )
+        } catch (cancellation: CancellationException) {
+            throw cancellation
+        } catch (failure: Throwable) {
+            if (failure.isInsufficientBalance) {
+                return@withLoadingResult CashuRequestAcquireResult.NeedsExternalTopUp(
+                    quote = targetQuote,
+                    targetMintUrl = trackedTargetMintUrl,
+                    requestedAmountSats = amountSats,
+                )
+            }
+            throw failure
+        }
+
+        if (sourceMeltQuote.totalAmount > source.balance) {
+            return@withLoadingResult CashuRequestAcquireResult.NeedsExternalTopUp(
+                quote = targetQuote,
+                targetMintUrl = trackedTargetMintUrl,
+                requestedAmountSats = amountSats,
             )
         }
+
+        val fundingConfirmation = gateway.meltTokens(sourceMeltQuote.id, source.url)
+        fundingConfirmation.pendingMelt?.let { watchPendingMelt(it, sourceMeltQuote.id) }
+        refreshBalance()
+        loadTransactions()
+
+        finishCashuRequestTopUpAndPayInternal(
+            encoded = encoded,
+            amountSats = amountSats,
+            targetMintUrl = trackedTargetMintUrl,
+            quoteId = targetQuote.id,
+        )
+        CashuRequestAcquireResult.Paid(fundingConfirmation.result)
+    }
+
+    /** Finish an externally-paid target quote, then pay the pending request. */
+    internal suspend fun finishCashuRequestTopUpAndPay(
+        encoded: String,
+        amountSats: Long,
+        targetMintUrl: String,
+        quoteId: String,
+    ) {
+        withLoading {
+            finishCashuRequestTopUpAndPayInternal(encoded, amountSats, targetMintUrl, quoteId)
+        }
+    }
+
+    private suspend fun finishCashuRequestTopUpAndPayInternal(
+        encoded: String,
+        amountSats: Long,
+        targetMintUrl: String,
+        quoteId: String,
+    ) {
+        mintCashuRequestTopUpWithRetries(quoteId)
+        try {
+            gateway.payCashuPaymentRequest(encoded, amountSats, targetMintUrl)
+        } catch (cancellation: CancellationException) {
+            throw cancellation
+        } catch (failure: Throwable) {
+            if (failure.isInsufficientBalance) throw CashuRequestMintSettling()
+            throw failure
+        }
+        refreshBalance()
+        loadTransactions()
+    }
+
+    private suspend fun mintCashuRequestTopUpWithRetries(quoteId: String) {
+        repeat(8) { attempt ->
+            val quote = try {
+                gateway.checkMintQuote(quoteId)
+            } catch (cancellation: CancellationException) {
+                throw cancellation
+            } catch (_: Throwable) {
+                null
+            }
+            when (quote?.state) {
+                MintQuoteState.Issued -> return
+                MintQuoteState.Paid -> {
+                    try {
+                        gateway.mintTokens(quoteId)
+                        return
+                    } catch (cancellation: CancellationException) {
+                        throw cancellation
+                    } catch (failure: Throwable) {
+                        if (mintQuoteSyncService.isAlreadyIssuedMintError(failure)) return
+                    }
+                }
+                else -> Unit
+            }
+            if (attempt < 7) delay(2_500)
+        }
+        throw CashuRequestMintSettling()
     }
 
     suspend fun loadTransactions() {
@@ -1235,59 +1368,91 @@ class WalletManager(
         val settingsSnapshot = replacementSnapshot.settings
         val nwcSnapshot = replacementSnapshot.nwc
 
-        runCatching {
-            // NwcService retains the native CDK wallet, so it must stop before
-            // the repository/database it is backed by is closed.
-            nwcManager.resetForWalletBoundary()
-            gateway.closeWalletRepository()
-            cashuRequestStore.resetForWalletBoundary()
-            walletStore.removeAllWalletData()
-            settingsManager.prepareForWalletReplacement()
-            nostrService.resetForWalletBoundary(deleteStoredKey = false)
-            npcService.resetForWalletBoundary()
-            openWalletRepositoryWithRecovery(mnemonic)
-            deriveNostrKey(mnemonic)
-            secureStorage.saveString(StorageKeys.secureWalletMnemonic, mnemonic)
-            settingsManager.deleteWalletScopedSecrets(settingsSnapshot, deleteNostrPrivateKey = true)
-            nostrMintBackupService.resetForWalletBoundary()
-            databasePathManager.removeWalletFileBackups(backups)
-            loadCachedState(needsOnboarding = needsOnboarding)
-            // A wallet installed during first-launch onboarding is incomplete
-            // until completeOnboarding(); installs from Settings skip
-            // onboarding entirely and are complete immediately.
-            settingsManager.onboardingCompleted = !needsOnboarding
-        }.onFailure { error ->
-            gateway.closeWalletRepository()
-            walletStore.restoreWalletScopedData(walletSnapshot)
-            cashuRequestStore.reload()
-            settingsManager.restoreWalletScopedData(settingsSnapshot)
-            nwcManager.restoreWalletScopedData(nwcSnapshot)
-            nostrMintBackupService.reloadStoredState()
-            databasePathManager.removeWalletDatabaseFiles()
-            databasePathManager.restoreWalletFileBackups(backups)
-            if (previousMnemonic != null) {
-                secureStorage.saveString(StorageKeys.secureWalletMnemonic, previousMnemonic)
-                runCatching {
-                    openWalletRepositoryWithRecovery(previousMnemonic)
-                    deriveNostrKey(previousMnemonic)
-                    loadCachedState(needsOnboarding = false)
-                    if (startNwc) nwcManager.startIfEnabled()
-                }
-                cashuRequestListener?.resetForWalletBoundary(restart = externalServicesEnabled)
-            } else {
-                secureStorage.delete(StorageKeys.secureWalletMnemonic)
-                update {
-                    WalletState(
-                        isInitialized = true,
-                        isRuntimeReady = true,
-                        needsOnboarding = true,
-                        canExitOnboarding = false,
+        runWalletReplacementCommit(
+            installAndCommit = {
+                // NwcService retains the native CDK wallet, so it must stop before
+                // the repository/database it is backed by is closed.
+                nwcManager.resetForWalletBoundary()
+                gateway.closeWalletRepository()
+                cashuRequestStore.resetForWalletBoundary()
+                walletStore.removeAllWalletData()
+                settingsManager.prepareForWalletReplacement()
+                nostrService.resetForWalletBoundary(deleteStoredKey = false)
+                npcService.resetForWalletBoundary()
+                openWalletRepositoryWithRecovery(mnemonic)
+                deriveNostrKey(mnemonic)
+                secureStorage.saveString(StorageKeys.secureWalletMnemonic, mnemonic)
+                nostrMintBackupService.resetForWalletBoundary()
+                loadCachedState(needsOnboarding = needsOnboarding)
+                // A wallet installed during first-launch onboarding is incomplete
+                // until completeOnboarding(); installs from Settings skip
+                // onboarding entirely and are complete immediately. This durable
+                // marker is the final rollback-eligible commit step.
+                settingsManager.onboardingCompleted = !needsOnboarding
+            },
+            rollback = {
+                try {
+                    gateway.closeWalletRepository()
+                    databasePathManager.restoreWalletFileBackups(
+                        backups = backups,
+                        beforeCommit = {
+                            if (previousMnemonic != null) {
+                                secureStorage.saveString(StorageKeys.secureWalletMnemonic, previousMnemonic)
+                            } else {
+                                secureStorage.delete(StorageKeys.secureWalletMnemonic)
+                            }
+                        },
+                        onRollback = {
+                            secureStorage.saveString(StorageKeys.secureWalletMnemonic, mnemonic)
+                        },
                     )
+                    walletStore.restoreWalletScopedData(walletSnapshot)
+                    cashuRequestStore.reload()
+                    settingsManager.restoreWalletScopedData(settingsSnapshot)
+                    nwcManager.restoreWalletScopedData(nwcSnapshot)
+                    nostrMintBackupService.reloadStoredState()
+                    if (previousMnemonic != null) {
+                        runCatching {
+                            openWalletRepositoryWithRecovery(previousMnemonic)
+                            deriveNostrKey(previousMnemonic)
+                            loadCachedState(needsOnboarding = false)
+                            if (startNwc) nwcManager.startIfEnabled()
+                        }
+                        cashuRequestListener?.resetForWalletBoundary(restart = externalServicesEnabled)
+                    } else {
+                        update {
+                            WalletState(
+                                isInitialized = true,
+                                isRuntimeReady = true,
+                                needsOnboarding = true,
+                                canExitOnboarding = false,
+                            )
+                        }
+                        cashuRequestListener?.resetForWalletBoundary(restart = false)
+                    }
+                } catch (rollbackError: Throwable) {
+                    AppLogger.wallet.error("Failed to restore the previous wallet transaction", rollbackError)
+                    runCatching {
+                        cashuRequestListener?.resetForWalletBoundary(restart = false)
+                    }.exceptionOrNull()?.let(rollbackError::addSuppressed)
+                    throw rollbackError
                 }
-                cashuRequestListener?.resetForWalletBoundary(restart = false)
-            }
-            throw error
-        }
+            },
+            cleanupSteps = listOf(
+                WalletReplacementCleanupStep("old wallet secrets") {
+                    settingsManager.deleteWalletScopedSecrets(
+                        settingsSnapshot,
+                        deleteNostrPrivateKey = true,
+                    )
+                },
+                WalletReplacementCleanupStep("wallet database backups") {
+                    databasePathManager.removeWalletFileBackups(backups)
+                },
+            ),
+            onCleanupFailure = { description, error ->
+                AppLogger.wallet.error("Post-commit $description cleanup failed", error)
+            },
+        )
         cashuRequestListener?.resetForWalletBoundary(restart = externalServicesEnabled && !needsOnboarding)
     }
 

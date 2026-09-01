@@ -1,6 +1,7 @@
 package com.cashu.me.ui.components
 
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.size
@@ -18,6 +19,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.semantics.Role
 import com.cashu.me.ui.theme.CashuTheme
 
 /**
@@ -101,7 +103,12 @@ fun ToggleRow(
 ) {
     val contentAlpha = if (enabled) 1f else 0.38f
     ListItem(
-        modifier = modifier.clickable(enabled = enabled) { onCheckedChange(!checked) },
+        modifier = modifier.toggleable(
+            value = checked,
+            enabled = enabled,
+            role = Role.Switch,
+            onValueChange = onCheckedChange,
+        ),
         colors = ListItemDefaults.colors(containerColor = Color.Transparent),
         headlineContent = {
             Text(
@@ -130,7 +137,9 @@ fun ToggleRow(
         trailingContent = {
             Switch(
                 checked = checked,
-                onCheckedChange = onCheckedChange,
+                // The whole row is the single switch control. A null callback
+                // keeps the visual thumb from becoming a second TalkBack node.
+                onCheckedChange = null,
                 enabled = enabled,
             )
         },

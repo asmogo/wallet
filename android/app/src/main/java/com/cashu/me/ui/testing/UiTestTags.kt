@@ -34,6 +34,7 @@ object UiTestTags {
     const val WalletReceive = "cashu.wallet.receive"
     const val WalletSend = "cashu.wallet.send"
     const val HistoryScreen = "cashu.screen.history"
+    const val TransactionReceiptSheet = "cashu.sheet.transaction-receipt"
     const val MintsScreen = "cashu.screen.mints"
     const val MintDetailScreen = "cashu.screen.mint-detail"
     const val MintDetailContent = "cashu.mint-detail.content"

@@ -30,7 +30,7 @@ internal object BitcoinAmountEntry {
 
     fun amountSats(raw: String, context: BitcoinAmountEntryContext): Long =
         when (context.primary) {
-            AmountDisplayPrimary.Sats -> raw.toLongOrNull()?.takeIf { it > 0L } ?: 0L
+            AmountDisplayPrimary.Sats -> UnitAmountEntry.baseUnits(raw, 0)
             AmountDisplayPrimary.Fiat -> fiatCentsToSats(
                 cents = UnitAmountEntry.baseUnits(raw, FIAT_DECIMALS),
                 btcPrice = context.btcPrice,
@@ -49,7 +49,7 @@ internal object BitcoinAmountEntry {
                         context.btcPrice *
                         CENTS_PER_FIAT
                     ).roundToLong()
-                if (cents !in 1..MAX_ENTRY_BASE_UNITS) {
+                if (cents !in 1..UnitAmountEntry.maxBaseUnits(FIAT_DECIMALS)) {
                     ""
                 } else {
                     UnitAmountEntry.entryString(cents, FIAT_DECIMALS)
@@ -80,5 +80,4 @@ internal object BitcoinAmountEntry {
     private const val FIAT_DECIMALS = 2
     private const val CENTS_PER_FIAT = 100.0
     private const val SATS_PER_BITCOIN = 100_000_000.0
-    private const val MAX_ENTRY_BASE_UNITS = 99_999_999_999L
 }

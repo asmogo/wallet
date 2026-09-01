@@ -2,6 +2,7 @@ package com.cashu.me.Core
 
 import android.content.Context
 import kotlinx.serialization.KSerializer
+import kotlinx.serialization.Serializable
 import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.builtins.serializer
 import kotlinx.serialization.json.Json
@@ -22,7 +23,7 @@ interface NostrSignerSettings {
 class SettingsStore(
     context: Context,
     storeName: String = "settings_store",
-) : NostrSignerSettings {
+) : NostrSignerSettings, PriceSettingsStore {
     companion object {
         val defaultNostrRelays = listOf(
             "wss://relay.damus.io",
@@ -38,11 +39,11 @@ class SettingsStore(
         get() = store.boolean(StorageKeys.settingsUseBitcoinSymbol, true)
         set(value) = store.putBoolean(StorageKeys.settingsUseBitcoinSymbol, value)
 
-    var showFiatBalance: Boolean
+    override var showFiatBalance: Boolean
         get() = store.boolean(StorageKeys.settingsShowFiatBalance, false)
         set(value) = store.putBoolean(StorageKeys.settingsShowFiatBalance, value)
 
-    var bitcoinPriceCurrency: String
+    override var bitcoinPriceCurrency: String
         get() = store.string(StorageKeys.settingsBitcoinPriceCurrency) ?: "USD"
         set(value) = store.putString(StorageKeys.settingsBitcoinPriceCurrency, value)
 
@@ -77,6 +78,10 @@ class SettingsStore(
     var amountDisplayPrimary: String
         get() = store.string(StorageKeys.settingsAmountDisplayPrimary) ?: "fiat"
         set(value) = store.putString(StorageKeys.settingsAmountDisplayPrimary, value)
+
+    var homeBalancePrimary: String
+        get() = store.string(StorageKeys.settingsHomeBalancePrimary) ?: "sats"
+        set(value) = store.putString(StorageKeys.settingsHomeBalancePrimary, value)
 
     var homeBalanceUnit: String
         get() = store.string(StorageKeys.settingsHomeBalanceUnit) ?: "sat"
@@ -156,7 +161,35 @@ class SettingsStore(
 
     var p2pkKeys: List<P2PKKeyInfo>
         get() = loadList(StorageKeys.settingsP2PKKeys, P2PKKeyInfo.serializer())
-        set(value) = saveList(StorageKeys.settingsP2PKKeys, P2PKKeyInfo.serializer(), value)
+        set(value) = saveP2PKKeys(value)
+
+    internal fun saveP2PKKeys(
+        keys: List<P2PKKeyInfo>,
+        preservingLegacySecrets: Map<String, String> = emptyMap(),
+    ) {
+        val records = keys.map { key ->
+            P2PKSettingsRecord(
+                id = key.id,
+                publicKey = key.publicKey,
+                label = key.label,
+                createdAtEpochMillis = key.createdAtEpochMillis,
+                used = key.used,
+                usedCount = key.usedCount,
+                privateKey = preservingLegacySecrets[key.id],
+            )
+        }
+        saveList(StorageKeys.settingsP2PKKeys, P2PKSettingsRecord.serializer(), records)
+    }
+
+    internal var p2pkPendingDeletionIds: Set<String>
+        get() = loadList(StorageKeys.settingsP2PKPendingDeletionIds, String.serializer()).toSet()
+        set(value) {
+            if (value.isEmpty()) {
+                store.remove(StorageKeys.settingsP2PKPendingDeletionIds)
+            } else {
+                saveList(StorageKeys.settingsP2PKPendingDeletionIds, String.serializer(), value.sorted())
+            }
+        }
 
     internal fun loadP2PKKeysWithLegacySecrets(): List<LegacyP2PKKeyRecord> =
         LegacySettingsSecretParser.p2pkKeys(store.string(StorageKeys.settingsP2PKKeys))
@@ -188,38 +221,51 @@ class SettingsStore(
         nostrRelays = defaultNostrRelays
     }
 
-    var priceEnabled: Boolean
+    override var priceEnabled: Boolean
         get() = store.boolean(StorageKeys.priceEnabled, showFiatBalance)
         set(value) = store.putBoolean(StorageKeys.priceEnabled, value)
 
-    var priceCurrencyCode: String
+    override var priceCurrencyCode: String
         get() = store.string(StorageKeys.priceCurrencyCode) ?: bitcoinPriceCurrency
         set(value) = store.putString(StorageKeys.priceCurrencyCode, value.uppercase())
 
-    fun cachedPrice(currency: String): Double? {
+    override fun cachedPrice(currency: String): Double? {
         val normalized = currency.uppercase()
-        return store.string(StorageKeys.priceCachedBTC(normalized))?.toDoubleOrNull()
-            ?: store.string(StorageKeys.priceCachedBTC)?.toDoubleOrNull()
+        val key = StorageKeys.priceCachedBTC(normalized)
+        store.string(key)?.toDoubleOrNull()?.let {
+            store.removeKeys(listOf(StorageKeys.priceCachedBTC))
+            return it
+        }
+
+        val legacy = store.string(StorageKeys.priceCachedBTC)?.toDoubleOrNull() ?: return null
+        store.putString(key, legacy.toString())
+        store.removeKeys(listOf(StorageKeys.priceCachedBTC))
+        return legacy
     }
 
-    fun setCachedPrice(price: Double, currency: String) {
+    override fun setCachedPrice(price: Double, currency: String) {
         val normalized = currency.uppercase()
         store.putString(StorageKeys.priceCachedBTC(normalized), price.toString())
-        store.putString(StorageKeys.priceCachedBTC, price.toString())
     }
 
-    fun cachedPriceDate(currency: String): Long? {
+    override fun cachedPriceDate(currency: String): Long? {
         val normalized = currency.uppercase()
-        val dated = store.long(StorageKeys.priceCachedBTCDate(normalized), Long.MIN_VALUE)
-        if (dated != Long.MIN_VALUE) return dated
+        val key = StorageKeys.priceCachedBTCDate(normalized)
+        val dated = store.long(key, Long.MIN_VALUE)
+        if (dated != Long.MIN_VALUE) {
+            store.removeKeys(listOf(StorageKeys.priceCachedBTCDate))
+            return dated
+        }
         val legacy = store.long(StorageKeys.priceCachedBTCDate, Long.MIN_VALUE)
-        return legacy.takeIf { it != Long.MIN_VALUE }
+        if (legacy == Long.MIN_VALUE) return null
+        store.putLong(key, legacy)
+        store.removeKeys(listOf(StorageKeys.priceCachedBTCDate))
+        return legacy
     }
 
-    fun setCachedPriceDate(epochMillis: Long, currency: String) {
+    override fun setCachedPriceDate(epochMillis: Long, currency: String) {
         val normalized = currency.uppercase()
         store.putLong(StorageKeys.priceCachedBTCDate(normalized), epochMillis)
-        store.putLong(StorageKeys.priceCachedBTCDate, epochMillis)
     }
 
     private fun <T> loadList(key: String, serializer: KSerializer<T>): List<T> {
@@ -235,6 +281,7 @@ class SettingsStore(
         StorageKeys.settingsEnablePaymentRequests,
         StorageKeys.settingsReceivePaymentRequestsAutomatically,
         StorageKeys.settingsP2PKKeys,
+        StorageKeys.settingsP2PKPendingDeletionIds,
         StorageKeys.settingsNostrSignerType,
         StorageKeys.settingsNostrMintBackupEnabled,
         StorageKeys.cashuRequestsProcessedNip17Ids,
@@ -249,6 +296,17 @@ class SettingsStore(
         StorageKeys.onboardingCompleted,
     )
 }
+
+@Serializable
+private data class P2PKSettingsRecord(
+    val id: String,
+    val publicKey: String,
+    val label: String,
+    val createdAtEpochMillis: Long,
+    val used: Boolean,
+    val usedCount: Int,
+    val privateKey: String? = null,
+)
 
 internal data class LegacyP2PKKeyRecord(
     val metadata: P2PKKeyInfo,

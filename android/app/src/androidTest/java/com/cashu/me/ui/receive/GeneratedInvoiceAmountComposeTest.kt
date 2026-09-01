@@ -4,12 +4,10 @@ import androidx.compose.ui.test.assertHasClickAction
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
-import androidx.compose.ui.test.onNodeWithText
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.cashu.me.Core.AmountDisplayPrimary
 import com.cashu.me.Models.PaymentMethodKind
 import com.cashu.me.ui.setCashuContent
-import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -35,12 +33,8 @@ class GeneratedInvoiceAmountComposeTest {
             )
         }
 
-        assertPrimaryAboveAlternate(
-            primary = "100,000,000 sat",
-            alternate = "$20,000.00",
-        )
         compose.onNodeWithContentDescription(
-            "Alternate amount: $20,000.00. Tap to make it primary.",
+            "Amount: 100,000,000 sat. Tap to make $20,000.00 primary.",
         )
             .assertIsDisplayed()
             .assertHasClickAction()
@@ -62,24 +56,10 @@ class GeneratedInvoiceAmountComposeTest {
             )
         }
 
-        assertPrimaryAboveAlternate(
-            primary = "$20,000.00",
-            alternate = "100,000,000 sat",
-        )
         compose.onNodeWithContentDescription(
-            "Alternate amount: 100,000,000 sat. Tap to make it primary.",
+            "Amount: $20,000.00. Tap to make 100,000,000 sat primary.",
         )
             .assertIsDisplayed()
             .assertHasClickAction()
-    }
-
-    private fun assertPrimaryAboveAlternate(primary: String, alternate: String) {
-        val primaryNode = compose.onNodeWithText(primary).assertIsDisplayed().fetchSemanticsNode()
-        val alternateNode = compose.onNodeWithText(alternate).assertIsDisplayed().fetchSemanticsNode()
-
-        assertTrue(
-            "Expected preferred amount '$primary' above alternate '$alternate'",
-            primaryNode.boundsInRoot.top < alternateNode.boundsInRoot.top,
-        )
     }
 }

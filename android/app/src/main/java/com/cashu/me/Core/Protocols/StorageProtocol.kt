@@ -80,6 +80,7 @@ object StorageKeys {
     const val settingsReceivePaymentRequestsAutomatically = "settings.receivePaymentRequestsAutomatically"
     const val settingsShowP2PKButtonInDrawer = "settings.showP2PKButtonInDrawer"
     const val settingsP2PKKeys = "settings.p2pkKeys"
+    const val settingsP2PKPendingDeletionIds = "settings.p2pkPendingDeletionIds"
     const val settingsCheckIncomingInvoices = "settings.checkIncomingInvoices"
     const val settingsPeriodicallyCheckIncomingInvoices = "settings.periodicallyCheckIncomingInvoices"
     const val settingsNostrRelays = "settings.nostrRelays"
@@ -87,6 +88,7 @@ object StorageKeys {
     const val settingsNostrMintBackupEnabled = "settings.nostrMintBackupEnabled"
     const val walletNostrMintBackupLastBackupDate = "wallet.nostrMintBackup.lastBackupDate"
     const val settingsAmountDisplayPrimary = "settings.amountDisplayPrimary"
+    const val settingsHomeBalancePrimary = "settings.homeBalancePrimary"
     const val settingsHomeBalanceUnit = "settings.homeBalanceUnit"
     const val settingsSentryEnabled = "settings.sentryEnabled"
     const val settingsAppLockEnabled = "settings.appLockEnabled"
@@ -148,6 +150,7 @@ object StorageKeys {
         cashuRequests,
         cashuRequestsCurrentId,
         settingsP2PKKeys,
+        settingsP2PKPendingDeletionIds,
         npcEnabled,
         npcAutomaticClaim,
         npcSelectedMint,

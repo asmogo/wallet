@@ -11,11 +11,12 @@ import org.junit.Test
 class TransactionDisplayTest {
     @Test
     fun outgoingLightningTransactionUsesPaymentLabels() {
+        val paymentProof = "0123456789abcdef0123456789abcdef"
         val transaction = transaction(
             kind = TransactionKind.Lightning,
             type = TransactionType.Outgoing,
             invoice = "lnbc1test",
-            preimage = "proof",
+            preimage = paymentProof,
             fee = 2,
         )
 
@@ -29,7 +30,13 @@ class TransactionDisplayTest {
         assertEquals("Status", fields.first().label)
         assertEquals("Date", fields[1].label)
         assertTrue(fields.any { it.label == "Fee" && it.value == "2 sat" })
-        assertTrue(fields.any { it.label == "Payment Proof" && it.value == "proof" })
+        assertTrue(
+            fields.any {
+                it.label == "Payment Proof" &&
+                    it.value == "01234567…abcdef" &&
+                    it.copyValue == paymentProof
+            },
+        )
     }
 
     @Test

@@ -22,7 +22,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonColors
 import androidx.compose.material3.ButtonDefaults
@@ -32,7 +31,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.LoadingIndicator
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -40,11 +38,12 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
@@ -52,14 +51,7 @@ import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.cashu.me.ui.theme.CashuTheme
-
-// Generous circular "method" buttons shared by the Send and Receive sheets
-// (Scan · Ecash · Tap / Scan · Ecash · Bitcoin). Surface, not
-// FilledTonalIconButton — the latter hardcodes 40dp and would ignore these
-// sizes. MethodRowSpacing is public so callers space the row identically.
-private val MethodButtonSize = 72.dp
-private val MethodIconSize = 32.dp
-val MethodRowSpacing = 40.dp
+import com.cashu.me.ui.theme.rememberReducedMotion
 
 // Full-width CTAs (incl. home Receive/Send). +10% over the original 58/16
 // iOS-large glass capsule sizing for a taller Android press target.
@@ -103,10 +95,11 @@ private val GhostLabelMorphBlur = 1.5.dp
 @Composable
 private fun rememberPressScale(interactionSource: MutableInteractionSource): Float {
     val pressed by interactionSource.collectIsPressedAsState()
+    val reduceMotion = rememberReducedMotion()
     val compress = MaterialTheme.motionScheme.fastEffectsSpec<Float>()
     val release = MaterialTheme.motionScheme.defaultEffectsSpec<Float>()
     val scale by animateFloatAsState(
-        targetValue = if (pressed) PressedScale else 1f,
+        targetValue = if (pressed && !reduceMotion) PressedScale else 1f,
         animationSpec = if (pressed) compress else release,
         label = "press-scale",
     )
@@ -149,8 +142,10 @@ fun neutralActionButtonColors(): ButtonColors = ButtonDefaults.buttonColors(
  * iOS bottom CTA is the non-prominent gray glass capsule), spring press-scale,
  * expressive loading indicator.
  *
- * Pass [colors] to override — the sole inverted-ink case is the Receive Ecash
- * commit button, mirroring iOS's single `.glassButton(prominent: true)`.
+ * Pass [colors] to override. Inverted ink (`ButtonDefaults.buttonColors()`) is
+ * used only where a sheet's CTA is that sheet's single irreversible commit:
+ * Add Mint, and the Nostr / P2PK key sheets. Every payment CTA — Pay, Receive —
+ * stays on this neutral fill, matching iOS's non-prominent glass capsule.
  */
 @OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
@@ -196,7 +191,17 @@ fun PrimaryButton(
             .graphicsLayer {
                 scaleX = scale
                 scaleY = scale
-            },
+            }
+            .then(
+                if (loading) {
+                    Modifier.semantics {
+                        contentDescription = text
+                        stateDescription = "In progress"
+                    }
+                } else {
+                    Modifier
+                },
+            ),
         enabled = active,
         interactionSource = interactionSource,
         colors = ButtonColors(container, content, container, content),
@@ -239,7 +244,10 @@ fun PrimaryButton(
                 val morph = morphBlur()
                 if (current == null) {
                     LoadingIndicator(
-                        modifier = Modifier.size(ButtonProgressSize).then(morph),
+                        modifier = Modifier
+                            .size(ButtonProgressSize)
+                            .then(morph)
+                            .clearAndSetSemantics {},
                         color = LocalContentColor.current,
                     )
                 } else {
@@ -283,6 +291,17 @@ fun SecondaryButton(
         )
     }
 }
+
+/**
+ * Text style for a [GhostButton] used as the tertiary action directly beneath a
+ * full-width CTA ("Receive later", the onboarding chassis' skip slot). It is
+ * [PrimaryButton]'s own label style, so the pair differs by fill and ink alone
+ * and never by type — a 14sp Medium label under an 18sp SemiBold capsule read as
+ * two unrelated controls. Inline ghosts ("Paste", "Discover mints") keep
+ * [GhostButton]'s smaller default.
+ */
+val ghostButtonUnderCtaTextStyle: TextStyle
+    @Composable get() = CashuTheme.type.buttonLabel
 
 /** Inline non-emphasized action (Copy, Paste, Restore from seed, etc.). */
 @Composable
@@ -358,51 +377,6 @@ fun GhostButton(
                 modifier = Modifier.size(GhostButtonIconSize),
             )
         }
-    }
-}
-
-/**
- * One round tonal icon button with a one-word caption below — the shared "way to
- * send / receive" button. iOS parity: `CircularGlassIconButton`.
- */
-@Composable
-fun CircularMethodButton(
-    icon: ImageVector,
-    label: String,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier,
-    enabled: Boolean = true,
-) {
-    Column(
-        modifier = modifier.alpha(if (enabled) 1f else 0.38f),
-        horizontalAlignment = Alignment.CenterHorizontally,
-    ) {
-        Surface(
-            onClick = onClick,
-            enabled = enabled,
-            modifier = Modifier.size(MethodButtonSize),
-            shape = CircleShape,
-            color = MaterialTheme.colorScheme.secondaryContainer,
-            contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
-        ) {
-            Box(
-                modifier = Modifier.fillMaxSize(),
-                contentAlignment = Alignment.Center,
-            ) {
-                Icon(
-                    imageVector = icon,
-                    contentDescription = label,
-                    modifier = Modifier.size(MethodIconSize),
-                )
-            }
-        }
-        Spacer(Modifier.height(CashuTheme.spacing.snug))
-        Text(
-            text = label,
-            style = MaterialTheme.typography.bodySmall,
-            fontWeight = FontWeight.Medium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
     }
 }
 

@@ -12,6 +12,7 @@ struct NWCSettingsView: View {
     @EnvironmentObject var walletManager: WalletManager
     @ObservedObject var nwc = NWCManager.shared
     @ObservedObject private var settings = SettingsManager.shared
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     @State private var showMintPicker = false
     @State private var showBudgetSheet = false
@@ -87,11 +88,12 @@ struct NWCSettingsView: View {
         }
         .navigationTitle("Wallet Connect")
         .toolbarBackground(.hidden, for: .navigationBar)
-        .animation(.easeInOut(duration: 0.2), value: nwc.isEnabled)
-        .animation(.easeInOut(duration: 0.2), value: nwc.connectionUri)
-        .animation(.easeInOut(duration: 0.2), value: nwc.errorMessage)
-        .sheet(isPresented: $showMintPicker) {
+        .animation(reduceMotion ? nil : .easeInOut(duration: 0.2), value: nwc.isEnabled)
+        .animation(reduceMotion ? nil : .easeInOut(duration: 0.2), value: nwc.connectionUri)
+        .animation(reduceMotion ? nil : .easeInOut(duration: 0.2), value: nwc.errorMessage)
+        .backdropSheet(isPresented: $showMintPicker) {
             MintPickerSheet(
+                title: "Mint",
                 mints: walletManager.mints,
                 selectedMintUrl: Binding(
                     get: { nwc.selectedMintUrl },
@@ -99,16 +101,14 @@ struct NWCSettingsView: View {
                 ),
                 onSelect: { nwc.selectedMintUrl = $0 }
             )
-            .presentationDetents([.medium, .large])
         }
-        .sheet(isPresented: $showBudgetSheet) {
+        .backdropSheet(isPresented: $showBudgetSheet) {
             NWCBudgetSheet()
                 .presentationDetents([.medium])
                 .presentationDragIndicator(.visible)
         }
-        .sheet(isPresented: $showConnectionQR) {
+        .backdropSheet(isPresented: $showConnectionQR) {
             QRCodeDetailSheet(title: "Wallet Connect", content: nwc.connectionUri ?? "")
-                .presentationDetents([.medium, .large])
         }
         .alert("Reset Connection", isPresented: $showRegenerateConfirm) {
             Button("Cancel", role: .cancel) {}
@@ -118,6 +118,7 @@ struct NWCSettingsView: View {
         } message: {
             Text("This creates a new connection code. Any app paired with the current one will stop working until you share the new code.")
         }
+        .bottomSheetBackdropHost()
     }
 
     // MARK: - Rows
@@ -133,11 +134,16 @@ struct NWCSettingsView: View {
                     .frame(width: 7, height: 7)
                     .accessibilityHidden(true)
 
-                Text(uri)
-                    .font(.system(.body, design: .monospaced))
-                    .foregroundStyle(.primary)
-                    .lineLimit(1)
-                    .truncationMode(.middle)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(uri)
+                        .font(.system(.body, design: .monospaced))
+                        .foregroundStyle(.primary)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                    Text(nwc.isRunning ? "Connected" : "Connecting")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
 
                 Spacer(minLength: 8)
 
@@ -156,6 +162,7 @@ struct NWCSettingsView: View {
             Button {
                 UIPasteboard.general.string = uri
                 HapticFeedback.selection()
+                ConfirmationToast.show("Copied connection code")
             } label: {
                 Label("Copy code", systemImage: "doc.on.doc")
             }
@@ -348,6 +355,7 @@ private struct NWCBudgetSheet: View {
                 if digits != newValue { budgetText = digits }
             }
         }
+        .flatBottomSheetSurface()
     }
 
     private func save() {

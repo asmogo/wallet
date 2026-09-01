@@ -20,6 +20,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import com.cashu.me.ui.theme.CashuTheme
+import com.cashu.me.ui.theme.CashuMotion
 import com.cashu.me.ui.theme.rememberReducedMotion
 
 /**
@@ -28,27 +29,33 @@ import com.cashu.me.ui.theme.rememberReducedMotion
  * `ReceiveLightningView.statusBadge` pending branch.
  */
 @Composable
-fun WaitingForPaymentRow(text: String = "Waiting for payment…") {
-    val reducedMotion = rememberReducedMotion()
+fun rememberPendingPulseAlpha(): Float {
+    if (rememberReducedMotion()) return 1f
     val transition = rememberInfiniteTransition(label = "waiting-pulse")
     val alpha by transition.animateFloat(
         initialValue = 1f,
-        targetValue = 0.4f,
+        targetValue = CashuMotion.PulseMinAlpha,
         animationSpec = infiniteRepeatable(
-            animation = tween(1100),
+            animation = tween(CashuMotion.PulsePeriodMs),
             repeatMode = RepeatMode.Reverse,
         ),
         label = "waiting-pulse-alpha",
     )
+    return alpha
+}
+
+@Composable
+fun WaitingForPaymentRow(text: String = "Waiting for payment…") {
+    val alpha = rememberPendingPulseAlpha()
     Row(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(CashuTheme.spacing.snug),
     ) {
-        Box(modifier = Modifier.alpha(if (reducedMotion) 1f else alpha)) {
+        Box(modifier = Modifier.alpha(alpha)) {
             Icon(
                 imageVector = Icons.Outlined.Schedule,
                 contentDescription = null,
-                tint = CashuTheme.colors.pending,
+                tint = CashuTheme.colors.onPendingContainer,
                 modifier = Modifier.size(CashuTheme.spacing.loose),
             )
         }

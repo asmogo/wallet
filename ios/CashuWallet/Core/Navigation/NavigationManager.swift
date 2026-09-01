@@ -10,6 +10,8 @@ import SwiftUI
 enum WalletSheet: Identifiable {
     case receive
     case send(prefill: String?)
+    case sendEdit(prefill: String)
+    case sendAmount(SendAmountDestination)
     case scanner
     case sendEcash
     case receiveLightning
@@ -24,6 +26,8 @@ enum WalletSheet: Identifiable {
         // pasted payable from Receive to Send morphs the open sheet instead
         // of tearing it down and re-presenting.
         case .send: return "send"
+        case .sendEdit: return "sendEdit"
+        case .sendAmount: return "sendAmount"
         case .scanner: return "scanner"
         case .sendEcash: return "sendEcash"
         case .receiveLightning: return "receiveLightning"

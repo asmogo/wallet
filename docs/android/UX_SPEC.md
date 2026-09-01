@@ -28,6 +28,8 @@ Cashu Wallet is a **system utility**, not a crypto dashboard. The bar is set by 
 | **Share-At-Top Rule** | When a screen shows a shareable QR (invoice, request, token, transaction), `Share` lives in the `TopAppBar` actions, never in the footer button stack. |
 | **Singular Button Rule** | Primary AND secondary CTAs both use `FilledTonalButton`. No `OutlinedButton`, no inverted-fill. Hierarchy via copy and disabled state. The single most-prominent action per screen (e.g. "Create Wallet") may use `Button` (filled). |
 | **Iconless-CTA Rule** | Primary CTAs (Copy, Send, Receive, Continue, New Request) are text-only. No leading icons. |
+| **Iconless-Row Rule** | Two-column detail rows (`InspectorRow`) on receipts, pay/receive confirms, and `PaymentStatusScreen` are label + value only — no `leadingIcon`. Trailing affordances (pencil, link arrow) stay. Method/action and Settings rows keep their leading icons. |
+| **Copy Feedback Rule** | Copy affordances never morph into checkmarks or change their label. A successful copy raises the shared, one-at-a-time top-center confirmation toast for 2.2s. One pass-through app-level dialog owns the toast above sheets and scrims; sheet content must not mount another host. The toast has no icon or bounce and respects the system motion scale. |
 
 ---
 
@@ -333,7 +335,7 @@ Body:
 2. **Amount** — large, centered, monospaced, `onSurfaceVariant`.
 3. **Memo** if present, `bodyMedium`, centered.
 4. **Status row** — "Waiting for recipient" with subtle pulsing dot. When poll detects claim, swap to "Token claimed" with `received-green` `Icons.Filled.CheckCircle` and bounce-in animation, hold 2.5s, then offer a "Send another" `FilledTonalButton`.
-5. **Copy `FilledTonalButton`** — full width. Tap → copies token, label becomes "Copied" for 2s.
+5. **Copy `FilledTonalButton`** — full width. Tap → copies token and raises the shared top confirmation toast; the button stays visually stable.
 
 ### 7.2 Send Lightning
 
@@ -403,7 +405,7 @@ Body:
 - QR card.
 - Amount (if fixed; otherwise hidden).
 - Status: same waiting / live-burst / persistent count states as Receive Lightning.
-- **Inspector rows** — `ListItem`s with leading icon, label, trailing value, and (on editable rows) a trailing pencil `IconButton`. Inspector divider is 0.5dp at 8dp horizontal inset (tighter than canvas).
+- **Inspector rows** — `ListItem`s with label, trailing value, and (on editable rows) a trailing pencil `IconButton`. No leading icon (Iconless-Row Rule). Inspector divider is 0.5dp at 8dp horizontal inset (tighter than canvas).
 
 | Row | Editable | Tap behavior |
 |-----|---------|--------------|
@@ -423,15 +425,19 @@ When a `cashu:` deep link arrives, push this screen over whatever tab is active.
 
 ## 9. Transaction detail
 
-Pushed route from History (or from Home recent activity). `TopAppBar(title = "", navigationIcon = Close, actions = [Share if shareable])`.
+Completed transactions open in a content-fitting native `ModalBottomSheet` over
+History or Home. The presenting canvas receives a restrained 2dp blur beneath
+the system scrim. The sheet uses its drag handle and scrim for dismissal, with no
+close button. Pending, failed, expired, QR, and claim/check states remain pushed
+detail routes because they are active workspaces rather than receipts.
 
 Body, top-to-bottom:
-1. **QR card** if the transaction has a shareable payload (token / invoice / address); else a large centered method icon with status badge.
+1. **QR card** if the transaction has a shareable payload (token / invoice / address); else a centered 64dp status glyph.
 2. **Amount** (large, monospaced, colored per status rules).
-3. **Status row** — same icons + colors as History row.
-4. **Inspector rows**: Type, Fee, Unit, State, Mint, Request (truncated, monospaced), Proof / preimage / txid (truncated, monospaced).
+3. **Status row** — plain monochrome label/value.
+4. **Inspector rows**: plain two-column labels and values with no leading field icons. Copyable reference values use a static trailing Copy affordance. Opaque values, including Payment Proof, display as `prefix(8)…suffix(6)` while copying the full value.
 5. **External link row** — "View in block explorer" for on-chain.
-6. **Copy `FilledTonalButton`** if there is a copyable payload (footer).
+6. **Copy `FilledTonalButton`** if there is a copyable payload (quiet secondary footer action), separated from the final metadata row by deliberate breathing room. Copy feedback uses the shared top toast.
 
 Long-press on QR opens `DropdownMenu` (Copy, Share).
 

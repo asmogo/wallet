@@ -35,9 +35,10 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
+import androidx.compose.material3.LoadingIndicator
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearWavyProgressIndicator
 import androidx.compose.material3.MaterialTheme
@@ -269,6 +270,7 @@ fun ScannerView(
 }
 
 @Composable
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 private fun ScannerStatusOverlay(
     progress: Float,
     error: String?,
@@ -408,10 +410,9 @@ private fun CameraPermissionView(
                 textAlign = TextAlign.Center,
             )
             if (showsProgress) {
-                CircularProgressIndicator(
+                LoadingIndicator(
                     modifier = Modifier.size(28.dp),
                     color = Color.White,
-                    strokeWidth = 2.dp,
                 )
             }
             if (actionText != null && onAction != null) {

@@ -18,12 +18,33 @@ class LightningAddressSettingsCopyTest {
     }
 
     @Test
+    fun preferencesCopyMatchesIos() {
+        assertEquals(
+            "Incoming payments are minted as ecash at your chosen mint.",
+            LightningAddressSettingsCopy.PreferencesFooter,
+        )
+        assertEquals("Receiving mint", LightningAddressSettingsCopy.ReceivingMintTitle)
+        assertEquals("Select a mint", LightningAddressSettingsCopy.SelectMintFallback)
+        assertEquals("Check for payments", LightningAddressSettingsCopy.CheckPaymentsTitle)
+        assertEquals("Not checked yet", LightningAddressSettingsCopy.NeverCheckedCaption)
+        assertEquals(
+            "To check for payments, allow incoming invoice checks in Privacy settings.",
+            LightningAddressSettingsCopy.ChecksOffFooter,
+        )
+    }
+
+    @Test
     fun primarySettingsCopyDoesNotExposeImplementationTerms() {
         val primaryCopy = listOf(
             LightningAddressSettingsCopy.EnableTitle,
             LightningAddressSettingsCopy.EnableSubtitle,
             LightningAddressSettingsCopy.AutomaticClaimTitle,
-            LightningAddressSettingsCopy.AutomaticClaimSubtitle,
+            LightningAddressSettingsCopy.PreferencesFooter,
+            LightningAddressSettingsCopy.ReceivingMintTitle,
+            LightningAddressSettingsCopy.SelectMintFallback,
+            LightningAddressSettingsCopy.CheckPaymentsTitle,
+            LightningAddressSettingsCopy.NeverCheckedCaption,
+            LightningAddressSettingsCopy.ChecksOffFooter,
         )
         val implementationTerms = listOf("Nostr", "NPC", "bridge", "quote", "handler")
 

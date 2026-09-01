@@ -5,6 +5,7 @@ struct HistoryView: View {
     @ObservedObject var settings = SettingsManager.shared
     @ObservedObject private var priceService = PriceService.shared
     @ObservedObject private var requestStore = CashuRequestStore.shared
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     enum FilterMode: String, CaseIterable, Identifiable {
         case all
@@ -31,6 +32,7 @@ struct HistoryView: View {
     @FocusState private var isSearchFocused: Bool
     @State private var selectedTransaction: WalletTransaction?
     @State private var selectedRequest: CashuRequest?
+    @State private var isSheetDismissing = false
     @State private var requestPendingDeletion: CashuRequest?
     @State private var receiveTokenPendingDeletion: WalletTransaction?
     /// Unclaimed incoming token being claimed (rows open the claim flow
@@ -69,6 +71,10 @@ struct HistoryView: View {
     // Match MainWalletView's recent-list row metrics so spacing reads the
     // same from Home → History (16pt vertical padding, 4pt title/time gap).
     private let rowVerticalPadding: CGFloat = 16
+
+    private var isBottomSheetPresented: Bool {
+        selectedTransaction != nil || selectedRequest != nil
+    }
 
     var body: some View {
         NavigationStack {
@@ -148,7 +154,7 @@ struct HistoryView: View {
             .sheet(item: $selectedTransaction) { transaction in
                 TransactionDetailView(transaction: transaction)
                     .environmentObject(walletManager)
-                    .canvasSheetBackground()
+                    .observeBottomSheetDismissal { isSheetDismissing = $0 }
             }
             // Claim flow for an unclaimed incoming token. `item:` captures the
             // pending token at presentation, so the content stays stable while
@@ -167,7 +173,8 @@ struct HistoryView: View {
                     CashuRequestDetailView(request: request)
                         .environmentObject(walletManager)
                 }
-                .canvasSheetBackground()
+                .compactBottomSheetSurface()
+                .observeBottomSheetDismissal { isSheetDismissing = $0 }
             }
             .confirmationDialog(
                 "Remove this Cashu Request from history?",
@@ -222,6 +229,12 @@ struct HistoryView: View {
             }
         }
         .accessibilityIdentifier("history-screen")
+        .bottomSheetBackdrop(
+            isPresented: isBottomSheetPresented && !isSheetDismissing
+        )
+        .onChange(of: isBottomSheetPresented) { _, presented in
+            if presented { isSheetDismissing = false }
+        }
     }
 
     // MARK: - History List
@@ -280,8 +293,12 @@ struct HistoryView: View {
             }
             .onChange(of: scrollResetToken) { _, _ in
                 if let firstId = visibleItems.first?.id {
-                    withAnimation(.snappy(duration: 0.25)) {
+                    if reduceMotion {
                         proxy.scrollTo(firstId, anchor: .top)
+                    } else {
+                        withAnimation(.snappy(duration: 0.25)) {
+                            proxy.scrollTo(firstId, anchor: .top)
+                        }
                     }
                 }
             }
@@ -479,6 +496,7 @@ struct HistoryView: View {
 
     private func cashuRequestRow(request: CashuRequest) -> some View {
         let isReceived = !request.receivedPayments.isEmpty
+        let receivedAmount = totalReceived(for: request)
         return Button {
             HapticFeedback.selection()
             selectedRequest = request
@@ -501,7 +519,7 @@ struct HistoryView: View {
                 CashuRequestAmountColumn(
                     request: request,
                     received: isReceived,
-                    receivedAmount: totalReceived(for: request)
+                    receivedAmount: receivedAmount
                 )
             }
             .padding(.horizontal, rowHorizontalPadding)
@@ -510,7 +528,13 @@ struct HistoryView: View {
         }
         .buttonStyle(.plain)
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("\(request.displayTitle), \(isReceived ? "received" : "waiting for payment"), \(formatRelativeDate(request.createdAt))")
+        .accessibilityLabel(
+            cashuRequestAccessibilityLabel(
+                request: request,
+                received: isReceived,
+                receivedAmount: receivedAmount
+            )
+        )
         .accessibilityHint("Opens request details")
         .swipeActions(edge: .trailing, allowsFullSwipe: true) {
             Button(role: .destructive) {
@@ -519,6 +543,36 @@ struct HistoryView: View {
                 Label("Remove", systemImage: "trash")
             }
         }
+    }
+
+    private func cashuRequestAccessibilityLabel(
+        request: CashuRequest,
+        received: Bool,
+        receivedAmount: UInt64
+    ) -> String {
+        let amount = received ? receivedAmount : (request.amount ?? 0)
+        let amountPart: String
+        if amount == 0 {
+            amountPart = "any amount"
+        } else if request.unit.lowercased() == "sat" {
+            let display = AmountFormatter.displayText(
+                amountSats: amount,
+                preferredPrimary: settings.homeBalancePrimary,
+                showFiat: settings.showFiatBalance,
+                btcPrice: priceService.btcPriceUSD,
+                currencyCode: settings.bitcoinPriceCurrency,
+                useBitcoinSymbol: settings.useBitcoinSymbol
+            )
+            amountPart = [display.primary, display.secondary]
+                .compactMap { $0 }
+                .joined(separator: ", ")
+        } else {
+            amountPart = CurrencyAmount(
+                value: amount,
+                currency: CurrencyRegistry.currency(forMintUnit: request.unit)
+            ).formatted()
+        }
+        return "\(request.displayTitle), \(amountPart), \(received ? "received" : "waiting for payment"), \(formatRelativeDate(request.createdAt))"
     }
 
     // MARK: - Transaction Row
@@ -561,7 +615,11 @@ struct HistoryView: View {
         .buttonStyle(.plain)
         .accessibilityElement(children: .combine)
         .accessibilityLabel("\(rowTitle(for: transaction)), \(formatAmount(transaction)), \(transaction.status == .completed ? "completed" : transaction.displayStatusText.lowercased()), \(formatRelativeDate(transaction.date))")
-        .accessibilityHint("Opens transaction details")
+        .accessibilityHint(
+            transaction.isPendingReceiveToken
+                ? "Opens receive review"
+                : "Opens transaction details"
+        )
         .swipeActions(edge: .trailing, allowsFullSwipe: false) {
             if transaction.isPendingReceiveToken {
                 Button(role: .destructive) {
@@ -594,7 +652,7 @@ struct HistoryView: View {
         if transaction.unit.lowercased() == "sat" {
             value = AmountFormatter.displayText(
                 amountSats: transaction.amount,
-                preferredPrimary: settings.amountDisplayPrimary,
+                preferredPrimary: settings.homeBalancePrimary,
                 showFiat: settings.showFiatBalance,
                 btcPrice: priceService.btcPriceUSD,
                 currencyCode: settings.bitcoinPriceCurrency,

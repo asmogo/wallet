@@ -6,31 +6,25 @@ import androidx.compose.animation.core.spring
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.togetherWith
-import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.SwapVert
-import androidx.compose.material3.Icon
+import androidx.compose.foundation.layout.sizeIn
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.onClick
 import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.unit.dp
@@ -43,20 +37,16 @@ import com.cashu.me.ui.theme.AmountScale
 import com.cashu.me.ui.theme.CashuTheme
 import com.cashu.me.ui.theme.withMonoDigits
 
-private val FlipPillIconSize = 14.dp
-
 /**
- * Hero amount with a tappable unit-flip pill beneath it — the Compose port of
- * iOS `CurrencyAmountDisplay`: the primary amount renders large, the secondary
- * (fiat or sats) sits in a small capsule with a ↕ glyph; tapping the pill
- * swaps which unit leads. The swap cross-fades, same as subsequent value
- * changes via [AmountText].
+ * Hero amount whose whole primary/secondary pair toggles units, matching Home.
+ * The swap cross-fades through [AmountText], and the pair stays visually plain
+ * rather than assigning the affordance to a separate icon or support-line button.
  *
  * When [entryRaw] is set, the primary line follows the typed keypad string
  * (partial decimals included) while the secondary line keeps the mint-unit
  * alternate — matching iOS live entry on Receive / Send.
  *
- * When no fiat price is available the pill is omitted and the amount renders
+ * When no fiat price is available the control is omitted and the amount renders
  * plain in sats.
  */
 @Composable
@@ -71,6 +61,7 @@ fun AmountFlipDisplay(
     entryRaw: String? = null,
     primaryTextStyle: TextStyle? = null,
     primaryAccessibilityPrefix: String? = null,
+    color: Color = MaterialTheme.colorScheme.onSurface,
 ) {
     val haptics = LocalHapticFeedback.current
     val formatter = remember { AmountFormatter() }
@@ -94,10 +85,43 @@ fun AmountFlipDisplay(
             useBitcoinSymbol = useBitcoinSymbol,
         )
     }
+    val secondary = display.secondary
+    val flip = {
+        haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+        onFlip(
+            if (display.effectivePrimary == AmountDisplayPrimary.Fiat) {
+                AmountDisplayPrimary.Sats
+            } else {
+                AmountDisplayPrimary.Fiat
+            },
+        )
+    }
+    val toggleModifier = if (secondary != null) {
+        Modifier
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null,
+                role = Role.Button,
+                onClickLabel = "Make $secondary primary",
+                onClick = flip,
+            )
+            .clearAndSetSemantics {
+                role = Role.Button
+                contentDescription =
+                    "Amount: ${display.primary}. Tap to make $secondary primary."
+                onClick(label = "Make $secondary primary") {
+                    flip()
+                    true
+                }
+            }
+            .sizeIn(minHeight = 48.dp)
+    } else {
+        Modifier
+    }
     Column(
-        modifier = modifier,
+        modifier = modifier.then(toggleModifier),
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(CashuTheme.spacing.snug),
+        verticalArrangement = Arrangement.spacedBy(CashuTheme.spacing.micro),
     ) {
         val primaryStyle =
             (primaryTextStyle ?: MaterialTheme.typography.displayMedium).withMonoDigits()
@@ -108,6 +132,7 @@ fun AmountFlipDisplay(
             AmountHero(
                 parts = display.primaryParts,
                 scale = AmountScale.Hero,
+                color = color,
                 accessibilityPrefix = primaryAccessibilityPrefix,
             )
         } else {
@@ -140,60 +165,23 @@ fun AmountFlipDisplay(
                         Modifier
                     },
                     style = primaryStyle,
+                    color = color,
                 )
             }
         }
-        val secondary = display.secondary
         if (secondary != null) {
-            Row(
-                modifier = Modifier
-                    .clip(CircleShape)
-                    .background(MaterialTheme.colorScheme.surfaceVariant)
-                    .clickable(
-                        interactionSource = remember { MutableInteractionSource() },
-                        indication = null,
-                        role = Role.Button,
-                        onClickLabel = "Make $secondary primary",
-                    ) {
-                        haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                        onFlip(
-                            if (display.effectivePrimary == AmountDisplayPrimary.Fiat) {
-                                AmountDisplayPrimary.Sats
-                            } else {
-                                AmountDisplayPrimary.Fiat
-                            },
-                        )
-                    }
-                    .semantics(mergeDescendants = true) {
-                        role = Role.Button
-                        contentDescription = "Alternate amount: $secondary. Tap to make it primary."
-                    }
-                    .padding(
-                        horizontal = CashuTheme.spacing.default,
-                        vertical = CashuTheme.spacing.micro,
-                    ),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(CashuTheme.spacing.micro),
-            ) {
-                AnimatedContent(
-                    targetState = secondary,
-                    transitionSpec = {
-                        fadeIn(spring(stiffness = Spring.StiffnessMedium))
-                            .togetherWith(fadeOut(spring(stiffness = Spring.StiffnessMedium)))
-                    },
-                    label = "amount-flip-pill",
-                ) { text ->
-                    Text(
-                        text = text,
-                        style = MaterialTheme.typography.labelLarge.withMonoDigits(),
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-                Icon(
-                    imageVector = Icons.Outlined.SwapVert,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.size(FlipPillIconSize),
+            AnimatedContent(
+                targetState = secondary,
+                transitionSpec = {
+                    fadeIn(spring(stiffness = Spring.StiffnessMedium))
+                        .togetherWith(fadeOut(spring(stiffness = Spring.StiffnessMedium)))
+                },
+                label = "amount-flip-control",
+            ) { text ->
+                Text(
+                    text = text,
+                    style = MaterialTheme.typography.labelLarge.withMonoDigits(),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
         }
@@ -226,9 +214,9 @@ internal fun AmountFormatter.entryDisplayText(
     } else {
         null
     }
-    val primaryRaw = entryRaw.ifEmpty {
-        if (effective == AmountDisplayPrimary.Fiat) "0.00" else "0"
-    }
+    // Whole-number-first entry: an untouched pad is "0" in both units. The
+    // secondary line below is a settled amount, so it keeps its full fraction.
+    val primaryRaw = entryRaw.ifEmpty { "0" }
     return when (effective) {
         AmountDisplayPrimary.Fiat -> AmountDisplayText(
             primary = entryFiatDisplay(primaryRaw, currencyCode),

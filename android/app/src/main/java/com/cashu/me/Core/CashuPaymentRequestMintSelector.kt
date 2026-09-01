@@ -5,8 +5,12 @@ import com.cashu.me.Models.MintInfo
 internal sealed interface CashuPaymentRequestRoute {
     data class PayWithEcash(val mint: MintInfo, val amountSats: Long) : CashuPaymentRequestRoute
     data class PayBolt11Fallback(val lightningRequest: String) : CashuPaymentRequestRoute
-    data class AddMintToPay(val mintUrls: List<String>, val amountSats: Long) : CashuPaymentRequestRoute
-    data class NeedsExternalTopUp(val mintUrl: String?, val amountSats: Long) : CashuPaymentRequestRoute
+    data class AcquireThenPay(
+        val mintUrls: List<String>,
+        val targetMintUrl: String?,
+        val amountSats: Long,
+        val addsNewMint: Boolean,
+    ) : CashuPaymentRequestRoute
     data class UnsupportedUnit(val unit: String?) : CashuPaymentRequestRoute
     data object MissingAmount : CashuPaymentRequestRoute
 }
@@ -52,6 +56,7 @@ internal fun routeForCashuPaymentRequest(
     selectedMintUrl: String?,
     activeMintUrl: String?,
     amountSats: Long?,
+    selectedTargetMintUrl: String? = null,
 ): CashuPaymentRequestRoute {
     if (!request.isSatUnit) {
         return CashuPaymentRequestRoute.UnsupportedUnit(request.unit)
@@ -74,22 +79,27 @@ internal fun routeForCashuPaymentRequest(
     }
 
     val requestedMintUrls = request.mints
-        .mapNotNull(::normalizedMintUrlForSelection)
-        .toList()
+        .filter { normalizedMintUrlForSelection(it) != null }
+        .distinctBy(::normalizedMintUrlForSelection)
     val trackedCompatible = compatibleMintsForCashuPaymentRequest(request, mints)
-    if (requestedMintUrls.isNotEmpty() && trackedCompatible.isEmpty()) {
-        return CashuPaymentRequestRoute.AddMintToPay(mintUrls = request.mints, amountSats = amount)
+
+    val trackedTarget = trackedCompatible.firstOrNull { mint ->
+        normalizedMintUrlForSelection(mint.url) == normalizedMintUrlForSelection(selectedMintUrl)
+    }?.url ?: trackedCompatible.firstOrNull { mint ->
+        normalizedMintUrlForSelection(mint.url) == normalizedMintUrlForSelection(activeMintUrl)
+    }?.url ?: trackedCompatible.maxByOrNull { it.balance }?.url
+
+    val selectedRequestedTarget = requestedMintUrls.firstOrNull {
+        normalizedMintUrlForSelection(it) == normalizedMintUrlForSelection(selectedTargetMintUrl)
     }
+    val requestedTarget = selectedRequestedTarget ?: requestedMintUrls.singleOrNull()
+    val targetMintUrl = trackedTarget ?: requestedTarget
 
-    val topUpTarget = selectedMintUrl?.takeIf { selected ->
-        trackedCompatible.any { normalizedMintUrlForSelection(it.url) == normalizedMintUrlForSelection(selected) }
-    } ?: activeMintUrl?.takeIf { active ->
-        trackedCompatible.any { normalizedMintUrlForSelection(it.url) == normalizedMintUrlForSelection(active) }
-    } ?: trackedCompatible.maxByOrNull { it.balance }?.url
-
-    return CashuPaymentRequestRoute.NeedsExternalTopUp(
-        mintUrl = topUpTarget ?: request.mints.firstOrNull(),
+    return CashuPaymentRequestRoute.AcquireThenPay(
+        mintUrls = requestedMintUrls,
+        targetMintUrl = targetMintUrl,
         amountSats = amount,
+        addsNewMint = trackedTarget == null && targetMintUrl != null,
     )
 }
 

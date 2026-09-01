@@ -75,6 +75,7 @@ import com.cashu.me.ui.components.MintAvatar
 import com.cashu.me.ui.components.NoticeSeverity
 import com.cashu.me.ui.components.PrimaryButton
 import com.cashu.me.ui.components.ScrollFadeBand
+import com.cashu.me.ui.components.ghostButtonUnderCtaTextStyle
 import com.cashu.me.ui.components.scrollEdgeFade
 import com.cashu.me.ui.testing.UiTestTags
 import com.cashu.me.ui.theme.CapsuleShape
@@ -378,7 +379,12 @@ fun RestoreSeedStep(
                 loading = restoring,
             )
             if (onBack != null) {
-                GhostButton(text = "Back", onClick = onBack, enabled = !restoring)
+                GhostButton(
+                    text = "Back",
+                    onClick = onBack,
+                    enabled = !restoring,
+                    textStyle = ghostButtonUnderCtaTextStyle,
+                )
             }
         }
     }
@@ -822,6 +828,7 @@ fun RestoreMintsStep(
                         staging.reset()
                         onBack()
                     },
+                    textStyle = ghostButtonUnderCtaTextStyle,
                 )
             }
         }
@@ -1087,7 +1094,7 @@ fun RestoreRecoveredTotal(
         Icon(
             imageVector = Icons.Filled.CheckCircle,
             contentDescription = null,
-            tint = CashuTheme.colors.received,
+            tint = CashuTheme.colors.onReceivedContainer,
             modifier = Modifier.size(18.dp),
         )
         Text(
@@ -1095,7 +1102,7 @@ fun RestoreRecoveredTotal(
             style = MaterialTheme.typography.bodyMedium
                 .copy(fontWeight = FontWeight.SemiBold)
                 .withMonoDigits(),
-            color = CashuTheme.colors.received,
+            color = CashuTheme.colors.onReceivedContainer,
         )
         if (centered) {
             Spacer(Modifier.weight(1f))
@@ -1313,7 +1320,7 @@ private fun RestoreProgressRow(
                         },
                         contentDescription = null,
                         tint = if (phase.result.totalRecovered > 0) {
-                            CashuTheme.colors.received
+                            CashuTheme.colors.onReceivedContainer
                         } else {
                             MaterialTheme.colorScheme.onSurfaceVariant
                         },

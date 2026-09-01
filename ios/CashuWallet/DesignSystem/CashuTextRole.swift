@@ -90,12 +90,11 @@ extension CashuTextRole {
     // No `design: .rounded` anywhere. The balance and the entry hero are the
     // same object and now say so.
 
-    /// 52 rather than 56, matching Android. The ladder was re-based once Geist
-    /// went in there and proved ~7% wider than Roboto; holding both platforms
-    /// to one number is worth more than 4pt on iOS, where SF Pro would have
-    /// carried either.
+    /// The iOS amount ladder follows a 4:3 progression: 64, 48, 36. This keeps
+    /// money visually dominant across entry, confirmation, and QR layouts while
+    /// preserving a clear hierarchy between those contexts.
     static let amountHero = CashuTextRole(
-        size: .hero(base: 52, anchor: .largeTitle, cap: 70),
+        size: .hero(base: 64, anchor: .largeTitle, cap: 84),
         weight: .semibold,
         trackingKey: \.amountHero,
         isNumeric: true,
@@ -104,7 +103,7 @@ extension CashuTextRole {
     )
 
     static let amountConfirm = CashuTextRole(
-        size: .hero(base: 40, anchor: .title, cap: 56),
+        size: .hero(base: 48, anchor: .title, cap: 64),
         weight: .semibold,
         trackingKey: \.amountConfirm,
         isNumeric: true,
@@ -113,7 +112,7 @@ extension CashuTextRole {
     )
 
     static let amountCompact = CashuTextRole(
-        size: .hero(base: 28, anchor: .title2, cap: 40),
+        size: .hero(base: 36, anchor: .title2, cap: 48),
         weight: .semibold,
         trackingKey: \.amountCompact,
         isNumeric: true,
@@ -187,6 +186,14 @@ extension CashuTextRole {
 
     // MARK: Technical strings
 
+    /// The value a QR/receipt sheet displays under its code — the technical
+    /// string as the sheet's second focal point, not a caption-sized footnote.
+    /// Single-line by role: it is a fingerprint (call sites middle-truncate);
+    /// the full value travels via Copy/Share.
+    static let monoDisplay = CashuTextRole(
+        size: .style(.body), face: .mono, trackingKey: \.mono, lineLimit: 1
+    )
+
     static let monoBody = CashuTextRole(
         size: .style(.subheadline), face: .mono, trackingKey: \.mono
     )
@@ -225,11 +232,19 @@ private struct CashuTextModifier: ViewModifier {
 private struct NumericTransitionModifier: ViewModifier {
     let value: Double?
 
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
     func body(content: Content) -> some View {
         if let value {
-            content
-                .contentTransition(.numericText(value: value))
-                .animation(.snappy, value: value)
+            if reduceMotion {
+                content
+                    .contentTransition(.opacity)
+                    .animation(.easeOut(duration: 0.2), value: value)
+            } else {
+                content
+                    .contentTransition(.numericText(value: value))
+                    .animation(.snappy, value: value)
+            }
         } else {
             content
         }

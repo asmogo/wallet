@@ -65,16 +65,20 @@ import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
 import com.cashu.me.Core.MintDiscoveryManager
 import com.cashu.me.Core.SettingsManager
+import com.cashu.me.Core.Wallet.userFacingWalletMessage
 import com.cashu.me.Core.WalletManager
 import com.cashu.me.Core.normalizeUserMintUrl
 import com.cashu.me.Core.shortenMintUrl
 import com.cashu.me.Models.MintInfo
 import com.cashu.me.ui.components.MintAvatar
+import com.cashu.me.ui.components.InlineNotice
+import com.cashu.me.ui.components.NoticeSeverity
 import com.cashu.me.ui.components.TabTopBar
 import com.cashu.me.ui.components.groupItemShape
 import com.cashu.me.ui.theme.CashuTheme
 import com.cashu.me.ui.theme.withMonoDigits
 import com.cashu.me.ui.testing.UiTestTags
+import kotlinx.coroutines.CancellationException
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3ExpressiveApi::class)
 @Composable
@@ -96,6 +100,7 @@ fun MintsScreen(
     var addMintOpen by remember { mutableStateOf(false) }
     var addMintInitialUrl by remember { mutableStateOf("") }
     var discoveryOpen by remember { mutableStateOf(false) }
+    var removalError by remember { mutableStateOf<String?>(null) }
 
     LaunchedEffect(scannedMintUrl) {
         val payload = scannedMintUrl?.trim().orEmpty()
@@ -140,6 +145,15 @@ fun MintsScreen(
                 bottom = CashuTheme.spacing.section,
             ),
         ) {
+            if (removalError != null) {
+                item("removal-error") {
+                    InlineNotice(
+                        text = removalError.orEmpty(),
+                        severity = NoticeSeverity.Error,
+                        modifier = Modifier.padding(bottom = CashuTheme.spacing.snug),
+                    )
+                }
+            }
             if (walletState.mints.isNotEmpty()) {
                 val mintCount = walletState.mints.size
                 itemsIndexed(walletState.mints, key = { _, mint -> mint.url }) { index, mint ->
@@ -253,7 +267,16 @@ fun MintsScreen(
                 TextButton(onClick = {
                     val target = mint
                     pendingRemoval = null
-                    scope.launch { walletManager.removeMint(target) }
+                    removalError = null
+                    scope.launch {
+                        try {
+                            walletManager.removeMint(target)
+                        } catch (cancellation: CancellationException) {
+                            throw cancellation
+                        } catch (error: Throwable) {
+                            removalError = error.userFacingWalletMessage
+                        }
+                    }
                 }) {
                     Text("Remove", color = MaterialTheme.colorScheme.error)
                 }
@@ -303,7 +326,9 @@ private fun SwipeableMintRow(
             when (dir) {
                 SwipeToDismissBoxValue.StartToEnd -> {
                     bg = CashuTheme.colors.received
-                    fg = Color.White
+                    // Black is the accessible on-fill role for the saturated
+                    // system green in both schemes; white is only 2.2:1.
+                    fg = Color.Black
                     icon = Icons.Outlined.Check
                     label = "Set as Default"
                     align = Alignment.CenterStart
@@ -374,6 +399,7 @@ private fun MintRow(
             .combinedClickable(
                 onClick = onClick,
                 onLongClick = { menuOpen = true },
+                onLongClickLabel = "Show mint actions",
             ),
     ) {
         Row(

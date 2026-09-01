@@ -14,12 +14,15 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.sp
 import com.cashu.me.Core.AmountParts
 import com.cashu.me.ui.theme.AmountScale
+import com.cashu.me.ui.theme.BitcoinSymbol
 import com.cashu.me.ui.theme.CashuTheme
 import com.cashu.me.ui.theme.asSubordinateUnit
 
@@ -78,7 +81,10 @@ fun AmountHero(
         AmountText(
             text = parts.value,
             annotated = lockup(parts, style),
-            style = style,
+            // AmountText fills the bounded hero while auto-sizing; the text
+            // itself must therefore center within that width, not merely have
+            // its composable centered by this Box.
+            style = style.copy(textAlign = TextAlign.Center),
             color = color,
             animated = animated,
             maxLines = 1,
@@ -133,12 +139,19 @@ private fun lockup(parts: AmountParts, style: TextStyle): AnnotatedString {
         letterSpacing = (style.fontSize.value * UnitGapEm).sp,
     )
     val symbolSpan = SpanStyle(fontSize = style.fontSize * SymbolScale)
+    val bitcoinSymbolSpan = SpanStyle(
+        fontSize = style.fontSize * SymbolScale,
+        fontFamily = BitcoinSymbol,
+        fontWeight = FontWeight.Bold,
+    )
 
     return buildAnnotatedString {
         when (val affix = parts.affix) {
             is AmountParts.Affix.None -> append(parts.value)
             is AmountParts.Affix.Prefix -> {
-                withStyle(symbolSpan) { append(affix.symbol) }
+                withStyle(if (affix.symbol == "₿") bitcoinSymbolSpan else symbolSpan) {
+                    append(affix.symbol)
+                }
                 append(parts.value)
             }
             is AmountParts.Affix.Suffix -> {

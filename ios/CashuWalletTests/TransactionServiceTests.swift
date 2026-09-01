@@ -1,4 +1,5 @@
 import XCTest
+import Cdk
 @testable import CashuWallet
 
 @MainActor
@@ -370,6 +371,120 @@ final class TransactionServiceTests: XCTestCase {
             amount: amount,
             date: Date(),
             mintUrl: "https://mint.example.com"
+        )
+    }
+}
+
+@MainActor
+final class MintQuoteContextPolicyTests: XCTestCase {
+    private let mintA = "https://mint-a.example"
+    private let mintB = "https://mint-b.example"
+
+    func testServiceReopensOfferForRequestedMintAndUnit() async throws {
+        let database = try WalletSqliteDatabase.newInMemory()
+        for quote in [
+            quote(id: "offer-b-usd", mintURL: mintB, unit: .usd),
+            quote(id: "offer-a-sat", mintURL: mintA, unit: .sat),
+            quote(id: "offer-a-usd", mintURL: mintA, unit: .usd)
+        ] {
+            try await database.addMintQuote(quote: quote)
+        }
+        let service = LightningService(
+            walletRepository: { nil },
+            walletDatabase: { database },
+            getActiveMint: { nil }
+        )
+
+        let aUSD = try await service.existingAmountlessOffer(mintURL: mintA, unit: .usd)
+        let aSAT = try await service.existingAmountlessOffer(mintURL: mintA, unit: .sat)
+        let bUSD = try await service.existingAmountlessOffer(mintURL: mintB, unit: .usd)
+
+        XCTAssertEqual(aUSD?.id, "offer-a-usd")
+        XCTAssertEqual(aUSD?.unit, "usd")
+        XCTAssertEqual(aUSD?.mintURL, mintA)
+        XCTAssertEqual(aSAT?.id, "offer-a-sat")
+        XCTAssertEqual(aSAT?.unit, "sat")
+        XCTAssertEqual(aSAT?.mintURL, mintA)
+        XCTAssertEqual(bUSD?.id, "offer-b-usd")
+        XCTAssertEqual(bUSD?.mintURL, mintB)
+    }
+
+    func testAmountlessOfferSelectionDoesNotCrossMintOrUnit() throws {
+        let quotes = [
+            quote(id: "wrong-method", mintURL: mintA, unit: .usd, paymentMethod: .bolt11),
+            quote(id: "fixed-a-usd", mintURL: mintA, unit: .usd, amount: 500),
+            quote(id: "offer-b-usd", mintURL: mintB, unit: .usd),
+            quote(id: "offer-a-sat", mintURL: mintA, unit: .sat),
+            quote(id: "offer-a-usd", mintURL: mintA, unit: .usd),
+            quote(id: "offer-b-sat", mintURL: mintB, unit: .sat)
+        ]
+
+        XCTAssertEqual(
+            MintQuoteContextPolicy.existingAmountlessOffer(
+                in: quotes,
+                requestedContext: MintQuoteWalletContext(mintURL: mintA, unit: .usd)
+            )?.id,
+            "offer-a-usd"
+        )
+        XCTAssertEqual(
+            MintQuoteContextPolicy.existingAmountlessOffer(
+                in: quotes,
+                requestedContext: MintQuoteWalletContext(mintURL: mintA, unit: .sat)
+            )?.id,
+            "offer-a-sat"
+        )
+        XCTAssertEqual(
+            MintQuoteContextPolicy.existingAmountlessOffer(
+                in: quotes,
+                requestedContext: MintQuoteWalletContext(mintURL: mintB, unit: .usd)
+            )?.id,
+            "offer-b-usd"
+        )
+        XCTAssertNil(
+            MintQuoteContextPolicy.existingAmountlessOffer(
+                in: quotes,
+                requestedContext: MintQuoteWalletContext(mintURL: mintB, unit: .eur)
+            )
+        )
+    }
+
+    func testStoredQuoteContextPreservesMintAndUnitAndMissingContextFailsClosed() {
+        for unit: Cdk.CurrencyUnit in [.sat, .usd] {
+            let storedQuote = quote(id: "offer", mintURL: mintA, unit: unit)
+            let resolved = MintQuoteContextPolicy.walletContext(storedQuote: storedQuote)
+
+            XCTAssertEqual(
+                resolved,
+                MintQuoteWalletContext(mintURL: mintA, unit: unit)
+            )
+        }
+
+        XCTAssertNil(MintQuoteContextPolicy.walletContext(storedQuote: nil))
+    }
+
+    private func quote(
+        id: String,
+        mintURL: String,
+        unit: Cdk.CurrencyUnit,
+        amount: UInt64? = nil,
+        paymentMethod: Cdk.PaymentMethod = .bolt12
+    ) -> MintQuote {
+        MintQuote(
+            id: id,
+            amount: amount.map { Amount(value: $0) },
+            unit: unit,
+            request: "request-\(id)",
+            state: .unpaid,
+            expiry: 0,
+            mintUrl: MintUrl(url: mintURL),
+            amountIssued: Amount(value: 0),
+            amountPaid: Amount(value: 0),
+            updatedAt: 0,
+            estimatedBlocks: nil,
+            paymentMethod: paymentMethod,
+            secretKey: nil,
+            usedByOperation: nil,
+            version: 0
         )
     }
 }

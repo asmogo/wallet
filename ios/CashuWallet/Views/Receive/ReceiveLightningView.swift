@@ -3,8 +3,8 @@ import Cdk
 
 private struct ReceiveRequestFailure {
     enum Retry {
-        case setReusableAmount(UInt64)
-        case amountlessOffer(forceNew: Bool, unit: String?)
+        case setReusableAmount(amount: UInt64, mintURL: String?, unit: String)
+        case amountlessOffer(forceNew: Bool, mintURL: String?, unit: String)
         case create(method: PaymentMethodKind, amountless: Bool, forceNew: Bool)
 
         var method: PaymentMethodKind {
@@ -43,7 +43,6 @@ struct ReceiveLightningView: View {
     @State private var showMintPicker = false
     /// Reusable BOLT12 offer: drives the Amount-row pencil → amount picker sheet.
     @State private var showReusableAmountPicker = false
-    @State private var copiedRequest = false
     /// VoiceOver Share action for the QR cards: ShareLink can't be invoked
     /// imperatively, so the accessibility action presents the share sheet.
     @State private var showShareSheet = false
@@ -81,7 +80,10 @@ struct ReceiveLightningView: View {
                     requestDisplayView(quote: quote)
                         .transition(reduceMotion ? .opacity : .asymmetric(
                             insertion: .move(edge: .trailing).combined(with: .opacity),
-                            removal: .opacity
+                            // Fast exit: when the payment lands, the QR clears
+                            // quickly so the success terminal's staged check
+                            // owns the moment.
+                            removal: .opacity.animation(.easeInOut(duration: 0.2))
                         ))
                 } else if isCreatingRequest && (isAmountlessOffer || selectedMethod == .onchain) {
                     // Auto-creating requests (amountless BOLT12 or onchain) have no
@@ -123,7 +125,7 @@ struct ReceiveLightningView: View {
                                 }
                                 if quote.paymentMethod == .bolt12 {
                                     Button {
-                                        createNewAmountlessOffer(unit: quote.unit)
+                                        createNewAmountlessOffer(for: quote)
                                     } label: {
                                         Label(
                                             isCreatingRequest ? "Creating…" : "New reusable invoice",
@@ -246,6 +248,7 @@ struct ReceiveLightningView: View {
             }
         }
         .accessibilityIdentifier("receive-lightning-screen")
+        .compactBottomSheetSurface()
     }
 
     // MARK: - Computed Properties
@@ -305,10 +308,10 @@ struct ReceiveLightningView: View {
     private func retryRequest(_ retry: ReceiveRequestFailure.Retry) {
         requestFailure = nil
         switch retry {
-        case .setReusableAmount(let amount):
-            setReusableOfferAmount(amount)
-        case .amountlessOffer(let forceNew, let unit):
-            loadOrCreateAmountlessOffer(forceNew: forceNew, unit: unit)
+        case .setReusableAmount(let amount, let mintURL, let unit):
+            setReusableOfferAmount(amount, mintURL: mintURL, unit: unit)
+        case .amountlessOffer(let forceNew, let mintURL, let unit):
+            loadOrCreateAmountlessOffer(forceNew: forceNew, mintURL: mintURL, unit: unit)
         case .create(let method, let amountless, let forceNew):
             createRequest(method: method, amountless: amountless, forceNew: forceNew)
         }
@@ -384,17 +387,19 @@ struct ReceiveLightningView: View {
 
     private var amountInputView: some View {
         VStack(spacing: 0) {
-            if let mint = walletManager.activeMint {
-                mintSelector(mint: mint)
-                    .padding(.horizontal)
-                    .padding(.top, 12)
-            }
-
             Spacer()
 
             amountHero
 
             Spacer()
+
+            // Under the amount, over the keypad — the same slot the send flows use.
+            if let mint = walletManager.activeMint {
+                mintSelector(mint: mint)
+                    // Aligned to the number pad below, not the CTA.
+                    .padding(.horizontal, NumberPadMetrics.gutter)
+                    .padding(.bottom, 8)
+            }
 
             Group {
                 if isSatReceive {
@@ -403,21 +408,24 @@ struct ReceiveLightningView: View {
                     NumberPadAmountInput(amountString: $amountString, decimals: receiveUnitDecimals)
                 }
             }
-            .padding(.horizontal, 24)
+            .padding(.horizontal, NumberPadMetrics.gutter)
             .onChange(of: amountString) { _, newValue in
                 // Typing a digit takes over from the amountless offer.
                 if isAmountless && !newValue.isEmpty { isAmountless = false }
             }
 
             Button(action: createRequest) {
-                if isCreatingRequest {
-                    ProgressView()
-                } else {
-                    Text(selectedMethod.createActionTitle)
-                }
+                LoadingButtonLabel(
+                    title: selectedMethod.createActionTitle,
+                    isLoading: isCreatingRequest
+                )
             }
-            .glassButton()
+            // Quiet tonal fill, matching Android's gray keypad CTA — the white
+            // ink stays reserved for the pay-confirm commit.
+            .flatSheetSecondaryButton()
             .accessibilityIdentifier("receive-lightning-create-request")
+            .accessibilityLabel(selectedMethod.createActionTitle)
+            .accessibilityValue(isCreatingRequest ? "In progress" : "")
             .disabled(!canCreateRequest)
             .padding(.horizontal)
             .padding(.top, 16)
@@ -485,49 +493,15 @@ struct ReceiveLightningView: View {
     // MARK: - Mint Selector
 
     private func mintSelector(mint: MintInfo) -> some View {
-        Button(action: { showMintPicker = true }) {
-            HStack(spacing: 12) {
-                if let iconUrl = mint.iconUrl, let url = URL(string: iconUrl) {
-                    CachedAsyncImage(url: url) { image in
-                        image.resizable().aspectRatio(contentMode: .fill)
-                    } placeholder: {
-                        Image(systemName: "bitcoinsign.bank.building")
-                            .foregroundStyle(.secondary)
-                    }
-                    .frame(width: 40, height: 40)
-                    .clipShape(Circle())
-                } else {
-                    Image(systemName: "bitcoinsign.bank.building")
-                        .foregroundStyle(.secondary)
-                        .frame(width: 40, height: 40)
-                }
-
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(mint.name)
-                        .font(.subheadline.weight(.medium))
-                    Text(formatBalance(mint.balance))
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-
-                Spacer()
-
-                Image(systemName: "chevron.down")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-            .padding(12)
-            .liquidGlass(in: RoundedRectangle(cornerRadius: 12), interactive: true)
-            // The glass pill is drawn across the whole padded frame, but neither
-            // the glass nor the fallback background expands the hit area — without
-            // an explicit content shape only the glyphs respond, leaving the
-            // pill's middle and edges dead.
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel("Mint: \(mint.name)")
-        .accessibilityHint("Opens mint selector")
+        MintSelectorRow(
+            direction: .destination,
+            mint: mint,
+            balanceText: formatBalance(mint.balance),
+            showsBalance: true,
+            // One mint means nothing to choose between, so the row drops its
+            // chevron and stops opening a picker that would list a single row.
+            onChooseMint: walletManager.mints.count > 1 ? { showMintPicker = true } : nil
+        )
     }
 
     // MARK: - Request Display View
@@ -584,7 +558,7 @@ struct ReceiveLightningView: View {
                                 Label("Share", systemImage: "square.and.arrow.up")
                             }
                             Button {
-                                createNewAmountlessOffer(unit: quote.unit)
+                                createNewAmountlessOffer(for: quote)
                             } label: {
                                 Label("New reusable invoice", systemImage: "arrow.2.squarepath")
                             }
@@ -616,19 +590,16 @@ struct ReceiveLightningView: View {
 
                     VStack(spacing: 0) {
                         detailRow(
-                            icon: "bitcoinsign.bank.building",
                             label: "Mint",
-                            value: reusableMintDisplayValue
+                            value: mintDisplayValue(for: quote) ?? "Unknown mint"
                         )
                         editableRow(
-                            icon: "bitcoinsign",
                             label: "Amount",
                             value: quote.amount.flatMap { $0 > 0 ? formatQuoteAmount($0, unit: quote.unit) : nil } ?? "Any",
                             action: { showReusableAmountPicker = true }
                         )
                         if let created = quote.createdAt {
                             detailRow(
-                                icon: "calendar",
                                 label: "Created",
                                 value: created.formatted(date: .abbreviated, time: .shortened)
                             )
@@ -643,7 +614,7 @@ struct ReceiveLightningView: View {
             Button(action: { copyRequest(quote.request) }) {
                 Text(copyButtonTitle(for: quote))
             }
-            .glassButton()
+            .flatSheetSecondaryButton()
             .padding(.horizontal)
             .padding(.bottom, 16)
         }
@@ -651,17 +622,21 @@ struct ReceiveLightningView: View {
             CashuRequestAmountPickerSheet(
                 currentAmount: quote.amount,
                 unit: quote.unit,
-                onSelect: { setReusableOfferAmount($0) }
+                onSelect: {
+                    setReusableOfferAmount($0, mintURL: quote.mintURL, unit: quote.unit)
+                }
             )
         }
     }
 
-    /// Friendly name of the offer's issuing mint for the read-only Mint row. A
-    /// BOLT12 offer is bound to one mint, so this never shows "Any mint" in
-    /// practice — the fallback only guards a missing active mint.
-    private var reusableMintDisplayValue: String {
-        guard let mint = walletManager.activeMint else { return "Any mint" }
-        return mint.name.isEmpty ? extractMintHost(mint.url) : mint.name
+    /// Friendly name of the quote's issuing mint. A quote remains bound to this
+    /// mint even if the user changes the wallet's active mint later.
+    private func mintDisplayValue(for quote: MintQuoteInfo) -> String? {
+        guard let mintURL = quote.mintURL else { return nil }
+        guard let mint = walletManager.mints.first(where: { $0.url == mintURL }) else {
+            return extractMintHost(mintURL)
+        }
+        return mint.name.isEmpty ? extractMintHost(mintURL) : mint.name
     }
 
     /// Full-screen success shown once payment is detected — the exact same
@@ -682,16 +657,14 @@ struct ReceiveLightningView: View {
         var rows: [PaymentStatusView.DetailRow] = []
         if let amount = quote.amount {
             rows.append(.init(
-                icon: "bitcoinsign",
                 label: "Amount",
                 value: formatQuoteAmount(amount, unit: quote.unit)
             ))
         }
-        if let mint = walletManager.activeMint {
+        if let mint = mintDisplayValue(for: quote) {
             rows.append(.init(
-                icon: "bitcoinsign.bank.building",
                 label: "Mint",
-                value: extractMintHost(mint.url)
+                value: mint
             ))
         }
         return rows
@@ -743,7 +716,6 @@ struct ReceiveLightningView: View {
                         VStack(spacing: 0) {
                             if let mint = walletManager.activeMint {
                                 detailRow(
-                                    icon: "bitcoinsign.bank.building",
                                     label: "Mint",
                                     value: extractMintHost(mint.url)
                                 )
@@ -762,7 +734,7 @@ struct ReceiveLightningView: View {
             Button(action: { copyRequest(quote.request) }) {
                 Text(copyButtonTitle(for: quote))
             }
-            .glassButton()
+            .flatSheetSecondaryButton()
             .padding(.horizontal)
             .padding(.bottom, 16)
         }
@@ -823,9 +795,9 @@ struct ReceiveLightningView: View {
 
     // MARK: - Detail Row
 
-    private func detailRow(icon: String, label: String, value: String) -> some View {
+    private func detailRow(label: String, value: String) -> some View {
         HStack {
-            Label(label, systemImage: icon)
+            Text(label)
                 .foregroundStyle(.secondary)
             Spacer()
             Text(value)
@@ -841,10 +813,10 @@ struct ReceiveLightningView: View {
 
     /// Same as `detailRow` but tappable, with a trailing pencil — used for the
     /// Amount row on the reusable offer screen (mirrors the Cashu Request screen).
-    private func editableRow(icon: String, label: String, value: String, action: @escaping () -> Void) -> some View {
+    private func editableRow(label: String, value: String, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             HStack {
-                Label(label, systemImage: icon)
+                Text(label)
                     .foregroundStyle(.secondary)
                 Spacer()
                 Text(value)
@@ -872,7 +844,7 @@ struct ReceiveLightningView: View {
     private func explorerLinkRow(label: String, url: URL) -> some View {
         Link(destination: url) {
             HStack {
-                Label(label, systemImage: "safari")
+                Text(label)
                     .foregroundStyle(.secondary)
                 Spacer()
                 Image(systemName: "arrow.up.right")
@@ -893,18 +865,12 @@ struct ReceiveLightningView: View {
 
     @ViewBuilder
     private var statusBadge: some View {
+        // No `isPaid` branch: the body swaps to the full-screen success
+        // terminal the instant `isPaid` flips, so an inline received badge
+        // here could never render — the celebration lives in
+        // `PaymentStatusView`'s staged entrance.
         Group {
-            if isPaid {
-                HStack(spacing: 6) {
-                    Image(systemName: "checkmark.circle.fill")
-                        .symbolEffect(.bounce, value: reduceMotion ? false : isPaid)
-                        .accessibilityHidden(true)
-                    Text("Payment Received!")
-                }
-                .font(.subheadline.weight(.medium))
-                .foregroundStyle(.green)
-                .transition(reduceMotion ? .opacity : .asymmetric(insertion: .scale(scale: 0.9).combined(with: .opacity), removal: .opacity))
-            } else if isCheckingPayment || isMinting {
+            if isCheckingPayment || isMinting {
                 HStack(spacing: 6) {
                     ProgressView()
                         .tint(.accentColor)
@@ -1030,7 +996,7 @@ struct ReceiveLightningView: View {
     }
 
     private func copyButtonTitle(for quote: MintQuoteInfo) -> String {
-        copiedRequest ? "Copied" : "Copy \(quote.paymentMethod.requestDisplayName)"
+        "Copy \(quote.paymentMethod.requestDisplayName)"
     }
 
     private func blockExplorerURL(for quote: MintQuoteInfo) -> URL? {
@@ -1122,12 +1088,14 @@ struct ReceiveLightningView: View {
         }
 
         let expiry = quote.expiry.flatMap { $0 > 0 ? Date(timeIntervalSince1970: Double($0)) : nil }
+        let mintURLs = quote.mintURL.map { [$0] } ?? []
         CashuRequestStore.shared.upsertQuoteIntent(
             rail: rail,
             quoteId: quote.id,
             encoded: quote.request,
             amount: quote.amount,
-            mints: walletManager.activeMint.map { [$0.url] } ?? [],
+            unit: quote.unit,
+            mints: mintURLs,
             reusable: reusable,
             expiry: expiry
         )
@@ -1138,12 +1106,18 @@ struct ReceiveLightningView: View {
     /// a fresh fixed-amount offer. Setting an amount is how the user turns an "Any"
     /// reusable invoice into a fixed-amount one. The old QR stays on screen until
     /// the new offer is ready, so the keypad never flashes back in.
-    private func setReusableOfferAmount(_ amount: UInt64?) {
+    private func setReusableOfferAmount(
+        _ amount: UInt64?,
+        mintURL: String? = nil,
+        unit: String? = nil
+    ) {
+        let requestedMintURL = mintURL ?? mintQuote?.mintURL ?? walletManager.activeMint?.url
+        let requestedUnit = unit ?? mintQuote?.unit ?? effectiveUnit
         let target: UInt64? = (amount ?? 0) > 0 ? amount : nil
         isAmountless = (target == nil)
 
         guard let target else {
-            loadOrCreateAmountlessOffer()
+            loadOrCreateAmountlessOffer(mintURL: requestedMintURL, unit: requestedUnit)
             return
         }
 
@@ -1151,19 +1125,28 @@ struct ReceiveLightningView: View {
         requestFailure = nil
         isPaid = false
         isExpired = false
-        copiedRequest = false
         onchainObservation = nil
         monitoredQuoteId = nil
         quoteStatusTask?.cancel()
 
         Task { @MainActor in
             do {
-                mintQuote = try await walletManager.createMintQuote(amount: target, method: .bolt12)
+                guard let requestedMintURL else { throw WalletError.notInitialized }
+                mintQuote = try await walletManager.createMintQuote(
+                    amount: target,
+                    method: .bolt12,
+                    targetMintURL: requestedMintURL,
+                    unit: requestedUnit
+                )
             } catch {
                 requestFailure = ReceiveRequestFailure(
                     title: requestFailureTitle(for: .bolt12),
                     message: error.userFacingWalletMessage,
-                    retry: .setReusableAmount(target)
+                    retry: .setReusableAmount(
+                        amount: target,
+                        mintURL: requestedMintURL,
+                        unit: requestedUnit
+                    )
                 )
             }
             isCreatingRequest = false
@@ -1172,13 +1155,18 @@ struct ReceiveLightningView: View {
 
     /// Reopen the mint's existing amountless offer by default. The explicit new
     /// action deliberately bypasses that lookup and leaves the prior offer valid.
-    private func loadOrCreateAmountlessOffer(forceNew: Bool = false, unit: String? = nil) {
+    private func loadOrCreateAmountlessOffer(
+        forceNew: Bool = false,
+        mintURL: String? = nil,
+        unit: String? = nil
+    ) {
+        let requestedMintURL = mintURL ?? walletManager.activeMint?.url
+        let requestedUnit = unit ?? effectiveUnit
         isCreatingRequest = true
         requestFailure = nil
         isAmountless = true
         isPaid = false
         isExpired = false
-        copiedRequest = false
         onchainObservation = nil
         quoteCreatedAt = nil
         monitoredQuoteId = nil
@@ -1189,13 +1177,19 @@ struct ReceiveLightningView: View {
         Task { @MainActor in
             do {
                 let quote: MintQuoteInfo
-                if !forceNew, let existing = try await walletManager.existingAmountlessOffer() {
+                guard let requestedMintURL else { throw WalletError.notInitialized }
+                if !forceNew,
+                   let existing = try await walletManager.existingAmountlessOffer(
+                       mintURL: requestedMintURL,
+                       unit: requestedUnit
+                   ) {
                     quote = existing
                 } else {
                     quote = try await walletManager.createMintQuote(
                         amount: nil,
                         method: .bolt12,
-                        unit: unit ?? effectiveUnit
+                        targetMintURL: requestedMintURL,
+                        unit: requestedUnit
                     )
                 }
                 quoteCreatedAt = Date()
@@ -1204,16 +1198,24 @@ struct ReceiveLightningView: View {
                 requestFailure = ReceiveRequestFailure(
                     title: requestFailureTitle(for: .bolt12),
                     message: error.userFacingWalletMessage,
-                    retry: .amountlessOffer(forceNew: forceNew, unit: unit)
+                    retry: .amountlessOffer(
+                        forceNew: forceNew,
+                        mintURL: requestedMintURL,
+                        unit: requestedUnit
+                    )
                 )
             }
             isCreatingRequest = false
         }
     }
 
-    private func createNewAmountlessOffer(unit: String) {
+    private func createNewAmountlessOffer(for quote: MintQuoteInfo) {
         amountString = ""
-        loadOrCreateAmountlessOffer(forceNew: true, unit: unit)
+        loadOrCreateAmountlessOffer(
+            forceNew: true,
+            mintURL: quote.mintURL,
+            unit: quote.unit
+        )
     }
 
     private func createRequest(method requestMethod: PaymentMethodKind, amountless: Bool, forceNew: Bool = false) {
@@ -1229,7 +1231,6 @@ struct ReceiveLightningView: View {
         requestFailure = nil
         isPaid = false
         isExpired = false
-        copiedRequest = false
         onchainObservation = nil
         quoteCreatedAt = nil
         monitoredQuoteId = nil
@@ -1276,10 +1277,10 @@ struct ReceiveLightningView: View {
     private func copyRequest(_ request: String) {
         UIPasteboard.general.string = request
         HapticFeedback.notification(.success)
-        copiedRequest = true
-        DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
-            copiedRequest = false
-        }
+        let copiedItem = mintQuote?.paymentMethod == .onchain
+            ? "Bitcoin address"
+            : "payment request"
+        ConfirmationToast.show("Copied \(copiedItem)")
     }
 
     private func startExpiryCountdown(quote: MintQuoteInfo) {
@@ -1375,7 +1376,8 @@ struct ReceiveLightningView: View {
                 state: .issued,
                 expiry: refreshed.expiry,
                 createdAt: refreshed.createdAt,
-                unit: refreshed.unit
+                unit: refreshed.unit,
+                mintURL: refreshed.mintURL
             )
             await completeReceivedQuote(mintInBackground: false)
             return
