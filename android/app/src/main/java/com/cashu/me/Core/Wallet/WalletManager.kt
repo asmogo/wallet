@@ -27,6 +27,7 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import org.cashudevkit.PendingMelt
 import org.cashudevkit.QuoteState as CdkQuoteState
+import org.cashudevkit.npubcashDeriveSecretKeyFromSeed
 import com.cashu.me.Core.CDK.CdkWalletGateway
 import com.cashu.me.Core.Platform.WalletDatabasePathManager
 import com.cashu.me.Core.Platform.WalletFileBackup
@@ -1521,15 +1522,17 @@ class WalletManager(
     }
 
     private suspend fun deriveNostrKey(mnemonic: String) {
-        // The app's legacy Nostr/P2PK identity remains sha256(mnemonic utf8).
+        // The app's Nostr identity is the NIP-06 key (m/44'/1237'/0'/0/0)
+        // derived from the same 64-byte BIP39 seed as the wallet — identical
+        // to the npub.cash identity and reproducible by any NIP-06 client.
+        // This matches iOS WalletManager+NPC exactly.
         runCatching {
-            val seed = java.security.MessageDigest.getInstance("SHA-256")
-                .digest(mnemonic.toByteArray(Charsets.UTF_8))
-            nostrService.deriveKeypairFromSeed(seed)
+            val seed = walletBip39Seed(mnemonic)
+            nostrService.deriveKeypairFromSeed(
+                NostrService.hexToBytes(npubcashDeriveSecretKeyFromSeed(seed)),
+            )
         }.onFailure { AppLogger.wallet.error("Nostr key derivation failed", it) }
 
-        // npub.cash is a separate NIP-06 identity derived by CDK from the
-        // 64-byte BIP39 seed. This matches iOS WalletManager+NPC exactly.
         runCatching {
             npcService.initializeWithSeed(walletBip39Seed(mnemonic))
         }.onFailure { AppLogger.wallet.error("npub.cash key derivation failed", it) }

@@ -61,6 +61,11 @@ class NostrService(
     private var currentSeed: ByteArray? = null
     private val secureRandom = SecureRandom()
 
+    /**
+     * Derives the Nostr keypair from the wallet's NIP-06 secret key. The
+     * caller passes the NIP-06-derived key (m/44'/1237'/0'/0/0 from the BIP39
+     * seed); the first 32 bytes are used as the private key.
+     */
     fun deriveKeypairFromSeed(seed: ByteArray): NostrState {
         require(seed.size >= 32) { "Nostr seed must contain at least 32 bytes." }
         currentSeed = seed.copyOf()

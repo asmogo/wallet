@@ -8,13 +8,16 @@ extension WalletManager {
     @discardableResult
     func initializeNostrKeypairLocally(mnemonic: String) -> Bool {
         do {
-            let seedData = Data(mnemonic.utf8).sha256()
-            try NostrService.shared.deriveKeypair(from: seedData)
-            // CDK derives the NpubCash key via NIP-06 from the wallet's
-            // 64-byte BIP39 seed (the same seed WalletRepository uses), and
-            // rejects anything shorter — the 32-byte sha256 seed above is
-            // only for the legacy NostrService identity.
+            // The app's Nostr identity is the NIP-06 key (m/44'/1237'/0'/0/0)
+            // derived from the same 64-byte BIP39 seed WalletRepository uses.
+            // Any NIP-06 Nostr client reproduces this npub from the mnemonic,
+            // and it is the same key npub.cash uses.
             let walletSeed = try Self.bip39Seed(mnemonic: mnemonic)
+            let nostrSecretKeyHex = try npubcashDeriveSecretKeyFromSeed(seed: walletSeed)
+            guard let nostrSecretKey = Data(hexString: nostrSecretKeyHex) else {
+                throw WalletError.notInitialized
+            }
+            try NostrService.shared.deriveKeypair(from: nostrSecretKey)
             try NPCService.shared.initializeWithSeed(walletSeed)
             return true
         } catch {
