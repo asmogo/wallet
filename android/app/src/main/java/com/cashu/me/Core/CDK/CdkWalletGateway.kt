@@ -79,6 +79,9 @@ interface CdkWalletGateway {
     suspend fun settleForeignNfcToken(tokenString: String, settlementMintUrl: String): ForeignNfcSettlement
     suspend fun calculateReceiveFee(tokenString: String): Long
 
+    /** Active sat keyset input fee in parts per thousand, or null when unavailable. */
+    suspend fun activeMintInputFeePpk(mintUrl: String): Long?
+
     /**
      * Exact input fee for paying a Cashu Request from [mintUrl].
      *

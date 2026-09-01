@@ -117,7 +117,7 @@ internal data class SendPaymentDetails(
  * - Melt rails: Method, on-chain Destination when applicable, Amount,
  *   Network fee, and Mint.
  * - Cashu Request: Method, Amount, Input/Network fee context, Mint when known,
- *   Memo when supplied, and a Route row when payment changes rails or adds a mint.
+ *   Memo when supplied, and a Route row when payment changes rails or needs a top-up.
  */
 internal fun buildSendPaymentDetails(
     rail: LockedRail,
@@ -198,12 +198,13 @@ private fun buildCashuRequestDetails(
     add(textRow(SendPaymentDetailKey.Method, "Method", "Cashu Request"))
     add(satsRow(SendPaymentDetailKey.Amount, "Amount", amountSats))
 
-    val fallback = route is CashuPaymentRequestRoute.PayBolt11Fallback
+    val networkRoute = route is CashuPaymentRequestRoute.PayBolt11Fallback ||
+        route is CashuPaymentRequestRoute.AcquireThenPay
     add(
         SendPaymentDetailRow(
-            key = if (fallback) SendPaymentDetailKey.NetworkFee else SendPaymentDetailKey.InputFee,
-            label = if (fallback) "Network fee" else "Input fee",
-            value = if (fallback) {
+            key = if (networkRoute) SendPaymentDetailKey.NetworkFee else SendPaymentDetailKey.InputFee,
+            label = if (networkRoute) "Network fee" else "Input fee",
+            value = if (networkRoute) {
                 SendPaymentDetailValue.Pending
             } else {
                 inputFeeSats
@@ -250,10 +251,8 @@ private fun cashuRequestMintValue(
 ): SendPaymentDetailValue? = when (route) {
     is CashuPaymentRequestRoute.PayWithEcash ->
         SendPaymentDetailValue.Text(route.mint.name)
-    is CashuPaymentRequestRoute.AddMintToPay ->
-        route.mintUrls.firstOrNull()?.let(::mintDisplayName)?.let(SendPaymentDetailValue::Text)
-    is CashuPaymentRequestRoute.NeedsExternalTopUp ->
-        route.mintUrl?.let(::mintDisplayName)?.let(SendPaymentDetailValue::Text)
+    is CashuPaymentRequestRoute.AcquireThenPay ->
+        route.targetMintUrl?.let(::mintDisplayName)?.let(SendPaymentDetailValue::Text)
     is CashuPaymentRequestRoute.PayBolt11Fallback -> SendPaymentDetailValue.Pending
     is CashuPaymentRequestRoute.UnsupportedUnit,
     CashuPaymentRequestRoute.MissingAmount,
@@ -262,8 +261,8 @@ private fun cashuRequestMintValue(
 
 private fun cashuRequestRouteName(route: CashuPaymentRequestRoute?): String? = when (route) {
     is CashuPaymentRequestRoute.PayBolt11Fallback -> "Lightning fallback"
-    is CashuPaymentRequestRoute.AddMintToPay -> "Add requested mint"
-    is CashuPaymentRequestRoute.NeedsExternalTopUp -> "Top up target mint"
+    is CashuPaymentRequestRoute.AcquireThenPay ->
+        if (route.addsNewMint) "Add requested mint" else "Fund target mint"
     is CashuPaymentRequestRoute.PayWithEcash,
     is CashuPaymentRequestRoute.UnsupportedUnit,
     CashuPaymentRequestRoute.MissingAmount,
