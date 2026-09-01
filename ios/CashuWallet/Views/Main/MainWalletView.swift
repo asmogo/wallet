@@ -588,15 +588,15 @@ struct MainWalletView: View {
     }
 
     private func formatAmount(_ transaction: WalletTransaction) -> String {
-        let value: String
-        if transaction.unit.lowercased() == "sat" {
-            value = balanceDisplay(transaction.amount).primary
-        } else {
-            value = CurrencyAmount(
-                value: transaction.amount,
-                currency: CurrencyRegistry.currency(forMintUnit: transaction.unit)
-            ).formatted()
-        }
+        let value = AmountFormatter.displayMintUnitAmount(
+            amount: transaction.amount,
+            unit: transaction.unit,
+            preferredPrimary: settings.homeBalancePrimary,
+            showFiat: settings.showFiatBalance,
+            btcPrice: priceService.btcPriceUSD,
+            currencyCode: settings.bitcoinPriceCurrency,
+            useBitcoinSymbol: settings.useBitcoinSymbol
+        ).primary
         guard !transaction.isUnsettled else { return value }
         return transaction.type == .incoming ? "+\(value)" : value
     }

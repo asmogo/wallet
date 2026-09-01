@@ -183,6 +183,10 @@ enum HomeBalance {
 
 /// Registry for looking up currencies by code
 enum CurrencyRegistry {
+    private static let satoshiUnitNames: Set<String> = [
+        "sat", "sats", "satoshi", "satoshis"
+    ]
+
     /// All supported currencies
     static let supportedCurrencies: [any Currency] = [
         SatoshiCurrency(),
@@ -194,21 +198,35 @@ enum CurrencyRegistry {
     static func currency(forCode code: String) -> (any Currency)? {
         supportedCurrencies.first { $0.code.uppercased() == code.uppercased() }
     }
+
+    /// Whether a mint unit represents Bitcoin's satoshi account. History can
+    /// receive legacy aliases from persisted requests and tokens, so display
+    /// conversion must use the same classification as the currency registry.
+    static func isSatoshiUnit(_ unit: String) -> Bool {
+        satoshiUnitNames.contains(normalizedMintUnit(unit))
+    }
     
     /// Map a mint unit string to a currency for entry precision + display.
     /// Known units resolve to their built-in currency; any other (custom) unit
     /// falls back to a `GenericCurrency` so the result is never nil and
     /// arbitrary mint units are supported.
     static func currency(forMintUnit unit: String) -> any Currency {
-        switch unit.lowercased() {
-        case "sat", "sats", "satoshi", "satoshis":
+        let normalized = normalizedMintUnit(unit)
+        if satoshiUnitNames.contains(normalized) {
             return SatoshiCurrency()
+        }
+
+        switch normalized {
         case "usd", "dollar", "dollars":
             return USDCurrency()
         case "eur", "euro", "euros":
             return EURCurrency()
         default:
-            return GenericCurrency(unit: unit)
+            return GenericCurrency(unit: unit.trimmingCharacters(in: .whitespacesAndNewlines))
         }
+    }
+
+    private static func normalizedMintUnit(_ unit: String) -> String {
+        unit.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
     }
 }

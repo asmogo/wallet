@@ -44,10 +44,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.launch
 import com.cashu.me.Core.AmountFormatter
+import com.cashu.me.Core.AmountDisplayText
 import com.cashu.me.Core.PendingTokenClaimCheckResult
 import com.cashu.me.Core.PriceService
-import com.cashu.me.Core.Protocols.CurrencyAmount
-import com.cashu.me.Core.Protocols.CurrencyRegistry
 import com.cashu.me.Core.OnchainExplorer
 import com.cashu.me.Core.ReceiveConfirmationOwner
 import com.cashu.me.Core.runPendingTokenClaimCheck
@@ -55,6 +54,7 @@ import com.cashu.me.Core.SettingsManager
 import com.cashu.me.Core.shouldOfferManualClaimCheck
 import com.cashu.me.Core.TransactionDisplay
 import com.cashu.me.Core.WalletManager
+import com.cashu.me.Core.displayMintUnitAmount
 import com.cashu.me.Models.TransactionKind
 import com.cashu.me.Models.TransactionStatus
 import com.cashu.me.Models.TransactionType
@@ -215,6 +215,7 @@ fun TransactionReceiptSheet(
                         HeroAmount(
                             transaction = current,
                             formatter = formatter,
+                            preferredPrimary = settings.homeBalancePrimary,
                             useBitcoinSymbol = settings.useBitcoinSymbol,
                             showFiat = settings.showFiatBalance,
                             btcPrice = priceState.btcPrice,
@@ -360,49 +361,34 @@ private fun copyConfirmationMessage(label: String): String = when (label) {
 private fun HeroAmount(
     transaction: WalletTransaction,
     formatter: AmountFormatter,
+    preferredPrimary: String,
     useBitcoinSymbol: Boolean,
     showFiat: Boolean,
     btcPrice: Double,
     currencyCode: String,
     compact: Boolean,
 ) {
-    if (!transaction.unit.equals("sat", ignoreCase = true)) {
-        val formatted = CurrencyAmount(
-            transaction.amount,
-            CurrencyRegistry.currencyForMintUnit(transaction.unit),
-        ).formatted()
-        AmountText(
-            text = formatted,
-            style = (if (compact) MaterialTheme.typography.headlineLarge else MaterialTheme.typography.displayMedium)
-                .copy(fontWeight = FontWeight.Bold)
-                .withMonoDigits(),
-            color = MaterialTheme.colorScheme.onSurface,
-            modifier = Modifier.padding(vertical = 5.dp),
-        )
-        return
-    }
-
-    val fiatParts = if (showFiat) {
-        formatter.fiatParts(
-            amountSats = transaction.amount,
-            btcPrice = btcPrice.takeIf { it > 0 },
-            currencyCode = currencyCode,
-        )
-    } else {
-        null
-    }
+    val display = transactionReceiptAmountDisplay(
+        transaction = transaction,
+        formatter = formatter,
+        preferredPrimary = preferredPrimary,
+        showFiat = showFiat,
+        btcPrice = btcPrice,
+        currencyCode = currencyCode,
+        useBitcoinSymbol = useBitcoinSymbol,
+    )
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(4.dp),
     ) {
         AmountHero(
-            parts = formatter.satsParts(transaction.amount, useBitcoinSymbol),
+            parts = display.primaryParts,
             scale = if (compact) AmountScale.Compact else AmountScale.Confirm,
             accessibilityPrefix = "Amount",
         )
-        fiatParts?.let { parts ->
+        display.secondary?.let { secondary ->
             AmountText(
-                text = parts.joined,
+                text = secondary,
                 style = MaterialTheme.typography.bodyLarge
                     .atSize(18.sp, leading = LeadingLabel)
                     .copy(fontWeight = FontWeight.Medium)
@@ -413,6 +399,24 @@ private fun HeroAmount(
         }
     }
 }
+
+internal fun transactionReceiptAmountDisplay(
+    transaction: WalletTransaction,
+    formatter: AmountFormatter,
+    preferredPrimary: String,
+    showFiat: Boolean,
+    btcPrice: Double?,
+    currencyCode: String,
+    useBitcoinSymbol: Boolean,
+): AmountDisplayText = formatter.displayMintUnitAmount(
+    amount = transaction.amount,
+    unit = transaction.unit,
+    preferredPrimary = preferredPrimary,
+    showFiat = showFiat,
+    btcPrice = btcPrice,
+    currencyCode = currencyCode,
+    useBitcoinSymbol = useBitcoinSymbol,
+)
 
 private fun WalletTransaction.explorerUrl(): String? {
     if (kind != TransactionKind.Onchain) return null

@@ -84,6 +84,10 @@ data class CurrencyAmount(
 }
 
 object CurrencyRegistry {
+    private val satoshiUnitNames = setOf("sat", "sats", "satoshi", "satoshis")
+    private val usdUnitNames = setOf("usd", "dollar", "dollars")
+    private val eurUnitNames = setOf("eur", "euro", "euros")
+
     val supportedCurrencies: List<WalletCurrency> = listOf(
         WalletCurrencies.Satoshi,
         WalletCurrencies.Usd,
@@ -96,18 +100,28 @@ object CurrencyRegistry {
     }
 
     /**
+     * Whether a mint unit represents Bitcoin's satoshi account. History can
+     * receive legacy aliases from persisted requests and tokens, so display
+     * conversion must use the same classification as the currency registry.
+     */
+    fun isSatoshiUnit(unit: String): Boolean = normalizedMintUnit(unit) in satoshiUnitNames
+
+    /**
      * Never null: unknown mint units resolve to a generic code-after currency
      * (0 decimals, uppercase code as the unit label), mirroring iOS
      * GenericCurrency so custom-unit mints always format.
      */
     fun currencyForMintUnit(unit: String): WalletCurrency {
-        return when (unit.trim().lowercase()) {
-            "sat", "sats", "satoshi", "satoshis" -> WalletCurrencies.Satoshi
-            "usd", "dollar", "dollars" -> WalletCurrencies.Usd
-            "eur", "euro", "euros" -> WalletCurrencies.Eur
+        val normalized = normalizedMintUnit(unit)
+        return when {
+            normalized in satoshiUnitNames -> WalletCurrencies.Satoshi
+            normalized in usdUnitNames -> WalletCurrencies.Usd
+            normalized in eurUnitNames -> WalletCurrencies.Eur
             else -> genericCurrency(unit)
         }
     }
+
+    private fun normalizedMintUnit(unit: String): String = unit.trim().lowercase()
 
     private fun genericCurrency(unit: String): WalletCurrency {
         val code = unit.trim().uppercase().ifEmpty { "SAT" }

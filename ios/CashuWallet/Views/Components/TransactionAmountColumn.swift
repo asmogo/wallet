@@ -50,32 +50,19 @@ struct TransactionAmountColumn: View {
     // Only a settled receipt gets a sign. Sent, pending, and expired rows stay
     // unsigned; direction remains explicit in the title and arrow.
     private var formattedAmount: String {
-        let value = nativeAmount
+        let value = amountDisplay.primary
         guard !transaction.isUnsettled, transaction.type == .incoming else { return value }
         return "+\(value)"
     }
 
-    private var isSatUnit: Bool {
-        transaction.unit.lowercased() == "sat"
-    }
-
-    private var nativeAmount: String {
-        if isSatUnit {
-            return satDisplay.primary
-        }
-        return CurrencyAmount(
-            value: transaction.amount,
-            currency: CurrencyRegistry.currency(forMintUnit: transaction.unit)
-        ).formatted()
-    }
-
     private var secondaryAmount: String? {
-        isSatUnit ? satDisplay.secondary : nil
+        amountDisplay.secondary
     }
 
-    private var satDisplay: AmountDisplayText {
-        AmountFormatter.displayText(
-            amountSats: transaction.amount,
+    private var amountDisplay: AmountDisplayText {
+        AmountFormatter.displayMintUnitAmount(
+            amount: transaction.amount,
+            unit: transaction.unit,
             preferredPrimary: settings.homeBalancePrimary,
             showFiat: settings.showFiatBalance,
             btcPrice: priceService.btcPriceUSD,

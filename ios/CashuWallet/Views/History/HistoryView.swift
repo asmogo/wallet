@@ -554,9 +554,10 @@ struct HistoryView: View {
         let amountPart: String
         if amount == 0 {
             amountPart = "any amount"
-        } else if request.unit.lowercased() == "sat" {
-            let display = AmountFormatter.displayText(
-                amountSats: amount,
+        } else {
+            let display = AmountFormatter.displayMintUnitAmount(
+                amount: amount,
+                unit: request.unit,
                 preferredPrimary: settings.homeBalancePrimary,
                 showFiat: settings.showFiatBalance,
                 btcPrice: priceService.btcPriceUSD,
@@ -566,11 +567,6 @@ struct HistoryView: View {
             amountPart = [display.primary, display.secondary]
                 .compactMap { $0 }
                 .joined(separator: ", ")
-        } else {
-            amountPart = CurrencyAmount(
-                value: amount,
-                currency: CurrencyRegistry.currency(forMintUnit: request.unit)
-            ).formatted()
         }
         return "\(request.displayTitle), \(amountPart), \(received ? "received" : "waiting for payment"), \(formatRelativeDate(request.createdAt))"
     }
@@ -648,22 +644,15 @@ struct HistoryView: View {
     // pending row reads as a bare amount in VoiceOver too (status is announced
     // separately).
     private func formatAmount(_ transaction: WalletTransaction) -> String {
-        let value: String
-        if transaction.unit.lowercased() == "sat" {
-            value = AmountFormatter.displayText(
-                amountSats: transaction.amount,
-                preferredPrimary: settings.homeBalancePrimary,
-                showFiat: settings.showFiatBalance,
-                btcPrice: priceService.btcPriceUSD,
-                currencyCode: settings.bitcoinPriceCurrency,
-                useBitcoinSymbol: settings.useBitcoinSymbol
-            ).primary
-        } else {
-            value = CurrencyAmount(
-                value: transaction.amount,
-                currency: CurrencyRegistry.currency(forMintUnit: transaction.unit)
-            ).formatted()
-        }
+        let value = AmountFormatter.displayMintUnitAmount(
+            amount: transaction.amount,
+            unit: transaction.unit,
+            preferredPrimary: settings.homeBalancePrimary,
+            showFiat: settings.showFiatBalance,
+            btcPrice: priceService.btcPriceUSD,
+            currencyCode: settings.bitcoinPriceCurrency,
+            useBitcoinSymbol: settings.useBitcoinSymbol
+        ).primary
         guard !transaction.isUnsettled else { return value }
         return transaction.type == .incoming ? "+\(value)" : value
     }

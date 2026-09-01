@@ -753,6 +753,64 @@ final class MultiUnitSupportTests: XCTestCase {
         XCTAssertEqual(display.effectivePrimary, .sats)
     }
 
+    func testHistoryAmountConvertsEverySatoshiUnitAlias() {
+        for unit in ["sat", "SAT", " sats ", "satoshi", "satoshis"] {
+            let display = AmountFormatter.displayMintUnitAmount(
+                amount: 300_000,
+                unit: unit,
+                preferredPrimary: .fiat,
+                showFiat: true,
+                btcPrice: 20_000,
+                currencyCode: "USD",
+                useBitcoinSymbol: false
+            )
+
+            XCTAssertEqual(display.primary, "$60.00", "Failed for unit: \(unit)")
+            XCTAssertEqual(display.secondary, "300,000 sat", "Failed for unit: \(unit)")
+            XCTAssertEqual(display.effectivePrimary, .fiat, "Failed for unit: \(unit)")
+        }
+    }
+
+    func testHistoryAmountKeepsNonBitcoinMintUnitNative() {
+        let display = AmountFormatter.displayMintUnitAmount(
+            amount: 500,
+            unit: "usd",
+            preferredPrimary: .fiat,
+            showFiat: true,
+            btcPrice: 20_000,
+            currencyCode: "EUR",
+            useBitcoinSymbol: false
+        )
+
+        XCTAssertEqual(display.primary, "$5.00")
+        XCTAssertNil(display.secondary)
+    }
+
+    func testLightningReceiptUsesHomeFiatPreference() {
+        let transaction = WalletTransaction(
+            id: "lightning-receive",
+            amount: 1,
+            type: .incoming,
+            kind: .lightning,
+            date: Date(),
+            memo: nil,
+            status: .completed
+        )
+
+        let display = TransactionReceiptAmountPair.display(
+            transaction: transaction,
+            preferredPrimary: .fiat,
+            showFiat: true,
+            btcPrice: 20_000,
+            currencyCode: "USD",
+            useBitcoinSymbol: false
+        )
+
+        XCTAssertEqual(display.primary, "<$0.01")
+        XCTAssertEqual(display.secondary, "1 sat")
+        XCTAssertEqual(display.effectivePrimary, .fiat)
+    }
+
     func testHomeBalancePrimaryDefaultsToSatsAndPersistsIndependently() {
         let store = SettingsStore(storage: InMemoryStorage())
 
