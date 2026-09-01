@@ -27,6 +27,28 @@ class CashuRequestFeeEstimateTest {
     }
 
     @Test
+    fun amountEntryReservesTheFeeRowBeforeAnAmountExists() {
+        assertEquals(
+            CashuRequestFeePresentation(value = "—"),
+            CashuRequestFeeEstimate.Unrequested.amountEntryPresentation(
+                usesNetworkRoute = false,
+                formatAmount = { "$it sat" },
+            ),
+        )
+    }
+
+    @Test
+    fun amountEntryDescribesAcquireAndPayAsANetworkFee() {
+        assertEquals(
+            CashuRequestFeePresentation(value = "Network fee"),
+            CashuRequestFeeEstimate.Amount(key, sats = 3L).amountEntryPresentation(
+                usesNetworkRoute = true,
+                formatAmount = { "$it sat" },
+            ),
+        )
+    }
+
+    @Test
     fun zeroFeeIsPresentedAsNoFee() = runBlocking {
         val result = resolveCashuRequestFeeEstimate(key) { _, _ -> 0L }
 

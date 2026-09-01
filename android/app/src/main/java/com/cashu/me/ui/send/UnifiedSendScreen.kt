@@ -114,6 +114,7 @@ import com.cashu.me.ui.components.PaymentStatusScreen
 import com.cashu.me.ui.components.PrimaryButton
 import com.cashu.me.ui.components.QrCard
 import com.cashu.me.ui.components.SheetHeader
+import com.cashu.me.ui.components.SkeletonValue
 import com.cashu.me.ui.components.SpinnerRing
 import com.cashu.me.ui.components.TwoFaceScreen
 import com.cashu.me.ui.mints.ConnectMintContext
@@ -127,6 +128,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 private const val TYPE_DEBOUNCE_MS = 400L
+private const val CASHU_FEE_DEBOUNCE_MS = 250L
 
 // PaymentStatusScreen's scaffold metrics, mirrored so the confirm face's hero
 // band (amount / quote spinner / caution face) lands at the same Y as the
@@ -542,11 +544,26 @@ fun UnifiedSendScreen(
     // work automatically, and reject a stale completion as a final backstop.
     LaunchedEffect(step, cashuRequestFeeKey) {
         val key = cashuRequestFeeKey
-        if (step != SendStep.Confirm || key == null) {
+        val showsFeePreview = step == SendStep.Amount || step == SendStep.Confirm
+        if (!showsFeePreview || key == null) {
             cashuRequestFeeEstimate = CashuRequestFeeEstimate.Unrequested
             return@LaunchedEffect
         }
+
+        // Preserve a completed amount-entry estimate when Continue opens the
+        // confirmation face. Failed estimates intentionally retry there.
+        val current = cashuRequestFeeEstimate
+        if (current.key == key &&
+            (current is CashuRequestFeeEstimate.NoFee || current is CashuRequestFeeEstimate.Amount)
+        ) {
+            return@LaunchedEffect
+        }
+
         cashuRequestFeeEstimate = CashuRequestFeeEstimate.Loading(key)
+        if (step == SendStep.Amount) {
+            // Match iOS: do not ask CDK to reselect proofs on every keypress.
+            delay(CASHU_FEE_DEBOUNCE_MS)
+        }
         val result = resolveCashuRequestFeeEstimate(key) { amountSats, mintUrl ->
             walletManager.estimateCashuPaymentRequestFee(amountSats, mintUrl)
         }
@@ -742,6 +759,13 @@ fun UnifiedSendScreen(
                                 fiatCurrencyCode = priceState.currencyCode,
                                 useBitcoinSymbol = settings.useBitcoinSymbol,
                                 formatter = formatter,
+                                cashuRequestFeePresentation = (locked as? LockedRail.Creq)?.let {
+                                    displayedCashuRequestFeeEstimate.amountEntryPresentation(
+                                        usesNetworkRoute = cashuRoute is CashuPaymentRequestRoute.AcquireThenPay,
+                                    ) { fee ->
+                                        formatter.formatWalletSats(fee, settings.useBitcoinSymbol)
+                                    }
+                                },
                                 onContinue = {
                                     cameFromAmount = true
                                     step = SendStep.Confirm
@@ -1081,6 +1105,46 @@ private fun ToRow(destination: String, modifier: Modifier = Modifier) {
 }
 
 @Composable
+private fun EstimatedCashuRequestFeeRow(
+    presentation: CashuRequestFeePresentation,
+    modifier: Modifier = Modifier,
+) {
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .heightIn(min = 32.dp)
+            .semantics(mergeDescendants = true) {
+                stateDescription = if (presentation.loading) {
+                    "Calculating"
+                } else {
+                    presentation.value
+                }
+            },
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            text = "Estimated fee",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Spacer(Modifier.weight(1f))
+        SkeletonValue(loading = presentation.loading) {
+            Text(
+                text = presentation.value,
+                style = if (presentation.valueMonospaced) {
+                    MaterialTheme.typography.bodyMedium.withMonoDigits()
+                } else {
+                    MaterialTheme.typography.bodyMedium
+                },
+                fontWeight = FontWeight.Medium,
+                color = MaterialTheme.colorScheme.onSurface,
+                maxLines = 1,
+            )
+        }
+    }
+}
+
+@Composable
 private fun AmountFace(
     amount: String,
     onAmountChange: (String) -> Unit,
@@ -1095,6 +1159,7 @@ private fun AmountFace(
     fiatCurrencyCode: String,
     useBitcoinSymbol: Boolean,
     formatter: AmountFormatter,
+    cashuRequestFeePresentation: CashuRequestFeePresentation?,
     onContinue: () -> Unit,
 ) {
     val mintBalance = mint?.balance ?: 0L
@@ -1156,6 +1221,10 @@ private fun AmountFace(
                     )
                 }
             }
+        }
+        if (cashuRequestFeePresentation != null) {
+            EstimatedCashuRequestFeeRow(cashuRequestFeePresentation)
+            Spacer(Modifier.height(CashuTheme.spacing.snug))
         }
         // Under the amount, over the keypad (Send Ecash / Receive parity).
         if (mint != null) {

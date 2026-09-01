@@ -479,18 +479,22 @@ struct CashuPaymentRequestPayView: View {
                 statusView(paymentPhase)
                     .transition(.opacity)
               } else {
-                // Family-style confirm layout. Any/multi-mint requests get a top mint
-                // pill (matching Pay Lightning) and just the amount hero; a request
-                // pinned to one required mint keeps the centered mint-identity header
-                // above the amount. Read-only request facts (Memo / Fees) sit beneath.
-                // Shared Pay-flow scaffold (see `PayFlowScaffold`) so the request
-                // facts sit at the same Y here as on the processing / success
-                // screens. Any/multi-mint requests show the switchable mint pill as
-                // the top accessory; a required mint keeps its centered identity
-                // header inside the hero band, above the amount.
-                PayFlowScaffold {
+                // Family-style confirm layout. Fixed-amount any/multi-mint requests
+                // get a top mint pill (matching Pay Lightning); amountless requests
+                // keep their fee preview and source mint beside the amount controls,
+                // directly above the number pad (matching Android and the unified
+                // Send amount screen). A fixed-amount request pinned to one required
+                // mint keeps the centered mint-identity header above the amount.
+                // Read-only request facts sit beneath.
+                // Fixed-amount requests use the shared Pay-flow anchor so their facts
+                // remain aligned with processing / success. Amount entry instead
+                // centers the complete amount lockup in the non-scrolling space above
+                // the fixed fee, mint, and number-pad controls.
+                PayFlowScaffold(
+                    contentLayout: request.amount == nil ? .centered : .anchoredScrollable
+                ) {
                     VStack(spacing: 12) {
-                        if request.isSatUnit, pickerSelectedMint == nil {
+                        if showsMintIdentityHeader {
                             mintHeader
                                 .padding(.horizontal)
                         }
@@ -518,8 +522,18 @@ struct CashuPaymentRequestPayView: View {
                 } footer: {
                     VStack(spacing: 16) {
                         if request.amount == nil {
-                            NumberPadAmountInput(amountString: $customAmountString, unit: entryUnit)
-                                .padding(.horizontal, NumberPadMetrics.gutter)
+                            VStack(spacing: 8) {
+                                if request.isSatUnit {
+                                    amountEntryFeeRow
+
+                                    if let selected = selectedPaymentMint {
+                                        paymentMintSelector(selected, isAmountEntry: true)
+                                    }
+                                }
+
+                                NumberPadAmountInput(amountString: $customAmountString, unit: entryUnit)
+                            }
+                            .padding(.horizontal, NumberPadMetrics.gutter)
                         }
 
                         Button(action: payRequest) {
@@ -542,22 +556,12 @@ struct CashuPaymentRequestPayView: View {
                         }
                     }
                 } topAccessory: {
-                    if request.isSatUnit, let selected = pickerSelectedMint {
-                        MintSelectorRow(
-                            direction: .source,
-                            mint: selected,
-                            balanceText: AmountFormatter.sats(
-                                selected.balance,
-                                useBitcoinSymbol: settings.useBitcoinSymbol
-                            ),
-                            onChooseMint: candidateMints.count > 1 ? {
-                                HapticFeedback.selection()
-                                showingMintPicker = true
-                            } : nil
-                        )
-                        // Aligned to the number pad below, not the CTA.
-                        .padding(.horizontal, NumberPadMetrics.gutter)
-                        .padding(.top, 8)
+                    if request.amount != nil,
+                       request.isSatUnit,
+                       let selected = pickerSelectedMint {
+                        paymentMintSelector(selected)
+                            .padding(.horizontal, NumberPadMetrics.gutter)
+                            .padding(.top, 8)
                     }
                 }
               }
@@ -618,6 +622,47 @@ struct CashuPaymentRequestPayView: View {
                 feeTask?.cancel()
             }
         }
+        // Preserve native swipe-to-dismiss everywhere except the brief interval
+        // where proofs are being reserved or delivered.
+        .interactiveDismissDisabled(isPaying)
+    }
+
+    private var showsMintIdentityHeader: Bool {
+        guard request.isSatUnit else { return false }
+        if request.amount == nil {
+            return selectedPaymentMint == nil
+        }
+        return pickerSelectedMint == nil
+    }
+
+    private func paymentMintSelector(_ mint: MintInfo, isAmountEntry: Bool = false) -> some View {
+        let onUseMax: (() -> Void)? = isAmountEntry && mint.balance > 0 ? {
+            useMaximumAmount(from: mint)
+        } : nil
+
+        return MintSelectorRow(
+            direction: .source,
+            mint: mint,
+            balanceText: AmountFormatter.sats(
+                mint.balance,
+                useBitcoinSymbol: settings.useBitcoinSymbol
+            ),
+            showsBalance: isAmountEntry,
+            onUseMax: onUseMax,
+            onChooseMint: candidateMints.count > 1 ? {
+                HapticFeedback.selection()
+                showingMintPicker = true
+            } : nil
+        )
+    }
+
+    private func useMaximumAmount(from mint: MintInfo) {
+        HapticFeedback.selection()
+        customAmountString = AmountFormatter.entryConverted(
+            raw: String(mint.balance),
+            from: .sats,
+            to: entryUnit
+        )
     }
 
     @ViewBuilder
@@ -735,9 +780,9 @@ struct CashuPaymentRequestPayView: View {
         return nil
     }
 
-    /// Family-style detail rows beneath the amount: the requester's memo and the
-    /// fee. Only shown for sat requests; non-sat requests surface their own
-    /// "unsupported" warning. (Mint selection lives in the top pill / header.)
+    /// Family-style detail rows beneath the amount. Amountless requests keep the
+    /// live fee beside the keypad so it cannot disappear behind the fixed input;
+    /// fixed-amount requests keep it here because they have no number pad.
     @ViewBuilder
     private var requestDetailsSection: some View {
         if request.isSatUnit {
@@ -750,7 +795,9 @@ struct CashuPaymentRequestPayView: View {
                 if let memo {
                     detailRow(label: "Memo", value: memo)
                 }
-                feesRow
+                if request.amount != nil {
+                    feesRow
+                }
             }
             .padding(.top, 16)
             .padding(.horizontal)
@@ -813,7 +860,26 @@ struct CashuPaymentRequestPayView: View {
         .font(.subheadline)
         .padding(.horizontal, 4)
         .padding(.vertical, 14)
-        .accessibilityElement(children: .combine)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Fees")
+        .accessibilityValue(feeAccessibilityValue)
+    }
+
+    /// Compact, non-scrolling amount-entry metadata. It reserves its place while
+    /// the debounced estimate is loading, so neither the mint row nor keypad jumps.
+    private var amountEntryFeeRow: some View {
+        HStack {
+            Text("Estimated fee")
+                .foregroundStyle(.secondary)
+            Spacer()
+            feeValueText
+        }
+        .font(.subheadline)
+        .padding(.horizontal, 4)
+        .padding(.vertical, FlowRowMetrics.verticalPadding)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Estimated fee")
+        .accessibilityValue(feeAccessibilityValue)
     }
 
     @ViewBuilder
@@ -831,9 +897,23 @@ struct CashuPaymentRequestPayView: View {
             case .amount(let fee):
                 Text(AmountFormatter.sats(fee, useBitcoinSymbol: settings.useBitcoinSymbol))
                     .fontWeight(.medium)
-            case .idle, .unavailable:
+            case .idle:
                 Text("—").foregroundStyle(.secondary)
+            case .unavailable:
+                Text("Unavailable").foregroundStyle(.secondary)
             }
+        }
+    }
+
+    private var feeAccessibilityValue: String {
+        if needsAcquire { return "Network fee" }
+        switch feeState {
+        case .idle: return "Not yet calculated"
+        case .loading: return "Calculating"
+        case .free: return "No fee"
+        case .amount(let fee):
+            return AmountFormatter.sats(fee, useBitcoinSymbol: settings.useBitcoinSymbol)
+        case .unavailable: return "Unavailable"
         }
     }
 
@@ -1077,8 +1157,8 @@ struct CashuPaymentRequestPayView: View {
                     customAmountSats: request.amount == nil ? paymentAmount : nil,
                     preferredMintURL: mint.url
                 )
-                // The consistency fix: every creq payment now lands on the shared
-                // full-screen success screen, same as Lightning/on-chain.
+                // Every creq payment lands on the shared success face, matching
+                // the Lightning/on-chain payment vocabulary.
                 withAnimation(.smooth(duration: 0.3)) { paymentPhase = .success }
             } catch {
                 let walletMessage = error.walletMessage
@@ -1148,7 +1228,7 @@ struct CashuPaymentRequestPayView: View {
         }
     }
 
-    /// Full-screen processing → success → failure status. Preserves the payment
+    /// Full-height processing → success → failure status. Preserves the payment
     /// facts (amount / mint / fee / memo) as rows. onDone completes like the old
     /// overlay's onDismiss did; onRetry returns to the confirm screen.
     private func statusView(_ phase: PaymentStatusView.Phase) -> some View {
@@ -1214,8 +1294,10 @@ struct CashuPaymentRequestPayView: View {
                 label: "Fees",
                 value: AmountFormatter.sats(fee, useBitcoinSymbol: settings.useBitcoinSymbol)
             )
-        case .idle, .unavailable:
+        case .idle:
             return .init(label: "Fees", value: "—")
+        case .unavailable:
+            return .init(label: "Fees", value: "Unavailable")
         }
     }
 }

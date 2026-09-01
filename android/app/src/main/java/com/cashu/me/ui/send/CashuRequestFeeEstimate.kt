@@ -57,6 +57,21 @@ internal fun CashuRequestFeeEstimate.presentation(
         is CashuRequestFeeEstimate.Unavailable -> CashuRequestFeePresentation(value = "Unavailable")
     }
 
+/**
+ * Compact amount-entry presentation. Before an amount exists the row reserves
+ * its slot with a dash; an acquire-and-pay route reports the honest network-fee
+ * category because its Lightning reserve is not known until the quote exists.
+ */
+internal fun CashuRequestFeeEstimate.amountEntryPresentation(
+    usesNetworkRoute: Boolean,
+    formatAmount: (Long) -> String,
+): CashuRequestFeePresentation =
+    when {
+        usesNetworkRoute -> CashuRequestFeePresentation(value = "Network fee")
+        this is CashuRequestFeeEstimate.Unrequested -> CashuRequestFeePresentation(value = "—")
+        else -> presentation(formatAmount)
+    }
+
 internal suspend fun resolveCashuRequestFeeEstimate(
     key: CashuRequestFeeEstimateKey,
     estimate: suspend (amountSats: Long, mintUrl: String) -> Long,
