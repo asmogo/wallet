@@ -366,8 +366,13 @@ struct SpinnerRing: View {
     }
 }
 
-/// Shared vertical scaffold for every Pay flow's confirm + status screens, so the
-/// payment-details block sits at the **same** vertical position across confirm →
+enum PayFlowContentLayout {
+    case anchoredScrollable
+    case centered
+}
+
+/// Shared vertical scaffold for Pay flow screens. Its default anchored layout keeps the
+/// payment-details block at the **same** vertical position across confirm →
 /// processing → success (no jump as the state changes). Layout contract:
 ///
 ///     [ topAccessory ]   ← overlaid at the top (e.g. mint chip); does NOT shift the anchor
@@ -380,7 +385,8 @@ struct SpinnerRing: View {
 /// The hero band is a fixed height, so both the hero **and** the details-block top
 /// stay stationary regardless of how many detail rows a given phase shows. Content
 /// scrolls if it exceeds the viewport (small devices / large Dynamic Type) rather
-/// than clipping. The caller still owns the toolbar header.
+/// than clipping. Amount entry can instead center its content in the space above a
+/// fixed keypad by selecting `.centered`. The caller still owns the toolbar header.
 struct PayFlowScaffold<TopAccessory: View, Hero: View, Details: View, Footer: View>: View {
     /// Fraction of the available height reserved above the hero band (upper-middle anchor).
     private static var topFraction: CGFloat { 0.16 }
@@ -393,13 +399,16 @@ struct PayFlowScaffold<TopAccessory: View, Hero: View, Details: View, Footer: Vi
     private let hero: Hero
     private let details: Details
     private let footer: Footer
+    private let contentLayout: PayFlowContentLayout
 
     init(
+        contentLayout: PayFlowContentLayout = .anchoredScrollable,
         @ViewBuilder hero: () -> Hero,
         @ViewBuilder details: () -> Details,
         @ViewBuilder footer: () -> Footer,
         @ViewBuilder topAccessory: () -> TopAccessory = { EmptyView() }
     ) {
+        self.contentLayout = contentLayout
         self.hero = hero()
         self.details = details()
         self.footer = footer()
@@ -409,24 +418,38 @@ struct PayFlowScaffold<TopAccessory: View, Hero: View, Details: View, Footer: Vi
     var body: some View {
         GeometryReader { geo in
             VStack(spacing: 0) {
-                ScrollView(.vertical, showsIndicators: false) {
+                if contentLayout == .anchoredScrollable {
+                    ScrollView(.vertical, showsIndicators: false) {
+                        VStack(spacing: 0) {
+                            Color.clear
+                                .frame(height: geo.size.height * Self.topFraction)
+                            hero
+                                .frame(maxWidth: .infinity)
+                                .frame(minHeight: Self.heroBandHeight)
+                            details
+                                .padding(.top, Self.heroDetailsGap)
+                        }
+                        .frame(maxWidth: .infinity)
+                        // Resolve the anchored column's geometry as one rigid unit before it
+                        // combines with the parent. Without this, when the GeometryReader's
+                        // size goes 0 → real on first layout, the hero/details interpolate
+                        // from the (0,0) origin under any live ancestor .animation scope
+                        // (this screen's value: phase, or PaymentStatusView's value: phaseKey)
+                        // — sliding the amount hero in from the top-left. Isolating geometry
+                        // leaves opacity/scale transitions (the spinner→check morph) untouched.
+                        .geometryGroup()
+                    }
+                } else {
                     VStack(spacing: 0) {
-                        Color.clear
-                            .frame(height: geo.size.height * Self.topFraction)
+                        Spacer(minLength: 0)
                         hero
                             .frame(maxWidth: .infinity)
-                            .frame(minHeight: Self.heroBandHeight)
+                            .layoutPriority(1)
                         details
                             .padding(.top, Self.heroDetailsGap)
+                        Spacer(minLength: 0)
                     }
-                    .frame(maxWidth: .infinity)
-                    // Resolve the anchored column's geometry as one rigid unit before it
-                    // combines with the parent. Without this, when the GeometryReader's
-                    // size goes 0 → real on first layout, the hero/details interpolate
-                    // from the (0,0) origin under any live ancestor .animation scope
-                    // (this screen's value: phase, or PaymentStatusView's value: phaseKey)
-                    // — sliding the amount hero in from the top-left. Isolating geometry
-                    // leaves opacity/scale transitions (the spinner→check morph) untouched.
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .geometryGroup()
                 }
                 footer

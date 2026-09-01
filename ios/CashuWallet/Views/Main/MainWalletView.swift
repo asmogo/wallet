@@ -703,6 +703,15 @@ struct MainWalletView: View {
                     )
                 }
             )
+        case .cashuRequestPay(let summary):
+            CashuPaymentRequestPayView(
+                request: summary,
+                onComplete: { navigationManager.activeWalletSheet = nil }
+            )
+            .environmentObject(walletManager)
+            .presentationDetents([.large])
+            .presentationDragIndicator(.visible)
+            .flatBottomSheetSurface()
         case .scanner:
             // The scanner self-dismisses on a successful read and hands the
             // payload back; the routed surface presents only after this sheet

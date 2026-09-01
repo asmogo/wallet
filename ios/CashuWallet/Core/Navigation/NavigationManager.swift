@@ -12,6 +12,7 @@ enum WalletSheet: Identifiable {
     case send(prefill: String?)
     case sendEdit(prefill: String)
     case sendAmount(SendAmountDestination)
+    case cashuRequestPay(CashuPaymentRequestSummary)
     case scanner
     case sendEcash
     case receiveLightning
@@ -28,6 +29,7 @@ enum WalletSheet: Identifiable {
         case .send: return "send"
         case .sendEdit: return "sendEdit"
         case .sendAmount: return "sendAmount"
+        case .cashuRequestPay(let summary): return "creq-\(summary.encoded.prefix(64))"
         case .scanner: return "scanner"
         case .sendEcash: return "sendEcash"
         case .receiveLightning: return "receiveLightning"
@@ -40,7 +42,7 @@ enum WalletSheet: Identifiable {
 
 /// The full-screen flow-page slot, bound by `ContentView`'s single
 /// `.fullScreenCover(item:)`: payment pages that read as a brand-new screen
-/// with nothing visible beneath (token claim, scan-routed pay, held approval).
+/// with nothing visible beneath (token claim, scan-routed melts, held approval).
 enum FlowCover: Identifiable {
     case receiveToken(String)
     case heldApproval(PendingReceiveToken)
@@ -50,14 +52,12 @@ enum FlowCover: Identifiable {
         autoQuote: Bool,
         explanation: CashuRequestRouteExplanation?
     )
-    case cashuRequestPay(CashuPaymentRequestSummary)
 
     var id: String {
         switch self {
         case .receiveToken(let token): return "token-\(token.prefix(48))"
         case .heldApproval(let pending): return "held-\(pending.tokenId)"
         case .melt(let request, _, _, _): return "melt-\(request.prefix(64))"
-        case .cashuRequestPay(let summary): return "creq-\(summary.encoded.prefix(64))"
         }
     }
 }
@@ -216,7 +216,7 @@ final class NavigationManager: ObservableObject {
         case .receiveToken(let token):
             present(.cover(.receiveToken(token)))
         case .cashuRequestPay(let summary):
-            present(.cover(.cashuRequestPay(summary)))
+            present(.sheet(.cashuRequestPay(summary)))
         case .melt(let request, let mode, let autoQuote, let explanation):
             present(.cover(.melt(
                 request: request,

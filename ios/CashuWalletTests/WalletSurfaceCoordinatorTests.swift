@@ -104,6 +104,28 @@ final class WalletSurfaceCoordinatorTests: XCTestCase {
         XCTAssertEqual(nav.activeWalletSheet?.id, "sendAmount")
     }
 
+    func testCashuRequestPayWaitsForScannerThenOpensAsSheet() {
+        let nav = NavigationManager()
+        let request = CashuPaymentRequestSummary(
+            encoded: "creqAtest",
+            amount: nil,
+            unit: "sat",
+            description: nil,
+            mints: []
+        )
+        nav.activeWalletSheet = .scanner
+
+        nav.present(.sheet(.cashuRequestPay(request)))
+
+        XCTAssertNil(nav.activeWalletSheet)
+        XCTAssertTrue(nav.isFlowSurfaceOpen, "the scanner sheet is still dismissing")
+
+        nav.sheetDidDismiss()
+
+        XCTAssertEqual(nav.activeWalletSheet?.id, "creq-creqAtest")
+        XCTAssertNil(nav.activeFlowCover)
+    }
+
     func testDeepLinkTokensQueueAndConsumeInOrder() {
         let nav = NavigationManager()
 

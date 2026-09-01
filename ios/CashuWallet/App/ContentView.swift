@@ -48,7 +48,7 @@ struct ContentView: View {
             value: walletManager.needsOnboarding
         )
         // The one full-screen flow-page slot: token claims (scan, deep link,
-        // paste-into-flow), scan-routed pay screens, held NUT-18 approvals.
+        // paste-into-flow), scan-routed melts, held NUT-18 approvals.
         // `onDismiss` promotes any surface parked by `NavigationManager.present`.
         .fullScreenCover(
             item: $navigationManager.activeFlowCover,
@@ -102,13 +102,6 @@ struct ContentView: View {
                 initialMode: mode,
                 autoQuoteOnAppear: autoQuote,
                 routeExplanation: explanation,
-                onComplete: { navigationManager.activeFlowCover = nil }
-            )
-            .environmentObject(walletManager)
-            .canvasSheetBackground()
-        case .cashuRequestPay(let summary):
-            CashuPaymentRequestPayView(
-                request: summary,
                 onComplete: { navigationManager.activeFlowCover = nil }
             )
             .environmentObject(walletManager)
