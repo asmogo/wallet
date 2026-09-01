@@ -1,6 +1,94 @@
 import Foundation
 import Cdk
 
+enum MintRemovalPolicyError: LocalizedError {
+    case multipleUnits
+
+    var errorDescription: String? {
+        switch self {
+        case .multipleUnits:
+            return "This mint uses multiple currency units and cannot be removed safely yet. Keep it connected and try again after updating the app."
+        }
+    }
+}
+
+@MainActor
+enum MintRemovalPolicy {
+    static func normalizedUnits(_ registeredUnits: [String]) -> [String] {
+        let units = registeredUnits
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() }
+            .filter { !$0.isEmpty }
+        var seen = Set<String>()
+        let unique = units.filter { seen.insert($0).inserted }
+        return unique
+    }
+
+    /// The native repository has no atomic multi-unit removal API. Refuse
+    /// before touching it rather than leave only part of a mint removed.
+    static func removalUnit(registeredUnits: [String]) throws -> String? {
+        let units = normalizedUnits(registeredUnits)
+        guard units.count <= 1 else { throw MintRemovalPolicyError.multipleUnits }
+        return units.first
+    }
+
+    static func matches(_ lhs: String, _ rhs: String) -> Bool {
+        normalizedMintURL(lhs) == normalizedMintURL(rhs)
+    }
+
+    static func removingMint(withURL targetURL: String, from mints: [MintInfo]) -> [MintInfo] {
+        mints.filter { !matches($0.url, targetURL) }
+    }
+
+    private static func normalizedMintURL(_ url: String) -> String {
+        let trimmed = url.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard var components = URLComponents(string: trimmed),
+              components.scheme != nil,
+              components.host != nil else {
+            return trimmed
+        }
+
+        // URL scheme and host are case-insensitive, but paths are not. Folding
+        // the whole string could remove a distinct mint at `/Mint` when the
+        // user selected `/mint`.
+        components.scheme = components.scheme?.lowercased()
+        components.host = components.host?.lowercased()
+        var path = components.percentEncodedPath
+        while path.count > 1 && path.hasSuffix("/") {
+            path.removeLast()
+        }
+        if path == "/" {
+            path = ""
+        }
+        components.percentEncodedPath = path
+        return components.string ?? trimmed
+    }
+
+    /// Commit local mint metadata only after the native removal succeeds.
+    static func removeBeforeCommit(
+        mint: MintInfo,
+        registeredUnits: [String],
+        removeWallet: @escaping (String, String) async throws -> Void,
+        commitMetadata: () -> Void
+    ) async throws {
+        let unit = try removalUnit(registeredUnits: registeredUnits)
+        try Task.checkCancellation()
+        if let unit {
+            // An unstructured child does not inherit later cancellation from
+            // this caller. Once native removal begins, await its definite
+            // result and mirror a success into metadata before cancellation
+            // can escape across the commit boundary.
+            let nativeRemoval = Task { @MainActor in
+                try await removeWallet(mint.url, unit)
+            }
+            try await nativeRemoval.value
+        }
+        // Native removal is the commit point. Mirror it into local metadata
+        // before propagating cancellation that arrived during the native call.
+        commitMetadata()
+        try Task.checkCancellation()
+    }
+}
+
 // MARK: - Mint Service
 
 /// Service responsible for mint management operations.
@@ -91,22 +179,45 @@ class MintService: ObservableObject {
         return mintInfo
     }
     
-    /// Remove mints at the specified offsets
-    func removeMint(at offsets: IndexSet) async {
-        guard let repo = walletRepository() else { return }
-        
-        for index in offsets {
-            let mint = mints[index]
-            if activeMint?.url == mint.url {
-                activeMint = mints.first { $0.url != mint.url }
-            }
-            
-            // Remove from wallet repository
-            let mintUrl = MintUrl(url: mint.url)
-            try? await repo.removeWallet(mintUrl: mintUrl, currencyUnit: .sat)
+    /// Remove one mint by stable identity. Array offsets can shift while this
+    /// operation waits in the repository coordinator.
+    func removeMint(_ requestedMint: MintInfo) async throws {
+        guard let repo = walletRepository() else {
+            throw WalletError.notInitialized
         }
-        mints.remove(atOffsets: offsets)
-        saveMints()
+
+        guard let mint = mints.first(where: {
+            MintRemovalPolicy.matches($0.url, requestedMint.url)
+        }) else {
+            throw WalletError.networkError("Mint is no longer tracked.")
+        }
+        let registeredUnits = await repo.getWallets()
+            .filter { wallet in
+                MintRemovalPolicy.matches(wallet.mintUrl().url, mint.url)
+            }
+            .map { PaymentRequestDecoder.unitDescription($0.unit()) }
+
+        try await MintRemovalPolicy.removeBeforeCommit(
+            mint: mint,
+            registeredUnits: registeredUnits,
+            removeWallet: { mintURL, unit in
+                try await repo.removeWallet(
+                    mintUrl: MintUrl(url: mintURL),
+                    currencyUnit: PaymentRequestDecoder.currencyUnit(from: unit)
+                )
+            },
+            commitMetadata: {
+                self.mints = MintRemovalPolicy.removingMint(
+                    withURL: mint.url,
+                    from: self.mints
+                )
+                if let activeMint = self.activeMint,
+                   MintRemovalPolicy.matches(activeMint.url, mint.url) {
+                    self.activeMint = self.mints.first
+                }
+                self.saveMints()
+            }
+        )
     }
     
     /// Set the active mint

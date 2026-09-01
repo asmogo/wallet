@@ -98,6 +98,7 @@ import com.cashu.me.ui.testing.UiTestTags
 import com.cashu.me.ui.theme.CapsuleShape
 import com.cashu.me.ui.theme.CashuTheme
 import com.cashu.me.ui.theme.withSlashedZero
+import kotlinx.coroutines.CancellationException
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -116,6 +117,8 @@ fun MintDetailScreen(
     var confirmingRemove by remember { mutableStateOf(false) }
     var settingDefault by remember(mintUrl) { mutableStateOf(false) }
     var setDefaultError by remember(mintUrl) { mutableStateOf<String?>(null) }
+    var removingMint by remember(mintUrl) { mutableStateOf(false) }
+    var removalError by remember(mintUrl) { mutableStateOf<String?>(null) }
 
     Scaffold(
         modifier = Modifier.testTag(UiTestTags.MintDetailScreen),
@@ -466,6 +469,9 @@ fun MintDetailScreen(
                 if (setDefaultError != null) {
                     InlineNotice(text = setDefaultError.orEmpty(), severity = NoticeSeverity.Error)
                 }
+                if (removalError != null) {
+                    InlineNotice(text = removalError.orEmpty(), severity = NoticeSeverity.Error)
+                }
                 if (!isActive) {
                     // iOS parity: progress disables the action while in flight
                     // and a failure renders inline without flipping the
@@ -490,6 +496,7 @@ fun MintDetailScreen(
                     text = "Remove mint",
                     onClick = { confirmingRemove = true },
                     modifier = Modifier.fillMaxWidth(),
+                    enabled = !removingMint,
                 )
             }
             Spacer(Modifier.height(CashuTheme.spacing.section))
@@ -509,8 +516,21 @@ fun MintDetailScreen(
             confirmButton = {
                 TextButton(onClick = {
                     confirmingRemove = false
-                    mint?.let { walletManager.launch { walletManager.removeMint(it) } }
-                    onClose()
+                    val target = mint ?: return@TextButton
+                    removingMint = true
+                    removalError = null
+                    walletManager.launch {
+                        try {
+                            walletManager.removeMint(target)
+                            onClose()
+                        } catch (cancellation: CancellationException) {
+                            throw cancellation
+                        } catch (error: Throwable) {
+                            removalError = error.userFacingWalletMessage
+                        } finally {
+                            removingMint = false
+                        }
+                    }
                 }) {
                     Text("Remove", color = MaterialTheme.colorScheme.error)
                 }

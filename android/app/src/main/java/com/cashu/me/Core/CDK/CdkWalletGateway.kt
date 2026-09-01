@@ -1,5 +1,6 @@
 package com.cashu.me.Core.CDK
 
+import java.net.URI
 import kotlinx.coroutines.flow.Flow
 import org.cashudevkit.PendingMelt
 import com.cashu.me.Core.NPCQuote
@@ -29,7 +30,14 @@ interface CdkWalletGateway {
     /** NUT-27: fetch the newest mint-list backup for the open seed; returns the backed-up mint URLs. */
     suspend fun fetchMintBackup(relays: List<String>, timeoutSecs: ULong): List<String>
     suspend fun ensureWallet(mintUrl: String, unit: String = "sat")
-    suspend fun removeWallet(mintUrl: String, unit: String = "sat")
+
+    /**
+     * Atomically inspects the native repository and removes [mintUrl] only when
+     * it has at most one registered unit. Returns false when no native wallet
+     * existed and throws [MultiUnitWalletRemovalException] before changing the
+     * repository when multiple units are registered.
+     */
+    suspend fun removeWalletIfSingleUnit(mintUrl: String): Boolean
     suspend fun fetchMintInfo(mintUrl: String): MintInfo?
     suspend fun restoreMint(mintUrl: String): RestoreMintResult
     suspend fun totalBalance(mintUrl: String): Long
@@ -110,6 +118,34 @@ interface CdkWalletGateway {
     /** Extract the encoded token a send saga persists until the token is
      * claimed; null for non-send or already-finalized operations. */
     suspend fun pendingSendTokenFromSaga(operationId: String): String?
+}
+
+class MultiUnitWalletRemovalException(
+    val registeredUnits: List<String>,
+) : IllegalStateException(
+    "This mint uses multiple currency units and cannot be removed safely yet. Keep it connected and try again after updating the app.",
+)
+
+internal fun normalizedRegisteredWalletUnits(units: List<String>): List<String> =
+    units
+        .map { it.trim().lowercase() }
+        .filter(String::isNotEmpty)
+        .distinct()
+
+internal fun mintRemovalUrlsMatch(lhs: String, rhs: String): Boolean {
+    fun identity(raw: String): List<Any?>? = runCatching {
+        val uri = URI(raw.trim())
+        val scheme = uri.scheme?.lowercase() ?: return@runCatching null
+        val authority = uri.rawAuthority?.lowercase() ?: return@runCatching null
+        var path = uri.rawPath.orEmpty()
+        while (path.length > 1 && path.endsWith('/')) path = path.dropLast(1)
+        if (path == "/") path = ""
+        listOf(scheme, authority, path, uri.rawQuery, uri.rawFragment)
+    }.getOrNull()
+
+    val left = identity(lhs) ?: return lhs.trim() == rhs.trim()
+    val right = identity(rhs) ?: return false
+    return left == right
 }
 
 data class ForeignNfcSettlement(

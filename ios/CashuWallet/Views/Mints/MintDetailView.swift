@@ -17,6 +17,7 @@ struct MintDetailView: View {
     @State private var aboutExpanded = false
     @State private var showNavTitle = false
     @State private var isSettingDefault = false
+    @State private var isRemovingMint = false
     @State private var actionError: String?
     /// Balances for the mint's non-sat units, loaded on demand (the sat balance
     /// is the cached `mint.balance`). Where a freshly-minted eur/usd shows up.
@@ -548,13 +549,19 @@ struct MintDetailView: View {
             Button(role: .destructive) {
                 showRemoveConfirmation = true
             } label: {
-                Text("Remove Mint")
-                    .font(.body)
-                    .foregroundStyle(.red)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 14)
+                HStack(spacing: 8) {
+                    Text("Remove Mint")
+                    if isRemovingMint {
+                        ProgressView().tint(.red)
+                    }
+                }
+                .font(.body)
+                .foregroundStyle(.red)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 14)
             }
             .buttonStyle(.plain)
+            .disabled(isRemovingMint)
         }
     }
 
@@ -683,9 +690,15 @@ struct MintDetailView: View {
 
     private func removeMint() {
         Task {
-            if let index = walletManager.mints.firstIndex(where: { $0.url == mint.url }) {
-                await walletManager.removeMint(at: IndexSet(integer: index))
+            isRemovingMint = true
+            actionError = nil
+            let removed = await walletManager.removeMint(mint)
+            isRemovingMint = false
+            if removed {
                 dismiss()
+            } else if !Task.isCancelled {
+                actionError = walletManager.errorMessage
+                    ?? "The mint could not be removed. Keep it connected and try again."
             }
         }
     }

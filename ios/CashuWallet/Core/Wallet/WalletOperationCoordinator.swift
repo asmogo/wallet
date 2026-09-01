@@ -13,6 +13,7 @@ import UIKit
 actor WalletOperationCoordinator {
     enum Kind: String, Sendable {
         case addMint
+        case removeMint
         case balance
         case feeEstimate
         case history
