@@ -16,6 +16,10 @@ struct MintQuoteInfo: Identifiable {
     /// in this unit's base units. Defaults to "sat" for older/sat quotes.
     var unit: String = "sat"
 
+    /// Mint wallet that owns the quote. Quote follow-up work must use this
+    /// instead of mutable active-mint state.
+    var mintURL: String? = nil
+
     var isExpired: Bool {
         guard let expiry = expiry, expiry > 0 else { return false }
         return Date().timeIntervalSince1970 > Double(expiry)

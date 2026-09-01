@@ -6,8 +6,8 @@ struct MintQuoteWalletContext: Equatable {
     let unit: Cdk.CurrencyUnit
 }
 
-/// Keeps every operation on the wallet that owns the quote. The active mint is
-/// only a compatibility fallback for quotes that predate local persistence.
+/// Keeps every operation on the wallet that owns the quote. Missing persisted
+/// context fails closed rather than guessing from mutable active-wallet state.
 enum MintQuoteContextPolicy {
     static func context(for quote: MintQuote) -> MintQuoteWalletContext {
         MintQuoteWalletContext(mintURL: quote.mintUrl.url, unit: quote.unit)
@@ -24,15 +24,8 @@ enum MintQuoteContextPolicy {
         }
     }
 
-    static func walletContext(
-        storedQuote: MintQuote?,
-        activeMintURL: String?
-    ) -> MintQuoteWalletContext? {
-        if let storedQuote {
-            return context(for: storedQuote)
-        }
-        guard let activeMintURL else { return nil }
-        return MintQuoteWalletContext(mintURL: activeMintURL, unit: .sat)
+    static func walletContext(storedQuote: MintQuote?) -> MintQuoteWalletContext? {
+        storedQuote.map { context(for: $0) }
     }
 }
 
@@ -215,21 +208,9 @@ class LightningService: ObservableObject {
             )
         }
 
-        guard let context = MintQuoteContextPolicy.walletContext(
-            storedQuote: nil,
-            activeMintURL: getActiveMint()?.url
-        ) else {
-            throw WalletError.notInitialized
-        }
-
-        let wallet = try await repo.getWallet(
-            mintUrl: MintUrl(url: context.mintURL),
-            unit: context.unit
+        throw WalletError.networkError(
+            "The mint context for this receive request is unavailable. Create a new request and try again."
         )
-        let quote = try await wallet.checkMintQuote(quoteId: quoteId)
-        let paymentMethod = PaymentMethodKind.from(quote.paymentMethod) ?? .bolt11
-        await persistMintQuote(quote, paymentMethod: paymentMethod)
-        return mintQuoteInfo(from: quote, fallbackAmount: nil, paymentMethod: paymentMethod)
     }
     
     /// Mint tokens after invoice is paid
@@ -255,7 +236,7 @@ class LightningService: ObservableObject {
         let mintUrl: MintUrl
         let amountSplitTarget: SplitTarget
         // Redeem into the quote's own unit wallet (also makes resuming a
-        // persisted non-sat quote correct). Defaults to sat when no stored quote.
+        // persisted non-sat quote correct). Never guess from the active wallet.
         let quoteUnit: Cdk.CurrencyUnit
 
         if let walletDatabase = walletDatabase(),
@@ -312,12 +293,10 @@ class LightningService: ObservableObject {
                     )
                 }
             }
-        } else if let activeMint = getActiveMint() {
-            mintUrl = MintUrl(url: activeMint.url)
-            amountSplitTarget = .none
-            quoteUnit = .sat
         } else {
-            throw WalletError.notInitialized
+            throw WalletError.networkError(
+                "The mint context for this receive request is unavailable. Create a new request and try again."
+            )
         }
 
         let wallet = try await repo.getWallet(mintUrl: mintUrl, unit: quoteUnit)
@@ -654,11 +633,10 @@ class LightningService: ObservableObject {
             storedQuote = nil
         }
 
-        guard let context = MintQuoteContextPolicy.walletContext(
-            storedQuote: storedQuote,
-            activeMintURL: getActiveMint()?.url
-        ) else {
-            throw WalletError.notInitialized
+        guard let context = MintQuoteContextPolicy.walletContext(storedQuote: storedQuote) else {
+            throw WalletError.networkError(
+                "The mint context for this receive request is unavailable. Create a new request and try again."
+            )
         }
 
         let wallet = try await repo.getWallet(
@@ -1173,7 +1151,8 @@ class LightningService: ObservableObject {
             state: mintQuoteState(from: quote, paymentMethod: paymentMethod),
             expiry: displayExpiry(quote.expiry),
             createdAt: createdAt,
-            unit: PaymentRequestDecoder.unitDescription(quote.unit)
+            unit: PaymentRequestDecoder.unitDescription(quote.unit),
+            mintURL: quote.mintUrl.url
         )
     }
 
