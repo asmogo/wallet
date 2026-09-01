@@ -3,8 +3,8 @@ import Cdk
 
 private struct ReceiveRequestFailure {
     enum Retry {
-        case setReusableAmount(UInt64)
-        case amountlessOffer(forceNew: Bool, unit: String?)
+        case setReusableAmount(amount: UInt64, mintURL: String?, unit: String)
+        case amountlessOffer(forceNew: Bool, mintURL: String?, unit: String)
         case create(method: PaymentMethodKind, amountless: Bool, forceNew: Bool)
 
         var method: PaymentMethodKind {
@@ -125,7 +125,7 @@ struct ReceiveLightningView: View {
                                 }
                                 if quote.paymentMethod == .bolt12 {
                                     Button {
-                                        createNewAmountlessOffer(unit: quote.unit)
+                                        createNewAmountlessOffer(for: quote)
                                     } label: {
                                         Label(
                                             isCreatingRequest ? "Creating…" : "New reusable invoice",
@@ -308,10 +308,10 @@ struct ReceiveLightningView: View {
     private func retryRequest(_ retry: ReceiveRequestFailure.Retry) {
         requestFailure = nil
         switch retry {
-        case .setReusableAmount(let amount):
-            setReusableOfferAmount(amount)
-        case .amountlessOffer(let forceNew, let unit):
-            loadOrCreateAmountlessOffer(forceNew: forceNew, unit: unit)
+        case .setReusableAmount(let amount, let mintURL, let unit):
+            setReusableOfferAmount(amount, mintURL: mintURL, unit: unit)
+        case .amountlessOffer(let forceNew, let mintURL, let unit):
+            loadOrCreateAmountlessOffer(forceNew: forceNew, mintURL: mintURL, unit: unit)
         case .create(let method, let amountless, let forceNew):
             createRequest(method: method, amountless: amountless, forceNew: forceNew)
         }
@@ -558,7 +558,7 @@ struct ReceiveLightningView: View {
                                 Label("Share", systemImage: "square.and.arrow.up")
                             }
                             Button {
-                                createNewAmountlessOffer(unit: quote.unit)
+                                createNewAmountlessOffer(for: quote)
                             } label: {
                                 Label("New reusable invoice", systemImage: "arrow.2.squarepath")
                             }
@@ -591,7 +591,7 @@ struct ReceiveLightningView: View {
                     VStack(spacing: 0) {
                         detailRow(
                             label: "Mint",
-                            value: reusableMintDisplayValue
+                            value: mintDisplayValue(for: quote) ?? "Unknown mint"
                         )
                         editableRow(
                             label: "Amount",
@@ -622,17 +622,21 @@ struct ReceiveLightningView: View {
             CashuRequestAmountPickerSheet(
                 currentAmount: quote.amount,
                 unit: quote.unit,
-                onSelect: { setReusableOfferAmount($0) }
+                onSelect: {
+                    setReusableOfferAmount($0, mintURL: quote.mintURL, unit: quote.unit)
+                }
             )
         }
     }
 
-    /// Friendly name of the offer's issuing mint for the read-only Mint row. A
-    /// BOLT12 offer is bound to one mint, so this never shows "Any mint" in
-    /// practice — the fallback only guards a missing active mint.
-    private var reusableMintDisplayValue: String {
-        guard let mint = walletManager.activeMint else { return "Any mint" }
-        return mint.name.isEmpty ? extractMintHost(mint.url) : mint.name
+    /// Friendly name of the quote's issuing mint. A quote remains bound to this
+    /// mint even if the user changes the wallet's active mint later.
+    private func mintDisplayValue(for quote: MintQuoteInfo) -> String? {
+        guard let mintURL = quote.mintURL else { return nil }
+        guard let mint = walletManager.mints.first(where: { $0.url == mintURL }) else {
+            return extractMintHost(mintURL)
+        }
+        return mint.name.isEmpty ? extractMintHost(mintURL) : mint.name
     }
 
     /// Full-screen success shown once payment is detected — the exact same
@@ -657,10 +661,10 @@ struct ReceiveLightningView: View {
                 value: formatQuoteAmount(amount, unit: quote.unit)
             ))
         }
-        if let mint = walletManager.activeMint {
+        if let mint = mintDisplayValue(for: quote) {
             rows.append(.init(
                 label: "Mint",
-                value: extractMintHost(mint.url)
+                value: mint
             ))
         }
         return rows
@@ -1084,12 +1088,14 @@ struct ReceiveLightningView: View {
         }
 
         let expiry = quote.expiry.flatMap { $0 > 0 ? Date(timeIntervalSince1970: Double($0)) : nil }
+        let mintURLs = quote.mintURL.map { [$0] } ?? []
         CashuRequestStore.shared.upsertQuoteIntent(
             rail: rail,
             quoteId: quote.id,
             encoded: quote.request,
             amount: quote.amount,
-            mints: walletManager.activeMint.map { [$0.url] } ?? [],
+            unit: quote.unit,
+            mints: mintURLs,
             reusable: reusable,
             expiry: expiry
         )
@@ -1100,12 +1106,18 @@ struct ReceiveLightningView: View {
     /// a fresh fixed-amount offer. Setting an amount is how the user turns an "Any"
     /// reusable invoice into a fixed-amount one. The old QR stays on screen until
     /// the new offer is ready, so the keypad never flashes back in.
-    private func setReusableOfferAmount(_ amount: UInt64?) {
+    private func setReusableOfferAmount(
+        _ amount: UInt64?,
+        mintURL: String? = nil,
+        unit: String? = nil
+    ) {
+        let requestedMintURL = mintURL ?? mintQuote?.mintURL ?? walletManager.activeMint?.url
+        let requestedUnit = unit ?? mintQuote?.unit ?? effectiveUnit
         let target: UInt64? = (amount ?? 0) > 0 ? amount : nil
         isAmountless = (target == nil)
 
         guard let target else {
-            loadOrCreateAmountlessOffer()
+            loadOrCreateAmountlessOffer(mintURL: requestedMintURL, unit: requestedUnit)
             return
         }
 
@@ -1119,12 +1131,22 @@ struct ReceiveLightningView: View {
 
         Task { @MainActor in
             do {
-                mintQuote = try await walletManager.createMintQuote(amount: target, method: .bolt12)
+                guard let requestedMintURL else { throw WalletError.notInitialized }
+                mintQuote = try await walletManager.createMintQuote(
+                    amount: target,
+                    method: .bolt12,
+                    targetMintURL: requestedMintURL,
+                    unit: requestedUnit
+                )
             } catch {
                 requestFailure = ReceiveRequestFailure(
                     title: requestFailureTitle(for: .bolt12),
                     message: error.userFacingWalletMessage,
-                    retry: .setReusableAmount(target)
+                    retry: .setReusableAmount(
+                        amount: target,
+                        mintURL: requestedMintURL,
+                        unit: requestedUnit
+                    )
                 )
             }
             isCreatingRequest = false
@@ -1133,7 +1155,13 @@ struct ReceiveLightningView: View {
 
     /// Reopen the mint's existing amountless offer by default. The explicit new
     /// action deliberately bypasses that lookup and leaves the prior offer valid.
-    private func loadOrCreateAmountlessOffer(forceNew: Bool = false, unit: String? = nil) {
+    private func loadOrCreateAmountlessOffer(
+        forceNew: Bool = false,
+        mintURL: String? = nil,
+        unit: String? = nil
+    ) {
+        let requestedMintURL = mintURL ?? walletManager.activeMint?.url
+        let requestedUnit = unit ?? effectiveUnit
         isCreatingRequest = true
         requestFailure = nil
         isAmountless = true
@@ -1149,13 +1177,19 @@ struct ReceiveLightningView: View {
         Task { @MainActor in
             do {
                 let quote: MintQuoteInfo
-                if !forceNew, let existing = try await walletManager.existingAmountlessOffer() {
+                guard let requestedMintURL else { throw WalletError.notInitialized }
+                if !forceNew,
+                   let existing = try await walletManager.existingAmountlessOffer(
+                       mintURL: requestedMintURL,
+                       unit: requestedUnit
+                   ) {
                     quote = existing
                 } else {
                     quote = try await walletManager.createMintQuote(
                         amount: nil,
                         method: .bolt12,
-                        unit: unit ?? effectiveUnit
+                        targetMintURL: requestedMintURL,
+                        unit: requestedUnit
                     )
                 }
                 quoteCreatedAt = Date()
@@ -1164,16 +1198,24 @@ struct ReceiveLightningView: View {
                 requestFailure = ReceiveRequestFailure(
                     title: requestFailureTitle(for: .bolt12),
                     message: error.userFacingWalletMessage,
-                    retry: .amountlessOffer(forceNew: forceNew, unit: unit)
+                    retry: .amountlessOffer(
+                        forceNew: forceNew,
+                        mintURL: requestedMintURL,
+                        unit: requestedUnit
+                    )
                 )
             }
             isCreatingRequest = false
         }
     }
 
-    private func createNewAmountlessOffer(unit: String) {
+    private func createNewAmountlessOffer(for quote: MintQuoteInfo) {
         amountString = ""
-        loadOrCreateAmountlessOffer(forceNew: true, unit: unit)
+        loadOrCreateAmountlessOffer(
+            forceNew: true,
+            mintURL: quote.mintURL,
+            unit: quote.unit
+        )
     }
 
     private func createRequest(method requestMethod: PaymentMethodKind, amountless: Bool, forceNew: Bool = false) {
@@ -1334,7 +1376,8 @@ struct ReceiveLightningView: View {
                 state: .issued,
                 expiry: refreshed.expiry,
                 createdAt: refreshed.createdAt,
-                unit: refreshed.unit
+                unit: refreshed.unit,
+                mintURL: refreshed.mintURL
             )
             await completeReceivedQuote(mintInBackground: false)
             return

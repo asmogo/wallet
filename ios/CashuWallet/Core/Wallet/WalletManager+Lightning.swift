@@ -25,9 +25,15 @@ extension WalletManager {
         }
     }
 
-    func existingAmountlessOffer() async throws -> MintQuoteInfo? {
-        try await operationCoordinator.perform(kind: .mintQuote) {
-            try await self.lightningService.existingAmountlessOffer()
+    func existingAmountlessOffer(
+        mintURL: String,
+        unit: String
+    ) async throws -> MintQuoteInfo? {
+        try await operationCoordinator.perform(kind: .mintQuote, resourceID: mintURL) {
+            try await self.lightningService.existingAmountlessOffer(
+                mintURL: mintURL,
+                unit: PaymentRequestDecoder.currencyUnit(from: unit)
+            )
         }
     }
 
