@@ -38,6 +38,7 @@ struct ReceiveLightningView: View {
     @State private var isCreatingRequest = false
     @State private var isMinting = false
     @State private var isCheckingPayment = false
+    @State private var mintRetryStatus = MintQuoteRetryStatus()
     @State private var isPaid = false
     @State private var requestFailure: ReceiveRequestFailure?
     @State private var showMintPicker = false
@@ -228,6 +229,25 @@ struct ReceiveLightningView: View {
                 // `isAmountless` is owned by the picked `ReceiveMethodOption` now
                 // (set in `applyMethodOption`); don't recompute it from the empty
                 // field here — that would fight the user's explicit picker choice.
+            }
+            .onChange(of: mintQuote?.id) { _, quoteID in
+                mintRetryStatus = quoteID.map(walletManager.mintQuoteRetryStatus)
+                    ?? MintQuoteRetryStatus()
+            }
+            .onChange(of: mintRetryStatus.state) { oldState, newState in
+                guard oldState != newState else { return }
+                switch newState {
+                case .none:
+                    break
+                case .retryScheduled:
+                    AccessibilityNotification.Announcement(
+                        "Payment received. Ecash issuance will retry automatically."
+                    ).post()
+                case .needsAttention:
+                    AccessibilityNotification.Announcement(
+                        "Payment received, but ecash is still pending. Retry now is available."
+                    ).post()
+                }
             }
             .onChange(of: entryUnit) { oldUnit, newUnit in
                 // Only the sats↔fiat display flip re-expresses the typed string.
@@ -882,12 +902,12 @@ struct ReceiveLightningView: View {
                     ProgressView()
                         .tint(.accentColor)
                         .scaleEffect(0.8)
-                    Text(isMinting ? "Minting..." : "Checking...")
+                    Text(isMinting ? "Issuing ecash..." : "Checking...")
                 }
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
                 .transition(.opacity)
-            } else if isExpired {
+            } else if isExpired, (mintQuote?.mintableAmount ?? 0) == 0 {
                 HStack(spacing: 6) {
                     Image(systemName: "xmark.circle.fill")
                         .accessibilityHidden(true)
@@ -897,6 +917,48 @@ struct ReceiveLightningView: View {
                 // Same severity token as the countdown above it, which already
                 // moved off Color.red — the two states of one clock.
                 .foregroundStyle(ErrorSeverity.error.foreground)
+                .transition(.opacity)
+            } else if (mintQuote?.mintableAmount ?? 0) > 0,
+                      mintRetryStatus.state != .none {
+                VStack(spacing: 8) {
+                    HStack(spacing: 6) {
+                        Image(
+                            systemName: mintRetryStatus.state == .needsAttention
+                                ? "exclamationmark.triangle.fill"
+                                : "clock.arrow.circlepath"
+                        )
+                        .accessibilityHidden(true)
+                        Text(
+                            mintRetryStatus.state == .needsAttention
+                                ? "Payment received. Ecash is still pending."
+                                : "Payment received. Retrying ecash automatically."
+                        )
+                    }
+                    .font(.subheadline.weight(.medium))
+                    .foregroundStyle(
+                        mintRetryStatus.state == .needsAttention
+                            ? ErrorSeverity.error.foreground
+                            : Color.secondary
+                    )
+
+                    Button {
+                        retryPendingMintQuote()
+                    } label: {
+                        Label("Retry now", systemImage: "arrow.clockwise")
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
+                    .accessibilityHint("Checks the payment and tries to issue the pending ecash again")
+                }
+                .transition(.opacity)
+            } else if (mintQuote?.mintableAmount ?? 0) > 0 {
+                HStack(spacing: 6) {
+                    Image(systemName: "clock.badge.checkmark")
+                        .accessibilityHidden(true)
+                    Text("Payment received. Ecash issuance is pending.")
+                }
+                .font(.subheadline.weight(.medium))
+                .foregroundStyle(.secondary)
                 .transition(.opacity)
             } else if let quote = mintQuote,
                       quote.paymentMethod == .bolt12,
@@ -941,6 +1003,7 @@ struct ReceiveLightningView: View {
         .animation(.easeInOut(duration: 0.2), value: isCheckingPayment)
         .animation(.easeInOut(duration: 0.2), value: isMinting)
         .animation(.easeInOut(duration: 0.2), value: isExpired)
+        .animation(.easeInOut(duration: 0.2), value: mintRetryStatus.state)
     }
 
     private var pendingStatusText: String {
@@ -1511,6 +1574,9 @@ struct ReceiveLightningView: View {
             let updatedQuote = try await walletManager.checkMintQuote(quoteId: quote.id)
             guard !Task.isCancelled, mintQuote?.id == quote.id else { return }
             mintQuote = updatedQuote
+            if updatedQuote.mintableAmount == 0 {
+                mintRetryStatus = MintQuoteRetryStatus()
+            }
 
             if updatedQuote.paymentMethod == .onchain, updatedQuote.state == .pending {
                 await refreshOnchainObservation(for: updatedQuote)
@@ -1572,6 +1638,7 @@ struct ReceiveLightningView: View {
             return
         }
         mintQuote = result.quote
+        mintRetryStatus = result.retryStatus
         guard result.hasSettledPayment else {
             // A transient mint failure leaves the paid/issued delta intact in
             // the durable quote. This screen and the app-wide foreground sweep
@@ -1596,6 +1663,7 @@ struct ReceiveLightningView: View {
             return
         }
         mintQuote = result.quote
+        mintRetryStatus = result.retryStatus
 
         // Only confirmed issuance earns receipt feedback. The reusable offer
         // remains on screen and keeps monitoring after every payment.
@@ -1606,6 +1674,17 @@ struct ReceiveLightningView: View {
                 homeHaptic: false
             )
             HapticFeedback.notification(.success)
+        }
+    }
+
+    private func retryPendingMintQuote() {
+        guard let quote = mintQuote, quote.mintableAmount > 0, !isMinting else { return }
+        Task { @MainActor in
+            if quote.paymentMethod == .bolt12 {
+                await reconcileReusableOffer(quote)
+            } else {
+                await mintQuoteIfReady(quote)
+            }
         }
     }
 

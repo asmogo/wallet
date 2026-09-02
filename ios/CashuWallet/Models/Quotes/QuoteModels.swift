@@ -51,6 +51,7 @@ struct MintQuoteReconciliationResult {
     let quote: MintQuoteInfo
     let newlyIssued: UInt64
     let hadOutstandingPayment: Bool
+    let retryStatus: MintQuoteRetryStatus
 
     var remainingAmount: UInt64 { quote.mintableAmount }
     var hasSettledPayment: Bool { quote.hasSettledPayment }
@@ -58,7 +59,8 @@ struct MintQuoteReconciliationResult {
     init(
         observed: MintQuoteInfo,
         mintedAmount: UInt64 = 0,
-        verified: MintQuoteInfo? = nil
+        verified: MintQuoteInfo? = nil,
+        retryStatus: MintQuoteRetryStatus = MintQuoteRetryStatus()
     ) {
         var reconciled = verified ?? observed
         reconciled.amountPaid = max(reconciled.amountPaid, observed.amountPaid)
@@ -81,6 +83,146 @@ struct MintQuoteReconciliationResult {
         quote = reconciled
         newlyIssued = max(mintedAmount, verifiedAdvance)
         hadOutstandingPayment = observed.amountPaid > observed.amountIssued
+        self.retryStatus = retryStatus
+    }
+}
+
+/// What the wallet can honestly promise after a paid quote fails to issue.
+enum MintQuoteRetryState: String, Codable, Equatable {
+    case none
+    case retryScheduled
+    case needsAttention
+}
+
+struct MintQuoteRetryStatus: Equatable {
+    var state: MintQuoteRetryState = .none
+    var nextRetryAt: Date?
+    var failureCount = 0
+}
+
+/// Durable maintenance metadata. CDK's paid/issued counters remain the money
+/// ledger; this record only bounds when the app checks again and preserves the
+/// truthful retry state across process restarts.
+struct MintQuoteScheduleRecord: Codable, Equatable {
+    var firstObservedAt: TimeInterval
+    var lastAttemptAt: TimeInterval?
+    var nextAttemptAt: TimeInterval = 0
+    var consecutiveFailures = 0
+    var hadOutstandingPayment = false
+    var isReusable = false
+    var isComplete = false
+}
+
+enum MintQuoteSchedulePolicy {
+    static let passiveBatchLimit = 2
+    static let forcedBatchLimit = 20
+    private static let recentQuoteWindow: TimeInterval = 2 * 60
+    private static let recentQuoteInterval: TimeInterval = 10
+    private static let idleQuoteInterval: TimeInterval = 60
+    private static let needsAttentionFailureCount = 4
+    private static let failureDelays: [TimeInterval] = [5, 15, 30, 60, 5 * 60]
+
+    struct Selection {
+        let quoteIDs: [String]
+        let records: [String: MintQuoteScheduleRecord]
+    }
+
+    static func select(
+        quoteIDs: Set<String>,
+        existing: [String: MintQuoteScheduleRecord],
+        now: Date,
+        force: Bool
+    ) -> Selection {
+        let nowValue = now.timeIntervalSince1970
+        var records = existing.filter { quoteIDs.contains($0.key) }
+        for quoteID in quoteIDs where !quoteID.isEmpty && records[quoteID] == nil {
+            records[quoteID] = MintQuoteScheduleRecord(firstObservedAt: nowValue)
+        }
+
+        let limit = force ? forcedBatchLimit : passiveBatchLimit
+        let selected = quoteIDs
+            .filter { quoteID in
+                guard let record = records[quoteID] else { return false }
+                return !record.isComplete && (force || record.nextAttemptAt <= nowValue)
+            }
+            .sorted { lhs, rhs in
+                guard let left = records[lhs], let right = records[rhs] else {
+                    return lhs < rhs
+                }
+                let leftAttempt = left.lastAttemptAt ?? -TimeInterval.greatestFiniteMagnitude
+                let rightAttempt = right.lastAttemptAt ?? -TimeInterval.greatestFiniteMagnitude
+                if leftAttempt != rightAttempt { return leftAttempt < rightAttempt }
+                if left.nextAttemptAt != right.nextAttemptAt {
+                    return left.nextAttemptAt < right.nextAttemptAt
+                }
+                return lhs < rhs
+            }
+            .prefix(limit)
+
+        for quoteID in selected {
+            guard var record = records[quoteID] else { continue }
+            record.lastAttemptAt = nowValue
+            record.nextAttemptAt = nowValue + (failureDelays.first ?? 5)
+            records[quoteID] = record
+        }
+        return Selection(quoteIDs: Array(selected), records: records)
+    }
+
+    static func observed(
+        previous: MintQuoteScheduleRecord?,
+        quote: MintQuoteInfo,
+        now: Date
+    ) -> MintQuoteScheduleRecord {
+        let nowValue = now.timeIntervalSince1970
+        var record = previous ?? MintQuoteScheduleRecord(firstObservedAt: nowValue)
+        let reusable = quote.paymentMethod == .bolt12
+        let expired = quote.expiry.map { $0 > 0 && UInt64(nowValue) >= $0 } ?? false
+        let complete = !reusable && (expired || quote.state == .issued || quote.hasSettledPayment)
+        let age = max(0, nowValue - record.firstObservedAt)
+        let interval = age < recentQuoteWindow ? recentQuoteInterval : idleQuoteInterval
+
+        record.lastAttemptAt = nowValue
+        record.nextAttemptAt = complete ? .greatestFiniteMagnitude : nowValue + interval
+        record.consecutiveFailures = 0
+        record.hadOutstandingPayment = false
+        record.isReusable = reusable
+        record.isComplete = complete
+        return record
+    }
+
+    static func failed(
+        previous: MintQuoteScheduleRecord?,
+        now: Date,
+        hadOutstandingPayment: Bool,
+        isReusable: Bool
+    ) -> MintQuoteScheduleRecord {
+        let nowValue = now.timeIntervalSince1970
+        var record = previous ?? MintQuoteScheduleRecord(firstObservedAt: nowValue)
+        let failures = record.consecutiveFailures == Int.max
+            ? Int.max
+            : record.consecutiveFailures + 1
+        let delayIndex = min(max(0, failures - 1), failureDelays.count - 1)
+
+        record.lastAttemptAt = nowValue
+        record.nextAttemptAt = nowValue + failureDelays[delayIndex]
+        record.consecutiveFailures = failures
+        record.hadOutstandingPayment = hadOutstandingPayment || record.hadOutstandingPayment
+        record.isReusable = isReusable || record.isReusable
+        record.isComplete = false
+        return record
+    }
+
+    static func retryStatus(for record: MintQuoteScheduleRecord) -> MintQuoteRetryStatus {
+        guard record.hadOutstandingPayment, record.consecutiveFailures > 0 else {
+            return MintQuoteRetryStatus()
+        }
+        return MintQuoteRetryStatus(
+            state: record.consecutiveFailures >= needsAttentionFailureCount
+                ? .needsAttention
+                : .retryScheduled,
+            nextRetryAt: Date(timeIntervalSince1970: record.nextAttemptAt),
+            failureCount: record.consecutiveFailures
+        )
     }
 }
 

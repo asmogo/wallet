@@ -9,6 +9,7 @@ import kotlinx.serialization.json.Json
 import com.cashu.me.Core.Protocols.StorageKeys
 import com.cashu.me.Models.CashuRequest
 import com.cashu.me.Models.MintInfo
+import com.cashu.me.Models.MintQuoteScheduleRecord
 import com.cashu.me.Models.PendingReceiveToken
 import com.cashu.me.Models.WalletTransaction
 
@@ -54,6 +55,11 @@ class WalletStore(
         loadMap(StorageKeys.walletMintQuoteTimestamps, Long.serializer())
     fun saveMintQuoteTimestamps(timestamps: Map<String, Long>) =
         saveMap(StorageKeys.walletMintQuoteTimestamps, Long.serializer(), timestamps)
+
+    fun loadMintQuoteSchedules(): Map<String, MintQuoteScheduleRecord> =
+        loadMap(StorageKeys.walletMintQuoteSchedules, MintQuoteScheduleRecord.serializer())
+    fun saveMintQuoteSchedules(schedules: Map<String, MintQuoteScheduleRecord>) =
+        saveMap(StorageKeys.walletMintQuoteSchedules, MintQuoteScheduleRecord.serializer(), schedules)
 
     fun loadProcessedNPCQuotes(): List<String> = loadList(StorageKeys.walletProcessedNPCQuotes, String.serializer())
     fun saveProcessedNPCQuotes(quotes: List<String>) =

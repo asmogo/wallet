@@ -53,6 +53,10 @@ interface CdkWalletGateway {
     suspend fun unitBalanceIfExists(mintUrl: String, unit: String): Long?
     suspend fun createMintQuote(amount: Long?, method: PaymentMethodKind, mintUrl: String, unit: String = "sat"): MintQuoteInfo
     suspend fun checkMintQuote(quoteId: String): MintQuoteInfo
+
+    /** Last durable local quote snapshot, without contacting the mint. */
+    suspend fun storedMintQuote(quoteId: String): MintQuoteInfo? = null
+
     fun subscribeToMintQuote(quoteId: String): Flow<MintQuoteInfo>
     suspend fun listUnissuedMintQuotes(): List<MintQuoteInfo>
     suspend fun mintTokens(quoteId: String): Long

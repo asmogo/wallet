@@ -239,6 +239,29 @@ class LightningService: ObservableObject {
             "The mint context for this receive request is unavailable. Create a new request and try again."
         )
     }
+
+    /// Last durable local quote snapshot without contacting the mint. Recovery
+    /// uses this only to tell the truth after a status request fails: a cached
+    /// paid/issued delta is enough to say that ecash is still pending, but never
+    /// enough to claim success.
+    func storedMintQuote(quoteId: String) async -> MintQuoteInfo? {
+        guard let database = walletDatabase() else { return nil }
+        let quote: MintQuote
+        do {
+            guard let stored = try await database.getMintQuote(quoteId: quoteId) else {
+                return nil
+            }
+            quote = stored
+        } catch {
+            return nil
+        }
+        let method = PaymentMethodKind.from(quote.paymentMethod) ?? .bolt11
+        return mintQuoteInfo(
+            from: quote,
+            fallbackAmount: quote.amount?.value,
+            paymentMethod: method
+        )
+    }
     
     /// Mint tokens after invoice is paid
     /// - Parameter quoteId: The quote ID to mint

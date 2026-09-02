@@ -401,6 +401,11 @@ class MintIntegrationTestSuite: IntegrationTestBase {
 
         // Open a fresh repository over the same durable store at the exact
         // failure boundary: payment is recorded, but no ecash was issued.
+        // This deliberately proves process/database-handle recovery, not a
+        // seed-only restore into an empty database. NUT-09 cannot discover a
+        // mint-generated quote id, and a BOLT12 quote additionally needs its
+        // stored NUT-20 signing key association. A true database-loss test
+        // requires an upstream/exported quote-backup format first.
         // Keep the first FFI handle alive because explicitly destroying a CDK
         // Tokio runtime inside an async XCTest context can itself panic.
         let reopenedRepository = try WalletRepository(

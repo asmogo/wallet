@@ -12,6 +12,36 @@ enum class MintQuoteState {
     Unknown,
 }
 
+/** What the wallet can honestly promise after a paid quote fails to issue. */
+@Serializable
+enum class MintQuoteRetryState {
+    None,
+    RetryScheduled,
+    NeedsAttention,
+}
+
+/**
+ * Durable maintenance metadata kept outside CDK's money ledger. CDK remains
+ * authoritative for paid/issued counters; this record only bounds when the app
+ * asks again and preserves retry truth across process restarts.
+ */
+@Serializable
+data class MintQuoteScheduleRecord(
+    val firstObservedAtEpochMillis: Long,
+    val lastAttemptAtEpochMillis: Long? = null,
+    val nextAttemptAtEpochMillis: Long = 0,
+    val consecutiveFailures: Int = 0,
+    val hadOutstandingPayment: Boolean = false,
+    val isReusable: Boolean = false,
+    val isComplete: Boolean = false,
+)
+
+data class MintQuoteRetryStatus(
+    val state: MintQuoteRetryState = MintQuoteRetryState.None,
+    val nextRetryAtEpochMillis: Long? = null,
+    val failureCount: Int = 0,
+)
+
 @Serializable
 data class MintQuoteInfo(
     val id: String,

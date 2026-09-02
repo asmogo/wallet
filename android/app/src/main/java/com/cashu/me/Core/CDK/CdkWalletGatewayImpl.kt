@@ -325,6 +325,16 @@ class CdkWalletGatewayImpl : WalletGateway {
         )
     }
 
+    override suspend fun storedMintQuote(quoteId: String): MintQuoteInfo? = cdkCall {
+        database?.getMintQuote(quoteId)?.let { quote ->
+            val method = quote.paymentMethod.toDomain()
+            quote.withLocalMintQuoteMetadata(method).toDomain(
+                fallbackAmount = quote.amount?.value?.toLong(),
+                fallbackMethod = method,
+            )
+        }
+    }
+
     override fun subscribeToMintQuote(quoteId: String): Flow<MintQuoteInfo> = flow {
         val subscription = cdkCall {
             val quote = database?.getMintQuote(quoteId)

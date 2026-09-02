@@ -20,6 +20,7 @@ extension WalletManager {
                 targetMintURL: targetMintURL,
                 unit: PaymentRequestDecoder.currencyUnit(from: unit)
             )
+            self.rememberMintQuoteForScheduling(quote)
             await self.loadTransactionsAssumingWalletOperationLease()
             return quote
         }
@@ -30,16 +31,20 @@ extension WalletManager {
         unit: String
     ) async throws -> MintQuoteInfo? {
         try await operationCoordinator.perform(kind: .mintQuote, resourceID: mintURL) {
-            try await self.lightningService.existingAmountlessOffer(
+            let quote = try await self.lightningService.existingAmountlessOffer(
                 mintURL: mintURL,
                 unit: PaymentRequestDecoder.currencyUnit(from: unit)
             )
+            if let quote { self.rememberMintQuoteForScheduling(quote) }
+            return quote
         }
     }
 
     func existingOnchainMintQuote(mintURL: String? = nil) async throws -> MintQuoteInfo? {
         try await operationCoordinator.perform(kind: .mintQuote) {
-            try await self.lightningService.existingOnchainMintQuote(mintURL: mintURL)
+            let quote = try await self.lightningService.existingOnchainMintQuote(mintURL: mintURL)
+            if let quote { self.rememberMintQuoteForScheduling(quote) }
+            return quote
         }
     }
 
@@ -48,7 +53,9 @@ extension WalletManager {
             kind: .mintQuote,
             resourceID: quoteId
         ) {
-            try await self.lightningService.checkMintQuote(quoteId: quoteId)
+            let quote = try await self.lightningService.checkMintQuote(quoteId: quoteId)
+            self.rememberMintQuoteForScheduling(quote)
+            return quote
         }
     }
 

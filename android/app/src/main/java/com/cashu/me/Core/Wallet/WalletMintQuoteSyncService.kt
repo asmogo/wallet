@@ -2,6 +2,9 @@ package com.cashu.me.Core
 
 import com.cashu.me.Core.CDK.CdkWalletGateway
 import com.cashu.me.Models.MintQuoteInfo
+import com.cashu.me.Models.MintQuoteRetryStatus
+import com.cashu.me.Models.MintQuoteScheduleRecord
+import com.cashu.me.Models.PaymentMethodKind
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -10,6 +13,7 @@ internal data class MintQuoteSyncResult(
     val quote: MintQuoteInfo? = null,
     val newlyIssued: Long = 0,
     val hadOutstandingPayment: Boolean = false,
+    val retryStatus: MintQuoteRetryStatus = MintQuoteRetryStatus(),
 ) {
     val minted: Boolean get() = newlyIssued > 0
     val receivedAmount: Long? get() = newlyIssued.takeIf { it > 0 }
@@ -53,8 +57,12 @@ internal fun reconciledMintQuoteResult(
 
 internal class WalletMintQuoteSyncService private constructor(
     private val checkQuote: suspend (String) -> MintQuoteInfo,
+    private val storedQuote: suspend (String) -> MintQuoteInfo?,
     private val mintQuote: suspend (String) -> Long,
     private val quoteObserved: (String) -> Unit,
+    private val loadSchedules: () -> Map<String, MintQuoteScheduleRecord>,
+    private val saveSchedules: (Map<String, MintQuoteScheduleRecord>) -> Unit,
+    private val nowEpochMillis: () -> Long,
     private val logFailure: (String, Throwable) -> Unit,
 ) {
     /**
@@ -63,12 +71,14 @@ internal class WalletMintQuoteSyncService private constructor(
      * duplicate issuance attempts and duplicate receipt events.
      */
     private val reconciliationMutex = Mutex()
+    private val scheduleMonitor = Any()
 
     constructor(
         gateway: CdkWalletGateway,
         walletStore: WalletStore,
     ) : this(
         checkQuote = gateway::checkMintQuote,
+        storedQuote = gateway::storedMintQuote,
         mintQuote = gateway::mintTokens,
         quoteObserved = { quoteId ->
             val current = walletStore.loadMintQuoteTimestamps()
@@ -76,6 +86,9 @@ internal class WalletMintQuoteSyncService private constructor(
                 walletStore.saveMintQuoteTimestamps(current + (quoteId to System.currentTimeMillis()))
             }
         },
+        loadSchedules = walletStore::loadMintQuoteSchedules,
+        saveSchedules = walletStore::saveMintQuoteSchedules,
+        nowEpochMillis = System::currentTimeMillis,
         logFailure = { message, error -> AppLogger.wallet.error(message, error) },
     )
 
@@ -83,7 +96,44 @@ internal class WalletMintQuoteSyncService private constructor(
     internal constructor(
         checkQuote: suspend (String) -> MintQuoteInfo,
         mintQuote: suspend (String) -> Long,
-    ) : this(checkQuote, mintQuote, {}, { _, _ -> })
+        storedQuote: suspend (String) -> MintQuoteInfo? = { null },
+        loadSchedules: () -> Map<String, MintQuoteScheduleRecord> = { emptyMap() },
+        saveSchedules: (Map<String, MintQuoteScheduleRecord>) -> Unit = {},
+        nowEpochMillis: () -> Long = System::currentTimeMillis,
+    ) : this(
+        checkQuote = checkQuote,
+        storedQuote = storedQuote,
+        mintQuote = mintQuote,
+        quoteObserved = {},
+        loadSchedules = loadSchedules,
+        saveSchedules = saveSchedules,
+        nowEpochMillis = nowEpochMillis,
+        logFailure = { _, _ -> },
+    )
+
+    /**
+     * Select a fair, bounded slice for one sweep and reserve it before any
+     * network suspension. Explicit refresh bypasses due times but remains
+     * bounded so a large historical ledger cannot monopolize the wallet.
+     */
+    fun selectQuoteIdsForSync(quoteIds: Collection<String>, force: Boolean): List<String> =
+        synchronized(scheduleMonitor) {
+            val selection = MintQuoteSchedulePolicy.select(
+                quoteIds = quoteIds,
+                existing = schedulesLocked(),
+                nowEpochMillis = nowEpochMillis(),
+                force = force,
+            )
+            persistSchedulesLocked(selection.records)
+            selection.quoteIds
+        }
+
+    /** Rehydrate a paid-but-unissued status when its receive screen reopens. */
+    fun retryStatus(quoteId: String): MintQuoteRetryStatus = synchronized(scheduleMonitor) {
+        schedulesLocked()[quoteId]
+            ?.let(MintQuoteSchedulePolicy::retryStatus)
+            ?: MintQuoteRetryStatus()
+    }
 
     /**
      * Check -> mint -> verify one persisted quote. The quote stays unresolved
@@ -100,10 +150,17 @@ internal class WalletMintQuoteSyncService private constructor(
                 if (!isMissingQuoteError(error)) {
                     logFailure("Failed to refresh pending quote $quoteId", error)
                 }
-                return@withLock MintQuoteSyncResult()
+                val local = runCatching { storedQuote(quoteId) }.getOrNull()
+                val retryStatus = recordFailure(quoteId, local)
+                return@withLock MintQuoteSyncResult(
+                    quote = local,
+                    hadOutstandingPayment = local?.mintableAmount?.let { it > 0 } == true,
+                    retryStatus = retryStatus,
+                )
             }
 
             if (observed.mintableAmount == 0L) {
+                recordObservation(observed)
                 return@withLock reconciledMintQuoteResult(observed)
             }
 
@@ -128,18 +185,65 @@ internal class WalletMintQuoteSyncService private constructor(
             }
             val result = reconciledMintQuoteResult(observed, mintedAmount, verified)
 
-            if (result.remainingAmount > 0L && mintError != null) {
-                logFailure(
-                    "Paid mint quote remains unissued: $quoteId " +
-                        "remaining=${result.remainingAmount}",
-                    mintError,
+            if (result.remainingAmount > 0L) {
+                val failure = mintError ?: IllegalStateException(
+                    "Mint quote made no verified issuance progress.",
                 )
+                logFailure(
+                    "Paid mint quote remains unissued: $quoteId remaining=${result.remainingAmount}",
+                    failure,
+                )
+                return@withLock result.copy(retryStatus = recordFailure(quoteId, result.quote))
             }
+            recordObservation(checkNotNull(result.quote))
             result
         }
 
     fun rememberMintQuoteTimestamp(quoteId: String) {
         quoteObserved(quoteId)
+        synchronized(scheduleMonitor) {
+            val schedules = schedulesLocked().toMutableMap()
+            schedules.putIfAbsent(
+                quoteId,
+                MintQuoteScheduleRecord(firstObservedAtEpochMillis = nowEpochMillis()),
+            )
+            persistSchedulesLocked(schedules)
+        }
+    }
+
+    private fun recordObservation(quote: MintQuoteInfo) {
+        synchronized(scheduleMonitor) {
+            val schedules = schedulesLocked().toMutableMap()
+            schedules[quote.id] = MintQuoteSchedulePolicy.observed(
+                previous = schedules[quote.id],
+                quote = quote,
+                nowEpochMillis = nowEpochMillis(),
+            )
+            persistSchedulesLocked(schedules)
+        }
+    }
+
+    private fun recordFailure(quoteId: String, quote: MintQuoteInfo?): MintQuoteRetryStatus =
+        synchronized(scheduleMonitor) {
+            val schedules = schedulesLocked().toMutableMap()
+            val record = MintQuoteSchedulePolicy.failed(
+                previous = schedules[quoteId],
+                nowEpochMillis = nowEpochMillis(),
+                hadOutstandingPayment = quote?.mintableAmount?.let { it > 0 } == true,
+                isReusable = quote?.paymentMethod == PaymentMethodKind.Bolt12,
+            )
+            schedules[quoteId] = record
+            persistSchedulesLocked(schedules)
+            MintQuoteSchedulePolicy.retryStatus(record)
+        }
+
+    // Always reload at the wallet boundary. Wallet replacement clears or
+    // restores this store while the manager remains alive; retaining a process
+    // cache here could otherwise resurrect retry metadata from the old wallet.
+    private fun schedulesLocked(): Map<String, MintQuoteScheduleRecord> = loadSchedules()
+
+    private fun persistSchedulesLocked(schedules: Map<String, MintQuoteScheduleRecord>) {
+        saveSchedules(schedules)
     }
 
     fun isAlreadyIssuedMintError(error: Throwable): Boolean {

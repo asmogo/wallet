@@ -1,6 +1,8 @@
 package com.cashu.me.Core
 
 import com.cashu.me.Models.MintQuoteInfo
+import com.cashu.me.Models.MintQuoteRetryState
+import com.cashu.me.Models.MintQuoteScheduleRecord
 import com.cashu.me.Models.MintQuoteState
 import com.cashu.me.Models.PaymentMethodKind
 import kotlinx.coroutines.Dispatchers
@@ -68,9 +70,70 @@ class WalletMintQuoteSyncServiceTest {
 
         assertFalse(failed.hasSettledPayment)
         assertEquals(8L, failed.remainingAmount)
+        assertEquals(MintQuoteRetryState.RetryScheduled, failed.retryStatus.state)
         assertEquals(8L, recovered.newlyIssued)
         assertTrue(recovered.hasSettledPayment)
+        assertEquals(MintQuoteRetryState.None, recovered.retryStatus.state)
         assertEquals(2, ledger.mintCalls)
+    }
+
+    @Test
+    fun `check failure uses durable paid snapshot and reports a scheduled retry`() = runBlocking {
+        val cached = MintQuoteInfo(
+            id = "reusable-quote",
+            request = "lno1test",
+            amount = null,
+            isAmountless = true,
+            paymentMethod = PaymentMethodKind.Bolt12,
+            state = MintQuoteState.Paid,
+            expiryEpochSeconds = null,
+            mintUrl = "https://mint.example",
+            amountPaid = 5,
+            amountIssued = 0,
+        )
+        val service = WalletMintQuoteSyncService(
+            checkQuote = { error("mint temporarily unavailable") },
+            storedQuote = { cached },
+            mintQuote = { error("must not mint without a status check") },
+            nowEpochMillis = { 10_000 },
+        )
+
+        val result = service.syncPendingMintQuote(cached.id)
+
+        assertEquals(cached, result.quote)
+        assertEquals(5L, result.remainingAmount)
+        assertEquals(MintQuoteRetryState.RetryScheduled, result.retryStatus.state)
+        assertEquals(15_000L, result.retryStatus.nextRetryAtEpochMillis)
+    }
+
+    @Test
+    fun `wallet boundary storage reset clears retry state immediately`() {
+        var schedules = mapOf(
+            "old-quote" to MintQuoteScheduleRecord(
+                firstObservedAtEpochMillis = 1_000,
+                consecutiveFailures = 4,
+                hadOutstandingPayment = true,
+                isReusable = true,
+            ),
+        )
+        val service = WalletMintQuoteSyncService(
+            checkQuote = { error("unused") },
+            mintQuote = { error("unused") },
+            loadSchedules = { schedules },
+            saveSchedules = { schedules = it },
+        )
+
+        assertEquals(
+            MintQuoteRetryState.NeedsAttention,
+            service.retryStatus("old-quote").state,
+        )
+
+        // WalletStore.removeAllWalletData() changes the durable source while
+        // WalletManager remains alive. The service must not retain the old
+        // wallet's retry metadata in memory.
+        schedules = emptyMap()
+
+        assertEquals(MintQuoteRetryState.None, service.retryStatus("old-quote").state)
     }
 
     @Test

@@ -100,6 +100,149 @@ final class MintQuoteReconciliationResultTests: XCTestCase {
     }
 }
 
+final class MintQuoteSchedulePolicyTests: XCTestCase {
+    func testPassiveSweepsAreBoundedAndRotateFairly() {
+        let ids = Set((1...5).map { "quote-\($0)" })
+        let now = Date(timeIntervalSince1970: 1_000)
+        let first = MintQuoteSchedulePolicy.select(
+            quoteIDs: ids,
+            existing: [:],
+            now: now,
+            force: false
+        )
+        let second = MintQuoteSchedulePolicy.select(
+            quoteIDs: ids,
+            existing: first.records,
+            now: now,
+            force: false
+        )
+
+        XCTAssertEqual(first.quoteIDs.count, MintQuoteSchedulePolicy.passiveBatchLimit)
+        XCTAssertEqual(second.quoteIDs.count, MintQuoteSchedulePolicy.passiveBatchLimit)
+        XCTAssertTrue(Set(first.quoteIDs).isDisjoint(with: second.quoteIDs))
+    }
+
+    func testForcedSweepBypassesDueTimeButStaysBounded() {
+        let ids = Set((1...30).map { "quote-\($0)" })
+        let future = Dictionary(uniqueKeysWithValues: ids.map {
+            ($0, MintQuoteScheduleRecord(
+                firstObservedAt: 1,
+                nextAttemptAt: .greatestFiniteMagnitude
+            ))
+        })
+
+        XCTAssertTrue(MintQuoteSchedulePolicy.select(
+            quoteIDs: ids,
+            existing: future,
+            now: Date(timeIntervalSince1970: 2_000),
+            force: false
+        ).quoteIDs.isEmpty)
+        XCTAssertEqual(MintQuoteSchedulePolicy.select(
+            quoteIDs: ids,
+            existing: future,
+            now: Date(timeIntervalSince1970: 2_000),
+            force: true
+        ).quoteIDs.count, MintQuoteSchedulePolicy.forcedBatchLimit)
+    }
+
+    func testPaidFailuresEscalateFromRetryScheduledToNeedsAttention() {
+        var record: MintQuoteScheduleRecord?
+        record = nil
+        for failure in 0..<3 {
+            record = MintQuoteSchedulePolicy.failed(
+                previous: record,
+                now: Date(timeIntervalSince1970: TimeInterval(failure * 10)),
+                hadOutstandingPayment: true,
+                isReusable: true
+            )
+        }
+        XCTAssertEqual(
+            MintQuoteSchedulePolicy.retryStatus(for: record!).state,
+            .retryScheduled
+        )
+
+        record = MintQuoteSchedulePolicy.failed(
+            previous: record,
+            now: Date(timeIntervalSince1970: 40),
+            hadOutstandingPayment: true,
+            isReusable: true
+        )
+        XCTAssertEqual(MintQuoteSchedulePolicy.retryStatus(for: record!).state, .needsAttention)
+        XCTAssertEqual(record?.consecutiveFailures, 4)
+    }
+
+    func testWaitingFailureBacksOffWithoutClaimingPaymentNeedsAttention() {
+        let record = MintQuoteSchedulePolicy.failed(
+            previous: nil,
+            now: Date(timeIntervalSince1970: 10),
+            hadOutstandingPayment: false,
+            isReusable: true
+        )
+
+        XCTAssertEqual(MintQuoteSchedulePolicy.retryStatus(for: record).state, .none)
+        XCTAssertGreaterThan(record.nextAttemptAt, 10)
+    }
+
+    func testFailureCounterSaturatesWithoutOverflowing() {
+        let saturated = MintQuoteSchedulePolicy.failed(
+            previous: MintQuoteScheduleRecord(
+                firstObservedAt: 1,
+                consecutiveFailures: .max,
+                hadOutstandingPayment: true
+            ),
+            now: Date(timeIntervalSince1970: 10),
+            hadOutstandingPayment: true,
+            isReusable: true
+        )
+
+        XCTAssertEqual(saturated.consecutiveFailures, .max)
+        XCTAssertEqual(MintQuoteSchedulePolicy.retryStatus(for: saturated).state, .needsAttention)
+    }
+
+    func testReusableQuoteRemainsScheduledAfterIssuanceCatchesUp() {
+        let record = MintQuoteSchedulePolicy.observed(
+            previous: nil,
+            quote: quote(method: .bolt12),
+            now: Date(timeIntervalSince1970: 1_000)
+        )
+
+        XCTAssertTrue(record.isReusable)
+        XCTAssertFalse(record.isComplete)
+        XCTAssertGreaterThan(record.nextAttemptAt, 1_000)
+    }
+
+    func testSettledOneShotQuoteLeavesScheduler() {
+        let record = MintQuoteSchedulePolicy.observed(
+            previous: nil,
+            quote: quote(method: .bolt11),
+            now: Date(timeIntervalSince1970: 1_000)
+        )
+
+        XCTAssertTrue(record.isComplete)
+        XCTAssertTrue(MintQuoteSchedulePolicy.select(
+            quoteIDs: ["quote"],
+            existing: ["quote": record],
+            now: .distantFuture,
+            force: true
+        ).quoteIDs.isEmpty)
+    }
+
+    private func quote(method: PaymentMethodKind) -> MintQuoteInfo {
+        MintQuoteInfo(
+            id: "quote",
+            request: "request",
+            amount: 21,
+            isAmountless: method == .bolt12,
+            paymentMethod: method,
+            state: .issued,
+            expiry: nil,
+            createdAt: nil,
+            amountPaid: 21,
+            amountIssued: 21
+        )
+    }
+}
+
 final class WalletStoreTests: XCTestCase {
     private var store: WalletStore!
 
@@ -214,6 +357,18 @@ final class WalletStoreTests: XCTestCase {
         let ts: TimeInterval = 1_700_000_000
         store.saveMintQuoteTimestamps(["quoteA": ts])
         XCTAssertEqual(store.loadMintQuoteTimestamps()["quoteA"], ts)
+    }
+
+    func testSaveAndLoadMintQuoteSchedules() {
+        let record = MintQuoteScheduleRecord(
+            firstObservedAt: 1_700_000_000,
+            nextAttemptAt: 1_700_000_010,
+            consecutiveFailures: 2,
+            hadOutstandingPayment: true,
+            isReusable: true
+        )
+        store.saveMintQuoteSchedules(["quoteA": record])
+        XCTAssertEqual(store.loadMintQuoteSchedules()["quoteA"], record)
     }
 
     func testSaveAndLoadMintKeysetRefreshTimestamps() {
@@ -369,6 +524,18 @@ final class WalletStoreTests: XCTestCase {
         store.saveBalancesByUnit(["sat": 21, "eur": 100])
         store.removeAllWalletData()
         XCTAssertTrue(store.loadBalancesByUnit().isEmpty)
+    }
+
+    func testRemoveAllWalletDataClearsMintQuoteSchedules() {
+        store.saveMintQuoteSchedules([
+            "quote": MintQuoteScheduleRecord(
+                firstObservedAt: 1,
+                consecutiveFailures: 1,
+                hadOutstandingPayment: true
+            )
+        ])
+        store.removeAllWalletData()
+        XCTAssertTrue(store.loadMintQuoteSchedules().isEmpty)
     }
 
     func testRemoveAllWalletDataClearsRetiredPendingTokenKeys() {
