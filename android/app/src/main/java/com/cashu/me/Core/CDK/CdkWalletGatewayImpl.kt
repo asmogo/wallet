@@ -42,6 +42,7 @@ import org.cashudevkit.CurrencyUnit as CdkCurrencyUnit
 import org.cashudevkit.FinalizedMelt as CdkFinalizedMelt
 import org.cashudevkit.KeysetLoadPolicy as CdkKeysetLoadPolicy
 import org.cashudevkit.MeltConfirmOutcome as CdkMeltConfirmOutcome
+import org.cashudevkit.MeltOptions as CdkMeltOptions
 import org.cashudevkit.MeltQuote as CdkMeltQuote
 import org.cashudevkit.MintInfo as CdkMintInfo
 import org.cashudevkit.MintQuote as CdkMintQuote
@@ -108,6 +109,30 @@ internal suspend fun awaitLightningSettlementOrNull(
     } catch (_: Exception) {
         null
     }
+}
+
+/** Builds CDK's explicit amount override for amountless Lightning requests. */
+internal fun meltOptionsForLightningRequest(
+    decoded: PaymentRequestDecodeResult,
+    amountSats: Long?,
+): CdkMeltOptions? {
+    val requestAmountSats = when (decoded) {
+        is PaymentRequestDecodeResult.Bolt11 -> decoded.amountSats
+        is PaymentRequestDecodeResult.Bolt12 -> decoded.amountSats
+        else -> return null
+    }
+    if (requestAmountSats != null && requestAmountSats > 0L) return null
+
+    val amount = amountSats?.takeIf { it > 0L }
+        ?: throw CdkGatewayUnavailable(
+            "This Lightning request doesn't include an amount. Enter an amount before requesting a quote.",
+        )
+    val amountMsat = try {
+        Math.multiplyExact(amount, 1_000L)
+    } catch (_: ArithmeticException) {
+        throw CdkGatewayUnavailable("Amount is too large.")
+    }
+    return CdkMeltOptions.Amountless(CdkAmount(amountMsat.toULong()))
 }
 
 class CdkWalletGatewayImpl : WalletGateway {
@@ -360,7 +385,17 @@ class CdkWalletGatewayImpl : WalletGateway {
                     "(amount_paid=${normalizedQuote.amountPaid.value}, amount_issued=${normalizedQuote.amountIssued.value}).",
             )
         }
-        normalizedQuote.usedByOperation?.let { releaseMintQuoteReservation(it, quoteId) }
+        if (normalizedQuote.usedByOperation != null) {
+            // The live CDK saga owns the deterministic secrets required to
+            // replay or restore an ambiguous mint response. Deleting it and
+            // issuing fresh outputs can strand a payment the mint already
+            // marked issued. Quote checks resume sagas; leave this one intact
+            // for the next reconciliation pass when recovery is unavailable.
+            throw CdkGatewayUnavailable(
+                "A previous mint attempt is still being recovered. " +
+                    "The wallet will retry automatically.",
+            )
+        }
         val proofs = walletFor(normalizedQuote.mintUrl.url, normalizedQuote.unit).mintUnified(
             quoteId = quoteId,
             amountSplitTarget = CdkSplitTarget.None,
@@ -384,7 +419,8 @@ class CdkWalletGatewayImpl : WalletGateway {
 
     override suspend fun createMeltQuote(request: String, amountSats: Long?, preferredMintURL: String?): MeltQuoteInfo = cdkCall {
         val wallet = preferredMintURL?.let { walletFor(it) } ?: firstWallet()
-        when (val decoded = PaymentRequestDecoder.decode(request)) {
+        val decoded = PaymentRequestDecoder.decode(request)
+        when (decoded) {
             is PaymentRequestDecodeResult.LightningAddress -> {
                 val amount = requirePositiveAmount(amountSats, "Lightning address payments require an amount.")
                 val amountMsat = try {
@@ -435,10 +471,11 @@ class CdkWalletGatewayImpl : WalletGateway {
         }
         val method = PaymentRequestParser.paymentMethod(request) ?: PaymentMethodKind.Bolt11
         val normalized = PaymentRequestDecoder.encodedLightningRequest(request) ?: request.trim()
+        val options = meltOptionsForLightningRequest(decoded, amountSats)
         val quote = wallet.meltQuote(
             method = cdkPaymentMethod(method),
             request = normalized,
-            options = null,
+            options = options,
             extra = null,
         )
         quote.toDomain(fallbackMethod = method)
@@ -971,17 +1008,6 @@ class CdkWalletGatewayImpl : WalletGateway {
         val saga = runCatching { database?.getSaga(operationId) }.getOrNull()
         if (saga != null) return this
         return clearingReservation()
-    }
-
-    private suspend fun releaseMintQuoteReservation(operationId: String, quoteId: String) {
-        runCatching {
-            database?.releaseMintQuote(operationId)
-            runCatching { database?.deleteSaga(operationId) }
-            val refreshed = database?.getMintQuote(quoteId)
-            if (refreshed?.usedByOperation != null) {
-                replaceStoredMintQuote(refreshed.clearingReservation())
-            }
-        }
     }
 
     private suspend fun replaceStoredMintQuote(quote: CdkMintQuote) {

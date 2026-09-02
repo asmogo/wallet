@@ -24,6 +24,82 @@ final class CashuRequestStoreBoundaryTests: XCTestCase {
     }
 }
 
+final class MintQuoteReconciliationResultTests: XCTestCase {
+    func testSuccessfulMintInfersIssuedCounterWhenVerificationIsOffline() {
+        let observed = quote(paid: 21, issued: 0)
+
+        let result = MintQuoteReconciliationResult(
+            observed: observed,
+            mintedAmount: 21,
+            verified: nil
+        )
+
+        XCTAssertEqual(result.newlyIssued, 21)
+        XCTAssertEqual(result.quote.amountIssued, 21)
+        XCTAssertEqual(result.remainingAmount, 0)
+        XCTAssertTrue(result.hasSettledPayment)
+        XCTAssertTrue(result.quote.isAmountless)
+    }
+
+    func testVerifiedCountersResolveLostMintResponse() {
+        let observed = quote(paid: 13, issued: 0)
+        let verified = quote(paid: 13, issued: 13)
+
+        let result = MintQuoteReconciliationResult(
+            observed: observed,
+            mintedAmount: 0,
+            verified: verified
+        )
+
+        XCTAssertEqual(result.newlyIssued, 13)
+        XCTAssertTrue(result.hasSettledPayment)
+        XCTAssertEqual(result.quote.state, .issued)
+    }
+
+    func testLaterReusablePaymentOnlyIssuesNewCounterDelta() {
+        let observed = quote(paid: 34, issued: 21)
+        let verified = quote(paid: 34, issued: 34)
+
+        let result = MintQuoteReconciliationResult(
+            observed: observed,
+            mintedAmount: 13,
+            verified: verified
+        )
+
+        XCTAssertEqual(result.newlyIssued, 13)
+        XCTAssertEqual(result.quote.amountIssued, 34)
+        XCTAssertTrue(result.hasSettledPayment)
+    }
+
+    func testUnissuedPaymentNeverBecomesFalseSuccess() {
+        let observed = quote(paid: 8, issued: 0)
+
+        let result = MintQuoteReconciliationResult(observed: observed)
+
+        XCTAssertEqual(result.newlyIssued, 0)
+        XCTAssertEqual(result.remainingAmount, 8)
+        XCTAssertFalse(result.hasSettledPayment)
+        XCTAssertEqual(result.quote.state, .paid)
+    }
+
+    private func quote(paid: UInt64, issued: UInt64) -> MintQuoteInfo {
+        MintQuoteInfo(
+            id: "reusable-quote",
+            request: "lno1test",
+            amount: paid > 0 ? paid : nil,
+            isAmountless: true,
+            paymentMethod: .bolt12,
+            state: paid > issued ? .paid : .issued,
+            expiry: nil,
+            createdAt: nil,
+            unit: "sat",
+            mintURL: "https://mint.example",
+            amountPaid: paid,
+            amountIssued: issued
+        )
+    }
+}
+
 final class WalletStoreTests: XCTestCase {
     private var store: WalletStore!
 

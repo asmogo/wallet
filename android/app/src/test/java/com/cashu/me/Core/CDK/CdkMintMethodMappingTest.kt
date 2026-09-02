@@ -1,7 +1,9 @@
 package com.cashu.me.Core.CDK
 
+import com.cashu.me.Core.PaymentRequestDecodeResult
 import com.cashu.me.Models.PaymentMethodKind
 import org.cashudevkit.CurrencyUnit as CdkCurrencyUnit
+import org.cashudevkit.MeltOptions as CdkMeltOptions
 import org.cashudevkit.MeltMethodSettings as CdkMeltMethodSettings
 import org.cashudevkit.MintMethodSettings as CdkMintMethodSettings
 import org.cashudevkit.Nut04Settings as CdkNut04Settings
@@ -19,6 +21,27 @@ import org.junit.Test
  * rails are dropped, matching iOS `supportedMintPaymentMethods` / `…Melt…`.
  */
 class CdkMintMethodMappingTest {
+
+    @Test
+    fun amountlessBolt12MeltUsesEnteredAmountInMillisatoshis() {
+        val options = meltOptionsForLightningRequest(
+            decoded = PaymentRequestDecodeResult.Bolt12(amountSats = null, description = null),
+            amountSats = 21L,
+        )
+
+        assertTrue(options is CdkMeltOptions.Amountless)
+        assertEquals(21_000uL, (options as CdkMeltOptions.Amountless).amountMsat.value)
+    }
+
+    @Test
+    fun amountCarryingBolt12DoesNotOverrideRequestAmount() {
+        val options = meltOptionsForLightningRequest(
+            decoded = PaymentRequestDecodeResult.Bolt12(amountSats = 21L, description = null),
+            amountSats = 42L,
+        )
+
+        assertEquals(null, options)
+    }
 
     @Test
     fun emptyNut04MethodListStaysReportedEmpty() {

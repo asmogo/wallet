@@ -16,25 +16,29 @@ extension WalletManager {
         await syncPendingMintQuotes(force: false)
     }
 
-    /// Silent single-quote check + mint if paid. Used when opening a pending
-    /// Lightning / on-chain receive in transaction detail (Android
-    /// `refreshPendingMintQuote` parity). Does not touch the global loading flag.
+    /// Reconcile one persisted quote against its mint. The returned counters
+    /// distinguish "the Lightning payment arrived" from "the ecash was
+    /// actually issued"; callers must never present success from the former.
+    /// Does not touch the global loading flag.
     @discardableResult
-    func refreshPendingMintQuote(quoteId: String) async -> Bool {
+    func refreshPendingMintQuote(quoteId: String) async -> MintQuoteReconciliationResult? {
         do {
             return try await operationCoordinator.perform(
                 kind: .mintQuote,
                 resourceID: quoteId
             ) {
-                let minted = await self.mintQuoteIfPaid(quoteId: quoteId)
-                if minted {
+                guard let result = await self.reconcileMintQuote(quoteId: quoteId) else {
+                    await self.loadTransactionsAssumingWalletOperationLease()
+                    return nil
+                }
+                if result.newlyIssued > 0 {
                     await self.refreshBalanceAssumingWalletOperationLease()
                 }
                 await self.loadTransactionsAssumingWalletOperationLease()
-                return minted
+                return result
             }
         } catch {
-            return false
+            return nil
         }
     }
 
@@ -66,10 +70,10 @@ extension WalletManager {
         pendingQuotePollTask = nil
     }
 
-    /// Check every tracked wallet for paid-but-unissued mint quotes and mint
-    /// them. CDK 0.18's `mintUnissuedQuotes()` refreshes each quote's NUT-04
-    /// counters with the mint and mints only the outstanding delta, which
-    /// covers reusable BOLT12 offers without any local heuristics.
+    /// Check every persisted, reconcilable quote and mint its outstanding
+    /// counter delta. CDK keeps every BOLT12 quote in this list permanently,
+    /// including fully-issued reusable offers, so later payments are still
+    /// found after dismissal, app suspension, or relaunch.
     /// - Parameter force: `false` (poll / startup / History open) only runs
     ///   when the repository lane is idle; `true` (pull-to-refresh) preempts.
     func syncPendingMintQuotes(force: Bool = false) async {
@@ -94,20 +98,33 @@ extension WalletManager {
     }
 
     private func mintUnissuedQuotesAcrossWallets() async {
-        guard walletRepository != nil else { return }
         lastMintQuoteSyncAt = Date()
 
-        var mintedAny = false
-        for wallet in await trackedWalletsAssumingWalletOperationLease() {
-            guard !Task.isCancelled else { break }
+        // The CDK database is the durable ledger. Union it with app-level
+        // receive intents so an older/migrated BOLT12 row is still explicitly
+        // checked and produces a useful missing-quote diagnostic instead of
+        // silently disappearing from maintenance.
+        var quoteIDs = Set(CashuRequestStore.shared.requests.compactMap(\.quoteId))
+        if let db {
             do {
-                let minted = try await wallet.mintUnissuedQuotes()
-                mintedAny = mintedAny || minted.value > 0
-            } catch is CancellationError {
-                break
+                quoteIDs.formUnion(try await db.getUnissuedMintQuotes().map(\.id))
             } catch {
                 AppLogger.wallet.error(
-                    "unissued quote sweep failed error_type=\(String(reflecting: type(of: error)), privacy: .public)"
+                    "mint quote ledger scan failed error_type=\(String(reflecting: type(of: error)), privacy: .public)"
+                )
+            }
+        }
+
+        var mintedAny = false
+        for quoteID in quoteIDs.sorted() {
+            guard !Task.isCancelled else { return }
+            guard let result = await reconcileMintQuote(quoteId: quoteID) else { continue }
+            if result.newlyIssued > 0 {
+                mintedAny = true
+                postReceivedMintNotification(
+                    amount: result.newlyIssued,
+                    unit: result.quote.unit,
+                    homeHaptic: true
                 )
             }
             if await operationCoordinator.hasWaitingUserOperation() { break }
@@ -120,43 +137,64 @@ extension WalletManager {
         await loadTransactionsAssumingWalletOperationLease()
     }
 
-    /// Check one quote with its mint and mint it when an unpaid amount is
-    /// outstanding. The NUT-04 `amountPaid`/`amountIssued` counters make this
-    /// correct for reusable BOLT12 offers too: fully-issued offers mint 0.
-    @discardableResult
-    private func mintQuoteIfPaid(quoteId: String) async -> Bool {
+    /// Check → mint → verify one quote while the wallet operation lane is held.
+    /// A follow-up check also resolves the important ambiguous case where the
+    /// mint issued ecash but the client lost the response. If another payment
+    /// arrives during the attempt, `remainingAmount` stays positive and the
+    /// next foreground tick mints that new delta.
+    private func reconcileMintQuote(quoteId: String) async -> MintQuoteReconciliationResult? {
+        let observed: MintQuoteInfo
         do {
-            _ = try await lightningService.checkMintQuote(quoteId: quoteId)
+            observed = try await lightningService.checkMintQuote(quoteId: quoteId)
         } catch {
             AppLogger.wallet.error(
                 "pending quote refresh failed resource=\(WalletOperationCoordinator.privacySafeIdentifier(quoteId), privacy: .public) error_type=\(String(reflecting: type(of: error)), privacy: .public)"
             )
-            return false
+            return nil
         }
 
-        let storedQuote: MintQuote??
-        do {
-            storedQuote = try await db?.getMintQuote(quoteId: quoteId)
-        } catch {
-            storedQuote = nil
-        }
-        guard let quote = storedQuote ?? nil,
-              quote.amountPaid.value > quote.amountIssued.value else {
-            return false
+        guard observed.mintableAmount > 0 else {
+            return MintQuoteReconciliationResult(observed: observed)
         }
 
+        var mintedAmount: UInt64 = 0
+        var mintError: Error?
         do {
-            _ = try await lightningService.mintTokens(quoteId: quoteId)
-            return true
+            mintedAmount = try await lightningService.mintTokens(quoteId: quoteId)
         } catch {
-            if isAlreadyIssuedMintError(error) {
-                return true
-            }
+            mintError = error
+        }
+
+        // Always verify counters after the attempt. This turns a response-loss
+        // failure into success when the mint did issue, without relying on
+        // fragile error-message matching.
+        let verified = try? await lightningService.checkMintQuote(quoteId: quoteId)
+        let result = MintQuoteReconciliationResult(
+            observed: observed,
+            mintedAmount: mintedAmount,
+            verified: verified
+        )
+
+        if result.remainingAmount > 0, let mintError {
             AppLogger.wallet.error(
-                "pending quote mint failed resource=\(WalletOperationCoordinator.privacySafeIdentifier(quoteId), privacy: .public) error_type=\(String(reflecting: type(of: error)), privacy: .public)"
+                "pending quote mint remains unissued resource=\(WalletOperationCoordinator.privacySafeIdentifier(quoteId), privacy: .public) remaining=\(result.remainingAmount, privacy: .public) error_type=\(String(reflecting: type(of: mintError)), privacy: .public)"
             )
-            return false
         }
+
+        return result
+    }
+
+    func postReceivedMintNotification(amount: UInt64, unit: String, homeHaptic: Bool) {
+        guard amount > 0 else { return }
+        NotificationCenter.default.post(
+            name: .cashuTokenReceived,
+            object: nil,
+            userInfo: [
+                "amount": amount,
+                "unit": unit,
+                "homeHaptic": homeHaptic
+            ]
+        )
     }
 
     // MARK: - Transaction History

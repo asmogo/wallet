@@ -42,10 +42,11 @@ class NFCPaymentInputDecoderTest {
 
     @Test
     fun routesBolt12LightningSchemeToLightningRequest() {
-        val decoded = NFCPaymentInputDecoder.decode("lightning:lno1ptest")
+        val offer = "lno1pgqpvggr25nht4nyqrgtnhxltctkdsfrf3myhj008f6fyulf4tplmarx8hxq"
+        val decoded = NFCPaymentInputDecoder.decode("lightning:$offer")
 
         assertTrue(decoded is NFCPaymentInput.LightningRequest)
-        assertEquals("lno1ptest", (decoded as NFCPaymentInput.LightningRequest).request)
+        assertEquals(offer, (decoded as NFCPaymentInput.LightningRequest).request)
     }
 
     @Test

@@ -29,6 +29,25 @@ enum MintQuoteContextPolicy {
     }
 }
 
+/// Builds CDK's explicit amount override for a request that does not carry one.
+/// Keeping this small conversion outside the service makes the protocol boundary
+/// directly testable without a live wallet repository.
+func meltOptionsForLightningRequest(
+    requestAmountMsat: UInt64?,
+    amountSats: UInt64?
+) throws -> MeltOptions? {
+    guard requestAmountMsat == nil else { return nil }
+    guard let amountSats, amountSats > 0 else {
+        throw WalletError.networkError(
+            "This Lightning request doesn't include an amount. Enter an amount before requesting a quote."
+        )
+    }
+    guard amountSats <= UInt64.max / 1_000 else {
+        throw WalletError.networkError("Amount is too large.")
+    }
+    return .amountless(amountMsat: Amount(value: amountSats * 1_000))
+}
+
 // MARK: - Lightning Service
 
 /// Service responsible for Lightning Network operations (NUT-04/NUT-05).
@@ -316,6 +335,7 @@ class LightningService: ObservableObject {
     /// - Returns: Melt quote with fee information
     func createMeltQuote(
         request: String,
+        amount: UInt64? = nil,
         preferredMintURL: String? = nil
     ) async throws -> MeltQuoteInfo {
         guard let repo = walletRepository() else {
@@ -335,6 +355,10 @@ class LightningService: ObservableObject {
         let normalizedRequest = metadata.normalizedRequest
         let paymentMethod = metadata.paymentMethod
         let invoiceAmountSats = metadata.amountSats
+        let meltOptions = try meltOptionsForLightningRequest(
+            requestAmountMsat: metadata.amountMsat,
+            amountSats: amount
+        )
 
         if PaymentRequestParser.isBitcoinAddress(normalizedRequest) {
             throw WalletError.networkError("On-chain payments require an amount before requesting a quote.")
@@ -342,7 +366,7 @@ class LightningService: ObservableObject {
 
         let candidates = meltQuoteCandidateMints(
             paymentMethod: paymentMethod,
-            minimumAmount: invoiceAmountSats,
+            minimumAmount: invoiceAmountSats ?? amount,
             preferredMintURL: preferredMintURL
         )
 
@@ -361,7 +385,7 @@ class LightningService: ObservableObject {
                 let quote = try await wallet.meltQuote(
                     method: paymentMethod.cdkMethod,
                     request: normalizedRequest,
-                    options: nil,
+                    options: meltOptions,
                     extra: nil
                 )
 
@@ -391,7 +415,7 @@ class LightningService: ObservableObject {
         invoice: String,
         preferredMintURL: String? = nil
     ) async throws -> MeltQuoteInfo {
-        try await createMeltQuote(request: invoice, preferredMintURL: preferredMintURL)
+        try await createMeltQuote(request: invoice, amount: nil, preferredMintURL: preferredMintURL)
     }
     
     /// Create a melt quote for paying a human-readable address.
@@ -1136,12 +1160,15 @@ class LightningService: ObservableObject {
             id: quote.id,
             request: quote.request,
             amount: resolvedAmount,
+            isAmountless: quote.amount == nil,
             paymentMethod: paymentMethod,
             state: mintQuoteState(from: quote, paymentMethod: paymentMethod),
             expiry: displayExpiry(quote.expiry),
             createdAt: createdAt,
             unit: PaymentRequestDecoder.unitDescription(quote.unit),
-            mintURL: quote.mintUrl.url
+            mintURL: quote.mintUrl.url,
+            amountPaid: quote.amountPaid.value,
+            amountIssued: quote.amountIssued.value
         )
     }
 

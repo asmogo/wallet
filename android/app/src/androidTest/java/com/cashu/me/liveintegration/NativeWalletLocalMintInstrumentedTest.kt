@@ -173,6 +173,32 @@ class NativeWalletLocalMintInstrumentedTest {
             )
             assertEquals(PaymentMethodKind.Bolt12, LightningRequestParser.parse(bolt12.request).method)
 
+            step = "CDK BOLT12 paid-but-unissued restart recovery"
+            val paidBolt12 = bolt12.awaitPaid(payer.gateway)
+            val outstandingBolt12 = paidBolt12.amountPaid - paidBolt12.amountIssued
+            assertTrue(outstandingBolt12 > 0)
+            val balanceBeforeRecovery = payer.gateway.totalBalance(cdkMintUrl)
+
+            // Reopen the same native database before issuing. This is the app
+            // process-death boundary that previously left a paid quote behind.
+            val payerMnemonic = payer.mnemonic
+            payer.close()
+            payer.open(payerMnemonic)
+            assertTrue(
+                payer.gateway.listUnissuedMintQuotes().any { it.id == paidBolt12.id },
+            )
+            assertEquals(
+                outstandingBolt12,
+                payer.gateway.mintUnissuedQuotes(cdkMintUrl, "sat"),
+            )
+            val verifiedBolt12 = payer.gateway.checkMintQuote(paidBolt12.id)
+            assertEquals(verifiedBolt12.amountPaid, verifiedBolt12.amountIssued)
+            assertEquals(
+                balanceBeforeRecovery + outstandingBolt12,
+                payer.gateway.totalBalance(cdkMintUrl),
+            )
+            assertEquals(0L, payer.gateway.mintUnissuedQuotes(cdkMintUrl, "sat"))
+
             step = "CDK on-chain quote"
             val onchain = payer.gateway.createMintQuote(
                 amount = 5,

@@ -4,6 +4,10 @@ struct MintQuoteInfo: Identifiable {
     let id: String
     let request: String  // Payment request (BOLT11 invoice, BOLT12 offer, or on-chain address)
     let amount: UInt64?
+    /// Whether the quote was created without an amount. This cannot be derived
+    /// from `amount`: NUT-25 reports the cumulative paid amount after the first
+    /// payment, but the underlying BOLT12 offer remains amountless and reusable.
+    let isAmountless: Bool
     let paymentMethod: PaymentMethodKind
     var state: MintQuoteState
     let expiry: UInt64?
@@ -20,9 +24,63 @@ struct MintQuoteInfo: Identifiable {
     /// instead of mutable active-mint state.
     var mintURL: String? = nil
 
+    /// NUT-25's durable settlement ledger. A reusable offer is fully caught up
+    /// when these values are equal; their difference is the only amount the
+    /// wallet is allowed to mint.
+    var amountPaid: UInt64 = 0
+    var amountIssued: UInt64 = 0
+
+    var mintableAmount: UInt64 {
+        amountPaid > amountIssued ? amountPaid - amountIssued : 0
+    }
+
+    var hasSettledPayment: Bool {
+        amountPaid > 0 && amountIssued >= amountPaid
+    }
+
     var isExpired: Bool {
         guard let expiry = expiry, expiry > 0 else { return false }
         return Date().timeIntervalSince1970 > Double(expiry)
+    }
+}
+
+/// Counter-verified result of reconciling one persisted mint quote. A
+/// successful mint response is combined with a follow-up quote check so an
+/// ambiguous network failure cannot lose a payment or mint it twice.
+struct MintQuoteReconciliationResult {
+    let quote: MintQuoteInfo
+    let newlyIssued: UInt64
+    let hadOutstandingPayment: Bool
+
+    var remainingAmount: UInt64 { quote.mintableAmount }
+    var hasSettledPayment: Bool { quote.hasSettledPayment }
+
+    init(
+        observed: MintQuoteInfo,
+        mintedAmount: UInt64 = 0,
+        verified: MintQuoteInfo? = nil
+    ) {
+        var reconciled = verified ?? observed
+        reconciled.amountPaid = max(reconciled.amountPaid, observed.amountPaid)
+
+        let inferredIssued: UInt64
+        let (sum, overflow) = observed.amountIssued.addingReportingOverflow(mintedAmount)
+        inferredIssued = overflow ? UInt64.max : sum
+        reconciled.amountIssued = max(reconciled.amountIssued, inferredIssued)
+
+        if reconciled.amountPaid > 0,
+           reconciled.amountIssued >= reconciled.amountPaid {
+            reconciled.state = .issued
+        } else if reconciled.amountPaid > reconciled.amountIssued {
+            reconciled.state = .paid
+        }
+
+        let verifiedAdvance = reconciled.amountIssued > observed.amountIssued
+            ? reconciled.amountIssued - observed.amountIssued
+            : 0
+        quote = reconciled
+        newlyIssued = max(mintedAmount, verifiedAdvance)
+        hadOutstandingPayment = observed.amountPaid > observed.amountIssued
     }
 }
 

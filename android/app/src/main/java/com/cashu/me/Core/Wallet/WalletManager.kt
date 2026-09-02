@@ -629,17 +629,17 @@ class WalletManager(
      * poll) and transaction detail open — must not flip the global loading
      * flag (passive UX).
      */
-    suspend fun refreshPendingMintQuote(
+    internal suspend fun refreshPendingMintQuote(
         quoteId: String,
         confirmationOwner: ReceiveConfirmationOwner,
-    ): Boolean {
+    ): MintQuoteSyncResult {
         val result = mintQuoteSyncService.syncPendingMintQuote(quoteId)
         if (result.minted) refreshBalance()
         loadTransactions()
         result.receivedAmount?.let { amount ->
             publishReceivedPayment(amount, result.unit, confirmationOwner)
         }
-        return result.minted
+        return result
     }
 
     /**
@@ -656,10 +656,11 @@ class WalletManager(
     }
 
     /**
-     * Check every tracked wallet for paid-but-unissued mint quotes and mint
-     * them (CDK 0.18 `mintUnissuedQuotes`): each quote's NUT-04 counters are
-     * refreshed with the mint and only the outstanding delta is minted, which
-     * covers reusable BOLT12 offers without any local heuristics.
+     * Reconcile every persisted mint quote individually. CDK's unissued list
+     * deliberately retains all BOLT12 quotes forever, so a reusable offer is
+     * checked after dismissal, suspension, and relaunch as well as while its QR
+     * is visible. Every path uses [WalletMintQuoteSyncService]'s single lane and
+     * verifies `amountPaid` against `amountIssued` before reporting success.
      * Silent by design (iOS parity): must never flip the global loading flag.
      *
      * @param force when false (poll / startup / History open), the pass only
@@ -671,27 +672,30 @@ class WalletManager(
         if (!isSyncingMintQuotes.compareAndSet(false, true)) return 0
         lastMintQuoteSyncAtMs.set(System.currentTimeMillis())
         try {
-            var mintedWallets = 0
-            transactionUnitsByMint(mutableState.value.mints).forEach { (mintUrl, units) ->
-                units.forEach { unit ->
-                    val minted = runCatching { gateway.mintUnissuedQuotes(mintUrl, unit) }
-                        .onFailure { AppLogger.wallet.error("Unissued quote sweep failed for $mintUrl ($unit)", it) }
-                        .getOrDefault(0L)
-                    if (minted > 0) {
-                        mintedWallets += 1
-                        // Home receive beat for a background-settled payment
-                        // (e.g. a BOLT12 offer paid from another wallet).
-                        publishReceivedPayment(
-                            amount = minted,
-                            unit = unit,
-                            confirmationOwner = ReceiveConfirmationOwner.Home,
-                        )
-                    }
+            val databaseQuoteIds = runCatching { gateway.listUnissuedMintQuotes().map { it.id } }
+                .onFailure { AppLogger.wallet.error("Mint quote ledger scan failed", it) }
+                .getOrDefault(emptyList())
+            // App intents are a second durable index. Usually these IDs are
+            // already in CDK's list; the union also surfaces a missing local
+            // quote instead of silently dropping an older/migrated offer.
+            val intentQuoteIds = cashuRequestStore.state.value.requests.mapNotNull { it.quoteId }
+            val quoteIds = (databaseQuoteIds + intentQuoteIds).distinct().sorted()
+
+            var mintedQuotes = 0
+            quoteIds.forEach { quoteId ->
+                val result = mintQuoteSyncService.syncPendingMintQuote(quoteId)
+                result.receivedAmount?.let { amount ->
+                    mintedQuotes += 1
+                    publishReceivedPayment(
+                        amount = amount,
+                        unit = result.unit,
+                        confirmationOwner = ReceiveConfirmationOwner.Home,
+                    )
                 }
             }
-            if (mintedWallets > 0) refreshBalance()
+            if (mintedQuotes > 0) refreshBalance()
             loadTransactions()
-            return mintedWallets
+            return mintedQuotes
         } finally {
             isSyncingMintQuotes.set(false)
         }

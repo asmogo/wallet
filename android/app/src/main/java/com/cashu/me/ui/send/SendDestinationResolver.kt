@@ -10,8 +10,6 @@ import com.cashu.me.Models.PaymentMethodKind
 
 internal const val AmountlessBolt11Hint =
     "This BOLT11 invoice doesn't include an amount. Ask for an amount-specific invoice before paying."
-internal const val AmountlessBolt12Hint =
-    "This BOLT12 offer doesn't include an amount. Amountless offers are not payable here yet."
 
 internal sealed interface SendDestinationResolution {
     data class Hint(val message: String) : SendDestinationResolution
@@ -58,16 +56,22 @@ internal fun resolveSendDestination(
             if (known == null || known <= 0L) {
                 SendDestinationResolution.Hint(AmountlessBolt11Hint)
             } else {
-                SendDestinationResolution.Melt(request, decoded, known, requiresAmountEntry = false)
+                SendDestinationResolution.Melt(
+                    PaymentRequestDecoder.encodedLightningRequest(request) ?: request,
+                    decoded,
+                    known,
+                    requiresAmountEntry = false,
+                )
             }
         }
         is PaymentRequestDecodeResult.Bolt12 -> {
-            val known = decoded.amountSats
-            if (known == null || known <= 0L) {
-                SendDestinationResolution.Hint(AmountlessBolt12Hint)
-            } else {
-                SendDestinationResolution.Melt(request, decoded, known, requiresAmountEntry = false)
-            }
+            val known = decoded.amountSats?.takeIf { it > 0L }
+            SendDestinationResolution.Melt(
+                request = PaymentRequestDecoder.encodedLightningRequest(request) ?: request,
+                decoded = decoded,
+                knownAmount = known,
+                requiresAmountEntry = known == null,
+            )
         }
         is PaymentRequestDecodeResult.LightningAddress,
         is PaymentRequestDecodeResult.Onchain -> SendDestinationResolution.Melt(

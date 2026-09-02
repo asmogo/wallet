@@ -263,8 +263,7 @@ struct ReceiveLightningView: View {
         return orderedMethods.isEmpty ? [.bolt11] : orderedMethods
     }
 
-    /// Picker rows: BOLT12 fans out into fixed + any-amount, so a BOLT12-only
-    /// mint still yields two options (and therefore a visible picker).
+    /// Picker rows are derived from the mint's supported payment methods.
     private var availableMethodOptions: [ReceiveMethodOption] {
         ReceiveMethodOption.options(for: availableMintMethods)
     }
@@ -276,8 +275,7 @@ struct ReceiveLightningView: View {
     }
 
     private var shouldShowMethodPicker: Bool {
-        // Count options, not methods: a BOLT12-only mint is one method but two
-        // options, and the in-screen toggle that used to disambiguate is gone.
+        // Count user-facing options rather than raw mint capabilities.
         availableMethodOptions.count > 1
     }
 
@@ -572,7 +570,7 @@ struct ReceiveLightningView: View {
                             ShareSheet(items: [qrShareText])
                         }
 
-                    if let amount = quote.amount, amount > 0 {
+                    if !quote.isAmountless, let amount = quote.amount, amount > 0 {
                         if quote.unit.lowercased() == "sat" {
                             CurrencyAmountDisplay(
                                 sats: amount,
@@ -599,9 +597,17 @@ struct ReceiveLightningView: View {
                         )
                         editableRow(
                             label: "Amount",
-                            value: quote.amount.flatMap { $0 > 0 ? formatQuoteAmount($0, unit: quote.unit) : nil } ?? "Any",
+                            value: quote.isAmountless
+                                ? "Any"
+                                : quote.amount.flatMap { $0 > 0 ? formatQuoteAmount($0, unit: quote.unit) : nil } ?? "Any",
                             action: { showReusableAmountPicker = true }
                         )
+                        if quote.amountIssued > 0 {
+                            detailRow(
+                                label: "Total received",
+                                value: formatQuoteAmount(quote.amountIssued, unit: quote.unit)
+                            )
+                        }
                         if let created = quote.createdAt {
                             detailRow(
                                 label: "Created",
@@ -624,7 +630,7 @@ struct ReceiveLightningView: View {
         }
         .sheet(isPresented: $showReusableAmountPicker) {
             CashuRequestAmountPickerSheet(
-                currentAmount: quote.amount,
+                currentAmount: quote.isAmountless ? nil : quote.amount,
                 unit: quote.unit,
                 onSelect: {
                     setReusableOfferAmount($0, mintURL: quote.mintURL, unit: quote.unit)
@@ -646,7 +652,8 @@ struct ReceiveLightningView: View {
     /// Full-screen success shown once ecash is issued — the exact same
     /// `PaymentStatusView` the pay/send flows use, so a received payment reads
     /// identically to a sent one (checkmark → title → detail block → Done).
-    /// Stays until the user taps Done.
+    /// Stays until the user taps Done. This view is reached only after the
+    /// reconciliation path has verified that ecash was issued.
     private func receiveSuccessView(quote: MintQuoteInfo) -> some View {
         PaymentStatusView(
             details: receiveSuccessRows(quote: quote),
@@ -869,10 +876,6 @@ struct ReceiveLightningView: View {
 
     @ViewBuilder
     private var statusBadge: some View {
-        // No `isPaid` branch: the body swaps to the full-screen success
-        // terminal the instant `isPaid` flips, so an inline received badge
-        // here could never render — the celebration lives in
-        // `PaymentStatusView`'s staged entrance.
         Group {
             if isCheckingPayment || isMinting {
                 HStack(spacing: 6) {
@@ -894,6 +897,19 @@ struct ReceiveLightningView: View {
                 // Same severity token as the countdown above it, which already
                 // moved off Color.red — the two states of one clock.
                 .foregroundStyle(ErrorSeverity.error.foreground)
+                .transition(.opacity)
+            } else if let quote = mintQuote,
+                      quote.paymentMethod == .bolt12,
+                      quote.amountIssued > 0,
+                      quote.mintableAmount == 0 {
+                HStack(spacing: 6) {
+                    Image(systemName: "checkmark.seal.fill")
+                        .symbolEffect(.bounce, value: reduceMotion ? nil : quote.amountIssued)
+                        .accessibilityHidden(true)
+                    Text("Ready for another payment")
+                }
+                .font(.subheadline.weight(.medium))
+                .foregroundStyle(.secondary)
                 .transition(.opacity)
             } else if mintQuote?.state == .paid || mintQuote?.state == .issued {
                 HStack(spacing: 6) {
@@ -1065,7 +1081,7 @@ struct ReceiveLightningView: View {
             amountString = ""
             loadOrCreateAmountlessOffer()
         } else {
-            // Lightning / fixed reusable: land on the amount screen.
+            // Amount-requiring rails: land on the amount screen.
             selectedMethod = option.method
             isAmountless = false
         }
@@ -1097,7 +1113,9 @@ struct ReceiveLightningView: View {
             rail: rail,
             quoteId: quote.id,
             encoded: quote.request,
-            amount: quote.amount,
+            // A paid amountless offer reports a cumulative amount, but its QR
+            // is still amountless. Preserve the original offer shape.
+            amount: quote.isAmountless ? nil : quote.amount,
             unit: quote.unit,
             mints: mintURLs,
             reusable: reusable,
@@ -1389,14 +1407,17 @@ struct ReceiveLightningView: View {
                 id: refreshed.id,
                 request: refreshed.request,
                 amount: mintedAmount,
+                isAmountless: false,
                 paymentMethod: .onchain,
                 state: .issued,
                 expiry: refreshed.expiry,
                 createdAt: refreshed.createdAt,
                 unit: refreshed.unit,
-                mintURL: refreshed.mintURL
+                mintURL: refreshed.mintURL,
+                amountPaid: mintedAmount ?? refreshed.amountPaid,
+                amountIssued: mintedAmount ?? refreshed.amountIssued
             )
-            await completeReceivedQuote()
+            await completeReceivedQuote(receivedAmount: mintedAmount)
             return
         }
     }
@@ -1411,7 +1432,11 @@ struct ReceiveLightningView: View {
             case .bolt11:
                 await pollMintQuote(quoteId: quote.id, initialInterval: 5, maxInterval: 15)
             case .bolt12:
-                await monitorMintQuoteViaSubscription(quoteId: quote.id, paymentMethod: .bolt12)
+                // A reusable offer must keep making progress even when a
+                // websocket stays connected but stops delivering updates.
+                // Polling also reconciles every paid/issued counter delta, so
+                // no individual payment can leave the quote stranded.
+                await pollMintQuote(quoteId: quote.id, initialInterval: 5, maxInterval: 15)
             case .onchain:
                 await refreshMintQuoteStatus()
                 await monitorMintQuoteViaSubscription(quoteId: quote.id, paymentMethod: .onchain)
@@ -1495,17 +1520,23 @@ struct ReceiveLightningView: View {
                 onchainObservation = nil
             }
 
+            if updatedQuote.paymentMethod == .bolt12 {
+                // A BOLT12 offer is never terminal. Reconcile its cumulative
+                // paid/issued counters and leave the same QR active for the
+                // next payer-generated invoice.
+                await reconcileReusableOffer(updatedQuote)
+                return
+            }
+
             switch updatedQuote.state {
             case .pending:
                 return
             case .paid:
-                // A paid invoice is not spendable ecash until minting succeeds.
-                // Keep monitoring through transient failures; show a receipt only
-                // after CDK has persisted the issued proofs.
+                // "Paid" is not success yet: keep the request visible until
+                // the quote counters prove ecash issuance completed.
                 await mintQuoteIfReady(updatedQuote)
             case .issued:
-                // Mint already issued the ecash — just refresh + finish.
-                await completeReceivedQuote()
+                await completeReceivedQuote(receivedAmount: updatedQuote.amountIssued)
             }
         } catch {
             // Ignore transient polling failures and keep monitoring.
@@ -1537,50 +1568,70 @@ struct ReceiveLightningView: View {
         isMinting = true
         defer { isMinting = false }
 
-        do {
-            let _ = try await walletManager.mintTokens(quoteId: quote.id)
-            await completeReceivedQuote()
-        } catch {
-            if isAlreadyIssuedMintError(error) {
-                await completeReceivedQuote()
-                return
-            }
+        guard let result = await walletManager.refreshPendingMintQuote(quoteId: quote.id) else {
+            return
+        }
+        mintQuote = result.quote
+        guard result.hasSettledPayment else {
+            // A transient mint failure leaves the paid/issued delta intact in
+            // the durable quote. This screen and the app-wide foreground sweep
+            // will retry it; never show a false success terminal.
+            return
+        }
 
-            if quote.paymentMethod == .onchain {
-                return
-            }
+        let receivedAmount = result.newlyIssued > 0
+            ? result.newlyIssued
+            : (result.quote.amount ?? result.quote.amountIssued)
+        await completeReceivedQuote(receivedAmount: receivedAmount)
+    }
 
-            AppLogger.wallet.error(
-                "Failed to mint quote \(quote.id, privacy: .public): \(String(describing: error), privacy: .public)"
+    @MainActor
+    private func reconcileReusableOffer(_ quote: MintQuoteInfo) async {
+        guard quote.mintableAmount > 0, !isMinting else { return }
+
+        isMinting = true
+        defer { isMinting = false }
+
+        guard let result = await walletManager.refreshPendingMintQuote(quoteId: quote.id) else {
+            return
+        }
+        mintQuote = result.quote
+
+        // Only confirmed issuance earns receipt feedback. The reusable offer
+        // remains on screen and keeps monitoring after every payment.
+        if result.newlyIssued > 0 {
+            walletManager.postReceivedMintNotification(
+                amount: result.newlyIssued,
+                unit: result.quote.unit,
+                homeHaptic: false
             )
+            HapticFeedback.notification(.success)
         }
     }
 
-    /// Publish a receipt only after the receive has been issued.
+    /// Finish a one-shot receive only after quote counters (or a successful
+    /// mint response) confirm that ecash was issued.
     @MainActor
-    private func completeReceivedQuote() async {
+    private func completeReceivedQuote(receivedAmount: UInt64? = nil) async {
         guard !isPaid else { return }
         isPaid = true
         expiryTimer?.invalidate()
-        Task { @MainActor in
-            await walletManager.refreshBalance()
-            await walletManager.loadTransactions()
-        }
 
         // Fire the home-screen toast (same notification the NPC mint flow
         // posts from WalletManager) so the user sees the receipt on the home
         // screen after dismiss.
-        if let quote = mintQuote, let amount = quote.amount {
-            NotificationCenter.default.post(
-                name: .cashuTokenReceived,
-                object: nil,
-                // Pass the unit so the home delta skips a misleading "+N sat" for
-                // a non-sat mint (the sat balance didn't move).
-                userInfo: ["amount": amount, "unit": quote.unit]
+        if let quote = mintQuote,
+           let amount = receivedAmount ?? quote.amount,
+           amount > 0 {
+            walletManager.postReceivedMintNotification(
+                amount: amount,
+                unit: quote.unit,
+                homeHaptic: false
             )
         }
 
-        // Issuance is complete; the receipt stays until the user taps Done.
+        // Ecash is issued — stop polling this one-shot request. Reusable
+        // BOLT12 offers never enter this terminal path.
         quoteStatusTask?.cancel()
     }
 

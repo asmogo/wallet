@@ -36,6 +36,14 @@ data class MintQuoteInfo(
         get() = expiryEpochSeconds != null &&
             expiryEpochSeconds > 0 &&
             System.currentTimeMillis() / 1000 > expiryEpochSeconds
+
+    /** NUT-25's authoritative amount still available for issuance. */
+    val mintableAmount: Long
+        get() = (amountPaid - amountIssued).coerceAtLeast(0)
+
+    /** A payment is complete only after ecash issuance catches up. */
+    val hasSettledPayment: Boolean
+        get() = amountPaid > 0 && amountIssued >= amountPaid
 }
 
 @Serializable

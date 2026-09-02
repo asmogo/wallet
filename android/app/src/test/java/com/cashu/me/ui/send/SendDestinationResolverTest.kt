@@ -18,13 +18,15 @@ class SendDestinationResolverTest {
     }
 
     @Test
-    fun amountlessBolt12OfferShowsHintInsteadOfAdvancing() {
-        val resolution = resolveSendDestination("lightning:lno1ptest", walletMints = emptyList())
+    fun amountlessBolt12OfferRoutesToAmountEntry() {
+        val resolution = resolveSendDestination("lightning:$AmountlessBolt12Offer", walletMints = emptyList())
 
-        assertEquals(
-            SendDestinationResolution.Hint(AmountlessBolt12Hint),
-            resolution,
-        )
+        assertTrue(resolution is SendDestinationResolution.Melt)
+        val melt = resolution as SendDestinationResolution.Melt
+        assertEquals(AmountlessBolt12Offer, melt.request)
+        assertEquals(null, melt.knownAmount)
+        assertTrue(melt.requiresAmountEntry)
+        assertTrue(melt.decoded is PaymentRequestDecodeResult.Bolt12)
     }
 
     @Test
@@ -58,6 +60,9 @@ class SendDestinationResolverTest {
     }
 
     private companion object {
+        private const val AmountlessBolt12Offer =
+            "lno1pgqpvggr25nht4nyqrgtnhxltctkdsfrf3myhj008f6fyulf4tplmarx8hxq"
+
         // BOLT #11 example: donation invoice with no amount in the HRP.
         private const val Bolt11AmountlessDonationInvoice =
             "lnbc1pvjluezsp5zyg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zygspp5qqqsyqcyq5rqwzqfqqqsyqcyq5rqwzqfqqqsyqcyq5rqwzqfqypqdpl2pkx2ctnv5sxxmmwwd5kgetjypeh2ursdae8g6twvus8g6rfwvs8qun0dfjkxaq9qrsgq357wnc5r2ueh7ck6q93dj32dlqnls087fxdwk8qakdyafkq3yap9us6v52vjjsrvywa6rt52cm9r9zqt8r2t7mlcwspyetp5h2tztugp9lfyql"

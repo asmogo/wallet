@@ -288,7 +288,12 @@ enum ScanRouter {
         case .bolt11, .bolt12:
             let request = PaymentRequestDecoder.encodedLightningRequest(from: trimmed)
                 ?? PaymentRequestParser.normalizeLightningRequest(trimmed)
-            return .melt(request: request, mode: .lightning, autoQuote: true, explanation: nil)
+            return .melt(
+                request: request,
+                mode: .lightning,
+                autoQuote: PaymentRequestDecoder.amountLocked(decoded),
+                explanation: nil
+            )
         case .onchain:
             return .melt(
                 request: PaymentRequestParser.normalizeBitcoinRequest(trimmed),

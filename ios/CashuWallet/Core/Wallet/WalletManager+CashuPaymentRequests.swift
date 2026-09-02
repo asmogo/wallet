@@ -449,7 +449,8 @@ extension WalletManager {
 
     /// Mint proofs for a paid quote, retrying so a slow/settling mint doesn't fail
     /// the whole flow. Returns false if all attempts are exhausted (the pending
-    /// quote is minted later by `claimPaidMintQuote`/History refresh).
+    /// quote stays in the durable reconciliation ledger and is minted by the
+    /// foreground/startup sweep or an explicit History refresh).
     private func mintWithRetries(quoteId: String) async -> Bool {
         for attempt in 0..<8 {
             guard !Task.isCancelled else { return false }

@@ -39,6 +39,7 @@ import androidx.compose.material.icons.outlined.Repeat
 import androidx.compose.material.icons.outlined.Timer
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.Icon
@@ -135,6 +136,12 @@ private sealed interface ReceiveLnFace {
         val forceNewReusableOffer: Boolean,
         val amountOverride: Long?,
     )
+}
+
+private enum class ReusableOfferSettlementState {
+    Waiting,
+    Minting,
+    Ready,
 }
 
 private fun receiveRequestHeaderTitle(method: PaymentMethodKind): String = when (method) {
@@ -419,20 +426,22 @@ fun ReceiveLightningScreen(
                     abandonedOnchainQuoteIds = abandonedOnchainQuoteIds - quoteId
                     continue
                 }
-                val minted = runCatching {
+                val reconciliation = runCatching {
                     walletManager.refreshPendingMintQuote(
                         quoteId,
                         confirmationOwner = ReceiveConfirmationOwner.InFlow,
                     )
                 }
-                    .getOrDefault(false)
-                if (!minted) continue
+                    .getOrNull()
+                if (reconciliation?.hasSettledPayment != true) continue
                 abandonedOnchainQuoteIds = abandonedOnchainQuoteIds - quoteId
                 // Refetch for the credited amount (on-chain always mints sat).
-                val refreshed = runCatching { walletManager.pollMintQuote(quoteId) }.getOrNull() ?: info
-                val paidAmount = refreshed?.amount
+                val refreshed = reconciliation.quote
+                    ?: runCatching { walletManager.pollMintQuote(quoteId) }.getOrNull()
+                    ?: info
+                val paidAmount = reconciliation.newlyIssued.takeIf { it > 0 }
+                    ?: refreshed?.amount
                     ?: refreshed?.amountIssued?.takeIf { it > 0 }
-                    ?: refreshed?.amountPaid?.takeIf { it > 0 }
                 successInfo = ReceiveSuccessInfo(
                     amountLabel = paidAmount?.let {
                         formatter.formatWalletSats(it, settings.useBitcoinSymbol)
@@ -674,10 +683,10 @@ fun ReceiveLightningScreen(
                         // iOS pollMintQuote parity: linear backoff (+1s per
                         // iteration up to the max), terminal-state/expiry aware
                         // via shouldPollMintQuote. Per-rail intervals:
-                        // BOLT11 5s→15s, BOLT12 10s→30s, on-chain flat 30s.
+                        // BOLT11/BOLT12 5s→15s, on-chain flat 30s.
                         val (initialMs, maxMs) = when (current.quote.paymentMethod) {
                             PaymentMethodKind.Bolt11 -> 5_000L to 15_000L
-                            PaymentMethodKind.Bolt12 -> 10_000L to 30_000L
+                            PaymentMethodKind.Bolt12 -> 5_000L to 15_000L
                             PaymentMethodKind.Onchain -> 30_000L to 30_000L
                         }
                         var intervalMs = initialMs
@@ -751,14 +760,16 @@ fun ReceiveLightningScreen(
                             ).formatted()
                         }
                     }
-                    val receivedAmountLabel = liveQuote.amountPaid
+                    // Green/received state is based on issued ecash, never on
+                    // a Lightning payment that is still waiting to be minted.
+                    val receivedAmountLabel = liveQuote.amountIssued
                         .takeIf { it > 0 }
-                        ?.let { paid ->
+                        ?.let { issued ->
                             if (liveQuote.unit.equals("sat", ignoreCase = true)) {
-                                formatter.formatWalletSats(paid, settings.useBitcoinSymbol)
+                                formatter.formatWalletSats(issued, settings.useBitcoinSymbol)
                             } else {
                                 CurrencyAmount(
-                                    paid,
+                                    issued,
                                     CurrencyRegistry.currencyForMintUnit(liveQuote.unit),
                                 ).formatted()
                             }
@@ -785,7 +796,7 @@ fun ReceiveLightningScreen(
                                             liveQuote.id,
                                             confirmationOwner = ReceiveConfirmationOwner.InFlow,
                                         )
-                                    }
+                                    }.getOrNull()?.quote?.let { liveQuote = it }
                                 }
                             }
                             return@LaunchedEffect
@@ -793,23 +804,25 @@ fun ReceiveLightningScreen(
                         if (liveQuote.state == MintQuoteState.Paid ||
                             liveQuote.state == MintQuoteState.Issued
                         ) {
-                            // Finish the UX immediately and mint on the wallet's
-                            // app-lifetime scope so the dismiss never cancels it
-                            // (iOS: unstructured task that outlives the sheet).
+                            // Keep the request visible until reconciliation
+                            // verifies amount_issued. A paid invoice is not yet
+                            // a successful ecash receive.
                             walletManager.launch {
-                                runCatching {
-                                    walletManager.mintTokens(
-                                        quoteId = liveQuote.id,
-                                        unit = liveQuote.unit,
+                                val result = runCatching {
+                                    walletManager.refreshPendingMintQuote(
+                                        liveQuote.id,
                                         confirmationOwner = ReceiveConfirmationOwner.InFlow,
+                                    )
+                                }.getOrNull() ?: return@launch
+                                result.quote?.let { liveQuote = it }
+                                if (result.hasSettledPayment) {
+                                    successInfo = ReceiveSuccessInfo(
+                                        amountLabel = amountLabel,
+                                        mintName = activeMint?.name,
+                                        method = liveQuote.paymentMethod,
                                     )
                                 }
                             }
-                            successInfo = ReceiveSuccessInfo(
-                                amountLabel = amountLabel,
-                                mintName = activeMint?.name,
-                                method = liveQuote.paymentMethod,
-                            )
                         }
                     }
                     val isOnchain = liveQuote.paymentMethod == PaymentMethodKind.Onchain
@@ -835,6 +848,12 @@ fun ReceiveLightningScreen(
                             liveQuote.paymentMethod == PaymentMethodKind.Bolt12 && liveQuote.isAmountless
                         },
                         receivedAmountLabel = receivedAmountLabel,
+                        reusableSettlementState = when {
+                            liveQuote.paymentMethod != PaymentMethodKind.Bolt12 -> null
+                            liveQuote.mintableAmount > 0 -> ReusableOfferSettlementState.Minting
+                            liveQuote.amountIssued > 0 -> ReusableOfferSettlementState.Ready
+                            else -> ReusableOfferSettlementState.Waiting
+                        },
                         mintName = activeMint?.name,
                         createdAtEpochMillis = cashuRequestState.requests
                             .firstOrNull { it.quoteId == liveQuote.id }
@@ -1115,6 +1134,7 @@ private fun DisplayFace(
     quote: MintQuoteInfo,
     amountLabel: String?,
     receivedAmountLabel: String?,
+    reusableSettlementState: ReusableOfferSettlementState?,
     mintName: String?,
     createdAtEpochMillis: Long?,
     errorText: String?,
@@ -1168,8 +1188,7 @@ private fun DisplayFace(
             }
             if (isReusable) {
                 ReusableOfferStatus(
-                    received = receivedAmountLabel != null,
-                    receivedAmountLabel = receivedAmountLabel,
+                    state = reusableSettlementState ?: ReusableOfferSettlementState.Waiting,
                 )
             } else {
                 WaitingForPaymentRow(text = pendingStatusText)
@@ -1294,15 +1313,15 @@ internal fun GeneratedInvoiceAmount(
 
 /**
  * Status line for a reusable BOLT12 offer. Mirrors the Cashu Request status
- * block: quiet waiting pulse, then a green "Payment received!" once funds land
- * — without the old multi-line explainer that crowded the QR.
+ * block: quiet waiting, an explicit paid-but-unissued minting state, then a
+ * ready-again state only after the ecash issuance counter catches up.
  */
 @Composable
-private fun ReusableOfferStatus(received: Boolean, receivedAmountLabel: String?) {
-    // Waiting → received swaps with the same fade + scale-in the terminal
-    // glyph uses, so an arriving payment reads as a morph, not a pop.
+private fun ReusableOfferStatus(
+    state: ReusableOfferSettlementState,
+) {
     AnimatedContent(
-        targetState = received,
+        targetState = state,
         transitionSpec = {
             (
                 fadeIn(tween(200)) + scaleIn(
@@ -1315,9 +1334,24 @@ private fun ReusableOfferStatus(received: Boolean, receivedAmountLabel: String?)
                 ) togetherWith fadeOut(tween(150))
         },
         label = "reusable-offer-status",
-    ) { isReceived ->
-        if (isReceived) {
-            Row(
+    ) { current ->
+        when (current) {
+            ReusableOfferSettlementState.Waiting -> WaitingForPaymentRow()
+            ReusableOfferSettlementState.Minting -> Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(CashuTheme.spacing.snug),
+            ) {
+                CircularProgressIndicator(
+                    modifier = Modifier.size(CashuTheme.spacing.loose),
+                    strokeWidth = 2.dp,
+                )
+                Text(
+                    text = "Payment found. Minting ecash…",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            ReusableOfferSettlementState.Ready -> Row(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(CashuTheme.spacing.snug),
             ) {
@@ -1328,13 +1362,11 @@ private fun ReusableOfferStatus(received: Boolean, receivedAmountLabel: String?)
                     modifier = Modifier.size(CashuTheme.spacing.loose),
                 )
                 Text(
-                    text = receivedAmountLabel?.let { "Received $it" } ?: "Payment received!",
+                    text = "Ready for another payment",
                     style = MaterialTheme.typography.titleMedium,
                     color = CashuTheme.colors.onReceivedContainer,
                 )
             }
-        } else {
-            WaitingForPaymentRow()
         }
     }
 }
