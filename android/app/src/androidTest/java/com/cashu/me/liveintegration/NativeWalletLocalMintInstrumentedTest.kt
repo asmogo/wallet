@@ -26,7 +26,6 @@ import org.junit.Assume.assumeTrue
 import org.junit.Test
 import com.cashu.me.test.FullOnly
 
-@FullOnly
 class NativeWalletLocalMintInstrumentedTest {
     private val args = InstrumentationRegistry.getArguments()
     private val context = InstrumentationRegistry.getInstrumentation().targetContext
@@ -90,6 +89,7 @@ class NativeWalletLocalMintInstrumentedTest {
         }
     }
 
+    @FullOnly
     @Test
     fun nativeCdkWalletMatrixAgainstLocalMints() = runBlocking {
         assumeNativeMatrixEnabled()
