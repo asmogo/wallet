@@ -52,9 +52,6 @@ struct ReceiveLightningView: View {
     /// never returns offer descriptions — the local memo is the only record).
     @State private var offerDescription: String?
     @State private var offerDescriptionLoaded = false
-    // Quote creation is serialized through this handle — a new create cancels
-    // the in-flight one so the slowest task can't clobber the freshest offer.
-    @State private var quoteCreationTask: Task<Void, Never>?
     /// VoiceOver Share action for the QR cards: ShareLink can't be invoked
     /// imperatively, so the accessibility action presents the share sheet.
     @State private var showShareSheet = false
@@ -1266,7 +1263,6 @@ struct ReceiveLightningView: View {
         onchainObservation = nil
         monitoredQuoteId = nil
         quoteStatusTask?.cancel()
-        quoteCreationTask?.cancel()
 
         requestCreationTask = Task { @MainActor in
             defer { if !Task.isCancelled { isCreatingRequest = false } }
@@ -1318,7 +1314,7 @@ struct ReceiveLightningView: View {
             setReusableOfferAmount(amount)
         } else {
             amountString = ""
-            loadOrCreateAmountlessOffer()
+            loadOrCreateAmountlessOffer(mintURL: mintQuote?.mintURL, unit: mintQuote?.unit)
         }
     }
 
@@ -1369,7 +1365,6 @@ struct ReceiveLightningView: View {
         expiryTimeRemaining = 0
         quoteStatusTask?.cancel()
         expiryTimer?.invalidate()
-        quoteCreationTask?.cancel()
 
         requestCreationTask = Task { @MainActor in
             defer { if !Task.isCancelled { isCreatingRequest = false } }
@@ -1441,7 +1436,6 @@ struct ReceiveLightningView: View {
         expiryTimeRemaining = 0
         quoteStatusTask?.cancel()
         expiryTimer?.invalidate()
-        quoteCreationTask?.cancel()
 
         requestCreationTask = Task { @MainActor in
             defer { if !Task.isCancelled { isCreatingRequest = false } }

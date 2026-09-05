@@ -1,92 +1,92 @@
 import SwiftUI
 
-/// Description edit sheet for a reusable BOLT12 offer (Android
-/// `ReusableDescriptionEditSheet` parity). The text is embedded in the offer
-/// payers receive. Seeded verbatim from the current offer's stored memo;
-/// never from profile or mint metadata. Empty → removes the description
-/// (plain offer).
+/// Edits the payer-facing memo of a reusable BOLT12 offer. A blank draft
+/// removes the description; closing the sheet leaves the offer unchanged.
 struct ReusableOfferDescriptionSheet: View {
     @Environment(\.dismiss) private var dismiss
 
-    /// Current offer description, if any (`nil` = plain offer).
-    let currentDescription: String?
-    /// Called with the new description on Done (`nil` = removed). Sheet
-    /// dismisses afterwards.
     let onDone: (String?) -> Void
 
     @State private var description: String
+    @State private var contentHeight: CGFloat = 0
+    @FocusState private var descriptionFocused: Bool
 
     init(currentDescription: String?, onDone: @escaping (String?) -> Void) {
-        self.currentDescription = currentDescription
         self.onDone = onDone
         self._description = State(initialValue: currentDescription ?? "")
     }
 
     var body: some View {
-        VStack(spacing: 0) {
-            header
-
-            // Same glass input as Receive/Send destination fields. Stock
-            // `.roundedBorder` is a different visual system next to the glass
-            // Done button and sheet chrome. Persistent label (not a
-            // placeholder doing double duty) matches Add mint / Android's
-            // floating CashuTextField label.
+        NavigationStack {
             VStack(alignment: .leading, spacing: 0) {
-                Text("Description shown to the payer")
-                    .font(.footnote)
+                Text("Add a note for anyone paying this invoice.")
+                    .font(.subheadline)
                     .foregroundStyle(.secondary)
-                    .padding(.bottom, 6)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.bottom, 16)
 
                 TextField("e.g. Coffee tips", text: $description, axis: .vertical)
                     .font(.body)
-                    .lineLimit(2...4)
-                    .accessibilityLabel("Description shown to the payer")
+                    .textFieldStyle(.plain)
+                    .lineLimit(3...5)
+                    .textInputAutocapitalization(.sentences)
+                    .focused($descriptionFocused)
+                    .accessibilityLabel("Description")
+                    .accessibilityHint("Shown to the payer. Leave blank to remove.")
+                    .accessibilityIdentifier("reusable-description-field")
                     .onChange(of: description) { _, newValue in
                         if newValue.count > ReceiveLightningView.maxOfferDescriptionLength {
                             description = String(newValue.prefix(ReceiveLightningView.maxOfferDescriptionLength))
                         }
                     }
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 14)
-                    .liquidGlassInput(in: RoundedRectangle(cornerRadius: 12))
-            }
-            .padding(.horizontal)
-            .padding(.top, 16)
+                    .padding(16)
+                    .background(.quaternary.opacity(0.5), in: RoundedRectangle(cornerRadius: 16))
 
-            Spacer(minLength: 0)
+                HStack(alignment: .firstTextBaseline) {
+                    Text("Leave blank to remove.")
+                    Spacer(minLength: 8)
+                    Text("\(description.count) / \(ReceiveLightningView.maxOfferDescriptionLength)")
+                        .monospacedDigit()
+                        .accessibilityLabel("\(description.count) of \(ReceiveLightningView.maxOfferDescriptionLength) characters")
+                }
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+                .padding(.top, 8)
+                .padding(.bottom, 24)
 
-            Button(action: confirm) {
-                Text("Done")
+                Button("Save", action: confirm)
+                    .glassButton()
+                    .accessibilityIdentifier("reusable-description-save")
             }
-            .glassButton()
-            .padding(.horizontal)
-            .padding(.top, 16)
+            .padding(.horizontal, 20)
+            .padding(.top, 8)
             .padding(.bottom, 16)
-        }
-        .presentationDetents([.medium])
-        .presentationDragIndicator(.visible)
-    }
-
-    private var header: some View {
-        ZStack {
-            Text("Description")
-                .font(.headline)
-
-            HStack {
-                SheetCloseButton()
-                    .font(.body.weight(.semibold))
-                    .foregroundStyle(.secondary)
-
-                Spacer()
+            .contentFitMeasured { contentHeight = $0 }
+            .navigationTitle("Description")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbarBackground(.hidden, for: .navigationBar)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    SheetCloseButton()
+                }
             }
-            .padding(.horizontal)
         }
-        .padding(.top, 8)
+        .contentFitDetent(contentHeight, estimate: 290)
+        .presentationDragIndicator(.visible)
+        .compactBottomSheetSurface()
+        .task { descriptionFocused = true }
     }
 
     private func confirm() {
+        HapticFeedback.selection()
         let trimmed = description.trimmingCharacters(in: .whitespacesAndNewlines)
         onDone(trimmed.isEmpty ? nil : trimmed)
         dismiss()
+    }
+}
+
+#Preview {
+    Color.clear.sheet(isPresented: .constant(true)) {
+        ReusableOfferDescriptionSheet(currentDescription: "Coffee tips") { _ in }
     }
 }

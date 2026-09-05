@@ -39,6 +39,7 @@ import androidx.compose.material.icons.outlined.Repeat
 import androidx.compose.material.icons.outlined.Schedule
 import androidx.compose.material.icons.outlined.Timer
 import androidx.compose.material.icons.outlined.WarningAmber
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.CircularProgressIndicator
@@ -59,6 +60,11 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalClipboardManager
@@ -102,6 +108,7 @@ import com.cashu.me.ui.components.AmountFlipDisplay
 import com.cashu.me.ui.components.AmountText
 import com.cashu.me.ui.components.CanvasDivider
 import com.cashu.me.ui.components.CashuTextField
+import com.cashu.me.ui.components.CompactSheetContent
 import com.cashu.me.ui.components.ExplorerLinkRow
 import com.cashu.me.ui.components.FlowSheetTitle
 import com.cashu.me.ui.components.IconSwap
@@ -1704,46 +1711,80 @@ private fun ReusableAmountEditSheet(
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun ReusableDescriptionEditSheet(
+internal fun ReusableDescriptionEditSheet(
     initialDescription: String?,
     onDone: (String?) -> Unit,
     onDismiss: () -> Unit,
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-    var description by remember { mutableStateOf(initialDescription.orEmpty()) }
+    var description by rememberSaveable { mutableStateOf(initialDescription.orEmpty()) }
+    val focusRequester = remember { FocusRequester() }
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = sheetState,
+        containerColor = CashuTheme.colors.compactSheetContainer,
     ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .imePadding()
-                .navigationBarsPadding()
-                .padding(horizontal = CashuTheme.spacing.comfortable),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(CashuTheme.spacing.comfortable),
-        ) {
-            SheetHeader(
-                title = "Description",
-                navigationIcon = Icons.Outlined.Close,
-                navigationContentDescription = "Close",
-                onNavigationClick = onDismiss,
-            )
-            CashuTextField(
-                value = description,
-                onValueChange = { description = it.take(MAX_OFFER_DESCRIPTION_LENGTH) },
-                label = "Description shown to the payer",
-                placeholder = "e.g. Coffee tips",
-                modifier = Modifier.fillMaxWidth(),
-                minLines = 2,
-            )
-            PrimaryButton(
-                text = "Done",
-                onClick = { onDone(description.trim().ifEmpty { null }) },
-                modifier = Modifier.fillMaxWidth(),
-            )
+        CompactSheetContent {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .imePadding()
+                    .verticalScroll(rememberScrollState())
+                    .padding(horizontal = CashuTheme.spacing.loose)
+                    .padding(bottom = CashuTheme.spacing.comfortable),
+            ) {
+                SheetHeader(
+                    title = "Description",
+                    navigationIcon = Icons.Outlined.Close,
+                    navigationContentDescription = "Close",
+                    onNavigationClick = onDismiss,
+                )
+                Text(
+                    text = "Add a note for anyone paying this invoice.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(bottom = CashuTheme.spacing.comfortable),
+                )
+                CashuTextField(
+                    value = description,
+                    onValueChange = { description = it.take(MAX_OFFER_DESCRIPTION_LENGTH) },
+                    label = "Description",
+                    placeholder = "e.g. Coffee tips",
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .focusRequester(focusRequester)
+                        .testTag("reusable-description-field"),
+                    keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences),
+                    minLines = 3,
+                    maxLines = 5,
+                )
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = CashuTheme.spacing.snug, bottom = CashuTheme.spacing.section),
+                    horizontalArrangement = Arrangement.spacedBy(CashuTheme.spacing.snug),
+                ) {
+                    Text(
+                        text = "Leave blank to remove.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.weight(1f),
+                    )
+                    Text(
+                        text = "${description.length} / $MAX_OFFER_DESCRIPTION_LENGTH",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                PrimaryButton(
+                    text = "Save",
+                    onClick = { onDone(description.trim().ifEmpty { null }) },
+                    colors = ButtonDefaults.buttonColors(),
+                    modifier = Modifier.fillMaxWidth().testTag("reusable-description-save"),
+                )
+            }
         }
+        LaunchedEffect(Unit) { focusRequester.requestFocus() }
     }
 }
 
