@@ -48,6 +48,7 @@ struct ReceiveLightningView: View {
     @State private var showShareSheet = false
     @State private var qrShareText = ""
     @State private var quoteStatusTask: Task<Void, Never>?
+    @State private var requestCreationTask: Task<Void, Never>?
     @State private var expiryTimeRemaining: TimeInterval = 0
     @State private var expiryTimer: Timer?
     @State private var isExpired = false
@@ -238,6 +239,9 @@ struct ReceiveLightningView: View {
                 amountString = AmountFormatter.entryConverted(raw: amountString, from: oldUnit, to: newUnit)
             }
             .onDisappear {
+                requestCreationTask?.cancel()
+                requestCreationTask = nil
+                isCreatingRequest = false
                 quoteStatusTask?.cancel()
                 expiryTimer?.invalidate()
                 quoteStatusTask = nil
@@ -639,10 +643,10 @@ struct ReceiveLightningView: View {
         return mint.name.isEmpty ? extractMintHost(mintURL) : mint.name
     }
 
-    /// Full-screen success shown once payment is detected — the exact same
+    /// Full-screen success shown once ecash is issued — the exact same
     /// `PaymentStatusView` the pay/send flows use, so a received payment reads
     /// identically to a sent one (checkmark → title → detail block → Done).
-    /// Stays until the user taps Done; the mint/refresh runs in the background.
+    /// Stays until the user taps Done.
     private func receiveSuccessView(quote: MintQuoteInfo) -> some View {
         PaymentStatusView(
             details: receiveSuccessRows(quote: quote),
@@ -1121,6 +1125,7 @@ struct ReceiveLightningView: View {
             return
         }
 
+        requestCreationTask?.cancel()
         isCreatingRequest = true
         requestFailure = nil
         isPaid = false
@@ -1129,16 +1134,20 @@ struct ReceiveLightningView: View {
         monitoredQuoteId = nil
         quoteStatusTask?.cancel()
 
-        Task { @MainActor in
+        requestCreationTask = Task { @MainActor in
+            defer { if !Task.isCancelled { isCreatingRequest = false } }
             do {
                 guard let requestedMintURL else { throw WalletError.notInitialized }
-                mintQuote = try await walletManager.createMintQuote(
+                let quote = try await walletManager.createMintQuote(
                     amount: target,
                     method: .bolt12,
                     targetMintURL: requestedMintURL,
                     unit: requestedUnit
                 )
+                guard !Task.isCancelled else { return }
+                mintQuote = quote
             } catch {
+                guard !Task.isCancelled else { return }
                 requestFailure = ReceiveRequestFailure(
                     title: requestFailureTitle(for: .bolt12),
                     message: error.userFacingWalletMessage,
@@ -1149,7 +1158,6 @@ struct ReceiveLightningView: View {
                     )
                 )
             }
-            isCreatingRequest = false
         }
     }
 
@@ -1162,6 +1170,7 @@ struct ReceiveLightningView: View {
     ) {
         let requestedMintURL = mintURL ?? walletManager.activeMint?.url
         let requestedUnit = unit ?? effectiveUnit
+        requestCreationTask?.cancel()
         isCreatingRequest = true
         requestFailure = nil
         isAmountless = true
@@ -1174,7 +1183,8 @@ struct ReceiveLightningView: View {
         quoteStatusTask?.cancel()
         expiryTimer?.invalidate()
 
-        Task { @MainActor in
+        requestCreationTask = Task { @MainActor in
+            defer { if !Task.isCancelled { isCreatingRequest = false } }
             do {
                 let quote: MintQuoteInfo
                 guard let requestedMintURL else { throw WalletError.notInitialized }
@@ -1192,9 +1202,11 @@ struct ReceiveLightningView: View {
                         unit: requestedUnit
                     )
                 }
+                guard !Task.isCancelled else { return }
                 quoteCreatedAt = Date()
                 mintQuote = quote
             } catch {
+                guard !Task.isCancelled else { return }
                 requestFailure = ReceiveRequestFailure(
                     title: requestFailureTitle(for: .bolt12),
                     message: error.userFacingWalletMessage,
@@ -1205,7 +1217,6 @@ struct ReceiveLightningView: View {
                     )
                 )
             }
-            isCreatingRequest = false
         }
     }
 
@@ -1219,6 +1230,8 @@ struct ReceiveLightningView: View {
     }
 
     private func createRequest(method requestMethod: PaymentMethodKind, amountless: Bool, forceNew: Bool = false) {
+        let requestedUnit = effectiveUnit
+        let requestedMintURL = walletManager.activeMint?.url
         // Onchain is always amountless (sender decides). Lightning/BOLT12 require a value.
         // Amount is in the active unit's base units (sats, or eur/usd cents, …).
         let requestAmount: UInt64? = (amountless || requestMethod == .onchain) ? nil : (amountBaseUnits > 0 ? amountBaseUnits : nil)
@@ -1227,6 +1240,7 @@ struct ReceiveLightningView: View {
             return
         }
 
+        requestCreationTask?.cancel()
         isCreatingRequest = true
         requestFailure = nil
         isPaid = false
@@ -1238,23 +1252,27 @@ struct ReceiveLightningView: View {
         quoteStatusTask?.cancel()
         expiryTimer?.invalidate()
 
-        Task { @MainActor in
+        requestCreationTask = Task { @MainActor in
+            defer { if !Task.isCancelled { isCreatingRequest = false } }
             do {
                 let quote: MintQuoteInfo
                 if !forceNew,
                    requestMethod == .onchain,
-                   let existing = try await walletManager.existingOnchainMintQuote() {
+                   let existing = try await walletManager.existingOnchainMintQuote(mintURL: requestedMintURL) {
                     quote = existing
                 } else {
                     quote = try await walletManager.createMintQuote(
                         amount: requestAmount,
                         method: requestMethod,
-                        unit: effectiveUnit
+                        targetMintURL: requestedMintURL,
+                        unit: requestedUnit
                     )
                 }
+                guard !Task.isCancelled else { return }
                 quoteCreatedAt = Date()
                 mintQuote = quote
             } catch {
+                guard !Task.isCancelled else { return }
                 requestFailure = ReceiveRequestFailure(
                     title: requestFailureTitle(for: requestMethod),
                     message: error.userFacingWalletMessage,
@@ -1265,7 +1283,6 @@ struct ReceiveLightningView: View {
                     )
                 )
             }
-            isCreatingRequest = false
         }
     }
 
@@ -1379,7 +1396,7 @@ struct ReceiveLightningView: View {
                 unit: refreshed.unit,
                 mintURL: refreshed.mintURL
             )
-            await completeReceivedQuote(mintInBackground: false)
+            await completeReceivedQuote()
             return
         }
     }
@@ -1467,6 +1484,7 @@ struct ReceiveLightningView: View {
 
         do {
             let updatedQuote = try await walletManager.checkMintQuote(quoteId: quote.id)
+            guard !Task.isCancelled, mintQuote?.id == quote.id else { return }
             mintQuote = updatedQuote
 
             if updatedQuote.paymentMethod == .onchain, updatedQuote.state == .pending {
@@ -1481,13 +1499,13 @@ struct ReceiveLightningView: View {
             case .pending:
                 return
             case .paid:
-                // Payment detected. Finish the UX immediately and mint in the
-                // background so a slow/transiently-failing mint never hangs the
-                // sheet (the balance credits a beat later).
-                await completeReceivedQuote(mintInBackground: true)
+                // A paid invoice is not spendable ecash until minting succeeds.
+                // Keep monitoring through transient failures; show a receipt only
+                // after CDK has persisted the issued proofs.
+                await mintQuoteIfReady(updatedQuote)
             case .issued:
                 // Mint already issued the ecash — just refresh + finish.
-                await completeReceivedQuote(mintInBackground: false)
+                await completeReceivedQuote()
             }
         } catch {
             // Ignore transient polling failures and keep monitoring.
@@ -1499,7 +1517,7 @@ struct ReceiveLightningView: View {
         guard quote.paymentMethod == .onchain,
               let amount = quote.amount,
               let createdAt = quoteCreatedAt,
-              let mintURL = walletManager.activeMint?.url else {
+              let mintURL = quote.mintURL else {
             onchainObservation = nil
             return
         }
@@ -1521,10 +1539,10 @@ struct ReceiveLightningView: View {
 
         do {
             let _ = try await walletManager.mintTokens(quoteId: quote.id)
-            await completeReceivedQuote(mintInBackground: false)
+            await completeReceivedQuote()
         } catch {
             if isAlreadyIssuedMintError(error) {
-                await completeReceivedQuote(mintInBackground: false)
+                await completeReceivedQuote()
                 return
             }
 
@@ -1538,32 +1556,15 @@ struct ReceiveLightningView: View {
         }
     }
 
-    /// Finish the receive UX as soon as the payment is *detected*. When
-    /// `mintInBackground` is true the quote is `.paid` but not yet minted: we
-    /// claim it in a detached task so a slow mint never holds the sheet open.
-    /// When false the ecash is already issued and we just refresh.
+    /// Publish a receipt only after the receive has been issued.
     @MainActor
-    private func completeReceivedQuote(mintInBackground: Bool) async {
+    private func completeReceivedQuote() async {
         guard !isPaid else { return }
-
-        // Flipping `isPaid` swaps the body to the full-screen success. The
-        // success haptic is owned by `PaymentStatusView` on appear (don't
-        // double-buzz here).
         isPaid = true
         expiryTimer?.invalidate()
-
-        let quoteId = mintQuote?.id
-
-        // Run the mint/refresh in an UNSTRUCTURED task that outlives this view
-        // and the (about-to-be-cancelled) poll task, so it completes after the
-        // sheet slides away.
-        if mintInBackground, let quoteId {
-            Task { await walletManager.claimPaidMintQuote(quoteId: quoteId) }
-        } else {
-            Task { @MainActor in
-                await walletManager.refreshBalance()
-                await walletManager.loadTransactions()
-            }
+        Task { @MainActor in
+            await walletManager.refreshBalance()
+            await walletManager.loadTransactions()
         }
 
         // Fire the home-screen toast (same notification the NPC mint flow
@@ -1579,26 +1580,12 @@ struct ReceiveLightningView: View {
             )
         }
 
-        // Payment is in — stop polling. The full-screen success now owns the
-        // screen and stays until the user taps Done (no auto-dismiss); the
-        // mint finishes in the background.
+        // Issuance is complete; the receipt stays until the user taps Done.
         quoteStatusTask?.cancel()
     }
 
     private func isAlreadyIssuedMintError(_ error: Error) -> Bool {
-        let errorString = "\(error.localizedDescription) \(String(describing: error))".lowercased()
-
-        if errorString.contains("already being minted")
-            || errorString.contains("not issued")
-            || errorString.contains("not yet")
-            || errorString.contains("unissued") {
-            return false
-        }
-
-        return errorString.contains("already issued")
-            || errorString.contains("already minted")
-            || errorString.contains("quote is issued")
-            || errorString.contains("state=issued")
+        walletManager.isAlreadyIssuedMintError(error)
     }
 }
 

@@ -751,7 +751,7 @@ enum ContentFitSheetMetrics {
     }
 
     /// First-frame stand-in before the geometry measurement lands.
-    static let bodyEstimate: CGFloat = 220
+    nonisolated static let bodyEstimate: CGFloat = 220
 
     /// Ceiling as a fraction of the screen. Past this the body scrolls inside
     /// the sheet rather than the sheet growing — at accessibility text sizes an

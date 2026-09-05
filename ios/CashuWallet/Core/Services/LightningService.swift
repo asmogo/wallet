@@ -35,6 +35,14 @@ enum MintQuoteContextPolicy {
 /// Handles minting (receiving via Lightning) and melting (paying via Lightning).
 @MainActor
 class LightningService: ObservableObject {
+    static func requiredMeltAmount(amount: UInt64, feeReserve: UInt64) throws -> UInt64 {
+        let total = amount.addingReportingOverflow(feeReserve)
+        guard !total.overflow else {
+            throw WalletError.networkError("The mint returned an invalid payment amount or fee.")
+        }
+        return total.partialValue
+    }
+
     private enum QuoteExpiry {
         static let never: UInt64 = 0
         static let localNeverExpiresSentinel: UInt64 = 253_402_300_799
@@ -82,7 +90,7 @@ class LightningService: ObservableObject {
     /// - Parameter targetMintURL: mint the quote is created at. Defaults to the
     ///   active mint (existing callers). Pass an explicit URL to mint at a
     ///   specific mint — e.g. funding a freshly-added mint to pay a Cashu request.
-    ///   Honored for bolt11 and bolt12; onchain still uses the active mint.
+    ///   Honored for all supported payment methods.
     func createMintQuote(
         amount: UInt64?,
         method: PaymentMethodKind = .bolt11,
@@ -103,7 +111,7 @@ class LightningService: ObservableObject {
         }
 
         if method == .onchain {
-            return try await createOnchainMintQuote(activeMint: activeMint)
+            return try await createOnchainMintQuote(mintURL: targetMintURL ?? activeMint.url)
         }
 
         guard let repo = walletRepository() else {
@@ -150,13 +158,13 @@ class LightningService: ObservableObject {
 
     /// Returns an existing unpaid onchain quote at the active mint, or nil if none exists.
     /// Used to avoid generating a fresh deposit address on every visit to the onchain receive screen.
-    func existingOnchainMintQuote() async throws -> MintQuoteInfo? {
+    func existingOnchainMintQuote(mintURL: String? = nil) async throws -> MintQuoteInfo? {
         guard let db = walletDatabase(),
-              let activeMint = getActiveMint() else { return nil }
+              let mintURL = mintURL ?? getActiveMint()?.url else { return nil }
         let pendingQuotes = try await db.getUnissuedMintQuotes()
         guard let match = pendingQuotes.first(where: {
             PaymentMethodKind.from($0.paymentMethod) == .onchain
-            && $0.mintUrl.url == activeMint.url
+            && MintURLIdentity.normalized($0.mintUrl.url) == MintURLIdentity.normalized(mintURL)
             && $0.amountPaid.value == 0
         }) else { return nil }
         let info = mintQuoteInfo(from: match, fallbackAmount: nil, paymentMethod: .onchain)
@@ -276,22 +284,14 @@ class LightningService: ObservableObject {
                 await persistMintQuoteIfNeeded(normalizedQuote, paymentMethod: .bolt12)
             }
 
-            if let operationId = normalizedQuote.usedByOperation {
-                do {
-                    try await walletDatabase.releaseMintQuote(operationId: operationId)
-                    try? await walletDatabase.deleteSaga(id: operationId)
-                    if let refreshedQuote = try await walletDatabase.getMintQuote(quoteId: quoteId),
-                       refreshedQuote.usedByOperation != nil {
-                        try await replaceStoredMintQuote(
-                            mintQuoteClearingReservation(refreshedQuote),
-                            in: walletDatabase
-                        )
-                    }
-                } catch {
-                    AppLogger.wallet.error(
-                        "stored mint quote release failed operation=\(WalletOperationCoordinator.privacySafeIdentifier(operationId), privacy: .public) error_type=\(String(reflecting: type(of: error)), privacy: .public)"
-                    )
-                }
+            if normalizedQuote.usedByOperation != nil {
+                let wallet = try await repo.getWallet(mintUrl: mintUrl, unit: quoteUnit)
+                let recoveredAmount = try await MintQuoteRecovery.reconcile(
+                    quote: normalizedQuote,
+                    recover: { _ = try await wallet.recoverIncompleteSagas() },
+                    reload: { try await walletDatabase.getMintQuote(quoteId: quoteId) }
+                )
+                if recoveredAmount > 0 { return recoveredAmount }
             }
         } else {
             throw WalletError.networkError(
@@ -365,7 +365,7 @@ class LightningService: ObservableObject {
                     extra: nil
                 )
 
-                let totalRequired = quote.amount.value + quote.feeReserve.value
+                let totalRequired = try Self.requiredMeltAmount(amount: quote.amount.value, feeReserve: quote.feeReserve.value)
                 guard mint.balance >= totalRequired else {
                     lastError = NFCPaymentError.insufficientBalance(required: totalRequired, available: mint.balance)
                     continue
@@ -479,7 +479,7 @@ class LightningService: ObservableObject {
                     extra: nil
                 )
 
-                let totalRequired = quote.amount.value + quote.feeReserve.value
+                let totalRequired = try Self.requiredMeltAmount(amount: quote.amount.value, feeReserve: quote.feeReserve.value)
                 guard mint.balance >= totalRequired else {
                     lastError = NFCPaymentError.insufficientBalance(required: totalRequired, available: mint.balance)
                     continue
@@ -532,7 +532,7 @@ class LightningService: ObservableObject {
                     network: bitcoinNetwork(for: mint.url)
                 )
 
-                let totalRequired = quote.amount.value + quote.feeReserve.value
+                let totalRequired = try Self.requiredMeltAmount(amount: quote.amount.value, feeReserve: quote.feeReserve.value)
                 guard mint.balance >= totalRequired else {
                     lastError = NFCPaymentError.insufficientBalance(required: totalRequired, available: mint.balance)
                     continue
@@ -597,7 +597,7 @@ class LightningService: ObservableObject {
                 }
 
                 let quote = try await wallet.selectOnchainMeltQuote(quote: quoteOption)
-                let totalRequired = quote.amount.value + quote.feeReserve.value
+                let totalRequired = try Self.requiredMeltAmount(amount: quote.amount.value, feeReserve: quote.feeReserve.value)
                 guard mint.balance >= totalRequired else {
                     lastError = NFCPaymentError.insufficientBalance(required: totalRequired, available: mint.balance)
                     continue
@@ -730,18 +730,7 @@ class LightningService: ObservableObject {
     }
 
     private func normalizedMintURL(_ urlString: String) -> String {
-        let trimmed = urlString.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard let url = URL(string: trimmed),
-              let host = url.host?.lowercased() else {
-            return trimmed.lowercased().trimmingCharacters(in: CharacterSet(charactersIn: "/"))
-        }
-
-        var normalized = host
-        if let port = url.port {
-            normalized += ":\(port)"
-        }
-        normalized += url.path.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
-        return normalized
+        MintURLIdentity.normalized(urlString)
     }
     
     /// Outcome of a melt confirmation. Pending results are persisted and
@@ -1227,11 +1216,7 @@ class LightningService: ObservableObject {
     private func persistMintQuote(_ quote: MintQuote) async {
         do {
             guard let walletDatabase = walletDatabase() else { return }
-            let quoteToPersist = await mintQuoteClearingOrphanedReservationIfNeeded(
-                quote,
-                in: walletDatabase
-            )
-            try await replaceStoredMintQuote(quoteToPersist, in: walletDatabase)
+            try await replaceStoredMintQuote(quote, in: walletDatabase)
         } catch {
             AppLogger.wallet.error(
                 "mint quote persistence failed resource=\(WalletOperationCoordinator.privacySafeIdentifier(quote.id), privacy: .public) error_type=\(String(reflecting: type(of: error)), privacy: .public)"
@@ -1301,48 +1286,6 @@ class LightningService: ObservableObject {
         return nil
     }
 
-    private func mintQuoteClearingOrphanedReservationIfNeeded(
-        _ quote: MintQuote,
-        in walletDatabase: WalletSqliteDatabase
-    ) async -> MintQuote {
-        guard let operationId = quote.usedByOperation else {
-            return quote
-        }
-
-        do {
-            guard try await walletDatabase.getSaga(id: operationId) == nil else {
-                return quote
-            }
-
-            return mintQuoteClearingReservation(quote)
-        } catch {
-            AppLogger.wallet.error(
-                "mint quote reservation inspection failed operation=\(WalletOperationCoordinator.privacySafeIdentifier(operationId), privacy: .public) quote=\(WalletOperationCoordinator.privacySafeIdentifier(quote.id), privacy: .public) error_type=\(String(reflecting: type(of: error)), privacy: .public)"
-            )
-            return quote
-        }
-    }
-
-    private func mintQuoteClearingReservation(_ quote: MintQuote) -> MintQuote {
-        MintQuote(
-            id: quote.id,
-            amount: quote.amount,
-            unit: quote.unit,
-            request: quote.request,
-            state: quote.state,
-            expiry: quote.expiry,
-            mintUrl: quote.mintUrl,
-            amountIssued: quote.amountIssued,
-            amountPaid: quote.amountPaid,
-            updatedAt: quote.updatedAt,
-            estimatedBlocks: quote.estimatedBlocks,
-            paymentMethod: quote.paymentMethod,
-            secretKey: quote.secretKey,
-            usedByOperation: nil,
-            version: quote.version
-        )
-    }
-
     private func mintQuotePreservingLocalMetadata(
         _ quote: MintQuote,
         from existingQuote: MintQuote
@@ -1375,16 +1318,20 @@ class LightningService: ObservableObject {
         )
     }
 
-    private func replaceStoredMintQuote(
+    func replaceStoredMintQuote(
         _ quote: MintQuote,
         in walletDatabase: WalletSqliteDatabase
     ) async throws {
-        do {
-            try await walletDatabase.addMintQuote(quote: quote)
-        } catch {
-            try await walletDatabase.removeMintQuote(quoteId: quote.id)
-            try await walletDatabase.addMintQuote(quote: quote)
+        // The FFI upsert accepts a stale record, including its reservation.
+        // While the repository lease is held, reject stale app projections
+        // instead of overwriting CDK's newer recovery state.
+        if let current = try await walletDatabase.getMintQuote(quoteId: quote.id) {
+            guard quote.version >= current.version,
+                  quote.usedByOperation == current.usedByOperation else {
+                throw WalletError.networkError("This receive request changed. Refresh it and try again.")
+            }
         }
+        try await walletDatabase.addMintQuote(quote: quote)
     }
 
     private func refreshStoredOnchainMintQuoteStatus(
@@ -1407,20 +1354,16 @@ class LightningService: ObservableObject {
             return refreshedQuote
         }
 
-        let quoteToPersist = await mintQuoteClearingOrphanedReservationIfNeeded(
-            refreshedQuote,
-            in: walletDatabase
-        )
-        try await replaceStoredMintQuote(quoteToPersist, in: walletDatabase)
-        return quoteToPersist
+        try await replaceStoredMintQuote(refreshedQuote, in: walletDatabase)
+        return refreshedQuote
     }
 
-    private func createOnchainMintQuote(activeMint: MintInfo) async throws -> MintQuoteInfo {
+    private func createOnchainMintQuote(mintURL: String) async throws -> MintQuoteInfo {
         guard let repo = walletRepository() else {
             throw WalletError.notInitialized
         }
 
-        let mintUrl = MintUrl(url: activeMint.url)
+        let mintUrl = MintUrl(url: mintURL)
         let wallet = try await repo.getWallet(mintUrl: mintUrl, unit: .sat)
 
         let quote = try await wallet.mintQuote(

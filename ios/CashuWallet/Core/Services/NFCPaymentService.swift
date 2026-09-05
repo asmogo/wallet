@@ -210,18 +210,7 @@ final class NFCPaymentService {
     }
 
     private static func normalizedMintURL(_ urlString: String) -> String {
-        let trimmed = urlString.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard let url = URL(string: trimmed),
-              let host = url.host?.lowercased() else {
-            return trimmed.lowercased().trimmingCharacters(in: CharacterSet(charactersIn: "/"))
-        }
-
-        var normalized = host
-        if let port = url.port {
-            normalized += ":\(port)"
-        }
-        normalized += url.path.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
-        return normalized
+        MintURLIdentity.normalized(urlString)
     }
 
     private static func description(for unit: Cdk.CurrencyUnit) -> String {

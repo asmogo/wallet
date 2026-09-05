@@ -71,7 +71,8 @@ struct MeltQuoteInfo: Identifiable {
     let expiry: UInt64?
     
     var totalAmount: UInt64 {
-        amount + feeReserve
+        let total = amount.addingReportingOverflow(feeReserve)
+        return total.overflow ? UInt64.max : total.partialValue
     }
     
     var isExpired: Bool {

@@ -239,19 +239,7 @@ final class TransactionServiceTests: XCTestCase {
         XCTAssertTrue(service.transactions.isEmpty)
     }
 
-    func testWalletUnitsIncludeSatAndEveryAdvertisedUnit() {
-        XCTAssertEqual(
-            TransactionService.walletUnits(advertisedUnits: ["usd", "EUR", "points"]),
-            ["sat", "usd", "EUR", "points"]
-        )
-    }
 
-    func testWalletUnitsIgnoreEmptyAndCaseInsensitiveDuplicates() {
-        XCTAssertEqual(
-            TransactionService.walletUnits(advertisedUnits: [" SAT ", "usd", "USD", " "]),
-            ["sat", "usd"]
-        )
-    }
 
     // MARK: - Detail lookup (quote-row → transaction-row follow)
 

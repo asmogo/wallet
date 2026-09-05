@@ -40,27 +40,7 @@ enum MintRemovalPolicy {
     }
 
     private static func normalizedMintURL(_ url: String) -> String {
-        let trimmed = url.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard var components = URLComponents(string: trimmed),
-              components.scheme != nil,
-              components.host != nil else {
-            return trimmed
-        }
-
-        // URL scheme and host are case-insensitive, but paths are not. Folding
-        // the whole string could remove a distinct mint at `/Mint` when the
-        // user selected `/mint`.
-        components.scheme = components.scheme?.lowercased()
-        components.host = components.host?.lowercased()
-        var path = components.percentEncodedPath
-        while path.count > 1 && path.hasSuffix("/") {
-            path.removeLast()
-        }
-        if path == "/" {
-            path = ""
-        }
-        components.percentEncodedPath = path
-        return components.string ?? trimmed
+        MintURLIdentity.normalized(url)
     }
 
     /// Commit local mint metadata only after the native removal succeeds.
@@ -148,7 +128,7 @@ class MintService: ObservableObject {
         }
 
         // Check if already exists locally
-        if mints.contains(where: { $0.url == normalizedUrl }) {
+        if isMintTracked(url: normalizedUrl) {
             throw WalletError.mintAlreadyExists
         }
         
@@ -225,7 +205,10 @@ class MintService: ObservableObject {
         guard walletRepository() != nil else {
             throw WalletError.notInitialized
         }
-        activeMint = mint
+        guard let current = mints.first(where: { MintRemovalPolicy.matches($0.url, mint.url) }) else {
+            throw WalletError.networkError("Mint is no longer tracked.")
+        }
+        activeMint = current
     }
     
     /// Load mints from persistent storage without touching the network-backed wallet repository.
@@ -323,7 +306,7 @@ class MintService: ObservableObject {
     
     /// Whether a mint with the given URL is already tracked.
     func isMintTracked(url: String) -> Bool {
-        mints.contains { $0.url == normalizeUrl(url) }
+        mints.contains { MintRemovalPolicy.matches($0.url, normalizeUrl(url)) }
     }
 
     /// Ensure a mint discovered via an incoming token or NPC quote is tracked with
@@ -337,7 +320,7 @@ class MintService: ObservableObject {
     ///   user-selected active mint and the mint's balance are preserved.
     func ensureMintTracked(url: String, name: String? = nil) async {
         let normalizedUrl = normalizeUrl(url)
-        let existingIndex = mints.firstIndex(where: { $0.url == normalizedUrl })
+        let existingIndex = mints.firstIndex(where: { MintRemovalPolicy.matches($0.url, normalizedUrl) })
 
         // Already tracked with real metadata — nothing to do.
         if let existingIndex, !mintNeedsEnrichment(mints[existingIndex]) {
@@ -435,10 +418,7 @@ class MintService: ObservableObject {
         if explicitUrlScheme(in: normalized) == nil {
             normalized = "https://" + normalized
         }
-        if normalized.hasSuffix("/") {
-            normalized = String(normalized.dropLast())
-        }
-        return normalized
+        return MintURLIdentity.normalized(normalized)
     }
 
     /// Validate that a mint URL uses http or https
