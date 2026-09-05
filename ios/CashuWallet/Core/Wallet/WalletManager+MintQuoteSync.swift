@@ -94,35 +94,23 @@ extension WalletManager {
     }
 
     private func mintUnissuedQuotesAcrossWallets() async {
-        guard let repo = walletRepository else { return }
+        guard walletRepository != nil else { return }
         lastMintQuoteSyncAt = Date()
 
         var mintedAny = false
-        for mintUrlString in trackedMintUrlsForWalletAccess() {
-            let units = TransactionService.walletUnits(
-                advertisedUnits: self.mints.first(where: { $0.url == mintUrlString })?.units ?? ["sat"]
-            )
-            for unitString in units {
-                guard !Task.isCancelled else { return }
-                do {
-                    let wallet = try await repo.getWallet(
-                        mintUrl: MintUrl(url: mintUrlString),
-                        unit: PaymentRequestDecoder.currencyUnit(from: unitString)
-                    )
-                    let minted = try await wallet.mintUnissuedQuotes()
-                    mintedAny = mintedAny || minted.value > 0
-                } catch is CancellationError {
-                    return
-                } catch {
-                    AppLogger.wallet.error(
-                        "unissued quote sweep failed resource=\(WalletOperationCoordinator.privacySafeIdentifier(mintUrlString), privacy: .public) error_type=\(String(reflecting: type(of: error)), privacy: .public)"
-                    )
-                }
-
-                if await operationCoordinator.hasWaitingUserOperation() {
-                    break
-                }
+        for wallet in await trackedWalletsAssumingWalletOperationLease() {
+            guard !Task.isCancelled else { break }
+            do {
+                let minted = try await wallet.mintUnissuedQuotes()
+                mintedAny = mintedAny || minted.value > 0
+            } catch is CancellationError {
+                break
+            } catch {
+                AppLogger.wallet.error(
+                    "unissued quote sweep failed error_type=\(String(reflecting: type(of: error)), privacy: .public)"
+                )
             }
+            if await operationCoordinator.hasWaitingUserOperation() { break }
         }
 
         if mintedAny {

@@ -29,7 +29,7 @@ final class WalletSurfaceCoordinatorTests: XCTestCase {
 
         nav.sheetDidDismiss()
 
-        XCTAssertEqual(nav.activeFlowCover?.id, "token-cashuAexample")
+        XCTAssertEqual(nav.activeFlowCover?.id, FlowCover.receiveToken("cashuAexample").id)
     }
 
     func testParkedSurfaceFiresExactlyOnce() {
@@ -54,7 +54,7 @@ final class WalletSurfaceCoordinatorTests: XCTestCase {
         nav.present(.cover(.receiveToken("cashuAsecond")))
         nav.sheetDidDismiss()
 
-        XCTAssertEqual(nav.activeFlowCover?.id, "token-cashuAsecond")
+        XCTAssertEqual(nav.activeFlowCover?.id, FlowCover.receiveToken("cashuAsecond").id)
     }
 
     func testUserDismissalMarksDismissalInFlightUntilOnDismiss() {
@@ -71,7 +71,7 @@ final class WalletSurfaceCoordinatorTests: XCTestCase {
         XCTAssertNil(nav.activeFlowCover)
 
         nav.sheetDidDismiss()
-        XCTAssertEqual(nav.activeFlowCover?.id, "token-cashuAparked")
+        XCTAssertEqual(nav.activeFlowCover?.id, FlowCover.receiveToken("cashuAparked").id)
     }
 
     func testSheetContentSwapKeepsSurfaceOpen() {
@@ -122,7 +122,10 @@ final class WalletSurfaceCoordinatorTests: XCTestCase {
 
         nav.sheetDidDismiss()
 
-        XCTAssertEqual(nav.activeWalletSheet?.id, "creq-creqAtest")
+        guard case .cashuRequestPay(let presented) = nav.activeWalletSheet else {
+            return XCTFail("Expected the Cashu request payment sheet")
+        }
+        XCTAssertEqual(presented.encoded, "creqAtest")
         XCTAssertNil(nav.activeFlowCover)
     }
 

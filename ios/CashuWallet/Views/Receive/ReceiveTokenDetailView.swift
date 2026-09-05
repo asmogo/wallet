@@ -57,7 +57,8 @@ struct ReceiveTokenDetailView: View {
     /// The token's own unit ("sat", "eur", "usd", or a custom string). Drives
     /// unit-native amount/fee formatting so a non-sat token isn't shown as sats.
     @State private var tokenUnit: String
-    @State private var receiveFee: UInt64 = 0
+    @State private var receiveFee: UInt64?
+    @State private var isValidToken = false
     /// The net amount CDK actually credited (token value minus the mint's
     /// receive-swap fee), set once the claim completes. Drives the success
     /// screen so "Amount" matches the balance change instead of the token's
@@ -114,8 +115,8 @@ struct ReceiveTokenDetailView: View {
     /// previewed receive-swap fee. The hero and the success estimate both show
     /// this — a 5001-sat token that redeems for 5000 must read as 5000, with
     /// the fee row accounting for the difference. Equals the gross value until
-    /// the async fee preview lands (receiveFee starts at 0).
-    private var netReceiveAmount: UInt64 { tokenAmount - min(receiveFee, tokenAmount) }
+    /// the async fee preview lands.
+    private var netReceiveAmount: UInt64 { tokenAmount - min(receiveFee ?? 0, tokenAmount) }
 
     private var unitCurrency: any Currency { CurrencyRegistry.currency(forMintUnit: tokenUnit) }
 
@@ -168,9 +169,10 @@ struct ReceiveTokenDetailView: View {
                 }
             }
         }
-        .onAppear {
-            parseToken()
+        .task(id: tokenString) {
+            await parseToken()
         }
+        .interactiveDismissDisabled(phase == .processing)
     }
 
     /// The confirm step, on the shared `PayFlowScaffold` so its details block
@@ -206,7 +208,7 @@ struct ReceiveTokenDetailView: View {
                         .font(.subheadline)
                         .padding(.horizontal, 4)
                         .padding(.vertical, 14)
-                    } else {
+                    } else if let receiveFee {
                         // Prospective charge (docs/product/copy-guidance.md):
                         // "No fee" states the user is charged nothing; a bare
                         // "0 sat" reads as an accounting figure.
@@ -214,6 +216,19 @@ struct ReceiveTokenDetailView: View {
                             label: "Fee",
                             value: receiveFee == 0 ? "No fee" : formatFee(receiveFee)
                         )
+                    } else {
+                        HStack {
+                            Text("Fee unavailable")
+                                .foregroundStyle(.secondary)
+                            Spacer()
+                            Button("Retry") {
+                                Task { await calculateFee() }
+                            }
+                            .disabled(!isValidToken)
+                        }
+                        .font(.subheadline)
+                        .padding(.horizontal, 4)
+                        .padding(.vertical, 14)
                     }
                     detailRow(label: "Mint", value: shortMintUrl(mintUrl))
                     if let memo = reviewPresentation.memo {
@@ -245,7 +260,7 @@ struct ReceiveTokenDetailView: View {
                     Text(reviewPresentation.claimActionTitle)
                 }
                 .glassButton()
-                .disabled(!tokenLockedToKnownKey)
+                .disabled(!isValidToken || !tokenLockedToKnownKey || isLoadingFee || receiveFee == nil)
 
                 if let secondaryActionTitle, let onSecondaryAction {
                     Button(action: onSecondaryAction) {
@@ -295,7 +310,7 @@ struct ReceiveTokenDetailView: View {
                 value: formatAmount(claimedAmount ?? netReceiveAmount)
             ),
         ]
-        let settledFee = paidFee ?? receiveFee
+        let settledFee = paidFee ?? receiveFee ?? 0
         if settledFee > 0 {
             rows.append(.init(label: "Fee", value: formatFee(settledFee)))
         }
@@ -391,7 +406,8 @@ struct ReceiveTokenDetailView: View {
 
     // MARK: - Actions
 
-    func parseToken() {
+    private func parseToken() async {
+        isValidToken = false
         do {
             let token = try walletManager.decodeToken(tokenString: tokenString)
             // `tokenAmount` is parsed eagerly in init (same Token.decode path), so
@@ -400,6 +416,7 @@ struct ReceiveTokenDetailView: View {
             let mint = try token.mintUrl()
             self.mintUrl = mint.url
             self.mintIsKnown = walletManager.isMintKnown(url: mint.url)
+            isValidToken = true
 
             let tokenP2PKPubkeys = token.p2pkPubkeys()
             self.p2pkPubkeys = tokenP2PKPubkeys
@@ -409,29 +426,29 @@ struct ReceiveTokenDetailView: View {
                 errorMessage = "This ecash is locked to a key you don't hold. Ask the sender to lock it to your key instead."
             }
 
-            Task { await calculateFee() }
+            await calculateFee()
         } catch {
             errorMessage = "Invalid token. \(error.userFacingWalletMessage)"
             isLoadingFee = false
         }
     }
 
-    func calculateFee() async {
+    private func calculateFee() async {
+        guard !Task.isCancelled else { return }
+        isLoadingFee = true
+        receiveFee = nil
         do {
             let fee = try await walletManager.calculateReceiveFee(tokenString: tokenString)
-            await MainActor.run {
-                self.receiveFee = fee
-                self.isLoadingFee = false
-            }
+            guard !Task.isCancelled else { return }
+            receiveFee = fee
         } catch {
-            await MainActor.run {
-                self.receiveFee = 0
-                self.isLoadingFee = false
-            }
+            guard !Task.isCancelled else { return }
         }
+        isLoadingFee = false
     }
 
     func receiveToken() {
+        guard phase != .processing, isValidToken, !isLoadingFee, receiveFee != nil else { return }
         guard tokenLockedToKnownKey else {
             errorMessage = "This token is locked to a key you don't have. Ask the sender to lock it to your key instead."
             return
@@ -494,6 +511,7 @@ struct ReceiveTokenDetailView: View {
     }
 
     func receiveLater() {
+        guard isValidToken, phase != .processing else { return }
         let pendingReceive = PendingReceiveToken(
             tokenId: UUID().uuidString,
             token: tokenString,

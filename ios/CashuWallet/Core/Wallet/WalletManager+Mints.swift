@@ -2,6 +2,19 @@ import Foundation
 import Cdk
 
 extension WalletManager {
+    /// Stored accounts remain authoritative even if a mint stops advertising
+    /// a currency. Include every tracked account in recovery and settlement.
+    func trackedWalletsAssumingWalletOperationLease() async -> [Wallet] {
+        guard let walletRepository else { return [] }
+        let tracked = trackedMintUrlsForWalletAccess().map(MintURLIdentity.normalized)
+        return await walletRepository.getWallets()
+            .filter { tracked.contains(MintURLIdentity.normalized($0.mintUrl().url)) }
+            .sorted {
+                (tracked.firstIndex(of: MintURLIdentity.normalized($0.mintUrl().url)) ?? .max)
+                    < (tracked.firstIndex(of: MintURLIdentity.normalized($1.mintUrl().url)) ?? .max)
+            }
+    }
+
     // MARK: - Mint Operations (Delegate to MintService)
 
     func addMint(url: String) async throws {
@@ -188,44 +201,35 @@ extension WalletManager {
             return
         }
 
-        var total: UInt64 = 0
-        var balancesByMintURL: [String: UInt64] = [:]
-        // Per-unit totals across all mints (sat plus any held eur/usd/custom).
+        var balancesByMintURL = Dictionary(uniqueKeysWithValues: mintUrls.map { ($0, UInt64(0)) })
         var unitTotals: [String: UInt64] = [:]
+        var failedUnits: Set<String> = []
+        let wallets = await walletRepository.getWallets()
 
-        for mintUrlString in mintUrls {
-            let mintUrl = MintUrl(url: mintUrlString)
-            do {
-                let wallet = try await walletRepository.getWallet(mintUrl: mintUrl, unit: .sat)
-                let walletBalance = try await wallet.totalBalance()
-
-                total += walletBalance.value
-                balancesByMintURL[mintUrlString] = walletBalance.value
-                unitTotals["sat", default: 0] += walletBalance.value
-            } catch {
-                balancesByMintURL[mintUrlString] = 0
-                AppLogger.wallet.error(
-                    "balance refresh failed resource=\(WalletOperationCoordinator.privacySafeIdentifier(mintUrlString), privacy: .public) error_type=\(String(reflecting: type(of: error)), privacy: .public)"
-                )
-            }
-
-            // Add this mint's non-sat unit balances. Only the units it advertises
-            // are queried; a never-used unit wallet throws getWallet → skipped as
-            // zero (no createWallet — the sat wallet above is reused for sat).
-            let nonSatUnits = mintService.mints
-                .first(where: { $0.url == mintUrlString })?
-                .units.filter { $0.lowercased() != "sat" } ?? []
-            for unit in nonSatUnits {
-                let currencyUnit = PaymentRequestDecoder.currencyUnit(from: unit)
-                if let unitWallet = try? await walletRepository.getWallet(mintUrl: mintUrl, unit: currencyUnit),
-                   let unitBalance = try? await unitWallet.totalBalance() {
-                    unitTotals[unit, default: 0] += unitBalance.value
+        for mintURL in mintUrls {
+            for wallet in wallets where MintURLIdentity.normalized(wallet.mintUrl().url) == MintURLIdentity.normalized(mintURL) {
+                let unit = PaymentRequestDecoder.unitDescription(wallet.unit())
+                do {
+                    let amount = try await wallet.totalBalance().value
+                    unitTotals[unit, default: 0] += amount
+                    if unit == "sat" { balancesByMintURL[mintURL] = amount }
+                } catch {
+                    failedUnits.insert(unit)
+                    if unit == "sat" {
+                        balancesByMintURL[mintURL] = mints.first { $0.url == mintURL }?.balance ?? 0
+                    }
+                    AppLogger.wallet.error(
+                        "balance refresh failed resource=\(WalletOperationCoordinator.privacySafeIdentifier(mintURL), privacy: .public) error_type=\(String(reflecting: type(of: error)), privacy: .public)"
+                    )
                 }
             }
         }
-
+        guard !Task.isCancelled else { return }
+        // A failed read is not a zero balance. Keep that unit's last complete
+        // total until all of its accounts can be read successfully.
+        for unit in failedUnits { unitTotals[unit] = balancesByUnit[unit] }
         mintService.updateMintBalances(balancesByMintURL)
-        balance = total
+        balance = unitTotals["sat"] ?? 0
         balancesByUnit = unitTotals
         walletStore.saveBalancesByUnit(unitTotals)
     }

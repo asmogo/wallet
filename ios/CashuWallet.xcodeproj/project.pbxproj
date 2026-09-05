@@ -7,6 +7,10 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		A09100000000000000000007 /* LifecycleSafeWalletDatabase.swift in Sources */ = {isa = PBXBuildFile; fileRef = A09100000000000000000008 /* LifecycleSafeWalletDatabase.swift */; };
+		A09100000000000000000005 /* WalletAuditRegressionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A09100000000000000000006 /* WalletAuditRegressionTests.swift */; };
+		A09100000000000000000003 /* MintURLIdentity.swift in Sources */ = {isa = PBXBuildFile; fileRef = A09100000000000000000004 /* MintURLIdentity.swift */; };
+		A09100000000000000000001 /* MintQuoteRecovery.swift in Sources */ = {isa = PBXBuildFile; fileRef = A09100000000000000000002 /* MintQuoteRecovery.swift */; };
 		CD9100000000000000000001 /* MintDetailInfoLoader.swift in Sources */ = {isa = PBXBuildFile; fileRef = CD9100000000000000000002 /* MintDetailInfoLoader.swift */; };
 		CD9100000000000000000003 /* MintDetailInfoLoaderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CD9100000000000000000004 /* MintDetailInfoLoaderTests.swift */; };
 		323A00000000000000000001 /* PriceServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 323A00000000000000000002 /* PriceServiceTests.swift */; };
@@ -56,9 +60,7 @@
 		895DF0E82C16A824D02D7FCB /* QRContextAccessibilityTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FC76C191800770CE8D66B4A0 /* QRContextAccessibilityTests.swift */; };
 		927178DF5291C6C3273CCA86 /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 460F5508C2B82DAECD0FEDDB /* Foundation.framework */; };
 		A2658AA9B592D1FED82159CB /* CashuTypography.swift in Sources */ = {isa = PBXBuildFile; fileRef = 785807A525CF155CAD0F929D /* CashuTypography.swift */; };
-		AA00000000000001 /* PaymentMethodProtocol.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA00000000000011 /* PaymentMethodProtocol.swift */; };
 		AA00000000000002 /* CurrencyProtocol.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA00000000000012 /* CurrencyProtocol.swift */; };
-		AA00000000000003 /* WalletServiceProtocol.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA00000000000013 /* WalletServiceProtocol.swift */; };
 		AA00000000000004 /* StorageProtocol.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA00000000000014 /* StorageProtocol.swift */; };
 		AA00000000000005 /* NavigationManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA00000000000015 /* NavigationManager.swift */; };
 		AB00000000000001 /* CashuRequest.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC00000000000001 /* CashuRequest.swift */; };
@@ -192,6 +194,10 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
+		A09100000000000000000008 /* LifecycleSafeWalletDatabase.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LifecycleSafeWalletDatabase.swift; sourceTree = "<group>"; };
+		A09100000000000000000006 /* WalletAuditRegressionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CashuWalletTests/WalletAuditRegressionTests.swift; sourceTree = "<group>"; };
+		A09100000000000000000004 /* MintURLIdentity.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MintURLIdentity.swift; sourceTree = "<group>"; };
+		A09100000000000000000002 /* MintQuoteRecovery.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MintQuoteRecovery.swift; sourceTree = "<group>"; };
 		CD9100000000000000000002 /* MintDetailInfoLoader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MintDetailInfoLoader.swift; sourceTree = "<group>"; };
 		CD9100000000000000000004 /* MintDetailInfoLoaderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = MintDetailInfoLoaderTests.swift; path = CashuWalletTests/MintDetailInfoLoaderTests.swift; sourceTree = "<group>"; };
 		323A00000000000000000002 /* PriceServiceTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = PriceServiceTests.swift; path = CashuWalletTests/PriceServiceTests.swift; sourceTree = "<group>"; };
@@ -240,9 +246,7 @@
 		72DD529F60A8D9D1A81E3FBB /* NutshellIntegrationTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = NutshellIntegrationTests.swift; path = ../CI/IntegrationTests/Tests/NutshellIntegrationTests.swift; sourceTree = "<group>"; };
 		785807A525CF155CAD0F929D /* CashuTypography.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = CashuTypography.swift; sourceTree = "<group>"; };
 		99846FC03810AE4BE904466F /* WalletIntegrationTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = WalletIntegrationTests.swift; path = CashuWalletUITests/WalletIntegrationTests.swift; sourceTree = "<group>"; };
-		AA00000000000011 /* PaymentMethodProtocol.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PaymentMethodProtocol.swift; sourceTree = "<group>"; };
 		AA00000000000012 /* CurrencyProtocol.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CurrencyProtocol.swift; sourceTree = "<group>"; };
-		AA00000000000013 /* WalletServiceProtocol.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WalletServiceProtocol.swift; sourceTree = "<group>"; };
 		AA00000000000014 /* StorageProtocol.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StorageProtocol.swift; sourceTree = "<group>"; };
 		AA00000000000015 /* NavigationManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NavigationManager.swift; sourceTree = "<group>"; };
 		AB00000000000052 /* TransactionAmountColumn.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TransactionAmountColumn.swift; sourceTree = "<group>"; };
@@ -413,6 +417,7 @@
 				T1B000000000000F /* HistorySearchTests.swift */,
 				AV00000000000012 /* AppVersionTests.swift */,
 				MW00000000000011 /* MeltSettlementWaitTests.swift */,
+				A09100000000000000000006 /* WalletAuditRegressionTests.swift */,
 				TG00000000000012 /* TypographyGuardTests.swift */,
 				WE00000000000012 /* WalletErrorMessageTests.swift */,
 				CD9100000000000000000004 /* MintDetailInfoLoaderTests.swift */,
@@ -680,9 +685,7 @@
 		AA00000000000020 /* Protocols */ = {
 			isa = PBXGroup;
 			children = (
-				AA00000000000011 /* PaymentMethodProtocol.swift */,
 				AA00000000000012 /* CurrencyProtocol.swift */,
-				AA00000000000013 /* WalletServiceProtocol.swift */,
 				AA00000000000014 /* StorageProtocol.swift */,
 			);
 			path = Protocols;
@@ -707,6 +710,7 @@
 				BB00000000000012 /* TransactionService.swift */,
 				BB00000000000013 /* TokenService.swift */,
 				BB00000000000014 /* LightningService.swift */,
+				A09100000000000000000002 /* MintQuoteRecovery.swift */,
 			);
 			path = Services;
 			sourceTree = "<group>";
@@ -727,6 +731,7 @@
 				D100000000000109 /* WalletErrors.swift */,
 				D10000000000010C /* PendingTokenClaim.swift */,
 				D10000000000010D /* WalletOperationCoordinator.swift */,
+				A09100000000000000000008 /* LifecycleSafeWalletDatabase.swift */,
 			);
 			path = Wallet;
 			sourceTree = "<group>";
@@ -744,6 +749,7 @@
 			isa = PBXGroup;
 			children = (
 				D100000000000204 /* MintInfo.swift */,
+				A09100000000000000000004 /* MintURLIdentity.swift */,
 			);
 			path = Mints;
 			sourceTree = "<group>";
@@ -1002,6 +1008,7 @@
 				T2B000000000000F /* HistorySearchTests.swift in Sources */,
 				AV00000000000002 /* AppVersionTests.swift in Sources */,
 				MW00000000000001 /* MeltSettlementWaitTests.swift in Sources */,
+				A09100000000000000000005 /* WalletAuditRegressionTests.swift in Sources */,
 				TG00000000000002 /* TypographyGuardTests.swift in Sources */,
 				WE00000000000002 /* WalletErrorMessageTests.swift in Sources */,
 				CD9100000000000000000003 /* MintDetailInfoLoaderTests.swift in Sources */,
@@ -1035,10 +1042,12 @@
 				D200000000000109 /* WalletErrors.swift in Sources */,
 				D20000000000010C /* PendingTokenClaim.swift in Sources */,
 				D20000000000010D /* WalletOperationCoordinator.swift in Sources */,
+				A09100000000000000000007 /* LifecycleSafeWalletDatabase.swift in Sources */,
 				D200000000000201 /* PaymentMethodKind.swift in Sources */,
 				D200000000000202 /* PaymentRequestParser.swift in Sources */,
 				D200000000000203 /* OnchainExplorer.swift in Sources */,
 				D200000000000204 /* MintInfo.swift in Sources */,
+				A09100000000000000000003 /* MintURLIdentity.swift in Sources */,
 				D200000000000205 /* WalletNotifications.swift in Sources */,
 				D200000000000206 /* QuoteModels.swift in Sources */,
 				D200000000000207 /* QuoteStates.swift in Sources */,
@@ -1080,16 +1089,15 @@
 				6A8EC94E2F25A0000058C21B /* NPCService.swift in Sources */,
 				CC000000000000A1 /* NWCManager.swift in Sources */,
 				AB00000000000002 /* CashuRequestStore.swift in Sources */,
-				AA00000000000001 /* PaymentMethodProtocol.swift in Sources */,
 				72AF0EF52FEF2300001AD6AC /* SentryService.swift in Sources */,
 				AA00000000000002 /* CurrencyProtocol.swift in Sources */,
-				AA00000000000003 /* WalletServiceProtocol.swift in Sources */,
 				AA00000000000004 /* StorageProtocol.swift in Sources */,
 				AA00000000000005 /* NavigationManager.swift in Sources */,
 				BB00000000000001 /* MintService.swift in Sources */,
 				BB00000000000002 /* TransactionService.swift in Sources */,
 				BB00000000000003 /* TokenService.swift in Sources */,
 				BB00000000000004 /* LightningService.swift in Sources */,
+				A09100000000000000000001 /* MintQuoteRecovery.swift in Sources */,
 				CC00000000000001 /* ThemeSettingsSection.swift in Sources */,
 				CC00000000000002 /* BackupSettingsSection.swift in Sources */,
 				CC00000000000004 /* P2PKSettingsSection.swift in Sources */,

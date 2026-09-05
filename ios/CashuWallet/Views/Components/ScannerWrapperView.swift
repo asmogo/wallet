@@ -46,7 +46,7 @@ class ScannerViewModel: ObservableObject {
 
         do {
             guard let token = try decoder.token() else { return nil }
-            return try token.encode()
+            return token.encode()
         } catch {
             DispatchQueue.main.async {
                 self.errorMessage = "That animated QR doesn't contain a Cashu token."
@@ -1116,18 +1116,7 @@ struct CashuPaymentRequestPayView: View {
     }
 
     private func normalizedMintURL(_ urlString: String) -> String {
-        let trimmed = urlString.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard let url = URL(string: trimmed),
-              let host = url.host?.lowercased() else {
-            return trimmed.lowercased().trimmingCharacters(in: CharacterSet(charactersIn: "/"))
-        }
-
-        var normalized = host
-        if let port = url.port {
-            normalized += ":\(port)"
-        }
-        normalized += url.path.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
-        return normalized
+        MintURLIdentity.normalized(urlString)
     }
 
     private func payRequest() {
@@ -1428,8 +1417,8 @@ class QRScannerViewController: UIViewController, AVCaptureMetadataOutputObjectsD
         }
         
         // Ensure connection orientation matches
-        if let connection = previewLayer?.connection, connection.isVideoOrientationSupported {
-            connection.videoOrientation = .portrait 
+        if let connection = previewLayer?.connection, connection.isVideoRotationAngleSupported(90) {
+            connection.videoRotationAngle = 90
         }
     }
     

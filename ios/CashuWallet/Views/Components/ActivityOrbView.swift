@@ -395,7 +395,7 @@ final class MintLogoCache: @unchecked Sendable {
         }()
 
         let image = await task.value
-        lock.lock(); inFlight[key] = nil; lock.unlock()
+        lock.withLock { inFlight[key] = nil }
         return image
     }
 

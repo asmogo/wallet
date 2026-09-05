@@ -281,25 +281,32 @@ class TokenService: ObservableObject {
         // NUT-02 fee: sum each input's fee_ppk, then one ceil over the total.
         // Don't use wallet.calculateFee here — the 0.17.x FFI helper floor-
         // divides (ppk * count / 1000), reporting 0 where the mint charges 1.
-        do {
-            var ppkByKeyset: [String: UInt64] = [:]
-            var totalPpk: UInt64 = 0
-            for proof in proofs {
-                if let ppk = ppkByKeyset[proof.keysetId] {
-                    totalPpk += ppk
-                } else {
-                    let ppk = try await wallet.getKeysetFeesById(keysetId: proof.keysetId)
-                    ppkByKeyset[proof.keysetId] = ppk
-                    totalPpk += ppk
-                }
-            }
-            return (totalPpk + 999) / 1000
-        } catch {
-            AppLogger.wallet.debug(
-                "receive fee lookup failed error_type=\(String(reflecting: type(of: error)), privacy: .public)"
-            )
-            return 0
+        return try await Self.receiveFee(keysetIDs: proofs.map(\.keysetId)) {
+            try await wallet.getKeysetFeesById(keysetId: $0)
         }
+    }
+
+    static func receiveFee(
+        keysetIDs: [String],
+        lookup: (String) async throws -> UInt64
+    ) async throws -> UInt64 {
+        var fees: [String: UInt64] = [:]
+        var total: UInt64 = 0
+        for keysetID in keysetIDs {
+            let fee: UInt64
+            if let cached = fees[keysetID] {
+                fee = cached
+            } else {
+                fee = try await lookup(keysetID)
+                fees[keysetID] = fee
+            }
+            let sum = total.addingReportingOverflow(fee)
+            guard !sum.overflow else {
+                throw WalletError.networkError("The mint returned an invalid receive fee.")
+            }
+            total = sum.partialValue
+        }
+        return total / 1000 + (total % 1000 == 0 ? 0 : 1)
     }
     
     // MARK: - Token Status

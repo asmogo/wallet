@@ -22,34 +22,24 @@ extension WalletManager {
     /// Reconcile melts still recorded as pending — e.g. after a relaunch killed
     /// the in-process waiter. Cheap no-op when no saga is incomplete.
     func syncPendingMeltQuotes() async {
-        guard let repo = walletRepository else { return }
+        guard walletRepository != nil else { return }
 
         do {
             try await operationCoordinator.performIfIdle(kind: .pendingMeltPoll) {
                 var settledAny = false
-                for mintUrlString in self.trackedMintUrlsForWalletAccess() {
-                    guard !Task.isCancelled else { return }
+                for wallet in await self.trackedWalletsAssumingWalletOperationLease() {
+                    guard !Task.isCancelled else { break }
                     do {
-                        let wallet = try await repo.getWallet(
-                            mintUrl: MintUrl(url: mintUrlString),
-                            unit: .sat
-                        )
                         let report = try await wallet.recoverIncompleteSagas()
-                        if report.recovered > 0 || report.compensated > 0 {
-                            settledAny = true
-                            SentryService.breadcrumb("Pending melts reconciled", category: "wallet.lightning")
-                        }
+                        settledAny = settledAny || report.recovered > 0 || report.compensated > 0
                     } catch is CancellationError {
-                        return
+                        break
                     } catch {
                         AppLogger.wallet.error(
-                            "pending melt reconciliation failed resource=\(WalletOperationCoordinator.privacySafeIdentifier(mintUrlString), privacy: .public) error_type=\(String(reflecting: type(of: error)), privacy: .public)"
+                            "pending operation reconciliation failed error_type=\(String(reflecting: type(of: error)), privacy: .public)"
                         )
                     }
-
-                    if await self.operationCoordinator.hasWaitingUserOperation() {
-                        break
-                    }
+                    if await self.operationCoordinator.hasWaitingUserOperation() { break }
                 }
 
                 if settledAny {

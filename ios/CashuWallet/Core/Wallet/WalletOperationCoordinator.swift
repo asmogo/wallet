@@ -151,6 +151,16 @@ actor WalletOperationCoordinator {
         waiters.contains { $0.request.priority != .maintenance }
     }
 
+    /// Called with the wallet-boundary lease held. Queued closures may retain
+    /// the previous repository and must not run after its files are replaced.
+    func cancelPendingOperations() {
+        let pending = waiters
+        waiters.removeAll()
+        for waiter in pending {
+            waiter.continuation.resume(throwing: CancellationError())
+        }
+    }
+
     private func acquire(kind: Kind, priority: Priority) async throws -> Lease {
         let request = makeRequest(kind: kind, priority: priority)
         if activeLease == nil {

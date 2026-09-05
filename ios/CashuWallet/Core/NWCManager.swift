@@ -25,6 +25,7 @@ final class NWCManager: ObservableObject {
             guard isEnabled != oldValue else { return }
             settingsStore.nwcEnabled = isEnabled
             guard !suppressSideEffects else { return }
+            lifecycleRevision &+= 1
             if isEnabled {
                 Task { await start() }
             } else {
@@ -38,6 +39,8 @@ final class NWCManager: ObservableObject {
         didSet {
             guard selectedMintUrl != oldValue else { return }
             settingsStore.nwcSelectedMint = selectedMintUrl
+            guard !suppressSideEffects else { return }
+            lifecycleRevision &+= 1
             // A different mint means a different backing wallet: rebuild.
             if isEnabled {
                 Task { await restartService() }
@@ -50,6 +53,8 @@ final class NWCManager: ObservableObject {
         didSet {
             guard budgetSats != oldValue else { return }
             settingsStore.nwcBudgetSats = budgetSats
+            guard !suppressSideEffects else { return }
+            lifecycleRevision &+= 1
             if isEnabled {
                 Task { await restartService() }
             }
@@ -70,7 +75,9 @@ final class NWCManager: ObservableObject {
     // MARK: - Private
 
     private var service: NwcService?
-    private let settingsStore = SettingsStore.shared
+    private let settingsStore: SettingsStore
+    private var lifecycleTask: Task<Void, Never>?
+    private var lifecycleRevision: UInt64 = 0
 
     /// When true, `isEnabled`/`selectedMintUrl`/`budgetSats` `didSet` skip their
     /// start/stop side effects (used for internal state corrections).
@@ -84,7 +91,8 @@ final class NWCManager: ObservableObject {
     /// Relays the service listens on. Reuses the shared Nostr relay list.
     private var relays: [String] { settingsStore.nostrRelays }
 
-    private init() {
+    init(settingsStore: SettingsStore = .shared) {
+        self.settingsStore = settingsStore
         self.isEnabled = settingsStore.nwcEnabled
         self.selectedMintUrl = settingsStore.nwcSelectedMint
         self.budgetSats = settingsStore.nwcBudgetSats
@@ -113,7 +121,12 @@ final class NWCManager: ObservableObject {
 
     /// Build (create or restore) the NWC service and start listening.
     func start() async {
-        guard !isBusy else { return }
+        await enqueue { await self.startService() }
+    }
+
+    private func startService() async {
+        guard isEnabled else { return }
+        let revision = lifecycleRevision
         isBusy = true
         errorMessage = nil
         defer { isBusy = false }
@@ -137,11 +150,13 @@ final class NWCManager: ObservableObject {
 
         // Tear down any previous instance first.
         await stopService()
+        guard isEnabled, revision == lifecycleRevision else { return }
 
         do {
             let serviceSecretKey = try nwcDeriveServiceSecretKeyFromSeed(seed: seed)
             let wallet = try await resolveWallet(mintUrl: mintUrl)
-            let budgetMsat = budgetSats.map { $0 * 1000 }
+            guard isEnabled, revision == lifecycleRevision else { return }
+            let budgetMsat = try Self.paymentLimitMsat(budgetSats)
 
             let svc: NwcService
             if let uri = connectionUri,
@@ -161,13 +176,23 @@ final class NWCManager: ObservableObject {
                     serviceSecretKey: serviceSecretKey,
                     maxPaymentMsat: budgetMsat
                 )
-                connectionUri = svc.connectionUri()
             }
 
-            try await svc.start()
+            do {
+                try await svc.start()
+            } catch {
+                try? await svc.stop()
+                throw error
+            }
+            guard isEnabled, revision == lifecycleRevision else {
+                try await svc.stop()
+                return
+            }
             service = svc
+            connectionUri = svc.connectionUri()
             isRunning = svc.isRunning()
         } catch {
+            guard revision == lifecycleRevision else { return }
             isRunning = false
             service = nil
             errorMessage = error.userFacingWalletMessage
@@ -180,32 +205,29 @@ final class NWCManager: ObservableObject {
     /// Stop the service but keep the configuration (URI, mint, budget) so it can
     /// be re-enabled later with the same connection.
     func stop() async {
-        isBusy = true
-        defer { isBusy = false }
-        await stopService()
+        lifecycleRevision &+= 1
+        await enqueue {
+            self.isBusy = true
+            defer { self.isBusy = false }
+            await self.stopService()
+        }
     }
 
     /// Generate a brand-new connection (fresh client secret → new URI). Any app
     /// paired with the old URI stops working.
     func regenerateConnection() async {
-        guard !isBusy else { return }
-        isBusy = true
-        errorMessage = nil
-        defer { isBusy = false }
-
-        await stopService()
-        connectionUri = nil
-
-        if isEnabled {
-            // start() handles its own busy flag; release ours first.
-            isBusy = false
-            await start()
+        lifecycleRevision &+= 1
+        await enqueue {
+            await self.stopService()
+            self.connectionUri = nil
+            await self.startService()
         }
     }
 
     /// Reset all NWC state at a wallet boundary (create/restore/delete wallet).
     func resetForWalletBoundary() {
-        Task { await stopService() }
+        lifecycleRevision &+= 1
+        Task { await stop() }
         suppressSideEffects = true
         isEnabled = false
         connectionUri = nil
@@ -218,8 +240,28 @@ final class NWCManager: ObservableObject {
     // MARK: - Helpers
 
     private func restartService() async {
-        guard !isBusy else { return }
         await start()
+    }
+
+    /// Main-actor isolation permits reentrancy at each await. Chain complete
+    /// lifecycle operations so an old stop cannot tear down a new service.
+    private func enqueue(_ operation: @escaping @MainActor () async -> Void) async {
+        let previous = lifecycleTask
+        let task = Task { @MainActor in
+            await previous?.value
+            await operation()
+        }
+        lifecycleTask = task
+        await task.value
+    }
+
+    static func paymentLimitMsat(_ sats: UInt64?) throws -> UInt64? {
+        guard let sats else { return nil }
+        let converted = sats.multipliedReportingOverflow(by: 1000)
+        guard !converted.overflow else {
+            throw WalletError.networkError("The payment limit is too large. Enter a smaller amount.")
+        }
+        return converted.partialValue
     }
 
     private func stopService() async {

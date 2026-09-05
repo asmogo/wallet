@@ -1162,6 +1162,7 @@ struct UnifiedSendView: View {
     // Amount + melt quote
     @State private var amountString = ""
     @State private var meltQuote: MeltQuoteInfo?
+    @State private var meltQuoteTask: Task<Void, Never>?
     @State private var selectedMint: MintInfo?
     /// True when the mint accepted the melt for asynchronous (NUT-05) settlement —
     /// typical for on-chain — so the success screen says "processing", not "sent".
@@ -1461,6 +1462,7 @@ struct UnifiedSendView: View {
             .onDisappear {
                 autoAdvanceTask?.cancel()
                 feeTask?.cancel()
+                cancelMeltQuote()
             }
         }
         // Own the sheet chrome so the detent can follow the step: compact for
@@ -1656,6 +1658,7 @@ struct UnifiedSendView: View {
     }
 
     private func editRecipient() {
+        cancelMeltQuote()
         HapticFeedback.selection()
         if let onEditDestination {
             onEditDestination()
@@ -1877,6 +1880,7 @@ struct UnifiedSendView: View {
     /// face, so it is dropped on the way out — Continue re-runs it against
     /// whatever amount the user settles on.
     private func backToAmount() {
+        cancelMeltQuote()
         HapticFeedback.selection()
         feeTask?.cancel()
         feeState = .idle
@@ -2221,6 +2225,7 @@ struct UnifiedSendView: View {
     // MARK: Melt quote + pay
 
     private func fetchMeltQuote() {
+        cancelMeltQuote()
         guard case let .melt(request, mode, decoded) = locked else { return }
         guard let mint = activeMeltMint else {
             presentError("No mint supports \(meltPaymentMethod.displayName) payments.")
@@ -2229,20 +2234,19 @@ struct UnifiedSendView: View {
         isWorking = true
         errorMessage = nil
         meltQuote = nil
-        Task { @MainActor in
-            defer { isWorking = false }
+        let amount = amountSats
+        meltQuoteTask = Task { @MainActor in
+            defer { if !Task.isCancelled { isWorking = false } }
             do {
                 let quote: MeltQuoteInfo
                 switch mode {
                 case .onchain:
-                    let amount = amountSats
                     guard amount > 0 else { return }
                     quote = try await walletManager.createOnchainMeltQuote(
                         address: request, amount: amount, preferredMintURL: mint.url
                     )
                 case .lightning:
                     if case .lightningAddress = decoded {
-                        let amount = amountSats
                         guard amount > 0 else { return }
                         quote = try await walletManager.createHumanReadableMeltQuote(
                             address: request, amount: amount, preferredMintURL: mint.url
@@ -2253,9 +2257,11 @@ struct UnifiedSendView: View {
                         )
                     }
                 }
+                guard !Task.isCancelled, step == .confirm else { return }
                 meltQuote = quote
                 if let resolved = mintInfo(for: quote) { selectedMint = resolved }
             } catch {
+                guard !Task.isCancelled else { return }
                 // Quote creation is a preflight, not a payment. Keep its failure inline
                 // on confirm so it can never be presented as a failed melt.
                 withAnimation(.smooth(duration: 0.3)) { presentError(from: error) }
@@ -2263,8 +2269,14 @@ struct UnifiedSendView: View {
         }
     }
 
+    private func cancelMeltQuote() {
+        meltQuoteTask?.cancel()
+        meltQuoteTask = nil
+        isWorking = false
+    }
+
     private func payMelt() {
-        guard let quote = meltQuote else { return }
+        guard step == .confirm, !isWorking, let quote = meltQuote else { return }
         HapticFeedback.impact(.medium)
         errorMessage = nil
         meltRetryNeedsFreshQuote = false
@@ -2584,14 +2596,7 @@ struct UnifiedSendView: View {
     }
 
     private func normalizedMintURL(_ urlString: String) -> String {
-        let trimmed = urlString.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard let url = URL(string: trimmed), let host = url.host?.lowercased() else {
-            return trimmed.lowercased().trimmingCharacters(in: CharacterSet(charactersIn: "/"))
-        }
-        var normalized = host
-        if let port = url.port { normalized += ":\(port)" }
-        normalized += url.path.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
-        return normalized
+        MintURLIdentity.normalized(urlString)
     }
 
     private func extractMintHost(_ url: String) -> String { URL(string: url)?.host ?? url }
@@ -2983,6 +2988,7 @@ struct MeltView: View {
     @State private var amountString: String
     @State private var meltMode: MeltMode
     @State private var meltQuote: MeltQuoteInfo?
+    @State private var meltQuoteTask: Task<Void, Never>?
     /// True while an auto-quote for an amount-carrying invoice is in flight (from mount, or
     /// from a paste/scan into this field) until it resolves (success, failure, or a guard
     /// that prevents fetching). Keeps the screen on the confirm layout (in a loading state)
@@ -3174,6 +3180,7 @@ struct MeltView: View {
         // A stray swipe must not tear down the flow mid-melt (sheet
         // presentations only; covers have no interactive dismiss).
         .interactiveDismissDisabled(isPaying)
+        .onDisappear { cancelMeltQuote() }
     }
 
     private var supportsOnchainMelt: Bool {
@@ -3697,6 +3704,7 @@ struct MeltView: View {
     }
 
     private func selectMeltMint(_ mint: MintInfo) {
+        cancelMeltQuote()
         selectedMeltMint = mint
         if meltQuote != nil {
             meltQuote = nil
@@ -3774,6 +3782,7 @@ struct MeltView: View {
     }
 
     private func getQuote() {
+        cancelMeltQuote()
         let trimmedInput = requestInput.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedInput.isEmpty else { return }
 
@@ -3816,20 +3825,31 @@ struct MeltView: View {
         isGettingQuote = true
         errorMessage = nil
 
-        Task { @MainActor in
-            defer { isGettingQuote = false }
+        let mode = meltMode
+        let amount = amountSats
+        let humanReadable = isHumanReadableAddress
+        meltQuoteTask = Task { @MainActor in
+            defer {
+                if !Task.isCancelled {
+                    isGettingQuote = false
+                    isPreparingInitialQuote = false
+                }
+            }
 
             do {
-                switch meltMode {
+                switch mode {
                 case .lightning:
-                    if isHumanReadableAddress {
-                        let amount = amountSats
+                    if humanReadable {
                         guard amount > 0 else { return }
                         let quote = try await walletManager.createHumanReadableMeltQuote(
                             address: trimmedInput,
                             amount: amount,
                             preferredMintURL: quoteMint.url
                         )
+                        guard !Task.isCancelled,
+                              requestInput.trimmingCharacters(in: .whitespacesAndNewlines) == trimmedInput,
+                              meltMode == mode, amountSats == amount,
+                              displayMeltMint?.id == quoteMint.id else { return }
                         setMeltQuote(quote)
                     } else {
                         let request = PaymentRequestDecoder.encodedLightningRequest(from: trimmedInput) ?? trimmedInput
@@ -3837,25 +3857,42 @@ struct MeltView: View {
                             request: request,
                             preferredMintURL: quoteMint.url
                         )
+                        guard !Task.isCancelled,
+                              requestInput.trimmingCharacters(in: .whitespacesAndNewlines) == trimmedInput,
+                              meltMode == mode, amountSats == amount,
+                              displayMeltMint?.id == quoteMint.id else { return }
                         setMeltQuote(quote)
                     }
                 case .onchain:
-                    let amount = amountSats
                     guard amount > 0 else { return }
                     let quote = try await walletManager.createOnchainMeltQuote(
                         address: trimmedInput,
                         amount: amount,
                         preferredMintURL: quoteMint.url
                     )
+                    guard !Task.isCancelled,
+                              requestInput.trimmingCharacters(in: .whitespacesAndNewlines) == trimmedInput,
+                              meltMode == mode, amountSats == amount,
+                              displayMeltMint?.id == quoteMint.id else { return }
                     setMeltQuote(quote)
                 }
             } catch {
+                guard !Task.isCancelled,
+                              requestInput.trimmingCharacters(in: .whitespacesAndNewlines) == trimmedInput,
+                              meltMode == mode, amountSats == amount,
+                              displayMeltMint?.id == quoteMint.id else { return }
                 // Fetch failed — leave the loading-confirm state so the input screen
                 // reappears with the error notice.
                 isPreparingInitialQuote = false
                 presentError(from: error)
             }
         }
+    }
+
+    private func cancelMeltQuote() {
+        meltQuoteTask?.cancel()
+        meltQuoteTask = nil
+        isGettingQuote = false
     }
 
     private func setMeltQuote(_ quote: MeltQuoteInfo) {
@@ -3867,7 +3904,7 @@ struct MeltView: View {
     }
 
     private func payRequest() {
-        guard let quote = meltQuote else { return }
+        guard !isPaying, !isGettingQuote, let quote = meltQuote else { return }
 
         isPaying = true
         errorMessage = nil

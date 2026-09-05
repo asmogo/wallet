@@ -346,51 +346,37 @@ extension WalletManager {
     }
 
     func checkAllPendingTokens() async {
-        guard let repo = walletRepository else { return }
+        guard walletRepository != nil else { return }
 
         do {
             try await operationCoordinator.performIfIdle(kind: .pendingTokenCheck) {
                 var claimedAny = false
                 var foundPending = false
 
-                for mintUrlString in self.trackedMintUrlsForWalletAccess() {
-                    let units = TransactionService.walletUnits(
-                        advertisedUnits: self.mints.first(where: { $0.url == mintUrlString })?.units ?? ["sat"]
-                    )
-                    for unitString in units {
-                        guard !Task.isCancelled else { return }
-                        do {
-                            let wallet = try await repo.getWallet(
-                                mintUrl: MintUrl(url: mintUrlString),
-                                unit: PaymentRequestDecoder.currencyUnit(from: unitString)
-                            )
-                            for operationId in try await wallet.getPendingSends() {
-                                foundPending = true
-                                do {
-                                    // CDK flips the transaction to completed
-                                    // when the mint reports the proofs spent.
-                                    if try await wallet.checkSendStatus(operationId: operationId) {
-                                        claimedAny = true
-                                    }
-                                } catch is CancellationError {
-                                    return
-                                } catch {
-                                    AppLogger.wallet.error(
-                                        "pending send status check failed error_type=\(String(reflecting: type(of: error)), privacy: .public)"
-                                    )
+                walletSweep: for wallet in await self.trackedWalletsAssumingWalletOperationLease() {
+                    guard !Task.isCancelled else { break }
+                    do {
+                        for operationId in try await wallet.getPendingSends() {
+                            foundPending = true
+                            do {
+                                if try await wallet.checkSendStatus(operationId: operationId) {
+                                    claimedAny = true
                                 }
-
-                                if await self.operationCoordinator.hasWaitingUserOperation() {
-                                    break
-                                }
+                            } catch is CancellationError {
+                                break walletSweep
+                            } catch {
+                                AppLogger.wallet.error(
+                                    "pending send status check failed error_type=\(String(reflecting: type(of: error)), privacy: .public)"
+                                )
                             }
-                        } catch is CancellationError {
-                            return
-                        } catch {
-                            AppLogger.wallet.error(
-                                "pending send maintenance failed resource=\(WalletOperationCoordinator.privacySafeIdentifier(mintUrlString), privacy: .public) error_type=\(String(reflecting: type(of: error)), privacy: .public)"
-                            )
+                            if await self.operationCoordinator.hasWaitingUserOperation() { break walletSweep }
                         }
+                    } catch is CancellationError {
+                        break
+                    } catch {
+                        AppLogger.wallet.error(
+                            "pending send maintenance failed error_type=\(String(reflecting: type(of: error)), privacy: .public)"
+                        )
                     }
                 }
 

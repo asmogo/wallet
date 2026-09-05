@@ -29,11 +29,11 @@ enum WalletSheet: Identifiable {
         case .send: return "send"
         case .sendEdit: return "sendEdit"
         case .sendAmount: return "sendAmount"
-        case .cashuRequestPay(let summary): return "creq-\(summary.encoded.prefix(64))"
+        case .cashuRequestPay(let summary): return "creq-\(Data(summary.encoded.utf8).sha256().base64EncodedString())"
         case .scanner: return "scanner"
         case .sendEcash: return "sendEcash"
         case .receiveLightning: return "receiveLightning"
-        case .meltInvoice(let invoice): return "meltInvoice-\(invoice.prefix(64))"
+        case .meltInvoice(let invoice): return "meltInvoice-\(Data(invoice.utf8).sha256().base64EncodedString())"
         case .connectMint: return "connectMint"
         case .discoverMints: return "discoverMints"
         }
@@ -55,9 +55,9 @@ enum FlowCover: Identifiable {
 
     var id: String {
         switch self {
-        case .receiveToken(let token): return "token-\(token.prefix(48))"
+        case .receiveToken(let token): return "token-\(Data(token.utf8).sha256().base64EncodedString())"
         case .heldApproval(let pending): return "held-\(pending.tokenId)"
-        case .melt(let request, _, _, _): return "melt-\(request.prefix(64))"
+        case .melt(let request, let mode, _, _): return "melt-\(mode)-\(Data(request.utf8).sha256().base64EncodedString())"
         }
     }
 }
@@ -159,18 +159,18 @@ final class NavigationManager: ObservableObject {
     /// wallet runtime is ready. An open payment flow is never interrupted.
     func handleDeepLink(url: URL) {
         // Format: cashu:cashuA... or cashu://cashuA...
-        guard url.scheme == "cashu" else { return }
+        guard url.scheme?.lowercased() == "cashu" else { return }
 
         var token: String
         if let host = url.host {
             token = host + url.path
         } else {
-            token = url.absoluteString.replacingOccurrences(of: "cashu:", with: "")
+            token = String(url.absoluteString.dropFirst("cashu:".count))
         }
         token = token.removingPercentEncoding ?? token
 
         guard TokenParser.isCashuDeepLinkToken(token) else {
-            print("Invalid cashu token in deep link: \(token.prefix(20))...")
+            AppLogger.wallet.debug("Invalid cashu token in deep link")
             return
         }
         heldDeepLinkTokens.append(token)

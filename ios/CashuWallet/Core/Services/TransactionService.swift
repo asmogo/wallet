@@ -27,7 +27,6 @@ class TransactionService: ObservableObject {
     private let walletRepository: () -> WalletRepository?
     private let walletDatabase: () -> WalletSqliteDatabase?
     private let getTrackedMintUrls: () -> [String]
-    private let getUnitsForMint: (String) -> [String]
     private let walletStore: WalletStore
 
     // MARK: - Initialization
@@ -36,13 +35,11 @@ class TransactionService: ObservableObject {
         walletRepository: @escaping () -> WalletRepository?,
         walletDatabase: @escaping () -> WalletSqliteDatabase?,
         getTrackedMintUrls: @escaping () -> [String],
-        getUnitsForMint: @escaping (String) -> [String] = { _ in ["sat"] },
         walletStore: WalletStore = WalletStore()
     ) {
         self.walletRepository = walletRepository
         self.walletDatabase = walletDatabase
         self.getTrackedMintUrls = getTrackedMintUrls
-        self.getUnitsForMint = getUnitsForMint
         self.walletStore = walletStore
     }
 
@@ -62,12 +59,12 @@ class TransactionService: ObservableObject {
         var quoteIdsWithTransactions: Set<String> = []
         let trackedMintUrls = Set(getTrackedMintUrls().filter { !$0.isEmpty })
 
+        let registeredWallets = await repo.getWallets()
         for mintUrlString in trackedMintUrls {
-            for unitString in Self.walletUnits(advertisedUnits: getUnitsForMint(mintUrlString)) {
+            for wallet in registeredWallets where MintURLIdentity.normalized(wallet.mintUrl().url) == MintURLIdentity.normalized(mintUrlString) {
+                let currencyUnit = wallet.unit()
+                let unitString = PaymentRequestDecoder.unitDescription(currencyUnit)
                 do {
-                    let mintUrl = MintUrl(url: mintUrlString)
-                    let currencyUnit = PaymentRequestDecoder.currencyUnit(from: unitString)
-                    let wallet = try await repo.getWallet(mintUrl: mintUrl, unit: currencyUnit)
                     let txs = try await wallet.listTransactions(direction: nil)
                     var walletTxs: [WalletTransaction] = txs.map { tx in
                         if let quoteId = tx.quoteId {
@@ -124,9 +121,7 @@ class TransactionService: ObservableObject {
                     }
                     allTransactions.append(contentsOf: walletTxs)
                 } catch {
-                    // A mint may advertise a unit whose wallet has never been
-                    // used locally. That account legitimately does not exist;
-                    // continue loading the remaining mint/unit accounts.
+                    // Keep the other registered accounts visible if this read fails.
                     AppLogger.wallet.error(
                         "Failed to load transactions for mint \(mintUrlString), unit \(unitString): \(error)"
                     )
@@ -184,22 +179,6 @@ class TransactionService: ObservableObject {
 
         // Post notification that transactions were updated
         NotificationCenter.default.post(name: .cashuTransactionsUpdated, object: nil)
-    }
-
-    /// Every tracked mint keeps a separate CDK wallet per unit. History must
-    /// enumerate all of them; querying only the implicit sat wallet silently
-    /// omits USD/EUR/custom-unit transactions.
-    static func walletUnits(advertisedUnits: [String]) -> [String] {
-        var units = ["sat"]
-        for rawUnit in advertisedUnits {
-            let unit = rawUnit.trimmingCharacters(in: .whitespacesAndNewlines)
-            guard !unit.isEmpty,
-                  !units.contains(where: { $0.caseInsensitiveCompare(unit) == .orderedSame }) else {
-                continue
-            }
-            units.append(unit)
-        }
-        return units
     }
 
     func loadCachedState() {

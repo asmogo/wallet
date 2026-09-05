@@ -37,9 +37,9 @@ extension WalletManager {
         }
     }
 
-    func existingOnchainMintQuote() async throws -> MintQuoteInfo? {
+    func existingOnchainMintQuote(mintURL: String? = nil) async throws -> MintQuoteInfo? {
         try await operationCoordinator.perform(kind: .mintQuote) {
-            try await self.lightningService.existingOnchainMintQuote()
+            try await self.lightningService.existingOnchainMintQuote(mintURL: mintURL)
         }
     }
 
@@ -85,11 +85,13 @@ extension WalletManager {
     /// ultimate backstop if all attempts here fail.
     func claimPaidMintQuote(quoteId: String) async {
         for _ in 0..<8 {
+            guard !Task.isCancelled else { return }
             do {
                 _ = try await mintTokens(quoteId: quoteId)
                 return
             } catch {
-                try? await Task.sleep(nanoseconds: 2_500_000_000)
+                do { try await Task.sleep(for: .milliseconds(2500)) }
+                catch { return }
             }
         }
         AppLogger.wallet.error(

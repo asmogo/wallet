@@ -714,6 +714,7 @@ extension WalletManager {
         }
         needsOnboarding = false
         guard !IntegrationTestConfig.shouldUseDeterministicUIRuntime else { return }
+        startDeferredStartupMaintenance()
         CashuRequestListener.shared.attach(walletManager: self)
         CashuRequestListener.shared.requestStart()
     }
@@ -731,23 +732,27 @@ extension WalletManager {
         // Stop accepting listener work and let an already-started token receive
         // finish all attribution/cache side effects before removing its wallet.
         await CashuRequestListener.shared.resetForWalletBoundary()
-        resetRuntimeState()
-        try keychainService.deleteMnemonic()
-        try? keychainService.deleteNostrPrivateKey()
-        OnboardingCompletionState.clear()
-        try removeWalletDatabaseFiles()
-        walletStore.removeAllWalletData()
-        SettingsManager.shared.resetWalletScopedData()
-        NWCManager.shared.resetForWalletBoundary()
-        CashuRequestStore.shared.resetForWalletBoundary()
-        MintLogoCache.shared.clear()
-        processedQuotes.removeAll()
-        // iCloud backup survives a local deletion — the user can restore it from
-        // Restore Wallet → Restore from iCloud.
-        needsOnboarding = true
-        isInitialized = true
-        isRuntimeReady = true
-        SentryService.breadcrumb("Wallet deleted", category: "wallet.lifecycle")
+        await NWCManager.shared.stop()
+        try await operationCoordinator.perform(kind: .recovery, priority: .recovery) {
+            await self.operationCoordinator.cancelPendingOperations()
+            resetRuntimeState()
+            try keychainService.deleteMnemonic()
+            try? keychainService.deleteNostrPrivateKey()
+            OnboardingCompletionState.clear()
+            try removeWalletDatabaseFiles()
+            walletStore.removeAllWalletData()
+            SettingsManager.shared.resetWalletScopedData()
+            NWCManager.shared.resetForWalletBoundary()
+            CashuRequestStore.shared.resetForWalletBoundary()
+            MintLogoCache.shared.clear()
+            processedQuotes.removeAll()
+            // iCloud backup survives a local deletion — the user can restore it from
+            // Restore Wallet → Restore from iCloud.
+            needsOnboarding = true
+            isInitialized = true
+            isRuntimeReady = true
+            SentryService.breadcrumb("Wallet deleted", category: "wallet.lifecycle")
+        }
     }
 
     private struct UserDefaultsSnapshot {
@@ -756,6 +761,15 @@ extension WalletManager {
     }
 
     private func installCleanWallet(mnemonic newMnemonic: String) async throws {
+        await CashuRequestListener.shared.resetForWalletBoundary()
+        await NWCManager.shared.stop()
+        try await operationCoordinator.perform(kind: .recovery, priority: .recovery) {
+            await self.operationCoordinator.cancelPendingOperations()
+            try await self.installCleanWalletAssumingLease(mnemonic: newMnemonic)
+        }
+    }
+
+    private func installCleanWalletAssumingLease(mnemonic newMnemonic: String) async throws {
         let previousMnemonic: String?
         if let mnemonic {
             previousMnemonic = mnemonic
@@ -764,9 +778,6 @@ extension WalletManager {
         }
         let defaultsSnapshot = walletBoundaryDefaultsSnapshot()
 
-        // The database backup is a mutation too: drain listener-owned receives
-        // before any live wallet file can be displaced.
-        await CashuRequestListener.shared.resetForWalletBoundary()
         let fileBackups: [WalletFileBackup]
         do {
             fileBackups = try backupWalletDatabaseFiles()
@@ -788,7 +799,6 @@ extension WalletManager {
             NPCService.shared.resetForWalletBoundary()
             NWCManager.shared.resetForWalletBoundary()
             CashuRequestStore.shared.resetForWalletBoundary()
-            SettingsStore.shared.clearWalletScopedData()
 
             try initializeWalletForCreation(mnemonic: newMnemonic)
             try keychainService.saveMnemonic(newMnemonic)
@@ -954,6 +964,8 @@ extension WalletManager {
     }
 
     private func resetRuntimeState() {
+        stopPendingQuoteForegroundPolling()
+        lastMintQuoteSyncAt = nil
         startupMaintenanceTask?.cancel()
         startupMaintenanceTask = nil
 
@@ -1030,23 +1042,11 @@ extension WalletManager {
     }
 
     private func migrateLegacyWalletDatabaseIfNeeded(to currentDatabaseURL: URL) throws {
-        let legacyDatabaseURL = legacyWalletDatabaseURL()
-        
-        guard FileManager.default.fileExists(atPath: legacyDatabaseURL.path) else { return }
-        guard !FileManager.default.fileExists(atPath: currentDatabaseURL.path) else { return }
-        
-        try FileManager.default.moveItem(at: legacyDatabaseURL, to: currentDatabaseURL)
-        
-        for suffix in ["-wal", "-shm", "-journal"] {
-            let legacySidecarURL = URL(fileURLWithPath: legacyDatabaseURL.path + suffix)
-            guard FileManager.default.fileExists(atPath: legacySidecarURL.path) else { continue }
-            
-            let currentSidecarURL = URL(fileURLWithPath: currentDatabaseURL.path + suffix)
-            if FileManager.default.fileExists(atPath: currentSidecarURL.path) {
-                try FileManager.default.removeItem(at: currentSidecarURL)
-            }
-            try FileManager.default.moveItem(at: legacySidecarURL, to: currentSidecarURL)
-        }
+        try Self.migrateLegacyWalletDatabaseIfNeeded(
+            from: legacyWalletDatabaseURL(),
+            to: currentDatabaseURL,
+            fileManager: .default
+        )
     }
 
     private func walletBoundaryDefaultsSnapshot() -> UserDefaultsSnapshot {
@@ -1151,7 +1151,7 @@ extension WalletManager {
         mnemonic: String,
         databaseURL: URL
     ) throws -> (db: WalletSqliteDatabase, repository: WalletRepository) {
-        let database = try WalletSqliteDatabase(filePath: databaseURL.path)
+        let database = try LifecycleSafeWalletDatabase(filePath: databaseURL.path)
         let repository = try WalletRepository(
             mnemonic: mnemonic,
             store: customWalletStore(db: database)
@@ -1216,7 +1216,7 @@ extension WalletManager {
         mnemonic: String,
         databaseURL: URL
     ) throws -> WalletLaunchRuntime {
-        let database = try WalletSqliteDatabase(filePath: databaseURL.path)
+        let database = try LifecycleSafeWalletDatabase(filePath: databaseURL.path)
         let repository = try WalletRepository(
             mnemonic: mnemonic,
             store: customWalletStore(db: database)
@@ -1404,7 +1404,7 @@ extension WalletManager {
     }
 
     private func performBestEffortWalletStartupMaintenanceAssumingLease() async -> Bool {
-        guard let walletRepository else { return false }
+        guard walletRepository != nil else { return false }
         let mintUrls = trackedMintUrlsForWalletAccess()
         guard !mintUrls.isEmpty else { return false }
 
@@ -1415,29 +1415,32 @@ extension WalletManager {
         var timestampsChanged = keysetRefreshTimestamps != storedKeysetRefreshTimestamps
         var recoveredWalletState = false
 
+        let wallets = await trackedWalletsAssumingWalletOperationLease()
         for mintUrlString in mintUrls {
             guard !Task.isCancelled else { break }
-            do {
-                let wallet = try await walletRepository.getWallet(
-                    mintUrl: MintUrl(url: mintUrlString),
-                    unit: .sat
-                )
+            let mintWallets = wallets.filter {
+                MintURLIdentity.normalized($0.mintUrl().url) == MintURLIdentity.normalized(mintUrlString)
+            }
+            var refreshedAllKeysets = !mintWallets.isEmpty
+            for wallet in mintWallets {
+                guard !Task.isCancelled else {
+                    refreshedAllKeysets = false
+                    break
+                }
                 if await recoverIncompleteSagasIfNeeded(wallet: wallet, mintUrl: mintUrlString) {
                     recoveredWalletState = true
                 }
-                if await refreshKeysetsIfNeeded(
+                let refreshed = await refreshKeysetsIfNeeded(
                     wallet: wallet,
                     mintUrl: mintUrlString,
-                    lastRefresh: keysetRefreshTimestamps[mintUrlString],
+                    lastRefresh: storedKeysetRefreshTimestamps[mintUrlString],
                     now: now
-                ) {
-                    keysetRefreshTimestamps[mintUrlString] = now
-                    timestampsChanged = true
-                }
-            } catch {
-                AppLogger.wallet.error(
-                    "wallet startup maintenance failed resource=\(WalletOperationCoordinator.privacySafeIdentifier(mintUrlString), privacy: .public) error_type=\(String(reflecting: type(of: error)), privacy: .public)"
                 )
+                refreshedAllKeysets = refreshedAllKeysets && refreshed
+            }
+            if refreshedAllKeysets {
+                keysetRefreshTimestamps[mintUrlString] = now
+                timestampsChanged = true
             }
         }
 

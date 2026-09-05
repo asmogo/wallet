@@ -338,18 +338,7 @@ extension WalletManager {
     }
 
     private func normalizedMintURL(_ urlString: String) -> String {
-        let trimmed = urlString.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard let url = URL(string: trimmed),
-              let host = url.host?.lowercased() else {
-            return trimmed.lowercased().trimmingCharacters(in: CharacterSet(charactersIn: "/"))
-        }
-
-        var normalized = host
-        if let port = url.port {
-            normalized += ":\(port)"
-        }
-        normalized += url.path.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
-        return normalized
+        MintURLIdentity.normalized(urlString)
     }
 
     // MARK: - Add mint & pay (acquire ecash at an unheld mint, then pay)
@@ -463,11 +452,15 @@ extension WalletManager {
     /// quote is minted later by `claimPaidMintQuote`/History refresh).
     private func mintWithRetries(quoteId: String) async -> Bool {
         for attempt in 0..<8 {
+            guard !Task.isCancelled else { return false }
             do {
                 _ = try await mintTokens(quoteId: quoteId)
                 return true
             } catch {
-                if attempt < 7 { try? await Task.sleep(nanoseconds: 2_500_000_000) }
+                if attempt < 7 {
+                    do { try await Task.sleep(for: .milliseconds(2500)) }
+                    catch { return false }
+                }
             }
         }
         return false
