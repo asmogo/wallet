@@ -12,6 +12,39 @@ import org.junit.Test
 
 class MintQuoteSchedulePolicyTest {
     @Test
+    fun `onchain deposits remain eligible after expiry and old schedules reopen`() {
+        val pending = quote(PaymentMethodKind.Onchain, MintQuoteState.Pending, 0, 0)
+            .copy(expiryEpochSeconds = 100)
+        val record = MintQuoteSchedulePolicy.observed(null, pending, 101_000)
+        assertFalse(record.isComplete)
+        for (force in listOf(false, true)) {
+            val selected = MintQuoteSchedulePolicy.select(
+                listOf(pending.id), mapOf(pending.id to record), 700_000, force,
+            )
+            assertEquals(listOf(pending.id), selected.quoteIds)
+        }
+
+        val oldRecord = record.copy(isComplete = true, nextAttemptAtEpochMillis = Long.MAX_VALUE)
+        val restored = MintQuoteSchedulePolicy.select(
+            listOf(pending.id), mapOf(pending.id to oldRecord), 700_000, false,
+            unsettledOnchainQuoteIds = setOf(pending.id),
+        )
+        assertEquals(listOf(pending.id), restored.quoteIds)
+    }
+
+    @Test
+    fun `selecting a due failed quote does not postpone its retry`() {
+        val record = MintQuoteSchedulePolicy.failed(null, 10_000, true, true)
+        val selected = MintQuoteSchedulePolicy.select(
+            listOf("quote"), mapOf("quote" to record), record.nextAttemptAtEpochMillis, false,
+        )
+        assertEquals(listOf("quote"), selected.quoteIds)
+        assertTrue(MintQuoteSchedulePolicy.shouldAttempt(
+            selected.records["quote"], record.nextAttemptAtEpochMillis, false,
+        ))
+    }
+
+    @Test
     fun `passive sweeps are bounded and rotate fairly`() {
         val ids = (1..5).map { "quote-$it" }
         val first = MintQuoteSchedulePolicy.select(ids, emptyMap(), nowEpochMillis = 1_000, force = false)

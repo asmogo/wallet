@@ -335,7 +335,7 @@ class CdkWalletGatewayImpl : WalletGateway {
         }
     }
 
-    override fun subscribeToMintQuote(quoteId: String): Flow<MintQuoteInfo> = flow {
+    override fun subscribeToMintQuote(quoteId: String, mayRefresh: () -> Boolean): Flow<MintQuoteInfo> = flow {
         val subscription = cdkCall {
             val quote = database?.getMintQuote(quoteId)
                 ?: throw CdkGatewayUnavailable("No stored mint quote for $quoteId.")
@@ -347,6 +347,7 @@ class CdkWalletGatewayImpl : WalletGateway {
             while (true) {
                 val payload = withContext(Dispatchers.IO) { subscription.recv() }
                 if (!payload.referencesMintQuote(quoteId)) continue
+                if (!mayRefresh()) continue
                 val refreshed = checkMintQuote(quoteId)
                 emit(refreshed)
                 // An amountless BOLT12 offer remains open after each mint. Keep

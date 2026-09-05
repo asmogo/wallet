@@ -331,7 +331,7 @@ fun ReceiveLightningScreen(
     fun createNewOnchainAddress() {
         val quote = (face as? ReceiveLnFace.Display)?.quote
         if (quote != null && quote.paymentMethod == PaymentMethodKind.Onchain &&
-            quote.state != MintQuoteState.Issued && !quote.isExpired
+            quote.state != MintQuoteState.Issued
         ) {
             abandonedOnchainQuoteIds = abandonedOnchainQuoteIds + quote.id
         }
@@ -413,28 +413,12 @@ fun ReceiveLightningScreen(
     // The header chevron owns the internal Display → Input step-back.
     // Failure terminal uses the header close affordance (and Try Again).
 
-    // Abandoned-quote watcher: every quote-keyed monitor re-keys to the
-    // replacement after "Use new address", so this screen-scoped loop is what
-    // keeps checking the old address(es). refreshPendingMintQuote returns
-    // whether tokens were actually minted — on-chain quotes can sit Pending
-    // until a mint attempt succeeds, so the Boolean (not the quote state) is
-    // the reliable signal. Keyed on isNotEmpty so the first pass runs
-    // immediately after the first tap (a quote already paid at tap time mints
-    // on the first tick). Dies with the sheet; the global pending-quote sweep
-    // remains the fallback after that.
+    // Keep outgoing addresses in the shared reconciliation lane, including
+    // expired quotes whose deposits may still be waiting for confirmations.
+    // The global pending-quote sweep remains the fallback after dismissal.
     LaunchedEffect(abandonedOnchainQuoteIds.isNotEmpty()) {
         while (abandonedOnchainQuoteIds.isNotEmpty() && successInfo == null) {
             for (quoteId in abandonedOnchainQuoteIds) {
-                val info = runCatching { walletManager.pollMintQuote(quoteId) }.getOrNull()
-                // Drop quotes that expired before the mint saw any deposit; a
-                // funded-but-expired quote keeps being checked.
-                if (info != null && info.isExpired &&
-                    info.state == MintQuoteState.Unpaid &&
-                    (info.amount ?: 0L) == 0L && info.amountPaid == 0L
-                ) {
-                    abandonedOnchainQuoteIds = abandonedOnchainQuoteIds - quoteId
-                    continue
-                }
                 val reconciliation = runCatching {
                     walletManager.refreshPendingMintQuote(
                         quoteId,
@@ -446,8 +430,6 @@ fun ReceiveLightningScreen(
                 abandonedOnchainQuoteIds = abandonedOnchainQuoteIds - quoteId
                 // Refetch for the credited amount (on-chain always mints sat).
                 val refreshed = reconciliation.quote
-                    ?: runCatching { walletManager.pollMintQuote(quoteId) }.getOrNull()
-                    ?: info
                 val paidAmount = reconciliation.newlyIssued.takeIf { it > 0 }
                     ?: refreshed?.amount
                     ?: refreshed?.amountIssued?.takeIf { it > 0 }
@@ -706,6 +688,7 @@ fun ReceiveLightningScreen(
                         var intervalMs = initialMs
                         while (true) {
                             delay(intervalMs)
+                            if (!walletManager.shouldAttemptMintQuote(current.quote.id)) continue
                             val refreshed = runCatching { walletManager.pollMintQuote(current.quote.id) }
                                 .getOrNull()
                                 ?: continue // transient failure — keep monitoring
@@ -715,6 +698,7 @@ fun ReceiveLightningScreen(
                             // payment (the mint never marks them terminally
                             // paid), so keep polling for the next one.
                             val keepPolling = refreshed.paymentMethod == PaymentMethodKind.Bolt12 ||
+                                (refreshed.paymentMethod == PaymentMethodKind.Onchain && !refreshed.hasSettledPayment) ||
                                 shouldPollMintQuote(
                                     state = refreshed.state,
                                     expiryEpochSeconds = refreshed.expiryEpochSeconds,
@@ -795,7 +779,7 @@ fun ReceiveLightningScreen(
                     // issuance. The local flag describes only a real
                     // check/issue operation; durable retry truth comes from the
                     // scheduler record returned with the result.
-                    fun reconcileDisplayedQuote() {
+                    fun reconcileDisplayedQuote(force: Boolean = false) {
                         if (isReconcilingQuote) return
                         val quoteId = liveQuote.id
                         val paymentMethod = liveQuote.paymentMethod
@@ -803,13 +787,14 @@ fun ReceiveLightningScreen(
                         // A caught-up reusable quote is merely being checked;
                         // don't claim ecash issuance until its counters already
                         // prove that a paid delta exists.
-                        isIssuingEcash = liveQuote.mintableAmount > 0 ||
-                            liveQuote.state == MintQuoteState.Paid
+                        isIssuingEcash = (force || walletManager.shouldAttemptMintQuote(quoteId)) &&
+                            (liveQuote.mintableAmount > 0 || liveQuote.state == MintQuoteState.Paid)
                         walletManager.launch {
                             try {
                                 val result = walletManager.refreshPendingMintQuote(
                                     quoteId,
                                     confirmationOwner = ReceiveConfirmationOwner.InFlow,
+                                    force = force,
                                 )
                                 result.quote?.let { liveQuote = it }
                                 mintRetryStatus = result.retryStatus
@@ -923,7 +908,7 @@ fun ReceiveLightningScreen(
                             "View transaction in block explorer"
                         },
                         onCopy = { clipboard.setText(AnnotatedString(liveQuote.request)) },
-                        onRetryPendingMint = ::reconcileDisplayedQuote,
+                        onRetryPendingMint = { reconcileDisplayedQuote(force = true) },
                         onEditReusableAmount = if (
                             liveQuote.paymentMethod == PaymentMethodKind.Bolt12
                         ) {

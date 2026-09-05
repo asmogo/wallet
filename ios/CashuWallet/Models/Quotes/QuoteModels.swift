@@ -60,6 +60,7 @@ struct MintQuoteReconciliationResult {
         observed: MintQuoteInfo,
         mintedAmount: UInt64 = 0,
         verified: MintQuoteInfo? = nil,
+        issuedBeforeCheck: UInt64? = nil,
         retryStatus: MintQuoteRetryStatus = MintQuoteRetryStatus()
     ) {
         var reconciled = verified ?? observed
@@ -77,8 +78,10 @@ struct MintQuoteReconciliationResult {
             reconciled.state = .paid
         }
 
-        let verifiedAdvance = reconciled.amountIssued > observed.amountIssued
-            ? reconciled.amountIssued - observed.amountIssued
+        // A quote status check may itself finish CDK's interrupted issue saga.
+        let baseline = issuedBeforeCheck ?? observed.amountIssued
+        let verifiedAdvance = reconciled.amountIssued > baseline
+            ? reconciled.amountIssued - baseline
             : 0
         quote = reconciled
         newlyIssued = max(mintedAmount, verifiedAdvance)
@@ -131,12 +134,19 @@ enum MintQuoteSchedulePolicy {
         quoteIDs: Set<String>,
         existing: [String: MintQuoteScheduleRecord],
         now: Date,
-        force: Bool
+        force: Bool,
+        unsettledOnchainQuoteIDs: Set<String> = []
     ) -> Selection {
         let nowValue = now.timeIntervalSince1970
         var records = existing.filter { quoteIDs.contains($0.key) }
         for quoteID in quoteIDs where !quoteID.isEmpty && records[quoteID] == nil {
             records[quoteID] = MintQuoteScheduleRecord(firstObservedAt: nowValue)
+        }
+        // Older schedules treated expiry as terminal even while an on-chain
+        // deposit was waiting for confirmations. The durable quote reopens it.
+        for quoteID in unsettledOnchainQuoteIDs where records[quoteID]?.isComplete == true {
+            records[quoteID]?.isComplete = false
+            records[quoteID]?.nextAttemptAt = 0
         }
 
         let limit = force ? forcedBatchLimit : passiveBatchLimit
@@ -162,7 +172,9 @@ enum MintQuoteSchedulePolicy {
         for quoteID in selected {
             guard var record = records[quoteID] else { continue }
             record.lastAttemptAt = nowValue
-            record.nextAttemptAt = nowValue + (failureDelays.first ?? 5)
+            if record.consecutiveFailures == 0 {
+                record.nextAttemptAt = nowValue + (failureDelays.first ?? 5)
+            }
             records[quoteID] = record
         }
         return Selection(quoteIDs: Array(selected), records: records)
@@ -177,7 +189,10 @@ enum MintQuoteSchedulePolicy {
         var record = previous ?? MintQuoteScheduleRecord(firstObservedAt: nowValue)
         let reusable = quote.paymentMethod == .bolt12
         let expired = quote.expiry.map { $0 > 0 && UInt64(nowValue) >= $0 } ?? false
-        let complete = !reusable && (expired || quote.state == .issued || quote.hasSettledPayment)
+        // On-chain expiry stops new deposits, not confirmation of deposits
+        // already seen by the mint. Zero paid counters cannot prove completion.
+        let expiredInvoice = quote.paymentMethod == .bolt11 && expired
+        let complete = !reusable && (expiredInvoice || quote.state == .issued || quote.hasSettledPayment)
         let age = max(0, nowValue - record.firstObservedAt)
         let interval = age < recentQuoteWindow ? recentQuoteInterval : idleQuoteInterval
 
@@ -210,6 +225,17 @@ enum MintQuoteSchedulePolicy {
         record.isReusable = isReusable || record.isReusable
         record.isComplete = false
         return record
+    }
+
+    /// Receive polling can run more often than maintenance, but shares its
+    /// failure backoff. Explicit retry and refresh actions bypass the deadline.
+    static func shouldAttempt(
+        record: MintQuoteScheduleRecord?,
+        now: Date,
+        force: Bool
+    ) -> Bool {
+        guard !force, let record, record.consecutiveFailures > 0 else { return true }
+        return record.nextAttemptAt <= now.timeIntervalSince1970
     }
 
     static func retryStatus(for record: MintQuoteScheduleRecord) -> MintQuoteRetryStatus {

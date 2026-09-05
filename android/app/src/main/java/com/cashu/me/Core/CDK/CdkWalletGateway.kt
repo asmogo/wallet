@@ -57,7 +57,9 @@ interface CdkWalletGateway {
     /** Last durable local quote snapshot, without contacting the mint. */
     suspend fun storedMintQuote(quoteId: String): MintQuoteInfo? = null
 
-    fun subscribeToMintQuote(quoteId: String): Flow<MintQuoteInfo>
+    /** Push updates may trigger CDK saga recovery, so callers can defer the
+     * network refresh while their persisted retry deadline is in the future. */
+    fun subscribeToMintQuote(quoteId: String, mayRefresh: () -> Boolean = { true }): Flow<MintQuoteInfo>
     suspend fun listUnissuedMintQuotes(): List<MintQuoteInfo>
     suspend fun mintTokens(quoteId: String): Long
     suspend fun mintNPCQuote(quote: NPCQuote, p2pkPubkey: String?): Long

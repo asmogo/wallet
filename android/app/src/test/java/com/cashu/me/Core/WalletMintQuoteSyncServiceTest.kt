@@ -16,6 +16,74 @@ import org.junit.Test
 
 class WalletMintQuoteSyncServiceTest {
     @Test
+    fun `recovery during the first check reports the issuance delta once`() = runBlocking {
+        val ledger = QuoteLedger(paid = 21, issued = 0).apply { recoverOnNextCheck = 21 }
+        val service = ledger.service()
+
+        val recovered = service.syncPendingMintQuote(ledger.quote.id)
+        val duplicate = service.syncPendingMintQuote(ledger.quote.id)
+
+        assertEquals(21L, recovered.newlyIssued)
+        assertTrue(recovered.minted)
+        assertEquals(0L, duplicate.newlyIssued)
+        assertEquals(0, ledger.mintCalls)
+    }
+
+    @Test
+    fun `first check recovery and a later payment report the combined delta`() = runBlocking {
+        val ledger = QuoteLedger(paid = 34, issued = 0).apply { recoverOnNextCheck = 21 }
+        val result = ledger.service().syncPendingMintQuote(ledger.quote.id)
+
+        assertEquals(34L, result.newlyIssued)
+        assertEquals(1, ledger.mintCalls)
+        assertTrue(result.hasSettledPayment)
+    }
+
+    @Test
+    fun `automatic retries respect persisted deadlines and manual retries bypass them`() = runBlocking {
+        val ledger = QuoteLedger(paid = 8, issued = 0).apply { failuresBeforeIssuance = 5 }
+        val first = ledger.service().syncPendingMintQuote(ledger.quote.id)
+        val checkCalls = ledger.checkCalls
+        val record = ledger.schedules[ledger.quote.id]
+
+        // Recreate the service over the same durable state, as on relaunch.
+        val reopened = ledger.service()
+        val deferred = reopened.syncPendingMintQuote(ledger.quote.id)
+        assertEquals(first.retryStatus, deferred.retryStatus)
+        assertEquals(checkCalls, ledger.checkCalls)
+        assertEquals(1, ledger.mintCalls)
+        assertEquals(record, ledger.schedules[ledger.quote.id])
+
+        ledger.now = checkNotNull(first.retryStatus.nextRetryAtEpochMillis)
+        reopened.syncPendingMintQuote(ledger.quote.id)
+        assertEquals(2, ledger.mintCalls)
+
+        ledger.failuresBeforeIssuance = 0
+        val manual = reopened.syncPendingMintQuote(ledger.quote.id, force = true)
+        assertEquals(8L, manual.newlyIssued)
+        assertEquals(3, ledger.mintCalls)
+        assertEquals(MintQuoteRetryState.None, manual.retryStatus.state)
+    }
+
+    @Test
+    fun `onchain payment confirmed after expiry is issued on the next sweep`() = runBlocking {
+        val ledger = QuoteLedger(paid = 0, issued = 0).apply {
+            quote = quote.copy(paymentMethod = PaymentMethodKind.Onchain, expiryEpochSeconds = 1)
+        }
+        val service = ledger.service()
+        service.syncPendingMintQuote(ledger.quote.id)
+        assertFalse(checkNotNull(ledger.schedules[ledger.quote.id]).isComplete)
+
+        ledger.addPayment(21)
+        ledger.now += 60_000
+        val selected = service.selectQuoteIdsForSync(listOf(ledger.quote.id), force = false)
+        assertEquals(listOf(ledger.quote.id), selected)
+        val result = service.syncPendingMintQuote(selected.single())
+        assertEquals(21L, result.newlyIssued)
+        assertTrue(result.hasSettledPayment)
+    }
+
+    @Test
     fun `paid quote is only complete after issued counter catches up`() = runBlocking {
         val ledger = QuoteLedger(paid = 21, issued = 0)
         val result = ledger.service().syncPendingMintQuote(ledger.quote.id)
@@ -66,7 +134,7 @@ class WalletMintQuoteSyncServiceTest {
         val service = ledger.service()
 
         val failed = service.syncPendingMintQuote(ledger.quote.id)
-        val recovered = service.syncPendingMintQuote(ledger.quote.id)
+        val recovered = service.syncPendingMintQuote(ledger.quote.id, force = true)
 
         assertFalse(failed.hasSettledPayment)
         assertEquals(8L, failed.remainingAmount)
@@ -158,18 +226,33 @@ class WalletMintQuoteSyncServiceTest {
             amount = null,
             isAmountless = true,
             paymentMethod = PaymentMethodKind.Bolt12,
-            state = if (paid > issued) MintQuoteState.Paid else MintQuoteState.Issued,
+            state = if (paid > issued) MintQuoteState.Paid else if (paid > 0) MintQuoteState.Issued else MintQuoteState.Pending,
             expiryEpochSeconds = null,
             mintUrl = "https://mint.example",
             amountPaid = paid,
             amountIssued = issued,
         )
         var mintCalls = 0
+        var checkCalls = 0
+        var now = 10_000L
+        var schedules: Map<String, MintQuoteScheduleRecord> = emptyMap()
+        var recoverOnNextCheck = 0L
         var failuresBeforeIssuance = 0
         var throwAfterNextIssuance = false
 
         fun service() = WalletMintQuoteSyncService(
-            checkQuote = { quote },
+            storedQuote = { quote },
+            checkQuote = {
+                checkCalls += 1
+                if (recoverOnNextCheck > 0) {
+                    quote = quote.copy(amountIssued = quote.amountIssued + recoverOnNextCheck)
+                    recoverOnNextCheck = 0
+                }
+                quote
+            },
+            loadSchedules = { schedules },
+            saveSchedules = { schedules = it },
+            nowEpochMillis = { now },
             mintQuote = {
                 mintCalls += 1
                 if (failuresBeforeIssuance > 0) {

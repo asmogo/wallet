@@ -1405,7 +1405,9 @@ struct ReceiveLightningView: View {
             if expiryTimeRemaining <= 0 {
                 isExpired = true
                 expiryTimer?.invalidate()
-                quoteStatusTask?.cancel()
+                if quote.paymentMethod != .onchain, (mintQuote?.mintableAmount ?? 0) == 0 {
+                    quoteStatusTask?.cancel()
+                }
             }
         }
     }
@@ -1419,7 +1421,6 @@ struct ReceiveLightningView: View {
         guard let quote = mintQuote,
               quote.paymentMethod == .onchain,
               quote.state != .issued,
-              !quote.isExpired,
               !abandonedOnchainQuoteIds.contains(quote.id) else { return }
         abandonedOnchainQuoteIds.append(quote.id)
         startAbandonedQuoteWatcher()
@@ -1440,47 +1441,14 @@ struct ReceiveLightningView: View {
     private func checkAbandonedOnchainQuotes() async {
         for quoteId in abandonedOnchainQuoteIds {
             guard !isPaid, !Task.isCancelled else { return }
-            guard let info = try? await walletManager.checkMintQuote(quoteId: quoteId) else { continue }
-            // Drop quotes that expired before the mint saw any deposit; a
-            // funded-but-expired quote keeps being probed.
-            if info.isExpired, info.state == .pending, (info.amount ?? 0) == 0 {
-                abandonedOnchainQuoteIds.removeAll { $0 == quoteId }
-                continue
-            }
-            // On-chain quotes sit .pending until a mint attempt succeeds — the
-            // mint call is the probe (mintQuoteIfReady parity; not-yet-funded
-            // failures are expected and swallowed).
-            var mintedAmount: UInt64?
-            do {
-                mintedAmount = try await walletManager.mintTokens(quoteId: quoteId)
-            } catch {
-                guard isAlreadyIssuedMintError(error) else { continue }
-            }
+            guard let result = await walletManager.refreshPendingMintQuote(quoteId: quoteId),
+                  result.hasSettledPayment else { continue }
             abandonedOnchainQuoteIds.removeAll { $0 == quoteId }
-            // Stop the live quote's monitoring BEFORE swapping `mintQuote`, so
-            // the display view's onChange can't restart polling mid-swap; then
-            // reuse the standard success path.
             quoteStatusTask?.cancel()
             monitoredQuoteId = nil
             expiryTimer?.invalidate()
-            let refreshed = (try? await walletManager.checkMintQuote(quoteId: quoteId)) ?? info
-            // `receiveSuccessRows` and the home toast need a non-nil amount;
-            // fall back to the freshly minted amount if the quote lacks one.
-            mintQuote = refreshed.amount != nil ? refreshed : MintQuoteInfo(
-                id: refreshed.id,
-                request: refreshed.request,
-                amount: mintedAmount,
-                isAmountless: false,
-                paymentMethod: .onchain,
-                state: .issued,
-                expiry: refreshed.expiry,
-                createdAt: refreshed.createdAt,
-                unit: refreshed.unit,
-                mintURL: refreshed.mintURL,
-                amountPaid: mintedAmount ?? refreshed.amountPaid,
-                amountIssued: mintedAmount ?? refreshed.amountIssued
-            )
-            await completeReceivedQuote(receivedAmount: mintedAmount)
+            mintQuote = result.quote
+            await completeReceivedQuote(receivedAmount: result.quote.amountIssued)
             return
         }
     }
@@ -1518,7 +1486,7 @@ struct ReceiveLightningView: View {
                 quoteId: quoteId,
                 paymentMethod: paymentMethod
             ) {
-                while !Task.isCancelled && !isPaid && !isExpired {
+                while !Task.isCancelled && !isPaid && (!isExpired || paymentMethod == .onchain) {
                     let notification = try await subscription.recv()
                     guard !Task.isCancelled else { break }
 
@@ -1551,10 +1519,12 @@ struct ReceiveLightningView: View {
     ) async {
         var interval = initialInterval
 
-        while !Task.isCancelled && !isPaid && !isExpired && mintQuote?.id == quoteId {
+        while !Task.isCancelled && !isPaid && mintQuote?.id == quoteId {
             try? await Task.sleep(nanoseconds: interval * 1_000_000_000)
 
-            guard !Task.isCancelled, !isPaid, !isExpired, mintQuote?.id == quoteId else { break }
+            guard !Task.isCancelled, !isPaid, mintQuote?.id == quoteId,
+                  !isExpired || mintQuote?.paymentMethod == .onchain ||
+                    (mintQuote?.mintableAmount ?? 0) > 0 else { break }
             await refreshMintQuoteStatus()
 
             if interval < maxInterval {
@@ -1564,48 +1534,42 @@ struct ReceiveLightningView: View {
     }
 
     @MainActor
-    private func refreshMintQuoteStatus() async {
-        guard let quote = mintQuote, !isExpired, !isMinting else { return }
+    private func refreshMintQuoteStatus(force: Bool = false) async {
+        guard let quote = mintQuote, !isMinting, !isCheckingPayment,
+              force || !isExpired || quote.paymentMethod == .onchain || quote.mintableAmount > 0 else { return }
 
         isCheckingPayment = true
-        defer { isCheckingPayment = false }
+        isMinting = quote.mintableAmount > 0 && (force || walletManager.shouldAttemptMintQuote(quoteID: quote.id))
+        defer {
+            isCheckingPayment = false
+            isMinting = false
+        }
 
-        do {
-            let updatedQuote = try await walletManager.checkMintQuote(quoteId: quote.id)
-            guard !Task.isCancelled, mintQuote?.id == quote.id else { return }
-            mintQuote = updatedQuote
-            if updatedQuote.mintableAmount == 0 {
-                mintRetryStatus = MintQuoteRetryStatus()
-            }
+        // The first status check can itself recover an interrupted CDK saga.
+        // Keep it inside reconciliation so its issuance delta and retry deadline
+        // are handled before balance updates or receive feedback.
+        guard let result = await walletManager.refreshPendingMintQuote(quoteId: quote.id, force: force),
+              !Task.isCancelled, mintQuote?.id == quote.id else { return }
+        mintQuote = result.quote
+        mintRetryStatus = result.retryStatus
 
-            if updatedQuote.paymentMethod == .onchain, updatedQuote.state == .pending {
-                await refreshOnchainObservation(for: updatedQuote)
-                await mintQuoteIfReady(updatedQuote)
-                return
-            } else {
-                onchainObservation = nil
-            }
+        if result.quote.paymentMethod == .onchain, result.quote.state == .pending {
+            await refreshOnchainObservation(for: result.quote)
+        } else {
+            onchainObservation = nil
+        }
 
-            if updatedQuote.paymentMethod == .bolt12 {
-                // A BOLT12 offer is never terminal. Reconcile its cumulative
-                // paid/issued counters and leave the same QR active for the
-                // next payer-generated invoice.
-                await reconcileReusableOffer(updatedQuote)
-                return
+        if result.quote.paymentMethod == .bolt12 {
+            if result.newlyIssued > 0 {
+                walletManager.postReceivedMintNotification(
+                    amount: result.newlyIssued,
+                    unit: result.quote.unit,
+                    homeHaptic: false
+                )
+                HapticFeedback.notification(.success)
             }
-
-            switch updatedQuote.state {
-            case .pending:
-                return
-            case .paid:
-                // "Paid" is not success yet: keep the request visible until
-                // the quote counters prove ecash issuance completed.
-                await mintQuoteIfReady(updatedQuote)
-            case .issued:
-                await completeReceivedQuote(receivedAmount: updatedQuote.amountIssued)
-            }
-        } catch {
-            // Ignore transient polling failures and keep monitoring.
+        } else if result.hasSettledPayment {
+            await completeReceivedQuote(receivedAmount: result.quote.amountIssued)
         }
     }
 
@@ -1627,64 +1591,10 @@ struct ReceiveLightningView: View {
         )
     }
 
-    @MainActor
-    private func mintQuoteIfReady(_ quote: MintQuoteInfo) async {
-        guard !isMinting else { return }
-
-        isMinting = true
-        defer { isMinting = false }
-
-        guard let result = await walletManager.refreshPendingMintQuote(quoteId: quote.id) else {
-            return
-        }
-        mintQuote = result.quote
-        mintRetryStatus = result.retryStatus
-        guard result.hasSettledPayment else {
-            // A transient mint failure leaves the paid/issued delta intact in
-            // the durable quote. This screen and the app-wide foreground sweep
-            // will retry it; never show a false success terminal.
-            return
-        }
-
-        let receivedAmount = result.newlyIssued > 0
-            ? result.newlyIssued
-            : (result.quote.amount ?? result.quote.amountIssued)
-        await completeReceivedQuote(receivedAmount: receivedAmount)
-    }
-
-    @MainActor
-    private func reconcileReusableOffer(_ quote: MintQuoteInfo) async {
-        guard quote.mintableAmount > 0, !isMinting else { return }
-
-        isMinting = true
-        defer { isMinting = false }
-
-        guard let result = await walletManager.refreshPendingMintQuote(quoteId: quote.id) else {
-            return
-        }
-        mintQuote = result.quote
-        mintRetryStatus = result.retryStatus
-
-        // Only confirmed issuance earns receipt feedback. The reusable offer
-        // remains on screen and keeps monitoring after every payment.
-        if result.newlyIssued > 0 {
-            walletManager.postReceivedMintNotification(
-                amount: result.newlyIssued,
-                unit: result.quote.unit,
-                homeHaptic: false
-            )
-            HapticFeedback.notification(.success)
-        }
-    }
-
     private func retryPendingMintQuote() {
         guard let quote = mintQuote, quote.mintableAmount > 0, !isMinting else { return }
         Task { @MainActor in
-            if quote.paymentMethod == .bolt12 {
-                await reconcileReusableOffer(quote)
-            } else {
-                await mintQuoteIfReady(quote)
-            }
+            await refreshMintQuoteStatus(force: true)
         }
     }
 
@@ -1714,9 +1624,7 @@ struct ReceiveLightningView: View {
         quoteStatusTask?.cancel()
     }
 
-    private func isAlreadyIssuedMintError(_ error: Error) -> Bool {
-        walletManager.isAlreadyIssuedMintError(error)
-    }
+
 }
 
 #Preview {

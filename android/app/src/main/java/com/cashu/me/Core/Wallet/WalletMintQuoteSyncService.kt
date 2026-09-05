@@ -32,6 +32,7 @@ internal fun reconciledMintQuoteResult(
     observed: MintQuoteInfo,
     mintedAmount: Long = 0,
     verified: MintQuoteInfo? = null,
+    issuedBeforeCheck: Long? = null,
 ): MintQuoteSyncResult {
     val nonNegativeMinted = mintedAmount.coerceAtLeast(0)
     val inferredIssued = if (nonNegativeMinted > Long.MAX_VALUE - observed.amountIssued) {
@@ -47,7 +48,7 @@ internal fun reconciledMintQuoteResult(
         amountIssued = issued,
         state = mintQuoteStateForDomain(base.paymentMethod, base.state, paid, issued),
     )
-    val verifiedAdvance = (issued - observed.amountIssued).coerceAtLeast(0)
+    val verifiedAdvance = (issued - (issuedBeforeCheck ?: observed.amountIssued)).coerceAtLeast(0)
     return MintQuoteSyncResult(
         quote = quote,
         newlyIssued = maxOf(nonNegativeMinted, verifiedAdvance),
@@ -116,13 +117,18 @@ internal class WalletMintQuoteSyncService private constructor(
      * network suspension. Explicit refresh bypasses due times but remains
      * bounded so a large historical ledger cannot monopolize the wallet.
      */
-    fun selectQuoteIdsForSync(quoteIds: Collection<String>, force: Boolean): List<String> =
+    fun selectQuoteIdsForSync(
+        quoteIds: Collection<String>,
+        force: Boolean,
+        unsettledOnchainQuoteIds: Set<String> = emptySet(),
+    ): List<String> =
         synchronized(scheduleMonitor) {
             val selection = MintQuoteSchedulePolicy.select(
                 quoteIds = quoteIds,
                 existing = schedulesLocked(),
                 nowEpochMillis = nowEpochMillis(),
                 force = force,
+                unsettledOnchainQuoteIds = unsettledOnchainQuoteIds,
             )
             persistSchedulesLocked(selection.records)
             selection.quoteIds
@@ -135,13 +141,21 @@ internal class WalletMintQuoteSyncService private constructor(
             ?: MintQuoteRetryStatus()
     }
 
+    fun shouldAttempt(quoteId: String, force: Boolean = false): Boolean = synchronized(scheduleMonitor) {
+        MintQuoteSchedulePolicy.shouldAttempt(schedulesLocked()[quoteId], nowEpochMillis(), force)
+    }
+
     /**
      * Check -> mint -> verify one persisted quote. The quote stays unresolved
      * when any paid amount remains, so the next foreground/startup pass retries
      * it. Reusable BOLT12 quotes can run through this method indefinitely.
      */
-    suspend fun syncPendingMintQuote(quoteId: String): MintQuoteSyncResult =
+    suspend fun syncPendingMintQuote(quoteId: String, force: Boolean = false): MintQuoteSyncResult =
         reconciliationMutex.withLock {
+            val cached = storedQuoteOrNull(quoteId)
+            if (!shouldAttempt(quoteId, force)) {
+                return@withLock MintQuoteSyncResult(quote = cached, retryStatus = retryStatus(quoteId))
+            }
             val observed = try {
                 checkQuote(quoteId).also { rememberMintQuoteTimestamp(it.id) }
             } catch (error: CancellationException) {
@@ -150,7 +164,7 @@ internal class WalletMintQuoteSyncService private constructor(
                 if (!isMissingQuoteError(error)) {
                     logFailure("Failed to refresh pending quote $quoteId", error)
                 }
-                val local = runCatching { storedQuote(quoteId) }.getOrNull()
+                val local = storedQuoteOrNull(quoteId) ?: cached
                 val retryStatus = recordFailure(quoteId, local)
                 return@withLock MintQuoteSyncResult(
                     quote = local,
@@ -161,7 +175,7 @@ internal class WalletMintQuoteSyncService private constructor(
 
             if (observed.mintableAmount == 0L) {
                 recordObservation(observed)
-                return@withLock reconciledMintQuoteResult(observed)
+                return@withLock reconciledMintQuoteResult(observed, issuedBeforeCheck = cached?.amountIssued)
             }
 
             var mintedAmount = 0L
@@ -183,7 +197,7 @@ internal class WalletMintQuoteSyncService private constructor(
             } catch (_: Throwable) {
                 null
             }
-            val result = reconciledMintQuoteResult(observed, mintedAmount, verified)
+            val result = reconciledMintQuoteResult(observed, mintedAmount, verified, cached?.amountIssued)
 
             if (result.remainingAmount > 0L) {
                 val failure = mintError ?: IllegalStateException(
@@ -198,6 +212,14 @@ internal class WalletMintQuoteSyncService private constructor(
             recordObservation(checkNotNull(result.quote))
             result
         }
+
+    private suspend fun storedQuoteOrNull(quoteId: String): MintQuoteInfo? = try {
+        storedQuote(quoteId)
+    } catch (error: CancellationException) {
+        throw error
+    } catch (_: Throwable) {
+        null
+    }
 
     fun rememberMintQuoteTimestamp(quoteId: String) {
         quoteObserved(quoteId)

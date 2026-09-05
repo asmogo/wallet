@@ -600,7 +600,8 @@ class WalletManager(
             mintQuoteSyncService.rememberMintQuoteTimestamp(it.id)
         }
 
-    fun subscribeToMintQuote(quoteId: String): Flow<MintQuoteInfo> = gateway.subscribeToMintQuote(quoteId)
+    fun subscribeToMintQuote(quoteId: String): Flow<MintQuoteInfo> =
+        gateway.subscribeToMintQuote(quoteId) { mintQuoteSyncService.shouldAttempt(quoteId) }
 
     override suspend fun mintTokens(quoteId: String): Long =
         mintTokens(
@@ -632,9 +633,12 @@ class WalletManager(
     internal suspend fun refreshPendingMintQuote(
         quoteId: String,
         confirmationOwner: ReceiveConfirmationOwner,
+        force: Boolean = false,
     ): MintQuoteSyncResult {
-        val result = mintQuoteSyncService.syncPendingMintQuote(quoteId)
-        if (result.minted) refreshBalance()
+        val result = mintQuoteSyncService.syncPendingMintQuote(quoteId, force)
+        // A prior status poll or websocket check may already have recovered
+        // the issue saga. Re-read balances for an already-settled receive too.
+        if (result.minted || result.hasSettledPayment) refreshBalance()
         loadTransactions()
         result.receivedAmount?.let { amount ->
             publishReceivedPayment(amount, result.unit, confirmationOwner)
@@ -645,6 +649,9 @@ class WalletManager(
     /** Advisory UI state only; NUT-25 paid/issued counters remain authoritative. */
     internal fun mintQuoteRetryStatus(quoteId: String) =
         mintQuoteSyncService.retryStatus(quoteId)
+
+    internal fun shouldAttemptMintQuote(quoteId: String): Boolean =
+        mintQuoteSyncService.shouldAttempt(quoteId)
 
     /**
      * Cooldown-gated sync for passive triggers (app start, resume, History
@@ -683,20 +690,26 @@ class WalletManager(
         }
         lastMintQuoteSyncAtMs.set(System.currentTimeMillis())
         try {
-            val databaseQuoteIds = runCatching { gateway.listUnissuedMintQuotes().map { it.id } }
+            val databaseQuotes = runCatching { gateway.listUnissuedMintQuotes() }
                 .onFailure { AppLogger.wallet.error("Mint quote ledger scan failed", it) }
                 .getOrDefault(emptyList())
             // App intents are a second durable index. Usually these IDs are
             // already in CDK's list; the union also surfaces a missing local
             // quote instead of silently dropping an older/migrated offer.
             val intentQuoteIds = cashuRequestStore.state.value.requests.mapNotNull { it.quoteId }
-            val quoteIds = (databaseQuoteIds + intentQuoteIds).distinct().sorted()
-            val selectedQuoteIds = mintQuoteSyncService.selectQuoteIdsForSync(quoteIds, force)
+            val quoteIds = (databaseQuotes.map { it.id } + intentQuoteIds).distinct().sorted()
+            val selectedQuoteIds = mintQuoteSyncService.selectQuoteIdsForSync(
+                quoteIds,
+                force,
+                unsettledOnchainQuoteIds = databaseQuotes.filter {
+                    it.paymentMethod == PaymentMethodKind.Onchain && it.amountIssued == 0L
+                }.map { it.id }.toSet(),
+            )
             if (selectedQuoteIds.isEmpty()) return 0
 
             var mintedQuotes = 0
             selectedQuoteIds.forEach { quoteId ->
-                val result = mintQuoteSyncService.syncPendingMintQuote(quoteId)
+                val result = mintQuoteSyncService.syncPendingMintQuote(quoteId, force)
                 result.receivedAmount?.let { amount ->
                     mintedQuotes += 1
                     publishReceivedPayment(

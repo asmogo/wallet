@@ -37,6 +37,7 @@ internal object MintQuoteSchedulePolicy {
         existing: Map<String, MintQuoteScheduleRecord>,
         nowEpochMillis: Long,
         force: Boolean,
+        unsettledOnchainQuoteIds: Set<String> = emptySet(),
     ): Selection {
         val uniqueIds = quoteIds.asSequence().filter(String::isNotBlank).toSet()
         val records = existing
@@ -48,6 +49,13 @@ internal object MintQuoteSchedulePolicy {
                 quoteId,
                 MintQuoteScheduleRecord(firstObservedAtEpochMillis = nowEpochMillis),
             )
+        }
+        // Reopen schedules created by the old expiry policy while a deposit
+        // was still waiting for confirmations. CDK remains the source of truth.
+        unsettledOnchainQuoteIds.forEach { quoteId ->
+            records[quoteId]?.takeIf { it.isComplete }?.let { record ->
+                records[quoteId] = record.copy(isComplete = false, nextAttemptAtEpochMillis = 0)
+            }
         }
 
         val limit = if (force) FORCED_BATCH_LIMIT else PASSIVE_BATCH_LIMIT
@@ -68,9 +76,14 @@ internal object MintQuoteSchedulePolicy {
         // cancelled halfway through, the same first row cannot starve all
         // later rows on the next foreground tick.
         selected.forEach { quoteId ->
-            records[quoteId] = checkNotNull(records[quoteId]).copy(
+            val record = checkNotNull(records[quoteId])
+            records[quoteId] = record.copy(
                 lastAttemptAtEpochMillis = nowEpochMillis,
-                nextAttemptAtEpochMillis = nowEpochMillis + FAILURE_DELAYS_MS.first(),
+                nextAttemptAtEpochMillis = if (record.consecutiveFailures == 0) {
+                    nowEpochMillis + FAILURE_DELAYS_MS.first()
+                } else {
+                    record.nextAttemptAtEpochMillis
+                },
             )
         }
         return Selection(selected, records)
@@ -89,8 +102,10 @@ internal object MintQuoteSchedulePolicy {
             ?.takeIf { it > 0 }
             ?.let { nowEpochMillis / 1_000 >= it }
             ?: false
+        // Deposits seen before an on-chain quote expires can confirm later.
+        val expiredInvoice = quote.paymentMethod == PaymentMethodKind.Bolt11 && expired
         val complete = !reusable && (
-            expired || quote.state == MintQuoteState.Issued || quote.hasSettledPayment
+            expiredInvoice || quote.state == MintQuoteState.Issued || quote.hasSettledPayment
         )
         val age = (nowEpochMillis - record.firstObservedAtEpochMillis).coerceAtLeast(0)
         val nextInterval = if (age < RECENT_QUOTE_WINDOW_MS) {
@@ -132,6 +147,10 @@ internal object MintQuoteSchedulePolicy {
             isComplete = false,
         )
     }
+
+    fun shouldAttempt(record: MintQuoteScheduleRecord?, nowEpochMillis: Long, force: Boolean): Boolean =
+        force || record == null || record.consecutiveFailures == 0 ||
+            record.nextAttemptAtEpochMillis <= nowEpochMillis
 
     fun retryStatus(record: MintQuoteScheduleRecord): MintQuoteRetryStatus {
         if (!record.hadOutstandingPayment || record.consecutiveFailures == 0) {
