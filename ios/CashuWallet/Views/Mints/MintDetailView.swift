@@ -16,9 +16,9 @@ struct MintDetailView: View {
         walletManager.mints.first(where: { $0.url == mint.url }) ?? mint
     }
 
-    @State private var cdkInfo: Cdk.MintInfo?
-    @State private var isLoading = true
-    @State private var errorMessage: String?
+    @State private var infoLoader = MintDetailInfoLoader<Cdk.MintInfo>()
+    @State private var refreshID = UUID()
+
     @State private var showRemoveConfirmation = false
     @State private var nutsExpanded = false
     @State private var aboutExpanded = false
@@ -30,6 +30,10 @@ struct MintDetailView: View {
     /// is the cached `mint.balance`). Where a freshly-minted eur/usd shows up.
     @State private var unitBalances: [String: UInt64] = [:]
 
+    private var cdkInfo: Cdk.MintInfo? { infoLoader.info }
+    private var isLoading: Bool { infoLoader.isLoading }
+    private var errorMessage: String? { infoLoader.errorMessage }
+
     /// The mint's non-sat units (sat is shown by `balanceRow`).
     private var nonSatUnits: [String] {
         liveMint.units.filter { $0.lowercased() != "sat" }.sorted()
@@ -37,14 +41,6 @@ struct MintDetailView: View {
 
     private var isDefaultMint: Bool {
         walletManager.activeMint?.url == liveMint.url
-    }
-
-    private enum Connection { case checking, online, offline }
-
-    private var connection: Connection {
-        if cdkInfo != nil { return .online }
-        if errorMessage != nil { return .offline }
-        return .checking
     }
 
     private var showFiat: Bool {
@@ -62,7 +58,7 @@ struct MintDetailView: View {
                     ErrorBannerView(
                         message: errorMessage,
                         severity: .error,
-                        retry: { Task { await loadMintInfo() } }
+                        retry: { refreshID = UUID() }
                     )
                         .padding(.bottom, 12)
                 }
@@ -121,7 +117,7 @@ struct MintDetailView: View {
                 .accessibilityLabel("Share mint")
             }
         }
-        .task { await loadMintInfo() }
+        .task(id: refreshID) { await loadMintInfo() }
         .task { await loadUnitBalances() }
         .confirmationDialog(
             "Remove Mint",
@@ -254,7 +250,9 @@ struct MintDetailView: View {
             Label("Connection", systemImage: "network")
                 .foregroundStyle(.secondary)
             Spacer()
-            switch connection {
+            switch infoLoader.connection {
+            case .notChecked:
+                Text("Not checked").foregroundStyle(.secondary)
             case .checking:
                 Text("Checking…").foregroundStyle(.secondary)
             case .online:
@@ -697,17 +695,8 @@ struct MintDetailView: View {
     }
 
     private func loadMintInfo() async {
-        withAnimation(reduceMotion ? nil : .easeOut(duration: 0.15)) {
-            isLoading = true
-            errorMessage = nil
-        }
-        do {
-            cdkInfo = try await walletManager.fetchFullMintInfo(mintUrl: liveMint.url)
-        } catch {
-            errorMessage = error.userFacingWalletMessage
-        }
-        withAnimation(reduceMotion ? nil : .easeOut(duration: 0.2)) {
-            isLoading = false
+        await infoLoader.load {
+            try await walletManager.fetchFullMintInfo(mintUrl: mint.url)
         }
     }
 
