@@ -11,6 +11,8 @@
 		A09100000000000000000005 /* WalletAuditRegressionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A09100000000000000000006 /* WalletAuditRegressionTests.swift */; };
 		A09100000000000000000003 /* MintURLIdentity.swift in Sources */ = {isa = PBXBuildFile; fileRef = A09100000000000000000004 /* MintURLIdentity.swift */; };
 		A09100000000000000000001 /* MintQuoteRecovery.swift in Sources */ = {isa = PBXBuildFile; fileRef = A09100000000000000000002 /* MintQuoteRecovery.swift */; };
+		CD9100000000000000000001 /* MintDetailInfoLoader.swift in Sources */ = {isa = PBXBuildFile; fileRef = CD9100000000000000000002 /* MintDetailInfoLoader.swift */; };
+		CD9100000000000000000003 /* MintDetailInfoLoaderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CD9100000000000000000004 /* MintDetailInfoLoaderTests.swift */; };
 		323A00000000000000000001 /* PriceServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 323A00000000000000000002 /* PriceServiceTests.swift */; };
 		1100000000000001 /* CashuWalletApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2100000000000001 /* CashuWalletApp.swift */; };
 		1100000000000002 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2100000000000002 /* ContentView.swift */; };
@@ -196,6 +198,8 @@
 		A09100000000000000000006 /* WalletAuditRegressionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CashuWalletTests/WalletAuditRegressionTests.swift; sourceTree = "<group>"; };
 		A09100000000000000000004 /* MintURLIdentity.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MintURLIdentity.swift; sourceTree = "<group>"; };
 		A09100000000000000000002 /* MintQuoteRecovery.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MintQuoteRecovery.swift; sourceTree = "<group>"; };
+		CD9100000000000000000002 /* MintDetailInfoLoader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MintDetailInfoLoader.swift; sourceTree = "<group>"; };
+		CD9100000000000000000004 /* MintDetailInfoLoaderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = MintDetailInfoLoaderTests.swift; path = CashuWalletTests/MintDetailInfoLoaderTests.swift; sourceTree = "<group>"; };
 		323A00000000000000000002 /* PriceServiceTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = PriceServiceTests.swift; path = CashuWalletTests/PriceServiceTests.swift; sourceTree = "<group>"; };
 		0100000000000001 /* CashuWallet.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = CashuWallet.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		2100000000000001 /* CashuWalletApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CashuWalletApp.swift; sourceTree = "<group>"; };
@@ -416,6 +420,7 @@
 				A09100000000000000000006 /* WalletAuditRegressionTests.swift */,
 				TG00000000000012 /* TypographyGuardTests.swift */,
 				WE00000000000012 /* WalletErrorMessageTests.swift */,
+				CD9100000000000000000004 /* MintDetailInfoLoaderTests.swift */,
 				SE00000000000013 /* SeedPhraseEntryTests.swift */,
 				T1B0000000000010 /* WalletSurfaceCoordinatorTests.swift */,
 				T1B0000000000011 /* ScanRouterTests.swift */,
@@ -585,6 +590,7 @@
 			children = (
 				210000000000000C /* MintsListView.swift */,
 				21000000000000CC /* MintDetailView.swift */,
+				CD9100000000000000000002 /* MintDetailInfoLoader.swift */,
 				21000000000000CE /* AddMintSheet.swift */,
 				2100000000000100 /* ConnectMintView.swift */,
 				21000000000000CD /* MintDiscoverySheet.swift */,
@@ -1005,6 +1011,7 @@
 				A09100000000000000000005 /* WalletAuditRegressionTests.swift in Sources */,
 				TG00000000000002 /* TypographyGuardTests.swift in Sources */,
 				WE00000000000002 /* WalletErrorMessageTests.swift in Sources */,
+				CD9100000000000000000003 /* MintDetailInfoLoaderTests.swift in Sources */,
 				SE00000000000003 /* SeedPhraseEntryTests.swift in Sources */,
 				T2B0000000000010 /* WalletSurfaceCoordinatorTests.swift in Sources */,
 				T2B0000000000011 /* ScanRouterTests.swift in Sources */,
@@ -1068,6 +1075,7 @@
 				110000000000000B /* SendView.swift in Sources */,
 				110000000000000C /* MintsListView.swift in Sources */,
 				11000000000000CC /* MintDetailView.swift in Sources */,
+				CD9100000000000000000001 /* MintDetailInfoLoader.swift in Sources */,
 				11000000000000CE /* AddMintSheet.swift in Sources */,
 				1100000000000100 /* ConnectMintView.swift in Sources */,
 				11000000000000CF /* MintMethodIcons.swift in Sources */,

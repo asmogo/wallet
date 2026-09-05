@@ -1,8 +1,19 @@
 package com.cashu.me.Core
 
+import java.io.IOException
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicBoolean
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.async
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeout
+import okhttp3.OkHttpClient
+import okhttp3.Request
+import okhttp3.WebSocket
+import okhttp3.WebSocketListener
+import okio.ByteString
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -123,15 +134,31 @@ class MintDiscoveryManagerTest {
 
     @Test
     fun retryResetsExhaustedStateWhileDiscovering() = runBlocking {
-        val manager = discoveryManager()
+        val isRetry = AtomicBoolean(false)
+        val retryStarted = CompletableDeferred<Unit>()
+        val finishRetry = CountDownLatch(1)
+        val manager = discoveryManager(client = FailedRelayClient {
+            if (isRetry.get()) {
+                retryStarted.complete(Unit)
+                check(finishRetry.await(5, TimeUnit.SECONDS)) { "Retry was not released by the test" }
+            }
+        })
         manager.discoverMints()
         assertTrue(manager.state.value.hasCompletedDiscovery)
 
+        isRetry.set(true)
         val retry = async(start = CoroutineStart.UNDISPATCHED) { manager.discoverMints() }
 
-        val retrying = manager.state.value
-        assertTrue(retrying.isDiscovering)
-        assertFalse(retrying.hasCompletedDiscovery)
+        try {
+            // Hold the relay request until the in-progress state is inspected.
+            // A real refused connection can finish before these assertions run.
+            withTimeout(5_000) { retryStarted.await() }
+            val retrying = manager.state.value
+            assertTrue(retrying.isDiscovering)
+            assertFalse(retrying.hasCompletedDiscovery)
+        } finally {
+            finishRetry.countDown()
+        }
         retry.await()
         assertTrue(manager.state.value.hasCompletedDiscovery)
         assertFalse(manager.state.value.isDiscovering)
@@ -165,11 +192,32 @@ class MintDiscoveryManagerTest {
 
     private fun discoveryManager(
         useWebsockets: Boolean = true,
-        relays: List<String> = listOf("ws://127.0.0.1:9"),
+        relays: List<String> = listOf("wss://relay.example"),
+        client: OkHttpClient = FailedRelayClient(),
     ) = MintDiscoveryManager(
         settings = FakeMintDiscoverySettings(useWebsockets, relays),
+        client = client,
         previewFetcher = MintPreviewFetcher { null },
     )
+
+    /** Completes empty discovery without opening sockets or depending on network timing. */
+    private class FailedRelayClient(
+        private val beforeConnect: () -> Unit = {},
+    ) : OkHttpClient() {
+        override fun newWebSocket(request: Request, listener: WebSocketListener): WebSocket {
+            beforeConnect()
+            val socket = object : WebSocket {
+                override fun request(): Request = request
+                override fun queueSize(): Long = 0
+                override fun send(text: String): Boolean = false
+                override fun send(bytes: ByteString): Boolean = false
+                override fun close(code: Int, reason: String?): Boolean = true
+                override fun cancel() = Unit
+            }
+            listener.onFailure(socket, IOException("Simulated unavailable relay"), null)
+            return socket
+        }
+    }
 
     private class FakeMintDiscoverySettings(
         override var useWebsockets: Boolean,
