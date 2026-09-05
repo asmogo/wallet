@@ -172,29 +172,13 @@ fun MintDetailScreen(
             // persisted mint until it lands (persisted supplies balance/icon/name).
             // A failed fetch surfaces an inline explanation + Retry, and the rows
             // below keep showing the saved record (stale), never a fake success.
-            var liveInfo by remember(mint.url) { mutableStateOf<MintInfo?>(null) }
-            var connection by remember(mint.url) { mutableStateOf(MintConnectionState.Checking) }
-            var infoError by remember(mint.url) { mutableStateOf<String?>(null) }
+            val infoLoader = remember(mint.url) { MintDetailInfoLoader<MintInfo>() }
+            val liveInfo = infoLoader.info
+            val connection = infoLoader.connection
+            val infoError = infoLoader.errorMessage
             var refreshNonce by remember(mint.url) { mutableStateOf(0) }
             LaunchedEffect(mint.url, refreshNonce) {
-                connection = MintConnectionState.Checking
-                infoError = null
-                runCatching { walletManager.fetchLiveMintInfo(mint.url) }
-                    .fold(
-                        { fetched ->
-                            if (fetched != null) {
-                                liveInfo = fetched
-                                connection = MintConnectionState.Online
-                            } else {
-                                connection = MintConnectionState.Offline
-                                infoError = "The mint did not respond."
-                            }
-                        },
-                        { error ->
-                            connection = MintConnectionState.Offline
-                            infoError = error.userFacingWalletMessage
-                        },
-                    )
+                infoLoader.load { walletManager.fetchLiveMintInfo(mint.url) }
             }
             val info = liveInfo ?: mint
 
@@ -246,6 +230,7 @@ fun MintDetailScreen(
                     leadingIcon = Icons.Outlined.Public,
                     valueColor = when (connection) {
                         MintConnectionState.Offline -> MaterialTheme.colorScheme.error
+                        MintConnectionState.NotChecked,
                         MintConnectionState.Checking -> MaterialTheme.colorScheme.onSurfaceVariant
                         MintConnectionState.Online -> null
                     },
@@ -749,13 +734,6 @@ private fun NutRow(code: String, label: String, supported: Boolean) {
             modifier = Modifier.size(16.dp),
         )
     }
-}
-
-// Three-state mint reachability, derived from a live info fetch (iOS parity).
-private enum class MintConnectionState(val label: String) {
-    Checking("Checking…"),
-    Online("Online"),
-    Offline("Offline"),
 }
 
 /// Per-channel contact glyph (iOS `contactIcon`).
