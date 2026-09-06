@@ -241,6 +241,10 @@ struct ReceiveLightningView: View {
                 offerDescriptionLoaded = false
                 loadStoredOfferDescriptionIfNeeded()
             }
+            .onChange(of: effectiveUnit) {
+                offerDescriptionLoaded = false
+                loadStoredOfferDescriptionIfNeeded()
+            }
             .onChange(of: selectedMethod) {
                 requestFailure = nil
                 onchainObservation = nil
@@ -1233,6 +1237,7 @@ struct ReceiveLightningView: View {
             reusable: reusable,
             expiry: expiry
         )
+        CashuRequestStore.shared.markQuotePresented(quote.id)
     }
 
     /// Re-mints the reusable BOLT12 offer at a new amount, driven by the Amount-row
@@ -1297,14 +1302,7 @@ struct ReceiveLightningView: View {
     /// offer, reuse allowed); non-blank → a fresh offer, since offers are
     /// immutable. The current fixed amount, if any, is preserved.
     private func setReusableOfferDescription(_ next: String?) {
-        // Strip control/bidi characters (payer-facing text shown by third-party
-        // wallets), then cap. An explicit user choice wins over the restore.
-        let stripped = (next ?? "")
-            .unicodeScalars
-            .filter { $0.properties.generalCategory != .control || $0 == "\n" }
-            .map { String($0) }.joined()
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-        offerDescription = stripped.isEmpty ? nil : String(stripped.prefix(Self.maxOfferDescriptionLength))
+        offerDescription = MintQuoteDomain.normalizedOfferDescription(next)
         offerDescriptionLoaded = true
         // Use the amountless flag, not `quote.amount`: CDK may fill amount
         // after a payment on an amountless offer, and reminting that as a
@@ -1329,15 +1327,8 @@ struct ReceiveLightningView: View {
             offerDescriptionLoaded = true
             return
         }
-        offerDescription = CashuRequestStore.shared.requests
-            .filter {
-                $0.rail == .bolt12 && $0.mints.contains(mintUrl) &&
-                // Only amountless reusable intents — a memo from a one-off
-                // fixed quote must not leak into the reusable offer.
-                $0.amount == nil
-            }
-            .max(by: { $0.createdAt < $1.createdAt })?
-            .memo
+        offerDescription = CashuRequestStore.shared
+            .lastPresentedAmountlessOffer(mintURL: mintUrl, unit: effectiveUnit)?.memo
         offerDescriptionLoaded = true
     }
 

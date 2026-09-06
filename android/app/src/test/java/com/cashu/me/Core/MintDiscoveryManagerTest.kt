@@ -130,7 +130,7 @@ class MintDiscoveryManagerTest {
                   "name":"Live Mint",
                   "nuts":{
                     "4":{"methods":[
-                      {"method":"bolt12","unit":"sat","description":true}
+                      {"method":"bolt12","unit":"sat","options":{"description":true}}
                     ]}
                   }
                 }

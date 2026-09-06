@@ -57,6 +57,7 @@ struct CashuRequest: Codable, Identifiable, Hashable {
 
     /// One-shot expiry (BOLT11 invoices). nil for reusable / never-expiring rails.
     let expiry: Date?
+    var lastPresentedAt: Date?
 
     init(
         id: String = Self.newId(),
@@ -70,7 +71,8 @@ struct CashuRequest: Codable, Identifiable, Hashable {
         rail: Rail = .ecash,
         reusable: Bool = true,
         quoteId: String? = nil,
-        expiry: Date? = nil
+        expiry: Date? = nil,
+        lastPresentedAt: Date? = nil
     ) {
         self.id = id
         self.encoded = encoded
@@ -84,6 +86,7 @@ struct CashuRequest: Codable, Identifiable, Hashable {
         self.reusable = reusable
         self.quoteId = quoteId
         self.expiry = expiry
+        self.lastPresentedAt = lastPresentedAt
     }
 
     static func newId() -> String {
@@ -130,7 +133,7 @@ struct CashuRequest: Codable, Identifiable, Hashable {
         case id, encoded, amount, unit, mints, memo, createdAt
         case receivedPayments
         case receivedPaymentIds  // legacy: stored as [String], no amounts
-        case rail, reusable, quoteId, expiry
+        case rail, reusable, quoteId, expiry, lastPresentedAt
     }
 
     init(from decoder: Decoder) throws {
@@ -152,6 +155,7 @@ struct CashuRequest: Codable, Identifiable, Hashable {
             ?? (decodedRail == .ecash || decodedRail == .bolt12)
         quoteId = try c.decodeIfPresent(String.self, forKey: .quoteId)
         expiry = try c.decodeIfPresent(Date.self, forKey: .expiry)
+        lastPresentedAt = try c.decodeIfPresent(Date.self, forKey: .lastPresentedAt)
 
         if let payments = try c.decodeIfPresent([CashuRequestPayment].self, forKey: .receivedPayments) {
             receivedPayments = payments
@@ -183,5 +187,6 @@ struct CashuRequest: Codable, Identifiable, Hashable {
         try c.encode(reusable, forKey: .reusable)
         try c.encodeIfPresent(quoteId, forKey: .quoteId)
         try c.encodeIfPresent(expiry, forKey: .expiry)
+        try c.encodeIfPresent(lastPresentedAt, forKey: .lastPresentedAt)
     }
 }

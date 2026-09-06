@@ -147,19 +147,20 @@ class LightningService: ObservableObject {
         }
         let wallet = try await repo.getWallet(mintUrl: mintUrl, unit: unit)
 
+        let offerDescription = method == .bolt12 ? MintQuoteDomain.normalizedOfferDescription(description) : nil
         let quote = try await wallet.mintQuote(
             paymentMethod: method.cdkMethod,
             amount: amount.map { Amount(value: $0) },
             // Description is only threaded for BOLT12 offers (NUT-04 optional);
             // mint support on other rails is uneven, so they keep nil.
-            description: method == .bolt12 ? description : nil,
+            description: offerDescription,
             extra: nil
         )
 
         await persistMintQuote(quote, paymentMethod: method)
 
         var info = mintQuoteInfo(from: quote, fallbackAmount: amount, paymentMethod: method)
-        info.description = method == .bolt12 ? description : nil
+        info.description = offerDescription
         return info
     }
 

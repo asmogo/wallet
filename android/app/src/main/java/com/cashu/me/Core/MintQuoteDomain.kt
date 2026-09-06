@@ -6,6 +6,15 @@ import com.cashu.me.Models.PaymentMethodKind
 
 internal const val LOCAL_NEVER_EXPIRES_EPOCH_SECONDS: Long = 253_402_300_799L
 
+/** CDK's payer-facing decoder replaces control characters (including newlines) with �. */
+internal fun normalizedOfferDescription(raw: String?): String? {
+    val cleaned = raw.orEmpty().filter { !it.isISOControl() || it.isWhitespace() }
+        .map { if (it.isWhitespace()) ' ' else it }.joinToString("")
+        .split(' ').filter(String::isNotEmpty).joinToString(" ").take(640)
+        .let { if (it.lastOrNull()?.isHighSurrogate() == true) it.dropLast(1) else it }
+    return cleaned.ifEmpty { null }
+}
+
 internal fun mintQuoteLocalStorageExpiry(
     expiryEpochSeconds: Long,
     paymentMethod: PaymentMethodKind,

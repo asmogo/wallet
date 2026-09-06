@@ -9,6 +9,15 @@ import org.junit.Test
 
 class MintQuoteDomainTest {
     @Test
+    fun normalizesDescriptionForPayerDisplay() {
+        assertEquals("Coffee tips Thank you ☕", normalizedOfferDescription("  Coffee tips\r\n\tThank you ☕  "))
+        assertEquals("Coffee", normalizedOfferDescription("Cof\u0000fee"))
+        assertNull(normalizedOfferDescription(" \r\n\t "))
+        assertEquals("a".repeat(640), normalizedOfferDescription("a".repeat(650)))
+        assertEquals("a".repeat(639), normalizedOfferDescription("a".repeat(639) + "😀"))
+    }
+
+    @Test
     fun findsReusableBolt12OfferOnlyForItsMintAndUnit() {
         val offer = MintQuoteInfo(
             id = "reusable-usd",

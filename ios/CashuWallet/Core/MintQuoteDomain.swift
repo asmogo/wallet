@@ -3,6 +3,16 @@ import Foundation
 /// Pure mint-quote domain rules (Android `MintQuoteDomain.kt` parity) —
 /// extracted for unit testing.
 enum MintQuoteDomain {
+    /// Payer decoders render control characters, including newlines, as replacement glyphs.
+    static func normalizedOfferDescription(_ raw: String?) -> String? {
+        let printable = (raw ?? "").unicodeScalars.compactMap { scalar -> String? in
+            if CharacterSet.whitespacesAndNewlines.contains(scalar) { return " " }
+            return scalar.properties.generalCategory == .control ? nil : String(scalar)
+        }.joined()
+        let normalized = String(printable.split(separator: " ").joined(separator: " ").prefix(640))
+        return normalized.isEmpty ? nil : normalized
+    }
+
     /// True when any NUT-04 bolt12 method advertises `description: true`.
     /// Null or false on every bolt12 method (or no bolt12 method) fails closed.
     static func reportsBolt12MintDescription(

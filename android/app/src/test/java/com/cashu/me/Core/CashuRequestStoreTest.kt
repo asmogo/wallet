@@ -12,6 +12,28 @@ import org.junit.Test
 
 class CashuRequestStoreTest {
     @Test
+    fun clearingDescriptionRestoresLastUsedOfferWithoutChangingHistory() {
+        val persistence = MemoryCashuRequestPersistence()
+        val store = CashuRequestStore(persistence)
+        val plain = CashuRequest(id = "plain", quoteId = "plain", quoteKind = "bolt12",
+            encoded = "lno-plain", mints = listOf("https://mint.example"), createdAtEpochMillis = 1)
+        store.upsert(plain)
+        store.upsert(plain.copy(id = "described", quoteId = "described", memo = "Coffee", createdAtEpochMillis = 2))
+        store.upsert(plain.copy(id = "other-unit", quoteId = "other-unit", unit = "usd", memo = "USD", createdAtEpochMillis = 3))
+        store.upsert(plain.copy(id = "fixed", quoteId = "fixed", amount = 21, memo = "Fixed", createdAtEpochMillis = 4))
+        assertEquals("described", store.lastPresentedAmountlessOffer("https://mint.example", "sat")?.id)
+        store.attachPaymentByQuoteId("plain", "payment", 21)
+        store.markQuotePresented("plain")
+        val reloaded = CashuRequestStore(persistence)
+        val restored = reloaded.lastPresentedAmountlessOffer("https://mint.example", "SAT")!!
+        assertNull(restored.memo)
+        assertEquals(plain.createdAtEpochMillis, restored.createdAtEpochMillis)
+        assertEquals(21L, restored.totalReceived)
+        assertEquals("other-unit", reloaded.lastPresentedAmountlessOffer("https://mint.example", "usd")?.id)
+        assertNull(reloaded.lastPresentedAmountlessOffer("https://other.example", "sat"))
+    }
+
+    @Test
     fun quoteIntentAttachmentUsesQuoteIdAndSuppressesDuplicatePayments() {
         val persistence = MemoryCashuRequestPersistence()
         val store = CashuRequestStore(persistence)

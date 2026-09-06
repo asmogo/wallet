@@ -315,7 +315,8 @@ internal object MintPreviewParser {
             supportsBolt12MintDescription = mintSettings.any { setting ->
                 PaymentMethodKind.fromRaw(setting["method"]?.jsonPrimitive?.contentOrNull) ==
                     PaymentMethodKind.Bolt12 &&
-                    setting["description"]?.jsonPrimitive?.booleanOrNull == true
+                    (setting["options"]?.jsonObject?.get("description")
+                        ?: setting["description"])?.jsonPrimitive?.booleanOrNull == true
             },
         )
     }.getOrNull()

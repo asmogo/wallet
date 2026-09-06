@@ -83,6 +83,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
+import com.cashu.me.Core.normalizedOfferDescription
 import com.cashu.me.Core.AmountFormatter
 import com.cashu.me.Core.AmountDisplayPrimary
 import com.cashu.me.Core.CashuRequestStore
@@ -215,10 +216,10 @@ fun ReceiveLightningScreen(
     var reusableAmountPickerOpen by remember { mutableStateOf(false) }
     var reusableDescriptionEditorOpen by remember { mutableStateOf(false) }
     // Description the next reusable BOLT12 offer is minted with. Initialized
-    // once per mint from the newest stored amountless offer intent so
+    // once per mint/unit from the last presented amountless offer intent so
     // re-opening the screen reloads the described offer instead of minting a
     // duplicate (CDK never returns offer descriptions — local memo is the
-    // only record). Keyed by mint url: a mint switch resets and re-restores.
+    // only record). A mint or unit switch resets and re-restores.
     var reusableOfferDescription by remember { mutableStateOf<String?>(null) }
     var reusableOfferDescriptionLoadedFor by remember { mutableStateOf<String?>(null) }
     // Quote creation is serialized through this handle — a new create cancels
@@ -253,10 +254,9 @@ fun ReceiveLightningScreen(
     val showsUnitSelector = activeMint?.supportsMultipleMintUnits == true &&
         method != PaymentMethodKind.Onchain
 
-    LaunchedEffect(activeMint?.url, cashuRequestState.requests, mintSupportsBolt12Description) {
-        val mintUrl = activeMint?.url
-        // Mint switch: drop the previous mint's description and re-restore.
-        if (reusableOfferDescriptionLoadedFor != null && reusableOfferDescriptionLoadedFor != mintUrl) {
+    val descriptionContext = activeMint?.url?.let { "$it|$effectiveUnit" }
+    LaunchedEffect(descriptionContext, cashuRequestState.requests, mintSupportsBolt12Description) {
+        if (reusableOfferDescriptionLoadedFor != descriptionContext) {
             reusableOfferDescription = null
             reusableOfferDescriptionLoadedFor = null
         }
@@ -265,22 +265,10 @@ fun ReceiveLightningScreen(
             reusableOfferDescriptionLoadedFor = null
             return@LaunchedEffect
         }
-        if (reusableOfferDescriptionLoadedFor == null &&
-            mintUrl != null &&
-            cashuRequestState.requests.isNotEmpty()
-        ) {
-            reusableOfferDescription = cashuRequestState.requests
-                .filter { request ->
-                    request.quoteKind == "bolt12" &&
-                        // Only amountless reusable intents — a memo from a
-                        // one-off fixed quote must not leak into the reusable
-                        // offer on re-open.
-                        request.amount == null &&
-                        mintUrl in request.mints
-                }
-                .maxByOrNull { it.createdAtEpochMillis }
-                ?.memo
-            reusableOfferDescriptionLoadedFor = mintUrl
+        if (reusableOfferDescriptionLoadedFor == null && activeMint != null) {
+            reusableOfferDescription = cashuRequestStore
+                .lastPresentedAmountlessOffer(activeMint.url, effectiveUnit)?.memo
+            reusableOfferDescriptionLoadedFor = descriptionContext
         }
     }
 
@@ -300,6 +288,7 @@ fun ReceiveLightningScreen(
             memo = quote.description,
             encoded = quote.request,
         )
+        cashuRequestStore.markQuotePresented(quote.id)
     }
 
     fun createMintRequest(
@@ -455,15 +444,8 @@ fun ReceiveLightningScreen(
     fun setReusableOfferDescription(next: String?) {
         method = PaymentMethodKind.Bolt12
         errorText = null
-        // Strip control/bidi characters (kept payer-facing text clean for
-        // third-party wallets) and cap; an explicit user choice wins over the
-        // one-time restore.
-        reusableOfferDescription = next
-            ?.filter { !it.isISOControl() || it == '\n' }
-            ?.trim()
-            ?.take(MAX_OFFER_DESCRIPTION_LENGTH)
-            ?.ifEmpty { null }
-        reusableOfferDescriptionLoadedFor = activeMint?.url
+        reusableOfferDescription = normalizedOfferDescription(next)
+        reusableOfferDescriptionLoadedFor = descriptionContext
         val currentQuote = (face as? ReceiveLnFace.Display)?.quote
         if (currentQuote != null &&
             currentQuote.paymentMethod == PaymentMethodKind.Bolt12 &&

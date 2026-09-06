@@ -3,6 +3,29 @@ import XCTest
 
 @MainActor
 final class CashuRequestStoreBoundaryTests: XCTestCase {
+    func testClearingDescriptionRestoresLastUsedOfferWithoutChangingHistory() throws {
+        let suiteName = "OfferReuseTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let store = CashuRequestStore(userDefaults: defaults)
+        let url = "https://mint.example"
+        let plain = store.upsertQuoteIntent(rail: .bolt12, quoteId: "plain", encoded: "lno-plain", mints: [url], reusable: true)
+        store.upsertQuoteIntent(rail: .bolt12, quoteId: "described", encoded: "lno-described", mints: [url], memo: "Coffee", reusable: true)
+        store.upsertQuoteIntent(rail: .bolt12, quoteId: "other-unit", encoded: "lno-usd", unit: "usd", mints: [url], memo: "USD", reusable: true)
+        store.upsertQuoteIntent(rail: .bolt12, quoteId: "fixed", encoded: "lno-fixed", amount: 21, mints: [url], memo: "Fixed", reusable: true)
+        XCTAssertEqual(store.lastPresentedAmountlessOffer(mintURL: url, unit: "sat")?.quoteId, "described")
+        store.attachPayment(quoteId: "plain", transactionId: "payment", amount: 21)
+        store.markQuotePresented("plain")
+        let reloaded = CashuRequestStore(userDefaults: defaults)
+        let restored = try XCTUnwrap(reloaded.lastPresentedAmountlessOffer(mintURL: url, unit: "SAT"))
+        XCTAssertEqual(restored.id, plain.id)
+        XCTAssertNil(restored.memo)
+        XCTAssertEqual(restored.createdAt, plain.createdAt)
+        XCTAssertEqual(restored.totalReceived, 21)
+        XCTAssertEqual(reloaded.lastPresentedAmountlessOffer(mintURL: url, unit: "usd")?.quoteId, "other-unit")
+        XCTAssertNil(reloaded.lastPresentedAmountlessOffer(mintURL: "https://other.example", unit: "sat"))
+    }
+
     func testResetForWalletBoundaryClearsRequestsAndDefaults() {
         let suiteName = "CashuRequestStoreBoundaryTests.\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suiteName)!

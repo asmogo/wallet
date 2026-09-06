@@ -561,15 +561,19 @@ class WalletManager(
 
     override suspend fun createMintQuote(amount: Long?, method: PaymentMethodKind, unit: String, description: String?): MintQuoteInfo {
         val active = mutableState.value.activeMint ?: throw IllegalStateException("No active mint.")
+        val offerDescription = normalizedOfferDescription(description)
         return withLoadingResult {
-            gateway.createMintQuote(amount, method, active.url, unit, description).also {
+            gateway.createMintQuote(
+                amount, method, active.url, unit,
+                if (method == PaymentMethodKind.Bolt12) offerDescription else description,
+            ).also {
                 mintQuoteSyncService.rememberMintQuoteTimestamp(it.id)
             }.let { quote ->
                 // CDK drops the description from the returned quote (write-only),
                 // so re-attach it for callers that persist or display it (iOS
                 // `info.description` parity). Offers are immutable, so this
                 // matches what was embedded.
-                if (method == PaymentMethodKind.Bolt12) quote.copy(description = description) else quote
+                if (method == PaymentMethodKind.Bolt12) quote.copy(description = offerDescription) else quote
             }
         }
     }

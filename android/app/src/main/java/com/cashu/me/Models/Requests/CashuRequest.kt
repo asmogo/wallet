@@ -19,6 +19,7 @@ data class CashuRequest(
     val mints: List<String> = emptyList(),
     val memo: String? = null,
     val createdAtEpochMillis: Long = System.currentTimeMillis(),
+    val lastPresentedAtEpochMillis: Long? = null,
     val quoteId: String? = null,
     val quoteKind: String? = null,
     val receivedPayments: List<CashuRequestPayment> = emptyList(),
