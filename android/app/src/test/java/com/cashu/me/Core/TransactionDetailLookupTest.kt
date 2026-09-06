@@ -11,6 +11,16 @@ import org.junit.Test
 
 class TransactionDetailLookupTest {
     @Test
+    fun detailMonitoringIncludesSettledOffersButExcludesPaidInvoicesAndOutgoingPayments() {
+        val pending = tx(id = "payment", quoteId = "quote", status = TransactionStatus.Pending)
+        assertEquals("quote", pending.mintQuoteIdForStatusRefresh)
+        assertEquals("quote", pending.copy(status = TransactionStatus.Expired).mintQuoteIdForStatusRefresh)
+        assertEquals("quote", pending.copy(status = TransactionStatus.Completed, invoice = "LNO1").mintQuoteIdForStatusRefresh)
+        assertNull(pending.copy(status = TransactionStatus.Completed).mintQuoteIdForStatusRefresh)
+        assertNull(pending.copy(type = TransactionType.Outgoing, invoice = "lno1").mintQuoteIdForStatusRefresh)
+    }
+
+    @Test
     fun prefersExactIdMatch() {
         val open = tx(id = "quote-1", quoteId = "quote-1", status = TransactionStatus.Pending)
         val other = tx(id = "cdk-9", quoteId = "quote-1", status = TransactionStatus.Completed)

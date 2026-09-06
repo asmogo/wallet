@@ -92,6 +92,7 @@ class WalletManager(
     private val initializationMutex = Mutex()
     private val mintMetadataFetcher = WalletMintMetadataFetcher(allowCleartextLocalTestMints)
     private val mintQuoteSyncService = WalletMintQuoteSyncService(gateway, walletStore)
+    private val focusedMintQuoteMonitor = FocusedMintQuoteMonitor()
     private val transactionLoader = WalletTransactionLoader(walletStore, gateway)
     private val npcQuotesInFlight = mutableSetOf<String>()
     private var processedNPCQuotes = walletStore.loadProcessedNPCQuotes().toMutableSet()
@@ -666,16 +667,38 @@ class WalletManager(
         quoteId: String,
         confirmationOwner: ReceiveConfirmationOwner,
         force: Boolean = false,
+        observingQuoteId: String? = null,
     ): MintQuoteSyncResult {
         val result = mintQuoteSyncService.syncPendingMintQuote(quoteId, force)
         // A prior status poll or websocket check may already have recovered
         // the issue saga. Re-read balances for an already-settled receive too.
         if (result.minted || result.hasSettledPayment) refreshBalance()
-        loadTransactions()
+        loadTransactions(observingQuoteId = observingQuoteId)
         result.receivedAmount?.let { amount ->
             publishReceivedPayment(amount, result.unit, confirmationOwner)
         }
         return result
+    }
+
+    /** The detail's lifecycle owns this job; every tick reconciles only its quote. */
+    internal suspend fun monitorDisplayedMintQuote(
+        quoteId: String,
+        confirmationOwner: ReceiveConfirmationOwner,
+    ) {
+        focusedMintQuoteMonitor.monitor(quoteId, refresh = { id ->
+            try {
+                refreshPendingMintQuote(
+                    id,
+                    confirmationOwner = confirmationOwner,
+                    observingQuoteId = id,
+                ).quote
+            } catch (error: CancellationException) {
+                throw error
+            } catch (error: Throwable) {
+                AppLogger.wallet.error("Displayed mint quote sync failed", error)
+                null
+            }
+        })
     }
 
     /** Advisory UI state only; NUT-25 paid/issued counters remain authoritative. */
@@ -711,6 +734,7 @@ class WalletManager(
      *   it preempts cooldown gating (explicit user intent).
      */
     suspend fun syncPendingMintQuotes(force: Boolean = false): Int {
+        if (!force && focusedMintQuoteMonitor.isActive) return 0
         // Passive triggers collapse while an existing pass is active. An
         // explicit user refresh waits its turn instead of being silently
         // discarded — this makes `force` real rather than a documentation-only
@@ -730,6 +754,7 @@ class WalletManager(
             // quote instead of silently dropping an older/migrated offer.
             val intentQuoteIds = cashuRequestStore.state.value.requests.mapNotNull { it.quoteId }
             val quoteIds = (databaseQuotes.map { it.id } + intentQuoteIds).distinct().sorted()
+            if (!force && focusedMintQuoteMonitor.isActive) return 0
             val selectedQuoteIds = mintQuoteSyncService.selectQuoteIdsForSync(
                 quoteIds,
                 force,
@@ -740,7 +765,8 @@ class WalletManager(
             if (selectedQuoteIds.isEmpty()) return 0
 
             var mintedQuotes = 0
-            selectedQuoteIds.forEach { quoteId ->
+            for (quoteId in selectedQuoteIds) {
+                if (!force && focusedMintQuoteMonitor.isActive) break
                 val result = mintQuoteSyncService.syncPendingMintQuote(quoteId, force)
                 result.receivedAmount?.let { amount ->
                     mintedQuotes += 1
@@ -756,7 +782,7 @@ class WalletManager(
                 if (!force) yield()
             }
             if (mintedQuotes > 0) refreshBalance()
-            loadTransactions()
+            loadTransactions(includeRemoteObservations = !focusedMintQuoteMonitor.isActive)
             return mintedQuotes
         } finally {
             mintQuoteSweepMutex.unlock()
@@ -1364,8 +1390,13 @@ class WalletManager(
         throw CashuRequestMintSettling()
     }
 
-    suspend fun loadTransactions() {
-        val result = transactionLoader.load(mutableState.value.mints)
+    suspend fun loadTransactions(
+        includeRemoteObservations: Boolean = true,
+        observingQuoteId: String? = null,
+    ) {
+        val result = transactionLoader.load(
+            mutableState.value.mints, includeRemoteObservations, observingQuoteId,
+        )
         // Quote-backed requests (notably the long-lived BOLT12 offer) own their
         // received payments in history. Reconcile before publishing so the UI
         // shows the one reusable-invoice row rather than duplicate payments.

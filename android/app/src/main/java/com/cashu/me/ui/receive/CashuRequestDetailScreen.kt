@@ -51,6 +51,9 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.repeatOnLifecycle
 import java.text.DateFormat
 import java.util.Date
 import com.cashu.me.Core.AmountFormatter
@@ -61,6 +64,7 @@ import com.cashu.me.Core.NfcReceive.NfcReceiveCoordinator
 import com.cashu.me.Core.NfcReceive.NfcReceivePhase
 import com.cashu.me.Core.NfcReceive.shouldOfferNfcReceive
 import com.cashu.me.Core.PaymentRequestBuilder
+import com.cashu.me.Core.ReceiveConfirmationOwner
 import com.cashu.me.Core.Protocols.CurrencyAmount
 import com.cashu.me.Core.Protocols.CurrencyRegistry
 import com.cashu.me.Core.SettingsManager
@@ -118,6 +122,7 @@ fun CashuRequestDetailScreen(
     val context = LocalContext.current
     val clipboard = LocalClipboardManager.current
     val confirmationToastController = LocalConfirmationToastController.current
+    val lifecycleOwner = LocalLifecycleOwner.current
 
     val request = storeState.requests.firstOrNull { it.id == requestId }
     val requestReadiness = remember(settings, nostrState) {
@@ -206,6 +211,19 @@ fun CashuRequestDetailScreen(
         ?.firstOrNull { it.transactionId == successPaymentId }
     val showSuccessTerminal = request != null && successPayment != null &&
         nfcState.phase != NfcReceivePhase.Success
+
+    val monitoredQuoteId = request?.quoteId.takeUnless { successPayment != null }
+    LaunchedEffect(monitoredQuoteId, lifecycleOwner, walletState.isRuntimeReady) {
+        if (!walletState.isRuntimeReady) return@LaunchedEffect
+        val quoteId = monitoredQuoteId ?: return@LaunchedEffect
+        // STARTED keeps monitoring through a native sheet/dialog, while still
+        // cancelling when the screen leaves composition or the app backgrounds.
+        lifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
+            walletManager.monitorDisplayedMintQuote(
+                quoteId, confirmationOwner = ReceiveConfirmationOwner.InFlow,
+            )
+        }
+    }
 
     // One gate keeps the detail and the receipt in the same composition so
     // the swap fades through instead of hard-cutting (iOS:

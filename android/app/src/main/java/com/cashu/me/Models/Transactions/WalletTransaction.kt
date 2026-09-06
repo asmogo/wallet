@@ -46,8 +46,8 @@ data class WalletTransaction(
 
     /**
      * Mint-quote id to re-check when opening this row's detail, if any.
-     * Only unsettled incoming Lightning / on-chain mint quotes (not ecash,
-     * not melts). Expired unpaid invoices are included so a late-paid NUT-04
+     * Incoming unsettled mint quotes and reusable offers (not ecash or melts).
+     * Expired unpaid invoices are included so a late-paid NUT-04
      * quote can still mint after the invoice timer.
      */
     val mintQuoteIdForStatusRefresh: String?
@@ -55,7 +55,9 @@ data class WalletTransaction(
             if (type != TransactionType.Incoming) return null
             if (kind != TransactionKind.Lightning && kind != TransactionKind.Onchain) return null
             if (invoice == null) return null
-            if (status != TransactionStatus.Pending && status != TransactionStatus.Expired) return null
+            val reusableOffer = kind == TransactionKind.Lightning &&
+                status == TransactionStatus.Completed && invoice.startsWith("lno", ignoreCase = true)
+            if (status != TransactionStatus.Pending && status != TransactionStatus.Expired && !reusableOffer) return null
             return quoteId ?: id
         }
 }

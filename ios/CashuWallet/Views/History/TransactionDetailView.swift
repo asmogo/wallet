@@ -2,6 +2,7 @@ import SwiftUI
 
 struct TransactionDetailView: View {
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.scenePhase) private var scenePhase
     @EnvironmentObject var walletManager: WalletManager
     /// Snapshot at open; [transaction] prefers the live wallet row so a
     /// successful open-check can flip Pending → Completed without dismissing.
@@ -60,6 +61,13 @@ struct TransactionDetailView: View {
     }
 
     private var showsQR: Bool { transaction.hasActionablePaymentCode }
+
+    // Keep the opening identity through settlement so a row update cannot
+    // cancel balance/history reconciliation midway through its final tick.
+    private var monitoredQuoteID: String? {
+        scenePhase == .active && walletManager.isRuntimeReady
+            ? seed.mintQuoteIdForStatusRefresh : nil
+    }
 
     private var qrContentTypeLabel: String {
         switch transaction.kind {
@@ -120,15 +128,17 @@ struct TransactionDetailView: View {
                     ShareSheet(items: [invoice])
                 }
             }
-            // Single-quote check on open (not the full pending list). Re-checks
-            // this mint quote against the mint and mints if already paid —
-            // Android TransactionDetailScreen parity.
-            .task(id: seed.id) {
-                guard let quoteId = seed.mintQuoteIdForStatusRefresh else { return }
-                _ = await walletManager.refreshPendingMintQuote(quoteId: quoteId)
-            }
             .onDisappear {
                 manualClaimCheckTask?.cancel()
+            }
+        }
+        .task(id: monitoredQuoteID) {
+            guard let quoteID = monitoredQuoteID else { return }
+            if seed.hasActionablePaymentCode {
+                await walletManager.monitorDisplayedMintQuote(quoteID: quoteID, homeHaptic: true)
+            } else {
+                // Expired receipts still get a final late-payment recovery check.
+                await walletManager.refreshPendingMintQuote(quoteId: quoteID)
             }
         }
         .fullScreenCover(item: $claimReceiveToken) { pending in

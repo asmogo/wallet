@@ -28,7 +28,11 @@ internal class WalletTransactionLoader(
     private val walletStore: WalletStore,
     private val gateway: CdkWalletGateway,
 ) {
-    suspend fun load(mints: List<MintInfo>): WalletTransactionLoadResult {
+    suspend fun load(
+        mints: List<MintInfo>,
+        includeRemoteObservations: Boolean = true,
+        observingQuoteId: String? = null,
+    ): WalletTransactionLoadResult {
         val trackedMintUrls = mints.map { it.url }.toSet()
         val savedTokens = walletStore.loadSavedTokens()
         val pendingReceiveTokens = walletStore.loadPendingReceiveTokens()
@@ -68,15 +72,18 @@ internal class WalletTransactionLoader(
         val mintQuoteTimestamps = walletStore.loadMintQuoteTimestamps().toMutableMap()
         val unissuedMintQuotes = runCatching { gateway.listUnissuedMintQuotes() }
             .getOrDefault(emptyList())
-        val pendingQuoteTransactions = observePendingOnchainMintQuotes(
-            pendingMintQuoteTransactions(
-                quotes = unissuedMintQuotes,
-                trackedMintUrls = trackedMintUrls,
-                quoteIdsWithTransactions = quoteIdsWithTransactions,
-                timestamps = mintQuoteTimestamps,
-                nowEpochMillis = System.currentTimeMillis(),
-            ),
+        val pendingQuotes = pendingMintQuoteTransactions(
+            quotes = unissuedMintQuotes,
+            trackedMintUrls = trackedMintUrls,
+            quoteIdsWithTransactions = quoteIdsWithTransactions,
+            timestamps = mintQuoteTimestamps,
+            nowEpochMillis = System.currentTimeMillis(),
         )
+        val pendingQuoteTransactions = if (includeRemoteObservations) {
+            observePendingOnchainMintQuotes(pendingQuotes, observingQuoteId)
+        } else {
+            pendingQuotes
+        }
         val requests = walletStore.loadCashuRequests()
         val receiveTokenTransactions = pendingReceiveTokenTransactions(pendingReceiveTokens)
         // Row id spaces are disjoint by construction (saga-derived tx ids,
@@ -97,10 +104,12 @@ internal class WalletTransactionLoader(
 
     private suspend fun observePendingOnchainMintQuotes(
         transactions: List<WalletTransaction>,
+        observingQuoteId: String?,
     ): List<WalletTransaction> =
         transactions.map { transaction ->
             if (
                 transaction.type != TransactionType.Incoming ||
+                (observingQuoteId != null && observingQuoteId != transaction.quoteId) ||
                 transaction.kind != TransactionKind.Onchain ||
                 transaction.invoice == null
             ) {

@@ -66,6 +66,7 @@ class WalletManager: ObservableObject {
     /// without pull-to-refresh (Android parity).
     var pendingQuotePollTask: Task<Void, Never>?
     let pendingQuotePollInterval: TimeInterval = 10
+    let focusedMintQuoteMonitor = FocusedMintQuoteMonitor()
 
     // MARK: - Services
 
