@@ -179,8 +179,8 @@ fun AmountFlipDisplay(
                 label = "amount-flip-control",
             ) { text ->
                 Text(
-                    text = text,
-                    style = MaterialTheme.typography.labelLarge.withMonoDigits(),
+                    text = bitcoinAmountText(text),
+                    style = CashuTheme.type.amountSecondary,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }

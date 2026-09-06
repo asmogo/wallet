@@ -1199,7 +1199,7 @@ private fun CreatingOverlay(method: PaymentMethodKind) {
  * method picker lives in the top bar, not on the canvas.
  */
 @Composable
-private fun InputFace(
+internal fun InputFace(
     amount: String,
     onAmountChange: (String) -> Unit,
     selectedMethod: PaymentMethodKind,
@@ -1282,6 +1282,7 @@ private fun InputFace(
                 mint = mint,
                 balanceText = mintBalanceText,
                 showBalance = true,
+                modifier = Modifier.padding(horizontal = CashuTheme.spacing.snug),
                 onPickMint = onPickMint,
             )
             Spacer(Modifier.height(CashuTheme.spacing.snug))

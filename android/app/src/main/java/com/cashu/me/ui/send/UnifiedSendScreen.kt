@@ -1233,6 +1233,7 @@ private fun AmountFace(
                 mint = mint,
                 balanceText = balanceText,
                 showBalance = true,
+                modifier = Modifier.padding(horizontal = CashuTheme.spacing.snug),
                 onPickMint = onPickMint,
                 // Gated on a spendable balance, the way Send Ecash already does
                 // it — an empty mint offered a Max that filled in zero.

@@ -717,6 +717,7 @@ private fun InputFace(
                 mint = activeMint,
                 balanceText = balanceText,
                 showBalance = true,
+                modifier = Modifier.padding(horizontal = CashuTheme.spacing.snug),
                 onPickMint = onPickMint,
                 onUseMax = if (canUseMax) onUseMax else null,
             )

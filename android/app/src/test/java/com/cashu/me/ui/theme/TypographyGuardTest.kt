@@ -125,7 +125,7 @@ class TypographyGuardTest {
     fun `role inventory is frozen`() {
         assertEquals(
             "Adding or removing a role is a design decision — update this count deliberately",
-            13,
+            15,
             allRoles().size,
         )
     }
@@ -161,6 +161,8 @@ class TypographyGuardTest {
             "amountConfirm" to r.amountConfirm,
             "amountCompact" to r.amountCompact,
             "amountRow" to r.amountRow,
+            "amountSecondary" to r.amountSecondary,
+            "mintSelector" to r.mintSelector,
             "title" to r.title,
             "overline" to r.overline,
             "buttonLabel" to r.buttonLabel,

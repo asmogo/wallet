@@ -19,9 +19,22 @@ import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import com.cashu.me.ui.theme.withMonoDigits
+import com.cashu.me.ui.theme.BitcoinSymbol
+
+/** Keep the existing Bitcoin face at the surrounding text's size and weight. */
+internal fun bitcoinAmountText(text: String): AnnotatedString = buildAnnotatedString {
+    append(text)
+    text.forEachIndexed { index, character ->
+        if (character == '₿') {
+            addStyle(SpanStyle(fontFamily = BitcoinSymbol), index, index + 1)
+        }
+    }
+}
 
 /**
  * Monospaced-digit amount text. Use everywhere balances, amounts, and fees
@@ -54,6 +67,7 @@ fun AmountText(
 ) {
     val resolvedColor = if (color == Color.Unspecified) LocalContentColor.current else color
     val finalStyle = style.withMonoDigits().copy(color = resolvedColor)
+    val styledText = annotated ?: bitcoinAmountText(text)
     val contentAlignment = when (finalStyle.textAlign) {
         TextAlign.Center -> Alignment.Center
         TextAlign.End, TextAlign.Right -> Alignment.CenterEnd
@@ -67,7 +81,7 @@ fun AmountText(
 
     if (!animated) {
         Text(
-            text = annotated ?: AnnotatedString(text),
+            text = styledText,
             style = finalStyle,
             modifier = modifier.then(textModifier),
             maxLines = maxLines,
@@ -90,7 +104,7 @@ fun AmountText(
         // one-weight-down, secondary ink up to full size and full ink at the
         // instant it began to disappear, and the wider unstyled string could
         // take a different autosize step on the way out.
-        targetState = text to (annotated ?: AnnotatedString(text)),
+        targetState = text to styledText,
         contentKey = { it.first },
         transitionSpec = {
             fadeIn(spring(stiffness = Spring.StiffnessMedium))

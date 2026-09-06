@@ -8,18 +8,19 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.windowInsetsBottomHeight
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.Backspace
 import androidx.compose.material3.Icon
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -37,11 +38,11 @@ import com.cashu.me.Core.UnitAmountEntry
 import com.cashu.me.ui.theme.CashuTheme
 
 // Minimal keypad: no background boxes, just numbers with subtle press feedback.
-// Matches iOS NumberPadAmountInput (10pt gaps, 64pt keys).
+// Matches iOS NumberPadAmountInput (10pt gaps, up to 64pt keys).
 private val KeyGap = 10.dp
-// Four rows plus the CTA must leave room for validation notices on compact
-// phones. 48dp remains the Material minimum interaction target.
-private val KeyHeight = 48.dp
+// Grow toward iOS on roomy screens while preserving the 48dp touch target.
+private val PreferredKeyHeight = 64.dp
+private val MinimumKeyHeight = 48.dp
 
 /**
  * Minimal numeric keypad for amount entry — no background boxes, just numbers
@@ -68,58 +69,62 @@ fun NumberPad(
         listOf("7", "8", "9"),
         listOf(separatorKey, "0", "delete"),
     )
-    Column(
-        modifier = modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(KeyGap),
-    ) {
-        rows.forEach { row ->
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(KeyGap),
-            ) {
-                row.forEach { key ->
-                    when (key) {
-                        "" -> Box(modifier = Modifier.weight(1f).height(KeyHeight))
-                        separatorKey -> NumberPadKey(
-                            modifier = Modifier.weight(1f),
-                            contentDescription = "Decimal point",
-                            onClick = {
-                                onAmountChange(UnitAmountEntry.appendSeparator(amount, decimals))
-                            },
-                        ) {
-                            Text(
-                                text = key,
-                                style = MaterialTheme.typography.headlineSmall,
-                            )
-                        }
-                        "delete" -> NumberPadKey(
-                            modifier = Modifier.weight(1f),
-                            contentDescription = "Delete. Long press to clear.",
-                            onClick = {
-                                if (amount.isNotEmpty()) {
-                                    onAmountChange(UnitAmountEntry.backspace(amount))
-                                }
-                            },
-                            onLongClick = {
-                                if (amount.isNotEmpty()) onAmountChange("")
-                            },
-                        ) {
-                            Icon(
-                                imageVector = Icons.AutoMirrored.Outlined.Backspace,
-                                contentDescription = null,
-                            )
-                        }
-                        else -> NumberPadKey(
-                            modifier = Modifier.weight(1f),
-                            contentDescription = key,
-                            onClick = {
-                                onAmountChange(UnitAmountEntry.append(key, amount, decimals))
-                            },
-                        ) {
-                            Text(
-                                text = key,
-                                style = MaterialTheme.typography.headlineSmall,
-                            )
+    BoxWithConstraints(modifier = modifier.fillMaxWidth()) {
+        val keyHeight = ((maxHeight - KeyGap * 3) / 4)
+            .coerceIn(MinimumKeyHeight, PreferredKeyHeight)
+        Column(
+            modifier = Modifier.fillMaxWidth(),
+            verticalArrangement = Arrangement.spacedBy(KeyGap),
+        ) {
+            rows.forEach { row ->
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(KeyGap),
+                ) {
+                    row.forEach { key ->
+                        when (key) {
+                            "" -> Box(modifier = Modifier.weight(1f).height(keyHeight))
+                            separatorKey -> NumberPadKey(
+                                modifier = Modifier.weight(1f).height(keyHeight),
+                                contentDescription = "Decimal point",
+                                onClick = {
+                                    onAmountChange(UnitAmountEntry.appendSeparator(amount, decimals))
+                                },
+                            ) {
+                                Text(
+                                    text = key,
+                                    style = CashuTheme.type.numberPadKey,
+                                )
+                            }
+                            "delete" -> NumberPadKey(
+                                modifier = Modifier.weight(1f).height(keyHeight),
+                                contentDescription = "Delete. Long press to clear.",
+                                onClick = {
+                                    if (amount.isNotEmpty()) {
+                                        onAmountChange(UnitAmountEntry.backspace(amount))
+                                    }
+                                },
+                                onLongClick = {
+                                    if (amount.isNotEmpty()) onAmountChange("")
+                                },
+                            ) {
+                                Icon(
+                                    imageVector = Icons.AutoMirrored.Outlined.Backspace,
+                                    contentDescription = null,
+                                )
+                            }
+                            else -> NumberPadKey(
+                                modifier = Modifier.weight(1f).height(keyHeight),
+                                contentDescription = key,
+                                onClick = {
+                                    onAmountChange(UnitAmountEntry.append(key, amount, decimals))
+                                },
+                            ) {
+                                Text(
+                                    text = key,
+                                    style = CashuTheme.type.numberPadKey,
+                                )
+                            }
                         }
                     }
                 }
@@ -130,7 +135,7 @@ fun NumberPad(
 
 /**
  * Shared tail for every amount-entry screen: [NumberPad] followed by a primary
- * action button, spaced with the app-wide keypad→button gap (`spacing.page`)
+ * action button, spaced with the 16dp keypad-to-button gap
  * and a bottom spacer sized to the real navigation-bar/gesture-bar inset.
  * Centralizing this stops each screen from hand-deriving its own spacing.
  */
@@ -147,8 +152,15 @@ fun NumberPadFooter(
     buttonModifier: Modifier = Modifier,
 ) {
     Column(modifier = modifier) {
-        NumberPad(amount = amount, onAmountChange = onAmountChange, decimals = decimals)
-        Spacer(Modifier.height(CashuTheme.spacing.page))
+        NumberPad(
+            amount = amount,
+            onAmountChange = onAmountChange,
+            decimals = decimals,
+            modifier = Modifier
+                .weight(1f, fill = false)
+                .padding(horizontal = CashuTheme.spacing.snug),
+        )
+        Spacer(Modifier.height(CashuTheme.spacing.comfortable))
         PrimaryButton(
             text = buttonText,
             onClick = onButtonClick,
@@ -185,7 +197,6 @@ private fun NumberPadKey(
     )
     Box(
         modifier = modifier
-            .height(KeyHeight)
             .graphicsLayer { this.alpha = alpha }
             .semantics {
                 this.contentDescription = contentDescription
