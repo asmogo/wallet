@@ -2,6 +2,7 @@ package com.cashu.me.Models
 
 import java.util.UUID
 import kotlinx.serialization.Serializable
+import com.cashu.me.Core.PaymentRequestDecoder
 
 @Serializable
 data class CashuRequestPayment(
@@ -25,6 +26,9 @@ data class CashuRequest(
     val receivedPayments: List<CashuRequestPayment> = emptyList(),
     val receivedPaymentIds: List<String> = emptyList(),
 ) {
+    val displayDescription: String?
+        get() = memo?.takeIf(String::isNotBlank) ?: PaymentRequestDecoder.description(encoded)
+
     val totalReceived: Long get() = receivedPayments.sumOf { it.amount }
 
     val isEcashRequest: Boolean get() = quoteKind == null

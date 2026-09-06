@@ -37,6 +37,12 @@ struct CashuRequest: Codable, Identifiable, Hashable {
     let unit: String
     let mints: [String]
     let memo: String?
+
+    var displayDescription: String? {
+        if let memo, !memo.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { return memo }
+        return PaymentRequestDecoder.description(from: encoded)
+    }
+
     let createdAt: Date
     var receivedPayments: [CashuRequestPayment]
 

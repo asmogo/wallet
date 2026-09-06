@@ -77,6 +77,18 @@ object PaymentRequestParser {
 }
 
 object PaymentRequestDecoder {
+    /** Recover immutable descriptions from persisted invoices, including older history. */
+    fun description(raw: String?): String? {
+        if (raw.isNullOrBlank()) return null
+        LightningRequestParser.parseBolt12Offer(raw)?.let { return it.description?.takeIf(String::isNotBlank) }
+        return when (val decoded = decode(raw, includeCashuPaymentRequests = true)) {
+            is PaymentRequestDecodeResult.Bolt11 -> decoded.description
+            is PaymentRequestDecodeResult.Bolt12 -> decoded.description
+            is PaymentRequestDecodeResult.CashuPaymentRequest -> decoded.summary.description
+            else -> null
+        }?.takeIf(String::isNotBlank)
+    }
+
     private const val CREQ_A_PREFIX = "creqA"
 
     fun decode(

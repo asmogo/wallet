@@ -1,5 +1,6 @@
 package com.cashu.me.ui.components
 
+import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -133,3 +134,20 @@ fun InspectorRow(
     }
 }
 
+
+/** Prose needs the full inspector width and must remain readable without truncation. */
+@Composable
+fun DescriptionDetailRow(description: String, label: String = "Description") {
+    Column(
+        modifier = Modifier.fillMaxWidth().padding(
+            horizontal = CashuTheme.spacing.comfortable,
+            vertical = CashuTheme.spacing.default,
+        ),
+        verticalArrangement = Arrangement.spacedBy(CashuTheme.spacing.snug),
+    ) {
+        Text(label, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        SelectionContainer {
+            Text(description, style = MaterialTheme.typography.bodyLarge)
+        }
+    }
+}

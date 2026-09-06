@@ -256,6 +256,9 @@ struct CashuRequestDetailView: View {
                         } else {
                             detailRow(label: "Unit", value: request.unit.uppercased())
                         }
+                        if let description = request.displayDescription {
+                            DescriptionDetailRow(description: description)
+                        }
                         detailRow(
                             label: "Created",
                             value: request.createdAt.formatted(date: .abbreviated, time: .shortened)

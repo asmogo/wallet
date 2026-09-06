@@ -23,6 +23,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.cashu.me.Models.TransactionStatus
 import com.cashu.me.Models.TransactionType
@@ -74,6 +75,7 @@ fun TransactionRow(
         tx.displayStatusText,
         semanticAmount,
         model.secondaryAmount,
+        tx.displayDescription,
         model.timestamp,
     )
     Row(
@@ -102,6 +104,15 @@ fun TransactionRow(
                 color = MaterialTheme.colorScheme.onSurface,
                 maxLines = 1,
             )
+            tx.displayDescription?.let { description ->
+                Text(
+                    text = description,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
             Text(
                 text = model.timestamp,
                 style = MaterialTheme.typography.bodySmall,

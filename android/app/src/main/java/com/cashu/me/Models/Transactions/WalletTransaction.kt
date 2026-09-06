@@ -1,6 +1,7 @@
 package com.cashu.me.Models
 
 import kotlinx.serialization.Serializable
+import com.cashu.me.Core.PaymentRequestDecoder
 
 @Serializable
 data class WalletTransaction(
@@ -33,6 +34,9 @@ data class WalletTransaction(
     /** BOLT11 mint quote still awaiting payment — titles the row "Lightning invoice". */
     val isUnpaidInvoice: Boolean = false,
 ) {
+    val displayDescription: String?
+        get() = memo?.takeIf(String::isNotBlank) ?: PaymentRequestDecoder.description(invoice)
+
     val displayStatusText: String
         get() = if (status == TransactionStatus.Pending) statusNote ?: status.displayText else status.displayText
 
@@ -106,3 +110,14 @@ internal fun List<WalletTransaction>.liveDetail(
 ): WalletTransaction? =
     firstOrNull { it.id == openId }
         ?: firstOrNull { it.quoteId != null && it.quoteId == openQuoteId }
+
+/** CDK may omit a mint transaction's memo and request after settlement. */
+internal fun WalletTransaction.restoringDescription(requests: List<CashuRequest>): WalletTransaction {
+    val description = displayDescription ?: requests.firstOrNull { request ->
+        type == TransactionType.Incoming && unit.equals(request.unit, ignoreCase = true) &&
+            (request.receivedPayments.any { it.transactionId == id } || cashuRequestId == request.id ||
+                (quoteId != null && quoteId == request.quoteId &&
+                    request.mints.any { it.trimEnd('/') == mintUrl?.trimEnd('/') }))
+    }?.displayDescription
+    return if (description == memo) this else copy(memo = description)
+}

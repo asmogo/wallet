@@ -74,6 +74,7 @@ import com.cashu.me.ui.components.GhostButton
 import com.cashu.me.ui.components.InlineNotice
 import com.cashu.me.ui.components.InlineNoticeHost
 import com.cashu.me.ui.components.LocalConfirmationToastController
+import com.cashu.me.ui.components.DescriptionDetailRow
 import com.cashu.me.ui.components.InspectorRow
 import com.cashu.me.ui.components.MintPickerSheet
 import com.cashu.me.ui.components.NumberPadFooter
@@ -384,6 +385,7 @@ fun CashuRequestDetailScreen(
                             label = "Created",
                             value = formatDate(request.createdAtEpochMillis),
                         )
+                        request.displayDescription?.let { DescriptionDetailRow(it) }
                         if (request.totalReceived > 0L) {
                             InspectorRow(
                                 label = "Total received",

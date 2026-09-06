@@ -507,12 +507,12 @@ internal fun unifiedFiltered(
                 val tx = item.transaction
                 TransactionDisplay.title(tx).contains(query, ignoreCase = true) ||
                     tx.amount.toString().contains(query) ||
-                    tx.memo?.contains(query, ignoreCase = true) == true
+                    tx.displayDescription?.contains(query, ignoreCase = true) == true
             }
             is HistoryItem.Req -> {
                 item.request.displayTitle.contains(query, ignoreCase = true) ||
                     (item.request.amount?.toString()?.contains(query) == true) ||
-                    item.request.memo?.contains(query, ignoreCase = true) == true
+                    item.request.displayDescription?.contains(query, ignoreCase = true) == true
             }
         }
     }

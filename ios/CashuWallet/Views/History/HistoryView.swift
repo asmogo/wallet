@@ -509,6 +509,13 @@ struct HistoryView: View {
                         .font(.body.weight(.medium))
                         .lineLimit(1)
 
+                    if let description = request.displayDescription {
+                        Text(description)
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(2)
+                    }
+
                     Text(formatRelativeDate(request.createdAt))
                         .cashuText(.metadata)
                         .foregroundStyle(.secondary)
@@ -568,7 +575,7 @@ struct HistoryView: View {
                 .compactMap { $0 }
                 .joined(separator: ", ")
         }
-        return "\(request.displayTitle), \(amountPart), \(received ? "received" : "waiting for payment"), \(formatRelativeDate(request.createdAt))"
+        return "\(request.displayTitle), \(request.displayDescription.map { "\($0), " } ?? "")\(amountPart), \(received ? "received" : "waiting for payment"), \(formatRelativeDate(request.createdAt))"
     }
 
     // MARK: - Transaction Row
@@ -595,6 +602,13 @@ struct HistoryView: View {
                         .font(.body.weight(.medium))
                         .lineLimit(1)
 
+                    if let description = transaction.displayDescription {
+                        Text(description)
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(2)
+                    }
+
                     Text(formatRelativeDate(transaction.date))
                         .cashuText(.metadata)
                         .foregroundStyle(.secondary)
@@ -610,7 +624,7 @@ struct HistoryView: View {
         }
         .buttonStyle(.plain)
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("\(rowTitle(for: transaction)), \(formatAmount(transaction)), \(transaction.status == .completed ? "completed" : transaction.displayStatusText.lowercased()), \(formatRelativeDate(transaction.date))")
+        .accessibilityLabel("\(rowTitle(for: transaction)), \(transaction.displayDescription.map { "\($0), " } ?? "")\(formatAmount(transaction)), \(transaction.status == .completed ? "completed" : transaction.displayStatusText.lowercased()), \(formatRelativeDate(transaction.date))")
         .accessibilityHint(
             transaction.isPendingReceiveToken
                 ? "Opens receive review"
@@ -710,7 +724,7 @@ enum HistorySearch {
         guard !query.isEmpty else { return true }
         if transaction.displayTitle.lowercased().contains(query) { return true }
         if "\(transaction.amount)".contains(query) { return true }
-        if let memo = transaction.memo, memo.lowercased().contains(query) { return true }
+        if let memo = transaction.displayDescription, memo.lowercased().contains(query) { return true }
         return false
     }
 
@@ -720,7 +734,7 @@ enum HistorySearch {
         if request.displayTitle.lowercased().contains(query) { return true }
         if let amount = request.amount, "\(amount)".contains(query) { return true }
         if receivedTotal > 0, "\(receivedTotal)".contains(query) { return true }
-        if let memo = request.memo, memo.lowercased().contains(query) { return true }
+        if let memo = request.displayDescription, memo.lowercased().contains(query) { return true }
         return false
     }
 

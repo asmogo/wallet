@@ -101,7 +101,7 @@ object TransactionDisplay {
             add(TransactionDetailField("Date", formatDetailDate(transaction.dateEpochMillis)))
             if (transaction.fee > 0) add(TransactionDetailField("Fee", formatNativeAmount(transaction.fee, transaction.unit)))
             transaction.mintUrl?.let { add(TransactionDetailField("Mint", mintHost(it))) }
-            transaction.memo
+            transaction.displayDescription
                 ?.takeIf { it.isNotBlank() }
                 ?.let { add(TransactionDetailField("Memo", it)) }
             if (transaction.kind == TransactionKind.Onchain) {

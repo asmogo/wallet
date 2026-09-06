@@ -551,6 +551,13 @@ struct MainWalletView: View {
                         .font(.body.weight(.medium))
                         .lineLimit(1)
 
+                    if let description = transaction.displayDescription {
+                        Text(description)
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(2)
+                    }
+
                     Text(formatRelativeDate(transaction.date))
                         .cashuText(.metadata)
                         .foregroundStyle(.secondary)
@@ -566,7 +573,7 @@ struct MainWalletView: View {
         }
         .buttonStyle(.plain)
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("\(rowTitle(for: transaction)), \(formatAmount(transaction)), \(transaction.status == .completed ? "completed" : transaction.displayStatusText.lowercased()), \(formatRelativeDate(transaction.date))")
+        .accessibilityLabel("\(rowTitle(for: transaction)), \(transaction.displayDescription.map { "\($0), " } ?? "")\(formatAmount(transaction)), \(transaction.status == .completed ? "completed" : transaction.displayStatusText.lowercased()), \(formatRelativeDate(transaction.date))")
         .accessibilityHint("Opens transaction details")
     }
 

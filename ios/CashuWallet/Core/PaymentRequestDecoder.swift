@@ -134,6 +134,22 @@ enum PaymentRequestMode: String, Equatable, Sendable {
 /// preview, recents tap, scan callback, and live decode feedback all share this
 /// single classification path.
 enum PaymentRequestDecoder {
+    /// Recover immutable descriptions from persisted invoices, including older history.
+    static func description(from raw: String?) -> String? {
+        guard let raw, !raw.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return nil }
+        let description: String?
+        if let offer = PaymentRequestParser.bolt12OfferMetadata(from: raw) {
+            description = offer.description
+        } else {
+            switch decode(raw, includeCashuPaymentRequests: true) {
+            case .bolt11(_, let value), .bolt12(_, let value): description = value
+            case .cashuPaymentRequest(let summary): description = summary.description
+            default: description = nil
+            }
+        }
+        return description.flatMap { $0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : $0 }
+    }
+
     static func decode(
         _ raw: String,
         includeCashuPaymentRequests: Bool = false,

@@ -57,3 +57,23 @@ reused. The last presented offer is remembered per mint and currency.
 
 Offline regression tests cover normalization, persisted selection after
 clearing, mint/currency isolation, and preservation of payment history.
+
+
+## Descriptions in paid history
+
+History and recent activity show a two-line description preview. Request and
+transaction details show the entire selectable description. Saved memos take
+precedence; older records can recover descriptions from their encoded BOLT11,
+BOLT12, or Cashu payment request. Incoming receipts missing CDK metadata also
+recover the description from their persisted receive request, matched by payment
+ID or by quote, mint, and currency. This is independent of payment status and
+works again after restarting the app.
+
+`HistoryDescriptionTest` (Android) and `HistoryDescriptionTests` (iOS) cover
+reloading paid reusable requests, multiple receipts, outgoing invoice recovery,
+Cashu request payments, blank descriptions, and mint/currency isolation.
+`HistoryDescriptionJourneyTest` drives the real Android History and detail
+screens with simulated settlement and a long Unicode description. Run it using
+the instrumentation command above, replacing the class argument with
+`com.cashu.me.ui.journeys.HistoryDescriptionJourneyTest`; no live-mint arguments
+are needed. These tests never spend funds.
