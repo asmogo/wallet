@@ -11,6 +11,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assert
+import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.unit.dp
@@ -41,6 +42,18 @@ import org.junit.runner.RunWith
 class OnboardingAsciiFieldLayoutComposeTest {
     @get:Rule
     val compose = createComposeRule()
+
+    @Test
+    fun ambientFieldAllowsTheUiToBecomeIdle() {
+        compose.setCashuContent {
+            // No static-time override: when system motion is enabled, the
+            // production loop must honor the test clock's auto-advance policy.
+            AsciiField(modifier = Modifier.fillMaxSize())
+        }
+        compose.waitForIdle()
+        compose.onNodeWithTag(UiTestTags.OnboardingAsciiField, useUnmergedTree = true)
+            .assertIsDisplayed()
+    }
 
     private enum class Step { Welcome, RestoreMethod, RestoreInput }
 

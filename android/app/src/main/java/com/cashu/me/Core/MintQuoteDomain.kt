@@ -6,6 +6,15 @@ import com.cashu.me.Models.PaymentMethodKind
 
 internal const val LOCAL_NEVER_EXPIRES_EPOCH_SECONDS: Long = 253_402_300_799L
 
+/** CDK's payer-facing decoder replaces control characters (including newlines) with �. */
+internal fun normalizedOfferDescription(raw: String?): String? {
+    val cleaned = raw.orEmpty().filter { !it.isISOControl() || it.isWhitespace() }
+        .map { if (it.isWhitespace()) ' ' else it }.joinToString("")
+        .split(' ').filter(String::isNotEmpty).joinToString(" ").take(640)
+        .let { if (it.lastOrNull()?.isHighSurrogate() == true) it.dropLast(1) else it }
+    return cleaned.ifEmpty { null }
+}
+
 internal fun mintQuoteLocalStorageExpiry(
     expiryEpochSeconds: Long,
     paymentMethod: PaymentMethodKind,
@@ -43,17 +52,22 @@ internal fun mintQuoteStateForDomain(
 }
 
 /**
- * Finds the long-lived, amountless BOLT12 offer for one mint wallet. BOLT12
- * quotes remain in CDK's unissued list even after payments, so deliberately do
- * not filter by quote state here.
+ * Finds the long-lived, amountless BOLT12 offer for one mint wallet, matching
+ * the requested [description] exactly (null → only the plain, description-less
+ * offer). BOLT12 quotes remain in CDK's unissued list even after payments, so
+ * deliberately do not filter by quote state here. The description match keeps
+ * reuse unambiguous once several amountless offers exist (offers are
+ * immutable, so a changed description always mints a fresh one).
  */
 internal fun findExistingAmountlessBolt12Offer(
     quotes: List<MintQuoteInfo>,
     mintUrl: String,
     unit: String,
+    description: String? = null,
 ): MintQuoteInfo? = quotes.firstOrNull { quote ->
     quote.paymentMethod == PaymentMethodKind.Bolt12 &&
         quote.isAmountless &&
         quote.mintUrl == mintUrl &&
-        quote.unit.equals(unit, ignoreCase = true)
+        quote.unit.equals(unit, ignoreCase = true) &&
+        quote.description == description
 }

@@ -6,7 +6,13 @@ struct WalletTransaction: Identifiable {
     let type: TransactionType
     let kind: TransactionKind
     let date: Date
-    let memo: String?
+    var memo: String?
+
+    var displayDescription: String? {
+        if let memo, !memo.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { return memo }
+        return PaymentRequestDecoder.description(from: invoice)
+    }
+
     var status: TransactionStatus
     var statusNote: String? = nil
     
@@ -201,4 +207,17 @@ enum SagaTransactionId {
 }
 
 
-/// Result of a send tokens operation - includes token string and fee paid
+extension WalletTransaction {
+    /// CDK may omit a mint transaction's memo and request after settlement.
+    func restoringDescription(from requests: [CashuRequest]) -> WalletTransaction {
+        let request = requests.first { request in
+            type == .incoming && unit.lowercased() == request.unit.lowercased() &&
+                (request.receivedPayments.contains { $0.transactionId == id } || cashuRequestId == request.id ||
+                    (quoteId != nil && quoteId == request.quoteId &&
+                        request.mints.contains { MintURLIdentity.normalized($0) == mintUrl.map(MintURLIdentity.normalized) }))
+        }
+        var transaction = self
+        transaction.memo = displayDescription ?? request?.displayDescription
+        return transaction
+    }
+}

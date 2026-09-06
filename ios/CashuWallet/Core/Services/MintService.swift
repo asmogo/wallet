@@ -528,6 +528,13 @@ class MintService: ObservableObject {
             if !meltMethods.isEmpty {
                 mintInfo.supportedMeltMethods = meltMethods
             }
+
+            // Live NUT-04 advertisement is authoritative, including false.
+            mintInfo.supportsBolt12MintDescription = MintQuoteDomain.reportsBolt12MintDescription(
+                methods: fetchedInfo.nuts.nut04.methods.map {
+                    (PaymentMethodKind.from($0.method), $0.description)
+                }
+            )
         }
 
         mintInfo.lastUpdated = Date()

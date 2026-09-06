@@ -499,6 +499,7 @@ struct HistoryView: View {
         let receivedAmount = totalReceived(for: request)
         return Button {
             HapticFeedback.selection()
+            isSearchFocused = false
             selectedRequest = request
         } label: {
             HStack(spacing: 14) {
@@ -576,6 +577,7 @@ struct HistoryView: View {
     private func transactionRow(transaction: WalletTransaction) -> some View {
         return Button {
             HapticFeedback.selection()
+            isSearchFocused = false
             // Unclaimed incoming ecash goes straight to the claim flow — the
             // receive screen already shows amount, fee, mint, and memo, so an
             // intermediate detail sheet would just add a second Receive tap.
@@ -710,7 +712,7 @@ enum HistorySearch {
         guard !query.isEmpty else { return true }
         if transaction.displayTitle.lowercased().contains(query) { return true }
         if "\(transaction.amount)".contains(query) { return true }
-        if let memo = transaction.memo, memo.lowercased().contains(query) { return true }
+        if let memo = transaction.displayDescription, memo.lowercased().contains(query) { return true }
         return false
     }
 
@@ -720,7 +722,7 @@ enum HistorySearch {
         if request.displayTitle.lowercased().contains(query) { return true }
         if let amount = request.amount, "\(amount)".contains(query) { return true }
         if receivedTotal > 0, "\(receivedTotal)".contains(query) { return true }
-        if let memo = request.memo, memo.lowercased().contains(query) { return true }
+        if let memo = request.displayDescription, memo.lowercased().contains(query) { return true }
         return false
     }
 

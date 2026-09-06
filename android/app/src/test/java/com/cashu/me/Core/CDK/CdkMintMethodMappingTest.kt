@@ -101,14 +101,69 @@ class CdkMintMethodMappingTest {
         assertTrue(nuts.reportedMeltMethods().isEmpty())
     }
 
-    private fun mintMethod(method: CdkPaymentMethod, unit: CdkCurrencyUnit) =
+    @Test
+    fun bolt12MintDescriptionFailsClosedUnlessAdvertisedTrue() {
+        assertEquals(
+            false,
+            nuts(nut04Methods = emptyList()).reportsBolt12MintDescription(),
+        )
+        assertEquals(
+            false,
+            nuts(
+                nut04Methods = listOf(
+                    mintMethod(CdkPaymentMethod.Bolt12, CdkCurrencyUnit.Sat, description = null),
+                ),
+            ).reportsBolt12MintDescription(),
+        )
+        assertEquals(
+            false,
+            nuts(
+                nut04Methods = listOf(
+                    mintMethod(CdkPaymentMethod.Bolt12, CdkCurrencyUnit.Sat, description = false),
+                ),
+            ).reportsBolt12MintDescription(),
+        )
+        assertEquals(
+            false,
+            nuts(
+                nut04Methods = listOf(
+                    mintMethod(CdkPaymentMethod.Bolt11, CdkCurrencyUnit.Sat, description = true),
+                ),
+            ).reportsBolt12MintDescription(),
+        )
+        assertEquals(
+            true,
+            nuts(
+                nut04Methods = listOf(
+                    mintMethod(CdkPaymentMethod.Bolt11, CdkCurrencyUnit.Sat, description = false),
+                    mintMethod(CdkPaymentMethod.Bolt12, CdkCurrencyUnit.Sat, description = true),
+                ),
+            ).reportsBolt12MintDescription(),
+        )
+        // Any bolt12 unit advertising true is enough.
+        assertEquals(
+            true,
+            nuts(
+                nut04Methods = listOf(
+                    mintMethod(CdkPaymentMethod.Bolt12, CdkCurrencyUnit.Usd, description = false),
+                    mintMethod(CdkPaymentMethod.Bolt12, CdkCurrencyUnit.Sat, description = true),
+                ),
+            ).reportsBolt12MintDescription(),
+        )
+    }
+
+    private fun mintMethod(
+        method: CdkPaymentMethod,
+        unit: CdkCurrencyUnit,
+        description: Boolean? = null,
+    ) =
         CdkMintMethodSettings(
             method = method,
             unit = unit,
             methodName = null,
             minAmount = null,
             maxAmount = null,
-            description = null,
+            description = description,
         )
 
     private fun meltMethod(method: CdkPaymentMethod, unit: CdkCurrencyUnit) =

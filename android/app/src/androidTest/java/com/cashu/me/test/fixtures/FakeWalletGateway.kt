@@ -154,6 +154,7 @@ class FakeWalletGateway(
         method: PaymentMethodKind,
         mintUrl: String,
         unit: String,
+        description: String?,
     ): MintQuoteInfo {
         failIfRequested()
         val id = "mint-quote-${sequence.getAndIncrement()}"
@@ -170,6 +171,7 @@ class FakeWalletGateway(
             expiryEpochSeconds = System.currentTimeMillis() / 1000 + 3_600,
             mintUrl = normalize(mintUrl),
             unit = unit,
+            description = description.takeIf { method == PaymentMethodKind.Bolt12 },
         )
         mintQuotes[id] = MutableStateFlow(quote)
         return quote

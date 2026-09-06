@@ -115,6 +115,20 @@ class CashuRequestStore: ObservableObject {
         )
     }
 
+    /// Track reuse separately from creation so clearing a description survives reopening.
+    func markQuotePresented(_ quoteId: String) {
+        guard let index = requests.firstIndex(where: { $0.quoteId == quoteId }) else { return }
+        requests[index].lastPresentedAt = Date()
+        persist()
+    }
+
+    func lastPresentedAmountlessOffer(mintURL: String, unit: String) -> CashuRequest? {
+        requests.filter {
+            $0.rail == .bolt12 && $0.amount == nil && $0.mints.contains(mintURL) &&
+                $0.unit.lowercased() == unit.lowercased()
+        }.max { ($0.lastPresentedAt ?? $0.createdAt) < ($1.lastPresentedAt ?? $1.createdAt) }
+    }
+
     /// Re-parameterize an existing intent in place (amount / mint-filter edits).
     /// The NUT-18 id stays stable across edits, so every handed-out copy of the
     /// request — the original amountless one and any later amounted re-encoding —
@@ -135,7 +149,8 @@ class CashuRequestStore: ObservableObject {
             rail: old.rail,
             reusable: old.reusable,
             quoteId: old.quoteId,
-            expiry: old.expiry
+            expiry: old.expiry,
+            lastPresentedAt: old.lastPresentedAt
         )
         persist()
     }

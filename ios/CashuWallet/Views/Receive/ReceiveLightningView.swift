@@ -44,6 +44,14 @@ struct ReceiveLightningView: View {
     @State private var showMintPicker = false
     /// Reusable BOLT12 offer: drives the Amount-row pencil → amount picker sheet.
     @State private var showReusableAmountPicker = false
+    /// Reusable BOLT12 offer: drives the Description-row pencil → editor sheet.
+    @State private var showReusableDescriptionEditor = false
+    /// Description the next reusable BOLT12 offer is minted with. Initialized
+    /// once from the last presented amountless offer for this mint and unit, so
+    /// reopening reloads the described offer instead of minting a duplicate (CDK
+    /// never returns offer descriptions — the local memo is the only record).
+    @State private var offerDescription: String?
+    @State private var offerDescriptionLoaded = false
     /// VoiceOver Share action for the QR cards: ShareLink can't be invoked
     /// imperatively, so the accessibility action presents the share sheet.
     @State private var showShareSheet = false
@@ -219,9 +227,23 @@ struct ReceiveLightningView: View {
             }
             .onAppear {
                 syncSelectedMethodWithActiveMint()
+                loadStoredOfferDescriptionIfNeeded()
             }
             .onChange(of: walletManager.activeMint?.id) {
                 syncSelectedMethodWithActiveMint()
+                // Drop the previous mint's description and re-restore.
+                offerDescription = nil
+                offerDescriptionLoaded = false
+                loadStoredOfferDescriptionIfNeeded()
+            }
+            .onChange(of: mintSupportsBolt12Description) {
+                offerDescription = nil
+                offerDescriptionLoaded = false
+                loadStoredOfferDescriptionIfNeeded()
+            }
+            .onChange(of: effectiveUnit) {
+                offerDescriptionLoaded = false
+                loadStoredOfferDescriptionIfNeeded()
             }
             .onChange(of: selectedMethod) {
                 requestFailure = nil
@@ -281,6 +303,17 @@ struct ReceiveLightningView: View {
         let methods = walletManager.activeMint?.supportedMintMethods ?? [.bolt11]
         let orderedMethods = PaymentMethodKind.allCases.filter { methods.contains($0) }
         return orderedMethods.isEmpty ? [.bolt11] : orderedMethods
+    }
+
+    /// Fail closed: only mints that advertised NUT-04 bolt12 description=true
+    /// get a Description row / description minting.
+    private var mintSupportsBolt12Description: Bool {
+        walletManager.activeMint?.supportsBolt12MintDescription == true
+    }
+
+    /// Description threaded into mintQuote only when the mint advertises it.
+    private var advertisedOfferDescription: String? {
+        mintSupportsBolt12Description ? offerDescription : nil
     }
 
     /// Picker rows are derived from the mint's supported payment methods.
@@ -533,112 +566,82 @@ struct ReceiveLightningView: View {
     /// on-chain keep the amount-hero + expiry-countdown layout in
     /// `standardRequestDisplayView`.
     @ViewBuilder
+    /// Every receive rail shares the same QR, amount, status, inspector, and actions.
     private func requestDisplayView(quote: MintQuoteInfo) -> some View {
-        if quote.paymentMethod == .bolt12 {
-            reusableOfferDisplayView(quote: quote)
-                .onAppear {
-                    persistReceiveIntent(for: quote)
-                    startQuoteMonitoring(for: quote)
-                }
-                .onChange(of: mintQuote?.id) { _, _ in
-                    if let quote = mintQuote {
-                        persistReceiveIntent(for: quote)
-                        startQuoteMonitoring(for: quote)
-                    }
-                }
-        } else {
-            standardRequestDisplayView(quote: quote)
-        }
-    }
-
-    /// Cashu-Request-style screen for a reusable BOLT12 offer: QR → (amount hero,
-    /// if fixed) → status → read-only Mint / editable Amount / Created rows → Copy.
-    /// Share + New live in the toolbar overflow menu so primary chrome stays calm.
-    /// Editing the Amount row mints a fresh fixed-amount offer (or reverts to the
-    /// amountless one) — that's how a fixed-amount reusable invoice is made.
-    /// No expiry countdown, no rotate affordance.
-    private func reusableOfferDisplayView(quote: MintQuoteInfo) -> some View {
         VStack(spacing: 0) {
-            ScrollView {
-                VStack(spacing: 24) {
-                    QRCodeView(
-                        content: quote.request,
-                        showControls: false,
-                        staticOnly: true,
-                        onCopy: { copyRequest(quote.request) },
-                        onShare: { shareQuoteRequest(quote.request) }
-                    )
-                        .frame(width: 280, height: 280)
-                        .padding(16)
-                        .background(Color.white, in: RoundedRectangle(cornerRadius: 20))
-                        .padding(.top, 8)
-                        .contextMenu {
-                            Button(action: { copyRequest(quote.request) }) {
-                                Label("Copy", systemImage: "doc.on.doc")
-                            }
-                            ShareLink(item: quote.request) {
-                                Label("Share", systemImage: "square.and.arrow.up")
-                            }
-                            Button {
-                                createNewAmountlessOffer(for: quote)
-                            } label: {
-                                Label("New reusable invoice", systemImage: "arrow.2.squarepath")
-                            }
-                            .disabled(isCreatingRequest)
-                        }
-                        .sheet(isPresented: $showShareSheet) {
-                            ShareSheet(items: [qrShareText])
-                        }
-
-                    if !quote.isAmountless, let amount = quote.amount, amount > 0 {
-                        if quote.unit.lowercased() == "sat" {
-                            CurrencyAmountDisplay(
-                                sats: amount,
-                                primary: $settings.amountDisplayPrimary,
-                                role: .amountCompact
-                            )
-                            .accessibilityLabel("Offer amount: \(amount) sats")
-                        } else {
-                            AmountLockup(
-                                parts: AmountParts.parse(formatQuoteAmount(amount, unit: quote.unit)),
-                                role: .amountCompact,
-                                value: Double(amount),
-                                accessibilityPrefix: "Offer amount"
-                            )
-                        }
+            PaymentDetailContent { qrSize in
+                QRCodeView(
+                    content: quote.request,
+                    showControls: false,
+                    staticOnly: true,
+                    onCopy: { copyRequest(quote.request) },
+                    onShare: { shareQuoteRequest(quote.request) }
+                )
+                .frame(width: qrSize, height: qrSize)
+                .padding(16)
+                .background(Color.white, in: RoundedRectangle(cornerRadius: 20))
+                .contextMenu {
+                    Button(action: { copyRequest(quote.request) }) {
+                        Label("Copy", systemImage: "doc.on.doc")
                     }
-
+                    ShareLink(item: quote.request) {
+                        Label("Share", systemImage: "square.and.arrow.up")
+                    }
+                }
+                .sheet(isPresented: $showShareSheet) {
+                    ShareSheet(items: [qrShareText])
+                }
+            } details: {
+                VStack(spacing: 16) {
+                    if !quote.isAmountless { amountSummary(for: quote) }
                     statusBadge
 
-                    VStack(spacing: 0) {
-                        detailRow(
-                            label: "Mint",
-                            value: mintDisplayValue(for: quote) ?? "Unknown mint"
-                        )
-                        editableRow(
-                            label: "Amount",
-                            value: quote.isAmountless
-                                ? "Any"
-                                : quote.amount.flatMap { $0 > 0 ? formatQuoteAmount($0, unit: quote.unit) : nil } ?? "Any",
-                            action: { showReusableAmountPicker = true }
-                        )
-                        if quote.amountIssued > 0 {
-                            detailRow(
-                                label: "Total received",
-                                value: formatQuoteAmount(quote.amountIssued, unit: quote.unit)
-                            )
+                    if quote.paymentMethod != .bolt12,
+                       !isPaid && !isExpired && expiryTimeRemaining > 0 {
+                        HStack(spacing: 5) {
+                            Image(systemName: "timer").font(.caption2)
+                            Text("Expires in \(formatTimeRemaining(expiryTimeRemaining))")
+                                .font(.footnote)
                         }
-                        if let created = quote.createdAt {
-                            detailRow(
-                                label: "Created",
-                                value: created.formatted(date: .abbreviated, time: .shortened)
+                        .foregroundStyle(expiryTimeRemaining < 60
+                            ? ErrorSeverity.error.foreground : Color.primary.opacity(0.5))
+                    }
+
+                    VStack(spacing: 0) {
+                        detailRow(label: "Mint", value: mintDisplayValue(for: quote) ?? "Unknown mint")
+                        if quote.paymentMethod == .bolt12 && mintSupportsBolt12Description {
+                            editableRow(
+                                label: "Description",
+                                value: CashuRequestStore.shared.intent(forQuoteId: quote.id)?.memo
+                                    ?? quote.description ?? "None",
+                                action: { showReusableDescriptionEditor = true }
                             )
+                        } else if let description = CashuRequestStore.shared.intent(forQuoteId: quote.id)?.displayDescription
+                            ?? MintQuoteDomain.normalizedOfferDescription(quote.description) {
+                            DescriptionDetailRow(description: description)
+                        }
+                        if quote.paymentMethod == .bolt12 {
+                            editableRow(
+                                label: "Amount",
+                                value: quote.isAmountless ? "Any"
+                                    : quote.amount.map { formatQuoteAmount($0, unit: quote.unit) } ?? "Any",
+                                action: { showReusableAmountPicker = true }
+                            )
+                            if quote.amountIssued > 0 {
+                                detailRow(label: "Total received",
+                                          value: formatQuoteAmount(quote.amountIssued, unit: quote.unit))
+                            }
+                        }
+                        if let created = quote.createdAt ?? quoteCreatedAt {
+                            detailRow(label: "Created",
+                                      value: created.formatted(date: .abbreviated, time: .shortened))
+                        }
+                        if let explorerURL = blockExplorerURL(for: quote) {
+                            explorerLinkRow(label: blockExplorerLabel(for: quote), url: explorerURL)
                         }
                     }
-                    .padding(.top, 8)
                     .padding(.horizontal, 4)
                 }
-                .padding(.horizontal)
             }
 
             Button(action: { copyRequest(quote.request) }) {
@@ -648,15 +651,32 @@ struct ReceiveLightningView: View {
             .padding(.horizontal)
             .padding(.bottom, 16)
         }
+        .onAppear { startDisplayingQuote(quote) }
+        .onChange(of: mintQuote?.id) {
+            if let quote = mintQuote { startDisplayingQuote(quote) }
+        }
         .sheet(isPresented: $showReusableAmountPicker) {
             CashuRequestAmountPickerSheet(
                 currentAmount: quote.isAmountless ? nil : quote.amount,
                 unit: quote.unit,
-                onSelect: {
-                    setReusableOfferAmount($0, mintURL: quote.mintURL, unit: quote.unit)
-                }
+                onSelect: { setReusableOfferAmount($0, mintURL: quote.mintURL, unit: quote.unit) }
             )
         }
+        .sheet(isPresented: $showReusableDescriptionEditor) {
+            if mintSupportsBolt12Description {
+                ReusableOfferDescriptionSheet(
+                    currentDescription: CashuRequestStore.shared.intent(forQuoteId: quote.id)?.memo
+                        ?? quote.description,
+                    onDone: { setReusableOfferDescription($0) }
+                )
+            }
+        }
+    }
+
+    private func startDisplayingQuote(_ quote: MintQuoteInfo) {
+        if quote.paymentMethod == .bolt12 { persistReceiveIntent(for: quote) }
+        startQuoteMonitoring(for: quote)
+        if quote.paymentMethod != .bolt12 { startExpiryCountdown(quote: quote) }
     }
 
     /// Friendly name of the quote's issuing mint. A quote remains bound to this
@@ -699,86 +719,6 @@ struct ReceiveLightningView: View {
             ))
         }
         return rows
-    }
-
-    private func standardRequestDisplayView(quote: MintQuoteInfo) -> some View {
-        VStack(spacing: 0) {
-            ScrollView {
-                VStack(spacing: 24) {
-                    QRCodeView(
-                        content: quote.request,
-                        showControls: false,
-                        staticOnly: true,
-                        onCopy: { copyRequest(quote.request) },
-                        onShare: { shareQuoteRequest(quote.request) }
-                    )
-                        .frame(width: 280, height: 280)
-                        .padding(16)
-                        .background(Color.white, in: RoundedRectangle(cornerRadius: 20))
-                        .padding(.top, 8)
-                        .contextMenu {
-                            Button(action: { copyRequest(quote.request) }) {
-                                Label("Copy", systemImage: "doc.on.doc")
-                            }
-                            ShareLink(item: quote.request) {
-                                Label("Share", systemImage: "square.and.arrow.up")
-                            }
-                        }
-                        .sheet(isPresented: $showShareSheet) {
-                            ShareSheet(items: [qrShareText])
-                        }
-
-                    amountSummary(for: quote)
-
-                    statusBadge
-
-                    if !isPaid && !isExpired && expiryTimeRemaining > 0 {
-                        // Plain caption, no pill — fewer surfaces.
-                        HStack(spacing: 5) {
-                            Image(systemName: "timer")
-                                .font(.caption2)
-                            Text("Expires in \(formatTimeRemaining(expiryTimeRemaining))")
-                                .font(.footnote)
-                        }
-                        .foregroundStyle(expiryTimeRemaining < 60 ? ErrorSeverity.error.foreground : Color.primary.opacity(0.5))
-                    }
-
-                    if walletManager.activeMint != nil || blockExplorerURL(for: quote) != nil {
-                        VStack(spacing: 0) {
-                            if let mint = walletManager.activeMint {
-                                detailRow(
-                                    label: "Mint",
-                                    value: extractMintHost(mint.url)
-                                )
-                            }
-                            if let explorerURL = blockExplorerURL(for: quote) {
-                                explorerLinkRow(label: blockExplorerLabel(for: quote), url: explorerURL)
-                            }
-                        }
-                        .padding(.top, 8)
-                        .padding(.horizontal, 4)
-                    }
-                }
-                .padding(.horizontal)
-            }
-
-            Button(action: { copyRequest(quote.request) }) {
-                Text(copyButtonTitle(for: quote))
-            }
-            .flatSheetSecondaryButton()
-            .padding(.horizontal)
-            .padding(.bottom, 16)
-        }
-        .onAppear {
-            startQuoteMonitoring(for: quote)
-            startExpiryCountdown(quote: quote)
-        }
-        .onChange(of: mintQuote?.id) { _, _ in
-            if let quote = mintQuote {
-                startQuoteMonitoring(for: quote)
-                startExpiryCountdown(quote: quote)
-            }
-        }
     }
 
     private func amountSummary(for quote: MintQuoteInfo) -> some View {
@@ -839,7 +779,7 @@ struct ReceiveLightningView: View {
         }
         .font(.subheadline)
         .padding(.horizontal, 4)
-        .padding(.vertical, 14)
+        .padding(.vertical, 12)
     }
 
     /// Same as `detailRow` but tappable, with a trailing pencil — used for the
@@ -862,7 +802,7 @@ struct ReceiveLightningView: View {
             }
             .font(.subheadline)
             .padding(.horizontal, 4)
-            .padding(.vertical, 14)
+            .padding(.vertical, 12)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
@@ -884,7 +824,7 @@ struct ReceiveLightningView: View {
             }
             .font(.subheadline)
             .padding(.horizontal, 4)
-            .padding(.vertical, 14)
+            .padding(.vertical, 12)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
@@ -1181,9 +1121,11 @@ struct ReceiveLightningView: View {
             amount: quote.isAmountless ? nil : quote.amount,
             unit: quote.unit,
             mints: mintURLs,
+            memo: quote.description,
             reusable: reusable,
             expiry: expiry
         )
+        CashuRequestStore.shared.markQuotePresented(quote.id)
     }
 
     /// Re-mints the reusable BOLT12 offer at a new amount, driven by the Amount-row
@@ -1223,7 +1165,8 @@ struct ReceiveLightningView: View {
                     amount: target,
                     method: .bolt12,
                     targetMintURL: requestedMintURL,
-                    unit: requestedUnit
+                    unit: requestedUnit,
+                    description: advertisedOfferDescription
                 )
                 guard !Task.isCancelled else { return }
                 mintQuote = quote
@@ -1241,6 +1184,44 @@ struct ReceiveLightningView: View {
             }
         }
     }
+
+    /// Re-mints the reusable BOLT12 offer with a new payer-facing description
+    /// (Android `setReusableOfferDescription` parity). Blank → nil (plain
+    /// offer, reuse allowed); non-blank → a fresh offer, since offers are
+    /// immutable. The current fixed amount, if any, is preserved.
+    private func setReusableOfferDescription(_ next: String?) {
+        offerDescription = MintQuoteDomain.normalizedOfferDescription(next)
+        offerDescriptionLoaded = true
+        // Use the amountless flag, not `quote.amount`: CDK may fill amount
+        // after a payment on an amountless offer, and reminting that as a
+        // fixed offer would drop reuse (Android `!quote.isAmountless` parity).
+        if let quote = mintQuote, quote.paymentMethod == .bolt12,
+           !quote.isAmountless, let amount = quote.amount, amount > 0 {
+            setReusableOfferAmount(amount)
+        } else {
+            amountString = ""
+            loadOrCreateAmountlessOffer(mintURL: mintQuote?.mintURL, unit: mintQuote?.unit)
+        }
+    }
+
+    /// One-time restore of the mint's last-used offer description, so a
+    /// re-open reloads the described offer (memo match) instead of silently
+    /// reverting to the plain one.
+    private func loadStoredOfferDescriptionIfNeeded() {
+        guard !offerDescriptionLoaded else { return }
+        guard let mintUrl = walletManager.activeMint?.url else { return }
+        guard mintSupportsBolt12Description else {
+            offerDescription = nil
+            offerDescriptionLoaded = true
+            return
+        }
+        offerDescription = CashuRequestStore.shared
+            .lastPresentedAmountlessOffer(mintURL: mintUrl, unit: effectiveUnit)?.memo
+        offerDescriptionLoaded = true
+    }
+
+    /// Defensive cap for the payer-facing BOLT12 offer description.
+    static let maxOfferDescriptionLength = 640
 
     /// Reopen the mint's existing amountless offer by default. The explicit new
     /// action deliberately bypasses that lookup and leaves the prior offer valid.
@@ -1272,7 +1253,8 @@ struct ReceiveLightningView: View {
                 if !forceNew,
                    let existing = try await walletManager.existingAmountlessOffer(
                        mintURL: requestedMintURL,
-                       unit: requestedUnit
+                       unit: requestedUnit,
+                       description: advertisedOfferDescription
                    ) {
                     quote = existing
                 } else {
@@ -1280,7 +1262,8 @@ struct ReceiveLightningView: View {
                         amount: nil,
                         method: .bolt12,
                         targetMintURL: requestedMintURL,
-                        unit: requestedUnit
+                        unit: requestedUnit,
+                        description: advertisedOfferDescription
                     )
                 }
                 guard !Task.isCancelled else { return }
@@ -1346,7 +1329,8 @@ struct ReceiveLightningView: View {
                         amount: requestAmount,
                         method: requestMethod,
                         targetMintURL: requestedMintURL,
-                        unit: requestedUnit
+                        unit: requestedUnit,
+                        description: requestMethod == .bolt12 ? advertisedOfferDescription : nil
                     )
                 }
                 guard !Task.isCancelled else { return }

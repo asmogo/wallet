@@ -37,6 +37,10 @@ struct MintQuoteInfo: Identifiable {
     var hasSettledPayment: Bool {
         amountPaid > 0 && amountIssued >= amountPaid
     }
+    /// Payer-facing description embedded in a BOLT12 offer. CDK never returns
+    /// it (write-only on `mintQuote`), so this is populated from the locally
+    /// stored quote-intent memo (`CashuRequest.memo`) — nil everywhere else.
+    var description: String? = nil
 
     var isExpired: Bool {
         guard let expiry = expiry, expiry > 0 else { return false }

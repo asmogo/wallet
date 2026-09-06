@@ -4,7 +4,9 @@ import android.content.ClipData
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -39,6 +41,7 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.launch
@@ -63,11 +66,13 @@ import com.cashu.me.ui.components.AmountText
 import com.cashu.me.ui.components.AmountHero
 import com.cashu.me.ui.components.CompactSheetContent
 import com.cashu.me.ui.components.ExplorerLinkRow
+import com.cashu.me.ui.components.DescriptionDetailRow
 import com.cashu.me.ui.components.InspectorRow
 import com.cashu.me.ui.components.InlineNotice
 import com.cashu.me.ui.components.LocalConfirmationToastController
 import com.cashu.me.ui.components.NoticeSeverity
 import com.cashu.me.ui.components.PrimaryButton
+import com.cashu.me.ui.components.PaymentDetailContent
 import com.cashu.me.ui.components.QrCard
 import com.cashu.me.ui.components.SecondaryButton
 import com.cashu.me.ui.components.SheetHeader
@@ -148,7 +153,14 @@ fun TransactionReceiptSheet(
     val qrContent = TransactionDisplay.qrContent(current)
     val copyableContent = TransactionDisplay.copyableContent(current)
     val title = TransactionDisplay.title(current)
-    val fields = remember(current) { TransactionDisplay.detailFields(current) }
+    val description = current.displayDescription
+    val fields = remember(current, walletState.mints) {
+        TransactionDisplay.detailFields(current).filterNot { it.label == "Memo" }.map { field ->
+            if (field.label == "Mint") {
+                field.copy(value = walletState.mints.firstOrNull { it.url == current.mintUrl }?.name ?: field.value)
+            } else field
+        }
+    }
     val explorerUrl = remember(current) { current.explorerUrl() }
     val pendingReceiveToken = current.token?.takeIf {
         current.isPendingReceiveToken &&
@@ -159,6 +171,171 @@ fun TransactionReceiptSheet(
         automaticChecksEnabled = settings.checkSentTokens,
         transaction = current,
     )
+
+    val hero: @Composable (Dp) -> Unit = { qrSize ->
+        when {
+            showsQr && qrContent != null -> QrCard(
+                content = qrContent,
+                size = qrSize,
+                staticOnly = current.kind != TransactionKind.Ecash,
+                shareSubject = title,
+                confirmationMessage =
+                    "Copied ${TransactionDisplay.qrLabel(current).replaceFirstChar { it.lowercase() }}",
+            )
+            current.status == TransactionStatus.Completed -> Icon(
+                imageVector = Icons.Filled.CheckCircle,
+                contentDescription = "Completed",
+                tint = CashuTheme.colors.onReceivedContainer,
+                modifier = Modifier.size(COMPLETED_RECEIPT_GLYPH_SIZE),
+            )
+            current.status == TransactionStatus.Failed -> Icon(
+                imageVector = Icons.Filled.Cancel,
+                contentDescription = "Failed",
+                tint = MaterialTheme.colorScheme.error,
+                modifier = Modifier.size(FAILED_GLYPH_SIZE),
+            )
+            else -> Unit
+        }
+    }
+    val details: @Composable () -> Unit = {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(CashuTheme.spacing.section),
+        ) {
+            HeroAmount(
+                transaction = current,
+                formatter = formatter,
+                preferredPrimary = settings.homeBalancePrimary,
+                useBitcoinSymbol = settings.useBitcoinSymbol,
+                showFiat = settings.showFiatBalance,
+                btcPrice = priceState.btcPrice,
+                currencyCode = priceState.currencyCode,
+                compact = showsQr,
+            )
+
+            Column(modifier = Modifier.fillMaxWidth()) {
+                fields.forEach { field ->
+                    InspectorRow(
+                        label = field.label,
+                        modifier = Modifier.heightIn(min = 48.dp),
+                        value = field.value,
+                        valueMonospaced = field.value.length > 24 ||
+                            field.label in MonospacedLabels,
+                        onClick = field.copyValue?.let { full ->
+                            {
+                                scope.launch {
+                                    clipboard.setClipEntry(
+                                        ClipEntry(ClipData.newPlainText(field.label, full)),
+                                    )
+                                    confirmationToastController?.show(
+                                        copyConfirmationMessage(field.label),
+                                    )
+                                }
+                            }
+                        },
+                        trailingIcon = field.copyValue?.let { Icons.Outlined.ContentCopy },
+                    )
+                    if (field.label == "Mint" && description != null) {
+                        DescriptionDetailRow(description)
+                    }
+                }
+                if (fields.none { it.label == "Mint" } && description != null) {
+                    DescriptionDetailRow(description)
+                }
+                // Explorer link joins the detail rows (iOS parity) —
+                // it's reference material, not an action.
+                if (explorerUrl != null) {
+                    ExplorerLinkRow(onClick = { context.openInBrowser(explorerUrl) })
+                }
+            }
+
+            if (offersManualClaimCheck) {
+                when (val outcome = manualCheckResult) {
+                    PendingTokenClaimCheckResult.NotClaimed -> InlineNotice(
+                        text = "Status checked",
+                        detail = "This token has not been claimed yet.",
+                        severity = NoticeSeverity.Info,
+                        modifier = Modifier.semantics {
+                            liveRegion = LiveRegionMode.Polite
+                        },
+                    )
+                    is PendingTokenClaimCheckResult.Failed -> InlineNotice(
+                        text = "Couldn't check status",
+                        detail = outcome.message.text,
+                        modifier = Modifier.semantics {
+                            liveRegion = LiveRegionMode.Polite
+                        },
+                        severity = NoticeSeverity.Caution,
+                    )
+                    PendingTokenClaimCheckResult.Claimed, null -> Unit
+                }
+            }
+        }
+    }
+    val actions: @Composable () -> Unit = {
+        Column(
+            modifier = Modifier.fillMaxWidth(),
+            verticalArrangement = Arrangement.spacedBy(CashuTheme.spacing.default),
+        ) {
+            if (pendingReceiveToken != null && onClaimReceiveToken != null) {
+                PrimaryButton(
+                    text = "Receive",
+                    onClick = { onClaimReceiveToken(pendingReceiveToken) },
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            } else {
+                if (copyableContent != null) {
+                        SecondaryButton(
+                        text = "Copy",
+                        onClick = {
+                            scope.launch {
+                                clipboard.setClipEntry(
+                                    ClipEntry(ClipData.newPlainText(title, copyableContent)),
+                                )
+                                confirmationToastController?.show(
+                                    "Copied ${TransactionDisplay.qrLabel(current).replaceFirstChar { it.lowercase() }}",
+                                )
+                            }
+                        },
+                        modifier = Modifier.semantics {
+                            liveRegion = LiveRegionMode.Polite
+                        },
+                    )
+                }
+                if (offersManualClaimCheck) {
+                    PrimaryButton(
+                        text = if (checkingClaim) "Checking…" else "Check Status",
+                        onClick = {
+                            checkingClaim = true
+                            manualCheckResult = null
+                            scope.launch {
+                                try {
+                                    manualCheckResult = runPendingTokenClaimCheck {
+                                        walletManager.checkPendingTokenStatus(current)
+                                    }
+                                } finally {
+                                    checkingClaim = false
+                                }
+                            }
+                        },
+                        loading = checkingClaim,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag(UiTestTags.HistoryCheckTokenStatus)
+                            .semantics {
+                                contentDescription = if (checkingClaim) {
+                                    "Checking claim status"
+                                } else {
+                                    "Check Status"
+                                }
+                                liveRegion = LiveRegionMode.Polite
+                            },
+                    )
+                }
+            }
+
+        }
+    }
 
     ModalBottomSheet(
         onDismissRequest = onDismissRequest,
@@ -171,188 +348,34 @@ fun TransactionReceiptSheet(
                 .testTag(UiTestTags.TransactionReceiptSheet),
         ) {
             CompactSheetContent {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .verticalScroll(rememberScrollState()),
-                ) {
-                    SheetHeader(title = title)
-
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = CashuTheme.spacing.comfortable)
-                            .padding(bottom = CashuTheme.spacing.comfortable),
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.spacedBy(CashuTheme.spacing.section),
-                    ) {
-                        Column(
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            verticalArrangement = Arrangement.spacedBy(CashuTheme.spacing.comfortable),
-                        ) {
-                            // Hero state slot: live request → QR; completed → 64dp green
-                            // check; failed → 64dp red X; pending with no QR → no glyph.
-                            // State detail lives in the monochrome Status row below.
-                            when {
-                                showsQr && qrContent != null -> QrCard(
-                                    content = qrContent,
-                                    staticOnly = current.kind != TransactionKind.Ecash,
-                                    shareSubject = title,
-                                    confirmationMessage =
-                                        "Copied ${TransactionDisplay.qrLabel(current).replaceFirstChar { it.lowercase() }}",
-                                )
-                                current.status == TransactionStatus.Completed -> Icon(
-                                    imageVector = Icons.Filled.CheckCircle,
-                                    contentDescription = "Completed",
-                                    tint = CashuTheme.colors.onReceivedContainer,
-                                    modifier = Modifier.size(COMPLETED_RECEIPT_GLYPH_SIZE),
-                                )
-                                current.status == TransactionStatus.Failed -> Icon(
-                                    imageVector = Icons.Filled.Cancel,
-                                    contentDescription = "Failed",
-                                    tint = MaterialTheme.colorScheme.error,
-                                    modifier = Modifier.size(FAILED_GLYPH_SIZE),
-                                )
-                                else -> Unit
-                            }
-
-                            HeroAmount(
-                                transaction = current,
-                                formatter = formatter,
-                                preferredPrimary = settings.homeBalancePrimary,
-                                useBitcoinSymbol = settings.useBitcoinSymbol,
-                                showFiat = settings.showFiatBalance,
-                                btcPrice = priceState.btcPrice,
-                                currencyCode = priceState.currencyCode,
-                                compact = showsQr,
-                            )
+                if (showsQr && description != null) {
+                    Column(modifier = Modifier.fillMaxWidth()) {
+                        SheetHeader(title = title)
+                        PaymentDetailContent(
+                            modifier = Modifier.weight(1f, fill = false),
+                            hero = hero,
+                        ) { details() }
+                        Column(modifier = Modifier.padding(horizontal = CashuTheme.spacing.comfortable)) {
+                            actions()
                         }
-
-                        // The last row's 12dp inset + this gap leaves 24dp before actions.
+                        Spacer(Modifier.height(CashuTheme.spacing.comfortable))
+                    }
+                } else {
+                    Column(modifier = Modifier.fillMaxWidth().verticalScroll(rememberScrollState())) {
+                        SheetHeader(title = title)
                         Column(
-                            modifier = Modifier.fillMaxWidth(),
+                            modifier = Modifier.fillMaxWidth().padding(horizontal = CashuTheme.spacing.comfortable)
+                                .padding(bottom = CashuTheme.spacing.comfortable),
                             verticalArrangement = Arrangement.spacedBy(CashuTheme.spacing.default),
                         ) {
-                            Column(modifier = Modifier.fillMaxWidth()) {
-                                fields.forEach { field ->
-                                    InspectorRow(
-                                        label = field.label,
-                                        modifier = Modifier.heightIn(min = 48.dp),
-                                        value = field.value,
-                                        valueMonospaced = field.value.length > 24 ||
-                                            field.label in MonospacedLabels,
-                                        onClick = field.copyValue?.let { full ->
-                                            {
-                                                scope.launch {
-                                                    clipboard.setClipEntry(
-                                                        ClipEntry(ClipData.newPlainText(field.label, full)),
-                                                    )
-                                                    confirmationToastController?.show(
-                                                        copyConfirmationMessage(field.label),
-                                                    )
-                                                }
-                                            }
-                                        },
-                                        trailingIcon = field.copyValue?.let { Icons.Outlined.ContentCopy },
-                                    )
-                                }
-                                // Explorer link joins the detail rows (iOS parity) —
-                                // it's reference material, not an action.
-                                if (explorerUrl != null) {
-                                    ExplorerLinkRow(
-                                        onClick = { context.openInBrowser(explorerUrl) },
-                                        modifier = Modifier.heightIn(min = 48.dp),
-                                    )
-                                }
-                            }
-
-                            if (offersManualClaimCheck) {
-                                when (val outcome = manualCheckResult) {
-                                    PendingTokenClaimCheckResult.NotClaimed -> InlineNotice(
-                                        text = "Status checked",
-                                        detail = "This token has not been claimed yet.",
-                                        severity = NoticeSeverity.Info,
-                                        modifier = Modifier.semantics {
-                                            liveRegion = LiveRegionMode.Polite
-                                        },
-                                    )
-                                    is PendingTokenClaimCheckResult.Failed -> InlineNotice(
-                                        text = "Couldn't check status",
-                                        detail = outcome.message.text,
-                                        modifier = Modifier.semantics {
-                                            liveRegion = LiveRegionMode.Polite
-                                        },
-                                        severity = NoticeSeverity.Caution,
-                                    )
-                                    PendingTokenClaimCheckResult.Claimed, null -> Unit
-                                }
-                            }
-
-                            if ((pendingReceiveToken != null && onClaimReceiveToken != null) ||
-                                copyableContent != null || offersManualClaimCheck
+                            Column(
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.spacedBy(CashuTheme.spacing.comfortable),
                             ) {
-                                Column(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    verticalArrangement = Arrangement.spacedBy(CashuTheme.spacing.default),
-                                ) {
-                                    if (pendingReceiveToken != null && onClaimReceiveToken != null) {
-                                        PrimaryButton(
-                                            text = "Receive",
-                                            onClick = { onClaimReceiveToken(pendingReceiveToken) },
-                                            modifier = Modifier.fillMaxWidth(),
-                                        )
-                                    } else {
-                                        if (copyableContent != null) {
-                                            SecondaryButton(
-                                                text = "Copy",
-                                                onClick = {
-                                                    scope.launch {
-                                                        clipboard.setClipEntry(
-                                                            ClipEntry(ClipData.newPlainText(title, copyableContent)),
-                                                        )
-                                                        confirmationToastController?.show(
-                                                            "Copied ${TransactionDisplay.qrLabel(current).replaceFirstChar { it.lowercase() }}",
-                                                        )
-                                                    }
-                                                },
-                                                modifier = Modifier.semantics {
-                                                    liveRegion = LiveRegionMode.Polite
-                                                },
-                                            )
-                                        }
-                                        if (offersManualClaimCheck) {
-                                            PrimaryButton(
-                                                text = if (checkingClaim) "Checking…" else "Check Status",
-                                                onClick = {
-                                                    checkingClaim = true
-                                                    manualCheckResult = null
-                                                    scope.launch {
-                                                        try {
-                                                            manualCheckResult = runPendingTokenClaimCheck {
-                                                                walletManager.checkPendingTokenStatus(current)
-                                                            }
-                                                        } finally {
-                                                            checkingClaim = false
-                                                        }
-                                                    }
-                                                },
-                                                loading = checkingClaim,
-                                                modifier = Modifier
-                                                    .fillMaxWidth()
-                                                    .testTag(UiTestTags.HistoryCheckTokenStatus)
-                                                    .semantics {
-                                                        contentDescription = if (checkingClaim) {
-                                                            "Checking claim status"
-                                                        } else {
-                                                            "Check Status"
-                                                        }
-                                                        liveRegion = LiveRegionMode.Polite
-                                                    },
-                                            )
-                                        }
-                                    }
-                                }
+                                hero(280.dp)
+                                details()
                             }
+                            actions()
                         }
                     }
                 }

@@ -476,3 +476,76 @@ final class MintQuoteContextPolicyTests: XCTestCase {
         )
     }
 }
+
+@MainActor
+final class HistoryDescriptionTests: XCTestCase {
+    private let offer = "lno1pg95xmmxvejk2g8sn7xtz93pqfumuen7l8wthtz45p3ftn58pvrs9xlumvkuu2xet8egzkcklqtes"
+    private let expectedDescription = "Coffee 🌱"
+
+    private func payment(_ id: String = "payment", type: WalletTransaction.TransactionType = .incoming) -> WalletTransaction {
+        var tx = WalletTransaction(id: id, amount: 21, type: type, kind: .lightning,
+            date: Date(), memo: nil, status: .completed, mintUrl: "https://mint.example/")
+        tx.quoteId = "quote"
+        return tx
+    }
+
+    func testPaidReusableRequestAndEveryReceiptKeepDescriptionAfterStoreReload() throws {
+        let suite = "HistoryDescriptionTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let store = CashuRequestStore(userDefaults: defaults)
+        let request = store.upsertQuoteIntent(rail: .bolt12, quoteId: "quote", encoded: offer,
+            mints: ["https://mint.example"], reusable: true)
+        store.attachPayment(requestId: request.id, transactionId: "first", amount: 21)
+        store.attachPayment(requestId: request.id, transactionId: "second", amount: 42)
+        let reloaded = WalletStore(storage: UserDefaultsStorage(defaults: defaults)).loadCashuRequests()
+        XCTAssertEqual(reloaded.count, 1)
+        XCTAssertEqual(reloaded.first?.totalReceived, 63)
+        XCTAssertEqual(reloaded.first?.displayDescription, expectedDescription)
+        for id in ["first", "second"] {
+            let receipt = payment(id).restoringDescription(from: reloaded)
+            XCTAssertEqual(receipt.memo, expectedDescription)
+            XCTAssertTrue(HistorySearch.matches(query: "coffee", transaction: receipt))
+        }
+        XCTAssertTrue(HistorySearch.matches(query: "coffee", request: try XCTUnwrap(reloaded.first), receivedTotal: 63))
+    }
+
+    func testOutgoingInvoiceRecoversDescriptionWithoutLocalRequest() {
+        var tx = payment(type: .outgoing)
+        tx.invoice = offer
+        XCTAssertEqual(tx.restoringDescription(from: []).memo, expectedDescription)
+        tx.status = .pending
+        XCTAssertEqual(tx.displayDescription, expectedDescription)
+    }
+
+    func testQuoteLinkDoesNotCopyDescriptionFromAnotherMintUnitOrDirection() {
+        let request = CashuRequest(encoded: offer, mints: ["https://mint.example"], rail: .bolt12, quoteId: "quote")
+        var wrongMint = payment()
+        wrongMint.mintUrl = "https://other.example"
+        var wrongUnit = payment()
+        wrongUnit.unit = "usd"
+        for tx in [wrongMint, wrongUnit, payment(type: .outgoing)] {
+            XCTAssertNil(tx.restoringDescription(from: [request]).memo)
+        }
+        XCTAssertEqual(payment().restoringDescription(from: [request]).memo, expectedDescription)
+    }
+
+    func testLocalMemoTakesPrecedenceAndEmptyDescriptionsStayHidden() {
+        var tx = payment()
+        tx.invoice = offer
+        tx.memo = "Personal memo"
+        XCTAssertEqual(tx.displayDescription, "Personal memo")
+        tx.invoice = nil
+        tx.memo = " \n "
+        XCTAssertNil(tx.displayDescription)
+        XCTAssertNil(CashuRequest(encoded: "invalid", memo: " ").displayDescription)
+    }
+
+    func testCashuRequestDescriptionSurvivesClaimedReceiptWithoutInvoice() {
+        let request = CashuRequest(id: "cashu", encoded: "creq", memo: expectedDescription,
+            receivedPayments: [.init(transactionId: "payment", amount: 21, receivedAt: Date())])
+        var tx = payment()
+        tx.quoteId = nil
+        XCTAssertEqual(tx.restoringDescription(from: [request]).memo, expectedDescription)
+    }
+}

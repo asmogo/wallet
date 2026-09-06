@@ -1,5 +1,6 @@
 package com.cashu.me.ui.components
 
+import android.content.res.Configuration
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -8,16 +9,27 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.selection.SelectionContainer
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Edit
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -133,3 +145,53 @@ fun InspectorRow(
     }
 }
 
+
+/** Prose belongs to the inspector, with a native reader for longer descriptions. */
+@Composable
+fun DescriptionDetailRow(description: String, label: String = "Description") {
+    var overflowing by remember(description) { mutableStateOf(false) }
+    var showFullDescription by remember(description) { mutableStateOf(false) }
+    val configuration = LocalConfiguration.current
+    val previewLines = if (LocalCompactPaymentDetails.current || configuration.orientation == Configuration.ORIENTATION_LANDSCAPE ||
+        configuration.fontScale > 1.3f) 1 else 3
+
+    Column(
+        modifier = Modifier.fillMaxWidth().padding(
+            horizontal = CashuTheme.spacing.comfortable,
+            vertical = CashuTheme.spacing.default,
+        ),
+        verticalArrangement = Arrangement.spacedBy(CashuTheme.spacing.snug),
+    ) {
+        Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Text(label, modifier = Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant)
+            if (overflowing) {
+                TextButton(onClick = { showFullDescription = true }) { Text("Read more") }
+            }
+        }
+        SelectionContainer {
+            Text(
+                text = description,
+                style = MaterialTheme.typography.bodyLarge,
+                maxLines = previewLines,
+                overflow = TextOverflow.Ellipsis,
+                onTextLayout = { overflowing = it.hasVisualOverflow },
+                modifier = Modifier.testTag("payment-description-preview"),
+            )
+        }
+    }
+    if (showFullDescription) {
+        AlertDialog(
+            onDismissRequest = { showFullDescription = false },
+            title = { Text(label) },
+            text = {
+                SelectionContainer {
+                    Text(description, modifier = Modifier.verticalScroll(rememberScrollState()))
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showFullDescription = false }) { Text("Done") }
+            },
+        )
+    }
+}

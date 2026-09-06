@@ -174,8 +174,10 @@ class TransactionService: ObservableObject {
 
         persistMintQuoteTimestamps(for: allTransactions, using: mintQuoteTimestamps)
 
-        // Sort by date descending (newest first)
-        transactions = allTransactions.sorted { $0.date > $1.date }
+        // Restore from durable request metadata each load, even after payment/relaunch.
+        let requests = walletStore.loadCashuRequests()
+        transactions = allTransactions.map { $0.restoringDescription(from: requests) }
+            .sorted { $0.date > $1.date }
 
         // Post notification that transactions were updated
         NotificationCenter.default.post(name: .cashuTransactionsUpdated, object: nil)

@@ -39,6 +39,10 @@ final class WalletStore {
         set(tokens, forKey: StorageKeys.pendingReceiveTokens)
     }
 
+    func loadCashuRequests() -> [CashuRequest] {
+        value(forKey: StorageKeys.cashuRequests) ?? []
+    }
+
     func loadSavedTokens() -> [String: String] {
         value(forKey: StorageKeys.savedTokens, legacyKeys: [StorageKeys.Legacy.savedTokens]) ?? [:]
     }

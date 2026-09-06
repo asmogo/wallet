@@ -51,7 +51,7 @@ interface CdkWalletGateway {
      * never registers keysets/counters the user hasn't touched.
      */
     suspend fun unitBalanceIfExists(mintUrl: String, unit: String): Long?
-    suspend fun createMintQuote(amount: Long?, method: PaymentMethodKind, mintUrl: String, unit: String = "sat"): MintQuoteInfo
+    suspend fun createMintQuote(amount: Long?, method: PaymentMethodKind, mintUrl: String, unit: String = "sat", description: String? = null): MintQuoteInfo
     suspend fun checkMintQuote(quoteId: String): MintQuoteInfo
 
     /** Last durable local quote snapshot, without contacting the mint. */

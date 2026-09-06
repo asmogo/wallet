@@ -39,6 +39,7 @@ import androidx.compose.material.icons.outlined.Repeat
 import androidx.compose.material.icons.outlined.Schedule
 import androidx.compose.material.icons.outlined.Timer
 import androidx.compose.material.icons.outlined.WarningAmber
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.CircularProgressIndicator
@@ -59,6 +60,11 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalClipboardManager
@@ -72,10 +78,12 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import java.text.DateFormat
 import java.util.Date
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
+import com.cashu.me.Core.normalizedOfferDescription
 import com.cashu.me.Core.AmountFormatter
 import com.cashu.me.Core.AmountDisplayPrimary
 import com.cashu.me.Core.CashuRequestStore
@@ -99,6 +107,8 @@ import com.cashu.me.Models.PaymentMethodKind
 import com.cashu.me.ui.components.AmountEntryHero
 import com.cashu.me.ui.components.AmountFlipDisplay
 import com.cashu.me.ui.components.AmountText
+import com.cashu.me.ui.components.CashuTextField
+import com.cashu.me.ui.components.CompactSheetContent
 import com.cashu.me.ui.components.ExplorerLinkRow
 import com.cashu.me.ui.components.FlowSheetTitle
 import com.cashu.me.ui.components.IconSwap
@@ -113,6 +123,8 @@ import com.cashu.me.ui.components.NumberPadFooter
 import com.cashu.me.ui.components.PaymentStatusPhase
 import com.cashu.me.ui.components.PaymentStatusScreen
 import com.cashu.me.ui.components.PrimaryButton
+import com.cashu.me.ui.components.PaymentDetailContent
+import com.cashu.me.ui.components.DescriptionDetailRow
 import com.cashu.me.ui.components.QrCard
 import com.cashu.me.ui.components.SheetHeader
 import com.cashu.me.ui.components.TwoFaceScreen
@@ -165,6 +177,9 @@ private fun receiveRequestFailureTitle(method: PaymentMethodKind): String = when
     PaymentMethodKind.Onchain -> "Couldn't Create Address"
 }
 
+/** Defensive cap for the payer-facing BOLT12 offer description. */
+private const val MAX_OFFER_DESCRIPTION_LENGTH = 640
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ReceiveLightningScreen(
@@ -200,12 +215,26 @@ fun ReceiveLightningScreen(
     var unitPickerOpen by remember { mutableStateOf(false) }
     var mintPickerOpen by remember { mutableStateOf(false) }
     var reusableAmountPickerOpen by remember { mutableStateOf(false) }
+    var reusableDescriptionEditorOpen by remember { mutableStateOf(false) }
+    // Description the next reusable BOLT12 offer is minted with. Initialized
+    // once per mint/unit from the last presented amountless offer intent so
+    // re-opening the screen reloads the described offer instead of minting a
+    // duplicate (CDK never returns offer descriptions — local memo is the
+    // only record). A mint or unit switch resets and re-restores.
+    var reusableOfferDescription by remember { mutableStateOf<String?>(null) }
+    var reusableOfferDescriptionLoadedFor by remember { mutableStateOf<String?>(null) }
+    // Quote creation is serialized through this handle — a new create cancels
+    // the in-flight one so the slowest job can't clobber the freshest offer.
+    var createJob by remember { mutableStateOf<Job?>(null) }
     var displayActionsOpen by remember { mutableStateOf(false) }
     var methodPickerOpen by remember { mutableStateOf(false) }
 
     val activeMint = walletState.activeMint
     val supportedMethods = activeMint?.supportedMintMethods?.ifEmpty { listOf(PaymentMethodKind.Bolt11) }
         ?: listOf(PaymentMethodKind.Bolt11)
+    // Fail closed: only mints that advertised NUT-04 bolt12 description=true
+    // get a Description row / description minting.
+    val mintSupportsBolt12Description = activeMint?.supportsBolt12MintDescription == true
 
     // Mint unit: NUT-04 mintable units only; on-chain always mints sat.
     val effectiveUnit = if (method == PaymentMethodKind.Onchain) {
@@ -226,6 +255,24 @@ fun ReceiveLightningScreen(
     val showsUnitSelector = activeMint?.supportsMultipleMintUnits == true &&
         method != PaymentMethodKind.Onchain
 
+    val descriptionContext = activeMint?.url?.let { "$it|$effectiveUnit" }
+    LaunchedEffect(descriptionContext, cashuRequestState.requests, mintSupportsBolt12Description) {
+        if (reusableOfferDescriptionLoadedFor != descriptionContext) {
+            reusableOfferDescription = null
+            reusableOfferDescriptionLoadedFor = null
+        }
+        if (!mintSupportsBolt12Description) {
+            reusableOfferDescription = null
+            reusableOfferDescriptionLoadedFor = null
+            return@LaunchedEffect
+        }
+        if (reusableOfferDescriptionLoadedFor == null && activeMint != null) {
+            reusableOfferDescription = cashuRequestStore
+                .lastPresentedAmountlessOffer(activeMint.url, effectiveUnit)?.memo
+            reusableOfferDescriptionLoadedFor = descriptionContext
+        }
+    }
+
     fun persistReusableOffer(quote: MintQuoteInfo) {
         if (quote.paymentMethod != PaymentMethodKind.Bolt12) return
         cashuRequestStore.upsertQuoteIntent(
@@ -237,8 +284,12 @@ fun ReceiveLightningScreen(
             amount = quote.amount.takeUnless { quote.isAmountless },
             unit = quote.unit,
             mints = listOfNotNull(quote.mintUrl ?: activeMint?.url),
+            // An offer's description is immutable like the offer itself, so a
+            // null here means "unknown" and must not wipe the stored memo.
+            memo = quote.description,
             encoded = quote.request,
         )
+        cashuRequestStore.markQuotePresented(quote.id)
     }
 
     fun createMintRequest(
@@ -266,31 +317,45 @@ fun ReceiveLightningScreen(
         val requestAmount = if (amountless) null else explicit
         creating = true
         errorText = null
-        scope.launch {
+        createJob?.cancel()
+        createJob = scope.launch {
             try {
                 val requestUnit = if (requestMethod == PaymentMethodKind.Onchain) {
                     "sat"
                 } else {
                     amountEntryContext.quoteUnit
                 }
+                // Offers are immutable: reuse only matches an offer carrying
+                // this exact description, so a changed description mints fresh.
+                val offerDescription = reusableOfferDescription
+                    .takeIf {
+                        requestMethod == PaymentMethodKind.Bolt12 &&
+                            mintSupportsBolt12Description
+                    }
                 val quote = if (
                     requestMethod == PaymentMethodKind.Bolt12 &&
                     amountless &&
                     !forceNewReusableOffer
                 ) {
-                    walletManager.existingAmountlessBolt12Offer(unit = requestUnit)
-                        ?: walletManager.createMintQuote(
-                            amount = null,
-                            method = requestMethod,
-                            unit = requestUnit,
-                        )
+                    walletManager.existingAmountlessBolt12Offer(
+                        unit = requestUnit,
+                        description = offerDescription,
+                    ) ?: walletManager.createMintQuote(
+                        amount = null,
+                        method = requestMethod,
+                        unit = requestUnit,
+                        description = offerDescription,
+                    )
                 } else {
                     walletManager.createMintQuote(
                         amount = requestAmount,
                         method = requestMethod,
                         unit = requestUnit,
+                        description = offerDescription,
                     )
                 }
+                // createMintQuote (and the reuse path) already carry the
+                // description on the returned quote; no face-level copy.
                 face = ReceiveLnFace.Display(quote)
             } catch (t: Throwable) {
                 face = ReceiveLnFace.Failure(
@@ -367,6 +432,36 @@ fun ReceiveLightningScreen(
                 requestMethod = PaymentMethodKind.Bolt12,
                 amountless = false,
                 amountOverride = nextAmount,
+            )
+        }
+    }
+
+    /**
+     * Re-mints the reusable BOLT12 offer with a new payer-facing description
+     * (iOS `setReusableOfferDescription` parity). Blank → null (plain offer,
+     * reuse allowed); non-blank → a fresh offer, since offers are immutable.
+     * The current fixed amount, if any, is preserved.
+     */
+    fun setReusableOfferDescription(next: String?) {
+        method = PaymentMethodKind.Bolt12
+        errorText = null
+        reusableOfferDescription = normalizedOfferDescription(next)
+        reusableOfferDescriptionLoadedFor = descriptionContext
+        val currentQuote = (face as? ReceiveLnFace.Display)?.quote
+        if (currentQuote != null &&
+            currentQuote.paymentMethod == PaymentMethodKind.Bolt12 &&
+            !currentQuote.isAmountless
+        ) {
+            // Preserve the displayed fixed amount via the same keypad/quote
+            // conversion as the Amount pencil. `UnitAmountEntry.entryString`
+            // would rebuild a mint-unit string and, on a sat quote with fiat
+            // primary, parse it as fiat — reminting the wrong amount.
+            setReusableOfferAmount(currentQuote.amount)
+        } else {
+            amount = ""
+            createMintRequest(
+                requestMethod = PaymentMethodKind.Bolt12,
+                amountless = true,
             )
         }
     }
@@ -860,6 +955,8 @@ fun ReceiveLightningScreen(
                     } else {
                         null
                     }
+                    val quoteIntent = cashuRequestState.requests
+                        .firstOrNull { it.quoteId == liveQuote.id }
                     DisplayFace(
                         quote = liveQuote,
                         amountLabel = amountLabel.takeUnless {
@@ -881,10 +978,12 @@ fun ReceiveLightningScreen(
                                 MintQuoteSettlementState.Waiting
                             else -> null
                         },
-                        mintName = activeMint?.name,
-                        createdAtEpochMillis = cashuRequestState.requests
-                            .firstOrNull { it.quoteId == liveQuote.id }
-                            ?.createdAtEpochMillis,
+                        mintName = walletState.mints.firstOrNull { it.url == liveQuote.mintUrl }?.name
+                            ?: liveQuote.mintUrl?.let { android.net.Uri.parse(it).host }
+                            ?: activeMint?.name,
+                        createdAtEpochMillis = quoteIntent?.createdAtEpochMillis ?: quoteCreatedAtMillis,
+                        descriptionLabel = quoteIntent?.displayDescription
+                            ?: liveQuote.description,
                         errorText = errorText,
                         amountPrimary = AmountDisplayPrimary.fromRaw(settings.amountDisplayPrimary),
                         onFlipAmountPrimary = {
@@ -913,6 +1012,14 @@ fun ReceiveLightningScreen(
                             liveQuote.paymentMethod == PaymentMethodKind.Bolt12
                         ) {
                             { reusableAmountPickerOpen = true }
+                        } else {
+                            null
+                        },
+                        onEditReusableDescription = if (
+                            liveQuote.paymentMethod == PaymentMethodKind.Bolt12 &&
+                            mintSupportsBolt12Description
+                        ) {
+                            { reusableDescriptionEditorOpen = true }
                         } else {
                             null
                         },
@@ -1010,6 +1117,22 @@ fun ReceiveLightningScreen(
                 setReusableOfferAmount(next)
             },
             onDismiss = { reusableAmountPickerOpen = false },
+        )
+    }
+
+    if (reusableDescriptionEditorOpen &&
+        displayQuote?.paymentMethod == PaymentMethodKind.Bolt12 &&
+        mintSupportsBolt12Description
+    ) {
+        ReusableDescriptionEditSheet(
+            initialDescription = cashuRequestState.requests
+                .firstOrNull { it.quoteId == displayQuote.id }?.memo
+                ?: displayQuote.description,
+            onDone = { next ->
+                reusableDescriptionEditorOpen = false
+                setReusableOfferDescription(next)
+            },
+            onDismiss = { reusableDescriptionEditorOpen = false },
         )
     }
 }
@@ -1165,6 +1288,7 @@ private fun DisplayFace(
     settlementState: MintQuoteSettlementState?,
     mintName: String?,
     createdAtEpochMillis: Long?,
+    descriptionLabel: String?,
     errorText: String?,
     amountPrimary: AmountDisplayPrimary,
     onFlipAmountPrimary: (AmountDisplayPrimary) -> Unit,
@@ -1176,32 +1300,28 @@ private fun DisplayFace(
     onCopy: () -> Unit,
     onRetryPendingMint: () -> Unit,
     onEditReusableAmount: (() -> Unit)?,
+    onEditReusableDescription: (() -> Unit)?,
     onOpenExplorer: (() -> Unit)?,
 ) {
     val confirmationToastController = LocalConfirmationToastController.current
     val isReusable = quote.paymentMethod == PaymentMethodKind.Bolt12
     Column(modifier = Modifier.fillMaxSize()) {
-        // Scrolling content region; the copy CTA is pinned to the bottom (iOS
-        // parity — the QR is the focal element, actions sit below the fold).
-        Column(
-            modifier = Modifier
-                .weight(1f)
-                .fillMaxWidth()
-                .verticalScroll(rememberScrollState()),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(CashuTheme.spacing.comfortable),
+        PaymentDetailContent(
+            modifier = Modifier.weight(1f),
+            hero = { qrSize ->
+                QrCard(
+                    content = quote.request,
+                    size = qrSize,
+                    shareSubject = "Payment request",
+                    staticOnly = true,
+                    confirmationMessage = if (quote.paymentMethod == PaymentMethodKind.Onchain) {
+                        "Copied Bitcoin address"
+                    } else {
+                        "Copied payment request"
+                    },
+                )
+            },
         ) {
-            Spacer(Modifier.height(CashuTheme.spacing.comfortable))
-            QrCard(
-                content = quote.request,
-                shareSubject = "Payment request",
-                staticOnly = true,
-                confirmationMessage = if (quote.paymentMethod == PaymentMethodKind.Onchain) {
-                    "Copied Bitcoin address"
-                } else {
-                    "Copied payment request"
-                },
-            )
             if (amountLabel != null) {
                 GeneratedInvoiceAmount(
                     amount = quote.amount ?: 0L,
@@ -1227,15 +1347,21 @@ private fun DisplayFace(
             if (!isReusable) {
                 ExpiryCaption(expirySeconds = quote.expiryEpochSeconds)
             }
-            if (isReusable) {
-                // Cashu-Request-style inspector group (iOS reusableOfferDisplayView).
-                Column(modifier = Modifier.fillMaxWidth()) {
-                    if (mintName != null) {
-                        InspectorRow(
-                            label = "Mint",
-                            value = mintName,
-                        )
-                    }
+            Column(modifier = Modifier.fillMaxWidth()) {
+                if (mintName != null) {
+                    InspectorRow(label = "Mint", value = mintName)
+                }
+                if (isReusable && onEditReusableDescription != null) {
+                    InspectorRow(
+                        label = "Description",
+                        value = descriptionLabel ?: "None",
+                        editable = true,
+                        onClick = onEditReusableDescription,
+                    )
+                } else if (!descriptionLabel.isNullOrBlank()) {
+                    DescriptionDetailRow(descriptionLabel)
+                }
+                if (isReusable) {
                     InspectorRow(
                         label = "Amount",
                         value = amountLabel ?: "Any",
@@ -1243,31 +1369,16 @@ private fun DisplayFace(
                         editable = onEditReusableAmount != null,
                         onClick = onEditReusableAmount,
                     )
-                    if (createdAtEpochMillis != null) {
-                        InspectorRow(
-                            label = "Created",
-                            value = formatReusableCreatedAt(createdAtEpochMillis),
-                        )
-                    }
                     if (receivedAmountLabel != null) {
-                        InspectorRow(
-                            label = "Total received",
-                            value = receivedAmountLabel,
-                            valueMonospaced = true,
-                        )
+                        InspectorRow(label = "Total received", value = receivedAmountLabel,
+                            valueMonospaced = true)
                     }
                 }
-            } else if (mintName != null || onOpenExplorer != null) {
-                Column(modifier = Modifier.fillMaxWidth()) {
-                    if (mintName != null) {
-                        InspectorRow(
-                            label = "Mint",
-                            value = mintName,
-                        )
-                    }
-                    if (onOpenExplorer != null) {
-                        ExplorerLinkRow(label = explorerLabel, onClick = onOpenExplorer)
-                    }
+                if (createdAtEpochMillis != null) {
+                    InspectorRow(label = "Created", value = formatReusableCreatedAt(createdAtEpochMillis))
+                }
+                if (onOpenExplorer != null) {
+                    ExplorerLinkRow(label = explorerLabel, onClick = onOpenExplorer)
                 }
             }
         }
@@ -1548,6 +1659,92 @@ private fun ReusableAmountEditSheet(
                 },
             )
         }
+    }
+}
+
+/**
+ * Description edit sheet for a reusable BOLT12 offer (iOS
+ * `ReusableOfferDescriptionSheet` parity). The text is embedded in the offer
+ * payers receive. Seeded verbatim from the current offer's stored memo;
+ * never from profile or mint metadata. Empty →
+ * removes the description (plain offer).
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+internal fun ReusableDescriptionEditSheet(
+    initialDescription: String?,
+    onDone: (String?) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    var description by rememberSaveable { mutableStateOf(initialDescription.orEmpty()) }
+    val focusRequester = remember { FocusRequester() }
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = sheetState,
+        containerColor = CashuTheme.colors.compactSheetContainer,
+    ) {
+        CompactSheetContent {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .imePadding()
+                    .verticalScroll(rememberScrollState())
+                    .padding(horizontal = CashuTheme.spacing.loose)
+                    .padding(bottom = CashuTheme.spacing.comfortable),
+            ) {
+                SheetHeader(
+                    title = "Description",
+                    navigationIcon = Icons.Outlined.Close,
+                    navigationContentDescription = "Close",
+                    onNavigationClick = onDismiss,
+                )
+                Text(
+                    text = "Add a note for anyone paying this invoice.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(bottom = CashuTheme.spacing.comfortable),
+                )
+                CashuTextField(
+                    value = description,
+                    onValueChange = { description = it.take(MAX_OFFER_DESCRIPTION_LENGTH) },
+                    label = "Description",
+                    placeholder = "e.g. Coffee tips",
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .focusRequester(focusRequester)
+                        .testTag("reusable-description-field"),
+                    keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences),
+                    minLines = 3,
+                    maxLines = 5,
+                )
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = CashuTheme.spacing.snug, bottom = CashuTheme.spacing.section),
+                    horizontalArrangement = Arrangement.spacedBy(CashuTheme.spacing.snug),
+                ) {
+                    Text(
+                        text = "Leave blank to remove.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.weight(1f),
+                    )
+                    Text(
+                        text = "${description.length} / $MAX_OFFER_DESCRIPTION_LENGTH",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                PrimaryButton(
+                    text = "Save",
+                    onClick = { onDone(description.trim().ifEmpty { null }) },
+                    colors = ButtonDefaults.buttonColors(),
+                    modifier = Modifier.fillMaxWidth().testTag("reusable-description-save"),
+                )
+            }
+        }
+        LaunchedEffect(Unit) { focusRequester.requestFocus() }
     }
 }
 

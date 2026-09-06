@@ -9,6 +9,15 @@ import org.junit.Test
 
 class MintQuoteDomainTest {
     @Test
+    fun normalizesDescriptionForPayerDisplay() {
+        assertEquals("Coffee tips Thank you ☕", normalizedOfferDescription("  Coffee tips\r\n\tThank you ☕  "))
+        assertEquals("Coffee", normalizedOfferDescription("Cof\u0000fee"))
+        assertNull(normalizedOfferDescription(" \r\n\t "))
+        assertEquals("a".repeat(640), normalizedOfferDescription("a".repeat(650)))
+        assertEquals("a".repeat(639), normalizedOfferDescription("a".repeat(639) + "😀"))
+    }
+
+    @Test
     fun findsReusableBolt12OfferOnlyForItsMintAndUnit() {
         val offer = MintQuoteInfo(
             id = "reusable-usd",
@@ -33,6 +42,61 @@ class MintQuoteDomainTest {
         )
 
         assertEquals(paidOffer, selected)
+    }
+
+    @Test
+    fun reusableBolt12OfferReuseMatchesDescriptionExactly() {
+        val plain = MintQuoteInfo(
+            id = "plain",
+            request = "lno1plain",
+            amount = null,
+            paymentMethod = PaymentMethodKind.Bolt12,
+            state = MintQuoteState.Pending,
+            expiryEpochSeconds = null,
+            mintUrl = "https://mint.example",
+            unit = "sat",
+        )
+        val described = plain.copy(id = "described", description = "Coffee tips")
+        val quotes = listOf(plain, described)
+
+        // Nil description reuses only the plain offer.
+        assertEquals(
+            plain,
+            findExistingAmountlessBolt12Offer(
+                quotes = quotes,
+                mintUrl = "https://mint.example",
+                unit = "sat",
+                description = null,
+            ),
+        )
+        // A set description reuses only the offer carrying the same memo.
+        assertEquals(
+            described,
+            findExistingAmountlessBolt12Offer(
+                quotes = quotes,
+                mintUrl = "https://mint.example",
+                unit = "sat",
+                description = "Coffee tips",
+            ),
+        )
+        // A changed description matches nothing, so the caller mints fresh.
+        assertNull(
+            findExistingAmountlessBolt12Offer(
+                quotes = quotes,
+                mintUrl = "https://mint.example",
+                unit = "sat",
+                description = "Different memo",
+            ),
+        )
+        // A plain-offer lookup ignores described offers entirely.
+        assertNull(
+            findExistingAmountlessBolt12Offer(
+                quotes = listOf(described),
+                mintUrl = "https://mint.example",
+                unit = "sat",
+                description = null,
+            ),
+        )
     }
 
     @Test

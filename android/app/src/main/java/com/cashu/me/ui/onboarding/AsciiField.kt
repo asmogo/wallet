@@ -11,6 +11,7 @@ import android.os.PowerManager
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.EaseOut
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.withInfiniteAnimationFrameNanos
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
@@ -28,7 +29,6 @@ import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.graphics.BlendMode
@@ -442,8 +442,8 @@ internal object AsciiFieldWarp {
 }
 
 /** Mutable finger state, read by the frame loop. Deliberately not Compose
- * state: the 30fps [withFrameNanos] tick already repaints, so mutations here
- * surface on the next frame without invalidating the composition per touch
+ * state: the 30fps [withInfiniteAnimationFrameNanos] tick already repaints, so
+ * mutations surface on the next frame without invalidating composition per touch
  * event. Mirrors iOS `AsciiFieldWarpTouch`. */
 internal class AsciiFieldWarpTouch {
     enum class Phase { Idle, Pressed, Released }
@@ -966,8 +966,8 @@ internal fun AsciiField(
     // The single decision point for every play/pause input, mirroring the
     // web's sync(): Reduce Motion / battery saver / staticTime paint one
     // still frame; leaving the step pair or opening the concept sheet stops
-    // the clockwork. Backgrounding pauses for free — withFrameNanos simply
-    // stops being serviced while the choreographer is idle.
+    // the clockwork. Backgrounding pauses for free — the frame clock stops
+    // being serviced while the choreographer is idle.
     val clockRuns = staticTime == null && !reducedMotion && !powerSave && active
 
     // Wall-clock zero. Time is always derived from the monotonic clock —
@@ -994,7 +994,10 @@ internal fun AsciiField(
             // skip: alternate frames on a 120 Hz panel would still be 60fps.
             var lastDrawNanos = 0L
             while (true) {
-                withFrameNanos { nanos ->
+                // Mark the ambient loop as infinite so Compose's test policy
+                // can stop it while advancing to idle. A raw frame loop keeps
+                // the recomposer busy forever on the onboarding welcome screen.
+                withInfiniteAnimationFrameNanos { nanos ->
                     val capNanos = if (interacting.value) 16_000_000L else 33_000_000L
                     if (nanos - lastDrawNanos >= capNanos) {
                         lastDrawNanos = nanos

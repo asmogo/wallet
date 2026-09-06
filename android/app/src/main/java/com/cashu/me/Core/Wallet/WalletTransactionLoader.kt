@@ -7,6 +7,7 @@ import com.cashu.me.Models.TransactionKind
 import com.cashu.me.Models.TransactionStatus
 import com.cashu.me.Models.TransactionType
 import com.cashu.me.Models.WalletTransaction
+import com.cashu.me.Models.restoringDescription
 
 internal data class WalletTransactionLoadResult(
     val transactions: List<WalletTransaction>,
@@ -76,12 +77,14 @@ internal class WalletTransactionLoader(
                 nowEpochMillis = System.currentTimeMillis(),
             ),
         )
+        val requests = walletStore.loadCashuRequests()
         val receiveTokenTransactions = pendingReceiveTokenTransactions(pendingReceiveTokens)
         // Row id spaces are disjoint by construction (saga-derived tx ids,
         // mint-issued quote ids, random pending-receive ids) and quote-backed
         // rows are skipped once CDK owns a transaction for the quote, so a
         // plain id dedupe is sufficient.
         val merged = (remoteWithTokens + pendingQuoteTransactions + receiveTokenTransactions)
+            .map { it.restoringDescription(requests) }
             .distinctBy { it.id }
             .sortedByDescending { it.dateEpochMillis }
         walletStore.saveTransactions(merged)

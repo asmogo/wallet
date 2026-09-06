@@ -9,11 +9,11 @@ struct TransactionDetailView: View {
     @ObservedObject var settings = SettingsManager.shared
     @ObservedObject private var priceService = PriceService.shared
 
+    @State private var contentHeight: CGFloat = 0
     @State private var showShareSheet = false
     @State private var isCheckingClaim = false
     @State private var manualClaimCheckResult: PendingTokenClaimCheckResult?
     @State private var manualClaimCheckTask: Task<Void, Never>?
-    @State private var contentHeight: CGFloat = 0
 
     init(transaction: WalletTransaction) {
         self.seed = transaction
@@ -104,110 +104,37 @@ struct TransactionDetailView: View {
         }
     }
 
-    /// Every transaction detail opens as a member of the same receipt-sheet
-    /// family. The sheet hugs its measured content (capped at 90% of the
-    /// screen, scrolling past that) instead of guessing a screen fraction:
-    /// fixed fractions clipped the rows behind the bottom actions on smaller
-    /// devices whenever the receipt grew — a Fee row, the fiat conversion
-    /// line, a second CTA — while fitting content on larger ones. Same
-    /// contract as `QRCodeDetailSheet` and the other content-fit receipts.
+    // Keep upstream's content-fitting receipt sizing. Described live QRs use
+    // the adaptive receive layout so Mint and Description remain visible.
+    private var usesAdaptiveQR: Bool { showsQR && transaction.displayDescription != nil }
+
     var body: some View {
         NavigationStack {
-            VStack(spacing: 24) {
-                // Group the state and amount more closely than the receipt facts.
-                VStack(spacing: 16) {
-                    // Hero: an actionable QR (unclaimed token / pending or
-                    // reusable invoice), else a state glyph that bounces in on
-                    // open — green check when completed, red X when failed;
-                    // nothing while a no-QR transaction is still pending.
-                    heroSlot
-
-                    // Receipt amounts use the same primary/secondary ordering
-                    // as Home and History. The glyph above carries state colour.
-                    TransactionReceiptAmountPair(
-                        transaction: transaction,
-                        role: showsQR ? .amountCompact : .amountConfirm,
-                        preferredPrimary: settings.homeBalancePrimary,
-                        showFiat: settings.showFiatBalance,
-                        btcPrice: priceService.btcPriceUSD,
-                        currencyCode: settings.bitcoinPriceCurrency,
-                        useBitcoinSymbol: settings.useBitcoinSymbol
-                    )
-                    .padding(.top, heroSlotIsEmpty ? 16 : 0)
-                }
-
-                // Row bottom padding + this gap leaves 24pt before the actions.
-                VStack(spacing: 12) {
-                    // Detail rows on canvas, led by Status + Date. Type is
-                    // omitted — the nav title names it.
+            Group {
+                if usesAdaptiveQR {
                     VStack(spacing: 0) {
-                        ForEach(Array(detailRows.enumerated()), id: \.offset) { _, row in
-                            if let copyValue = row.copyValue {
-                                copyableRow(label: row.label, value: row.value, copyValue: copyValue)
-                            } else {
-                                detailRow(label: row.label, value: row.value)
-                            }
+                        PaymentDetailContent { qrSize in
+                            heroSlot(qrSize: qrSize)
+                        } details: {
+                            receiptDetails
                         }
-                        if let explorerURL = onchainExplorerURL {
-                            explorerLinkRow(label: "View in block explorer", url: explorerURL)
-                        }
+                        receiptActions
+                            .padding(.horizontal)
+                            .padding(.bottom, 16)
                     }
-                    .padding(.horizontal, 4)
-
-                    if offersManualClaimCheck {
-                        switch manualClaimCheckResult {
-                        case .notClaimed:
-                            InlineNotice(
-                                message: "This token has not been claimed yet.",
-                                title: "Status checked",
-                                severity: .info
-                            )
-                        case .failed(let message):
-                            InlineNotice(
-                                message: message.text,
-                                title: "Couldn't check status",
-                                severity: message.severity
-                            )
-                        case .claimed, nil:
-                            EmptyView()
+                } else {
+                    VStack(spacing: 12) {
+                        VStack(spacing: 16) {
+                            heroSlot(qrSize: 280)
+                            receiptDetails
                         }
+                        receiptActions
                     }
-
-                    // Pending outgoing ecash gains the same one-off status action as
-                    // the generated-token screen when automatic checks are disabled.
-                    // Keep it after Copy so the two surfaces share the same action order.
-                    if offersManualClaimCheck || copyableContent != nil {
-                        VStack(spacing: 12) {
-                            if let content = copyableContent {
-                                Button(action: { copyContent(content) }) {
-                                    Text("Copy")
-                                }
-                                .flatSheetSecondaryButton()
-                                .accessibilityLabel("Copy \(qrContentTypeLabel)")
-                                .accessibilityHint("Copies the \(qrContentAccessibilityLabel) to clipboard")
-                            }
-
-                            if offersManualClaimCheck {
-                                Button(action: { startManualClaimCheck() }) {
-                                    if isCheckingClaim {
-                                        ProgressView()
-                                    } else {
-                                        Text("Check Status")
-                                    }
-                                }
-                                .glassButton()
-                                .disabled(isCheckingClaim)
-                                .accessibilityIdentifier("cashu.history.check-token-status")
-                                .accessibilityLabel(isCheckingClaim ? "Checking claim status" : "Check Status")
-                                .accessibilityInputLabels(["Check Status"])
-                            }
-                        }
-                    }
+                    .padding(.horizontal)
+                    .padding(.bottom, 16)
+                    .contentFitMeasured { contentHeight = $0 }
                 }
             }
-            .padding(.horizontal)
-            .padding(.bottom, 16)
-            .contentFitMeasured { contentHeight = $0 }
             .navigationBarTitleDisplayMode(.inline)
             .toolbarBackground(.hidden, for: .navigationBar)
             .toolbar {
@@ -237,17 +164,109 @@ struct TransactionDetailView: View {
             }
         }
         .compactBottomSheetSurface()
-        .contentFitDetent(contentHeight, estimate: 500, navigationBar: true)
+        .contentFitDetent(contentHeight, enabled: !usesAdaptiveQR, estimate: 500, navigationBar: true)
         .presentationDragIndicator(.visible)
     }
 
     // MARK: - Subviews
 
+    private var receiptDetails: some View {
+        VStack(spacing: 24) {
+            // Receipt amounts use the same primary/secondary ordering
+            // as Home and History. The glyph above carries state colour.
+            TransactionReceiptAmountPair(
+                transaction: transaction,
+                role: showsQR ? .amountCompact : .amountConfirm,
+                preferredPrimary: settings.homeBalancePrimary,
+                showFiat: settings.showFiatBalance,
+                btcPrice: priceService.btcPriceUSD,
+                currencyCode: settings.bitcoinPriceCurrency,
+                useBitcoinSymbol: settings.useBitcoinSymbol
+            )
+            .padding(.top, heroSlotIsEmpty ? 16 : 0)
+
+            // Detail rows on canvas, led by Status + Date. Type is
+            // omitted — the nav title names it.
+            VStack(spacing: 0) {
+                ForEach(Array(detailRows.enumerated()), id: \.offset) { _, row in
+                    if let copyValue = row.copyValue {
+                        copyableRow(label: row.label, value: row.value, copyValue: copyValue)
+                    } else {
+                        detailRow(label: row.label, value: row.value)
+                    }
+                    if row.label == "Mint", let description = transaction.displayDescription {
+                        DescriptionDetailRow(description: description)
+                    }
+                }
+                if !detailRows.contains(where: { $0.label == "Mint" }),
+                   let description = transaction.displayDescription {
+                    DescriptionDetailRow(description: description)
+                }
+                if let explorerURL = onchainExplorerURL {
+                    explorerLinkRow(label: "View in block explorer", url: explorerURL)
+                }
+            }
+            .padding(.horizontal, 4)
+
+            if offersManualClaimCheck {
+                switch manualClaimCheckResult {
+                case .notClaimed:
+                    InlineNotice(
+                        message: "This token has not been claimed yet.",
+                        title: "Status checked",
+                        severity: .info
+                    )
+                case .failed(let message):
+                    InlineNotice(
+                        message: message.text,
+                        title: "Couldn't check status",
+                        severity: message.severity
+                    )
+                case .claimed, nil:
+                    EmptyView()
+                }
+            }
+        }
+    }
+
+
+    @ViewBuilder
+    private var receiptActions: some View {
+        if offersManualClaimCheck || copyableContent != nil {
+            VStack(spacing: 12) {
+                if let content = copyableContent {
+                    Button(action: { copyContent(content) }) {
+                        Text("Copy")
+                    }
+                    .flatSheetSecondaryButton()
+                    .accessibilityLabel("Copy \(qrContentTypeLabel)")
+                    .accessibilityHint("Copies the \(qrContentAccessibilityLabel) to clipboard")
+                }
+
+                if offersManualClaimCheck {
+                    Button(action: { startManualClaimCheck() }) {
+                        if isCheckingClaim {
+                            ProgressView()
+                        } else {
+                            Text("Check Status")
+                        }
+                    }
+                    .glassButton()
+                    .disabled(isCheckingClaim)
+                    .accessibilityIdentifier("cashu.history.check-token-status")
+                    .accessibilityLabel(isCheckingClaim ? "Checking claim status" : "Check Status")
+                    .accessibilityInputLabels(["Check Status"])
+                }
+            }
+        }
+    }
+
+
     /// The hero above the amount. An actionable request shows its QR; otherwise a
     /// state glyph bounces in on open — green check (completed) / red X (failed),
     /// same size as the payment-success screen. A pending, no-QR tx shows nothing.
     @ViewBuilder
-    private var heroSlot: some View {
+    private func heroSlot(qrSize: CGFloat) -> some View {
         if showsQR, let content = qrContent {
             QRCodeView(
                 content: content,
@@ -258,10 +277,9 @@ struct TransactionDetailView: View {
                 onCopy: { copyContent(content) },
                 onShare: { showShareSheet = true }
             )
-            .frame(width: 280, height: 280)
+            .frame(width: qrSize, height: qrSize)
             .padding(16)
             .background(Color.white, in: RoundedRectangle(cornerRadius: 20))
-            .padding(.top, 8)
             .contextMenu {
                 Button(action: { copyContent(content) }) {
                     Label("Copy", systemImage: "doc.on.doc")
@@ -328,7 +346,7 @@ struct TransactionDetailView: View {
         }
         if transaction.kind == .onchain {
             if let mintUrl = transaction.mintUrl {
-                rows.append(("Mint", extractMintHost(mintUrl), nil))
+                rows.append(("Mint", walletManager.mints.first(where: { $0.url == mintUrl })?.name ?? extractMintHost(mintUrl), nil))
             }
             // Address/txid are reference blobs — show the decoder's standard
             // 8…6 short form; tap-to-copy carries the full value.
@@ -340,7 +358,7 @@ struct TransactionDetailView: View {
             }
         } else {
             if let mintUrl = transaction.mintUrl {
-                rows.append(("Mint", extractMintHost(mintUrl), nil))
+                rows.append(("Mint", walletManager.mints.first(where: { $0.url == mintUrl })?.name ?? extractMintHost(mintUrl), nil))
             }
             if let preimage = transaction.preimage {
                 rows.append(("Payment Proof", PaymentRequestDecoder.middleTruncated(preimage), preimage))
@@ -570,6 +588,85 @@ struct TransactionReceiptAmountPair: View {
                     .monospacedDigit()
                     .foregroundStyle(.secondary)
                     .accessibilityLabel("Alternate amount: \(secondary)")
+            }
+        }
+    }
+}
+
+/// Prose belongs to the inspector, with a native reader for longer descriptions.
+struct DescriptionDetailRow: View {
+    let description: String
+    @Environment(\.compactPaymentDetails) private var compactPaymentDetails
+    @Environment(\.verticalSizeClass) private var verticalSizeClass
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @State private var fullHeight: CGFloat = 0
+    @State private var previewHeight: CGFloat = 0
+    @State private var showFullDescription = false
+
+    private var previewLines: Int {
+        compactPaymentDetails || verticalSizeClass == .compact || dynamicTypeSize.isAccessibilitySize ? 1 : 3
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Text("Description")
+                    .foregroundStyle(.secondary)
+                Spacer()
+                if fullHeight > previewHeight + 1 {
+                    Button { showFullDescription = true } label: {
+                        Text("Read more")
+                            .fontWeight(.medium)
+                            .frame(minHeight: 44)
+                    }
+                    .accessibilityHint("Opens the full description")
+                }
+            }
+            Text(description)
+                .lineLimit(previewLines)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .fixedSize(horizontal: false, vertical: true)
+                .textSelection(.enabled)
+                .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { previewHeight = $0 }
+                .background {
+                    Text(description)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { fullHeight = $0 }
+                        .hidden()
+                        .accessibilityHidden(true)
+                }
+                .accessibilityIdentifier("payment-description-preview")
+        }
+        .font(.subheadline)
+        .padding(.horizontal, 4)
+        .padding(.vertical, 12)
+        .sheet(isPresented: $showFullDescription) {
+            PaymentDescriptionView(description: description)
+                .presentationDetents([.large])
+        }
+    }
+}
+
+private struct PaymentDescriptionView: View {
+    let description: String
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                Text(description)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .textSelection(.enabled)
+                    .padding()
+            }
+            .scrollBounceBehavior(.basedOnSize)
+            .navigationTitle("Description")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Done") { dismiss() }
+                }
             }
         }
     }

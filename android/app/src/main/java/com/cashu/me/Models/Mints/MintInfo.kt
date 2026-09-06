@@ -19,6 +19,10 @@ data class MintInfo(
     // (absent — hide the direction), non-empty = the reported methods.
     val supportedMintMethods: List<PaymentMethodKind>? = null,
     val supportedMeltMethods: List<PaymentMethodKind>? = null,
+    // NUT-04 bolt12 MintMethodSettings.description. Default false so records
+    // persisted before this landed, and mints that omit the field, fail closed
+    // (the Description row stays hidden until a live fetch advertises true).
+    val supportsBolt12MintDescription: Boolean = false,
     val onchainMintConfirmations: Int? = null,
     // NUT-06 self-reported metadata (contact / terms / software). Empty or null
     // when the mint did not report it — the UI never invents placeholders.

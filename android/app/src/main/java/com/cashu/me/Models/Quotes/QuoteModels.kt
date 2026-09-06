@@ -61,6 +61,10 @@ data class MintQuoteInfo(
     val updatedAtEpochSeconds: Long = 0,
     // Unit the quote mints into; poll/redeem must resolve the same-unit wallet.
     val unit: String = "sat",
+    // Payer-facing description embedded in a BOLT12 offer. CDK never returns it
+    // (write-only on mintQuote), so this is populated from local quote-intent
+    // metadata (CashuRequest.memo) — null everywhere else.
+    val description: String? = null,
 ) {
     val isExpired: Boolean
         get() = expiryEpochSeconds != null &&

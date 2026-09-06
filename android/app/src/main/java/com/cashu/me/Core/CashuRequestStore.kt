@@ -96,8 +96,12 @@ class CashuRequestStore(
                 amount = amount,
                 unit = unit,
                 mints = mints,
-                memo = memo?.takeIf { it.isNotBlank() },
+                // Quote-level metadata is immutable (BOLT12 offers can't change
+                // their description), so a null memo means "unknown here" and
+                // must not wipe the previously stored one.
+                memo = memo?.takeIf { it.isNotBlank() } ?: existing?.memo,
                 createdAtEpochMillis = existing?.createdAtEpochMillis ?: System.currentTimeMillis(),
+                lastPresentedAtEpochMillis = existing?.lastPresentedAtEpochMillis,
                 quoteId = quoteId,
                 quoteKind = quoteKind,
                 receivedPayments = existing?.receivedPayments.orEmpty(),
@@ -123,6 +127,18 @@ class CashuRequestStore(
         }
         persist(updated, current.currentRequestId)
     }
+
+    /** Remember reuse separately from creation so clearing a memo survives reopening. */
+    fun markQuotePresented(quoteId: String) {
+        val request = mutableState.value.requests.firstOrNull { it.quoteId == quoteId } ?: return
+        upsert(request.copy(lastPresentedAtEpochMillis = System.currentTimeMillis()), makeCurrent = false)
+    }
+
+    fun lastPresentedAmountlessOffer(mintUrl: String, unit: String): CashuRequest? =
+        mutableState.value.requests.filter {
+            it.quoteKind == "bolt12" && it.amount == null && mintUrl in it.mints &&
+                it.unit.equals(unit, ignoreCase = true)
+        }.maxByOrNull { it.lastPresentedAtEpochMillis ?: it.createdAtEpochMillis }
 
     fun attachPaymentByQuoteId(quoteId: String, transactionId: String, amount: Long) {
         val request = mutableState.value.requests.firstOrNull { it.quoteId == quoteId } ?: return
