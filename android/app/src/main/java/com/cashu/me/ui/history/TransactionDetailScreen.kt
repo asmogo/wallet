@@ -150,7 +150,8 @@ fun TransactionReceiptSheet(
     val qrContent = TransactionDisplay.qrContent(current)
     val copyableContent = TransactionDisplay.copyableContent(current)
     val title = TransactionDisplay.title(current)
-    val fields = remember(current) { TransactionDisplay.detailFields(current) }
+    val description = current.displayDescription
+    val fields = remember(current) { TransactionDisplay.detailFields(current).filterNot { it.label == "Memo" } }
     val explorerUrl = remember(current) { current.explorerUrl() }
     val pendingReceiveToken = current.token?.takeIf {
         current.isPendingReceiveToken &&
@@ -190,27 +191,29 @@ fun TransactionReceiptSheet(
                         // Hero state slot: live request → QR; completed → 64dp green
                         // check; failed → 64dp red X; pending with no QR → no glyph.
                         // State detail lives in the monochrome Status row below.
-                        when {
-                            showsQr && qrContent != null -> QrCard(
-                                content = qrContent,
-                                staticOnly = current.kind != TransactionKind.Ecash,
-                                shareSubject = title,
-                                confirmationMessage =
-                                    "Copied ${TransactionDisplay.qrLabel(current).replaceFirstChar { it.lowercase() }}",
-                            )
-                            current.status == TransactionStatus.Completed -> Icon(
-                                imageVector = Icons.Filled.CheckCircle,
-                                contentDescription = "Completed",
-                                tint = CashuTheme.colors.onReceivedContainer,
-                                modifier = Modifier.size(COMPLETED_RECEIPT_GLYPH_SIZE),
-                            )
-                            current.status == TransactionStatus.Failed -> Icon(
-                                imageVector = Icons.Filled.Cancel,
-                                contentDescription = "Failed",
-                                tint = MaterialTheme.colorScheme.error,
-                                modifier = Modifier.size(FAILED_GLYPH_SIZE),
-                            )
-                            else -> Unit
+                        if (!showsQr || description == null) {
+                            when {
+                                showsQr && qrContent != null -> QrCard(
+                                    content = qrContent,
+                                    staticOnly = current.kind != TransactionKind.Ecash,
+                                    shareSubject = title,
+                                    confirmationMessage =
+                                        "Copied ${TransactionDisplay.qrLabel(current).replaceFirstChar { it.lowercase() }}",
+                                )
+                                current.status == TransactionStatus.Completed -> Icon(
+                                    imageVector = Icons.Filled.CheckCircle,
+                                    contentDescription = "Completed",
+                                    tint = CashuTheme.colors.onReceivedContainer,
+                                    modifier = Modifier.size(COMPLETED_RECEIPT_GLYPH_SIZE),
+                                )
+                                current.status == TransactionStatus.Failed -> Icon(
+                                    imageVector = Icons.Filled.Cancel,
+                                    contentDescription = "Failed",
+                                    tint = MaterialTheme.colorScheme.error,
+                                    modifier = Modifier.size(FAILED_GLYPH_SIZE),
+                                )
+                                else -> Unit
+                            }
                         }
 
                         HeroAmount(
@@ -224,12 +227,21 @@ fun TransactionReceiptSheet(
                             compact = showsQr,
                         )
 
+                        if (description != null) {
+                            DescriptionDetailRow(description)
+                            if (showsQr && qrContent != null) {
+                                QrCard(
+                                    content = qrContent,
+                                    staticOnly = current.kind != TransactionKind.Ecash,
+                                    shareSubject = title,
+                                    confirmationMessage =
+                                        "Copied ${TransactionDisplay.qrLabel(current).replaceFirstChar { it.lowercase() }}",
+                                )
+                            }
+                        }
+
                         Column(modifier = Modifier.fillMaxWidth()) {
                             fields.forEach { field ->
-                                if (field.label == "Memo") {
-                                    DescriptionDetailRow(field.value)
-                                    return@forEach
-                                }
                                 InspectorRow(
                                     label = field.label,
                                     value = field.value,

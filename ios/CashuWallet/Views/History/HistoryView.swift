@@ -499,6 +499,7 @@ struct HistoryView: View {
         let receivedAmount = totalReceived(for: request)
         return Button {
             HapticFeedback.selection()
+            isSearchFocused = false
             selectedRequest = request
         } label: {
             HStack(spacing: 14) {
@@ -508,13 +509,6 @@ struct HistoryView: View {
                     Text(request.displayTitle)
                         .font(.body.weight(.medium))
                         .lineLimit(1)
-
-                    if let description = request.displayDescription {
-                        Text(description)
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
-                            .lineLimit(2)
-                    }
 
                     Text(formatRelativeDate(request.createdAt))
                         .cashuText(.metadata)
@@ -575,7 +569,7 @@ struct HistoryView: View {
                 .compactMap { $0 }
                 .joined(separator: ", ")
         }
-        return "\(request.displayTitle), \(request.displayDescription.map { "\($0), " } ?? "")\(amountPart), \(received ? "received" : "waiting for payment"), \(formatRelativeDate(request.createdAt))"
+        return "\(request.displayTitle), \(amountPart), \(received ? "received" : "waiting for payment"), \(formatRelativeDate(request.createdAt))"
     }
 
     // MARK: - Transaction Row
@@ -583,6 +577,7 @@ struct HistoryView: View {
     private func transactionRow(transaction: WalletTransaction) -> some View {
         return Button {
             HapticFeedback.selection()
+            isSearchFocused = false
             // Unclaimed incoming ecash goes straight to the claim flow — the
             // receive screen already shows amount, fee, mint, and memo, so an
             // intermediate detail sheet would just add a second Receive tap.
@@ -602,13 +597,6 @@ struct HistoryView: View {
                         .font(.body.weight(.medium))
                         .lineLimit(1)
 
-                    if let description = transaction.displayDescription {
-                        Text(description)
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
-                            .lineLimit(2)
-                    }
-
                     Text(formatRelativeDate(transaction.date))
                         .cashuText(.metadata)
                         .foregroundStyle(.secondary)
@@ -624,7 +612,7 @@ struct HistoryView: View {
         }
         .buttonStyle(.plain)
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("\(rowTitle(for: transaction)), \(transaction.displayDescription.map { "\($0), " } ?? "")\(formatAmount(transaction)), \(transaction.status == .completed ? "completed" : transaction.displayStatusText.lowercased()), \(formatRelativeDate(transaction.date))")
+        .accessibilityLabel("\(rowTitle(for: transaction)), \(formatAmount(transaction)), \(transaction.status == .completed ? "completed" : transaction.displayStatusText.lowercased()), \(formatRelativeDate(transaction.date))")
         .accessibilityHint(
             transaction.isPendingReceiveToken
                 ? "Opens receive review"

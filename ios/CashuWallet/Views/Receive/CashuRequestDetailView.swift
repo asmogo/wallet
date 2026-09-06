@@ -172,28 +172,9 @@ struct CashuRequestDetailView: View {
         VStack(spacing: 0) {
             ScrollView {
                 VStack(spacing: 24) {
-                    QRCodeView(
-                        content: request.encoded,
-                        showControls: false,
-                        staticOnly: true,
-                        onCopy: { copy(request.encoded) },
-                        onShare: { showShareSheet = true }
-                    )
-                        .frame(width: 280, height: 280)
-                        .padding(16)
-                        .background(Color.white, in: RoundedRectangle(cornerRadius: 20))
-                        .padding(.top, 8)
-                        .contextMenu {
-                            Button(action: { copy(request.encoded) }) {
-                                Label("Copy", systemImage: "doc.on.doc")
-                            }
-                            ShareLink(item: request.encoded) {
-                                Label("Share", systemImage: "square.and.arrow.up")
-                            }
-                        }
-                        .sheet(isPresented: $showShareSheet) {
-                            ShareSheet(items: [request.encoded])
-                        }
+                    if request.displayDescription == nil {
+                        requestQRCode(request)
+                    }
 
                     if let amount = request.amount, amount > 0 {
                         if request.unit.lowercased() == "sat" {
@@ -213,6 +194,11 @@ struct CashuRequestDetailView: View {
                                 value: Double(amount)
                             )
                         }
+                    }
+
+                    if let description = request.displayDescription {
+                        DescriptionDetailRow(description: description)
+                        requestQRCode(request)
                     }
 
                     deliveryStatus(for: request)
@@ -256,9 +242,6 @@ struct CashuRequestDetailView: View {
                         } else {
                             detailRow(label: "Unit", value: request.unit.uppercased())
                         }
-                        if let description = request.displayDescription {
-                            DescriptionDetailRow(description: description)
-                        }
                         detailRow(
                             label: "Created",
                             value: request.createdAt.formatted(date: .abbreviated, time: .shortened)
@@ -269,6 +252,7 @@ struct CashuRequestDetailView: View {
                 }
                 .padding(.horizontal)
             }
+            .scrollBounceBehavior(.basedOnSize)
 
             HStack(spacing: 12) {
                 Button(action: { copy(request.encoded) }) {
@@ -326,6 +310,31 @@ struct CashuRequestDetailView: View {
             .transition(reduceMotion ? .opacity : .opacity.combined(with: .scale(scale: 0.98)))
         } else {
             statusBadge
+        }
+    }
+
+    private func requestQRCode(_ request: CashuRequest) -> some View {
+        QRCodeView(
+            content: request.encoded,
+            showControls: false,
+            staticOnly: true,
+            onCopy: { copy(request.encoded) },
+            onShare: { showShareSheet = true }
+        )
+        .frame(width: 280, height: 280)
+        .padding(16)
+        .background(Color.white, in: RoundedRectangle(cornerRadius: 20))
+        .padding(.top, 8)
+        .contextMenu {
+            Button(action: { copy(request.encoded) }) {
+                Label("Copy", systemImage: "doc.on.doc")
+            }
+            ShareLink(item: request.encoded) {
+                Label("Share", systemImage: "square.and.arrow.up")
+            }
+        }
+        .sheet(isPresented: $showShareSheet) {
+            ShareSheet(items: [request.encoded])
         }
     }
 

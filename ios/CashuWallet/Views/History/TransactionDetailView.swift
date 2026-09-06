@@ -111,6 +111,7 @@ struct TransactionDetailView: View {
     /// bottom padding, the row-to-CTA gap every receipt shows — fits without
     /// clipping; any tighter and that gap is the first thing cut.
     private var presentationDetents: Set<PresentationDetent> {
+        if transaction.displayDescription != nil { return [.large] }
         if showsQR { return [.fraction(0.94), .large] }
         return transaction.kind == .onchain
             ? [.fraction(0.78), .large]
@@ -126,7 +127,9 @@ struct TransactionDetailView: View {
                         // reusable invoice), else a state glyph that bounces in on
                         // open — green check when completed, red X when failed;
                         // nothing while a no-QR transaction is still pending.
-                        heroSlot
+                        if !showsQR || transaction.displayDescription == nil {
+                            heroSlot
+                        }
 
                         // Receipt amounts use the same primary/secondary ordering
                         // as Home and History. The glyph above carries state colour.
@@ -140,6 +143,11 @@ struct TransactionDetailView: View {
                             useBitcoinSymbol: settings.useBitcoinSymbol
                         )
                         .padding(.top, heroSlotIsEmpty ? 32 : 0)
+
+                        if let description = transaction.displayDescription {
+                            DescriptionDetailRow(description: description)
+                            if showsQR { heroSlot }
+                        }
 
                         // Detail rows on canvas, led by Status + Date. Type is
                         // omitted — the nav title names it.
@@ -180,6 +188,7 @@ struct TransactionDetailView: View {
                     .padding(.horizontal)
                     .padding(.bottom, copyableContent == nil ? 0 : 24)
                 }
+                .scrollBounceBehavior(.basedOnSize)
 
                 // Pending outgoing ecash gains the same one-off status action as
                 // the generated-token screen when automatic checks are disabled.
@@ -352,9 +361,6 @@ struct TransactionDetailView: View {
                 rows.append(("Payment Proof", PaymentRequestDecoder.middleTruncated(preimage), preimage))
             }
         }
-        if let description = transaction.displayDescription {
-            rows.append(("Description", description, nil))
-        }
         return rows
     }
 
@@ -370,29 +376,24 @@ struct TransactionDetailView: View {
         ).formatted()
     }
 
-    @ViewBuilder
     private func detailRow(label: String, value: String) -> some View {
-        if label == "Description" {
-            DescriptionDetailRow(description: value)
-        } else {
-            HStack {
-                Text(label)
-                    .foregroundStyle(.secondary)
-                Spacer()
-                Text(value)
-                    .fontWeight(.medium)
-                    .multilineTextAlignment(.trailing)
-                    .lineLimit(1)
-                    .truncationMode(.middle)
-                    .textSelection(.enabled)
-            }
-            .font(.subheadline)
-            .padding(.horizontal, 4)
-            .padding(.vertical, 14)
-            .accessibilityElement(children: .ignore)
-            .accessibilityLabel(label)
-            .accessibilityValue(value)
+        HStack {
+            Text(label)
+                .foregroundStyle(.secondary)
+            Spacer()
+            Text(value)
+                .fontWeight(.medium)
+                .multilineTextAlignment(.trailing)
+                .lineLimit(1)
+                .truncationMode(.middle)
+                .textSelection(.enabled)
         }
+        .font(.subheadline)
+        .padding(.horizontal, 4)
+        .padding(.vertical, 14)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(label)
+        .accessibilityValue(value)
     }
 
     /// Same shape as `detailRow` but tap-to-copy: copies the FULL value while

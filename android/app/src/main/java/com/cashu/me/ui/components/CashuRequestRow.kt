@@ -13,7 +13,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextOverflow
 import com.cashu.me.Core.AmountDisplayText
 import com.cashu.me.Core.AmountFormatter
 import com.cashu.me.Core.displayMintUnitAmount
@@ -115,15 +114,6 @@ fun CashuRequestRow(
                 color = MaterialTheme.colorScheme.onSurface,
                 maxLines = 1,
             )
-            request.displayDescription?.let { description ->
-                Text(
-                    text = description,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
-                )
-            }
             Text(
                 text = timestamp,
                 style = MaterialTheme.typography.bodySmall,

@@ -1,11 +1,11 @@
 package com.cashu.me.ui.journeys
 
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.performSemanticsAction
+import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
 import androidx.compose.ui.test.onNodeWithText
-import androidx.compose.ui.test.onAllNodesWithText
-import androidx.compose.ui.test.onLast
-import androidx.compose.ui.test.performScrollTo
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.cashu.me.Models.TransactionKind
 import com.cashu.me.Models.TransactionStatus
@@ -20,6 +20,7 @@ import com.cashu.me.test.fixtures.LaunchedFixture
 import com.cashu.me.ui.testing.UiTestTags
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -51,12 +52,23 @@ class HistoryDescriptionJourneyTest {
         assertEquals(description, fixture.container.walletManager.state.value.transactions.first { it.id == payment.id }.memo)
         assertEquals(21L, fixture.container.cashuRequestStore.request(request.id)?.totalReceived)
         fixture.scenario.recreate()
-        robot.awaitTag(UiTestTags.WalletScreen).tapText("History").awaitText(description)
+        robot.awaitTag(UiTestTags.WalletScreen)
+        compose.onNodeWithText(description, useUnmergedTree = true).assertDoesNotExist()
+        compose.onNodeWithText("Outgoing coffee receipt", useUnmergedTree = true).assertDoesNotExist()
+        robot.tapText("History").awaitText("Reusable Invoice")
+        compose.onNodeWithText(description, useUnmergedTree = true).assertDoesNotExist()
+        compose.onNodeWithText("Outgoing coffee receipt", useUnmergedTree = true).assertDoesNotExist()
+        robot.tapDescription("Search history").typeIntoTag(UiTestTags.HistorySearch, "Coffee")
             .tapText("Reusable Invoice")
-        compose.onNodeWithText(description, useUnmergedTree = true).performScrollTo().assertIsDisplayed()
+        val descriptionText = compose.onNodeWithText(description, useUnmergedTree = true)
+        descriptionText.assertIsDisplayed()
+        val layouts = mutableListOf<TextLayoutResult>()
+        descriptionText.performSemanticsAction(SemanticsActions.GetTextLayoutResult) { it(layouts) }
+        assertTrue("The entire description must fit on opening, without scrolling",
+            descriptionText.fetchSemanticsNode().boundsInRoot.height >= layouts.single().size.height - 1)
         robot.awaitText("Description").pressSystemBack()
-            .tapText("Outgoing coffee receipt")
-        compose.onAllNodesWithText("Outgoing coffee receipt", useUnmergedTree = true).onLast().performScrollTo().assertIsDisplayed()
+            .tapText("Lightning paid")
+        compose.onNodeWithText("Outgoing coffee receipt", useUnmergedTree = true).assertIsDisplayed()
         robot.awaitText("Description")
     }
 }

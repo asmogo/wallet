@@ -61,8 +61,10 @@ clearing, mint/currency isolation, and preservation of payment history.
 
 ## Descriptions in paid history
 
-History and recent activity show a two-line description preview. Request and
-transaction details show the entire selectable description. Saved memos take
+History and recent activity keep their compact rows without description previews.
+Opening a request or payment shows the entire selectable description immediately
+below its amount, ahead of the QR code and metadata. Described iOS receipts open
+at full height, and descriptions do not use a separate scroll area. Saved memos take
 precedence; older records can recover descriptions from their encoded BOLT11,
 BOLT12, or Cashu payment request. Incoming receipts missing CDK metadata also
 recover the description from their persisted receive request, matched by payment

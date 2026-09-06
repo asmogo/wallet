@@ -316,6 +316,7 @@ fun HistoryScreen(
                                                 secondaryAmount = amountDisplay.secondary,
                                             ),
                                             onClick = {
+                                                keyboardController?.hide()
                                                 val pending = walletState.pendingReceiveTokens
                                                     .firstOrNull { it.tokenId == tx.id }
                                                 if (tx.isPendingReceiveToken && pending != null) {
@@ -354,7 +355,10 @@ fun HistoryScreen(
                                             timestamp = formatRelativeTimestamp(item.request.createdAtEpochMillis),
                                             primaryAmountText = amountDisplay?.primary,
                                             secondaryAmountText = amountDisplay?.secondary,
-                                            onClick = { onOpenCashuRequest(item.request) },
+                                            onClick = {
+                                                keyboardController?.hide()
+                                                onOpenCashuRequest(item.request)
+                                            },
                                             onLongClick = { requestPendingDelete = item.request },
                                         )
                                     }

@@ -307,12 +307,14 @@ fun CashuRequestDetailScreen(
                     horizontalAlignment = Alignment.CenterHorizontally,
                 ) {
                     Spacer(Modifier.height(CashuTheme.spacing.snug))
-                    QrCard(
-                        content = request.encoded,
-                        shareSubject = request.displayTitle,
-                        staticOnly = true,
-                        confirmationMessage = "Copied Cashu request",
-                    )
+                    if (request.displayDescription == null) {
+                        QrCard(
+                            content = request.encoded,
+                            shareSubject = request.displayTitle,
+                            staticOnly = true,
+                            confirmationMessage = "Copied Cashu request",
+                        )
+                    }
 
                     // Request amounts render in the request's own unit.
                     val isSatRequest = request.unit.equals("sat", ignoreCase = true)
@@ -330,6 +332,16 @@ fun CashuRequestDetailScreen(
                                 .copy(fontWeight = FontWeight.Bold)
                                 .withMonoDigits(),
                             modifier = Modifier.padding(vertical = 5.dp),
+                        )
+                    }
+
+                    request.displayDescription?.let { description ->
+                        DescriptionDetailRow(description)
+                        QrCard(
+                            content = request.encoded,
+                            shareSubject = request.displayTitle,
+                            staticOnly = true,
+                            confirmationMessage = "Copied Cashu request",
                         )
                     }
 
@@ -385,7 +397,6 @@ fun CashuRequestDetailScreen(
                             label = "Created",
                             value = formatDate(request.createdAtEpochMillis),
                         )
-                        request.displayDescription?.let { DescriptionDetailRow(it) }
                         if (request.totalReceived > 0L) {
                             InspectorRow(
                                 label = "Total received",
