@@ -107,7 +107,6 @@ import com.cashu.me.Models.PaymentMethodKind
 import com.cashu.me.ui.components.AmountEntryHero
 import com.cashu.me.ui.components.AmountFlipDisplay
 import com.cashu.me.ui.components.AmountText
-import com.cashu.me.ui.components.CanvasDivider
 import com.cashu.me.ui.components.CashuTextField
 import com.cashu.me.ui.components.CompactSheetContent
 import com.cashu.me.ui.components.ExplorerLinkRow
@@ -124,6 +123,8 @@ import com.cashu.me.ui.components.NumberPadFooter
 import com.cashu.me.ui.components.PaymentStatusPhase
 import com.cashu.me.ui.components.PaymentStatusScreen
 import com.cashu.me.ui.components.PrimaryButton
+import com.cashu.me.ui.components.PaymentDetailContent
+import com.cashu.me.ui.components.DescriptionDetailRow
 import com.cashu.me.ui.components.QrCard
 import com.cashu.me.ui.components.SheetHeader
 import com.cashu.me.ui.components.TwoFaceScreen
@@ -977,9 +978,11 @@ fun ReceiveLightningScreen(
                                 MintQuoteSettlementState.Waiting
                             else -> null
                         },
-                        mintName = activeMint?.name,
-                        createdAtEpochMillis = quoteIntent?.createdAtEpochMillis,
-                        descriptionLabel = quoteIntent?.memo
+                        mintName = walletState.mints.firstOrNull { it.url == liveQuote.mintUrl }?.name
+                            ?: liveQuote.mintUrl?.let { android.net.Uri.parse(it).host }
+                            ?: activeMint?.name,
+                        createdAtEpochMillis = quoteIntent?.createdAtEpochMillis ?: quoteCreatedAtMillis,
+                        descriptionLabel = quoteIntent?.displayDescription
                             ?: liveQuote.description,
                         errorText = errorText,
                         amountPrimary = AmountDisplayPrimary.fromRaw(settings.amountDisplayPrimary),
@@ -1303,27 +1306,22 @@ private fun DisplayFace(
     val confirmationToastController = LocalConfirmationToastController.current
     val isReusable = quote.paymentMethod == PaymentMethodKind.Bolt12
     Column(modifier = Modifier.fillMaxSize()) {
-        // Scrolling content region; the copy CTA is pinned to the bottom (iOS
-        // parity — the QR is the focal element, actions sit below the fold).
-        Column(
-            modifier = Modifier
-                .weight(1f)
-                .fillMaxWidth()
-                .verticalScroll(rememberScrollState()),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(CashuTheme.spacing.comfortable),
+        PaymentDetailContent(
+            modifier = Modifier.weight(1f),
+            hero = { qrSize ->
+                QrCard(
+                    content = quote.request,
+                    size = qrSize,
+                    shareSubject = "Payment request",
+                    staticOnly = true,
+                    confirmationMessage = if (quote.paymentMethod == PaymentMethodKind.Onchain) {
+                        "Copied Bitcoin address"
+                    } else {
+                        "Copied payment request"
+                    },
+                )
+            },
         ) {
-            Spacer(Modifier.height(CashuTheme.spacing.comfortable))
-            QrCard(
-                content = quote.request,
-                shareSubject = "Payment request",
-                staticOnly = true,
-                confirmationMessage = if (quote.paymentMethod == PaymentMethodKind.Onchain) {
-                    "Copied Bitcoin address"
-                } else {
-                    "Copied payment request"
-                },
-            )
             if (amountLabel != null) {
                 GeneratedInvoiceAmount(
                     amount = quote.amount ?: 0L,
@@ -1349,15 +1347,21 @@ private fun DisplayFace(
             if (!isReusable) {
                 ExpiryCaption(expirySeconds = quote.expiryEpochSeconds)
             }
-            if (isReusable) {
-                // Cashu-Request-style inspector group (iOS reusableOfferDisplayView).
-                Column(modifier = Modifier.fillMaxWidth()) {
-                    if (mintName != null) {
-                        InspectorRow(
-                            label = "Mint",
-                            value = mintName,
-                        )
-                    }
+            Column(modifier = Modifier.fillMaxWidth()) {
+                if (mintName != null) {
+                    InspectorRow(label = "Mint", value = mintName)
+                }
+                if (isReusable && onEditReusableDescription != null) {
+                    InspectorRow(
+                        label = "Description",
+                        value = descriptionLabel ?: "None",
+                        editable = true,
+                        onClick = onEditReusableDescription,
+                    )
+                } else if (!descriptionLabel.isNullOrBlank()) {
+                    DescriptionDetailRow(descriptionLabel)
+                }
+                if (isReusable) {
                     InspectorRow(
                         label = "Amount",
                         value = amountLabel ?: "Any",
@@ -1365,42 +1369,16 @@ private fun DisplayFace(
                         editable = onEditReusableAmount != null,
                         onClick = onEditReusableAmount,
                     )
-                    // Payer-facing offer description — only when the mint
-                    // advertised NUT-04 bolt12 MintMethodSettings.description.
-                    if (onEditReusableDescription != null) {
-                        CanvasDivider(leadingInset = 16.dp)
-                        InspectorRow(
-                            label = "Description",
-                            value = descriptionLabel ?: "None",
-                            editable = true,
-                            onClick = onEditReusableDescription,
-                        )
-                    }
-                    if (createdAtEpochMillis != null) {
-                        InspectorRow(
-                            label = "Created",
-                            value = formatReusableCreatedAt(createdAtEpochMillis),
-                        )
-                    }
                     if (receivedAmountLabel != null) {
-                        InspectorRow(
-                            label = "Total received",
-                            value = receivedAmountLabel,
-                            valueMonospaced = true,
-                        )
+                        InspectorRow(label = "Total received", value = receivedAmountLabel,
+                            valueMonospaced = true)
                     }
                 }
-            } else if (mintName != null || onOpenExplorer != null) {
-                Column(modifier = Modifier.fillMaxWidth()) {
-                    if (mintName != null) {
-                        InspectorRow(
-                            label = "Mint",
-                            value = mintName,
-                        )
-                    }
-                    if (onOpenExplorer != null) {
-                        ExplorerLinkRow(label = explorerLabel, onClick = onOpenExplorer)
-                    }
+                if (createdAtEpochMillis != null) {
+                    InspectorRow(label = "Created", value = formatReusableCreatedAt(createdAtEpochMillis))
+                }
+                if (onOpenExplorer != null) {
+                    ExplorerLinkRow(label = explorerLabel, onClick = onOpenExplorer)
                 }
             }
         }

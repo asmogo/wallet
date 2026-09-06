@@ -170,10 +170,10 @@ struct CashuRequestDetailView: View {
     @ViewBuilder
     private func content(request: CashuRequest) -> some View {
         VStack(spacing: 0) {
-            ScrollView {
-                VStack(spacing: 24) {
-                    requestQRCode(request)
-
+            PaymentDetailContent { qrSize in
+                requestQRCode(request, size: qrSize)
+            } details: {
+                VStack(spacing: 16) {
                     if let amount = request.amount, amount > 0 {
                         if request.unit.lowercased() == "sat" {
                             CurrencyAmountDisplay(
@@ -201,30 +201,24 @@ struct CashuRequestDetailView: View {
                     }
 
                     VStack(spacing: 0) {
+                        if request.rail == .ecash {
+                            editableRow(label: "Mint", value: mintDisplayValue(for: request),
+                                        action: { showMintPicker = true })
+                        } else {
+                            detailRow(label: "Mint", value: mintDisplayValue(for: request))
+                        }
+                        if let description = request.displayDescription {
+                            DescriptionDetailRow(description: description)
+                        }
                         // Only the ecash NUT-18 request can re-mint its Mint /
                         // Amount in place (that's what `regenerate` rebuilds).
                         // Quote-backed rails (BOLT12 offer, etc.) are read-only
                         // here until the unified editable detail lands.
                         if request.rail == .ecash {
-                            editableRow(
-                                label: "Mint",
-                                value: mintDisplayValue(for: request),
-                                action: { showMintPicker = true }
-                            )
-                            editableRow(
-                                label: "Amount",
-                                value: amountDisplayValue(for: request),
-                                action: { showAmountPicker = true }
-                            )
-                        } else {
-                            detailRow(
-                                label: "Mint",
-                                value: mintDisplayValue(for: request)
-                            )
-                            detailRow(
-                                label: "Amount",
-                                value: amountDisplayValue(for: request)
-                            )
+                            editableRow(label: "Amount", value: amountDisplayValue(for: request),
+                                        action: { showAmountPicker = true })
+                        } else if request.amount == nil {
+                            detailRow(label: "Amount", value: amountDisplayValue(for: request))
                         }
                         if unitEditable(for: request) {
                             editableRow(
@@ -232,7 +226,7 @@ struct CashuRequestDetailView: View {
                                 value: request.unit.uppercased(),
                                 action: { showUnitPicker = true }
                             )
-                        } else {
+                        } else if request.rail == .ecash {
                             detailRow(label: "Unit", value: request.unit.uppercased())
                         }
                         detailRow(
@@ -240,17 +234,8 @@ struct CashuRequestDetailView: View {
                             value: request.createdAt.formatted(date: .abbreviated, time: .shortened)
                         )
                     }
-                    .padding(.top, 8)
                     .padding(.horizontal, 4)
                 }
-                .padding(.horizontal)
-            }
-            .scrollBounceBehavior(.basedOnSize)
-
-            if let description = request.displayDescription {
-                DescriptionDetailRow(description: description)
-                    .padding(.horizontal)
-                    .layoutPriority(1)
             }
 
             HStack(spacing: 12) {
@@ -312,7 +297,7 @@ struct CashuRequestDetailView: View {
         }
     }
 
-    private func requestQRCode(_ request: CashuRequest) -> some View {
+    private func requestQRCode(_ request: CashuRequest, size: CGFloat) -> some View {
         QRCodeView(
             content: request.encoded,
             showControls: false,
@@ -320,10 +305,9 @@ struct CashuRequestDetailView: View {
             onCopy: { copy(request.encoded) },
             onShare: { showShareSheet = true }
         )
-        .frame(width: 280, height: 280)
+        .frame(width: size, height: size)
         .padding(16)
         .background(Color.white, in: RoundedRectangle(cornerRadius: 20))
-        .padding(.top, 8)
         .contextMenu {
             Button(action: { copy(request.encoded) }) {
                 Label("Copy", systemImage: "doc.on.doc")
@@ -352,7 +336,7 @@ struct CashuRequestDetailView: View {
         }
         .font(.subheadline)
         .padding(.vertical, 12)
-        .padding(.horizontal, 8)
+        .padding(.horizontal, 4)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(label)
         .accessibilityValue(value)
@@ -376,7 +360,7 @@ struct CashuRequestDetailView: View {
             }
             .font(.subheadline)
             .padding(.vertical, 12)
-            .padding(.horizontal, 8)
+            .padding(.horizontal, 4)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)

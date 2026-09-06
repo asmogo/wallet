@@ -9,6 +9,7 @@
 /* Begin PBXBuildFile section */
 		BD0100000000000000000002 /* ReceivedBalanceFeedback.swift in Sources */ = {isa = PBXBuildFile; fileRef = BD0100000000000000000001 /* ReceivedBalanceFeedback.swift */; };
 		BD0100000000000000000004 /* ReceivedBalanceFeedbackTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BD0100000000000000000003 /* ReceivedBalanceFeedbackTests.swift */; };
+		EA1850000000000000000001 /* PaymentDetailContent.swift in Sources */ = {isa = PBXBuildFile; fileRef = EA1850000000000000000002 /* PaymentDetailContent.swift */; };
 		A09100000000000000000007 /* LifecycleSafeWalletDatabase.swift in Sources */ = {isa = PBXBuildFile; fileRef = A09100000000000000000008 /* LifecycleSafeWalletDatabase.swift */; };
 		A09100000000000000000005 /* WalletAuditRegressionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A09100000000000000000006 /* WalletAuditRegressionTests.swift */; };
 		A09100000000000000000003 /* MintURLIdentity.swift in Sources */ = {isa = PBXBuildFile; fileRef = A09100000000000000000004 /* MintURLIdentity.swift */; };
@@ -202,6 +203,7 @@
 /* Begin PBXFileReference section */
 		BD0100000000000000000001 /* ReceivedBalanceFeedback.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReceivedBalanceFeedback.swift; sourceTree = "<group>"; };
 		BD0100000000000000000003 /* ReceivedBalanceFeedbackTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = ReceivedBalanceFeedbackTests.swift; path = CashuWalletTests/ReceivedBalanceFeedbackTests.swift; sourceTree = "<group>"; };
+		EA1850000000000000000002 /* PaymentDetailContent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PaymentDetailContent.swift; sourceTree = "<group>"; };
 		A09100000000000000000008 /* LifecycleSafeWalletDatabase.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LifecycleSafeWalletDatabase.swift; sourceTree = "<group>"; };
 		A09100000000000000000006 /* WalletAuditRegressionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CashuWalletTests/WalletAuditRegressionTests.swift; sourceTree = "<group>"; };
 		A09100000000000000000004 /* MintURLIdentity.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MintURLIdentity.swift; sourceTree = "<group>"; };
@@ -658,6 +660,7 @@
 				6A8EC9492F2580000058C21B /* TransactionIcon.swift */,
 				6A8EC9332F244BD80058C21B /* ScannerWrapperView.swift */,
 				2100000000000010 /* QRCodeView.swift */,
+				EA1850000000000000000002 /* PaymentDetailContent.swift */,
 				DD00000000000014 /* ErrorBannerView.swift */,
 				3DC08FE85DFC643906176894 /* LiquidGlassModifiers.swift */,
 				21000000000000CF /* MintMethodIcons.swift */,
@@ -1104,6 +1107,7 @@
 				110000000000000D /* HistoryView.swift in Sources */,
 				110000000000000E /* SettingsView.swift in Sources */,
 				1100000000000010 /* QRCodeView.swift in Sources */,
+				EA1850000000000000000001 /* PaymentDetailContent.swift in Sources */,
 				6A8EC9482F2580000058C21B /* TransactionIcon.swift in Sources */,
 				6A8EC94A2F2590000058C21B /* PriceService.swift in Sources */,
 				6A8EC94C2F25A0000058C21B /* NostrService.swift in Sources */,

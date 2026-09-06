@@ -8,7 +8,6 @@ import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onLast
-import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.onNodeWithText
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.cashu.me.Models.TransactionKind
@@ -71,10 +70,10 @@ class HistoryDescriptionJourneyTest {
         preview.performSemanticsAction(SemanticsActions.GetTextLayoutResult) { it(layouts) }
         assertTrue("The visible preview must fit without scrolling",
             preview.fetchSemanticsNode().boundsInRoot.height >= layouts.single().size.height - 1)
-        val initialBounds = preview.fetchSemanticsNode().boundsInRoot
-        compose.onNodeWithText("Created", useUnmergedTree = true).performScrollTo().assertIsDisplayed()
-        assertEquals("The description stays at the bottom while details scroll",
-            initialBounds, preview.fetchSemanticsNode().boundsInRoot)
+        val mintBounds = compose.onNodeWithText("Mint", useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
+        val descriptionBounds = compose.onNodeWithText("Description", useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
+        assertTrue("Description belongs immediately below Mint in the inspector",
+            descriptionBounds.top > mintBounds.bottom && descriptionBounds.top - mintBounds.bottom < 160)
         robot.tapText("Read more")
         compose.onAllNodesWithText(description, useUnmergedTree = true).onLast().assertIsDisplayed()
         robot.tapText("Done")

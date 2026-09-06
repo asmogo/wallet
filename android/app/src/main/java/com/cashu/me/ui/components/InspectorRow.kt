@@ -146,13 +146,13 @@ fun InspectorRow(
 }
 
 
-/** A bounded, non-scrolling footer keeps descriptions visible on small screens. */
+/** Prose belongs to the inspector, with a native reader for longer descriptions. */
 @Composable
 fun DescriptionDetailRow(description: String, label: String = "Description") {
     var overflowing by remember(description) { mutableStateOf(false) }
     var showFullDescription by remember(description) { mutableStateOf(false) }
     val configuration = LocalConfiguration.current
-    val previewLines = if (configuration.orientation == Configuration.ORIENTATION_LANDSCAPE ||
+    val previewLines = if (LocalCompactPaymentDetails.current || configuration.orientation == Configuration.ORIENTATION_LANDSCAPE ||
         configuration.fontScale > 1.3f) 1 else 3
 
     Column(

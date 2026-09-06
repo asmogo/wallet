@@ -81,6 +81,7 @@ import com.cashu.me.ui.components.NumberPadFooter
 import com.cashu.me.ui.components.NoticeSeverity
 import com.cashu.me.ui.components.PaymentStatusPhase
 import com.cashu.me.ui.components.PaymentStatusScreen
+import com.cashu.me.ui.components.PaymentDetailContent
 import com.cashu.me.ui.components.QrCard
 import com.cashu.me.ui.components.SecondaryButton
 import com.cashu.me.ui.components.SheetHeader
@@ -297,23 +298,18 @@ fun CashuRequestDetailScreen(
                     .fillMaxSize()
                     .padding(padding),
             ) {
-                Column(
-                    modifier = Modifier
-                        .weight(1f)
-                        .fillMaxWidth()
-                        .verticalScroll(rememberScrollState())
-                        .padding(horizontal = CashuTheme.spacing.comfortable),
-                    verticalArrangement = Arrangement.spacedBy(CashuTheme.spacing.comfortable),
-                    horizontalAlignment = Alignment.CenterHorizontally,
+                PaymentDetailContent(
+                    modifier = Modifier.weight(1f),
+                    hero = { qrSize ->
+                        QrCard(
+                            content = request.encoded,
+                            size = qrSize,
+                            shareSubject = request.displayTitle,
+                            staticOnly = true,
+                            confirmationMessage = "Copied payment request",
+                        )
+                    },
                 ) {
-                    Spacer(Modifier.height(CashuTheme.spacing.snug))
-                    QrCard(
-                        content = request.encoded,
-                        shareSubject = request.displayTitle,
-                        staticOnly = true,
-                        confirmationMessage = "Copied Cashu request",
-                    )
-
                     // Request amounts render in the request's own unit.
                     val isSatRequest = request.unit.equals("sat", ignoreCase = true)
                     val requestCurrency = CurrencyRegistry.currencyForMintUnit(request.unit)
@@ -366,21 +362,26 @@ fun CashuRequestDetailScreen(
                             editable = requestEditable,
                             onClick = { mintPickerOpen = true },
                         )
-                        InspectorRow(
-                            label = "Amount",
-                            value = request.amount?.let {
-                                if (isSatRequest) "$it sat" else formatRequestAmount(it)
-                            } ?: "Any",
-                            valueMonospaced = true,
-                            editable = requestEditable,
-                            onClick = { amountPickerOpen = true },
-                        )
-                        InspectorRow(
-                            label = "Unit",
-                            value = request.unit.uppercase(),
-                            editable = requestEditable && requestMint?.supportsMultipleMintUnits == true,
-                            onClick = { unitPickerOpen = true },
-                        )
+                        request.displayDescription?.let { DescriptionDetailRow(it) }
+                        if (request.isEcashRequest || request.amount == null) {
+                            InspectorRow(
+                                label = "Amount",
+                                value = request.amount?.let {
+                                    if (isSatRequest) "$it sat" else formatRequestAmount(it)
+                                } ?: "Any",
+                                valueMonospaced = true,
+                                editable = requestEditable,
+                                onClick = { amountPickerOpen = true },
+                            )
+                        }
+                        if (request.isEcashRequest) {
+                            InspectorRow(
+                                label = "Unit",
+                                value = request.unit.uppercase(),
+                                editable = requestEditable && requestMint?.supportsMultipleMintUnits == true,
+                                onClick = { unitPickerOpen = true },
+                            )
+                        }
                         InspectorRow(
                             label = "Created",
                             value = formatDate(request.createdAtEpochMillis),
@@ -392,6 +393,7 @@ fun CashuRequestDetailScreen(
                                 valueMonospaced = true,
                             )
                         }
+
                     }
 
                     InlineNoticeHost(
@@ -400,10 +402,7 @@ fun CashuRequestDetailScreen(
                         severity = NoticeSeverity.Error,
                     )
 
-                    Spacer(Modifier.height(CashuTheme.spacing.snug))
                 }
-
-                request.displayDescription?.let { DescriptionDetailRow(it) }
 
                 DetailActionFooter {
                     Row(
