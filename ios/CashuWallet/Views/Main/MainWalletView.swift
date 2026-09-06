@@ -26,9 +26,9 @@ struct MainWalletView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.dynamicTypeSize) private var typeSize
     @Environment(\.cashuFonts) private var fonts
+    @Environment(\.scenePhase) private var scenePhase
 
-    @State private var receivedDelta: ReceivedDelta?
-    @State private var deltaDismissTask: Task<Void, Never>?
+    @State private var receivedFeedback = ReceivedBalanceFeedback()
     @State private var contactlessCoordinator = ContactlessPaymentCoordinator()
     @State private var selectedTransaction: WalletTransaction?
     @State private var isSheetDismissing = false
@@ -173,13 +173,15 @@ struct MainWalletView: View {
             // "+N sat".
             let unit = note.userInfo?["unit"] as? String ?? "sat"
             guard unit.lowercased() == "sat" else { return }
-            let fee = note.userInfo?["fee"] as? UInt64
             // Only background receives (poster sets "homeHaptic") buzz here; in-flow
             // receives own the success haptic on their confirmation surface.
             let playHaptic = note.userInfo?["homeHaptic"] as? Bool ?? false
-            showReceivedDelta(amount: amount, fee: fee, playHaptic: playHaptic)
+            showReceivedDelta(amount: amount, playHaptic: playHaptic)
         }
-        .onDisappear { deltaDismissTask?.cancel() }
+        .onDisappear { receivedFeedback.clear() }
+        .onChange(of: scenePhase) { _, phase in
+            if phase == .background { receivedFeedback.clear() }
+        }
     }
 
     // MARK: - Fixed Top Section
@@ -325,8 +327,8 @@ struct MainWalletView: View {
     @ViewBuilder
     private func balanceStatusLine(_ display: AmountDisplayText, secondaryValue: Double?) -> some View {
         ZStack {
-            if let delta = receivedDelta {
-                receivedDeltaBeat(delta)
+            if let amount = receivedFeedback.amount {
+                receivedDeltaBeat(amount)
                     .transition(reduceMotion ? .opacity : .asymmetric(insertion: .scale(scale: 0.9).combined(with: .opacity), removal: .opacity))
             } else if !walletManager.isRuntimeReady {
                 Text("Preparing wallet…")
@@ -352,8 +354,8 @@ struct MainWalletView: View {
     /// no unit (the balance beside it carries it), no directional arrow (the
     /// down-arrow stays exclusive to row badges). VoiceOver-hidden; the balance
     /// announces the new total.
-    private func receivedDeltaBeat(_ delta: ReceivedDelta) -> some View {
-        Text("+\(settings.formatAmountShort(delta.amount))")
+    private func receivedDeltaBeat(_ amount: UInt64) -> some View {
+        Text("+\(settings.formatAmountShort(amount))")
             .monospacedDigit()
             .font(.body.weight(.semibold))
             .foregroundStyle(.secondary)
@@ -373,19 +375,9 @@ struct MainWalletView: View {
     /// confirms (npub.cash). In-flow receives (Lightning / ecash paste via
     /// PaymentStatusView, a watched Cashu request) already own a success haptic,
     /// so they leave it off to avoid a double-buzz.
-    private func showReceivedDelta(amount: UInt64, fee: UInt64?, playHaptic: Bool) {
-        deltaDismissTask?.cancel()
+    private func showReceivedDelta(amount: UInt64, playHaptic: Bool) {
         if playHaptic { HapticFeedback.notification(.success) }
-        withAnimation(receivedDeltaAnimation) {
-            receivedDelta = ReceivedDelta(amount: amount, fee: fee)
-        }
-        deltaDismissTask = Task { @MainActor in
-            try? await Task.sleep(for: .seconds(2.5))
-            guard !Task.isCancelled else { return }
-            withAnimation(receivedDeltaAnimation) {
-                receivedDelta = nil
-            }
-        }
+        receivedFeedback.show(amount: amount, animation: receivedDeltaAnimation)
     }
 
     // MARK: - Action Buttons (Receive + Send)
@@ -793,14 +785,6 @@ struct MainWalletView: View {
         )
         .environmentObject(walletManager)
     }
-}
-
-/// A just-received amount, surfaced as the transient balance beat. The `id`
-/// makes rapid successive receives re-trigger the entrance + checkmark bounce.
-private struct ReceivedDelta: Identifiable, Equatable {
-    let id = UUID()
-    let amount: UInt64
-    let fee: UInt64?
 }
 
 private struct TopInsetHeightKey: PreferenceKey {
