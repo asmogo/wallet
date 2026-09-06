@@ -121,7 +121,12 @@ fun AmountFlipDisplay(
     Column(
         modifier = modifier.then(toggleModifier),
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(CashuTheme.spacing.micro),
+        // Geist's entry hero has a tighter line box than iOS's SF amount.
+        // Compensate here so the visible conversion gap matches, without
+        // changing the hero's metrics or the smaller receipt amount pairs.
+        verticalArrangement = Arrangement.spacedBy(
+            if (entryRaw != null) CashuTheme.spacing.default else CashuTheme.spacing.micro,
+        ),
     ) {
         val primaryStyle =
             (primaryTextStyle ?: MaterialTheme.typography.displayMedium).withMonoDigits()

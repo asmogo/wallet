@@ -63,7 +63,8 @@ fun TransactionRow(
     val unsettled = tx.isUnsettled
     val amountColor = when {
         unsettled -> MaterialTheme.colorScheme.onSurfaceVariant
-        incoming -> CashuTheme.colors.onReceivedContainer
+        // Match iOS TransactionAmountColumn's .green ledger amounts.
+        incoming -> CashuTheme.colors.received
         else -> MaterialTheme.colorScheme.onSurface
     }
     val amountText = if (!unsettled && incoming) "+${model.primaryAmount}" else model.primaryAmount
