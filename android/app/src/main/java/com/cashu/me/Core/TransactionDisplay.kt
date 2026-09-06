@@ -19,7 +19,7 @@ data class TransactionDetailField(
 object TransactionDisplay {
     // Kind-first, capitalized kind, lowercase verb — single source of truth for
     // rows AND the detail title, so a row and the sheet it opens read identically.
-    fun title(transaction: WalletTransaction): String = when (transaction.kind) {
+    fun title(transaction: WalletTransaction): String = if (transaction.isPendingReceiveToken) "Ecash to claim" else when (transaction.kind) {
         TransactionKind.Lightning -> when {
             transaction.type != TransactionType.Incoming -> "Lightning paid"
             // Nothing has been received while the invoice awaits payment.
@@ -38,7 +38,7 @@ object TransactionDisplay {
         }
     }
 
-    // The Status detail row: monochrome value, the hero glyph carries colour.
+    // Explicit, monochrome lifecycle text in the shared receipt inspector.
     fun statusText(transaction: WalletTransaction): String = when (transaction.status) {
         TransactionStatus.Completed -> when (transaction.kind) {
             TransactionKind.Ecash -> "Claimed"
@@ -54,24 +54,23 @@ object TransactionDisplay {
         transaction.token ?: transaction.invoice
 
     /**
-     * The QR hero appears only while the artifact remains useful. Ecash is
-     * shareable only for an unclaimed outgoing send; an incoming pending token
-     * is money to claim, not a payment code. One-shot Lightning invoices retire
-     * after settlement, reusable BOLT12 offers stay live, and on-chain addresses
-     * retire once the deposit is minted — a confirmed receive is a historical
-     * receipt (checkmark hero), not a payment code to re-present.
+     * Availability behind Show QR code. Incoming tokens need claiming; outgoing
+     * Lightning/on-chain payments are receipts. Reusable incoming offers remain
+     * usable after payment, while settled one-shot artifacts retire.
      */
     fun showsQr(transaction: WalletTransaction): Boolean = when (transaction.kind) {
         TransactionKind.Ecash ->
-            transaction.token != null &&
+            !transaction.token.isNullOrEmpty() &&
                 transaction.type == TransactionType.Outgoing &&
                 transaction.status == TransactionStatus.Pending
         TransactionKind.Lightning ->
-            transaction.invoice != null &&
+            transaction.type == TransactionType.Incoming && !transaction.invoice.isNullOrEmpty() &&
                 (transaction.status == TransactionStatus.Pending ||
-                    transaction.invoice.startsWith("lno", ignoreCase = true))
+                    (transaction.status == TransactionStatus.Completed &&
+                        transaction.invoice.startsWith("lno", ignoreCase = true)))
         TransactionKind.Onchain ->
-            transaction.invoice != null && transaction.status == TransactionStatus.Pending
+            transaction.type == TransactionType.Incoming && !transaction.invoice.isNullOrEmpty() &&
+                transaction.status == TransactionStatus.Pending
     }
 
     /**

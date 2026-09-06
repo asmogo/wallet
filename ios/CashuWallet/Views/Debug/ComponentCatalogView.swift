@@ -20,10 +20,10 @@ struct ComponentCatalogView: View {
     /// Which page to render. Split in two so each fits one screenshot without
     /// scrolling, and so each pairs with its Android counterpart.
     enum Page {
-        case matrix, variants
+        case matrix, variants, activity
 
         init(rawValue: String?) {
-            self = rawValue == "variants" ? .variants : .matrix
+            self = rawValue == "activity" ? .activity : rawValue == "variants" ? .variants : .matrix
         }
     }
 
@@ -35,6 +35,8 @@ struct ComponentCatalogView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 20) {
             switch page {
+            case .activity:
+                ActivityDetailCatalog()
             case .matrix:
                 noticeMatrix
                 bannerSection
@@ -144,6 +146,55 @@ struct ComponentCatalogView: View {
             content()
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
+/// Deterministic receipts for native UI checks; no wallet initialization or mint is needed.
+private struct ActivityDetailCatalog: View {
+    @State private var selectedTransaction: WalletTransaction?
+    @State private var selectedRequest: CashuRequest?
+    private let date = Date(timeIntervalSince1970: 1_788_768_000)
+
+    private var transactions: [WalletTransaction] {
+        [
+            .init(id: "pending-lightning", amount: 2100, type: .incoming, kind: .lightning,
+                  date: date, memo: "Coffee payment", status: .pending,
+                  mintUrl: "https://mint.example", invoice: "lnbc1test", isUnpaidInvoice: true),
+            .init(id: "paid-lightning", amount: 2100, type: .incoming, kind: .lightning,
+                  date: date, memo: "Coffee payment", status: .completed,
+                  mintUrl: "https://mint.example", invoice: "lnbc1test"),
+            .init(id: "sent-lightning", amount: 2100, type: .outgoing, kind: .lightning,
+                  date: date, status: .completed, mintUrl: "https://mint.example",
+                  preimage: "0123456789abcdef0123456789abcdef", fee: 2),
+            .init(id: "pending-ecash", amount: 2100, type: .outgoing, kind: .ecash,
+                  date: date, status: .pending, mintUrl: "https://mint.example", token: "cashu-token"),
+            .init(id: "received-ecash", amount: 2100, type: .incoming, kind: .ecash,
+                  date: date, status: .completed, mintUrl: "https://mint.example", token: "cashu-token"),
+            .init(id: "received-bitcoin", amount: 2100, type: .incoming, kind: .onchain,
+                  date: date, status: .completed, mintUrl: "https://mint.example",
+                  preimage: "0123456789abcdef0123456789abcdef", invoice: "bc1qfixture"),
+        ]
+    }
+
+    var body: some View {
+        VStack(spacing: 16) {
+            Text("Activity details").font(.title)
+            ForEach(transactions) { transaction in
+                Button(transaction.displayTitle) { selectedTransaction = transaction }
+                    .accessibilityIdentifier(transaction.id)
+            }
+            Button("Reusable Invoice") {
+                selectedRequest = CashuRequest(
+                    id: "catalog-offer", encoded: "lno1fixture", mints: ["https://mint.example"],
+                    memo: "Coffee tips", createdAt: date,
+                    receivedPayments: [.init(transactionId: "fixture-payment", amount: 2100, receivedAt: date)],
+                    rail: .bolt12, reusable: true
+                )
+            }
+            .accessibilityIdentifier("reusable-invoice")
+        }
+        .sheet(item: $selectedTransaction) { TransactionDetailView(transaction: $0) }
+        .sheet(item: $selectedRequest) { CashuRequestReceiptView(request: $0) }
     }
 }
 

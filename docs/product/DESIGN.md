@@ -193,6 +193,33 @@ What this system explicitly rejects, pulled verbatim from docs/product/PRODUCT.m
   `pencil` hint glyph. Tap opens a `.medium`-detent sub-sheet rather than pushing
   a screen. No leading field icon — see The Iconless-Row Rule, §5.
 
+### Unified activity detail sheets (2026-09-06)
+
+This contract supersedes the older hero-slot, QR-at-top, and share-at-top rules
+below **for History and Home activity details** on both iOS and Android. Creation,
+request management, and live payment success screens retain their own flow UI.
+
+- Every incoming/outgoing transaction and stored receive request opens a native,
+  content-fitting bottom sheet with a centered title and drag handle. Dismiss by
+  swiping, native accessibility dismissal, or Android Back; no close/share toolbar.
+- Stable order: amount at `amountConfirm`, Status, Date, fee when applicable, Mint,
+  Description, reference/proof rows, then relevant actions. No changing QR/check/X
+  hero and no changing amount scale between pending, completed, failed, and expired.
+- Actionable artifacts have an initially collapsed **Show QR code** disclosure below
+  the facts. Expanding it preserves the receipt and exposes the QR's native Copy/
+  Share context actions. A visible Copy button remains below it.
+- QR eligibility: pending outgoing ecash; pending incoming Lightning/on-chain;
+  active reusable ecash requests and BOLT12 offers. Settled/expired/failed one-shot
+  codes, incoming tokens to claim, and outgoing Lightning/on-chain payments never
+  offer payment QR codes. Settled ecash keeps its existing passive Copy receipt.
+- Reusable requests show **Total received**, **Active** after a payment, requested
+  amount, payment count, and links to individual payment receipts. They keep their
+  code available after receiving. **Manage request** opens the ecash request editor.
+- Unclaimed incoming ecash opens the same inspector and offers **Receive** to enter
+  the claim flow. Manual outgoing-token status checks remain available as before.
+- Content scrolls at large text sizes and on short screens. The native iOS
+  disclosure and Android expandable button expose their expanded/collapsed state.
+
 ## 2. Colors: The Inverted-Ink Palette
 
 A semantic-only palette built on iOS system colors plus three state hues. The

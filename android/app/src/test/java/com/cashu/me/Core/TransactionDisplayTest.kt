@@ -173,6 +173,34 @@ class TransactionDisplayTest {
         assertTrue(TransactionDisplay.detailFields(withoutMemo).none { it.label == "Memo" })
     }
 
+    @Test
+    fun paymentCodesFollowDirectionAndLifecycleForEveryRail() {
+        TransactionKind.entries.forEach { kind ->
+            TransactionType.entries.forEach { direction ->
+                TransactionStatus.entries.forEach { status ->
+                    val tx = transaction(kind = kind, type = direction,
+                        token = if (kind == TransactionKind.Ecash) "cashu-token" else null,
+                        invoice = if (kind == TransactionKind.Ecash) null else "one-shot-request",
+                    ).copy(status = status)
+                    val expected = status == TransactionStatus.Pending &&
+                        if (kind == TransactionKind.Ecash) direction == TransactionType.Outgoing
+                        else direction == TransactionType.Incoming
+                    assertEquals("$kind $direction $status", expected, TransactionDisplay.showsQr(tx))
+                }
+            }
+        }
+    }
+
+    @Test
+    fun failedAndOutgoingReusableOfferPaymentsDoNotExposeCodes() {
+        val offer = transaction(kind = TransactionKind.Lightning, type = TransactionType.Incoming,
+            invoice = "LNO1offer")
+        assertTrue(TransactionDisplay.showsQr(offer))
+        assertTrue(!TransactionDisplay.showsQr(offer.copy(status = TransactionStatus.Failed)))
+        assertTrue(!TransactionDisplay.showsQr(offer.copy(type = TransactionType.Outgoing,
+            status = TransactionStatus.Pending)))
+    }
+
     private fun transaction(
         kind: TransactionKind,
         type: TransactionType,

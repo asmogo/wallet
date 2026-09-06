@@ -31,7 +31,9 @@ import androidx.navigation.compose.composable
 import androidx.navigation.navArgument
 import com.cashu.me.App.AppContainer
 import com.cashu.me.Core.Platform.ConnectivityState
+import com.cashu.me.Models.CashuRequest
 import com.cashu.me.Models.WalletTransaction
+import com.cashu.me.ui.history.CashuRequestReceiptSheet
 import com.cashu.me.ui.history.HistoryScreen
 import com.cashu.me.ui.history.TransactionReceiptSheet
 import com.cashu.me.ui.home.HomeScreen
@@ -79,8 +81,9 @@ fun CashuNavHost(
     modifier: Modifier = Modifier,
 ) {
     var receiptTransaction by remember { mutableStateOf<WalletTransaction?>(null) }
+    var receiptRequest by remember { mutableStateOf<CashuRequest?>(null) }
     val receiptBackdropBlur by animateDpAsState(
-        targetValue = if (receiptTransaction != null) 2.dp else 0.dp,
+        targetValue = if (receiptTransaction != null || receiptRequest != null) 2.dp else 0.dp,
         animationSpec = tween(durationMillis = 180),
         label = "transaction-receipt-backdrop-blur",
     )
@@ -107,10 +110,10 @@ fun CashuNavHost(
             onSend = onSend,
             pendingMintScan = pendingMintScan,
             onPendingMintScanConsumed = onPendingMintScanConsumed,
-            onClaimReceiveToken = onClaimReceiveToken,
             // Every transaction detail — settled or live — opens as the same
             // receipt-family sheet over the originating list (iOS parity).
             onOpenTransaction = { transaction -> receiptTransaction = transaction },
+            onOpenRequest = { request -> receiptRequest = request },
         )
         composable(
             route = Routes.MINT_DETAIL,
@@ -262,6 +265,22 @@ fun CashuNavHost(
         }
     }
 
+    receiptRequest?.let { request ->
+        CashuRequestReceiptSheet(
+            request = request,
+            walletManager = container.walletManager,
+            settingsManager = container.settingsManager,
+            priceService = container.priceService,
+            store = container.cashuRequestStore,
+            onDismissRequest = { receiptRequest = null },
+            onManageRequest = { id ->
+                receiptRequest = null
+                navController.navigate(cashuRequestDetailRouteFor(id))
+            },
+            onOpenPayment = { payment -> receiptTransaction = payment },
+        )
+    }
+
     receiptTransaction?.let { transaction ->
         TransactionReceiptSheet(
             transaction = transaction,
@@ -301,7 +320,7 @@ private fun NavGraphBuilder.tabDestinations(
     pendingMintScan: String?,
     onPendingMintScanConsumed: () -> Unit,
     onOpenTransaction: (WalletTransaction) -> Unit,
-    onClaimReceiveToken: (String) -> Unit,
+    onOpenRequest: (CashuRequest) -> Unit,
 ) {
     composable(
         route = Routes.HOME,
@@ -340,10 +359,7 @@ private fun NavGraphBuilder.tabDestinations(
             priceService = container.priceService,
             cashuRequestStore = container.cashuRequestStore,
             onOpenTransaction = onOpenTransaction,
-            onClaimReceiveToken = onClaimReceiveToken,
-            onOpenCashuRequest = { req ->
-                navController.navigate(cashuRequestDetailRouteFor(req.id))
-            },
+            onOpenCashuRequest = onOpenRequest,
             contentPadding = contentPadding,
         )
     }

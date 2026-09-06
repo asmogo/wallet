@@ -35,9 +35,6 @@ struct HistoryView: View {
     @State private var isSheetDismissing = false
     @State private var requestPendingDeletion: CashuRequest?
     @State private var receiveTokenPendingDeletion: WalletTransaction?
-    /// Unclaimed incoming token being claimed (rows open the claim flow
-    /// directly — one Receive tap, no intermediate detail sheet).
-    @State private var claimReceiveToken: PendingReceiveToken?
     @State private var transactionUpdateRevision = 0
     @State private var didInitialLoad = false
 
@@ -156,25 +153,10 @@ struct HistoryView: View {
                     .environmentObject(walletManager)
                     .observeBottomSheetDismissal { isSheetDismissing = $0 }
             }
-            // Claim flow for an unclaimed incoming token. `item:` captures the
-            // pending token at presentation, so the content stays stable while
-            // the claim removes it from the store (a live lookup here would go
-            // nil mid-flow and blank the screen).
-            .fullScreenCover(item: $claimReceiveToken) { pending in
-                ReceiveTokenDetailView(
-                    tokenString: pending.token,
-                    onComplete: { claimReceiveToken = nil },
-                    claim: { try await walletManager.claimPendingReceiveToken(pending) }
-                )
-                .environmentObject(walletManager)
-            }
             .sheet(item: $selectedRequest) { request in
-                NavigationStack {
-                    CashuRequestDetailView(request: request)
-                        .environmentObject(walletManager)
-                }
-                .compactBottomSheetSurface()
-                .observeBottomSheetDismissal { isSheetDismissing = $0 }
+                CashuRequestReceiptView(request: request)
+                    .environmentObject(walletManager)
+                    .observeBottomSheetDismissal { isSheetDismissing = $0 }
             }
             .confirmationDialog(
                 "Remove this Cashu Request from history?",
@@ -578,15 +560,7 @@ struct HistoryView: View {
         return Button {
             HapticFeedback.selection()
             isSearchFocused = false
-            // Unclaimed incoming ecash goes straight to the claim flow — the
-            // receive screen already shows amount, fee, mint, and memo, so an
-            // intermediate detail sheet would just add a second Receive tap.
-            if transaction.isPendingReceiveToken,
-               let pending = walletManager.pendingReceiveTokens.first(where: { $0.tokenId == transaction.id }) {
-                claimReceiveToken = pending
-            } else {
-                selectedTransaction = transaction
-            }
+            selectedTransaction = transaction
         } label: {
             HStack(spacing: 14) {
                 rowIcon(for: transaction)

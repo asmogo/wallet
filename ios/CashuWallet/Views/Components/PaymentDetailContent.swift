@@ -30,3 +30,66 @@ struct PaymentDetailContent<Hero: View, Details: View>: View {
         }
     }
 }
+
+/// History always opens on the same compact inspector. Optional payment codes
+/// expand below the facts, without replacing the amount or changing its scale.
+struct ActivityDetailSheet<Content: View>: View {
+    let title: String
+    @ViewBuilder var content: () -> Content
+    @Environment(\.dismiss) private var dismiss
+    @State private var contentHeight: CGFloat = 0
+
+    var body: some View {
+        NavigationStack {
+            VStack(spacing: 24, content: content)
+                .padding(.horizontal, 16)
+                .padding(.top, 16)
+                .padding(.bottom, 16)
+                .contentFitMeasured { contentHeight = $0 }
+                .navigationTitle(title)
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbarBackground(.hidden, for: .navigationBar)
+        }
+        .compactBottomSheetSurface()
+        .contentFitDetent(contentHeight, estimate: 420, navigationBar: true)
+        .presentationDragIndicator(.visible)
+        .accessibilityAction(.escape) { dismiss() }
+    }
+}
+
+struct ActivityPaymentCode: View {
+    let content: String
+    var staticOnly = true
+    let onCopy: () -> Void
+    let onShare: () -> Void
+    @State private var expanded = false
+
+    var body: some View {
+        DisclosureGroup(isExpanded: $expanded) {
+            ViewThatFits(in: .horizontal) {
+                code(size: 240)
+                code(size: 180)
+                code(size: 120)
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 12)
+        } label: {
+            Text(expanded ? "Hide QR code" : "Show QR code")
+                .font(.subheadline.weight(.medium))
+                .frame(minHeight: 44)
+        }
+        .accessibilityIdentifier("cashu.history.payment-code")
+    }
+
+    private func code(size: CGFloat) -> some View {
+        QRCodeView(content: content, showControls: false, staticOnly: staticOnly,
+                   onCopy: onCopy, onShare: onShare)
+            .frame(width: size, height: size)
+            .padding(16)
+            .background(Color.white, in: RoundedRectangle(cornerRadius: 20))
+            .contextMenu {
+                Button("Copy", systemImage: "doc.on.doc", action: onCopy)
+                Button("Share", systemImage: "square.and.arrow.up", action: onShare)
+            }
+    }
+}
