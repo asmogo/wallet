@@ -206,6 +206,12 @@ fun ReceiveLightningScreen(
     // When a payment lands the body crossfades to the shared receipt while the
     // sheet header stays mounted, matching iOS ReceiveLightningView.
     var successInfo by remember { mutableStateOf<ReceiveSuccessInfo?>(null) }
+    val displayedQuote = (face as? ReceiveLnFace.Display)?.quote
+    // Owned outside the animated body: returning from success must retain the
+    // cumulative issuance baseline for this exact offer.
+    val reusablePaymentObservation = remember(displayedQuote?.id) {
+        ReusableMintPaymentObservation(displayedQuote?.amountIssued ?: 0)
+    }
     // On-chain quotes abandoned via "Use new address": a payment may already be
     // racing toward the old address, so keep checking them for the life of the
     // sheet (mint-status checks only — no extra explorer polling). Set
@@ -567,7 +573,13 @@ fun ReceiveLightningScreen(
             )
             ReceiveSuccessTerminal(
                 info = terminal,
-                onDone = onClose,
+                onDone = {
+                    if (terminal.method == PaymentMethodKind.Bolt12) {
+                        successInfo = null
+                    } else {
+                        onClose()
+                    }
+                },
                 modifier = Modifier.weight(1f),
             )
         }
@@ -875,7 +887,7 @@ fun ReceiveLightningScreen(
                     // check/issue operation; durable retry truth comes from the
                     // scheduler record returned with the result.
                     fun reconcileDisplayedQuote(force: Boolean = false) {
-                        if (isReconcilingQuote) return
+                        if (isReconcilingQuote || successInfo != null) return
                         val quoteId = liveQuote.id
                         val paymentMethod = liveQuote.paymentMethod
                         isReconcilingQuote = true
@@ -893,12 +905,35 @@ fun ReceiveLightningScreen(
                                 )
                                 result.quote?.let { liveQuote = it }
                                 mintRetryStatus = result.retryStatus
-                                if (paymentMethod != PaymentMethodKind.Bolt12 &&
-                                    result.hasSettledPayment
+                                if (successInfo != null ||
+                                    (face as? ReceiveLnFace.Display)?.quote?.id != quoteId
+                                ) return@launch
+                                val settledQuote = result.quote
+                                val receivedAmount = settledQuote?.let {
+                                    if (paymentMethod == PaymentMethodKind.Bolt12) {
+                                        reusablePaymentObservation.newlyIssuedAmount(it.amountIssued)
+                                    } else if (result.hasSettledPayment) {
+                                        it.amountIssued.takeIf { issued -> issued > 0 } ?: it.amount
+                                    } else null
+                                }
+                                if (settledQuote != null &&
+                                    (receivedAmount != null ||
+                                        (paymentMethod != PaymentMethodKind.Bolt12 && result.hasSettledPayment))
                                 ) {
+                                    face = ReceiveLnFace.Display(settledQuote)
                                     successInfo = ReceiveSuccessInfo(
-                                        amountLabel = amountLabel,
-                                        mintName = activeMint?.name,
+                                        amountLabel = receivedAmount?.let {
+                                            if (settledQuote.unit.equals("sat", ignoreCase = true)) {
+                                                formatter.formatWalletSats(it, settings.useBitcoinSymbol)
+                                            } else {
+                                                CurrencyAmount(
+                                                    it, CurrencyRegistry.currencyForMintUnit(settledQuote.unit),
+                                                ).formatted()
+                                            }
+                                        },
+                                        mintName = walletState.mints.firstOrNull {
+                                            it.url == settledQuote.mintUrl
+                                        }?.name ?: settledQuote.mintUrl,
                                         method = paymentMethod,
                                     )
                                 }
@@ -916,11 +951,8 @@ fun ReceiveLightningScreen(
                         liveQuote.amountIssued,
                     ) {
                         if (liveQuote.paymentMethod == PaymentMethodKind.Bolt12) {
-                            // Reusable offers never reach the one-shot success
-                            // terminal. The synchronizer mints a newly-paid
-                            // amount when needed and always reloads History,
-                            // including the already-issued case. Keep the QR on
-                            // screen to accept the next payment.
+                            // Reconcile before showing success. The receipt uses
+                            // the issuance delta and Done restores this same QR.
                             if (liveQuote.amountPaid > 0 ||
                                 liveQuote.state == MintQuoteState.Paid ||
                                 liveQuote.state == MintQuoteState.Issued

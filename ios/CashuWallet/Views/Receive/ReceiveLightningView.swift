@@ -40,6 +40,8 @@ struct ReceiveLightningView: View {
     @State private var isCheckingPayment = false
     @State private var mintRetryStatus = MintQuoteRetryStatus()
     @State private var isPaid = false
+    @State private var receivedAmount: UInt64?
+    @State private var reusablePaymentObservation = ReusableMintPaymentObservation()
     @State private var requestFailure: ReceiveRequestFailure?
     @State private var showMintPicker = false
     /// Reusable BOLT12 offer: drives the Amount-row pencil → amount picker sheet.
@@ -674,6 +676,7 @@ struct ReceiveLightningView: View {
     }
 
     private func startDisplayingQuote(_ quote: MintQuoteInfo) {
+        reusablePaymentObservation.startObserving(quoteID: quote.id, amountIssued: quote.amountIssued)
         if quote.paymentMethod == .bolt12 { persistReceiveIntent(for: quote) }
         startQuoteMonitoring(for: quote)
         if quote.paymentMethod != .bolt12 { startExpiryCountdown(quote: quote) }
@@ -699,14 +702,20 @@ struct ReceiveLightningView: View {
             details: receiveSuccessRows(quote: quote),
             phase: .success,
             successTitle: "Payment Received!",
-            onDone: { dismiss() },
+            onDone: {
+                if quote.paymentMethod == .bolt12 {
+                    isPaid = false
+                } else {
+                    dismiss()
+                }
+            },
             onRetry: {}
         )
     }
 
     private func receiveSuccessRows(quote: MintQuoteInfo) -> [PaymentStatusView.DetailRow] {
         var rows: [PaymentStatusView.DetailRow] = []
-        if let amount = quote.amount {
+        if let amount = receivedAmount ?? quote.amount {
             rows.append(.init(
                 label: "Amount",
                 value: formatQuoteAmount(amount, unit: quote.unit)
@@ -1519,7 +1528,7 @@ struct ReceiveLightningView: View {
 
     @MainActor
     private func refreshMintQuoteStatus(force: Bool = false) async {
-        guard let quote = mintQuote, !isMinting, !isCheckingPayment,
+        guard let quote = mintQuote, !isPaid, !isMinting, !isCheckingPayment,
               force || !isExpired || quote.paymentMethod == .onchain || quote.mintableAmount > 0 else { return }
 
         isCheckingPayment = true
@@ -1544,13 +1553,8 @@ struct ReceiveLightningView: View {
         }
 
         if result.quote.paymentMethod == .bolt12 {
-            if result.newlyIssued > 0 {
-                walletManager.postReceivedMintNotification(
-                    amount: result.newlyIssued,
-                    unit: result.quote.unit,
-                    homeHaptic: false
-                )
-                HapticFeedback.notification(.success)
+            if let amount = reusablePaymentObservation.newlyIssuedAmount(result.quote.amountIssued) {
+                await completeReceivedQuote(receivedAmount: amount)
             }
         } else if result.hasSettledPayment {
             await completeReceivedQuote(receivedAmount: result.quote.amountIssued)
@@ -1582,11 +1586,11 @@ struct ReceiveLightningView: View {
         }
     }
 
-    /// Finish a one-shot receive only after quote counters (or a successful
-    /// mint response) confirm that ecash was issued.
+    /// Present a receipt only after reconciliation confirms ecash was issued.
     @MainActor
     private func completeReceivedQuote(receivedAmount: UInt64? = nil) async {
         guard !isPaid else { return }
+        self.receivedAmount = receivedAmount
         isPaid = true
         expiryTimer?.invalidate()
 
@@ -1603,12 +1607,33 @@ struct ReceiveLightningView: View {
             )
         }
 
-        // Ecash is issued — stop polling this one-shot request. Reusable
-        // BOLT12 offers never enter this terminal path.
+        // Returning to a reusable QR starts monitoring again with the same
+        // issuance baseline, so the previous payment cannot replay success.
         quoteStatusTask?.cancel()
+        monitoredQuoteId = nil
     }
 
 
+}
+
+/// BOLT12 counters are cumulative. Preserve the acknowledged total across
+/// receipt dismissal and ignore stale snapshots or already-paid saved offers.
+struct ReusableMintPaymentObservation {
+    private var quoteID: String?
+    private var amountIssued: UInt64 = 0
+
+    mutating func startObserving(quoteID: String, amountIssued: UInt64) {
+        guard self.quoteID != quoteID else { return }
+        self.quoteID = quoteID
+        self.amountIssued = amountIssued
+    }
+
+    mutating func newlyIssuedAmount(_ currentAmountIssued: UInt64) -> UInt64? {
+        guard currentAmountIssued > amountIssued else { return nil }
+        let received = currentAmountIssued - amountIssued
+        amountIssued = currentAmountIssued
+        return received
+    }
 }
 
 #Preview {

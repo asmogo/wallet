@@ -19,7 +19,6 @@ struct CashuRequestDetailView: View {
     @State private var showUnitPicker = false
     @State private var paymentObservation: CashuRequestPaymentObservation
     @State private var regenerationError: String?
-    @State private var didAutoComplete = false
     /// Amount of the payment that just landed, for the shared success screen.
     @State private var receivedAmount: UInt64?
     @State private var showPaymentSuccess = false
@@ -124,13 +123,11 @@ struct CashuRequestDetailView: View {
                 .presentationDetents([.medium])
             }
         }
-        .onChange(of: request?.receivedPayments) { _, currentPayments in
-            guard let currentPayments,
-                  let payment = paymentObservation.newlyLinkedPayment(in: currentPayments) else { return }
-            AppLogger.wallet.notice(
-                "CashuRequestDetailView: linked payment \(payment.transactionId, privacy: .public)"
-            )
-            markPaymentReceived(amount: payment.amount)
+        .onChange(of: request?.receivedPayments) {
+            presentNextPayment()
+        }
+        .onChange(of: showPaymentSuccess) {
+            presentNextPayment()
         }
         .task(id: monitoredQuoteID) {
             guard let quoteID = monitoredQuoteID else { return }
@@ -139,13 +136,12 @@ struct CashuRequestDetailView: View {
         .compactBottomSheetSurface()
     }
 
-    /// Single-fire transition into the shared full-screen success — the same
-    /// `PaymentStatusView` every other receive/pay flow ends on, so a paid
-    /// request reads identically to a paid invoice. Stays until Done.
-    private func markPaymentReceived(amount: UInt64?) {
-        guard !didAutoComplete else { return }
-        didAutoComplete = true
-        receivedAmount = amount ?? request?.amount
+    /// Keep the current receipt stable; payments arriving during it are picked
+    /// up after Done without replaying any previously acknowledged payment.
+    private func presentNextPayment() {
+        guard !showPaymentSuccess, let request,
+              let payment = paymentObservation.newlyLinkedPayment(in: request.receivedPayments) else { return }
+        receivedAmount = payment.amount
         // PaymentStatusView owns the success haptic on appear — don't buzz here.
         showPaymentSuccess = true
     }
@@ -157,7 +153,13 @@ struct CashuRequestDetailView: View {
             phase: .success,
             successTitle: "Payment Received!",
             onDone: {
-                if let onClose { onClose() } else { dismiss() }
+                if request?.reusable == true {
+                    showPaymentSuccess = false
+                } else if let onClose {
+                    onClose()
+                } else {
+                    dismiss()
+                }
             },
             onRetry: {}
         )

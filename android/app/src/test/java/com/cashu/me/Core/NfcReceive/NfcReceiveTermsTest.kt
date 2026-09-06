@@ -15,10 +15,11 @@ class NfcReceiveTermsTest {
     }
 
     @Test
-    fun `nfc receive is only offered for unpaid requests`() {
+    fun `reusable cashu request remains available for another tap after payment`() {
         assertTrue(request(amount = 1).shouldOfferNfcReceive())
-        assertTrue(!paidRequest().shouldOfferNfcReceive())
-        assertTrue(!paidRequest().canReceiveByNfc())
+        assertTrue(paidRequest().shouldOfferNfcReceive())
+        assertTrue(paidRequest().canReceiveByNfc())
+        assertTrue(!paidRequest().copy(quoteKind = "bolt11").shouldOfferNfcReceive())
     }
 
     @Test
