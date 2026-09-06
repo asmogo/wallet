@@ -120,9 +120,8 @@ struct CashuWalletApp: App {
                     Task { await walletManager.syncPendingMintQuotesIfStale() }
                     Task { await walletManager.syncPendingMeltQuotes() }
                     Task { await NWCManager.shared.startIfEnabled() }
-                    // Re-arm the pollers stopped on `.background` (both are idempotent
-                    // and self-gate on their enabled/connected state).
-                    NPCService.shared.applyPollingPreferences()
+                    // Recover enabled services and re-arm polling after backgrounding.
+                    Task { await NPCService.shared.initializeIfEnabled() }
                     if PriceService.shared.isEnabled {
                         PriceService.shared.startAutoRefresh()
                     }

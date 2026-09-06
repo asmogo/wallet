@@ -881,6 +881,7 @@ class WalletManager(
         if (!pollQuotesInForeground) return
         startPendingQuoteForegroundPolling()
         if (!mutableState.value.isRuntimeReady) return
+        npcService.initializeIfEnabled()
         scope.launch {
             try {
                 syncPendingMintQuotesIfStale()

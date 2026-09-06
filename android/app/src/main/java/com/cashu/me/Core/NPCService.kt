@@ -1,6 +1,14 @@
 package com.cashu.me.Core
 
 import android.content.Context
+import android.content.SharedPreferences
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Deferred
+import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.async
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -11,10 +19,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.sync.Mutex
-import kotlinx.coroutines.sync.withLock
 import com.cashu.me.Core.Protocols.StorageKeys
-import org.cashudevkit.NpubCashClient
 import org.cashudevkit.NpubCashQuote
 import org.cashudevkit.npubcashDeriveSecretKeyFromSeed
 import org.cashudevkit.npubcashGetPubkey
@@ -53,19 +58,29 @@ interface NPCQuoteClaimHandler {
     suspend fun claimNPCQuote(quote: NPCQuote, p2pkPubkey: String?): Boolean
 }
 
-class NPCService(
-    context: Context,
-    private val settingsManager: SettingsManager,
+class NPCService internal constructor(
+    private val prefs: SharedPreferences,
+    private val settingsState: StateFlow<SettingsState>,
+    private val scope: CoroutineScope,
+    private val refreshIntervalMillis: Long = 120_000L,
+    private val makeClient: (String, String) -> NPCClient = ::CdkNPCClient,
+    private val deriveKeys: (ByteArray) -> Pair<String, String> = { seed ->
+        val secret = npubcashDeriveSecretKeyFromSeed(seed)
+        secret to npubcashGetPubkey(secret)
+    },
 ) {
-    private val prefs = context.applicationContext.getSharedPreferences("npc_store", Context.MODE_PRIVATE)
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+    constructor(context: Context, settingsManager: SettingsManager) : this(
+        prefs = context.applicationContext.getSharedPreferences("npc_store", Context.MODE_PRIVATE),
+        settingsState = settingsManager.state,
+        scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate),
+    )
     private val baseUrl = "https://npubx.cash"
     private val domain = "npubx.cash"
-    private val refreshIntervalMillis = 120_000L
     private var refreshJob: Job? = null
     private var paymentCheckJob: Job? = null
-    private val connectionMutex = Mutex()
-    private var client: NpubCashClient? = null
+    private var connectionAttempt: Deferred<Unit>? = null
+    private var sessionGeneration = 0L
+    private var client: NPCClient? = null
     private var nostrSecretKey: String? = null
     private var nostrPublicKey: String? = null
     var quoteClaimHandler: NPCQuoteClaimHandler? = null
@@ -75,7 +90,7 @@ class NPCService(
 
     init {
         scope.launch {
-            settingsManager.state.collect {
+            settingsState.collect {
                 applyPollingPreferences()
             }
         }
@@ -86,11 +101,13 @@ class NPCService(
      * NIP-06 key from the 64-byte BIP39 seed, not from the wallet's legacy
      * Nostr/P2PK key.
      */
-    fun initializeWithSeed(seed: ByteArray) {
-        val secretKey = npubcashDeriveSecretKeyFromSeed(seed)
-        val publicKey = npubcashGetPubkey(secretKey)
+    // Wallet setup also calls this from IO; publish keys and session changes
+    // on the same dispatcher that owns connection and polling jobs.
+    suspend fun initializeWithSeed(seed: ByteArray) = withContext(scope.coroutineContext.minusKey(Job)) {
+        val (secretKey, publicKey) = deriveKeys(seed)
         val npub = Bech32.encode("npub", NostrService.hexToBytes(publicKey))
 
+        if (nostrSecretKey != secretKey) disconnect()
         nostrSecretKey = secretKey
         nostrPublicKey = publicKey
         update {
@@ -100,16 +117,25 @@ class NPCService(
                 errorMessage = null,
             )
         }
-        if (mutableState.value.isEnabled) scope.launch { connect() }
+        initializeIfEnabled()
     }
 
     fun setEnabled(value: Boolean) {
+        if (mutableState.value.isEnabled == value) return
         prefs.edit().putBoolean(StorageKeys.npcEnabled, value).apply()
         update { copy(isEnabled = value, errorMessage = null) }
         if (value) {
-            scope.launch { connect() }
+            initializeIfEnabled()
         } else {
             disconnect()
+        }
+    }
+
+    /** Recover an enabled address on startup, foreground, or settings entry. */
+    fun initializeIfEnabled() {
+        scope.launch {
+            connect()
+            applyPollingPreferences()
         }
     }
 
@@ -120,11 +146,15 @@ class NPCService(
 
     fun changeMint(mintUrl: String) {
         scope.launch {
+            if (!mutableState.value.isEnabled) return@launch
+            val session = sessionGeneration
             update { copy(isLoading = true, errorMessage = null) }
             val result = runCatching {
-                if (client == null) connect()
+                connect()
+                if (!isCurrentSession(session)) throw CancellationException()
                 setRemoteMint(mintUrl)
             }
+            if (!isCurrentSession(session)) return@launch
             result.onSuccess { selected ->
                 prefs.edit().putString(StorageKeys.npcSelectedMint, selected).apply()
                 update {
@@ -137,6 +167,7 @@ class NPCService(
                     )
                 }
             }.onFailure { error ->
+                if (error is CancellationException) throw error
                 update {
                     copy(
                         isLoading = false,
@@ -152,8 +183,8 @@ class NPCService(
         paymentCheckJob = scope.launch { checkAndClaimPaymentsNow() }
     }
 
-    fun resetForWalletBoundary() {
-        stopBackgroundRefresh()
+    suspend fun resetForWalletBoundary() = withContext(scope.coroutineContext.minusKey(Job)) {
+        disconnect()
         prefs.edit()
             .remove(StorageKeys.npcEnabled)
             .remove(StorageKeys.npcAutomaticClaim)
@@ -161,94 +192,104 @@ class NPCService(
             .remove(StorageKeys.npcLastCheck)
             .apply()
         mutableState.value = NPCState()
-        client?.close()
-        client = null
         nostrSecretKey = null
         nostrPublicKey = null
     }
 
-    private suspend fun connect() {
-        connectionMutex.withLock {
-            val current = mutableState.value
-            val secretKey = nostrSecretKey
-            if (!current.isEnabled || !current.isInitialized || secretKey == null) {
-                update {
-                    copy(
-                        isConnected = false,
-                        // Key setup follows wallet-runtime initialization. This is a
-                        // readiness state, not a connection failure; the settings UI
-                        // can distinguish active setup from a setup that needs retrying.
-                        errorMessage = null,
-                    )
-                }
-                return@withLock
-            }
-            client?.close()
-            client = null
-            update { copy(isConnected = false, isLoading = true, errorMessage = null) }
-            val result = runCatching {
-                val connectedClient = NpubCashClient(baseUrl = baseUrl, nostrSecretKey = secretKey)
+    internal suspend fun connect() {
+        val current = mutableState.value
+        val secretKey = nostrSecretKey
+        if (!current.isEnabled || !current.isInitialized || secretKey == null) return
+        if (current.isConnected && client != null) return
+        connectionAttempt?.let { it.await(); return }
+
+        val session = sessionGeneration
+        update { copy(isConnected = false, isLoading = true, errorMessage = null) }
+        // Install the handle before execution, including on Main.immediate.
+        val attempt = scope.async(start = CoroutineStart.LAZY) {
+            establishConnection(secretKey, session)
+        }
+        connectionAttempt = attempt
+        attempt.await()
+    }
+
+    private suspend fun establishConnection(secretKey: String, session: Long) {
+        var candidate: NPCClient? = null
+        try {
+            val connectedClient = makeClient(baseUrl, secretKey)
+            candidate = connectedClient
+            val quotes = connectedClient.getQuotes()
+            currentCoroutineContext().ensureActive()
+            if (!isCurrentSession(session)) return
+            val selected = mutableState.value.selectedMintUrl
+            val configured = if (selected != null) {
                 try {
-                    val quotes = connectedClient.getQuotes(since = null).map(::fromCdkQuote)
-                    val selected = mutableState.value.selectedMintUrl
-                    val configured = if (selected != null) {
-                        runCatching { connectedClient.setMintUrl(mintUrl = selected) }
-                            .getOrNull()
-                            ?.takeUnless { it.error }
-                            ?.mintUrl
-                            ?: selected
-                    } else {
-                        quotes.firstNotNullOfOrNull { it.mintUrl }.orEmpty()
-                    }
-                    ConnectedNPCClient(connectedClient, configured)
-                } catch (error: Throwable) {
-                    connectedClient.close()
+                    connectedClient.setMintUrl(selected)
+                } catch (error: CancellationException) {
                     throw error
+                } catch (_: Exception) {
+                    selected
                 }
+            } else {
+                quotes.firstNotNullOfOrNull { it.mintUrl }.orEmpty()
             }
-            val connected = result.getOrElse { error ->
-                update {
-                    copy(
-                        isConnected = false,
-                        isLoading = false,
-                        errorMessage = error.message ?: "Not connected to npub.cash.",
-                    )
-                }
-                return@withLock
-            }
-            if (!mutableState.value.isEnabled || nostrSecretKey != secretKey) {
-                connected.client.close()
-                update { copy(isConnected = false, isLoading = false) }
-                return@withLock
-            }
-            client = connected.client
+            currentCoroutineContext().ensureActive()
+            if (!isCurrentSession(session)) return
+            client = connectedClient
+            candidate = null // Ownership passes to the active session.
             update {
-                copy(
-                    configuredMintUrl = connected.configuredMintUrl,
-                    isConnected = true,
-                    isLoading = false,
-                    errorMessage = null,
-                )
+                copy(configuredMintUrl = configured, isConnected = true, errorMessage = null)
             }
-            applyPollingPreferences()
+        } catch (error: CancellationException) {
+            throw error
+        } catch (error: Exception) {
+            if (!isCurrentSession(session)) return
+            update {
+                copy(isConnected = false, errorMessage = error.message ?: "Not connected to npub.cash.")
+            }
+        } finally {
+            candidate?.close()
+            if (isCurrentSession(session)) {
+                connectionAttempt = null
+                update { copy(isLoading = false) }
+                applyPollingPreferences()
+            }
         }
     }
 
+    private fun isCurrentSession(session: Long): Boolean =
+        mutableState.value.isEnabled && sessionGeneration == session
+
     private fun disconnect() {
+        sessionGeneration += 1
+        connectionAttempt?.cancel()
+        connectionAttempt = null
+        paymentCheckJob?.cancel()
+        paymentCheckJob = null
         stopBackgroundRefresh()
         client?.close()
         client = null
-        update { copy(isConnected = false, isLoading = false, pendingPaidQuotes = emptyList()) }
+        update {
+            copy(
+                isConnected = false,
+                isLoading = false,
+                isCheckingPayments = false,
+                errorMessage = null,
+                pendingPaidQuotes = emptyList(),
+            )
+        }
     }
 
     private suspend fun checkAndClaimPaymentsNow() {
-        val settings = settingsManager.state.value
+        val settings = settingsState.value
         if (!mutableState.value.isEnabled || !settings.checkIncomingInvoices) return
+        val session = sessionGeneration
         if (!mutableState.value.isConnected) connect()
-        if (!mutableState.value.isConnected) return
+        if (!isCurrentSession(session) || !mutableState.value.isConnected) return
 
         update { copy(isCheckingPayments = true, errorMessage = null) }
         val result = runCatching { fetchQuotes() }
+        if (!isCurrentSession(session)) return
         result.onSuccess { quotes ->
             val now = System.currentTimeMillis()
             prefs.edit().putLong(StorageKeys.npcLastCheck, now).apply()
@@ -261,10 +302,11 @@ class NPCService(
                 processedQuoteIds = processedQuoteIds,
             )
             val claimFailures = if (mutableState.value.automaticClaim) {
-                claimPaidQuotes(paidQuotes, handler)
+                claimPaidQuotes(paidQuotes, handler, session)
             } else {
                 paidQuotes
             }
+            if (!isCurrentSession(session)) return
             update {
                 copy(
                     lastCheckEpochMillis = now,
@@ -278,8 +320,15 @@ class NPCService(
                 )
             }
         }.onFailure { error ->
+            if (error is CancellationException) {
+                update { copy(isCheckingPayments = false) }
+                throw error
+            }
+            client?.close()
+            client = null
             update {
                 copy(
+                    isConnected = false,
                     isCheckingPayments = false,
                     errorMessage = error.message ?: "Failed to check npub.cash payments.",
                 )
@@ -290,11 +339,20 @@ class NPCService(
     private suspend fun claimPaidQuotes(
         paidQuotes: List<NPCQuote>,
         handler: NPCQuoteClaimHandler?,
+        session: Long,
     ): List<NPCQuote> {
         if (handler == null) return paidQuotes
         return paidQuotes.filterNot { quote ->
-            runCatching { handler.claimNPCQuote(quote, p2pkPublicKeyFor(quote)) }
-                .getOrDefault(false) || handler.isNPCQuoteProcessed(quote.id)
+            currentCoroutineContext().ensureActive()
+            if (!isCurrentSession(session)) return emptyList()
+            val claimed = try {
+                handler.claimNPCQuote(quote, p2pkPublicKeyFor(quote))
+            } catch (error: CancellationException) {
+                throw error
+            } catch (_: Exception) {
+                false
+            }
+            claimed || handler.isNPCQuoteProcessed(quote.id)
         }
     }
 
@@ -305,11 +363,11 @@ class NPCService(
     }
 
     private fun applyPollingPreferences() {
-        val settings = settingsManager.state.value
+        val settings = settingsState.value
         val state = mutableState.value
         val shouldRun = shouldRunPeriodicInvoiceChecks(
             isEnabled = state.isEnabled,
-            isConnected = state.isConnected,
+            isInitialized = state.isInitialized,
             checkIncomingInvoices = settings.checkIncomingInvoices,
             periodicallyCheckIncomingInvoices = settings.periodicallyCheckIncomingInvoices,
         )
@@ -319,9 +377,11 @@ class NPCService(
         }
         if (refreshJob?.isActive == true) return
         refreshJob = scope.launch {
+            // Delay after failure so recovery never recursively retries.
+            if (mutableState.value.isConnected) checkAndClaimPayments()
             while (isActive) {
-                checkAndClaimPaymentsNow()
                 delay(refreshIntervalMillis)
+                checkAndClaimPayments()
             }
         }
     }
@@ -333,14 +393,12 @@ class NPCService(
 
     private suspend fun fetchQuotes(): List<NPCQuote> {
         val connectedClient = client ?: error("Not connected to npub.cash.")
-        return connectedClient.getQuotes(since = null).map(::fromCdkQuote)
+        return connectedClient.getQuotes()
     }
 
     private suspend fun setRemoteMint(mintUrl: String): String {
         val connectedClient = client ?: error("Not connected to npub.cash.")
-        val response = connectedClient.setMintUrl(mintUrl = mintUrl)
-        if (response.error) error("Failed to change mint.")
-        return response.mintUrl ?: mintUrl
+        return connectedClient.setMintUrl(mintUrl)
     }
 
     private fun loadInitialState(): NPCState {
@@ -382,15 +440,10 @@ class NPCService(
 
         internal fun shouldRunPeriodicInvoiceChecks(
             isEnabled: Boolean,
-            isConnected: Boolean,
+            isInitialized: Boolean,
             checkIncomingInvoices: Boolean,
             periodicallyCheckIncomingInvoices: Boolean,
-        ): Boolean = isEnabled && isConnected && checkIncomingInvoices && periodicallyCheckIncomingInvoices
+        ): Boolean = isEnabled && isInitialized && checkIncomingInvoices && periodicallyCheckIncomingInvoices
 
     }
-
-    private data class ConnectedNPCClient(
-        val client: NpubCashClient,
-        val configuredMintUrl: String,
-    )
 }

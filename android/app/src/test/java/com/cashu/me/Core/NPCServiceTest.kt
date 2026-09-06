@@ -99,7 +99,7 @@ class NPCServiceTest {
         assertTrue(
             NPCService.shouldRunPeriodicInvoiceChecks(
                 isEnabled = true,
-                isConnected = true,
+                isInitialized = true,
                 checkIncomingInvoices = true,
                 periodicallyCheckIncomingInvoices = true,
             ),
@@ -107,7 +107,7 @@ class NPCServiceTest {
         assertFalse(
             NPCService.shouldRunPeriodicInvoiceChecks(
                 isEnabled = true,
-                isConnected = true,
+                isInitialized = true,
                 checkIncomingInvoices = false,
                 periodicallyCheckIncomingInvoices = true,
             ),
@@ -115,7 +115,7 @@ class NPCServiceTest {
         assertFalse(
             NPCService.shouldRunPeriodicInvoiceChecks(
                 isEnabled = true,
-                isConnected = true,
+                isInitialized = true,
                 checkIncomingInvoices = true,
                 periodicallyCheckIncomingInvoices = false,
             ),
@@ -123,7 +123,7 @@ class NPCServiceTest {
         assertFalse(
             NPCService.shouldRunPeriodicInvoiceChecks(
                 isEnabled = false,
-                isConnected = true,
+                isInitialized = true,
                 checkIncomingInvoices = true,
                 periodicallyCheckIncomingInvoices = true,
             ),
@@ -131,7 +131,7 @@ class NPCServiceTest {
         assertFalse(
             NPCService.shouldRunPeriodicInvoiceChecks(
                 isEnabled = true,
-                isConnected = false,
+                isInitialized = false,
                 checkIncomingInvoices = true,
                 periodicallyCheckIncomingInvoices = true,
             ),

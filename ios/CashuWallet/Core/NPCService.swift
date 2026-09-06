@@ -12,6 +12,7 @@ class NPCService: ObservableObject {
     
     @Published var isEnabled: Bool {
         didSet {
+            guard isEnabled != oldValue else { return }
             settingsStore.npcEnabled = isEnabled
             if isEnabled {
                 Task { await connect() }
@@ -59,13 +60,16 @@ class NPCService: ObservableObject {
     
     // MARK: - Private
     
-    private var client: NpubCashClient?
+    private var client: (any NpubCashClientProtocol)?
+    private var connectionTask: Task<Void, Never>?
+    private var sessionID = UUID()
+    private let makeClient: (String, String) throws -> any NpubCashClientProtocol
     private var nostrSecretKey: String?
     private var nostrPubkey: String?
     private var refreshTimer: Timer?
     private var paymentCheckInProgress = false
-    private let settingsStore = SettingsStore.shared
-    private let refreshInterval: TimeInterval = 120  // Check every 2 minutes
+    private let settingsStore: SettingsStore
+    private let refreshInterval: TimeInterval
     private var shouldCheckIncomingInvoices: Bool {
         settingsStore.checkIncomingInvoices
     }
@@ -75,7 +79,16 @@ class NPCService: ObservableObject {
     
     // MARK: - Initialization
     
-    private init() {
+    init(
+        settingsStore: SettingsStore = .shared,
+        refreshInterval: TimeInterval = 120,
+        makeClient: @escaping (String, String) throws -> any NpubCashClientProtocol = {
+            try NpubCashClient(baseUrl: $0, nostrSecretKey: $1)
+        }
+    ) {
+        self.settingsStore = settingsStore
+        self.refreshInterval = refreshInterval
+        self.makeClient = makeClient
         self.isEnabled = settingsStore.npcEnabled
         self.automaticClaim = settingsStore.npcAutomaticClaim
         self.selectedMintUrl = settingsStore.npcSelectedMint
@@ -85,11 +98,10 @@ class NPCService: ObservableObject {
     /// Initialize connection on app startup if enabled
     /// Should be called after wallet seed is available
     func initializeIfEnabled() async {
-        if isEnabled {
-            await connect()
-        }
+        await connect()
+        applyPollingPreferences()
     }
-    
+
     // MARK: - Key Derivation
     
     /// Initialize with wallet seed
@@ -101,11 +113,19 @@ class NPCService: ObservableObject {
         // Convert hex pubkey to bech32 npub format for Lightning address
         let npub = try hexToNpub(derivedPubkey)
         
+        if nostrSecretKey != derivedSecretKey {
+            disconnect()
+            configuredMintUrl = ""
+        }
         nostrSecretKey = derivedSecretKey
         nostrPubkey = derivedPubkey
         lightningAddress = "\(npub)@\(domain)"
         
-        print("NPC: Initialized with npub: \(npub.prefix(20))...")
+        // Restored settings do not invoke isEnabled.didSet. Start only after
+        // keys exist, without blocking local wallet startup on the network.
+        if isEnabled {
+            Task { await initializeIfEnabled() }
+        }
     }
     
     /// Get the npub (bech32 public key) for display
@@ -140,63 +160,75 @@ class NPCService: ObservableObject {
     
     // MARK: - Connection
     
-    /// Initialize NPC connection
+    /// Share one attempt across startup, foreground, settings, and payment checks.
     func connect() async {
-        guard isEnabled else { return }
-        
-        guard let secretKey = nostrSecretKey else {
-            errorMessage = "Nostr keys not initialized"
+        guard isEnabled, let secretKey = nostrSecretKey else { return }
+        if isConnected, client != nil { return }
+        if let connectionTask {
+            await connectionTask.value
             return
         }
-        
+
+        let session = sessionID
         isLoading = true
         errorMessage = nil
-        
-        defer { isLoading = false }
-        
+        let task = Task { await establishConnection(secretKey: secretKey, session: session) }
+        connectionTask = task
+        await task.value
+    }
+
+    private func establishConnection(secretKey: String, session: UUID) async {
+        defer {
+            if sessionID == session {
+                connectionTask = nil
+                isLoading = false
+            }
+        }
+        guard isCurrentSession(session), !Task.isCancelled else { return }
         do {
-            // Create NpubCashClient with CDK.
-            let connectedClient = try NpubCashClient(baseUrl: baseURL, nostrSecretKey: secretKey)
-            client = connectedClient
-            
-            // Try to get user info by fetching quotes (this validates connection)
-            // The client handles authentication internally
+            let connectedClient = try makeClient(baseURL, secretKey)
             let quotes = try await connectedClient.getQuotes(since: nil)
-            print("NPC: Connected successfully, found \(quotes.count) quotes")
-            
-            // Reconcile the server-side mint with the local selection. The server
-            // falls back to its own default mint for accounts that never set one,
-            // so re-assert the user's choice on every connect.
+            guard isCurrentSession(session), !Task.isCancelled else { return }
+
+            var configured = quotes.compactMap(\.mintUrl).first ?? ""
             if let selected = selectedMintUrl {
                 do {
                     let response = try await connectedClient.setMintUrl(mintUrl: selected)
                     if !response.error, let confirmed = response.mintUrl {
-                        configuredMintUrl = confirmed
+                        configured = confirmed
                     }
                 } catch {
+                    // A mint reconciliation failure does not invalidate authentication.
                     print("NPC: mint reconciliation failed: \(error)")
                 }
-            } else if let firstQuote = quotes.first, let mintUrl = firstQuote.mintUrl {
-                // No local choice yet: surface the server's mint for display,
-                // but don't persist it as if the user picked it.
-                configuredMintUrl = mintUrl
             }
-            
+            guard isCurrentSession(session), !Task.isCancelled else { return }
+            client = connectedClient
+            configuredMintUrl = configured
             isConnected = true
             errorMessage = nil
-            
-            // Start background refresh
             startBackgroundRefresh()
-            
         } catch {
-            errorMessage = error.userFacingWalletMessage
-            print("NPC connection error: \(error)")
+            guard isCurrentSession(session), !Task.isCancelled else { return }
+            client = nil
             isConnected = false
+            errorMessage = error.userFacingWalletMessage
+            // Keep periodic recovery available after a failed initial attempt.
+            startBackgroundRefresh()
         }
     }
-    
+
+    private func isCurrentSession(_ session: UUID) -> Bool {
+        isEnabled && sessionID == session
+    }
+
     /// Disconnect and stop background refresh
     func disconnect() {
+        sessionID = UUID()
+        connectionTask?.cancel()
+        connectionTask = nil
+        isLoading = false
+        paymentCheckInProgress = false
         stopBackgroundRefresh()
         isConnected = false
         client = nil
@@ -211,14 +243,13 @@ class NPCService: ObservableObject {
     /// Local selection is only persisted once the server confirms the change,
     /// otherwise incoming payments keep landing on the server's default mint.
     func changeMint(to mintUrl: String) async throws {
-        if client == nil {
-            await connect()
-        }
-        guard let client = client else {
-            throw NPCError.notConnected
-        }
+        let session = sessionID
+        await connect()
+        guard isCurrentSession(session) else { throw CancellationError() }
+        guard let client, isConnected else { throw NPCError.notConnected }
 
         let response = try await client.setMintUrl(mintUrl: mintUrl)
+        guard isCurrentSession(session) else { throw CancellationError() }
 
         if response.error {
             throw NPCError.apiError("Failed to change mint")
@@ -244,17 +275,21 @@ class NPCService: ObservableObject {
         guard isEnabled, shouldCheckIncomingInvoices else { return }
         guard !paymentCheckInProgress else { return }
 
+        let session = sessionID
         paymentCheckInProgress = true
-        defer { paymentCheckInProgress = false }
+        defer {
+            if sessionID == session { paymentCheckInProgress = false }
+        }
 
         if !isConnected || client == nil {
             await connect()
         }
 
-        guard isConnected, client != nil else { return }
+        guard isCurrentSession(session), isConnected, client != nil else { return }
         
         do {
             let quotes = try await getQuotes(since: nil)
+            guard isCurrentSession(session), !Task.isCancelled else { return }
             lastCheck = Date()
             errorMessage = nil
             
@@ -266,6 +301,7 @@ class NPCService: ObservableObject {
                 }
             
             for quote in paidQuotes {
+                guard isCurrentSession(session), !Task.isCancelled else { return }
                 if automaticClaim {
                     await claimQuote(quote)
                 } else {
@@ -275,6 +311,9 @@ class NPCService: ObservableObject {
             }
             
         } catch {
+            guard isCurrentSession(session), !Task.isCancelled else { return }
+            isConnected = false
+            client = nil
             errorMessage = error.userFacingWalletMessage
             print("Failed to check NPC payments: \(error)")
         }
@@ -321,10 +360,12 @@ class NPCService: ObservableObject {
     func startBackgroundRefresh() {
         stopBackgroundRefresh()
 
-        guard shouldCheckIncomingInvoices else { return }
+        guard isEnabled, isInitialized, shouldCheckIncomingInvoices else { return }
 
-        // Initial check
-        Task { await checkAndClaimPayments() }
+        // A failed connection waits for the timer; do not immediately recurse.
+        if isConnected {
+            Task { await checkAndClaimPayments() }
+        }
 
         guard shouldPeriodicallyCheckIncomingInvoices else { return }
 
@@ -342,7 +383,7 @@ class NPCService: ObservableObject {
     }
 
     func applyPollingPreferences() {
-        guard isEnabled, isConnected else {
+        guard isEnabled, isInitialized else {
             stopBackgroundRefresh()
             return
         }
