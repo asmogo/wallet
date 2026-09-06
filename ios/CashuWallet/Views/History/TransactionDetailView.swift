@@ -114,88 +114,93 @@ struct TransactionDetailView: View {
     var body: some View {
         NavigationStack {
             VStack(spacing: 24) {
-                // Hero: an actionable QR (unclaimed token / pending or
-                // reusable invoice), else a state glyph that bounces in on
-                // open — green check when completed, red X when failed;
-                // nothing while a no-QR transaction is still pending.
-                heroSlot
+                // Group the state and amount more closely than the receipt facts.
+                VStack(spacing: 16) {
+                    // Hero: an actionable QR (unclaimed token / pending or
+                    // reusable invoice), else a state glyph that bounces in on
+                    // open — green check when completed, red X when failed;
+                    // nothing while a no-QR transaction is still pending.
+                    heroSlot
 
-                // Receipt amounts use the same primary/secondary ordering
-                // as Home and History. The glyph above carries state colour.
-                TransactionReceiptAmountPair(
-                    transaction: transaction,
-                    role: showsQR ? .amountCompact : .amountConfirm,
-                    preferredPrimary: settings.homeBalancePrimary,
-                    showFiat: settings.showFiatBalance,
-                    btcPrice: priceService.btcPriceUSD,
-                    currencyCode: settings.bitcoinPriceCurrency,
-                    useBitcoinSymbol: settings.useBitcoinSymbol
-                )
-                .padding(.top, heroSlotIsEmpty ? 32 : 0)
-
-                // Detail rows on canvas, led by Status + Date. Type is
-                // omitted — the nav title names it.
-                VStack(spacing: 0) {
-                    ForEach(Array(detailRows.enumerated()), id: \.offset) { _, row in
-                        if let copyValue = row.copyValue {
-                            copyableRow(label: row.label, value: row.value, copyValue: copyValue)
-                        } else {
-                            detailRow(label: row.label, value: row.value)
-                        }
-                    }
-                    if let explorerURL = onchainExplorerURL {
-                        explorerLinkRow(label: "View in block explorer", url: explorerURL)
-                    }
-                }
-                .padding(.top, 8)
-                .padding(.horizontal, 4)
-
-                if offersManualClaimCheck {
-                    switch manualClaimCheckResult {
-                    case .notClaimed:
-                        InlineNotice(
-                            message: "This token has not been claimed yet.",
-                            title: "Status checked",
-                            severity: .info
-                        )
-                    case .failed(let message):
-                        InlineNotice(
-                            message: message.text,
-                            title: "Couldn't check status",
-                            severity: message.severity
-                        )
-                    case .claimed, nil:
-                        EmptyView()
-                    }
+                    // Receipt amounts use the same primary/secondary ordering
+                    // as Home and History. The glyph above carries state colour.
+                    TransactionReceiptAmountPair(
+                        transaction: transaction,
+                        role: showsQR ? .amountCompact : .amountConfirm,
+                        preferredPrimary: settings.homeBalancePrimary,
+                        showFiat: settings.showFiatBalance,
+                        btcPrice: priceService.btcPriceUSD,
+                        currencyCode: settings.bitcoinPriceCurrency,
+                        useBitcoinSymbol: settings.useBitcoinSymbol
+                    )
+                    .padding(.top, heroSlotIsEmpty ? 16 : 0)
                 }
 
-                // Pending outgoing ecash gains the same one-off status action as
-                // the generated-token screen when automatic checks are disabled.
-                // Keep it after Copy so the two surfaces share the same action order.
-                if offersManualClaimCheck || copyableContent != nil {
-                    VStack(spacing: 12) {
-                        if let content = copyableContent {
-                            Button(action: { copyContent(content) }) {
-                                Text("Copy")
+                // Row bottom padding + this gap leaves 24pt before the actions.
+                VStack(spacing: 12) {
+                    // Detail rows on canvas, led by Status + Date. Type is
+                    // omitted — the nav title names it.
+                    VStack(spacing: 0) {
+                        ForEach(Array(detailRows.enumerated()), id: \.offset) { _, row in
+                            if let copyValue = row.copyValue {
+                                copyableRow(label: row.label, value: row.value, copyValue: copyValue)
+                            } else {
+                                detailRow(label: row.label, value: row.value)
                             }
-                            .flatSheetSecondaryButton()
-                            .accessibilityLabel("Copy \(qrContentTypeLabel)")
-                            .accessibilityHint("Copies the \(qrContentAccessibilityLabel) to clipboard")
                         }
+                        if let explorerURL = onchainExplorerURL {
+                            explorerLinkRow(label: "View in block explorer", url: explorerURL)
+                        }
+                    }
+                    .padding(.horizontal, 4)
 
-                        if offersManualClaimCheck {
-                            Button(action: { startManualClaimCheck() }) {
-                                if isCheckingClaim {
-                                    ProgressView()
-                                } else {
-                                    Text("Check Status")
+                    if offersManualClaimCheck {
+                        switch manualClaimCheckResult {
+                        case .notClaimed:
+                            InlineNotice(
+                                message: "This token has not been claimed yet.",
+                                title: "Status checked",
+                                severity: .info
+                            )
+                        case .failed(let message):
+                            InlineNotice(
+                                message: message.text,
+                                title: "Couldn't check status",
+                                severity: message.severity
+                            )
+                        case .claimed, nil:
+                            EmptyView()
+                        }
+                    }
+
+                    // Pending outgoing ecash gains the same one-off status action as
+                    // the generated-token screen when automatic checks are disabled.
+                    // Keep it after Copy so the two surfaces share the same action order.
+                    if offersManualClaimCheck || copyableContent != nil {
+                        VStack(spacing: 12) {
+                            if let content = copyableContent {
+                                Button(action: { copyContent(content) }) {
+                                    Text("Copy")
                                 }
+                                .flatSheetSecondaryButton()
+                                .accessibilityLabel("Copy \(qrContentTypeLabel)")
+                                .accessibilityHint("Copies the \(qrContentAccessibilityLabel) to clipboard")
                             }
-                            .glassButton()
-                            .disabled(isCheckingClaim)
-                            .accessibilityIdentifier("cashu.history.check-token-status")
-                            .accessibilityLabel(isCheckingClaim ? "Checking claim status" : "Check Status")
-                            .accessibilityInputLabels(["Check Status"])
+
+                            if offersManualClaimCheck {
+                                Button(action: { startManualClaimCheck() }) {
+                                    if isCheckingClaim {
+                                        ProgressView()
+                                    } else {
+                                        Text("Check Status")
+                                    }
+                                }
+                                .glassButton()
+                                .disabled(isCheckingClaim)
+                                .accessibilityIdentifier("cashu.history.check-token-status")
+                                .accessibilityLabel(isCheckingClaim ? "Checking claim status" : "Check Status")
+                                .accessibilityInputLabels(["Check Status"])
+                            }
                         }
                     }
                 }
@@ -275,13 +280,13 @@ struct TransactionDetailView: View {
             Image(systemName: "checkmark.circle.fill")
                 .font(.statusGlyph)
                 .foregroundStyle(ErrorSeverity.success.foreground)
-                .padding(.top, 24)
+                .padding(.top, 16)
                 .accessibilityLabel("Completed")
         } else if transaction.status == .failed {
             Image(systemName: "xmark.circle.fill")
                 .font(.statusGlyph)
                 .foregroundStyle(ErrorSeverity.error.foreground)
-                .padding(.top, 24)
+                .padding(.top, 16)
                 .accessibilityLabel("Failed")
         }
     }
@@ -370,7 +375,8 @@ struct TransactionDetailView: View {
         }
         .font(.subheadline)
         .padding(.horizontal, 4)
-        .padding(.vertical, 14)
+        .padding(.vertical, 12)
+        .frame(minHeight: 44)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(label)
         .accessibilityValue(value)
@@ -401,7 +407,8 @@ struct TransactionDetailView: View {
             }
             .font(.subheadline)
             .padding(.horizontal, 4)
-            .padding(.vertical, 14)
+            .padding(.vertical, 12)
+            .frame(minHeight: 44)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
@@ -425,7 +432,8 @@ struct TransactionDetailView: View {
             }
             .font(.subheadline)
             .padding(.horizontal, 4)
-            .padding(.vertical, 14)
+            .padding(.vertical, 12)
+            .frame(minHeight: 44)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
