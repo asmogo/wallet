@@ -38,6 +38,7 @@ struct ReceiveLightningView: View {
     @State private var isCreatingRequest = false
     @State private var isMinting = false
     @State private var isCheckingPayment = false
+    @State private var mintRetryStatus = MintQuoteRetryStatus()
     @State private var isPaid = false
     @State private var requestFailure: ReceiveRequestFailure?
     @State private var showMintPicker = false
@@ -229,6 +230,25 @@ struct ReceiveLightningView: View {
                 // (set in `applyMethodOption`); don't recompute it from the empty
                 // field here — that would fight the user's explicit picker choice.
             }
+            .onChange(of: mintQuote?.id) { _, quoteID in
+                mintRetryStatus = quoteID.map(walletManager.mintQuoteRetryStatus)
+                    ?? MintQuoteRetryStatus()
+            }
+            .onChange(of: mintRetryStatus.state) { oldState, newState in
+                guard oldState != newState else { return }
+                switch newState {
+                case .none:
+                    break
+                case .retryScheduled:
+                    AccessibilityNotification.Announcement(
+                        "Payment received. Ecash issuance will retry automatically."
+                    ).post()
+                case .needsAttention:
+                    AccessibilityNotification.Announcement(
+                        "Payment received, but ecash is still pending. Retry now is available."
+                    ).post()
+                }
+            }
             .onChange(of: entryUnit) { oldUnit, newUnit in
                 // Only the sats↔fiat display flip re-expresses the typed string.
                 // A non-sat mint unit is entered directly and must not be
@@ -263,8 +283,7 @@ struct ReceiveLightningView: View {
         return orderedMethods.isEmpty ? [.bolt11] : orderedMethods
     }
 
-    /// Picker rows: BOLT12 fans out into fixed + any-amount, so a BOLT12-only
-    /// mint still yields two options (and therefore a visible picker).
+    /// Picker rows are derived from the mint's supported payment methods.
     private var availableMethodOptions: [ReceiveMethodOption] {
         ReceiveMethodOption.options(for: availableMintMethods)
     }
@@ -276,8 +295,7 @@ struct ReceiveLightningView: View {
     }
 
     private var shouldShowMethodPicker: Bool {
-        // Count options, not methods: a BOLT12-only mint is one method but two
-        // options, and the in-screen toggle that used to disambiguate is gone.
+        // Count user-facing options rather than raw mint capabilities.
         availableMethodOptions.count > 1
     }
 
@@ -572,7 +590,7 @@ struct ReceiveLightningView: View {
                             ShareSheet(items: [qrShareText])
                         }
 
-                    if let amount = quote.amount, amount > 0 {
+                    if !quote.isAmountless, let amount = quote.amount, amount > 0 {
                         if quote.unit.lowercased() == "sat" {
                             CurrencyAmountDisplay(
                                 sats: amount,
@@ -599,9 +617,17 @@ struct ReceiveLightningView: View {
                         )
                         editableRow(
                             label: "Amount",
-                            value: quote.amount.flatMap { $0 > 0 ? formatQuoteAmount($0, unit: quote.unit) : nil } ?? "Any",
+                            value: quote.isAmountless
+                                ? "Any"
+                                : quote.amount.flatMap { $0 > 0 ? formatQuoteAmount($0, unit: quote.unit) : nil } ?? "Any",
                             action: { showReusableAmountPicker = true }
                         )
+                        if quote.amountIssued > 0 {
+                            detailRow(
+                                label: "Total received",
+                                value: formatQuoteAmount(quote.amountIssued, unit: quote.unit)
+                            )
+                        }
                         if let created = quote.createdAt {
                             detailRow(
                                 label: "Created",
@@ -624,7 +650,7 @@ struct ReceiveLightningView: View {
         }
         .sheet(isPresented: $showReusableAmountPicker) {
             CashuRequestAmountPickerSheet(
-                currentAmount: quote.amount,
+                currentAmount: quote.isAmountless ? nil : quote.amount,
                 unit: quote.unit,
                 onSelect: {
                     setReusableOfferAmount($0, mintURL: quote.mintURL, unit: quote.unit)
@@ -646,7 +672,8 @@ struct ReceiveLightningView: View {
     /// Full-screen success shown once ecash is issued — the exact same
     /// `PaymentStatusView` the pay/send flows use, so a received payment reads
     /// identically to a sent one (checkmark → title → detail block → Done).
-    /// Stays until the user taps Done.
+    /// Stays until the user taps Done. This view is reached only after the
+    /// reconciliation path has verified that ecash was issued.
     private func receiveSuccessView(quote: MintQuoteInfo) -> some View {
         PaymentStatusView(
             details: receiveSuccessRows(quote: quote),
@@ -869,22 +896,18 @@ struct ReceiveLightningView: View {
 
     @ViewBuilder
     private var statusBadge: some View {
-        // No `isPaid` branch: the body swaps to the full-screen success
-        // terminal the instant `isPaid` flips, so an inline received badge
-        // here could never render — the celebration lives in
-        // `PaymentStatusView`'s staged entrance.
         Group {
             if isCheckingPayment || isMinting {
                 HStack(spacing: 6) {
                     ProgressView()
                         .tint(.accentColor)
                         .scaleEffect(0.8)
-                    Text(isMinting ? "Minting..." : "Checking...")
+                    Text(isMinting ? "Issuing ecash..." : "Checking...")
                 }
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
                 .transition(.opacity)
-            } else if isExpired {
+            } else if isExpired, (mintQuote?.mintableAmount ?? 0) == 0 {
                 HStack(spacing: 6) {
                     Image(systemName: "xmark.circle.fill")
                         .accessibilityHidden(true)
@@ -894,6 +917,61 @@ struct ReceiveLightningView: View {
                 // Same severity token as the countdown above it, which already
                 // moved off Color.red — the two states of one clock.
                 .foregroundStyle(ErrorSeverity.error.foreground)
+                .transition(.opacity)
+            } else if (mintQuote?.mintableAmount ?? 0) > 0,
+                      mintRetryStatus.state != .none {
+                VStack(spacing: 8) {
+                    HStack(spacing: 6) {
+                        Image(
+                            systemName: mintRetryStatus.state == .needsAttention
+                                ? "exclamationmark.triangle.fill"
+                                : "clock.arrow.circlepath"
+                        )
+                        .accessibilityHidden(true)
+                        Text(
+                            mintRetryStatus.state == .needsAttention
+                                ? "Payment received. Ecash is still pending."
+                                : "Payment received. Retrying ecash automatically."
+                        )
+                    }
+                    .font(.subheadline.weight(.medium))
+                    .foregroundStyle(
+                        mintRetryStatus.state == .needsAttention
+                            ? ErrorSeverity.error.foreground
+                            : Color.secondary
+                    )
+
+                    Button {
+                        retryPendingMintQuote()
+                    } label: {
+                        Label("Retry now", systemImage: "arrow.clockwise")
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
+                    .accessibilityHint("Checks the payment and tries to issue the pending ecash again")
+                }
+                .transition(.opacity)
+            } else if (mintQuote?.mintableAmount ?? 0) > 0 {
+                HStack(spacing: 6) {
+                    Image(systemName: "clock.badge.checkmark")
+                        .accessibilityHidden(true)
+                    Text("Payment received. Ecash issuance is pending.")
+                }
+                .font(.subheadline.weight(.medium))
+                .foregroundStyle(.secondary)
+                .transition(.opacity)
+            } else if let quote = mintQuote,
+                      quote.paymentMethod == .bolt12,
+                      quote.amountIssued > 0,
+                      quote.mintableAmount == 0 {
+                HStack(spacing: 6) {
+                    Image(systemName: "checkmark.seal.fill")
+                        .symbolEffect(.bounce, value: reduceMotion ? nil : quote.amountIssued)
+                        .accessibilityHidden(true)
+                    Text("Ready for another payment")
+                }
+                .font(.subheadline.weight(.medium))
+                .foregroundStyle(.secondary)
                 .transition(.opacity)
             } else if mintQuote?.state == .paid || mintQuote?.state == .issued {
                 HStack(spacing: 6) {
@@ -925,6 +1003,7 @@ struct ReceiveLightningView: View {
         .animation(.easeInOut(duration: 0.2), value: isCheckingPayment)
         .animation(.easeInOut(duration: 0.2), value: isMinting)
         .animation(.easeInOut(duration: 0.2), value: isExpired)
+        .animation(.easeInOut(duration: 0.2), value: mintRetryStatus.state)
     }
 
     private var pendingStatusText: String {
@@ -1065,7 +1144,7 @@ struct ReceiveLightningView: View {
             amountString = ""
             loadOrCreateAmountlessOffer()
         } else {
-            // Lightning / fixed reusable: land on the amount screen.
+            // Amount-requiring rails: land on the amount screen.
             selectedMethod = option.method
             isAmountless = false
         }
@@ -1097,7 +1176,9 @@ struct ReceiveLightningView: View {
             rail: rail,
             quoteId: quote.id,
             encoded: quote.request,
-            amount: quote.amount,
+            // A paid amountless offer reports a cumulative amount, but its QR
+            // is still amountless. Preserve the original offer shape.
+            amount: quote.isAmountless ? nil : quote.amount,
             unit: quote.unit,
             mints: mintURLs,
             reusable: reusable,
@@ -1324,7 +1405,9 @@ struct ReceiveLightningView: View {
             if expiryTimeRemaining <= 0 {
                 isExpired = true
                 expiryTimer?.invalidate()
-                quoteStatusTask?.cancel()
+                if quote.paymentMethod != .onchain, (mintQuote?.mintableAmount ?? 0) == 0 {
+                    quoteStatusTask?.cancel()
+                }
             }
         }
     }
@@ -1338,7 +1421,6 @@ struct ReceiveLightningView: View {
         guard let quote = mintQuote,
               quote.paymentMethod == .onchain,
               quote.state != .issued,
-              !quote.isExpired,
               !abandonedOnchainQuoteIds.contains(quote.id) else { return }
         abandonedOnchainQuoteIds.append(quote.id)
         startAbandonedQuoteWatcher()
@@ -1359,44 +1441,14 @@ struct ReceiveLightningView: View {
     private func checkAbandonedOnchainQuotes() async {
         for quoteId in abandonedOnchainQuoteIds {
             guard !isPaid, !Task.isCancelled else { return }
-            guard let info = try? await walletManager.checkMintQuote(quoteId: quoteId) else { continue }
-            // Drop quotes that expired before the mint saw any deposit; a
-            // funded-but-expired quote keeps being probed.
-            if info.isExpired, info.state == .pending, (info.amount ?? 0) == 0 {
-                abandonedOnchainQuoteIds.removeAll { $0 == quoteId }
-                continue
-            }
-            // On-chain quotes sit .pending until a mint attempt succeeds — the
-            // mint call is the probe (mintQuoteIfReady parity; not-yet-funded
-            // failures are expected and swallowed).
-            var mintedAmount: UInt64?
-            do {
-                mintedAmount = try await walletManager.mintTokens(quoteId: quoteId)
-            } catch {
-                guard isAlreadyIssuedMintError(error) else { continue }
-            }
+            guard let result = await walletManager.refreshPendingMintQuote(quoteId: quoteId),
+                  result.hasSettledPayment else { continue }
             abandonedOnchainQuoteIds.removeAll { $0 == quoteId }
-            // Stop the live quote's monitoring BEFORE swapping `mintQuote`, so
-            // the display view's onChange can't restart polling mid-swap; then
-            // reuse the standard success path.
             quoteStatusTask?.cancel()
             monitoredQuoteId = nil
             expiryTimer?.invalidate()
-            let refreshed = (try? await walletManager.checkMintQuote(quoteId: quoteId)) ?? info
-            // `receiveSuccessRows` and the home toast need a non-nil amount;
-            // fall back to the freshly minted amount if the quote lacks one.
-            mintQuote = refreshed.amount != nil ? refreshed : MintQuoteInfo(
-                id: refreshed.id,
-                request: refreshed.request,
-                amount: mintedAmount,
-                paymentMethod: .onchain,
-                state: .issued,
-                expiry: refreshed.expiry,
-                createdAt: refreshed.createdAt,
-                unit: refreshed.unit,
-                mintURL: refreshed.mintURL
-            )
-            await completeReceivedQuote()
+            mintQuote = result.quote
+            await completeReceivedQuote(receivedAmount: result.quote.amountIssued)
             return
         }
     }
@@ -1411,7 +1463,11 @@ struct ReceiveLightningView: View {
             case .bolt11:
                 await pollMintQuote(quoteId: quote.id, initialInterval: 5, maxInterval: 15)
             case .bolt12:
-                await monitorMintQuoteViaSubscription(quoteId: quote.id, paymentMethod: .bolt12)
+                // A reusable offer must keep making progress even when a
+                // websocket stays connected but stops delivering updates.
+                // Polling also reconciles every paid/issued counter delta, so
+                // no individual payment can leave the quote stranded.
+                await pollMintQuote(quoteId: quote.id, initialInterval: 5, maxInterval: 15)
             case .onchain:
                 await refreshMintQuoteStatus()
                 await monitorMintQuoteViaSubscription(quoteId: quote.id, paymentMethod: .onchain)
@@ -1430,7 +1486,7 @@ struct ReceiveLightningView: View {
                 quoteId: quoteId,
                 paymentMethod: paymentMethod
             ) {
-                while !Task.isCancelled && !isPaid && !isExpired {
+                while !Task.isCancelled && !isPaid && (!isExpired || paymentMethod == .onchain) {
                     let notification = try await subscription.recv()
                     guard !Task.isCancelled else { break }
 
@@ -1463,10 +1519,12 @@ struct ReceiveLightningView: View {
     ) async {
         var interval = initialInterval
 
-        while !Task.isCancelled && !isPaid && !isExpired && mintQuote?.id == quoteId {
+        while !Task.isCancelled && !isPaid && mintQuote?.id == quoteId {
             try? await Task.sleep(nanoseconds: interval * 1_000_000_000)
 
-            guard !Task.isCancelled, !isPaid, !isExpired, mintQuote?.id == quoteId else { break }
+            guard !Task.isCancelled, !isPaid, mintQuote?.id == quoteId,
+                  !isExpired || mintQuote?.paymentMethod == .onchain ||
+                    (mintQuote?.mintableAmount ?? 0) > 0 else { break }
             await refreshMintQuoteStatus()
 
             if interval < maxInterval {
@@ -1476,39 +1534,42 @@ struct ReceiveLightningView: View {
     }
 
     @MainActor
-    private func refreshMintQuoteStatus() async {
-        guard let quote = mintQuote, !isExpired, !isMinting else { return }
+    private func refreshMintQuoteStatus(force: Bool = false) async {
+        guard let quote = mintQuote, !isMinting, !isCheckingPayment,
+              force || !isExpired || quote.paymentMethod == .onchain || quote.mintableAmount > 0 else { return }
 
         isCheckingPayment = true
-        defer { isCheckingPayment = false }
+        isMinting = quote.mintableAmount > 0 && (force || walletManager.shouldAttemptMintQuote(quoteID: quote.id))
+        defer {
+            isCheckingPayment = false
+            isMinting = false
+        }
 
-        do {
-            let updatedQuote = try await walletManager.checkMintQuote(quoteId: quote.id)
-            guard !Task.isCancelled, mintQuote?.id == quote.id else { return }
-            mintQuote = updatedQuote
+        // The first status check can itself recover an interrupted CDK saga.
+        // Keep it inside reconciliation so its issuance delta and retry deadline
+        // are handled before balance updates or receive feedback.
+        guard let result = await walletManager.refreshPendingMintQuote(quoteId: quote.id, force: force),
+              !Task.isCancelled, mintQuote?.id == quote.id else { return }
+        mintQuote = result.quote
+        mintRetryStatus = result.retryStatus
 
-            if updatedQuote.paymentMethod == .onchain, updatedQuote.state == .pending {
-                await refreshOnchainObservation(for: updatedQuote)
-                await mintQuoteIfReady(updatedQuote)
-                return
-            } else {
-                onchainObservation = nil
+        if result.quote.paymentMethod == .onchain, result.quote.state == .pending {
+            await refreshOnchainObservation(for: result.quote)
+        } else {
+            onchainObservation = nil
+        }
+
+        if result.quote.paymentMethod == .bolt12 {
+            if result.newlyIssued > 0 {
+                walletManager.postReceivedMintNotification(
+                    amount: result.newlyIssued,
+                    unit: result.quote.unit,
+                    homeHaptic: false
+                )
+                HapticFeedback.notification(.success)
             }
-
-            switch updatedQuote.state {
-            case .pending:
-                return
-            case .paid:
-                // A paid invoice is not spendable ecash until minting succeeds.
-                // Keep monitoring through transient failures; show a receipt only
-                // after CDK has persisted the issued proofs.
-                await mintQuoteIfReady(updatedQuote)
-            case .issued:
-                // Mint already issued the ecash — just refresh + finish.
-                await completeReceivedQuote()
-            }
-        } catch {
-            // Ignore transient polling failures and keep monitoring.
+        } else if result.hasSettledPayment {
+            await completeReceivedQuote(receivedAmount: result.quote.amountIssued)
         }
     }
 
@@ -1530,63 +1591,40 @@ struct ReceiveLightningView: View {
         )
     }
 
-    @MainActor
-    private func mintQuoteIfReady(_ quote: MintQuoteInfo) async {
-        guard !isMinting else { return }
-
-        isMinting = true
-        defer { isMinting = false }
-
-        do {
-            let _ = try await walletManager.mintTokens(quoteId: quote.id)
-            await completeReceivedQuote()
-        } catch {
-            if isAlreadyIssuedMintError(error) {
-                await completeReceivedQuote()
-                return
-            }
-
-            if quote.paymentMethod == .onchain {
-                return
-            }
-
-            AppLogger.wallet.error(
-                "Failed to mint quote \(quote.id, privacy: .public): \(String(describing: error), privacy: .public)"
-            )
+    private func retryPendingMintQuote() {
+        guard let quote = mintQuote, quote.mintableAmount > 0, !isMinting else { return }
+        Task { @MainActor in
+            await refreshMintQuoteStatus(force: true)
         }
     }
 
-    /// Publish a receipt only after the receive has been issued.
+    /// Finish a one-shot receive only after quote counters (or a successful
+    /// mint response) confirm that ecash was issued.
     @MainActor
-    private func completeReceivedQuote() async {
+    private func completeReceivedQuote(receivedAmount: UInt64? = nil) async {
         guard !isPaid else { return }
         isPaid = true
         expiryTimer?.invalidate()
-        Task { @MainActor in
-            await walletManager.refreshBalance()
-            await walletManager.loadTransactions()
-        }
 
         // Fire the home-screen toast (same notification the NPC mint flow
         // posts from WalletManager) so the user sees the receipt on the home
         // screen after dismiss.
-        if let quote = mintQuote, let amount = quote.amount {
-            NotificationCenter.default.post(
-                name: .cashuTokenReceived,
-                object: nil,
-                // Pass the unit so the home delta skips a misleading "+N sat" for
-                // a non-sat mint (the sat balance didn't move).
-                userInfo: ["amount": amount, "unit": quote.unit]
+        if let quote = mintQuote,
+           let amount = receivedAmount ?? quote.amount,
+           amount > 0 {
+            walletManager.postReceivedMintNotification(
+                amount: amount,
+                unit: quote.unit,
+                homeHaptic: false
             )
         }
 
-        // Issuance is complete; the receipt stays until the user taps Done.
+        // Ecash is issued — stop polling this one-shot request. Reusable
+        // BOLT12 offers never enter this terminal path.
         quoteStatusTask?.cancel()
     }
 
-    private func isAlreadyIssuedMintError(_ error: Error) -> Bool {
-        walletManager.isAlreadyIssuedMintError(error)
-    }
+
 }
 
 #Preview {

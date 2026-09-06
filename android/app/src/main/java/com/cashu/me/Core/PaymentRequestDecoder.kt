@@ -68,6 +68,9 @@ object PaymentRequestParser {
                 CdkPaymentType.BOLT12 -> PaymentMethodKind.Bolt12
             }
         }
+        if (LightningRequestParser.parseBolt12Offer(normalized) != null) {
+            return PaymentMethodKind.Bolt12
+        }
         if (isBitcoinAddress(request)) return PaymentMethodKind.Onchain
         return null
     }
@@ -108,8 +111,12 @@ object PaymentRequestDecoder {
     fun encodedLightningRequest(raw: String): String? {
         val trimmed = raw.trim()
         if (trimmed.isEmpty()) return null
-        bitcoinPaymentURI(trimmed)?.lightning?.let { return PaymentRequestParser.normalizeLightningRequest(it) }
+        bitcoinPaymentURI(trimmed)?.lightning?.let { embedded ->
+            val normalized = PaymentRequestParser.normalizeLightningRequest(embedded)
+            return LightningRequestParser.parseBolt12Offer(normalized)?.request ?: normalized
+        }
         val normalized = PaymentRequestParser.normalizeLightningRequest(trimmed)
+        LightningRequestParser.parseBolt12Offer(normalized)?.let { return it.request }
         return if (runCatching { decodeInvoice(normalized) }.isSuccess) normalized else null
     }
 
@@ -150,12 +157,15 @@ object PaymentRequestDecoder {
 
     private fun decodedLightningRequest(raw: String): PaymentRequestDecodeResult? {
         val normalized = encodedLightningRequest(raw) ?: return null
-        val decoded = runCatching { decodeInvoice(normalized) }.getOrNull() ?: return null
-        val amountSats = decoded.amountMsat?.let { (it.toLong() + 999) / 1000 }
-        return when (decoded.paymentType) {
-            CdkPaymentType.BOLT11 -> PaymentRequestDecodeResult.Bolt11(amountSats, decoded.description)
-            CdkPaymentType.BOLT12 -> PaymentRequestDecodeResult.Bolt12(amountSats, decoded.description)
+        runCatching { decodeInvoice(normalized) }.getOrNull()?.let { decoded ->
+            val amountSats = decoded.amountMsat?.let { (it.toLong() + 999) / 1000 }
+            return when (decoded.paymentType) {
+                CdkPaymentType.BOLT11 -> PaymentRequestDecodeResult.Bolt11(amountSats, decoded.description)
+                CdkPaymentType.BOLT12 -> PaymentRequestDecodeResult.Bolt12(amountSats, decoded.description)
+            }
         }
+        val offer = LightningRequestParser.parseBolt12Offer(normalized) ?: return null
+        return PaymentRequestDecodeResult.Bolt12(offer.amountSats, offer.description)
     }
 
     fun amountLocked(result: PaymentRequestDecodeResult): Boolean = when (result) {

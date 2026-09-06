@@ -59,13 +59,13 @@ class WalletManager: ObservableObject {
     /// don't hammer it. Kept equal to `pendingQuotePollInterval` (Android
     /// parity) so the poll drives one sync pass per interval.
     var lastMintQuoteSyncAt: Date?
-    let mintQuoteSyncCooldown: TimeInterval = 5
+    let mintQuoteSyncCooldown: TimeInterval = 10
 
     /// Foreground quote poll (started/stopped on scenePhase changes). Re-checks
     /// pending mint + melt quotes while the app is active so a payment lands
     /// without pull-to-refresh (Android parity).
     var pendingQuotePollTask: Task<Void, Never>?
-    let pendingQuotePollInterval: TimeInterval = 5
+    let pendingQuotePollInterval: TimeInterval = 10
 
     // MARK: - Services
 

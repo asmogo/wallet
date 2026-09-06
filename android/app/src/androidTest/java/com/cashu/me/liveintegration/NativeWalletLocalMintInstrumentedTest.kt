@@ -26,7 +26,6 @@ import org.junit.Assume.assumeTrue
 import org.junit.Test
 import com.cashu.me.test.FullOnly
 
-@FullOnly
 class NativeWalletLocalMintInstrumentedTest {
     private val args = InstrumentationRegistry.getArguments()
     private val context = InstrumentationRegistry.getInstrumentation().targetContext
@@ -40,6 +39,57 @@ class NativeWalletLocalMintInstrumentedTest {
         workDir.deleteRecursively()
     }
 
+    @Test
+    fun bolt12PaidButUnissuedQuoteRecoversAfterDatabaseReopen() = runBlocking {
+        assumeNativeMatrixEnabled()
+        assertMintEndpointReady(cdkMintUrl)
+        workDir.deleteRecursively()
+        workDir.mkdirs()
+
+        val payer = TestWallet("bolt12-recovery")
+        try {
+            payer.open()
+            payer.gateway.ensureWallet(cdkMintUrl)
+            val quote = payer.gateway.createMintQuote(
+                amount = null,
+                method = PaymentMethodKind.Bolt12,
+                mintUrl = cdkMintUrl,
+                unit = "sat",
+            )
+            assertEquals(PaymentMethodKind.Bolt12, LightningRequestParser.parse(quote.request).method)
+
+            val paid = quote.awaitPaid(payer.gateway)
+            val outstanding = paid.amountPaid - paid.amountIssued
+            assertTrue(outstanding > 0)
+            val balanceBeforeRecovery = payer.gateway.totalBalance(cdkMintUrl)
+
+            val payerMnemonic = payer.mnemonic
+            payer.close()
+            payer.open(payerMnemonic)
+
+            assertTrue(payer.gateway.listUnissuedMintQuotes().any { it.id == paid.id })
+            assertEquals(
+                outstanding,
+                payer.gateway.mintUnissuedQuotes(cdkMintUrl, "sat"),
+            )
+            val verified = payer.gateway.checkMintQuote(paid.id)
+            assertEquals(verified.amountPaid, verified.amountIssued)
+            assertEquals(
+                balanceBeforeRecovery + outstanding,
+                payer.gateway.totalBalance(cdkMintUrl),
+            )
+            assertEquals(0L, payer.gateway.mintUnissuedQuotes(cdkMintUrl, "sat"))
+
+            // This is deliberately the process-death boundary over the same
+            // durable database. A seed-only restore cannot discover a
+            // mint-generated quote id or its NUT-20 signing-key association;
+            // that requires an upstream/exported quote-backup format.
+        } finally {
+            payer.close()
+        }
+    }
+
+    @FullOnly
     @Test
     fun nativeCdkWalletMatrixAgainstLocalMints() = runBlocking {
         assumeNativeMatrixEnabled()
@@ -172,6 +222,36 @@ class NativeWalletLocalMintInstrumentedTest {
                 unit = "sat",
             )
             assertEquals(PaymentMethodKind.Bolt12, LightningRequestParser.parse(bolt12.request).method)
+
+            step = "CDK BOLT12 paid-but-unissued restart recovery"
+            val paidBolt12 = bolt12.awaitPaid(payer.gateway)
+            val outstandingBolt12 = paidBolt12.amountPaid - paidBolt12.amountIssued
+            assertTrue(outstandingBolt12 > 0)
+            val balanceBeforeRecovery = payer.gateway.totalBalance(cdkMintUrl)
+
+            // Reopen the same native database before issuing. This is the app
+            // process-death boundary that previously left a paid quote behind.
+            // It is not a seed-only restore into an empty database: NUT-09
+            // cannot discover the mint-generated quote id, and BOLT12 issuance
+            // also needs the stored NUT-20 signing-key association. That needs
+            // a CDK/exported quote-backup format before it can be tested here.
+            val payerMnemonic = payer.mnemonic
+            payer.close()
+            payer.open(payerMnemonic)
+            assertTrue(
+                payer.gateway.listUnissuedMintQuotes().any { it.id == paidBolt12.id },
+            )
+            assertEquals(
+                outstandingBolt12,
+                payer.gateway.mintUnissuedQuotes(cdkMintUrl, "sat"),
+            )
+            val verifiedBolt12 = payer.gateway.checkMintQuote(paidBolt12.id)
+            assertEquals(verifiedBolt12.amountPaid, verifiedBolt12.amountIssued)
+            assertEquals(
+                balanceBeforeRecovery + outstandingBolt12,
+                payer.gateway.totalBalance(cdkMintUrl),
+            )
+            assertEquals(0L, payer.gateway.mintUnissuedQuotes(cdkMintUrl, "sat"))
 
             step = "CDK on-chain quote"
             val onchain = payer.gateway.createMintQuote(

@@ -160,7 +160,6 @@ jobs:
         ./CI/setup-nutshell.sh
 
     - name: Setup local CDK mint
-      if: env.UI_TIER == 'full'
       working-directory: .
       run: |
         chmod +x CI/setup-cdk.sh
@@ -171,9 +170,7 @@ jobs:
       run: |
         chmod +x CI/start-nutshell.sh CI/start-cdk.sh
         ./CI/start-nutshell.sh 3338
-        if [ "$UI_TIER" = "full" ]; then
-          ./CI/start-cdk.sh
-        fi
+        ./CI/start-cdk.sh
 
     - name: Run required Android UI suite
       if: env.UI_TIER != 'full'
@@ -186,7 +183,9 @@ jobs:
           -Pandroid.testInstrumentationRunnerArguments.notAnnotation=com.cashu.me.test.FullOnly \
           -Pandroid.testInstrumentationRunnerArguments.timeout_msec=600000 \
           -Pandroid.testInstrumentationRunnerArguments.cashu.liveUiLocalMintEnabled=true \
-          -Pandroid.testInstrumentationRunnerArguments.cashu.nutshellMintUrl=http://10.0.2.2:3338
+          -Pandroid.testInstrumentationRunnerArguments.cashu.nativeWalletLocalMintIntegration=true \
+          -Pandroid.testInstrumentationRunnerArguments.cashu.nutshellMintUrl=http://10.0.2.2:3338 \
+          -Pandroid.testInstrumentationRunnerArguments.cashu.cdkMintUrl=http://10.0.2.2:3339
 
     - name: Run full Android UI and native suite
       if: env.UI_TIER == 'full'

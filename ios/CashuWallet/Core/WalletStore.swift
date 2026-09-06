@@ -69,6 +69,14 @@ final class WalletStore {
         set(timestamps, forKey: StorageKeys.mintQuoteTimestamps)
     }
 
+    func loadMintQuoteSchedules() -> [String: MintQuoteScheduleRecord] {
+        value(forKey: StorageKeys.mintQuoteSchedules) ?? [:]
+    }
+
+    func saveMintQuoteSchedules(_ schedules: [String: MintQuoteScheduleRecord]) {
+        set(schedules, forKey: StorageKeys.mintQuoteSchedules)
+    }
+
     /// Last successful online keyset refresh per mint. Startup uses this to
     /// avoid contacting every configured mint on every app launch.
     func loadMintKeysetRefreshTimestamps() -> [String: TimeInterval] {

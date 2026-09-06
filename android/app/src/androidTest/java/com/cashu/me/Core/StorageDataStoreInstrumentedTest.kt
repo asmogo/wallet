@@ -6,12 +6,14 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import java.util.UUID
 import kotlinx.serialization.builtins.ListSerializer
+import kotlinx.serialization.builtins.MapSerializer
 import kotlinx.serialization.builtins.serializer
 import kotlinx.serialization.json.Json
 import com.cashu.me.Core.Platform.AndroidSecureStorage
 import com.cashu.me.Core.Protocols.StorageKeys
 import com.cashu.me.Models.CashuRequest
 import com.cashu.me.Models.MintInfo
+import com.cashu.me.Models.MintQuoteScheduleRecord
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -30,6 +32,13 @@ class StorageDataStoreInstrumentedTest {
     fun walletStoreMigratesSharedPreferencesAndClearsWalletBoundary() {
         val storeName = uniqueStoreName("wallet_store")
         val mint = MintInfo(url = "https://mint.example.com", name = "Example", balance = 21)
+        val schedule = MintQuoteScheduleRecord(
+            firstObservedAtEpochMillis = 1_000,
+            nextAttemptAtEpochMillis = 2_000,
+            consecutiveFailures = 2,
+            hadOutstandingPayment = true,
+            isReusable = true,
+        )
         context.seedSharedPreferences(storeName) {
             putString(
                 StorageKeys.walletMints,
@@ -37,6 +46,13 @@ class StorageDataStoreInstrumentedTest {
             )
             putString(StorageKeys.walletActiveMintUrl, mint.url)
             putString(StorageKeys.walletProcessedNPCQuotes, json.encodeToString(ListSerializer(String.serializer()), listOf("quote-1")))
+            putString(
+                StorageKeys.walletMintQuoteSchedules,
+                json.encodeToString(
+                    MapSerializer(String.serializer(), MintQuoteScheduleRecord.serializer()),
+                    mapOf("quote-1" to schedule),
+                ),
+            )
             putString(
                 StorageKeys.cashuRequests,
                 json.encodeToString(ListSerializer(CashuRequest.serializer()), listOf(CashuRequest(id = "req-1", encoded = "creqA-test"))),
@@ -49,6 +65,7 @@ class StorageDataStoreInstrumentedTest {
         assertEquals(mint.url, store.activeMintURL)
         assertEquals(listOf(mint), store.loadMints())
         assertEquals(listOf("quote-1"), store.loadProcessedNPCQuotes())
+        assertEquals(mapOf("quote-1" to schedule), store.loadMintQuoteSchedules())
         assertEquals("req-1", store.loadCashuRequests().first().id)
         assertEquals("req-1", store.currentCashuRequestId)
 
@@ -57,6 +74,7 @@ class StorageDataStoreInstrumentedTest {
         assertNull(store.activeMintURL)
         assertEquals(emptyList<MintInfo>(), store.loadMints())
         assertEquals(emptyList<String>(), store.loadProcessedNPCQuotes())
+        assertEquals(emptyMap<String, MintQuoteScheduleRecord>(), store.loadMintQuoteSchedules())
         assertEquals(emptyList<CashuRequest>(), store.loadCashuRequests())
         assertNull(store.currentCashuRequestId)
     }

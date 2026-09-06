@@ -1,7 +1,11 @@
 import XCTest
+import Cdk
 @testable import CashuWallet
 
 final class PaymentRequestDecoderTests: XCTestCase {
+
+    private let amountlessBolt12Offer =
+        "lno1pgqpvggr25nht4nyqrgtnhxltctkdsfrf3myhj008f6fyulf4tplmarx8hxq"
 
     // MARK: - iconName
 
@@ -169,6 +173,67 @@ final class PaymentRequestDecoderTests: XCTestCase {
     func testDecodeLightningAddressWithSubdomain() {
         let result = PaymentRequestDecoder.decode("alice@wallet.example.com")
         XCTAssertEqual(result, .lightningAddress("alice@wallet.example.com"))
+    }
+
+    func testDecodeRealAmountlessBolt12Offer() {
+        guard case .bolt12(let amountSats, _) = PaymentRequestDecoder.decode(amountlessBolt12Offer) else {
+            return XCTFail("Expected a real amountless BOLT12 offer to be recognized")
+        }
+
+        XCTAssertNil(amountSats)
+        XCTAssertEqual(
+            PaymentRequestDecoder.encodedLightningRequest(from: "lightning:\(amountlessBolt12Offer)"),
+            amountlessBolt12Offer
+        )
+    }
+
+    func testBolt12TextEnvelopeNormalizesUppercaseAndContinuation() {
+        let split = amountlessBolt12Offer.index(amountlessBolt12Offer.startIndex, offsetBy: 32)
+        let continued = "\(amountlessBolt12Offer[..<split])+\n \(amountlessBolt12Offer[split...])"
+        let compactContinuation = "\(amountlessBolt12Offer[..<split])+\(amountlessBolt12Offer[split...])"
+
+        XCTAssertEqual(
+            PaymentRequestDecoder.encodedLightningRequest(from: amountlessBolt12Offer.uppercased()),
+            amountlessBolt12Offer
+        )
+        XCTAssertEqual(
+            PaymentRequestDecoder.encodedLightningRequest(from: continued),
+            amountlessBolt12Offer
+        )
+        XCTAssertEqual(
+            PaymentRequestDecoder.encodedLightningRequest(from: compactContinuation),
+            amountlessBolt12Offer
+        )
+        XCTAssertNil(
+            PaymentRequestDecoder.encodedLightningRequest(
+                from: "L\(amountlessBolt12Offer.dropFirst())"
+            )
+        )
+    }
+
+    func testAmountlessBolt12DestinationRequiresAmountEntry() {
+        let destination = SendAmountDestination.melt(
+            request: amountlessBolt12Offer,
+            mode: .lightning,
+            decoded: .bolt12(amountSats: nil, description: nil)
+        )
+
+        XCTAssertFalse(destination.carriesAmount)
+    }
+
+    func testAmountlessMeltOptionsCarryEnteredAmountInMillisatoshis() throws {
+        guard case .amountless(let amountMsat) = try meltOptionsForLightningRequest(
+            requestAmountMsat: nil,
+            amountSats: 21
+        ) else {
+            return XCTFail("Expected amountless melt options")
+        }
+
+        XCTAssertEqual(amountMsat.value, 21_000)
+        XCTAssertNil(
+            try meltOptionsForLightningRequest(requestAmountMsat: 5_000, amountSats: 21),
+            "A request carrying its own amount must not be overridden"
+        )
     }
 
     // MARK: - decode — onchain

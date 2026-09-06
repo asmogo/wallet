@@ -1093,10 +1093,8 @@ enum SendAmountDestination: Equatable {
     var carriesAmount: Bool {
         switch self {
         case .melt(_, _, let decoded):
-            // Amountless invoices/offers never lock (the input step keeps them
-            // with a caution), so a locked bolt11/bolt12 always carries one.
             switch decoded {
-            case .bolt11, .bolt12: return true
+            case .bolt11(let amount, _), .bolt12(let amount, _): return amount != nil
             default: return false
             }
         case .cashuRequest(let summary):
@@ -1717,16 +1715,15 @@ struct UnifiedSendView: View {
         switch result {
         case .bolt11, .bolt12:
             if let notice = result.amountlessMeltCaution {
-                // Amountless invoice/offer can't be paid without an amount we don't
-                // collect here — stay on input with a clean caution instead of routing
-                // to a quote that only fails with raw mint jargon.
+                // Keep unsupported amountless request types on input with a
+                // clean caution instead of leaking raw mint jargon.
                 inputHint = notice
                 return
             }
             let request = PaymentRequestDecoder.encodedLightningRequest(from: raw)
                 ?? PaymentRequestParser.normalizeLightningRequest(raw)
             lockMelt(request: request, mode: .lightning, decoded: result)
-            routeToPayment()   // amount carried by the invoice → opens on confirm
+            routeToPayment()   // fixed amount opens on confirm; amountless opens the keypad
         case .lightningAddress(let address):
             lockMelt(request: address, mode: .lightning, decoded: result)
             routeToPayment()
@@ -2253,7 +2250,9 @@ struct UnifiedSendView: View {
                         )
                     } else {
                         quote = try await walletManager.createMeltQuote(
-                            request: request, preferredMintURL: mint.url
+                            request: request,
+                            amount: amountSats > 0 ? amountSats : nil,
+                            preferredMintURL: mint.url
                         )
                     }
                 }
@@ -3164,9 +3163,8 @@ struct MeltView: View {
             }
             .onChange(of: requestInput) {
                 syncSelectedMeltMint()
-                // Surface the amountless caution the moment a request is pasted/typed —
-                // no Get Quote tap needed to discover it carries no amount. Any other
-                // stale notice clears when the destination changes.
+                // Surface unsupported amountless request types immediately.
+                // BOLT12 instead reveals the amount keypad below.
                 if let notice = PaymentRequestDecoder.decode(requestInput).amountlessMeltCaution {
                     presentError(notice, severity: .caution)
                 } else {
@@ -3276,7 +3274,13 @@ struct MeltView: View {
     }
 
     private var amountRequired: Bool {
-        meltMode == .onchain || isHumanReadableAddress
+        if meltMode == .onchain || isHumanReadableAddress {
+            return true
+        }
+        if case .bolt12(let amount, _) = PaymentRequestDecoder.decode(requestInput) {
+            return amount == nil
+        }
+        return false
     }
 
     private var canGetQuote: Bool {
@@ -3804,8 +3808,7 @@ struct MeltView: View {
         }
 
         if let notice = PaymentRequestDecoder.decode(trimmedInput).amountlessMeltCaution {
-            // Amountless invoice/offer can't be quoted without an amount we don't collect
-            // here — surface the clean caution up-front instead of a raw mint error.
+            // Surface unsupported amountless request types before a raw mint error.
             isPreparingInitialQuote = false
             presentError(notice, severity: .caution)
             return
@@ -3855,6 +3858,7 @@ struct MeltView: View {
                         let request = PaymentRequestDecoder.encodedLightningRequest(from: trimmedInput) ?? trimmedInput
                         let quote = try await walletManager.createMeltQuote(
                             request: request,
+                            amount: amountSats > 0 ? amountSats : nil,
                             preferredMintURL: quoteMint.url
                         )
                         guard !Task.isCancelled,

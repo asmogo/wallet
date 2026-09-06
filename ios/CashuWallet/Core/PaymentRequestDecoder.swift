@@ -60,24 +60,32 @@ actor CdkRuntime {
         let normalized = PaymentRequestDecoder.encodedLightningRequest(from: raw)
             ?? PaymentRequestParser.normalizeLightningRequest(raw)
 
-        guard !normalized.isEmpty,
-              let decoded = try? decodeInvoice(invoiceStr: normalized) else {
-            return nil
+        guard !normalized.isEmpty else { return nil }
+
+        if let decoded = try? decodeInvoice(invoiceStr: normalized) {
+            let paymentMethod: PaymentMethodKind
+            switch decoded.paymentType {
+            case .bolt11:
+                paymentMethod = .bolt11
+            case .bolt12:
+                paymentMethod = .bolt12
+            }
+
+            return LightningRequestMetadata(
+                normalizedRequest: normalized,
+                paymentMethod: paymentMethod,
+                amountSats: decoded.amountMsat.map(PaymentRequestDecoder.satsCeiling(from:)),
+                amountMsat: decoded.amountMsat
+            )
         }
 
-        let paymentMethod: PaymentMethodKind
-        switch decoded.paymentType {
-        case .bolt11:
-            paymentMethod = .bolt11
-        case .bolt12:
-            paymentMethod = .bolt12
-        }
+        guard let offer = PaymentRequestParser.bolt12OfferMetadata(from: normalized) else { return nil }
 
         return LightningRequestMetadata(
-            normalizedRequest: normalized,
-            paymentMethod: paymentMethod,
-            amountSats: decoded.amountMsat.map(PaymentRequestDecoder.satsCeiling(from:)),
-            amountMsat: decoded.amountMsat
+            normalizedRequest: offer.normalizedRequest,
+            paymentMethod: .bolt12,
+            amountSats: offer.amountMsat.map(PaymentRequestDecoder.satsCeiling(from:)),
+            amountMsat: offer.amountMsat
         )
     }
 
@@ -102,16 +110,13 @@ enum PaymentRequestDecodeResult: Equatable, Sendable {
 }
 
 extension PaymentRequestDecodeResult {
-    /// Clean caution copy when this is a Lightning request that carries no amount,
-    /// so every melt entry point surfaces identical, plain-language wording instead
-    /// of a failing quote round-trip that leaks raw CDK codes. Nil for anything that
-    /// isn't an amountless BOLT11 invoice or BOLT12 offer.
+    /// Clean caution copy for amountless request types this wallet still cannot
+    /// pay. BOLT12 offers are intentionally excluded: Send collects an amount
+    /// and passes it through CDK's amountless melt option.
     var amountlessMeltCaution: String? {
         switch self {
         case .bolt11(let amountSats, _) where amountSats == nil:
             return "This invoice doesn't set an amount. Ask the sender for one with the amount set."
-        case .bolt12(let amountSats, _) where amountSats == nil:
-            return "This offer doesn't set an amount. Ask the sender for one with the amount set."
         default:
             return nil
         }
@@ -124,8 +129,10 @@ enum PaymentRequestMode: String, Equatable, Sendable {
 }
 
 /// Centralized payment-request decoder. Wraps `PaymentRequestParser` +
-/// CashuDevKit's `decodeInvoice` so the chip preview, recents tap, scan
-/// callback, and live decode feedback all share a single classification path.
+/// CashuDevKit's `decodeInvoice`, with a BOLT12 envelope/TLV fallback for
+/// valid amountless offers that CDK's stricter decoder rejects. The chip
+/// preview, recents tap, scan callback, and live decode feedback all share this
+/// single classification path.
 enum PaymentRequestDecoder {
     static func decode(
         _ raw: String,
@@ -165,12 +172,18 @@ enum PaymentRequestDecoder {
         let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return nil }
 
+        let normalized: String
         if let bitcoinURI = bitcoinPaymentURI(from: trimmed),
            let lightning = bitcoinURI.lightning {
-            return PaymentRequestParser.normalizeLightningRequest(lightning)
+            normalized = PaymentRequestParser.normalizeLightningRequest(lightning)
+        } else {
+            normalized = PaymentRequestParser.normalizeLightningRequest(trimmed)
         }
 
-        let normalized = PaymentRequestParser.normalizeLightningRequest(trimmed)
+        if let offer = PaymentRequestParser.bolt12OfferMetadata(from: normalized) {
+            return offer.normalizedRequest
+        }
+
         guard (try? decodeInvoice(invoiceStr: normalized)) != nil else {
             return nil
         }
@@ -220,18 +233,23 @@ enum PaymentRequestDecoder {
     }
 
     private static func decodedLightningRequest(from raw: String) -> PaymentRequestDecodeResult? {
-        guard let normalized = encodedLightningRequest(from: raw),
-              let decoded = try? decodeInvoice(invoiceStr: normalized) else {
-            return nil
+        guard let normalized = encodedLightningRequest(from: raw) else { return nil }
+
+        if let decoded = try? decodeInvoice(invoiceStr: normalized) {
+            let amountSats: UInt64? = decoded.amountMsat.map(satsCeiling(from:))
+            switch decoded.paymentType {
+            case .bolt11:
+                return .bolt11(amountSats: amountSats, description: decoded.description)
+            case .bolt12:
+                return .bolt12(amountSats: amountSats, description: decoded.description)
+            }
         }
 
-        let amountSats: UInt64? = decoded.amountMsat.map(satsCeiling(from:))
-        switch decoded.paymentType {
-        case .bolt11:
-            return .bolt11(amountSats: amountSats, description: decoded.description)
-        case .bolt12:
-            return .bolt12(amountSats: amountSats, description: decoded.description)
-        }
+        guard let offer = PaymentRequestParser.bolt12OfferMetadata(from: normalized) else { return nil }
+        return .bolt12(
+            amountSats: offer.amountMsat.map(satsCeiling(from:)),
+            description: offer.description
+        )
     }
 
     fileprivate static func satsCeiling(from amountMsat: UInt64) -> UInt64 {

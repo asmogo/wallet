@@ -16,26 +16,49 @@ extension WalletManager {
         await syncPendingMintQuotes(force: false)
     }
 
-    /// Silent single-quote check + mint if paid. Used when opening a pending
-    /// Lightning / on-chain receive in transaction detail (Android
-    /// `refreshPendingMintQuote` parity). Does not touch the global loading flag.
+    /// Reconcile one persisted quote against its mint. The returned counters
+    /// distinguish "the Lightning payment arrived" from "the ecash was
+    /// actually issued"; callers must never present success from the former.
+    /// Does not touch the global loading flag.
     @discardableResult
-    func refreshPendingMintQuote(quoteId: String) async -> Bool {
+    func refreshPendingMintQuote(quoteId: String, force: Bool = false) async -> MintQuoteReconciliationResult? {
         do {
             return try await operationCoordinator.perform(
                 kind: .mintQuote,
                 resourceID: quoteId
             ) {
-                let minted = await self.mintQuoteIfPaid(quoteId: quoteId)
-                if minted {
+                guard let result = await self.reconcileMintQuote(quoteId: quoteId, force: force) else {
+                    await self.loadTransactionsAssumingWalletOperationLease()
+                    return nil
+                }
+                // A previous status observer may already have recovered the
+                // saga. Settled receives still need their visible balance read.
+                if result.newlyIssued > 0 || result.hasSettledPayment {
                     await self.refreshBalanceAssumingWalletOperationLease()
                 }
                 await self.loadTransactionsAssumingWalletOperationLease()
-                return minted
+                return result
             }
         } catch {
-            return false
+            return nil
         }
+    }
+
+    /// Restore the last honest paid-but-unissued state when a receive screen is
+    /// reopened. The schedule metadata is advisory only; quote counters remain
+    /// authoritative and callers must ignore this status once no amount is
+    /// outstanding.
+    func mintQuoteRetryStatus(quoteID: String) -> MintQuoteRetryStatus {
+        guard let record = walletStore.loadMintQuoteSchedules()[quoteID] else {
+            return MintQuoteRetryStatus()
+        }
+        return MintQuoteSchedulePolicy.retryStatus(for: record)
+    }
+
+    func shouldAttemptMintQuote(quoteID: String) -> Bool {
+        MintQuoteSchedulePolicy.shouldAttempt(
+            record: walletStore.loadMintQuoteSchedules()[quoteID], now: Date(), force: false
+        )
     }
 
     // MARK: - Foreground polling
@@ -66,17 +89,17 @@ extension WalletManager {
         pendingQuotePollTask = nil
     }
 
-    /// Check every tracked wallet for paid-but-unissued mint quotes and mint
-    /// them. CDK 0.18's `mintUnissuedQuotes()` refreshes each quote's NUT-04
-    /// counters with the mint and mints only the outstanding delta, which
-    /// covers reusable BOLT12 offers without any local heuristics.
+    /// Check every persisted, reconcilable quote and mint its outstanding
+    /// counter delta. CDK keeps every BOLT12 quote in this list permanently,
+    /// including fully-issued reusable offers, so later payments are still
+    /// found after dismissal, app suspension, or relaunch.
     /// - Parameter force: `false` (poll / startup / History open) only runs
     ///   when the repository lane is idle; `true` (pull-to-refresh) preempts.
     func syncPendingMintQuotes(force: Bool = false) async {
         if force {
             do {
                 try await operationCoordinator.perform(kind: .quotePoll) {
-                    await self.mintUnissuedQuotesAcrossWallets()
+                    await self.mintUnissuedQuotesAcrossWallets(force: true)
                 }
             } catch {
                 // Explicit refresh cancellation is expected when its view exits.
@@ -86,28 +109,57 @@ extension WalletManager {
 
         do {
             try await operationCoordinator.performIfIdle(kind: .quotePoll) {
-                await self.mintUnissuedQuotesAcrossWallets()
+                await self.mintUnissuedQuotesAcrossWallets(force: false)
             }
         } catch {
             // Passive maintenance is best effort and will run again next tick.
         }
     }
 
-    private func mintUnissuedQuotesAcrossWallets() async {
+    private func mintUnissuedQuotesAcrossWallets(force: Bool) async {
         guard walletRepository != nil else { return }
         lastMintQuoteSyncAt = Date()
 
-        var mintedAny = false
-        for wallet in await trackedWalletsAssumingWalletOperationLease() {
-            guard !Task.isCancelled else { break }
+        // The CDK database is the durable ledger. Union it with app-level
+        // receive intents so an older/migrated BOLT12 row is still explicitly
+        // checked and produces a useful missing-quote diagnostic instead of
+        // silently disappearing from maintenance.
+        var quoteIDs = Set(CashuRequestStore.shared.requests.compactMap(\.quoteId))
+        var unsettledOnchainQuoteIDs = Set<String>()
+        if let db {
             do {
-                let minted = try await wallet.mintUnissuedQuotes()
-                mintedAny = mintedAny || minted.value > 0
-            } catch is CancellationError {
-                break
+                let quotes = try await db.getUnissuedMintQuotes()
+                quoteIDs.formUnion(quotes.map(\.id))
+                unsettledOnchainQuoteIDs.formUnion(quotes.filter {
+                    PaymentMethodKind.from($0.paymentMethod) == .onchain && $0.amountIssued.value == 0
+                }.map(\.id))
             } catch {
                 AppLogger.wallet.error(
-                    "unissued quote sweep failed error_type=\(String(reflecting: type(of: error)), privacy: .public)"
+                    "mint quote ledger scan failed error_type=\(String(reflecting: type(of: error)), privacy: .public)"
+                )
+            }
+        }
+
+        let selection = MintQuoteSchedulePolicy.select(
+            quoteIDs: quoteIDs,
+            existing: walletStore.loadMintQuoteSchedules(),
+            now: Date(),
+            force: force,
+            unsettledOnchainQuoteIDs: unsettledOnchainQuoteIDs
+        )
+        walletStore.saveMintQuoteSchedules(selection.records)
+        guard !selection.quoteIDs.isEmpty else { return }
+
+        var mintedAny = false
+        for quoteID in selection.quoteIDs {
+            guard !Task.isCancelled else { break }
+            guard let result = await reconcileMintQuote(quoteId: quoteID, force: force) else { continue }
+            if result.newlyIssued > 0 {
+                mintedAny = true
+                postReceivedMintNotification(
+                    amount: result.newlyIssued,
+                    unit: result.quote.unit,
+                    homeHaptic: true
                 )
             }
             if await operationCoordinator.hasWaitingUserOperation() { break }
@@ -120,43 +172,78 @@ extension WalletManager {
         await loadTransactionsAssumingWalletOperationLease()
     }
 
-    /// Check one quote with its mint and mint it when an unpaid amount is
-    /// outstanding. The NUT-04 `amountPaid`/`amountIssued` counters make this
-    /// correct for reusable BOLT12 offers too: fully-issued offers mint 0.
-    @discardableResult
-    private func mintQuoteIfPaid(quoteId: String) async -> Bool {
-        do {
-            _ = try await lightningService.checkMintQuote(quoteId: quoteId)
-        } catch {
-            AppLogger.wallet.error(
-                "pending quote refresh failed resource=\(WalletOperationCoordinator.privacySafeIdentifier(quoteId), privacy: .public) error_type=\(String(reflecting: type(of: error)), privacy: .public)"
-            )
-            return false
-        }
-
-        let storedQuote: MintQuote??
-        do {
-            storedQuote = try await db?.getMintQuote(quoteId: quoteId)
-        } catch {
-            storedQuote = nil
-        }
-        guard let quote = storedQuote ?? nil,
-              quote.amountPaid.value > quote.amountIssued.value else {
-            return false
-        }
-
-        do {
-            _ = try await lightningService.mintTokens(quoteId: quoteId)
-            return true
-        } catch {
-            if isAlreadyIssuedMintError(error) {
-                return true
+    /// Check → mint → verify one quote while the wallet operation lane is held.
+    /// A follow-up check also resolves the important ambiguous case where the
+    /// mint issued ecash but the client lost the response. If another payment
+    /// arrives during the attempt, `remainingAmount` stays positive and the
+    /// next foreground tick mints that new delta.
+    private func reconcileMintQuote(quoteId: String, force: Bool) async -> MintQuoteReconciliationResult? {
+        let reconciler = MintQuoteReconciler(
+            storedQuote: lightningService.storedMintQuote,
+            checkQuote: lightningService.checkMintQuote,
+            mintQuote: lightningService.mintTokens,
+            schedule: { self.walletStore.loadMintQuoteSchedules()[$0] },
+            observed: recordMintQuoteObservation,
+            failed: recordMintQuoteFailure,
+            logFailure: { quoteID, error in
+                AppLogger.wallet.error(
+                    "mint quote reconciliation failed resource=\(WalletOperationCoordinator.privacySafeIdentifier(quoteID), privacy: .public) error_type=\(String(reflecting: type(of: error)), privacy: .public)"
+                )
             }
-            AppLogger.wallet.error(
-                "pending quote mint failed resource=\(WalletOperationCoordinator.privacySafeIdentifier(quoteId), privacy: .public) error_type=\(String(reflecting: type(of: error)), privacy: .public)"
-            )
-            return false
-        }
+        )
+        return await reconciler.reconcile(quoteID: quoteId, force: force)
+    }
+
+    /// Register a newly-created/discovered quote without postponing an already
+    /// due reconciliation. The first sweep sees it immediately.
+    func rememberMintQuoteForScheduling(_ quote: MintQuoteInfo) {
+        var schedules = walletStore.loadMintQuoteSchedules()
+        guard schedules[quote.id] == nil else { return }
+        schedules[quote.id] = MintQuoteScheduleRecord(
+            firstObservedAt: Date().timeIntervalSince1970,
+            isReusable: quote.paymentMethod == .bolt12
+        )
+        walletStore.saveMintQuoteSchedules(schedules)
+    }
+
+    private func recordMintQuoteObservation(_ quote: MintQuoteInfo) {
+        var schedules = walletStore.loadMintQuoteSchedules()
+        schedules[quote.id] = MintQuoteSchedulePolicy.observed(
+            previous: schedules[quote.id],
+            quote: quote,
+            now: Date()
+        )
+        walletStore.saveMintQuoteSchedules(schedules)
+    }
+
+    @discardableResult
+    private func recordMintQuoteFailure(
+        quoteID: String,
+        quote: MintQuoteInfo?
+    ) -> MintQuoteRetryStatus {
+        var schedules = walletStore.loadMintQuoteSchedules()
+        let record = MintQuoteSchedulePolicy.failed(
+            previous: schedules[quoteID],
+            now: Date(),
+            hadOutstandingPayment: (quote?.mintableAmount ?? 0) > 0,
+            isReusable: quote?.paymentMethod == .bolt12
+        )
+        schedules[quoteID] = record
+        walletStore.saveMintQuoteSchedules(schedules)
+        return MintQuoteSchedulePolicy.retryStatus(for: record)
+    }
+
+    func postReceivedMintNotification(amount: UInt64, unit: String, homeHaptic: Bool) {
+        guard amount > 0 else { return }
+        NotificationCenter.default.post(
+            name: .cashuTokenReceived,
+            object: nil,
+            userInfo: [
+                "amount": amount,
+                "unit": unit,
+                "homeHaptic": homeHaptic
+            ]
+        )
     }
 
     // MARK: - Transaction History

@@ -26,6 +26,7 @@ import com.cashu.me.Models.WalletTransaction
 import java.util.concurrent.atomic.AtomicInteger
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.filter
 
 /**
  * Stateful deterministic native-wallet replacement used only by app-level
@@ -177,8 +178,9 @@ class FakeWalletGateway(
     override suspend fun checkMintQuote(quoteId: String): MintQuoteInfo =
         checkNotNull(mintQuotes[quoteId]) { "Unknown fake quote $quoteId" }.value
 
-    override fun subscribeToMintQuote(quoteId: String): Flow<MintQuoteInfo> =
+    override fun subscribeToMintQuote(quoteId: String, mayRefresh: () -> Boolean): Flow<MintQuoteInfo> =
         checkNotNull(mintQuotes[quoteId]) { "Unknown fake quote $quoteId" }
+            .filter { mayRefresh() }
 
     override suspend fun listUnissuedMintQuotes(): List<MintQuoteInfo> =
         mintQuotes.values.map { it.value }.filter { it.state != MintQuoteState.Issued }

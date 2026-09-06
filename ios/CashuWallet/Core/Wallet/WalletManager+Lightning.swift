@@ -20,6 +20,7 @@ extension WalletManager {
                 targetMintURL: targetMintURL,
                 unit: PaymentRequestDecoder.currencyUnit(from: unit)
             )
+            self.rememberMintQuoteForScheduling(quote)
             await self.loadTransactionsAssumingWalletOperationLease()
             return quote
         }
@@ -30,16 +31,20 @@ extension WalletManager {
         unit: String
     ) async throws -> MintQuoteInfo? {
         try await operationCoordinator.perform(kind: .mintQuote, resourceID: mintURL) {
-            try await self.lightningService.existingAmountlessOffer(
+            let quote = try await self.lightningService.existingAmountlessOffer(
                 mintURL: mintURL,
                 unit: PaymentRequestDecoder.currencyUnit(from: unit)
             )
+            if let quote { self.rememberMintQuoteForScheduling(quote) }
+            return quote
         }
     }
 
     func existingOnchainMintQuote(mintURL: String? = nil) async throws -> MintQuoteInfo? {
         try await operationCoordinator.perform(kind: .mintQuote) {
-            try await self.lightningService.existingOnchainMintQuote(mintURL: mintURL)
+            let quote = try await self.lightningService.existingOnchainMintQuote(mintURL: mintURL)
+            if let quote { self.rememberMintQuoteForScheduling(quote) }
+            return quote
         }
     }
 
@@ -48,7 +53,9 @@ extension WalletManager {
             kind: .mintQuote,
             resourceID: quoteId
         ) {
-            try await self.lightningService.checkMintQuote(quoteId: quoteId)
+            let quote = try await self.lightningService.checkMintQuote(quoteId: quoteId)
+            self.rememberMintQuoteForScheduling(quote)
+            return quote
         }
     }
 
@@ -78,30 +85,9 @@ extension WalletManager {
         return amount
     }
 
-    /// Fire-and-forget: keep trying to mint a paid quote so a slow/transiently
-    /// failing mint never blocks the receive sheet. `mintTokens` already
-    /// refreshes balance + history on success, so the wallet credits the moment
-    /// it lands; `syncPendingMintQuotes()` (History pull-to-refresh) is the
-    /// ultimate backstop if all attempts here fail.
-    func claimPaidMintQuote(quoteId: String) async {
-        for _ in 0..<8 {
-            guard !Task.isCancelled else { return }
-            do {
-                _ = try await mintTokens(quoteId: quoteId)
-                return
-            } catch {
-                do { try await Task.sleep(for: .milliseconds(2500)) }
-                catch { return }
-            }
-        }
-        AppLogger.wallet.error(
-            "claimPaidMintQuote: gave up minting resource=\(WalletOperationCoordinator.privacySafeIdentifier(quoteId), privacy: .public)"
-        )
-        SentryService.breadcrumb("Lightning mint claim gave up after retries", category: "wallet.lightning")
-    }
-
     func createMeltQuote(
         request: String,
+        amount: UInt64? = nil,
         preferredMintURL: String? = nil
     ) async throws -> MeltQuoteInfo {
         try await operationCoordinator.perform(
@@ -110,6 +96,7 @@ extension WalletManager {
         ) {
             try await self.lightningService.createMeltQuote(
                 request: request,
+                amount: amount,
                 preferredMintURL: preferredMintURL
             )
         }
@@ -119,7 +106,7 @@ extension WalletManager {
         invoice: String,
         preferredMintURL: String? = nil
     ) async throws -> MeltQuoteInfo {
-        return try await createMeltQuote(request: invoice, preferredMintURL: preferredMintURL)
+        return try await createMeltQuote(request: invoice, amount: nil, preferredMintURL: preferredMintURL)
     }
 
     func createHumanReadableMeltQuote(

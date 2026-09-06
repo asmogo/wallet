@@ -5,6 +5,9 @@ import XCTest
 /// `routeScannedPayload` so the two scanners route identically.
 final class ScanRouterTests: XCTestCase {
 
+    private let amountlessBolt12Offer =
+        "lno1pgqpvggr25nht4nyqrgtnhxltctkdsfrf3myhj008f6fyulf4tplmarx8hxq"
+
     private func route(_ content: String) -> ScannedPayloadRoute {
         ScanRouter.route(content) { summary, _ in .payWithEcash(summary) }
     }
@@ -30,6 +33,18 @@ final class ScanRouterTests: XCTestCase {
         XCTAssertEqual(request, "user@example.com")
         XCTAssertEqual(mode, .lightning)
         XCTAssertFalse(autoQuote, "an address carries no amount — no quote to prefetch")
+        XCTAssertNil(explanation)
+    }
+
+    func testAmountlessBolt12OfferRoutesToAmountEntry() {
+        guard case .melt(let request, let mode, let autoQuote, let explanation) =
+            route(amountlessBolt12Offer) else {
+            return XCTFail("expected .melt")
+        }
+
+        XCTAssertEqual(request, amountlessBolt12Offer)
+        XCTAssertEqual(mode, .lightning)
+        XCTAssertFalse(autoQuote, "an amountless offer needs sender amount entry before quoting")
         XCTAssertNil(explanation)
     }
 

@@ -20,16 +20,21 @@ enum LightningRequestParser {
 
     static func parse(_ request: String) throws -> ParsedRequest {
         let normalizedRequest = normalize(request)
-        let decodedRequest = try decodeInvoice(invoiceStr: normalizedRequest)
-
-        let method: PaymentMethod
-        switch decodedRequest.paymentType {
-        case .bolt11:
-            method = .bolt11
-        case .bolt12:
-            method = .bolt12
+        do {
+            let decodedRequest = try decodeInvoice(invoiceStr: normalizedRequest)
+            let method: PaymentMethod
+            switch decodedRequest.paymentType {
+            case .bolt11:
+                method = .bolt11
+            case .bolt12:
+                method = .bolt12
+            }
+            return ParsedRequest(request: normalizedRequest, method: method)
+        } catch {
+            if let offer = PaymentRequestParser.bolt12OfferMetadata(from: normalizedRequest) {
+                return ParsedRequest(request: offer.normalizedRequest, method: .bolt12)
+            }
+            throw error
         }
-
-        return ParsedRequest(request: normalizedRequest, method: method)
     }
 }

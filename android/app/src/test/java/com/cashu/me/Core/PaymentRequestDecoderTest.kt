@@ -38,11 +38,11 @@ class PaymentRequestDecoderTest {
 
     @Test
     fun rawAndSchemedBolt12PrefixesAreRecognizedByLightningParser() {
-        assertTrue(LightningRequestParser.isBolt12("lno1ptest"))
-        assertTrue(LightningRequestParser.isBolt12("lightning://lno1ptest"))
+        assertTrue(LightningRequestParser.isBolt12(AmountlessBolt12Offer))
+        assertTrue(LightningRequestParser.isBolt12("lightning://$AmountlessBolt12Offer"))
         assertEquals(
             PaymentMethodKind.Bolt12,
-            LightningRequestParser.parse("lightning:lno1ptest").method,
+            LightningRequestParser.parse("lightning:$AmountlessBolt12Offer").method,
         )
     }
 
@@ -114,6 +114,42 @@ class PaymentRequestDecoderTest {
     }
 
     @Test
+    fun decodeRecognizesRealAmountlessBolt12Offer() {
+        val decoded = PaymentRequestDecoder.decode(AmountlessBolt12Offer)
+
+        assertTrue(decoded is PaymentRequestDecodeResult.Bolt12)
+        assertEquals(null, (decoded as PaymentRequestDecodeResult.Bolt12).amountSats)
+        assertEquals(
+            AmountlessBolt12Offer,
+            PaymentRequestDecoder.encodedLightningRequest("lightning:$AmountlessBolt12Offer"),
+        )
+    }
+
+    @Test
+    fun bolt12TextEnvelopeNormalizesUppercaseAndContinuation() {
+        val continued = AmountlessBolt12Offer.take(32) + "+\n " + AmountlessBolt12Offer.drop(32)
+        val compactContinuation = AmountlessBolt12Offer.take(32) + "+" + AmountlessBolt12Offer.drop(32)
+
+        assertEquals(
+            AmountlessBolt12Offer,
+            PaymentRequestDecoder.encodedLightningRequest(AmountlessBolt12Offer.uppercase()),
+        )
+        assertEquals(
+            AmountlessBolt12Offer,
+            PaymentRequestDecoder.encodedLightningRequest(continued),
+        )
+        assertEquals(
+            AmountlessBolt12Offer,
+            PaymentRequestDecoder.encodedLightningRequest(compactContinuation),
+        )
+        assertEquals(
+            null,
+            PaymentRequestDecoder.encodedLightningRequest("L${AmountlessBolt12Offer.drop(1)}"),
+        )
+        assertTrue(!LightningRequestParser.isBolt12("lno1ptest"))
+    }
+
+    @Test
     fun decodeRecognizesPlainBitcoinAddress() {
         val decoded = PaymentRequestDecoder.decode("1BoatSLRHtKNngkdXEeobR76b53LETtpyT")
         assertEquals(PaymentRequestDecodeResult.Onchain("1BoatSLRHtKNngkdXEeobR76b53LETtpyT"), decoded)
@@ -122,5 +158,10 @@ class PaymentRequestDecoderTest {
     @Test
     fun lightningAddressIsNotBitcoinAddress() {
         assertTrue(!PaymentRequestParser.isBitcoinAddress("user@example.com"))
+    }
+
+    private companion object {
+        const val AmountlessBolt12Offer =
+            "lno1pgqpvggr25nht4nyqrgtnhxltctkdsfrf3myhj008f6fyulf4tplmarx8hxq"
     }
 }

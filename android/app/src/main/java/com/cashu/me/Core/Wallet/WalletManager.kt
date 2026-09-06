@@ -3,7 +3,6 @@ package com.cashu.me.Core
 import java.net.URL
 import java.text.Normalizer
 import java.util.UUID
-import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicLong
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineExceptionHandler
@@ -25,6 +24,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.yield
 import org.cashudevkit.PendingMelt
 import org.cashudevkit.QuoteState as CdkQuoteState
 import org.cashudevkit.npubcashDeriveSecretKeyFromSeed
@@ -103,7 +103,7 @@ class WalletManager(
     // calls [syncPendingMintQuotes] directly to bypass the cooldown.
     // Atomic: startup maintenance runs on Dispatchers.IO while the foreground
     // poll runs on the main-scoped job.
-    private val isSyncingMintQuotes = AtomicBoolean(false)
+    private val mintQuoteSweepMutex = Mutex()
     // 0 = never synced. Written/read across the IO + Main poll jobs.
     private val lastMintQuoteSyncAtMs = AtomicLong(0L)
 
@@ -600,7 +600,8 @@ class WalletManager(
             mintQuoteSyncService.rememberMintQuoteTimestamp(it.id)
         }
 
-    fun subscribeToMintQuote(quoteId: String): Flow<MintQuoteInfo> = gateway.subscribeToMintQuote(quoteId)
+    fun subscribeToMintQuote(quoteId: String): Flow<MintQuoteInfo> =
+        gateway.subscribeToMintQuote(quoteId) { mintQuoteSyncService.shouldAttempt(quoteId) }
 
     override suspend fun mintTokens(quoteId: String): Long =
         mintTokens(
@@ -629,18 +630,28 @@ class WalletManager(
      * poll) and transaction detail open — must not flip the global loading
      * flag (passive UX).
      */
-    suspend fun refreshPendingMintQuote(
+    internal suspend fun refreshPendingMintQuote(
         quoteId: String,
         confirmationOwner: ReceiveConfirmationOwner,
-    ): Boolean {
-        val result = mintQuoteSyncService.syncPendingMintQuote(quoteId)
-        if (result.minted) refreshBalance()
+        force: Boolean = false,
+    ): MintQuoteSyncResult {
+        val result = mintQuoteSyncService.syncPendingMintQuote(quoteId, force)
+        // A prior status poll or websocket check may already have recovered
+        // the issue saga. Re-read balances for an already-settled receive too.
+        if (result.minted || result.hasSettledPayment) refreshBalance()
         loadTransactions()
         result.receivedAmount?.let { amount ->
             publishReceivedPayment(amount, result.unit, confirmationOwner)
         }
-        return result.minted
+        return result
     }
+
+    /** Advisory UI state only; NUT-25 paid/issued counters remain authoritative. */
+    internal fun mintQuoteRetryStatus(quoteId: String) =
+        mintQuoteSyncService.retryStatus(quoteId)
+
+    internal fun shouldAttemptMintQuote(quoteId: String): Boolean =
+        mintQuoteSyncService.shouldAttempt(quoteId)
 
     /**
      * Cooldown-gated sync for passive triggers (app start, resume, History
@@ -656,10 +667,11 @@ class WalletManager(
     }
 
     /**
-     * Check every tracked wallet for paid-but-unissued mint quotes and mint
-     * them (CDK 0.18 `mintUnissuedQuotes`): each quote's NUT-04 counters are
-     * refreshed with the mint and only the outstanding delta is minted, which
-     * covers reusable BOLT12 offers without any local heuristics.
+     * Reconcile every persisted mint quote individually. CDK's unissued list
+     * deliberately retains all BOLT12 quotes forever, so a reusable offer is
+     * checked after dismissal, suspension, and relaunch as well as while its QR
+     * is visible. Every path uses [WalletMintQuoteSyncService]'s single lane and
+     * verifies `amountPaid` against `amountIssued` before reporting success.
      * Silent by design (iOS parity): must never flip the global loading flag.
      *
      * @param force when false (poll / startup / History open), the pass only
@@ -667,33 +679,55 @@ class WalletManager(
      *   it preempts cooldown gating (explicit user intent).
      */
     suspend fun syncPendingMintQuotes(force: Boolean = false): Int {
-        // Coarse in-flight guard: collapse overlapping triggers into one pass.
-        if (!isSyncingMintQuotes.compareAndSet(false, true)) return 0
+        // Passive triggers collapse while an existing pass is active. An
+        // explicit user refresh waits its turn instead of being silently
+        // discarded — this makes `force` real rather than a documentation-only
+        // parameter and matches iOS's coordinated forced lane.
+        if (force) {
+            mintQuoteSweepMutex.lock()
+        } else if (!mintQuoteSweepMutex.tryLock()) {
+            return 0
+        }
         lastMintQuoteSyncAtMs.set(System.currentTimeMillis())
         try {
-            var mintedWallets = 0
-            transactionUnitsByMint(mutableState.value.mints).forEach { (mintUrl, units) ->
-                units.forEach { unit ->
-                    val minted = runCatching { gateway.mintUnissuedQuotes(mintUrl, unit) }
-                        .onFailure { AppLogger.wallet.error("Unissued quote sweep failed for $mintUrl ($unit)", it) }
-                        .getOrDefault(0L)
-                    if (minted > 0) {
-                        mintedWallets += 1
-                        // Home receive beat for a background-settled payment
-                        // (e.g. a BOLT12 offer paid from another wallet).
-                        publishReceivedPayment(
-                            amount = minted,
-                            unit = unit,
-                            confirmationOwner = ReceiveConfirmationOwner.Home,
-                        )
-                    }
+            val databaseQuotes = runCatching { gateway.listUnissuedMintQuotes() }
+                .onFailure { AppLogger.wallet.error("Mint quote ledger scan failed", it) }
+                .getOrDefault(emptyList())
+            // App intents are a second durable index. Usually these IDs are
+            // already in CDK's list; the union also surfaces a missing local
+            // quote instead of silently dropping an older/migrated offer.
+            val intentQuoteIds = cashuRequestStore.state.value.requests.mapNotNull { it.quoteId }
+            val quoteIds = (databaseQuotes.map { it.id } + intentQuoteIds).distinct().sorted()
+            val selectedQuoteIds = mintQuoteSyncService.selectQuoteIdsForSync(
+                quoteIds,
+                force,
+                unsettledOnchainQuoteIds = databaseQuotes.filter {
+                    it.paymentMethod == PaymentMethodKind.Onchain && it.amountIssued == 0L
+                }.map { it.id }.toSet(),
+            )
+            if (selectedQuoteIds.isEmpty()) return 0
+
+            var mintedQuotes = 0
+            selectedQuoteIds.forEach { quoteId ->
+                val result = mintQuoteSyncService.syncPendingMintQuote(quoteId, force)
+                result.receivedAmount?.let { amount ->
+                    mintedQuotes += 1
+                    publishReceivedPayment(
+                        amount = amount,
+                        unit = result.unit,
+                        confirmationOwner = ReceiveConfirmationOwner.Home,
+                    )
                 }
+                // Each gateway call releases its native mutex. Yield between
+                // rows so foreground user work can acquire it before the next
+                // maintenance quote; the passive batch itself is capped at two.
+                if (!force) yield()
             }
-            if (mintedWallets > 0) refreshBalance()
+            if (mintedQuotes > 0) refreshBalance()
             loadTransactions()
-            return mintedWallets
+            return mintedQuotes
         } finally {
-            isSyncingMintQuotes.set(false)
+            mintQuoteSweepMutex.unlock()
         }
     }
 
@@ -1592,11 +1626,11 @@ class WalletManager(
         // Minimum gap between passive mint-quote sync passes. Equal to the
         // foreground poll interval so the poll drives one pass per interval
         // (iOS `mintQuoteSyncCooldown` parity).
-        const val MINT_QUOTE_SYNC_COOLDOWN_MS = 5_000L
+        const val MINT_QUOTE_SYNC_COOLDOWN_MS = 10_000L
 
         // How often the foreground poll re-checks pending quotes while the
         // app is active (iOS `pendingQuotePollInterval` parity).
-        const val PENDING_QUOTE_POLL_INTERVAL_MS = 5_000L
+        const val PENDING_QUOTE_POLL_INTERVAL_MS = 10_000L
     }
 }
 

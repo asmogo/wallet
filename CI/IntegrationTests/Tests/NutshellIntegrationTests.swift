@@ -335,20 +335,110 @@ class MintIntegrationTestSuite: IntegrationTestBase {
     func waitForQuotePayment(
         quoteId: String,
         method: PaymentMethod,
+        wallet targetWallet: Wallet? = nil,
         timeout: TimeInterval = 15.0
     ) async throws -> MintQuote {
+        let target = targetWallet ?? wallet!
         let start = Date()
-        var updated = try await wallet.fetchMintQuote(quoteId: quoteId, paymentMethod: method)
+        var updated = try await target.fetchMintQuote(quoteId: quoteId, paymentMethod: method)
         while updated.amountPaid.value <= updated.amountIssued.value,
               Date().timeIntervalSince(start) < timeout {
             try await Task.sleep(nanoseconds: 200_000_000)  // 200 ms
-            updated = try await wallet.fetchMintQuote(quoteId: quoteId, paymentMethod: method)
+            updated = try await target.fetchMintQuote(quoteId: quoteId, paymentMethod: method)
         }
         XCTAssertGreaterThan(
             updated.amountPaid.value, updated.amountIssued.value,
             "\(method) quote was not auto-paid by the FakeWallet within \(timeout)s"
         )
         return updated
+    }
+
+    func runBolt12SweepRecoversEveryQuoteAfterRestart() async throws {
+        let dbPath = NSTemporaryDirectory()
+            .appending("bolt12_recovery_\(UUID().uuidString).sqlite")
+        let mnemonic = try generateMnemonic()
+        let mintURL = MintUrl(url: mintUrlStr)
+
+        let firstRepository = try WalletRepository(
+            mnemonic: mnemonic,
+            store: .sqlite(path: dbPath)
+        )
+        try await firstRepository.createWallet(
+            mintUrl: mintURL,
+            unit: .sat,
+            targetProofCount: nil
+        )
+        let firstWallet = try await firstRepository.getWallet(
+            mintUrl: mintURL,
+            unit: .sat
+        )
+
+        let firstQuote = try await firstWallet.mintQuote(
+            paymentMethod: .bolt12,
+            amount: nil,
+            description: nil,
+            extra: nil
+        )
+        let secondQuote = try await firstWallet.mintQuote(
+            paymentMethod: .bolt12,
+            amount: nil,
+            description: nil,
+            extra: nil
+        )
+        let quotes = [firstQuote, secondQuote]
+        var expectedOutstanding: UInt64 = 0
+        for quote in quotes {
+            let paid = try await waitForQuotePayment(
+                quoteId: quote.id,
+                method: .bolt12,
+                wallet: firstWallet
+            )
+            expectedOutstanding += paid.amountPaid.value - paid.amountIssued.value
+        }
+        XCTAssertGreaterThan(expectedOutstanding, 0)
+        let balanceBeforeRestart = try await firstWallet.totalBalance()
+        XCTAssertEqual(balanceBeforeRestart.value, 0)
+
+        // Open a fresh repository over the same durable store at the exact
+        // failure boundary: payment is recorded, but no ecash was issued.
+        // This deliberately proves process/database-handle recovery, not a
+        // seed-only restore into an empty database. NUT-09 cannot discover a
+        // mint-generated quote id, and a BOLT12 quote additionally needs its
+        // stored NUT-20 signing key association. A true database-loss test
+        // requires an upstream/exported quote-backup format first.
+        // Keep the first FFI handle alive because explicitly destroying a CDK
+        // Tokio runtime inside an async XCTest context can itself panic.
+        let reopenedRepository = try WalletRepository(
+            mnemonic: mnemonic,
+            store: .sqlite(path: dbPath)
+        )
+        try await reopenedRepository.createWallet(
+            mintUrl: mintURL,
+            unit: .sat,
+            targetProofCount: nil
+        )
+        let reopenedWallet = try await reopenedRepository.getWallet(
+            mintUrl: mintURL,
+            unit: .sat
+        )
+
+        let recovered = try await reopenedWallet.mintUnissuedQuotes()
+        XCTAssertEqual(recovered.value, expectedOutstanding)
+        let balanceAfterRecovery = try await reopenedWallet.totalBalance()
+        XCTAssertEqual(balanceAfterRecovery.value, expectedOutstanding)
+
+        for quote in quotes {
+            let verified = try await reopenedWallet.checkMintQuote(quoteId: quote.id)
+            XCTAssertEqual(verified.amountIssued.value, verified.amountPaid.value)
+        }
+        let secondSweep = try await reopenedWallet.mintUnissuedQuotes()
+        XCTAssertEqual(secondSweep.value, 0)
+
+        withExtendedLifetime((firstRepository, firstWallet)) {}
+
+        for suffix in ["", "-shm", "-wal"] {
+            try? FileManager.default.removeItem(atPath: dbPath + suffix)
+        }
     }
 
     func runBolt12MintFlow() async throws {
@@ -381,10 +471,9 @@ class MintIntegrationTestSuite: IntegrationTestBase {
     }
 
     func runBolt12MeltFlow() async throws {
-        _ = try await mintSats(100)
-
-        // Any offer works as the payee for the FakeWallet; reuse one handed out
-        // by the mint's own fake node via a throwaway bolt12 mint quote.
+        // Keep payer and receiver state separate: the receiver publishes one
+        // reusable offer while the payer requests a fresh invoice for each
+        // entered amount.
         let offerQuote = try await wallet.mintQuote(
             paymentMethod: .bolt12,
             amount: nil,
@@ -393,24 +482,115 @@ class MintIntegrationTestSuite: IntegrationTestBase {
         )
         let offer = offerQuote.request
 
-        // The offer is amountless, so the melt amount comes from MeltOptions.
-        let meltQuote = try await wallet.meltQuote(
+        // FakeWallet seeds a newly checked amountless offer with one synthetic
+        // payment. Settle that fixture credit first so the assertions below
+        // measure only the two payer-generated invoice flows.
+        let fixturePaid = try await waitForQuotePayment(
+            quoteId: offerQuote.id,
+            method: .bolt12
+        )
+        let fixtureOutstanding = fixturePaid.amountPaid.value - fixturePaid.amountIssued.value
+        XCTAssertGreaterThan(fixtureOutstanding, 0)
+        let fixtureProofs = try await wallet.mintUnified(
+            quoteId: offerQuote.id,
+            amountSplitTarget: .none,
+            spendingConditions: nil
+        )
+        XCTAssertEqual(
+            fixtureProofs.reduce(0) { $0 + $1.amount.value },
+            fixtureOutstanding
+        )
+        let receiverBalanceBeforePayments = try await wallet.totalBalance()
+
+        let payerDbPath = NSTemporaryDirectory()
+            .appending("bolt12_payer_\(UUID().uuidString).sqlite")
+        let payerRepository = try WalletRepository(
+            mnemonic: try generateMnemonic(),
+            store: .sqlite(path: payerDbPath)
+        )
+        let mintURL = MintUrl(url: mintUrlStr)
+        try await payerRepository.createWallet(
+            mintUrl: mintURL,
+            unit: .sat,
+            targetProofCount: nil
+        )
+        let payerWallet = try await payerRepository.getWallet(
+            mintUrl: mintURL,
+            unit: .sat
+        )
+        _ = try await mintSats(100, wallet: payerWallet)
+
+        // First amount: CDK sends an invoice_request carrying 21, receives a
+        // unique BOLT12 invoice, and pays it.
+        let firstMeltQuote = try await payerWallet.meltQuote(
             method: .bolt12,
             request: offer,
             options: .amountless(amountMsat: Amount(value: 21_000)),
             extra: nil
         )
-        XCTAssertEqual(meltQuote.amount.value, 21, "Melt quote should be for 21 sats")
+        XCTAssertEqual(firstMeltQuote.amount.value, 21, "First melt quote should be for 21 sats")
+        let firstPrepared = try await payerWallet.prepareMelt(quoteId: firstMeltQuote.id)
+        let firstFinalized = try await firstPrepared.confirm()
+        XCTAssertEqual(firstFinalized.state, .paid, "First BOLT12 payment should settle")
 
-        let prepared = try await wallet.prepareMelt(quoteId: meltQuote.id)
-        let finalized = try await prepared.confirm()
-        XCTAssertEqual(finalized.state, .paid, "BOLT12 melt should settle against the FakeWallet")
-
-        let balance = try await wallet.totalBalance()
-        XCTAssertEqual(
-            balance.value, 100 - 21 - finalized.feePaid.value,
-            "Balance should drop by melt amount plus fee"
+        let firstPaid = try await waitForQuotePayment(
+            quoteId: offerQuote.id,
+            method: .bolt12
         )
+        let firstOutstanding = firstPaid.amountPaid.value - firstPaid.amountIssued.value
+        XCTAssertEqual(firstOutstanding, 21)
+        let firstProofs = try await wallet.mintUnified(
+            quoteId: offerQuote.id,
+            amountSplitTarget: .none,
+            spendingConditions: nil
+        )
+        XCTAssertEqual(firstProofs.reduce(0) { $0 + $1.amount.value }, 21)
+
+        // Second amount against the same parent offer must create another
+        // payment quote/invoice and expose only the new 13-sat issuance delta.
+        let secondMeltQuote = try await payerWallet.meltQuote(
+            method: .bolt12,
+            request: offer,
+            options: .amountless(amountMsat: Amount(value: 13_000)),
+            extra: nil
+        )
+        XCTAssertEqual(secondMeltQuote.amount.value, 13, "Second melt quote should be for 13 sats")
+        XCTAssertNotEqual(firstMeltQuote.id, secondMeltQuote.id)
+        let secondPrepared = try await payerWallet.prepareMelt(quoteId: secondMeltQuote.id)
+        let secondFinalized = try await secondPrepared.confirm()
+        XCTAssertEqual(secondFinalized.state, .paid, "Second BOLT12 payment should settle")
+
+        let secondPaid = try await waitForQuotePayment(
+            quoteId: offerQuote.id,
+            method: .bolt12
+        )
+        let secondOutstanding = secondPaid.amountPaid.value - secondPaid.amountIssued.value
+        XCTAssertEqual(secondOutstanding, 13)
+        let secondProofs = try await wallet.mintUnified(
+            quoteId: offerQuote.id,
+            amountSplitTarget: .none,
+            spendingConditions: nil
+        )
+        XCTAssertEqual(secondProofs.reduce(0) { $0 + $1.amount.value }, 13)
+
+        let receiverBalance = try await wallet.totalBalance()
+        XCTAssertEqual(
+            receiverBalance.value,
+            receiverBalanceBeforePayments.value + 34,
+            "Reusable offer should issue both payer-generated deltas exactly once"
+        )
+
+        let payerBalance = try await payerWallet.totalBalance()
+        XCTAssertEqual(
+            payerBalance.value,
+            100 - 34 - firstFinalized.feePaid.value - secondFinalized.feePaid.value,
+            "Payer balance should drop by both amounts plus their fees"
+        )
+
+        withExtendedLifetime((payerRepository, payerWallet)) {}
+        for suffix in ["", "-shm", "-wal"] {
+            try? FileManager.default.removeItem(atPath: payerDbPath + suffix)
+        }
     }
 
     func runOnchainMintFlow() async throws {
@@ -531,6 +711,9 @@ final class CDKIntegrationTests: MintIntegrationTestSuite {
 
     // BOLT12 & on-chain run only against CDK — Nutshell's FakeWallet is bolt11-only.
     func testBolt12MintFlow() async throws { try await runBolt12MintFlow() }
+    func testBolt12SweepRecoversEveryQuoteAfterRestart() async throws {
+        try await runBolt12SweepRecoversEveryQuoteAfterRestart()
+    }
     func testBolt12MeltFlow() async throws { try await runBolt12MeltFlow() }
     func testOnchainMintFlow() async throws { try await runOnchainMintFlow() }
     func testOnchainMeltFlow() async throws { try await runOnchainMeltFlow() }
