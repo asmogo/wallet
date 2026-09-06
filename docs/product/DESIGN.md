@@ -1155,6 +1155,14 @@ chevron on a switchable mint. Method/action rows (the Send and Receive entry
 sheets, Settings navigation rows) are a different vocabulary and keep their
 leading icons — there the glyph identifies a destination, not a field.
 
+Transaction receipts group the status hero and amount with a 16pt/dp gap,
+then separate that group from the detail rows by 24pt/dp. Detail rows use
+12pt/dp vertical padding and retain native minimum touch heights (44pt on iOS,
+48dp on Android). A 12pt/dp gap after the rows combines with the last row's
+bottom padding to leave 24pt/dp before the actions. Stacked actions use a
+12pt/dp gap, and the content ends with 16pt/dp padding above the native bottom
+inset. The QR's size and white border stay unchanged.
+
 **The Confirmation Toast Rule.** Completed utility actions such as Copy use a
 single top-center capsule with a short semantic message (for example, “Copied
 Bitcoin address”). It enters with a restrained upward spring/slide and opacity,
