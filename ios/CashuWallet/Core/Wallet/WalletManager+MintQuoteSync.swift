@@ -21,14 +21,20 @@ extension WalletManager {
     /// actually issued"; callers must never present success from the former.
     /// Does not touch the global loading flag.
     @discardableResult
-    func refreshPendingMintQuote(quoteId: String, force: Bool = false) async -> MintQuoteReconciliationResult? {
+    func refreshPendingMintQuote(
+        quoteId: String,
+        force: Bool = false,
+        observingQuoteID: String? = nil
+    ) async -> MintQuoteReconciliationResult? {
         do {
             return try await operationCoordinator.perform(
                 kind: .mintQuote,
                 resourceID: quoteId
             ) {
                 guard let result = await self.reconcileMintQuote(quoteId: quoteId, force: force) else {
-                    await self.loadTransactionsAssumingWalletOperationLease()
+                    await self.loadTransactionsAssumingWalletOperationLease(
+                        observingQuoteID: observingQuoteID
+                    )
                     return nil
                 }
                 // A previous status observer may already have recovered the
@@ -36,7 +42,9 @@ extension WalletManager {
                 if result.newlyIssued > 0 || result.hasSettledPayment {
                     await self.refreshBalanceAssumingWalletOperationLease()
                 }
-                await self.loadTransactionsAssumingWalletOperationLease()
+                await self.loadTransactionsAssumingWalletOperationLease(
+                    observingQuoteID: observingQuoteID
+                )
                 return result
             }
         } catch {
@@ -62,6 +70,22 @@ extension WalletManager {
     }
 
     // MARK: - Foreground polling
+
+    /// Called from a lifecycle-bound detail task. The balance and local receipt
+    /// are refreshed before feedback; unrelated quotes/explorers are not polled.
+    func monitorDisplayedMintQuote(quoteID: String, homeHaptic: Bool) async {
+        await focusedMintQuoteMonitor.monitor(quoteID: quoteID) { quoteID in
+            let result = await self.refreshPendingMintQuote(
+                quoteId: quoteID, observingQuoteID: quoteID
+            )
+            if let result, result.newlyIssued > 0 {
+                self.postReceivedMintNotification(
+                    amount: result.newlyIssued, unit: result.quote.unit, homeHaptic: homeHaptic
+                )
+            }
+            return result?.quote
+        }
+    }
 
     /// While the app is active, re-check pending quotes every
     /// `pendingQuotePollInterval` so a payment lands on its own — e.g. a
@@ -96,6 +120,7 @@ extension WalletManager {
     /// - Parameter force: `false` (poll / startup / History open) only runs
     ///   when the repository lane is idle; `true` (pull-to-refresh) preempts.
     func syncPendingMintQuotes(force: Bool = false) async {
+        guard force || !focusedMintQuoteMonitor.isActive else { return }
         if force {
             do {
                 try await operationCoordinator.perform(kind: .quotePoll) {
@@ -118,6 +143,7 @@ extension WalletManager {
 
     private func mintUnissuedQuotesAcrossWallets(force: Bool) async {
         guard walletRepository != nil else { return }
+        guard force || !focusedMintQuoteMonitor.isActive else { return }
         lastMintQuoteSyncAt = Date()
 
         // The CDK database is the durable ledger. Union it with app-level
@@ -140,6 +166,7 @@ extension WalletManager {
             }
         }
 
+        guard force || !focusedMintQuoteMonitor.isActive else { return }
         let selection = MintQuoteSchedulePolicy.select(
             quoteIDs: quoteIDs,
             existing: walletStore.loadMintQuoteSchedules(),
@@ -153,6 +180,7 @@ extension WalletManager {
         var mintedAny = false
         for quoteID in selection.quoteIDs {
             guard !Task.isCancelled else { break }
+            guard force || !focusedMintQuoteMonitor.isActive else { break }
             guard let result = await reconcileMintQuote(quoteId: quoteID, force: force) else { continue }
             if result.newlyIssued > 0 {
                 mintedAny = true
@@ -169,7 +197,9 @@ extension WalletManager {
             await refreshBalanceAssumingWalletOperationLease()
         }
 
-        await loadTransactionsAssumingWalletOperationLease()
+        await loadTransactionsAssumingWalletOperationLease(
+            includeRemoteObservations: !focusedMintQuoteMonitor.isActive
+        )
     }
 
     /// Check → mint → verify one quote while the wallet operation lane is held.
@@ -262,9 +292,13 @@ extension WalletManager {
 
     /// Internal form for workflows that already own the repository lease.
     func loadTransactionsAssumingWalletOperationLease(
-        includeRemoteObservations: Bool = true
+        includeRemoteObservations: Bool = true,
+        observingQuoteID: String? = nil
     ) async {
-        await transactionService.loadTransactions(includeRemoteObservations: includeRemoteObservations)
+        await transactionService.loadTransactions(
+            includeRemoteObservations: includeRemoteObservations,
+            observingQuoteID: observingQuoteID
+        )
         reconcileQuoteIntents()
         objectWillChange.send()
     }

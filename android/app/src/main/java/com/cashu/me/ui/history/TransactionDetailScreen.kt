@@ -40,6 +40,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.repeatOnLifecycle
 import kotlinx.coroutines.launch
 import com.cashu.me.Core.AmountFormatter
 import com.cashu.me.Core.AmountDisplayText
@@ -106,6 +109,7 @@ fun TransactionReceiptSheet(
     val scope = rememberCoroutineScope()
     val formatter = remember { AmountFormatter() }
     val confirmationToastController = LocalConfirmationToastController.current
+    val lifecycleOwner = LocalLifecycleOwner.current
 
     // Pending mint-quote rows use id == quoteId; after mint CDK swaps in a new
     // transaction id with the same quoteId. Keep the open-time identity so the
@@ -126,18 +130,21 @@ fun TransactionReceiptSheet(
     var manualCheckResult: PendingTokenClaimCheckResult? by remember(transaction.id) {
         mutableStateOf(null)
     }
-    // Single-quote check on open (not the full pending list). Re-checks this
-    // mint quote against the mint and mints if already paid — same path Receive
-    // uses for its per-quote poll, without the global loading spinner. Keyed on
-    // the opening id so a successful mint → Completed transition does not
-    // cancel the in-flight check.
-    LaunchedEffect(transaction.id) {
+    // Keep the opening identity through settlement so the final balance and
+    // history refresh cannot be cancelled by its own Pending → Completed update.
+    LaunchedEffect(transaction.id, lifecycleOwner, walletState.isRuntimeReady) {
+        if (!walletState.isRuntimeReady) return@LaunchedEffect
         val quoteId = transaction.mintQuoteIdForStatusRefresh ?: return@LaunchedEffect
-        runCatching {
-            walletManager.refreshPendingMintQuote(
-                quoteId,
-                confirmationOwner = ReceiveConfirmationOwner.Home,
-            )
+        lifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
+            if (TransactionDisplay.showsQr(transaction)) {
+                walletManager.monitorDisplayedMintQuote(
+                    quoteId, confirmationOwner = ReceiveConfirmationOwner.Home,
+                )
+            } else {
+                walletManager.refreshPendingMintQuote(
+                    quoteId, confirmationOwner = ReceiveConfirmationOwner.Home,
+                )
+            }
         }
     }
 

@@ -46,7 +46,10 @@ class TransactionService: ObservableObject {
     // MARK: - Transaction Loading
 
     /// Load transaction history from all mints
-    func loadTransactions(includeRemoteObservations: Bool = true) async {
+    func loadTransactions(
+        includeRemoteObservations: Bool = true,
+        observingQuoteID: String? = nil
+    ) async {
         guard let repo = walletRepository() else { return }
 
         loadPendingReceiveTokens()
@@ -141,7 +144,8 @@ class TransactionService: ObservableObject {
                     trackedMintUrls: trackedMintUrls,
                     quoteIdsWithTransactions: quoteIdsWithTransactions,
                     timestamps: &mintQuoteTimestamps,
-                    includeRemoteObservations: includeRemoteObservations
+                    includeRemoteObservations: includeRemoteObservations,
+                    observingQuoteID: observingQuoteID
                 )
                 allTransactions.append(contentsOf: pendingQuoteTransactions)
             } catch {
@@ -299,7 +303,8 @@ class TransactionService: ObservableObject {
         trackedMintUrls: Set<String>,
         quoteIdsWithTransactions: Set<String>,
         timestamps: inout [String: TimeInterval],
-        includeRemoteObservations: Bool
+        includeRemoteObservations: Bool,
+        observingQuoteID: String?
     ) async -> [WalletTransaction] {
         var transactions: [WalletTransaction] = []
 
@@ -370,6 +375,7 @@ class TransactionService: ObservableObject {
             var statusNote: String?
 
             if includeRemoteObservations,
+               observingQuoteID == nil || observingQuoteID == quote.id,
                paymentMethod == .onchain,
                let observation = await OnchainExplorer.observePayment(
                 for: quote.request,

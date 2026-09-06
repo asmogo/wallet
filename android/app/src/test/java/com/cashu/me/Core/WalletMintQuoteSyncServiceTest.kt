@@ -16,6 +16,30 @@ import org.junit.Test
 
 class WalletMintQuoteSyncServiceTest {
     @Test
+    fun `focused monitoring respects failure backoff and settles without manual refresh`() = runBlocking {
+        val ledger = QuoteLedger(paid = 8, issued = 0).apply {
+            quote = quote.copy(paymentMethod = PaymentMethodKind.Bolt11)
+            failuresBeforeIssuance = 1
+        }
+        val service = ledger.service()
+        val monitor = FocusedMintQuoteMonitor()
+        val credits = mutableListOf<Long>()
+        var refreshes = 0
+        monitor.monitor(ledger.quote.id, refresh = { id ->
+            refreshes++
+            val result = service.syncPendingMintQuote(id)
+            result.receivedAmount?.let { credits += it }
+            result.quote
+        }, sleep = { ledger.now += 2_000 })
+
+        assertEquals(4, refreshes) // Immediate, 2s, 4s, 6s (retry is due at 5s).
+        assertEquals(2, ledger.mintCalls)
+        assertEquals(listOf(8L), credits)
+        assertEquals(8L, ledger.quote.amountIssued)
+        assertFalse(monitor.isActive)
+    }
+
+    @Test
     fun `recovery during the first check reports the issuance delta once`() = runBlocking {
         val ledger = QuoteLedger(paid = 21, issued = 0).apply { recoverOnNextCheck = 21 }
         val service = ledger.service()

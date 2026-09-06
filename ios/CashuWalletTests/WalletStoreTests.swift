@@ -125,6 +125,28 @@ final class MintQuoteReconciliationResultTests: XCTestCase {
 
 @MainActor
 final class MintQuoteReconcilerTests: XCTestCase {
+    func testFocusedMonitoringRespectsFailureBackoffAndSettlesWithoutManualRefresh() async {
+        let ledger = Ledger(paid: 8, method: .bolt11)
+        ledger.failuresBeforeIssuance = 1
+        let monitor = FocusedMintQuoteMonitor()
+        var credits: [UInt64] = []
+        var refreshes = 0
+        await monitor.monitor(quoteID: ledger.quote.id, refresh: { id in
+            refreshes += 1
+            let result = await ledger.reconciler().reconcile(quoteID: id)
+            if let result, result.newlyIssued > 0 { credits.append(result.newlyIssued) }
+            return result?.quote
+        }, sleep: { _ in
+            ledger.now = ledger.now.addingTimeInterval(2)
+        })
+
+        XCTAssertEqual(refreshes, 4) // Immediate, 2s, 4s, 6s (retry is due at 5s).
+        XCTAssertEqual(ledger.mintCalls, 2)
+        XCTAssertEqual(credits, [8])
+        XCTAssertEqual(ledger.quote.amountIssued, 8)
+        XCTAssertFalse(monitor.isActive)
+    }
+
     func testRecoveryDuringFirstCheckReportsIssuanceOnce() async {
         let ledger = Ledger(paid: 21)
         ledger.recoverOnNextCheck = 21

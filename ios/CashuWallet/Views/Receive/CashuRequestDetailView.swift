@@ -3,6 +3,7 @@ import UIKit
 
 struct CashuRequestDetailView: View {
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.scenePhase) private var scenePhase
     @EnvironmentObject var walletManager: WalletManager
     @ObservedObject private var store = CashuRequestStore.shared
     @ObservedObject private var settings = SettingsManager.shared
@@ -41,6 +42,11 @@ struct CashuRequestDetailView: View {
 
     private var paymentCount: Int {
         request?.receivedPayments.count ?? 0
+    }
+
+    private var monitoredQuoteID: String? {
+        scenePhase == .active && walletManager.isRuntimeReady && !showPaymentSuccess
+            ? request?.quoteId : nil
     }
 
     var body: some View {
@@ -125,6 +131,10 @@ struct CashuRequestDetailView: View {
                 "CashuRequestDetailView: linked payment \(payment.transactionId, privacy: .public)"
             )
             markPaymentReceived(amount: payment.amount)
+        }
+        .task(id: monitoredQuoteID) {
+            guard let quoteID = monitoredQuoteID else { return }
+            await walletManager.monitorDisplayedMintQuote(quoteID: quoteID, homeHaptic: false)
         }
         .compactBottomSheetSurface()
     }

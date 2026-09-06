@@ -64,15 +64,17 @@ struct WalletTransaction: Identifiable {
     }
 
     /// Mint-quote id to re-check when opening this row's detail, if any.
-    /// Only unsettled incoming Lightning / on-chain mint quotes (not ecash,
-    /// not melts). Expired unpaid invoices are included so a late-paid NUT-04
+    /// Incoming unsettled mint quotes and reusable offers (not ecash or melts).
+    /// Expired unpaid invoices are included so a late-paid NUT-04
     /// quote can still mint after the invoice timer.
     var mintQuoteIdForStatusRefresh: String? {
         guard type == .incoming else { return nil }
         guard kind == .lightning || kind == .onchain else { return nil }
         guard !isPendingReceiveToken else { return nil }
         guard invoice != nil else { return nil }
-        guard status == .pending || status == .expired else { return nil }
+        let reusableOffer = kind == .lightning && status == .completed &&
+            invoice?.lowercased().hasPrefix("lno") == true
+        guard status == .pending || status == .expired || reusableOffer else { return nil }
         return quoteId ?? id
     }
 

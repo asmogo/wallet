@@ -9,6 +9,7 @@
 /* Begin PBXBuildFile section */
 		BD0100000000000000000002 /* ReceivedBalanceFeedback.swift in Sources */ = {isa = PBXBuildFile; fileRef = BD0100000000000000000001 /* ReceivedBalanceFeedback.swift */; };
 		BD0100000000000000000004 /* ReceivedBalanceFeedbackTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BD0100000000000000000003 /* ReceivedBalanceFeedbackTests.swift */; };
+		F06000000000000000000004 /* FocusedMintQuoteMonitorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F06000000000000000000003 /* FocusedMintQuoteMonitorTests.swift */; };
 		EA1850000000000000000001 /* PaymentDetailContent.swift in Sources */ = {isa = PBXBuildFile; fileRef = EA1850000000000000000002 /* PaymentDetailContent.swift */; };
 		A09100000000000000000007 /* LifecycleSafeWalletDatabase.swift in Sources */ = {isa = PBXBuildFile; fileRef = A09100000000000000000008 /* LifecycleSafeWalletDatabase.swift */; };
 		A09100000000000000000005 /* WalletAuditRegressionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A09100000000000000000006 /* WalletAuditRegressionTests.swift */; };
@@ -17,6 +18,7 @@
 		CD9100000000000000000001 /* MintDetailInfoLoader.swift in Sources */ = {isa = PBXBuildFile; fileRef = CD9100000000000000000002 /* MintDetailInfoLoader.swift */; };
 		CD9100000000000000000003 /* MintDetailInfoLoaderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CD9100000000000000000004 /* MintDetailInfoLoaderTests.swift */; };
 		C33400000000000000000001 /* MintQuoteReconciler.swift in Sources */ = {isa = PBXBuildFile; fileRef = C33400000000000000000002 /* MintQuoteReconciler.swift */; };
+		F06000000000000000000001 /* FocusedMintQuoteMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = F06000000000000000000002 /* FocusedMintQuoteMonitor.swift */; };
 		323A00000000000000000001 /* PriceServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 323A00000000000000000002 /* PriceServiceTests.swift */; };
 		1100000000000001 /* CashuWalletApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2100000000000001 /* CashuWalletApp.swift */; };
 		1100000000000002 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2100000000000002 /* ContentView.swift */; };
@@ -203,6 +205,7 @@
 /* Begin PBXFileReference section */
 		BD0100000000000000000001 /* ReceivedBalanceFeedback.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReceivedBalanceFeedback.swift; sourceTree = "<group>"; };
 		BD0100000000000000000003 /* ReceivedBalanceFeedbackTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = ReceivedBalanceFeedbackTests.swift; path = CashuWalletTests/ReceivedBalanceFeedbackTests.swift; sourceTree = "<group>"; };
+		F06000000000000000000003 /* FocusedMintQuoteMonitorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = FocusedMintQuoteMonitorTests.swift; path = CashuWalletTests/FocusedMintQuoteMonitorTests.swift; sourceTree = "<group>"; };
 		EA1850000000000000000002 /* PaymentDetailContent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PaymentDetailContent.swift; sourceTree = "<group>"; };
 		A09100000000000000000008 /* LifecycleSafeWalletDatabase.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LifecycleSafeWalletDatabase.swift; sourceTree = "<group>"; };
 		A09100000000000000000006 /* WalletAuditRegressionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CashuWalletTests/WalletAuditRegressionTests.swift; sourceTree = "<group>"; };
@@ -211,6 +214,7 @@
 		CD9100000000000000000002 /* MintDetailInfoLoader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MintDetailInfoLoader.swift; sourceTree = "<group>"; };
 		CD9100000000000000000004 /* MintDetailInfoLoaderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = MintDetailInfoLoaderTests.swift; path = CashuWalletTests/MintDetailInfoLoaderTests.swift; sourceTree = "<group>"; };
 		C33400000000000000000002 /* MintQuoteReconciler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MintQuoteReconciler.swift; sourceTree = "<group>"; };
+		F06000000000000000000002 /* FocusedMintQuoteMonitor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FocusedMintQuoteMonitor.swift; sourceTree = "<group>"; };
 		323A00000000000000000002 /* PriceServiceTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = PriceServiceTests.swift; path = CashuWalletTests/PriceServiceTests.swift; sourceTree = "<group>"; };
 		0100000000000001 /* CashuWallet.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = CashuWallet.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		2100000000000001 /* CashuWalletApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CashuWalletApp.swift; sourceTree = "<group>"; };
@@ -426,6 +430,7 @@
 				T1B000000000000B /* ReceiveAutoPasteTests.swift */,
 				T1B000000000000C /* HomeActionAccessibilityTests.swift */,
 				BD0100000000000000000003 /* ReceivedBalanceFeedbackTests.swift */,
+				F06000000000000000000003 /* FocusedMintQuoteMonitorTests.swift */,
 				T1B0000000000100 /* ConnectMintContextTests.swift */,
 				T1B000000000000D /* CashuRequestRouteExplanationTests.swift */,
 				C0A100000000000000000001 /* CashuRequestPaymentObservationTests.swift */,
@@ -732,6 +737,7 @@
 				BB00000000000014 /* LightningService.swift */,
 				A09100000000000000000002 /* MintQuoteRecovery.swift */,
 				C33400000000000000000002 /* MintQuoteReconciler.swift */,
+				F06000000000000000000002 /* FocusedMintQuoteMonitor.swift */,
 			);
 			path = Services;
 			sourceTree = "<group>";
@@ -1024,6 +1030,7 @@
 				T2B000000000000B /* ReceiveAutoPasteTests.swift in Sources */,
 				T2B000000000000C /* HomeActionAccessibilityTests.swift in Sources */,
 				BD0100000000000000000004 /* ReceivedBalanceFeedbackTests.swift in Sources */,
+				F06000000000000000000004 /* FocusedMintQuoteMonitorTests.swift in Sources */,
 				T2B0000000000100 /* ConnectMintContextTests.swift in Sources */,
 				T2B000000000000D /* CashuRequestRouteExplanationTests.swift in Sources */,
 				C0A100000000000000000002 /* CashuRequestPaymentObservationTests.swift in Sources */,
@@ -1124,6 +1131,7 @@
 				BB00000000000004 /* LightningService.swift in Sources */,
 				A09100000000000000000001 /* MintQuoteRecovery.swift in Sources */,
 				C33400000000000000000001 /* MintQuoteReconciler.swift in Sources */,
+				F06000000000000000000001 /* FocusedMintQuoteMonitor.swift in Sources */,
 				CC00000000000001 /* ThemeSettingsSection.swift in Sources */,
 				CC00000000000002 /* BackupSettingsSection.swift in Sources */,
 				CC00000000000004 /* P2PKSettingsSection.swift in Sources */,
