@@ -60,6 +60,16 @@ class CashuRequestPaymentObservationTest {
     }
 
     @Test
+    fun `same request can present a second payment without replaying the first`() {
+        val first = payment("first", amount = 21)
+        val second = payment("second", amount = 21)
+        assertEquals(first, newestUnseenPayment(emptyList(), listOf(first)))
+        assertNull(newestUnseenPayment(listOf(first.transactionId), listOf(first)))
+        assertEquals(second, newestUnseenPayment(listOf(first.transactionId), listOf(first, second)))
+        assertNull(newestUnseenPayment(listOf("first", "second"), listOf(first, second)))
+    }
+
+    @Test
     fun `NFC session stays mounted while payment record and success state hand off`() {
         assertTrue(shouldKeepNfcSessionMounted(false, NfcReceivePhase.Redeeming))
         assertTrue(shouldKeepNfcSessionMounted(false, NfcReceivePhase.Success))

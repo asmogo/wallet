@@ -12,6 +12,7 @@ import com.cashu.me.App.UiRuntimePolicy
 import com.cashu.me.App.UiTestApplication
 import com.cashu.me.Core.CDK.CdkWalletGatewayImpl
 import com.cashu.me.Models.TransactionKind
+import com.cashu.me.Models.PaymentMethodKind
 import com.cashu.me.Models.TransactionStatus
 import com.cashu.me.Models.TransactionType
 import com.cashu.me.Models.WalletTransaction
@@ -44,6 +45,7 @@ object AppTestFixture {
     fun launch(
         mode: FixtureMode,
         deepLink: String? = null,
+        supportedMintMethods: List<PaymentMethodKind> = listOf(PaymentMethodKind.Bolt11),
     ): LaunchedFixture {
         val application = ApplicationProvider.getApplicationContext<UiTestApplication>()
         val usesLiveGateway = mode == FixtureMode.LiveLocalMint ||
@@ -87,6 +89,7 @@ object AppTestFixture {
             null
         } else {
             FakeWalletGateway(
+                supportedMintMethods = supportedMintMethods,
                 initialBalances = if (mode == FixtureMode.FundedWithHistory) {
                     mapOf(mintUrl to 500L)
                 } else {

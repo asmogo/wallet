@@ -12,6 +12,7 @@ class CashuRequestDisplayTest {
 
         assertEquals("Cashu Request", request.displayTitle)
         assertTrue(request.isEcashRequest)
+        assertTrue(request.isReusable)
     }
 
     @Test
@@ -24,6 +25,9 @@ class CashuRequestDisplayTest {
         assertEquals("Reusable Invoice", bolt12.displayTitle)
         assertEquals("Bitcoin Address", onchain.displayTitle)
         assertFalse(bolt11.isEcashRequest)
+        assertFalse(bolt11.isReusable)
+        assertTrue(bolt12.isReusable)
+        assertFalse(onchain.isReusable)
 
         val payment = CashuRequestPayment("tx", 10, 1_700_000_000)
         assertEquals("Lightning received", bolt11.copy(receivedPayments = listOf(payment)).displayTitle)

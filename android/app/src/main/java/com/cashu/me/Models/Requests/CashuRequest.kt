@@ -33,6 +33,8 @@ data class CashuRequest(
 
     val isEcashRequest: Boolean get() = quoteKind == null
 
+    val isReusable: Boolean get() = isEcashRequest || quoteKind.equals("bolt12", ignoreCase = true)
+
     val displayTitle: String
         get() = when (quoteKind?.lowercase()) {
             "bolt12" -> "Reusable Invoice"

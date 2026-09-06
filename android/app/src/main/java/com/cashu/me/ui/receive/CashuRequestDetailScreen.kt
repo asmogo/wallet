@@ -196,12 +196,23 @@ fun CashuRequestDetailScreen(
         mutableStateOf(request?.receivedPayments?.map { it.transactionId })
     }
     var successPaymentId by rememberSaveable(requestId) { mutableStateOf<String?>(null) }
-    LaunchedEffect(requestId, request?.receivedPayments) {
+    LaunchedEffect(requestId, request?.receivedPayments, successPaymentId) {
+        if (successPaymentId != null) return@LaunchedEffect
         val currentPayments = request?.receivedPayments ?: return@LaunchedEffect
         newestUnseenPayment(observedPaymentIds, currentPayments)?.let { payment ->
             successPaymentId = payment.transactionId
         }
         observedPaymentIds = currentPayments.map { it.transactionId }
+    }
+
+    fun finishPayment() {
+        if (request?.isReusable == true) {
+            successPaymentId = null
+            nfcReceiveCoordinator.clearResult()
+        } else {
+            nfcReceiveCoordinator.deactivate()
+            onClose()
+        }
     }
 
     // A payment that lands while this request is open always gets the shared
@@ -258,10 +269,7 @@ fun CashuRequestDetailScreen(
                 CashuRequestSuccessTerminal(
                     amountLabel = amountLabel,
                     mintName = mintName,
-                    onDone = {
-                        nfcReceiveCoordinator.deactivate()
-                        onClose()
-                    },
+                    onDone = ::finishPayment,
                     modifier = Modifier.padding(padding),
                 )
             }
@@ -512,10 +520,7 @@ fun CashuRequestDetailScreen(
                 coordinator = nfcReceiveCoordinator,
                 successAmountLabel = nfcSuccessAmountLabel,
                 successMintName = nfcSuccessMintName,
-                onSuccessDone = {
-                    nfcReceiveCoordinator.deactivate()
-                    onClose()
-                },
+                onSuccessDone = ::finishPayment,
             )
         }
         }

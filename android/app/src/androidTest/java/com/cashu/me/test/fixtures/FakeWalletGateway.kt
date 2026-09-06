@@ -36,6 +36,7 @@ import kotlinx.coroutines.flow.filter
 class FakeWalletGateway(
     initialBalances: Map<String, Long> = emptyMap(),
     initialTransactions: List<WalletTransaction> = emptyList(),
+    private val supportedMintMethods: List<PaymentMethodKind> = listOf(PaymentMethodKind.Bolt11),
 ) : WalletGateway {
     private val sequence = AtomicInteger(1)
     private val walletUrls = linkedSetOf<String>()
@@ -191,7 +192,7 @@ class FakeWalletGateway(
         val flow = checkNotNull(mintQuotes[quoteId]) { "Unknown fake quote $quoteId" }
         val quote = flow.value
         check(quote.state == MintQuoteState.Paid) { "Fake quote has not been paid." }
-        val credited = quote.amountPaid.takeIf { it > 0 } ?: quote.amount ?: 0
+        val credited = (quote.amountPaid.takeIf { it > 0 } ?: quote.amount ?: 0) - quote.amountIssued
         val mintUrl = checkNotNull(quote.mintUrl)
         balances[mintUrl] = (balances[mintUrl] ?: 0) + credited
         transactions += WalletTransaction(
@@ -212,7 +213,7 @@ class FakeWalletGateway(
         )
         flow.value = quote.copy(
             state = MintQuoteState.Issued,
-            amountIssued = credited,
+            amountIssued = quote.amountIssued + credited,
         )
         return credited
     }
@@ -396,6 +397,7 @@ class FakeWalletGateway(
 
     private fun defaultMint(url: String): MintInfo = MintInfo(
         url = url,
+        supportedMintMethods = supportedMintMethods,
         name = if (url == TestMintUrl) "Nutshell UI Test Mint" else "Test Mint",
         description = "Deterministic instrumented-test mint",
         nutSupport = NutSupport(
