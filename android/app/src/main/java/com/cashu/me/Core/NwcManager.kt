@@ -1,5 +1,7 @@
 package com.cashu.me.Core
 
+import com.cashu.me.Core.Wallet.ActionErrorMessages
+
 import java.net.URI
 import java.net.URLDecoder
 import java.nio.charset.StandardCharsets
@@ -236,8 +238,7 @@ class NwcManager internal constructor(
             if (error is CancellationException) throw error
             mutableState.value = mutableState.value.copy(
                 isRunning = false,
-                errorMessage = error.message?.takeIf(String::isNotBlank)
-                    ?: "Could not start Nostr Wallet Connect.",
+                errorMessage = ActionErrorMessages.message(error, ActionErrorMessages.Context.WalletConnect),
             )
             AppLogger.wallet.error("Failed to start Nostr Wallet Connect", error)
         }

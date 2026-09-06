@@ -4,7 +4,6 @@ struct MintsListView: View {
     @EnvironmentObject var walletManager: WalletManager
 
     @State private var mintToRemove: MintInfo?
-    @State private var showRemoveConfirmation = false
     @State private var showAddMintSheet = false
     @State private var showDiscoverySheet = false
     @State private var removalError: String?
@@ -55,23 +54,14 @@ struct MintsListView: View {
             .task {
                 await walletManager.refreshMintInfo()
             }
-            .confirmationDialog(
-                "Remove Mint",
-                isPresented: $showRemoveConfirmation,
-                titleVisibility: .visible
-            ) {
-                Button("Remove", role: .destructive) {
-                    if let mint = mintToRemove {
-                        removeMint(mint)
-                    }
-                    mintToRemove = nil
-                }
-                Button("Cancel", role: .cancel) {
-                    mintToRemove = nil
-                }
-            } message: {
-                if let mint = mintToRemove {
-                    Text("Remove \(mint.name)? Any unspent ecash on this mint will need to be restored from your seed phrase.")
+            .backdropSheet(item: $mintToRemove) { mint in
+                ActionConfirmationSheet(
+                    title: "Remove mint?",
+                    message: "Remove \(mint.name) from your wallet? Any unspent ecash on this mint will need to be restored from your seed phrase.",
+                    actionLabel: "Remove",
+                    destructive: true
+                ) {
+                    removeMint(mint)
                 }
             }
             // Softens this page while any sheet reported from its subtree is
@@ -138,18 +128,17 @@ struct MintsListView: View {
             }
             Button(role: .destructive) {
                 mintToRemove = mint
-                showRemoveConfirmation = true
             } label: {
                 Label("Remove", systemImage: "trash")
             }
         }
         .swipeActions(edge: .trailing, allowsFullSwipe: false) {
-            Button(role: .destructive) {
+            Button {
                 mintToRemove = mint
-                showRemoveConfirmation = true
             } label: {
                 Label("Remove", systemImage: "trash")
             }
+            .tint(.red)
         }
         .swipeActions(edge: .leading, allowsFullSwipe: true) {
             if !isActive(mint) {

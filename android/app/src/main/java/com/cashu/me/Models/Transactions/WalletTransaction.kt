@@ -37,6 +37,17 @@ data class WalletTransaction(
     val displayDescription: String?
         get() = memo?.takeIf(String::isNotBlank) ?: PaymentRequestDecoder.description(invoice)
 
+    /** Display the decoder's hashed Lightning description as a copyable reference. */
+    val descriptionHash: String?
+        get() {
+            if (kind != TransactionKind.Lightning) return null
+            val description = displayDescription?.trim() ?: return null
+            if (!description.startsWith("Hash:")) return null
+            return description.removePrefix("Hash:").trim().takeIf { hash ->
+                hash.length == 64 && hash.all { it in '0'..'9' || it in 'a'..'f' || it in 'A'..'F' }
+            }
+        }
+
     val displayStatusText: String
         get() = if (status == TransactionStatus.Pending) statusNote ?: status.displayText else status.displayText
 

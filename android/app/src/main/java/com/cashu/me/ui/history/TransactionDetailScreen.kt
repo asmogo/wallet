@@ -161,7 +161,7 @@ fun TransactionReceiptSheet(
     val qrContent = TransactionDisplay.qrContent(current)
     val copyableContent = TransactionDisplay.copyableContent(current)
     val title = TransactionDisplay.title(current)
-    val description = current.displayDescription
+    val description = current.displayDescription?.takeIf { current.descriptionHash == null }
     val fields = remember(current, walletState.mints) {
         TransactionDisplay.detailFields(current).filterNot { it.label == "Memo" }.map { field ->
             if (field.label == "Mint") {
@@ -193,7 +193,7 @@ fun TransactionReceiptSheet(
             current.status == TransactionStatus.Completed -> Icon(
                 imageVector = Icons.Filled.CheckCircle,
                 contentDescription = "Completed",
-                tint = CashuTheme.colors.onReceivedContainer,
+                tint = CashuTheme.colors.received,
                 modifier = Modifier.size(COMPLETED_RECEIPT_GLYPH_SIZE),
             )
             current.status == TransactionStatus.Failed -> Icon(
@@ -389,7 +389,7 @@ fun TransactionReceiptSheet(
 private val COMPLETED_RECEIPT_GLYPH_SIZE = 64.dp
 private val FAILED_GLYPH_SIZE = 64.dp
 
-private val MonospacedLabels = setOf("Request", "Address", "Payment Proof", "Transaction ID", "Quote ID", "Mint")
+private val MonospacedLabels = setOf("Request", "Address", "Hash", "Payment Proof", "Transaction ID", "Quote ID", "Mint")
 
 private fun copyConfirmationMessage(label: String): String = when (label) {
     "Address" -> "Copied Bitcoin address"

@@ -1,5 +1,7 @@
 package com.cashu.me.ui.components
 
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.getValue
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -23,10 +25,8 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -75,12 +75,11 @@ enum class NoticeSeverity { Error, Caution, Info, Success }
  * - already happened, nothing to fix → `SnackbarHost`
  * - blocks the whole screen → this, plus a retry action
  *
- * Rendered as a Material tonal container. Every fill is paired with its matching
- * content role, so contrast comes from the colour system instead of restating
- * the fill colour as the text colour.
+ * Plain supporting text with a semantic status icon by default. Optional tonal
+ * containers retain their matching content role for contrast.
  *
  * @param detail optional second line for amounts and supporting specifics
- * @param showsContainer drop the tonal fill and padding, leaving glyph + text.
+ * @param showsContainer opt into a tonal fill and padding; defaults to plain text.
  *   For notices that float on a bare surface rather than sitting inside a list
  *   or card — the Send amount faces, where the only other things on screen are
  *   the amount and the keypad, and a filled box reads as a foreign object.
@@ -94,10 +93,16 @@ fun InlineNotice(
     modifier: Modifier = Modifier,
     severity: NoticeSeverity,
     detail: String? = null,
-    showsContainer: Boolean = true,
+    showsContainer: Boolean = false,
     centered: Boolean = false,
 ) {
-    val (icon, content, container) = noticeColors(severity)
+    val (icon, accent, container) = noticeColors(severity)
+    val content = if (showsContainer) when (severity) {
+        NoticeSeverity.Error -> MaterialTheme.colorScheme.onErrorContainer
+        NoticeSeverity.Caution -> CashuTheme.colors.onPendingContainer
+        NoticeSeverity.Success -> CashuTheme.colors.onReceivedContainer
+        NoticeSeverity.Info -> MaterialTheme.colorScheme.onSurfaceVariant
+    } else MaterialTheme.colorScheme.onSurfaceVariant
     Column(
         modifier = modifier
             .fillMaxWidth()
@@ -123,7 +128,7 @@ fun InlineNotice(
             Icon(
                 imageVector = icon,
                 contentDescription = null,
-                tint = content,
+                tint = if (showsContainer) content else accent,
                 modifier = Modifier.size(NoticeIconSize),
             )
             Column(
@@ -148,7 +153,7 @@ fun InlineNotice(
                     Text(
                         text = detail,
                         style = MaterialTheme.typography.bodySmall,
-                        color = content.copy(alpha = 0.78f),
+                        color = content,
                         textAlign = align,
                     )
                 }
@@ -198,12 +203,12 @@ fun InlineNoticeHost(
 private fun noticeColors(severity: NoticeSeverity): Triple<ImageVector, Color, Color> = when (severity) {
     NoticeSeverity.Error -> Triple(
         Icons.Filled.Error,
-        MaterialTheme.colorScheme.onErrorContainer,
+        MaterialTheme.colorScheme.error,
         MaterialTheme.colorScheme.errorContainer,
     )
     NoticeSeverity.Caution -> Triple(
         Icons.Filled.Warning,
-        CashuTheme.colors.onPendingContainer,
+        CashuTheme.colors.pending,
         CashuTheme.colors.pendingContainer,
     )
     NoticeSeverity.Info -> Triple(
@@ -213,7 +218,7 @@ private fun noticeColors(severity: NoticeSeverity): Triple<ImageVector, Color, C
     )
     NoticeSeverity.Success -> Triple(
         Icons.Filled.CheckCircle,
-        CashuTheme.colors.onReceivedContainer,
+        CashuTheme.colors.received,
         CashuTheme.colors.receivedContainer,
     )
 }

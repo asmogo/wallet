@@ -1,5 +1,7 @@
 package com.cashu.me.ui.mints
 
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.getValue
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
@@ -42,23 +44,19 @@ import androidx.compose.material.icons.outlined.Public
 import androidx.compose.material.icons.outlined.Remove
 import androidx.compose.material.icons.outlined.Send
 import androidx.compose.material.icons.outlined.Straighten
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -81,6 +79,7 @@ import com.cashu.me.Core.WalletManager
 import com.cashu.me.Core.shortenMintUrl
 import com.cashu.me.Models.MintInfo
 import com.cashu.me.Models.NutSupport
+import com.cashu.me.ui.components.ActionConfirmationSheet
 import com.cashu.me.ui.components.DestructiveTextButton
 import com.cashu.me.ui.components.GhostButton
 import com.cashu.me.ui.components.InlineNotice
@@ -90,7 +89,7 @@ import com.cashu.me.ui.components.MintAvatar
 import com.cashu.me.ui.components.NoticeSeverity
 import com.cashu.me.ui.components.PrimaryButton
 import com.cashu.me.ui.components.SectionHeader
-import com.cashu.me.ui.components.SpinnerRing
+import com.cashu.me.ui.components.TextButtonContext
 import com.cashu.me.ui.components.ToolbarIcon
 import com.cashu.me.ui.components.neutralActionButtonColors
 import com.cashu.me.ui.components.openInBrowser
@@ -182,22 +181,6 @@ fun MintDetailScreen(
             }
             val info = liveInfo ?: mint
 
-            if (infoError != null) {
-                Column(modifier = Modifier.fillMaxWidth()) {
-                    InlineNotice(
-                        text = infoError.orEmpty(),
-                        detail = "Showing saved information.",
-                        severity = NoticeSeverity.Caution,
-                    )
-                    GhostButton(
-                        text = "Retry",
-                        onClick = { refreshNonce += 1 },
-                        enabled = connection != MintConnectionState.Checking,
-                        modifier = Modifier.padding(horizontal = CashuTheme.spacing.comfortable),
-                    )
-                }
-            }
-
             Column(modifier = Modifier.fillMaxWidth()) {
                 InspectorRow(
                     label = "Balance",
@@ -224,44 +207,11 @@ fun MintDetailScreen(
                         valueMonospaced = true,
                     )
                 }
-                InspectorRow(
-                    label = "Connection",
-                    value = connection.label,
-                    leadingIcon = Icons.Outlined.Public,
-                    valueColor = when (connection) {
-                        MintConnectionState.Offline -> MaterialTheme.colorScheme.error
-                        MintConnectionState.NotChecked,
-                        MintConnectionState.Checking -> MaterialTheme.colorScheme.onSurfaceVariant
-                        MintConnectionState.Online -> null
-                    },
+                MintConnectionStatus(
+                    connection = connection,
+                    showsRecovery = infoError != null,
+                    onRetry = { refreshNonce += 1 },
                 )
-            }
-
-            // iOS `loadingRow`: remote metadata is still in flight — hold the
-            // sections' place with a quiet spinner line instead of popping them
-            // in unannounced.
-            if (liveInfo == null && connection == MintConnectionState.Checking) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(CashuTheme.spacing.default),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(
-                            horizontal = CashuTheme.spacing.comfortable,
-                            vertical = CashuTheme.spacing.loose,
-                        ),
-                ) {
-                    SpinnerRing(
-                        size = 18.dp,
-                        strokeWidth = 2.dp,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                    Text(
-                        text = "Loading mint info…",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
             }
 
             // About: short description reads primary/white; the long description
@@ -299,6 +249,7 @@ fun MintDetailScreen(
                         )
                         if (aboutOverflows) {
                             GhostButton(
+                                context = TextButtonContext.Compact,
                                 text = if (aboutExpanded) "Show less" else "Read more",
                                 onClick = { aboutExpanded = !aboutExpanded },
                                 modifier = Modifier.padding(horizontal = CashuTheme.spacing.default),
@@ -478,6 +429,7 @@ fun MintDetailScreen(
                     )
                 }
                 DestructiveTextButton(
+                    context = TextButtonContext.Screen,
                     text = "Remove mint",
                     onClick = { confirmingRemove = true },
                     modifier = Modifier.fillMaxWidth(),
@@ -489,40 +441,30 @@ fun MintDetailScreen(
     }
 
     if (confirmingRemove) {
-        AlertDialog(
-            onDismissRequest = { confirmingRemove = false },
-            title = { Text("Remove ${mint?.name ?: "mint"}?") },
-            text = {
-                Text(
-                    "Any unspent ecash on this mint will need to be restored from your seed phrase.",
-                    style = MaterialTheme.typography.bodyMedium,
-                )
-            },
-            confirmButton = {
-                TextButton(onClick = {
-                    confirmingRemove = false
-                    val target = mint ?: return@TextButton
-                    removingMint = true
-                    removalError = null
-                    walletManager.launch {
-                        try {
-                            walletManager.removeMint(target)
-                            onClose()
-                        } catch (cancellation: CancellationException) {
-                            throw cancellation
-                        } catch (error: Throwable) {
-                            removalError = error.userFacingWalletMessage
-                        } finally {
-                            removingMint = false
-                        }
+        ActionConfirmationSheet(
+            title = "Remove mint?",
+            message = "Remove ${mint?.name ?: "this mint"} from your wallet? Any unspent ecash on this mint will need to be restored from your seed phrase.",
+            actionLabel = "Remove",
+            destructive = true,
+            onConfirm = {
+                confirmingRemove = false
+                val target = mint ?: return@ActionConfirmationSheet
+                removingMint = true
+                removalError = null
+                walletManager.launch {
+                    try {
+                        walletManager.removeMint(target)
+                        onClose()
+                    } catch (cancellation: CancellationException) {
+                        throw cancellation
+                    } catch (error: Throwable) {
+                        removalError = error.userFacingWalletMessage
+                    } finally {
+                        removingMint = false
                     }
-                }) {
-                    Text("Remove", color = MaterialTheme.colorScheme.error)
                 }
             },
-            dismissButton = {
-                TextButton(onClick = { confirmingRemove = false }) { Text("Cancel") }
-            },
+            onDismiss = { confirmingRemove = false },
         )
     }
 }
@@ -640,7 +582,7 @@ private fun EmptyMintFallback(padding: PaddingValues, onClose: () -> Unit) {
             style = MaterialTheme.typography.titleMedium,
         )
         Spacer(Modifier.height(CashuTheme.spacing.comfortable))
-        GhostButton(text = "Back to mints", onClick = onClose)
+        GhostButton(context = TextButtonContext.Screen, text = "Back to mints", onClick = onClose)
     }
 }
 

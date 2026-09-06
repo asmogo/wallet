@@ -97,13 +97,14 @@ struct SettingsView: View {
                 .presentationDetents([.medium, .large])
                 .presentationDragIndicator(.visible)
         }
-        .alert("Delete Wallet", isPresented: $showDeleteConfirm) {
-            Button("Cancel", role: .cancel) {}
-            Button("Delete", role: .destructive) {
-                deleteWallet()
-            }
-        } message: {
-            Text("Are you sure you want to delete your wallet? This action cannot be undone. Make sure you have backed up your seed phrase!")
+        .backdropSheet(isPresented: $showDeleteConfirm) {
+            ActionConfirmationSheet(
+                title: "Delete wallet?",
+                message: "This deletes the wallet from this device. Make sure you have backed up your seed phrase before continuing. This cannot be undone.",
+                actionLabel: "Delete",
+                destructive: true,
+                action: deleteWallet
+            )
         }
         .errorBanner($walletActionError)
         // Softens this page while any sheet reported from its subtree is up —
@@ -437,6 +438,9 @@ struct SecuritySettingsSection: View {
 
             SettingsSectionFooter {
                 VStack(alignment: .leading, spacing: 8) {
+                    if let authError {
+                        InlineNotice(message: authError, severity: .error)
+                    }
                     if !biometryAvailable {
                         Text("Set a device passcode in iOS Settings to use App Lock.")
                     }
@@ -445,14 +449,6 @@ struct SecuritySettingsSection: View {
             }
         }
         .task { refreshBiometry() }
-        .alert("Couldn't Enable App Lock", isPresented: Binding(
-            get: { authError != nil },
-            set: { if !$0 { authError = nil } }
-        )) {
-            Button("OK", role: .cancel) {}
-        } message: {
-            Text(authError ?? "")
-        }
     }
 
     /// Enabling first confirms with a live auth and reverts to off on failure —
@@ -461,6 +457,7 @@ struct SecuritySettingsSection: View {
         Binding(
             get: { settings.appLockEnabled },
             set: { newValue in
+                authError = nil
                 guard newValue else {
                     settings.appLockEnabled = false
                     return
@@ -469,7 +466,7 @@ struct SecuritySettingsSection: View {
                     let ok = await AppLockManager.shared.authenticate(reason: "Confirm to enable App Lock")
                     settings.appLockEnabled = ok
                     if !ok {
-                        authError = "Authentication failed. App Lock was not enabled."
+                        authError = "Authentication failed. App Lock was not enabled. Try turning it on again."
                     }
                 }
             }
@@ -1379,7 +1376,7 @@ struct ImportP2PKSheet: View {
             try onImport(trimmed)
             dismiss()
         } catch {
-            validationError = error.localizedDescription
+            validationError = ActionErrorMessages.message(for: error, context: .keyImport)
         }
     }
 
@@ -1551,23 +1548,29 @@ struct ICloudBackupSettingsView: View {
         .navigationTitle("iCloud Backup")
         .navigationBarTitleDisplayMode(.inline)
         .toolbarBackground(.hidden, for: .navigationBar)
-        .alert("Enable iCloud Backup?", isPresented: $showEnableConfirm) {
-            Button("Enable") {
+        .backdropSheet(isPresented: $showEnableConfirm) {
+            ActionConfirmationSheet(
+                title: "Enable iCloud backup?",
+                message: "Your seed phrase will be stored in iCloud Keychain, which is end-to-end encrypted and inaccessible to Apple. Mint URLs will be stored in iCloud encrypted by Apple.",
+                actionLabel: "Enable"
+            ) {
                 walletManager.iCloudBackupEnabled = true
                 if let outcome = walletManager.lastICloudBackupOutcome {
                     backupError = backupErrorMessage(for: outcome)
                 }
             }
-            Button("Cancel", role: .cancel) {}
-        } message: {
-            Text("Your seed phrase will be stored in iCloud Keychain, which is end-to-end encrypted and inaccessible to Apple. Mint URLs will be stored in iCloud encrypted by Apple.")
         }
-        .alert("Disable iCloud Backup?", isPresented: $showDisableConfirm) {
-            Button("Disable", role: .destructive) { walletManager.iCloudBackupEnabled = false }
-            Button("Cancel", role: .cancel) {}
-        } message: {
-            Text("Your backup will be removed from iCloud Keychain and iCloud. Your local wallet is not affected.")
+        .backdropSheet(isPresented: $showDisableConfirm) {
+            ActionConfirmationSheet(
+                title: "Disable iCloud backup?",
+                message: "Your backup will be removed from iCloud Keychain and iCloud. Your local wallet is not affected.",
+                actionLabel: "Disable",
+                destructive: true
+            ) {
+                walletManager.iCloudBackupEnabled = false
+            }
         }
+        .bottomSheetBackdropHost()
         .errorBanner($backupError, retry: { backUpNow() })
     }
 

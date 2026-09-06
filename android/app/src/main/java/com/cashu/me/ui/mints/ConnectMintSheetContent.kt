@@ -51,6 +51,7 @@ import com.cashu.me.ui.components.MintAvatar
 import com.cashu.me.ui.components.NoticeSeverity
 import com.cashu.me.ui.components.SectionHeader
 import com.cashu.me.ui.components.SheetHeader
+import com.cashu.me.ui.components.TextButtonContext
 import com.cashu.me.ui.components.TwoFaceScreen
 import com.cashu.me.ui.navigation.ConnectMintBackAction
 import com.cashu.me.ui.navigation.connectMintBackAction
@@ -284,6 +285,7 @@ internal fun SuggestedMintsFace(
         Spacer(Modifier.height(CashuTheme.spacing.loose))
         Column(verticalArrangement = Arrangement.spacedBy(CashuTheme.spacing.default)) {
             GhostButton(
+                context = TextButtonContext.Screen,
                 // Verb + object, matching "Discover mints" beside it. "Custom" is
                 // an implementation label, and "URL" is already said by the step
                 // it opens.
@@ -298,6 +300,7 @@ internal fun SuggestedMintsFace(
             // can only show a "turn this on" dead end, so it isn't offered at all.
             if (discoveryAvailable) {
                 GhostButton(
+                    context = TextButtonContext.Screen,
                     text = "Discover mints",
                     onClick = onDiscover,
                     leadingIcon = Icons.Outlined.Search,

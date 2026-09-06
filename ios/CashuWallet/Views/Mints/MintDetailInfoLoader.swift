@@ -21,7 +21,7 @@ final class MintDetailInfoLoader<Info> {
         let request = UUID()
         requestID = request
         connection = .checking
-        errorMessage = nil
+        // Keep the recovery explanation visible until a retry succeeds.
 
         do {
             let fetched = try await fetch()
@@ -33,6 +33,7 @@ final class MintDetailInfoLoader<Info> {
                 return
             }
             info = fetched
+            errorMessage = nil
             connection = .online
         } catch {
             // An older request must not overwrite a newer success or loading state.

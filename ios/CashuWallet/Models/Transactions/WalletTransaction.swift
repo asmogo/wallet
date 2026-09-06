@@ -13,6 +13,19 @@ struct WalletTransaction: Identifiable {
         return PaymentRequestDecoder.description(from: invoice)
     }
 
+    /// The decoder can expose a hashed Lightning description as `Hash: <hex>`.
+    /// Keep the stored description intact, but display this reference as a copyable row.
+    var descriptionHash: String? {
+        guard kind == .lightning,
+              let description = displayDescription?.trimmingCharacters(in: .whitespacesAndNewlines),
+              description.hasPrefix("Hash:") else { return nil }
+        let hash = description.dropFirst(5).trimmingCharacters(in: .whitespacesAndNewlines)
+        guard hash.utf8.count == 64,
+              hash.utf8.allSatisfy({ (48...57).contains($0) || (65...70).contains($0) || (97...102).contains($0) })
+        else { return nil }
+        return hash
+    }
+
     var status: TransactionStatus
     var statusNote: String? = nil
     

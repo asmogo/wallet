@@ -81,7 +81,7 @@ struct InlineNotice: View {
         HStack(alignment: .top, spacing: 6) {
             if showsIcon {
                 Image(systemName: severity.icon)
-                    .font(.caption.weight(.semibold))
+                    .font(.subheadline.weight(.semibold))
                     .foregroundStyle(severity.foreground)
                     .accessibilityHidden(true)
             }
@@ -89,19 +89,19 @@ struct InlineNotice: View {
             VStack(alignment: isCentered ? .center : .leading, spacing: 2) {
                 if let title {
                     Text(title)
-                        .font(.caption.weight(.semibold))
+                        .font(.subheadline.weight(.semibold))
                         .foregroundStyle(.primary)
                         .fixedSize(horizontal: false, vertical: true)
                 }
 
                 Text(message)
-                    .font(title == nil ? .caption : .caption2)
-                    .foregroundStyle(title == nil ? severity.foreground : Color.secondary)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
 
                 if let detail {
                     Text(detail)
-                        .font(.caption2)
+                        .font(.subheadline)
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
                 }
@@ -115,7 +115,7 @@ struct InlineNotice: View {
         .frame(maxWidth: .infinity, alignment: isCentered ? .center : .leading)
         .accessibilityElement(children: .combine)
         .accessibilityLabel(accessibilityText)
-        .onAppear {
+        .onChange(of: accessibilityText, initial: true) { _, _ in
             // Owned here so no call site can forget it. This is exactly what the
             // hand-rolled copy in SendView used to drop.
             guard severity != .info else { return }

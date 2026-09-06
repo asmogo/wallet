@@ -91,6 +91,7 @@ import com.cashu.me.ui.components.PaymentDetailContent
 import com.cashu.me.ui.components.QrCard
 import com.cashu.me.ui.components.SecondaryButton
 import com.cashu.me.ui.components.SheetHeader
+import com.cashu.me.ui.components.TextButtonContext
 import com.cashu.me.ui.components.ToolbarIcon
 import com.cashu.me.ui.components.UnitPickerSheet
 import com.cashu.me.ui.components.WaitingForPaymentRow
@@ -299,7 +300,7 @@ fun CashuRequestDetailScreen(
                         style = MaterialTheme.typography.titleMedium,
                     )
                     Spacer(Modifier.height(CashuTheme.spacing.comfortable))
-                    GhostButton(text = "Back", onClick = onClose)
+                    GhostButton(context = TextButtonContext.Screen, text = "Back", onClick = onClose)
                 }
                 return@CashuRequestDetailContainer
             }

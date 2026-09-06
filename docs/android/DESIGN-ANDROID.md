@@ -194,9 +194,18 @@ like a port, make the Android-native choice instead.
 - Button hierarchy: filled `Button` (primary action) → `FilledTonalButton`
   (secondary) → `TextButton` (inline). See `PrimaryButton` / `SecondaryButton`
   / `GhostButton` / `DestructiveTextButton` in `Buttons.kt`.
+- Button typography is owned by `Type.kt` and the shared components. Primary
+  and secondary buttons use `buttonLabel` (18sp semibold); screen text actions
+  use `textButtonLabel` (the same metrics, regular weight). Every `GhostButton`
+  and `DestructiveTextButton` must specify `TextButtonContext.Screen` for
+  standalone actions and alternatives below a CTA, or `.Compact` for field
+  helpers, row actions, and dialogs (Material `labelLarge`). Screen code must
+  not override button text styles. Destructive actions use the same component
+  and sizing rules with error-colored text and an accessible warning.
 - Bottom sheets (`ModalBottomSheet`) for choosers/pickers/inspectors; pushed
-  destinations for flows. `NavigationBar` for tabs. `AlertDialog` for
-  confirmation, destructive action tinted `error`.
+  destinations for flows. `NavigationBar` for tabs. Simple confirmations use
+  `ActionConfirmationSheet`; destructive actions use a red primary button
+  with white text.
 - Text inputs go through `CashuTextField`. **One carve-out (2026-08-08):** the
   seed-entry card in `SeedWordEntry.kt` uses a bare `BasicTextField`, because
   `CashuTextField`'s job is to supply the container and here the *card is* the

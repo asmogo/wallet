@@ -87,7 +87,9 @@ struct TransactionDetailView: View {
 
     // Keep upstream's content-fitting receipt sizing. Described live QRs use
     // the adaptive receive layout so Mint and Description remain visible.
-    private var usesAdaptiveQR: Bool { showsQR && transaction.displayDescription != nil }
+    private var usesAdaptiveQR: Bool {
+        showsQR && transaction.descriptionHash == nil && transaction.displayDescription != nil
+    }
 
     var body: some View {
         ActivityDetailSheet(
@@ -180,11 +182,13 @@ struct TransactionDetailView: View {
                     } else {
                         detailRow(label: row.label, value: row.value)
                     }
-                    if row.label == "Mint", let description = transaction.displayDescription {
+                    if row.label == "Mint", transaction.descriptionHash == nil,
+                       let description = transaction.displayDescription {
                         DescriptionDetailRow(description: description)
                     }
                 }
                 if !detailRows.contains(where: { $0.label == "Mint" }),
+                   transaction.descriptionHash == nil,
                    let description = transaction.displayDescription {
                     DescriptionDetailRow(description: description)
                 }
@@ -288,12 +292,10 @@ struct TransactionDetailView: View {
             // Static glyph — no `.symbolEffect(.bounce)`. This is historical review
             // (a detail screen re-opened often), not the live payment-received moment
             // that owns the bounce (DESIGN.md §6). The status already happened.
-            // Status hero, not an inline notice — but it speaks the same
-            // severity vocabulary, so it takes the same tokens rather than
-            // raw .green/.red.
+            // Match the received-amount green on Home and History.
             Image(systemName: "checkmark.circle.fill")
                 .font(.statusGlyph)
-                .foregroundStyle(ErrorSeverity.success.foreground)
+                .foregroundStyle(.green)
                 .padding(.top, 16)
                 .accessibilityLabel("Completed")
         } else if transaction.status == .failed {
@@ -355,6 +357,9 @@ struct TransactionDetailView: View {
         } else {
             if let mintUrl = transaction.mintUrl {
                 rows.append(("Mint", walletManager.mints.first(where: { $0.url == mintUrl })?.name ?? extractMintHost(mintUrl), nil))
+            }
+            if let hash = transaction.descriptionHash {
+                rows.append(("Hash", PaymentRequestDecoder.middleTruncated(hash), hash))
             }
             if let preimage = transaction.preimage {
                 rows.append(("Payment Proof", PaymentRequestDecoder.middleTruncated(preimage), preimage))

@@ -77,6 +77,7 @@ import com.cashu.me.Core.recentCompletedTransactions
 import com.cashu.me.Core.rememberWalletHaptics
 import com.cashu.me.Models.WalletTransaction
 import com.cashu.me.ui.components.BalanceDisplay
+import com.cashu.me.ui.components.TextButtonContext
 import com.cashu.me.ui.components.balanceHeroHeight
 import com.cashu.me.ui.components.EmptyState
 import com.cashu.me.ui.components.GhostButton
@@ -352,10 +353,10 @@ fun HomeScreen(
                             // Chevron lives inside the button so the whole affordance
                             // is one touch target (iOS: text + chevron in one Button).
                             GhostButton(
+                                context = TextButtonContext.Screen,
                                 text = "View all activity",
                                 onClick = onOpenHistory,
                                 trailingIcon = Icons.AutoMirrored.Outlined.KeyboardArrowRight,
-                                textStyle = MaterialTheme.typography.bodyLarge,
                                 contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                         }

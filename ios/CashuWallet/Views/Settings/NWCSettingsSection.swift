@@ -110,13 +110,15 @@ struct NWCSettingsView: View {
         .backdropSheet(isPresented: $showConnectionQR) {
             QRCodeDetailSheet(title: "Wallet Connect", content: nwc.connectionUri ?? "")
         }
-        .alert("Reset Connection", isPresented: $showRegenerateConfirm) {
-            Button("Cancel", role: .cancel) {}
-            Button("Reset", role: .destructive) {
+        .backdropSheet(isPresented: $showRegenerateConfirm) {
+            ActionConfirmationSheet(
+                title: "Reset connection?",
+                message: "This creates a new connection code. Apps paired with the current code will stop working until you share the new code with them.",
+                actionLabel: "Reset",
+                destructive: true
+            ) {
                 Task { await nwc.regenerateConnection() }
             }
-        } message: {
-            Text("This creates a new connection code. Any app paired with the current one will stop working until you share the new code.")
         }
         .bottomSheetBackdropHost()
     }
@@ -246,7 +248,7 @@ struct NWCSettingsView: View {
             }
         } else if let error = nwc.errorMessage {
             SettingsSectionFooter {
-                InlineNotice(message: error, severity: .error, showsIcon: false)
+                InlineNotice(message: error, severity: .error)
             }
         } else if !nwc.isEnabled {
             SettingsSectionFooter {

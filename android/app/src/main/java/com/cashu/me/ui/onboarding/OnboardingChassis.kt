@@ -39,7 +39,7 @@ import androidx.compose.ui.unit.sp
 import com.cashu.me.ui.components.GhostButton
 import com.cashu.me.ui.components.PrimaryButton
 import com.cashu.me.ui.components.SecondaryButton
-import com.cashu.me.ui.components.ghostButtonUnderCtaTextStyle
+import com.cashu.me.ui.components.TextButtonContext
 import com.cashu.me.ui.components.morphBlur
 import com.cashu.me.ui.testing.UiTestTags
 import com.cashu.me.ui.theme.CashuTheme
@@ -330,12 +330,12 @@ private fun ChassisSlot(action: ChassisAction?, topPadding: Dp) {
                         enabled = shown.enabled,
                     )
                     ChassisButtonStyle.Ghost -> GhostButton(
+                        context = TextButtonContext.Screen,
                         text = shown.label,
                         onClick = onClick,
                         modifier = tagModifier,
                         enabled = shown.enabled,
                         animatedLabel = true,
-                        textStyle = ghostButtonUnderCtaTextStyle,
                     )
                 }
             }

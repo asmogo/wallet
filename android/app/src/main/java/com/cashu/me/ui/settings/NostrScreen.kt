@@ -1,5 +1,9 @@
 package com.cashu.me.ui.settings
 
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.getValue
+import com.cashu.me.Core.Wallet.ActionErrorMessages
+
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.Spring
@@ -29,7 +33,6 @@ import androidx.compose.material.icons.outlined.Bolt
 import androidx.compose.material.icons.outlined.Cancel
 import androidx.compose.material.icons.outlined.FileDownload
 import androidx.compose.material.icons.outlined.RestartAlt
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -38,17 +41,13 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalClipboardManager
@@ -69,8 +68,8 @@ import com.cashu.me.Core.NwcManager
 import com.cashu.me.Core.RelayAddResult
 import com.cashu.me.Core.SettingsManager
 import com.cashu.me.Core.nostrSignerSelectionAction
+import com.cashu.me.ui.components.ActionConfirmationSheet
 import com.cashu.me.ui.components.CashuTextField
-import com.cashu.me.ui.components.DestructiveTextButton
 import com.cashu.me.ui.components.InlineNotice
 import com.cashu.me.ui.components.LocalConfirmationToastController
 import com.cashu.me.ui.components.NavRow
@@ -89,17 +88,21 @@ internal const val NostrPrivateKeyWarningText =
 
 internal enum class NostrIdentityMutation(
     val progressMessage: String,
-    private val failureAction: String,
 ) {
-    SwitchSigner("Updating Nostr key source…", "switch the Nostr key source"),
-    ImportKey("Importing Nostr key…", "import the Nostr key"),
-    GenerateKey("Generating a new Nostr key…", "generate a new Nostr key"),
-    ResetKey("Resetting to the wallet seed…", "reset the Nostr key"),
+    SwitchSigner("Updating Nostr key source…"),
+    ImportKey("Importing Nostr key…"),
+    GenerateKey("Generating a new Nostr key…"),
+    ResetKey("Resetting to the wallet seed…"),
     ;
 
     fun failureMessage(error: Throwable): String {
-        val detail = error.message?.trim()?.takeIf(String::isNotEmpty) ?: "Please try again."
-        return "Couldn’t $failureAction. Your current identity was not changed. $detail"
+        val context = when (this) {
+            ImportKey -> ActionErrorMessages.Context.KeyImport
+            GenerateKey -> ActionErrorMessages.Context.KeyGenerate
+            else -> ActionErrorMessages.Context.KeyUpdate
+        }
+        val detail = ActionErrorMessages.message(error, context)
+        return "$detail Your current identity was not changed."
     }
 }
 
@@ -309,42 +312,42 @@ fun NostrScreen(
     }
 
     if (showMissingCustomKeyChoice) {
-        // Three actions don't fit M3's two button slots, so the two choices live
-        // in the body as rows and Cancel keeps the one button.
-        AlertDialog(
-            onDismissRequest = { showMissingCustomKeyChoice = false },
-            title = { Text("Choose a custom key") },
-            text = {
-                Column {
-                    Text(
-                        "Switching to Custom Key needs a key to switch to.",
-                        style = MaterialTheme.typography.bodyMedium,
-                    )
-                    Spacer(Modifier.height(CashuTheme.spacing.snug))
-                    NavRow(
-                        title = "Generate a new key",
-                        leadingIcon = Icons.Outlined.AddCircleOutline,
-                        showChevron = false,
-                        onClick = {
-                            showMissingCustomKeyChoice = false
-                            showGenerateConfirm = true
-                        },
-                    )
-                    NavRow(
-                        title = "Import an existing nsec",
-                        leadingIcon = Icons.Outlined.FileDownload,
-                        showChevron = false,
-                        onClick = {
-                            showMissingCustomKeyChoice = false
-                            showImport = true
-                        },
-                    )
-                }
-            },
-            confirmButton = {
-                TextButton(onClick = { showMissingCustomKeyChoice = false }) { Text("Cancel") }
-            },
-        )
+        ModalBottomSheet(onDismissRequest = { showMissingCustomKeyChoice = false }) {
+            Column(
+                modifier = Modifier
+                    .verticalScroll(rememberScrollState())
+                    .navigationBarsPadding()
+                    .padding(horizontal = CashuTheme.spacing.comfortable)
+                    .padding(bottom = CashuTheme.spacing.section),
+                verticalArrangement = Arrangement.spacedBy(CashuTheme.spacing.snug),
+            ) {
+                SheetHeader(title = "Choose a custom key")
+                Text(
+                    "Generate a new Nostr key or import one you already use.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                NavRow(
+                    title = "Generate a new key",
+                    leadingIcon = Icons.Outlined.AddCircleOutline,
+                    showChevron = false,
+                    onClick = {
+                        showMissingCustomKeyChoice = false
+                        showGenerateConfirm = true
+                    },
+                )
+                NavRow(
+                    title = "Import an existing nsec",
+                    leadingIcon = Icons.Outlined.FileDownload,
+                    showChevron = false,
+                    onClick = {
+                        showMissingCustomKeyChoice = false
+                        showImport = true
+                    },
+                )
+                SecondaryButton("Cancel", onClick = { showMissingCustomKeyChoice = false })
+            }
+        }
     }
 
     if (showImport) {
@@ -373,7 +376,7 @@ fun NostrScreen(
     }
 
     if (showGenerateConfirm) {
-        KeyActionConfirmSheet(
+        ActionConfirmationSheet(
             title = "Generate new key?",
             message = NostrIdentityReplacementWarnings.Generate,
             actionLabel = "Generate",
@@ -389,7 +392,7 @@ fun NostrScreen(
     }
 
     if (showResetConfirm) {
-        KeyActionConfirmSheet(
+        ActionConfirmationSheet(
             title = "Reset to wallet seed?",
             message = NostrIdentityReplacementWarnings.Reset,
             actionLabel = "Reset",
@@ -407,50 +410,33 @@ fun NostrScreen(
     }
 
     pendingSignerType?.let { signerType ->
-        AlertDialog(
-            onDismissRequest = { pendingSignerType = null },
-            title = { Text("Switch Nostr key?") },
-            text = {
-                Text(
-                    NostrIdentityReplacementWarnings.switchTo(signerType.displayName),
-                    style = MaterialTheme.typography.bodyMedium,
+        ActionConfirmationSheet(
+            title = "Switch Nostr key?",
+            message = NostrIdentityReplacementWarnings.switchTo(signerType.displayName),
+            actionLabel = "Switch",
+            destructive = true,
+            onConfirm = {
+                pendingSignerType = null
+                performIdentityMutation(
+                    mutation = NostrIdentityMutation.SwitchSigner,
+                    operation = { nostrService.switchSignerType(signerType) },
                 )
             },
-            confirmButton = {
-                DestructiveTextButton(text = "Switch", onClick = {
-                    pendingSignerType = null
-                    performIdentityMutation(
-                        mutation = NostrIdentityMutation.SwitchSigner,
-                        operation = { nostrService.switchSignerType(signerType) },
-                    )
-                })
-            },
-            dismissButton = {
-                TextButton(onClick = { pendingSignerType = null }) { Text("Cancel") }
-            },
+            onDismiss = { pendingSignerType = null },
         )
     }
 
     if (showRelayResetConfirm) {
-        AlertDialog(
-            onDismissRequest = { showRelayResetConfirm = false },
-            title = { Text("Reset to default relays") },
-            text = {
-                Text(
-                    "This replaces your relay list with " +
-                        SettingsManager.defaultNostrRelays.joinToString(", ") + ".",
-                    style = MaterialTheme.typography.bodyMedium,
-                )
+        ActionConfirmationSheet(
+            title = "Reset to default relays?",
+            message = "This replaces your relay list with " + SettingsManager.defaultNostrRelays.joinToString(", ") + ".",
+            actionLabel = "Reset",
+            destructive = true,
+            onConfirm = {
+                showRelayResetConfirm = false
+                settingsManager.resetNostrRelaysToDefault()
             },
-            confirmButton = {
-                DestructiveTextButton(text = "Reset", onClick = {
-                    showRelayResetConfirm = false
-                    settingsManager.resetNostrRelaysToDefault()
-                })
-            },
-            dismissButton = {
-                TextButton(onClick = { showRelayResetConfirm = false }) { Text("Cancel") }
-            },
+            onDismiss = { showRelayResetConfirm = false },
         )
     }
 
@@ -672,71 +658,6 @@ private fun NsecImportSheet(
                             )
                         }
                     }
-                }
-            }
-        }
-    }
-}
-
-/**
- * Single-face confirmation sheet for a Nostr key mutation, on the same recipe
- * as the import sheet's confirm face (iOS `KeyActionConfirmSheet` parity):
- * SheetHeader title, centered warning copy, and a Cancel/action row, instead
- * of an AlertDialog stacked over the screen.
- */
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-private fun KeyActionConfirmSheet(
-    title: String,
-    message: String,
-    actionLabel: String,
-    onConfirm: () -> Unit,
-    onDismiss: () -> Unit,
-    // Red commit button for the mutation that destroys a key outright
-    // (Reset deletes the custom key); false keeps the inverted-ink primary.
-    destructive: Boolean = false,
-) {
-    ModalBottomSheet(onDismissRequest = onDismiss) {
-        Box(modifier = Modifier.fillMaxWidth()) {
-            Column(
-                modifier = Modifier
-                    .navigationBarsPadding()
-                    .padding(horizontal = CashuTheme.spacing.comfortable)
-                    .padding(bottom = CashuTheme.spacing.section),
-                verticalArrangement = Arrangement.spacedBy(CashuTheme.spacing.section),
-            ) {
-                SheetHeader(title = title)
-
-                Text(
-                    text = message,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    textAlign = TextAlign.Center,
-                    modifier = Modifier.fillMaxWidth(),
-                )
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(CashuTheme.spacing.snug),
-                ) {
-                    SecondaryButton(
-                        text = "Cancel",
-                        onClick = onDismiss,
-                        modifier = Modifier.weight(1f),
-                    )
-                    PrimaryButton(
-                        text = actionLabel,
-                        onClick = onConfirm,
-                        colors = if (destructive) {
-                            ButtonDefaults.buttonColors(
-                                containerColor = MaterialTheme.colorScheme.error,
-                                contentColor = MaterialTheme.colorScheme.onError,
-                            )
-                        } else {
-                            ButtonDefaults.buttonColors()
-                        },
-                        modifier = Modifier.weight(1f),
-                    )
                 }
             }
         }

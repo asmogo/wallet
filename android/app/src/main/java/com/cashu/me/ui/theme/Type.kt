@@ -211,6 +211,10 @@ data class CashuTypeRoles(
     val monoBody: TextStyle,
     val monoCaption: TextStyle,
 ) {
+    /** Screen text actions share the main button's metrics, with quieter weight. */
+    val textButtonLabel: TextStyle
+        get() = buttonLabel.copy(fontWeight = FontWeight.Normal)
+
     fun amount(scale: AmountScale): TextStyle = when (scale) {
         AmountScale.Hero -> amountHero
         AmountScale.Confirm -> amountConfirm

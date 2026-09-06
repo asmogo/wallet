@@ -195,7 +195,7 @@ final class NWCManager: ObservableObject {
             guard revision == lifecycleRevision else { return }
             isRunning = false
             service = nil
-            errorMessage = error.userFacingWalletMessage
+            errorMessage = ActionErrorMessages.message(for: error, context: .walletConnect)
             AppLogger.wallet.error(
                 "NWC service start failed error_type=\(String(reflecting: type(of: error)), privacy: .public)"
             )

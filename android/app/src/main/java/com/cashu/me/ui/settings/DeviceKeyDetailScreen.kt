@@ -1,5 +1,9 @@
 package com.cashu.me.ui.settings
 
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.getValue
+import com.cashu.me.Core.Wallet.ActionErrorMessages
+
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -10,36 +14,32 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
-import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.FileDownload
 import androidx.compose.material.icons.outlined.Key
 import androidx.compose.material.icons.outlined.QrCode
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import com.cashu.me.Core.AppLockManager
 import com.cashu.me.Core.SettingsManager
+import com.cashu.me.ui.components.ActionConfirmationSheet
 import com.cashu.me.ui.components.CashuTextField
 import com.cashu.me.ui.components.DestructiveTextButton
 import com.cashu.me.ui.components.InlineNotice
 import com.cashu.me.ui.components.NoticeSeverity
 import com.cashu.me.ui.components.SectionHeader
 import com.cashu.me.ui.components.SettingsFooterText
+import com.cashu.me.ui.components.TextButtonContext
 import com.cashu.me.ui.components.ToolbarIcon
 import com.cashu.me.ui.theme.CashuTheme
 
@@ -153,7 +153,7 @@ fun DeviceKeyDetailScreen(
                     nameText = it
                     runCatching { settingsManager.setP2PKKeyNickname(key.id, it) }
                         .onFailure { error ->
-                            actionError = error.message ?: "Could not rename the key."
+                            actionError = ActionErrorMessages.message(error, ActionErrorMessages.Context.KeyRename)
                         }
                 },
                 label = "Add a name",
@@ -165,6 +165,7 @@ fun DeviceKeyDetailScreen(
 
             Spacer(Modifier.height(CashuTheme.spacing.section))
             DestructiveTextButton(
+                context = TextButtonContext.Screen,
                 text = "Remove Key",
                 onClick = { showRemoveConfirm = true },
                 modifier = Modifier.padding(horizontal = CashuTheme.spacing.comfortable),
@@ -198,30 +199,20 @@ fun DeviceKeyDetailScreen(
         )
     }
     if (showRemoveConfirm) {
-        AlertDialog(
-            onDismissRequest = { showRemoveConfirm = false },
-            title = { Text("Remove this key?") },
-            text = {
-                Text(
-                    "Ecash locked to this key can only be claimed with it. This can't be undone.",
-                    style = MaterialTheme.typography.bodyMedium,
-                )
+        ActionConfirmationSheet(
+            title = "Remove this key?",
+            message = "Ecash locked to this key can only be claimed with it. This cannot be undone.",
+            actionLabel = "Remove Key",
+            destructive = true,
+            onConfirm = {
+                showRemoveConfirm = false
+                actionError = null
+                runCatching { settingsManager.removeP2PKKey(key.id) }
+                    .onFailure { error ->
+                        actionError = ActionErrorMessages.message(error, ActionErrorMessages.Context.KeyRemove)
+                    }
             },
-            confirmButton = {
-                TextButton(onClick = {
-                    showRemoveConfirm = false
-                    actionError = null
-                    runCatching { settingsManager.removeP2PKKey(key.id) }
-                        .onFailure { error ->
-                            actionError = error.message ?: "Could not remove the key."
-                        }
-                }) {
-                    Text("Remove Key", color = MaterialTheme.colorScheme.error)
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showRemoveConfirm = false }) { Text("Cancel") }
-            },
+            onDismiss = { showRemoveConfirm = false },
         )
     }
 }

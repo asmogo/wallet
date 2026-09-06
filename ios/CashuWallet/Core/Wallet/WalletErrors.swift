@@ -40,6 +40,10 @@ enum WalletErrorMessage {
             }
         }
 
+        if error is KeychainError {
+            return .error("Couldn't access the wallet's secure storage. Restart the app and try again.")
+        }
+
         if let walletError = error as? WalletError {
             return classified(for: walletError)
         }

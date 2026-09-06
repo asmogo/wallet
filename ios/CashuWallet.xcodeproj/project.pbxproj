@@ -119,6 +119,7 @@
 		D200000000000107 /* WalletManager+MintQuoteSync.swift in Sources */ = {isa = PBXBuildFile; fileRef = D100000000000107 /* WalletManager+MintQuoteSync.swift */; };
 		D200000000000108 /* WalletManager+Backup.swift in Sources */ = {isa = PBXBuildFile; fileRef = D100000000000108 /* WalletManager+Backup.swift */; };
 		D200000000000109 /* WalletErrors.swift in Sources */ = {isa = PBXBuildFile; fileRef = D100000000000109 /* WalletErrors.swift */; };
+		AC5100000000000000000003 /* ActionErrorMessages.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC5100000000000000000004 /* ActionErrorMessages.swift */; };
 		D20000000000010A /* WalletManager+PendingMelts.swift in Sources */ = {isa = PBXBuildFile; fileRef = D10000000000010A /* WalletManager+PendingMelts.swift */; };
 		D20000000000010C /* PendingTokenClaim.swift in Sources */ = {isa = PBXBuildFile; fileRef = D10000000000010C /* PendingTokenClaim.swift */; };
 		D20000000000010D /* WalletOperationCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = D10000000000010D /* WalletOperationCoordinator.swift */; };
@@ -140,6 +141,7 @@
 		SE00000000000004 /* SeedWordEntry.swift in Sources */ = {isa = PBXBuildFile; fileRef = SE00000000000014 /* SeedWordEntry.swift */; };
 		DD00000000000003 /* HapticFeedback.swift in Sources */ = {isa = PBXBuildFile; fileRef = DD00000000000013 /* HapticFeedback.swift */; };
 		DD00000000000004 /* ErrorBannerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DD00000000000014 /* ErrorBannerView.swift */; };
+		AC5100000000000000000001 /* ActionConfirmationSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC5100000000000000000002 /* ActionConfirmationSheet.swift */; };
 		E32692A9480E3C49BBF13F46 /* CashuTextRole.swift in Sources */ = {isa = PBXBuildFile; fileRef = D524F7B6EDC481010F7CDA63 /* CashuTextRole.swift */; };
 		DD00000000000021 /* ComponentCatalogView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DD00000000000020 /* ComponentCatalogView.swift */; };
 		EE00000000000002 /* WalletStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = EE00000000000012 /* WalletStore.swift */; };
@@ -312,6 +314,7 @@
 		D100000000000107 /* WalletManager+MintQuoteSync.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "WalletManager+MintQuoteSync.swift"; sourceTree = "<group>"; };
 		D100000000000108 /* WalletManager+Backup.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "WalletManager+Backup.swift"; sourceTree = "<group>"; };
 		D100000000000109 /* WalletErrors.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WalletErrors.swift; sourceTree = "<group>"; };
+		AC5100000000000000000004 /* ActionErrorMessages.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActionErrorMessages.swift; sourceTree = "<group>"; };
 		D10000000000010A /* WalletManager+PendingMelts.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "WalletManager+PendingMelts.swift"; sourceTree = "<group>"; };
 		D10000000000010C /* PendingTokenClaim.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PendingTokenClaim.swift; sourceTree = "<group>"; };
 		D10000000000010D /* WalletOperationCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WalletOperationCoordinator.swift; sourceTree = "<group>"; };
@@ -333,6 +336,7 @@
 		SE00000000000012 /* SeedPhraseEntry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SeedPhraseEntry.swift; sourceTree = "<group>"; };
 		DD00000000000013 /* HapticFeedback.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HapticFeedback.swift; sourceTree = "<group>"; };
 		DD00000000000014 /* ErrorBannerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ErrorBannerView.swift; sourceTree = "<group>"; };
+		AC5100000000000000000002 /* ActionConfirmationSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActionConfirmationSheet.swift; sourceTree = "<group>"; };
 		DD00000000000020 /* ComponentCatalogView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ComponentCatalogView.swift; sourceTree = "<group>"; };
 		EE00000000000012 /* WalletStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WalletStore.swift; sourceTree = "<group>"; };
 		EE00000000000013 /* SettingsStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsStore.swift; sourceTree = "<group>"; };
@@ -670,6 +674,7 @@
 				2100000000000010 /* QRCodeView.swift */,
 				EA1850000000000000000002 /* PaymentDetailContent.swift */,
 				DD00000000000014 /* ErrorBannerView.swift */,
+				AC5100000000000000000002 /* ActionConfirmationSheet.swift */,
 				3DC08FE85DFC643906176894 /* LiquidGlassModifiers.swift */,
 				21000000000000CF /* MintMethodIcons.swift */,
 				CC00000000000021 /* PressableButtonStyle.swift */,
@@ -759,6 +764,7 @@
 				D100000000000107 /* WalletManager+MintQuoteSync.swift */,
 				D100000000000108 /* WalletManager+Backup.swift */,
 				D100000000000109 /* WalletErrors.swift */,
+				AC5100000000000000000004 /* ActionErrorMessages.swift */,
 				D10000000000010C /* PendingTokenClaim.swift */,
 				D10000000000010D /* WalletOperationCoordinator.swift */,
 				A09100000000000000000008 /* LifecycleSafeWalletDatabase.swift */,
@@ -1074,6 +1080,7 @@
 				D200000000000107 /* WalletManager+MintQuoteSync.swift in Sources */,
 				D200000000000108 /* WalletManager+Backup.swift in Sources */,
 				D200000000000109 /* WalletErrors.swift in Sources */,
+				AC5100000000000000000003 /* ActionErrorMessages.swift in Sources */,
 				D20000000000010C /* PendingTokenClaim.swift in Sources */,
 				D20000000000010D /* WalletOperationCoordinator.swift in Sources */,
 				A09100000000000000000007 /* LifecycleSafeWalletDatabase.swift in Sources */,
@@ -1155,6 +1162,7 @@
 				SE00000000000004 /* SeedWordEntry.swift in Sources */,
 				DD00000000000003 /* HapticFeedback.swift in Sources */,
 				DD00000000000004 /* ErrorBannerView.swift in Sources */,
+				AC5100000000000000000001 /* ActionConfirmationSheet.swift in Sources */,
 				DD00000000000021 /* ComponentCatalogView.swift in Sources */,
 				EE00000000000004 /* TokenParser.swift in Sources */,
 				EE00000000000005 /* AmountFormatter.swift in Sources */,

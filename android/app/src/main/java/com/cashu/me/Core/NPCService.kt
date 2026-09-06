@@ -1,5 +1,7 @@
 package com.cashu.me.Core
 
+import com.cashu.me.Core.Wallet.ActionErrorMessages
+
 import android.content.Context
 import android.content.SharedPreferences
 import kotlinx.coroutines.CancellationException
@@ -171,7 +173,7 @@ class NPCService internal constructor(
                 update {
                     copy(
                         isLoading = false,
-                        errorMessage = error.message ?: "Failed to update npub.cash mint.",
+                        errorMessage = ActionErrorMessages.message(error, ActionErrorMessages.Context.LightningMint),
                     )
                 }
             }
@@ -245,7 +247,7 @@ class NPCService internal constructor(
         } catch (error: Exception) {
             if (!isCurrentSession(session)) return
             update {
-                copy(isConnected = false, errorMessage = error.message ?: "Not connected to npub.cash.")
+                copy(isConnected = false, errorMessage = ActionErrorMessages.message(error, ActionErrorMessages.Context.LightningConnection))
             }
         } finally {
             candidate?.close()
@@ -313,7 +315,7 @@ class NPCService internal constructor(
                     isCheckingPayments = false,
                     pendingPaidQuotes = claimFailures,
                     errorMessage = if (claimFailures.isNotEmpty() && mutableState.value.automaticClaim) {
-                        "Some paid npub.cash quotes could not be minted automatically."
+                        "Some received payments could not be added to your wallet. Check for payments again shortly."
                     } else {
                         null
                     },
@@ -330,7 +332,7 @@ class NPCService internal constructor(
                 copy(
                     isConnected = false,
                     isCheckingPayments = false,
-                    errorMessage = error.message ?: "Failed to check npub.cash payments.",
+                    errorMessage = ActionErrorMessages.message(error, ActionErrorMessages.Context.LightningPayments),
                 )
             }
         }

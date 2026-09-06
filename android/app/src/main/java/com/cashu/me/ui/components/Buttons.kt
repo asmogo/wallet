@@ -46,7 +46,6 @@ import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -292,30 +291,34 @@ fun SecondaryButton(
     }
 }
 
-/**
- * Text style for a [GhostButton] used as the tertiary action directly beneath a
- * full-width CTA ("Receive later", the onboarding chassis' skip slot). It is
- * [PrimaryButton]'s own label style, so the pair differs by fill and ink alone
- * and never by type — a 14sp Medium label under an 18sp SemiBold capsule read as
- * two unrelated controls. Inline ghosts ("Paste", "Discover mints") keep
- * [GhostButton]'s smaller default.
- */
-val ghostButtonUnderCtaTextStyle: TextStyle
-    @Composable get() = CashuTheme.type.buttonLabel
+/** Choose by placement so individual screens never supply their own button font. */
+enum class TextButtonContext {
+    /** Standalone screen actions and alternatives beneath a primary button. */
+    Screen,
+    /** Field helpers, row actions, and native dialog actions. */
+    Compact,
+}
 
-/** Inline non-emphasized action (Copy, Paste, Restore from seed, etc.). */
+private val TextButtonContext.labelStyle: TextStyle
+    @Composable get() = when (this) {
+        TextButtonContext.Screen -> CashuTheme.type.textButtonLabel
+        TextButtonContext.Compact -> MaterialTheme.typography.labelLarge
+    }
+
+/** Borderless native text action with centrally owned typography and press feedback. */
 @Composable
 fun GhostButton(
     text: String,
     onClick: () -> Unit,
+    context: TextButtonContext,
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
     leadingIcon: ImageVector? = null,
     trailingIcon: ImageVector? = null,
-    textStyle: TextStyle = MaterialTheme.typography.labelLarge,
     contentColor: Color = Color.Unspecified,
     animatedLabel: Boolean = false,
 ) {
+    val textStyle = context.labelStyle
     val interactionSource = remember { MutableInteractionSource() }
     val alpha = rememberPressAlpha(interactionSource)
     // Captured outside the non-composable transitionSpec lambda (see PrimaryButton).
@@ -380,33 +383,21 @@ fun GhostButton(
     }
 }
 
-/**
- * Destructive inline action (Delete Wallet, Remove Mint).
- *
- * Material's error color communicates the action visually. The state description
- * gives accessibility services the equivalent destructive announcement while the
- * underlying [TextButton] continues to expose the native button role.
- */
+/** The same text action, with destructive color and an accessible warning. */
 @Composable
 fun DestructiveTextButton(
     text: String,
     onClick: () -> Unit,
+    context: TextButtonContext,
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
 ) {
-    val interactionSource = remember { MutableInteractionSource() }
-    val alpha = rememberPressAlpha(interactionSource)
-    TextButton(
+    GhostButton(
+        text = text,
         onClick = onClick,
-        modifier = modifier
-            .semantics { stateDescription = DestructiveActionStateDescription }
-            .graphicsLayer { this.alpha = alpha },
+        context = context,
+        modifier = modifier.semantics { stateDescription = DestructiveActionStateDescription },
         enabled = enabled,
-        interactionSource = interactionSource,
-        colors = ButtonDefaults.textButtonColors(
-            contentColor = MaterialTheme.colorScheme.error,
-        ),
-    ) {
-        Text(text = text, style = MaterialTheme.typography.labelLarge)
-    }
+        contentColor = MaterialTheme.colorScheme.error,
+    )
 }

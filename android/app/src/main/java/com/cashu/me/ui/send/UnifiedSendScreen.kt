@@ -116,6 +116,7 @@ import com.cashu.me.ui.components.QrCard
 import com.cashu.me.ui.components.SheetHeader
 import com.cashu.me.ui.components.SkeletonValue
 import com.cashu.me.ui.components.SpinnerRing
+import com.cashu.me.ui.components.TextButtonContext
 import com.cashu.me.ui.components.TwoFaceScreen
 import com.cashu.me.ui.mints.ConnectMintContext
 import com.cashu.me.ui.mints.ConnectMintSheetContent
@@ -1033,7 +1034,7 @@ private fun InputFace(
                                 Icon(Icons.Outlined.Cancel, contentDescription = "Clear")
                             }
                         } else {
-                            GhostButton(text = "Paste", onClick = onPaste)
+                            GhostButton(context = TextButtonContext.Compact, text = "Paste", onClick = onPaste)
                         }
                     }
                 }
@@ -1471,7 +1472,7 @@ private fun ConfirmFace(
                     },
                 )
                 if (!cashuRoute.addsNewMint && canPickMint) {
-                    GhostButton(text = "Choose another mint", onClick = onPickMint)
+                    GhostButton(context = TextButtonContext.Compact, text = "Choose another mint", onClick = onPickMint)
                 }
             }
             is CashuPaymentRequestRoute.PayBolt11Fallback -> {
