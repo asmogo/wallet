@@ -95,6 +95,9 @@ fun CashuRequestReceiptSheet(
     }
 
     ActivityDetailSheet(title = current.displayTitle, onDismissRequest = onDismissRequest) {
+        if (codeAvailable) {
+            ActivityPaymentCode(content = current.encoded, title = current.displayTitle)
+        }
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
             if (current.receivedPayments.isNotEmpty()) {
                 Text("Total received", style = MaterialTheme.typography.bodyMedium,
@@ -131,7 +134,6 @@ fun CashuRequestReceiptSheet(
             }
         }
         if (codeAvailable) {
-            ActivityPaymentCode(content = current.encoded, title = current.displayTitle)
             SecondaryButton(text = "Copy", onClick = {
                 scope.launch {
                     clipboard.setClipEntry(ClipEntry(ClipData.newPlainText("Payment request", current.encoded)))

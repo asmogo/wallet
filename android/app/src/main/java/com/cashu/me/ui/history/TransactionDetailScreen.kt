@@ -290,7 +290,6 @@ fun TransactionReceiptSheet(
         onDismissRequest = onDismissRequest,
         modifier = Modifier.testTag(UiTestTags.TransactionReceiptSheet),
     ) {
-        details()
         if (showsQr && qrContent != null) {
             ActivityPaymentCode(
                 content = qrContent,
@@ -299,6 +298,7 @@ fun TransactionReceiptSheet(
                 confirmationMessage = "Copied ${TransactionDisplay.qrLabel(current).replaceFirstChar { it.lowercase() }}",
             )
         }
+        details()
         actions()
     }
 }

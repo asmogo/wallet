@@ -31,8 +31,7 @@ struct PaymentDetailContent<Hero: View, Details: View>: View {
     }
 }
 
-/// History always opens on the same compact inspector. Optional payment codes
-/// expand below the facts, without replacing the amount or changing its scale.
+/// Shared history inspector with an optional visible QR above the amount and facts.
 struct ActivityDetailSheet<Content: View>: View {
     let title: String
     @ViewBuilder var content: () -> Content
@@ -62,22 +61,14 @@ struct ActivityPaymentCode: View {
     var staticOnly = true
     let onCopy: () -> Void
     let onShare: () -> Void
-    @State private var expanded = false
 
     var body: some View {
-        DisclosureGroup(isExpanded: $expanded) {
-            ViewThatFits(in: .horizontal) {
-                code(size: 240)
-                code(size: 180)
-                code(size: 120)
-            }
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, 12)
-        } label: {
-            Text(expanded ? "Hide QR code" : "Show QR code")
-                .font(.subheadline.weight(.medium))
-                .frame(minHeight: 44)
+        ViewThatFits(in: .horizontal) {
+            code(size: 240)
+            code(size: 180)
+            code(size: 120)
         }
+        .frame(maxWidth: .infinity)
         .accessibilityIdentifier("cashu.history.payment-code")
     }
 

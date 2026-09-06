@@ -13,18 +13,12 @@ import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.SheetValue
 import androidx.compose.material3.rememberBottomSheetState
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.unit.dp
 import com.cashu.me.ui.theme.CashuTheme
 
-/** Shared native history inspector: title, amount, facts, optional code, actions. */
+/** Shared native history inspector: title, optional QR, amount, facts, actions. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ActivityDetailSheet(
@@ -59,7 +53,7 @@ fun ActivityDetailSheet(
     }
 }
 
-/** A consistent, initially collapsed code, independent of receipt status/amount layout. */
+/** Visible payment code above the amount and facts, with native Copy/Share actions. */
 @Composable
 fun ActivityPaymentCode(
     content: String,
@@ -67,28 +61,16 @@ fun ActivityPaymentCode(
     staticOnly: Boolean = true,
     confirmationMessage: String = "Copied payment request",
 ) {
-    var expanded by rememberSaveable(content) { mutableStateOf(false) }
-    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        SecondaryButton(
-            text = if (expanded) "Hide QR code" else "Show QR code",
-            onClick = { expanded = !expanded },
-            modifier = Modifier.semantics {
-                stateDescription = if (expanded) "Expanded" else "Collapsed"
-            },
+    BoxWithConstraints(
+        modifier = Modifier.fillMaxWidth(),
+        contentAlignment = Alignment.Center,
+    ) {
+        QrCard(
+            content = content,
+            size = minOf(240.dp, maxWidth - 32.dp),
+            staticOnly = staticOnly,
+            shareSubject = title,
+            confirmationMessage = confirmationMessage,
         )
-        if (expanded) {
-            BoxWithConstraints(
-                modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
-                contentAlignment = Alignment.Center,
-            ) {
-                QrCard(
-                    content = content,
-                    size = minOf(240.dp, maxWidth - 32.dp),
-                    staticOnly = staticOnly,
-                    shareSubject = title,
-                    confirmationMessage = confirmationMessage,
-                )
-            }
-        }
     }
 }

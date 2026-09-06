@@ -115,7 +115,7 @@ final class MainTabUITests: UITestBase {
 
 /// Actual receipt sheets with deterministic catalog records, without a live mint.
 final class ActivityDetailUITests: XCTestCase {
-    func testReceiptLayoutAndPaymentCodeDisclosure() {
+    func testReceiptLayoutAndVisiblePaymentCode() {
         continueAfterFailure = false
         let app = XCUIApplication()
         app.launchEnvironment = ["SHOW_COMPONENT_CATALOG": "activity", "CI_INTEGRATION_TEST": "1"]
@@ -137,14 +137,12 @@ final class ActivityDetailUITests: XCTestCase {
             add(attachment)
 
             if id == "pending-lightning" || id == "reusable-invoice" {
-                let code = app.buttons["cashu.history.payment-code"]
-                XCTAssertTrue(code.exists)
-                code.tap()
-                XCTAssertTrue(app.staticTexts["Hide QR code"].waitForExistence(timeout: 5))
-                code.tap()
+                XCTAssertTrue(app.descendants(matching: .any)["cashu.history.payment-code"].firstMatch.exists)
             } else {
-                XCTAssertFalse(app.buttons["cashu.history.payment-code"].exists)
+                XCTAssertFalse(app.descendants(matching: .any)["cashu.history.payment-code"].firstMatch.exists)
             }
+            XCTAssertFalse(app.buttons["Show QR code"].exists)
+            XCTAssertFalse(app.buttons["Hide QR code"].exists)
             // Native sheet gesture, starting on the title to avoid scrolling its body.
             let title = app.navigationBars.firstMatch
             title.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))

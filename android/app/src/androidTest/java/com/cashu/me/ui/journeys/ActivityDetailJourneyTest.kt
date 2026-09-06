@@ -4,7 +4,6 @@ import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
-import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
@@ -32,7 +31,7 @@ class ActivityDetailJourneyTest {
     private var launched: LaunchedFixture? = null
     private val robot by lazy { WalletJourneyRobot(compose) }
 
-    @Test fun receiptStartsCollapsedAndRetiresCodeWhenPaymentSettles() {
+    @Test fun receiptShowsCodeImmediatelyAndRetiresItWhenPaymentSettles() {
         launched = AppTestFixture.launch(FixtureMode.SeededWithMint)
         val fixture = launched!!
         robot.awaitTag(UiTestTags.WalletScreen)
@@ -43,13 +42,10 @@ class ActivityDetailJourneyTest {
         fixture.fakeGateway!!.addTransaction(tx)
         runBlocking { fixture.container.walletManager.loadTransactions() }
         robot.tapText("History").tapText("Lightning invoice").awaitTag(UiTestTags.TransactionReceiptSheet)
-        compose.onNodeWithText("Status").assertIsDisplayed()
-        compose.onNodeWithText("Date").assertIsDisplayed()
+        compose.onNodeWithText("Status").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("Date").performScrollTo().assertIsDisplayed()
         compose.onNodeWithContentDescription("Close").assertDoesNotExist()
-        compose.onNodeWithContentDescription("QR code. Long press for copy and share options.").assertDoesNotExist()
         screenshot("activity-pending")
-        compose.onNodeWithText("Show QR code").performScrollTo().performClick()
-        compose.onNodeWithText("Hide QR code").assertIsDisplayed()
         compose.onNodeWithContentDescription("QR code. Long press for copy and share options.")
             .performScrollTo().assertIsDisplayed()
         fixture.fakeGateway!!.addTransaction(tx.copy(status = TransactionStatus.Completed, isUnpaidInvoice = false))
@@ -74,12 +70,11 @@ class ActivityDetailJourneyTest {
             mintUrl = FakeWalletGateway.TestMintUrl, quoteId = "activity-offer"))
         runBlocking { fixture.container.walletManager.loadTransactions() }
         robot.tapText("History").tapText("Reusable Invoice").awaitText("Active")
-        compose.onNodeWithText("Status").assertIsDisplayed()
-        compose.onNodeWithText("Date").assertIsDisplayed()
+        compose.onNodeWithText("Status").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("Date").performScrollTo().assertIsDisplayed()
         compose.onNodeWithText("Total received").assertIsDisplayed()
         compose.onNodeWithContentDescription("Close").assertDoesNotExist()
         screenshot("activity-reusable")
-        compose.onNodeWithText("Show QR code").performScrollTo().performClick()
         compose.onNodeWithContentDescription("QR code. Long press for copy and share options.")
             .performScrollTo().assertIsDisplayed()
         robot.pressSystemBack().awaitTag(UiTestTags.HistoryScreen)

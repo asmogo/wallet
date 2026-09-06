@@ -79,7 +79,6 @@ struct TransactionDetailView: View {
 
     var body: some View {
         ActivityDetailSheet(title: transaction.displayTitle) {
-            receiptDetails
             if showsQR, let content = qrContent {
                 ActivityPaymentCode(
                     content: content,
@@ -88,6 +87,7 @@ struct TransactionDetailView: View {
                     onShare: { showShareSheet = true }
                 )
             }
+            receiptDetails
             receiptActions
         }
         .sheet(isPresented: $showShareSheet) {
@@ -616,6 +616,10 @@ struct CashuRequestReceiptView: View {
         // One-shot expiry can pass while a receipt is open, even without a store update.
         TimelineView(.periodic(from: .now, by: 1)) { _ in
             ActivityDetailSheet(title: request.displayTitle) {
+                if codeAvailable {
+                    ActivityPaymentCode(content: request.encoded,
+                                        onCopy: copyRequest, onShare: { showShareSheet = true })
+                }
                 VStack(spacing: 4) {
                     if !request.receivedPayments.isEmpty {
                         Text("Total received").font(.subheadline).foregroundStyle(.secondary)
@@ -664,8 +668,6 @@ struct CashuRequestReceiptView: View {
                     }
                 }
                 if codeAvailable {
-                    ActivityPaymentCode(content: request.encoded,
-                                        onCopy: copyRequest, onShare: { showShareSheet = true })
                     Button("Copy", action: copyRequest)
                         .flatSheetSecondaryButton()
                         .accessibilityLabel("Copy payment request")
