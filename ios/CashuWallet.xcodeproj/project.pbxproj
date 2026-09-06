@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		AA9600000000000000000001 /* NPCServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA9600000000000000000002 /* NPCServiceTests.swift */; };
 		BD0100000000000000000002 /* ReceivedBalanceFeedback.swift in Sources */ = {isa = PBXBuildFile; fileRef = BD0100000000000000000001 /* ReceivedBalanceFeedback.swift */; };
 		BD0100000000000000000004 /* ReceivedBalanceFeedbackTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BD0100000000000000000003 /* ReceivedBalanceFeedbackTests.swift */; };
 		F06000000000000000000004 /* FocusedMintQuoteMonitorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F06000000000000000000003 /* FocusedMintQuoteMonitorTests.swift */; };
@@ -203,6 +204,7 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
+		AA9600000000000000000002 /* NPCServiceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CashuWalletTests/NPCServiceTests.swift; sourceTree = "<group>"; };
 		BD0100000000000000000001 /* ReceivedBalanceFeedback.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReceivedBalanceFeedback.swift; sourceTree = "<group>"; };
 		BD0100000000000000000003 /* ReceivedBalanceFeedbackTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = ReceivedBalanceFeedbackTests.swift; path = CashuWalletTests/ReceivedBalanceFeedbackTests.swift; sourceTree = "<group>"; };
 		F06000000000000000000003 /* FocusedMintQuoteMonitorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = FocusedMintQuoteMonitorTests.swift; path = CashuWalletTests/FocusedMintQuoteMonitorTests.swift; sourceTree = "<group>"; };
@@ -441,6 +443,7 @@
 				A09100000000000000000006 /* WalletAuditRegressionTests.swift */,
 				TG00000000000012 /* TypographyGuardTests.swift */,
 				WE00000000000012 /* WalletErrorMessageTests.swift */,
+				AA9600000000000000000002 /* NPCServiceTests.swift */,
 				CD9100000000000000000004 /* MintDetailInfoLoaderTests.swift */,
 				SE00000000000013 /* SeedPhraseEntryTests.swift */,
 				T1B0000000000010 /* WalletSurfaceCoordinatorTests.swift */,
@@ -1041,6 +1044,7 @@
 				A09100000000000000000005 /* WalletAuditRegressionTests.swift in Sources */,
 				TG00000000000002 /* TypographyGuardTests.swift in Sources */,
 				WE00000000000002 /* WalletErrorMessageTests.swift in Sources */,
+				AA9600000000000000000001 /* NPCServiceTests.swift in Sources */,
 				CD9100000000000000000003 /* MintDetailInfoLoaderTests.swift in Sources */,
 				SE00000000000003 /* SeedPhraseEntryTests.swift in Sources */,
 				T2B0000000000010 /* WalletSurfaceCoordinatorTests.swift in Sources */,

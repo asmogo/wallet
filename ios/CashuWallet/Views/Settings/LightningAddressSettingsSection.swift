@@ -63,6 +63,7 @@ struct LightningAddressSettingsSection: View {
                 }
             }
         }
+        .task { await npcService.initializeIfEnabled() }
         .animation(reduceMotion ? nil : .easeInOut(duration: 0.2), value: npcService.isEnabled)
         .animation(reduceMotion ? nil : .easeInOut(duration: 0.2), value: npcService.errorMessage)
         .animation(reduceMotion ? nil : .easeInOut(duration: 0.2), value: settings.checkIncomingInvoices)
@@ -77,6 +78,8 @@ struct LightningAddressSettingsSection: View {
                     Task {
                         do {
                             try await npcService.changeMint(to: mintUrl)
+                        } catch is CancellationError {
+                            // The address was disabled or the wallet changed.
                         } catch {
                             npcService.errorMessage = error.userFacingWalletMessage
                         }
@@ -164,7 +167,8 @@ struct LightningAddressSettingsSection: View {
 
     private var statusLabel: String {
         if let error = npcService.errorMessage { return error }
-        return npcService.isConnected ? "Connected" : "Connecting"
+        if npcService.isConnected { return "Connected" }
+        return npcService.isLoading ? "Connecting" : "Not connected"
     }
 
     // MARK: - Receiving Mint row

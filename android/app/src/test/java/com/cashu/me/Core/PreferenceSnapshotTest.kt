@@ -32,7 +32,7 @@ class PreferenceSnapshotTest {
     }
 }
 
-private class InMemorySharedPreferences(
+internal class InMemorySharedPreferences(
     private val values: MutableMap<String, Any> = mutableMapOf(),
 ) : SharedPreferences {
     override fun getAll(): MutableMap<String, *> = values.toMutableMap()

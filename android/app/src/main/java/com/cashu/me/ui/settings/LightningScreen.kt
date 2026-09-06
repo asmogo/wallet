@@ -33,6 +33,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -112,6 +113,7 @@ fun LightningScreen(
     val npcState by npcService.state.collectAsState()
     val settings by settingsManager.state.collectAsState()
     val scope = rememberCoroutineScope()
+    LaunchedEffect(npcService) { npcService.initializeIfEnabled() }
 
     var mintPickerOpen by remember { mutableStateOf(false) }
     var addressQrOpen by remember { mutableStateOf(false) }
@@ -421,5 +423,9 @@ private fun npcStatusColor(state: NPCState): Color {
     }
 }
 
-private fun npcStatusLabel(state: NPCState): String =
-    state.errorMessage ?: if (state.isConnected) "Connected" else "Connecting"
+internal fun npcStatusLabel(state: NPCState): String =
+    state.errorMessage ?: when {
+        state.isConnected -> "Connected"
+        state.isLoading -> "Connecting"
+        else -> "Not connected"
+    }
