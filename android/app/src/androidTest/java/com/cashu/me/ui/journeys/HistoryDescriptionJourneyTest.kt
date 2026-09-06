@@ -5,6 +5,10 @@ import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
+import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onLast
+import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.onNodeWithText
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.cashu.me.Models.TransactionKind
@@ -60,12 +64,20 @@ class HistoryDescriptionJourneyTest {
         compose.onNodeWithText("Outgoing coffee receipt", useUnmergedTree = true).assertDoesNotExist()
         robot.tapDescription("Search history").typeIntoTag(UiTestTags.HistorySearch, "Coffee")
             .tapText("Reusable Invoice")
-        val descriptionText = compose.onNodeWithText(description, useUnmergedTree = true)
-        descriptionText.assertIsDisplayed()
+        val preview = compose.onNodeWithTag("payment-description-preview", useUnmergedTree = true)
+        preview.assertIsDisplayed()
+        robot.awaitText("Read more")
         val layouts = mutableListOf<TextLayoutResult>()
-        descriptionText.performSemanticsAction(SemanticsActions.GetTextLayoutResult) { it(layouts) }
-        assertTrue("The entire description must fit on opening, without scrolling",
-            descriptionText.fetchSemanticsNode().boundsInRoot.height >= layouts.single().size.height - 1)
+        preview.performSemanticsAction(SemanticsActions.GetTextLayoutResult) { it(layouts) }
+        assertTrue("The visible preview must fit without scrolling",
+            preview.fetchSemanticsNode().boundsInRoot.height >= layouts.single().size.height - 1)
+        val initialBounds = preview.fetchSemanticsNode().boundsInRoot
+        compose.onNodeWithText("Created", useUnmergedTree = true).performScrollTo().assertIsDisplayed()
+        assertEquals("The description stays at the bottom while details scroll",
+            initialBounds, preview.fetchSemanticsNode().boundsInRoot)
+        robot.tapText("Read more")
+        compose.onAllNodesWithText(description, useUnmergedTree = true).onLast().assertIsDisplayed()
+        robot.tapText("Done")
         robot.awaitText("Description").pressSystemBack()
             .tapText("Lightning paid")
         compose.onNodeWithText("Outgoing coffee receipt", useUnmergedTree = true).assertIsDisplayed()

@@ -62,10 +62,12 @@ clearing, mint/currency isolation, and preservation of payment history.
 ## Descriptions in paid history
 
 History and recent activity keep their compact rows without description previews.
-Opening a request or payment shows the entire selectable description immediately
-below its amount, ahead of the QR code and metadata. Described iOS receipts open
-at full height, and descriptions do not use a separate scroll area. Saved memos take
-precedence; older records can recover descriptions from their encoded BOLT11,
+Opening a request or payment keeps its description in a fixed bottom section,
+below the payment facts and above the action buttons. This section remains visible
+while the details above it scroll. Short descriptions display in full; longer ones
+show up to three lines with a native Read more view for the full selectable text.
+Short windows and larger accessibility text use a one-line preview.
+Saved memos take precedence; older records can recover descriptions from their encoded BOLT11,
 BOLT12, or Cashu payment request. Incoming receipts missing CDK metadata also
 recover the description from their persisted receive request, matched by payment
 ID or by quote, mint, and currency. This is independent of payment status and
@@ -75,7 +77,9 @@ works again after restarting the app.
 reloading paid reusable requests, multiple receipts, outgoing invoice recovery,
 Cashu request payments, blank descriptions, and mint/currency isolation.
 `HistoryDescriptionJourneyTest` drives the real Android History and detail
-screens with simulated settlement and a long Unicode description. Run it using
+screens with simulated settlement and a long Unicode description. It checks that
+the footer is visible without scrolling, stays fixed while metadata scrolls, and
+opens the complete text via Read more. Run it using
 the instrumentation command above, replacing the class argument with
 `com.cashu.me.ui.journeys.HistoryDescriptionJourneyTest`; no live-mint arguments
 are needed. These tests never spend funds.

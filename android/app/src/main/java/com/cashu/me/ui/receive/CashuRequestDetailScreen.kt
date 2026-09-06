@@ -307,14 +307,12 @@ fun CashuRequestDetailScreen(
                     horizontalAlignment = Alignment.CenterHorizontally,
                 ) {
                     Spacer(Modifier.height(CashuTheme.spacing.snug))
-                    if (request.displayDescription == null) {
-                        QrCard(
-                            content = request.encoded,
-                            shareSubject = request.displayTitle,
-                            staticOnly = true,
-                            confirmationMessage = "Copied Cashu request",
-                        )
-                    }
+                    QrCard(
+                        content = request.encoded,
+                        shareSubject = request.displayTitle,
+                        staticOnly = true,
+                        confirmationMessage = "Copied Cashu request",
+                    )
 
                     // Request amounts render in the request's own unit.
                     val isSatRequest = request.unit.equals("sat", ignoreCase = true)
@@ -332,16 +330,6 @@ fun CashuRequestDetailScreen(
                                 .copy(fontWeight = FontWeight.Bold)
                                 .withMonoDigits(),
                             modifier = Modifier.padding(vertical = 5.dp),
-                        )
-                    }
-
-                    request.displayDescription?.let { description ->
-                        DescriptionDetailRow(description)
-                        QrCard(
-                            content = request.encoded,
-                            shareSubject = request.displayTitle,
-                            staticOnly = true,
-                            confirmationMessage = "Copied Cashu request",
                         )
                     }
 
@@ -414,6 +402,8 @@ fun CashuRequestDetailScreen(
 
                     Spacer(Modifier.height(CashuTheme.spacing.snug))
                 }
+
+                request.displayDescription?.let { DescriptionDetailRow(it) }
 
                 DetailActionFooter {
                     Row(

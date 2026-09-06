@@ -172,9 +172,7 @@ struct CashuRequestDetailView: View {
         VStack(spacing: 0) {
             ScrollView {
                 VStack(spacing: 24) {
-                    if request.displayDescription == nil {
-                        requestQRCode(request)
-                    }
+                    requestQRCode(request)
 
                     if let amount = request.amount, amount > 0 {
                         if request.unit.lowercased() == "sat" {
@@ -194,11 +192,6 @@ struct CashuRequestDetailView: View {
                                 value: Double(amount)
                             )
                         }
-                    }
-
-                    if let description = request.displayDescription {
-                        DescriptionDetailRow(description: description)
-                        requestQRCode(request)
                     }
 
                     deliveryStatus(for: request)
@@ -253,6 +246,12 @@ struct CashuRequestDetailView: View {
                 .padding(.horizontal)
             }
             .scrollBounceBehavior(.basedOnSize)
+
+            if let description = request.displayDescription {
+                DescriptionDetailRow(description: description)
+                    .padding(.horizontal)
+                    .layoutPriority(1)
+            }
 
             HStack(spacing: 12) {
                 Button(action: { copy(request.encoded) }) {

@@ -127,9 +127,7 @@ struct TransactionDetailView: View {
                         // reusable invoice), else a state glyph that bounces in on
                         // open — green check when completed, red X when failed;
                         // nothing while a no-QR transaction is still pending.
-                        if !showsQR || transaction.displayDescription == nil {
-                            heroSlot
-                        }
+                        heroSlot
 
                         // Receipt amounts use the same primary/secondary ordering
                         // as Home and History. The glyph above carries state colour.
@@ -143,11 +141,6 @@ struct TransactionDetailView: View {
                             useBitcoinSymbol: settings.useBitcoinSymbol
                         )
                         .padding(.top, heroSlotIsEmpty ? 32 : 0)
-
-                        if let description = transaction.displayDescription {
-                            DescriptionDetailRow(description: description)
-                            if showsQR { heroSlot }
-                        }
 
                         // Detail rows on canvas, led by Status + Date. Type is
                         // omitted — the nav title names it.
@@ -189,6 +182,12 @@ struct TransactionDetailView: View {
                     .padding(.bottom, copyableContent == nil ? 0 : 24)
                 }
                 .scrollBounceBehavior(.basedOnSize)
+
+                if let description = transaction.displayDescription {
+                    DescriptionDetailRow(description: description)
+                        .padding(.horizontal)
+                        .layoutPriority(1)
+                }
 
                 // Pending outgoing ecash gains the same one-off status action as
                 // the generated-token screen when automatic checks are disabled.
@@ -587,22 +586,80 @@ struct TransactionReceiptAmountPair: View {
     }
 }
 
-/// Prose uses the full inspector width and remains selectable without truncation.
+/// A bounded, non-scrolling footer keeps descriptions visible on small screens.
 struct DescriptionDetailRow: View {
     let description: String
+    @Environment(\.verticalSizeClass) private var verticalSizeClass
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @State private var fullHeight: CGFloat = 0
+    @State private var previewHeight: CGFloat = 0
+    @State private var showFullDescription = false
+
+    private var previewLines: Int {
+        verticalSizeClass == .compact || dynamicTypeSize.isAccessibilitySize ? 1 : 3
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("Description")
-                .foregroundStyle(.secondary)
+            HStack {
+                Text("Description")
+                    .foregroundStyle(.secondary)
+                Spacer()
+                if fullHeight > previewHeight + 1 {
+                    Button { showFullDescription = true } label: {
+                        Text("Read more")
+                            .fontWeight(.medium)
+                            .frame(minHeight: 44)
+                    }
+                    .accessibilityHint("Opens the full description")
+                }
+            }
             Text(description)
+                .lineLimit(previewLines)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .fixedSize(horizontal: false, vertical: true)
                 .textSelection(.enabled)
+                .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { previewHeight = $0 }
+                .background {
+                    Text(description)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { fullHeight = $0 }
+                        .hidden()
+                        .accessibilityHidden(true)
+                }
+                .accessibilityIdentifier("payment-description-preview")
         }
         .font(.subheadline)
         .padding(.horizontal, 4)
         .padding(.vertical, 14)
-        .accessibilityElement(children: .combine)
+        .sheet(isPresented: $showFullDescription) {
+            PaymentDescriptionView(description: description)
+                .presentationDetents([.large])
+        }
+    }
+}
+
+private struct PaymentDescriptionView: View {
+    let description: String
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                Text(description)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .textSelection(.enabled)
+                    .padding()
+            }
+            .scrollBounceBehavior(.basedOnSize)
+            .navigationTitle("Description")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Done") { dismiss() }
+                }
+            }
+        }
     }
 }

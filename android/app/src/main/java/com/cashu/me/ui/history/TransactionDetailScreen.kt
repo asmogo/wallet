@@ -176,22 +176,24 @@ fun TransactionReceiptSheet(
             CompactSheetContent {
                 Column(
                     modifier = Modifier
-                        .fillMaxWidth()
-                        .verticalScroll(rememberScrollState()),
+                        .fillMaxWidth(),
                 ) {
                     SheetHeader(title = title)
 
                     Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = CashuTheme.spacing.comfortable),
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.spacedBy(CashuTheme.spacing.comfortable),
+                        modifier = Modifier.weight(1f, fill = false)
+                            .verticalScroll(rememberScrollState()),
                     ) {
-                        // Hero state slot: live request → QR; completed → 64dp green
-                        // check; failed → 64dp red X; pending with no QR → no glyph.
-                        // State detail lives in the monochrome Status row below.
-                        if (!showsQr || description == null) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = CashuTheme.spacing.comfortable),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.spacedBy(CashuTheme.spacing.comfortable),
+                        ) {
+                            // Hero state slot: live request → QR; completed → 64dp green
+                            // check; failed → 64dp red X; pending with no QR → no glyph.
+                            // State detail lives in the monochrome Status row below.
                             when {
                                 showsQr && qrContent != null -> QrCard(
                                     content = qrContent,
@@ -214,83 +216,80 @@ fun TransactionReceiptSheet(
                                 )
                                 else -> Unit
                             }
-                        }
 
-                        HeroAmount(
-                            transaction = current,
-                            formatter = formatter,
-                            preferredPrimary = settings.homeBalancePrimary,
-                            useBitcoinSymbol = settings.useBitcoinSymbol,
-                            showFiat = settings.showFiatBalance,
-                            btcPrice = priceState.btcPrice,
-                            currencyCode = priceState.currencyCode,
-                            compact = showsQr,
-                        )
+                            HeroAmount(
+                                transaction = current,
+                                formatter = formatter,
+                                preferredPrimary = settings.homeBalancePrimary,
+                                useBitcoinSymbol = settings.useBitcoinSymbol,
+                                showFiat = settings.showFiatBalance,
+                                btcPrice = priceState.btcPrice,
+                                currencyCode = priceState.currencyCode,
+                                compact = showsQr,
+                            )
 
-                        if (description != null) {
-                            DescriptionDetailRow(description)
-                            if (showsQr && qrContent != null) {
-                                QrCard(
-                                    content = qrContent,
-                                    staticOnly = current.kind != TransactionKind.Ecash,
-                                    shareSubject = title,
-                                    confirmationMessage =
-                                        "Copied ${TransactionDisplay.qrLabel(current).replaceFirstChar { it.lowercase() }}",
-                                )
-                            }
-                        }
-
-                        Column(modifier = Modifier.fillMaxWidth()) {
-                            fields.forEach { field ->
-                                InspectorRow(
-                                    label = field.label,
-                                    value = field.value,
-                                    valueMonospaced = field.value.length > 24 ||
-                                        field.label in MonospacedLabels,
-                                    onClick = field.copyValue?.let { full ->
-                                        {
-                                            scope.launch {
-                                                clipboard.setClipEntry(
-                                                    ClipEntry(ClipData.newPlainText(field.label, full)),
-                                                )
-                                                confirmationToastController?.show(
-                                                    copyConfirmationMessage(field.label),
-                                                )
+                            Column(modifier = Modifier.fillMaxWidth()) {
+                                fields.forEach { field ->
+                                    InspectorRow(
+                                        label = field.label,
+                                        value = field.value,
+                                        valueMonospaced = field.value.length > 24 ||
+                                            field.label in MonospacedLabels,
+                                        onClick = field.copyValue?.let { full ->
+                                            {
+                                                scope.launch {
+                                                    clipboard.setClipEntry(
+                                                        ClipEntry(ClipData.newPlainText(field.label, full)),
+                                                    )
+                                                    confirmationToastController?.show(
+                                                        copyConfirmationMessage(field.label),
+                                                    )
+                                                }
                                             }
-                                        }
-                                    },
-                                    trailingIcon = field.copyValue?.let { Icons.Outlined.ContentCopy },
-                                )
+                                        },
+                                        trailingIcon = field.copyValue?.let { Icons.Outlined.ContentCopy },
+                                    )
+                                }
+                                // Explorer link joins the detail rows (iOS parity) —
+                                // it's reference material, not an action.
+                                if (explorerUrl != null) {
+                                    ExplorerLinkRow(onClick = { context.openInBrowser(explorerUrl) })
+                                }
                             }
-                            // Explorer link joins the detail rows (iOS parity) —
-                            // it's reference material, not an action.
-                            if (explorerUrl != null) {
-                                ExplorerLinkRow(onClick = { context.openInBrowser(explorerUrl) })
+
+                            if (offersManualClaimCheck) {
+                                when (val outcome = manualCheckResult) {
+                                    PendingTokenClaimCheckResult.NotClaimed -> InlineNotice(
+                                        text = "Status checked",
+                                        detail = "This token has not been claimed yet.",
+                                        severity = NoticeSeverity.Info,
+                                        modifier = Modifier.semantics {
+                                            liveRegion = LiveRegionMode.Polite
+                                        },
+                                    )
+                                    is PendingTokenClaimCheckResult.Failed -> InlineNotice(
+                                        text = "Couldn't check status",
+                                        detail = outcome.message.text,
+                                        modifier = Modifier.semantics {
+                                            liveRegion = LiveRegionMode.Polite
+                                        },
+                                        severity = NoticeSeverity.Caution,
+                                    )
+                                    PendingTokenClaimCheckResult.Claimed, null -> Unit
+                                }
                             }
                         }
+                    }
 
-                        if (offersManualClaimCheck) {
-                            when (val outcome = manualCheckResult) {
-                                PendingTokenClaimCheckResult.NotClaimed -> InlineNotice(
-                                    text = "Status checked",
-                                    detail = "This token has not been claimed yet.",
-                                    severity = NoticeSeverity.Info,
-                                    modifier = Modifier.semantics {
-                                        liveRegion = LiveRegionMode.Polite
-                                    },
-                                )
-                                is PendingTokenClaimCheckResult.Failed -> InlineNotice(
-                                    text = "Couldn't check status",
-                                    detail = outcome.message.text,
-                                    modifier = Modifier.semantics {
-                                        liveRegion = LiveRegionMode.Polite
-                                    },
-                                    severity = NoticeSeverity.Caution,
-                                )
-                                PendingTokenClaimCheckResult.Claimed, null -> Unit
-                            }
-                        }
+                    if (description != null) {
+                        DescriptionDetailRow(description)
+                    }
 
+                    Column(
+                        modifier = Modifier.fillMaxWidth()
+                            .padding(horizontal = CashuTheme.spacing.comfortable),
+                        verticalArrangement = Arrangement.spacedBy(CashuTheme.spacing.snug),
+                    ) {
                         if (pendingReceiveToken != null && onClaimReceiveToken != null) {
                             Spacer(Modifier.height(CashuTheme.spacing.snug))
                             PrimaryButton(
