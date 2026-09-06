@@ -1,15 +1,16 @@
 package com.cashu.me.Core.NfcReceive
 
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.withContext
 import com.cashu.me.Core.CDK.CdkGatewayUnavailable
 import com.cashu.me.Core.CDK.ForeignNfcSettlement
 import org.cashudevkit.Amount
 import org.cashudevkit.CurrencyUnit
-import org.cashudevkit.KeySetInfo
-import org.cashudevkit.KeysetLoadPolicy
 import org.cashudevkit.MeltConfirmOptions
 import org.cashudevkit.PaymentMethod
 import org.cashudevkit.QuoteState
+import org.cashudevkit.ReceiveOptions
 import org.cashudevkit.SplitTarget
 import org.cashudevkit.Token
 import org.cashudevkit.WalletRepository
@@ -31,17 +32,17 @@ internal suspend fun settleForeignNfcTokenWithCdk(
     val gross = token.value().value.toLong()
     require(gross > 1L) { "Payment is too small to convert." }
 
-    // Use the seed-backed repository database: CDK persists external proofs, the
-    // melt saga, and returned change here. Startup recovery can then finish a
-    // conversion even if the NFC session or process disappears after mint acceptance.
+    // Secure the incoming token through CDK's receive/swap saga first. Melt
+    // compensation assumes its inputs already belong to this wallet and returns
+    // them to Unspent, including after a restart before confirmation.
     repository.createWallet(org.cashudevkit.MintUrl(sourceMint), CurrencyUnit.Sat, null)
     val sourceWallet = repository.getWallet(org.cashudevkit.MintUrl(sourceMint), CurrencyUnit.Sat)
     val targetWallet = repository.getWallet(org.cashudevkit.MintUrl(targetMint), CurrencyUnit.Sat)
-    val keysets = sourceWallet.keysets(KeysetLoadPolicy.REFRESH).map {
-        KeySetInfo(id = it.id, unit = it.unit, active = it.active ?: false, inputFeePpk = it.inputFeePpk)
-    }
-    val proofs = token.proofs(keysets)
-    require(proofs.isNotEmpty()) { "The foreign-mint token contains no proofs." }
+    val received = sourceWallet.receive(
+        token,
+        ReceiveOptions(SplitTarget.None, emptyList(), emptyList(), emptyMap()),
+    ).value.toLong()
+    val receiveFee = gross - received
 
     val existingTransactionIds = targetWallet.listTransactions(org.cashudevkit.TransactionDirection.INCOMING)
         .map { it.id.hex }
@@ -54,18 +55,28 @@ internal suspend fun settleForeignNfcTokenWithCdk(
     val estimateMelt = sourceWallet.meltQuote(PaymentMethod.Bolt11, estimateQuote.request, null, null)
     val reserve = estimateMelt.feeReserve.value.toLong()
     runCatching { database.removeMintQuote(estimateQuote.id) }
-    require(reserve <= maximumFee) { "Foreign mint fee exceeds the 5% safety limit." }
+    require(receiveFee + reserve <= maximumFee) { "Foreign mint fee exceeds the 5% safety limit. Received funds remain at the source mint." }
 
     val minimumOverhead = kotlin.math.ceil(gross * 0.005).toLong().coerceAtLeast(1L)
-    val targetAmount = gross - reserve - minimumOverhead
+    val targetAmount = received - reserve - minimumOverhead
     require(targetAmount > 0) { "Payment is too small after conversion fees." }
     val targetQuote = targetWallet.mintQuote(PaymentMethod.Bolt11, Amount(targetAmount.toULong()), null, null)
     val meltQuote = sourceWallet.meltQuote(PaymentMethod.Bolt11, targetQuote.request, null, null)
-    require(meltQuote.amount.value.toLong() + meltQuote.feeReserve.value.toLong() <= gross) {
+    require(meltQuote.amount.value.toLong() + meltQuote.feeReserve.value.toLong() <= received) {
         "Foreign mint requires more ecash than was received."
     }
-    val finalized = sourceWallet.prepareMeltProofs(meltQuote.id, proofs)
-        .confirmWithOptions(MeltConfirmOptions(skipSwap = true))
+    val prepared = sourceWallet.prepareMelt(meltQuote.id)
+    // Selection may include larger proofs from an existing source balance. Its
+    // change is retained, but this receipt must cover all of the actual costs.
+    val feeBudget = minOf(received - meltQuote.amount.value.toLong(), maximumFee - receiveFee)
+    val reserveCost = meltQuote.feeReserve.value
+    if (feeBudget < 0 || reserveCost > feeBudget.toULong() ||
+        prepared.inputFeeWithoutSwap().value > feeBudget.toULong() - reserveCost
+    ) {
+        withContext(NonCancellable) { prepared.cancel() }
+        throw CdkGatewayUnavailable("Foreign mint fee exceeds the conversion budget. Received funds remain at the source mint.")
+    }
+    val finalized = prepared.confirmWithOptions(MeltConfirmOptions(skipSwap = true))
     require(finalized.state == QuoteState.PAID) { "Foreign mint did not settle the payment." }
 
     var checked = targetWallet.checkMintQuote(targetQuote.id)
@@ -89,8 +100,8 @@ internal suspend fun settleForeignNfcTokenWithCdk(
         amountReceived = credited,
         transactionId = transactionId,
         // The difference also includes change kept at the source mint.
-        // CDK's finalized fee is the actual conversion cost.
-        feePaid = finalized.feePaid.value.toLong(),
+        // Include the receive swap as well as the melt's actual cost.
+        feePaid = receiveFee + finalized.feePaid.value.toLong(),
         sourceMintUrl = sourceMint,
         settlementMintUrl = targetMint,
     )

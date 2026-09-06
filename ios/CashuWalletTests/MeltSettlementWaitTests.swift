@@ -77,4 +77,79 @@ final class MeltSettlementWaitTests: XCTestCase {
             XCTFail("unexpected failure: \(error)")
         }
     }
+
+    func testUncancellableResidualBlocksWalletBoundaryUntilNativeWaitReturns() async throws {
+        let service = makeService()
+        let (residual, finish) = await holdSettlement(service: service)
+
+        XCTAssertThrowsError(try service.requireNoActiveMeltSettlement())
+        service.clearState()
+        residual.cancel()
+        XCTAssertThrowsError(try service.requireNoActiveMeltSettlement(),
+                             "Clearing UI state or cancelling Swift must not hide a live native wait")
+
+        finish.resume(returning: finalized())
+        _ = try await residual.value
+        XCTAssertNoThrow(try service.requireNoActiveMeltSettlement())
+    }
+
+    func testWalletBoundaryWaitsForEveryNativeSettlement() async throws {
+        struct WaitError: Error {}
+        let service = makeService()
+        let (residual, finish) = await holdSettlement(service: service)
+        let (otherResidual, finishOther) = await holdSettlement(service: service)
+        XCTAssertThrowsError(try service.requireNoActiveMeltSettlement())
+
+        finish.resume(throwing: WaitError())
+        _ = await residual.result
+        XCTAssertThrowsError(try service.requireNoActiveMeltSettlement(),
+                             "A failed wait must not release another live settlement")
+
+        finishOther.resume(returning: finalized())
+        _ = try await otherResidual.value
+        XCTAssertNoThrow(try service.requireNoActiveMeltSettlement())
+    }
+
+    func testCreateAndDeleteRejectActiveSettlementBeforeTouchingWalletState() async throws {
+        let manager = WalletManager()
+        let (residual, finish) = await holdSettlement(service: manager.lightningService)
+
+        do {
+            try await manager.createNewWallet()
+            XCTFail("Creation must not replace files while a native settlement is active")
+        } catch {
+            XCTAssertTrue(error.localizedDescription.contains("still settling"))
+        }
+        do {
+            try await manager.deleteWallet()
+            XCTFail("Deletion must not remove files while a native settlement is active")
+        } catch {
+            XCTAssertTrue(error.localizedDescription.contains("still settling"))
+        }
+        XCTAssertNil(manager.walletRepository)
+        XCTAssertFalse(manager.isLoading)
+
+        finish.resume(returning: finalized())
+        _ = try await residual.value
+    }
+
+    private func holdSettlement(service: LightningService) async -> (
+        Task<FinalizedMelt, any Error>, CheckedContinuation<FinalizedMelt, any Error>
+    ) {
+        let started = expectation(description: "Native settlement started")
+        var finish: CheckedContinuation<FinalizedMelt, any Error>?
+        let race = Task {
+            await service.awaitMeltSettlementBounded(cap: .zero) {
+                try await withCheckedThrowingContinuation { continuation in
+                    finish = continuation
+                    started.fulfill()
+                }
+            }
+        }
+        await fulfillment(of: [started], timeout: 2)
+        guard case .capExpired(let residual) = await race.value, let finish else {
+            preconditionFailure("Held settlement must outlive the cap")
+        }
+        return (residual, finish)
+    }
 }

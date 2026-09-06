@@ -79,6 +79,9 @@ class LightningService: ObservableObject {
     private let getActiveMint: () -> MintInfo?
     private let getMints: () -> [MintInfo]
     private var mintQuotesInFlight: Set<String> = []
+    // These native waits can outlive the wallet operation lease. They cannot
+    // be cancelled by Swift and must survive clearState() until they return.
+    private var activeMeltSettlementWaits = 0
     
     // MARK: - Initialization
     
@@ -97,6 +100,12 @@ class LightningService: ObservableObject {
     func clearState() {
         isLoading = false
         mintQuotesInFlight.removeAll()
+    }
+
+    func requireNoActiveMeltSettlement() throws {
+        guard activeMeltSettlementWaits == 0 else {
+            throw WalletError.networkError("A payment is still settling. Wait for it to finish before replacing or deleting the wallet.")
+        }
     }
     
     // MARK: - Minting (NUT-04) - Receive via Lightning
@@ -850,7 +859,11 @@ class LightningService: ObservableObject {
         // is serialized; it exists because both will reach it.
         final class ResumeGate { var resumed = false }
         let gate = ResumeGate()
-        let waitTask = Task { try await wait() }
+        activeMeltSettlementWaits += 1
+        let waitTask = Task {
+            defer { activeMeltSettlementWaits -= 1 }
+            return try await wait()
+        }
         return await withCheckedContinuation { continuation in
             func resumeOnce(_ outcome: BoundedMeltWaitOutcome) {
                 guard !gate.resumed else { return }

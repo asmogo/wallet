@@ -123,6 +123,47 @@ class NativeWalletLocalMintInstrumentedTest {
         }
     }
 
+    @Test
+    fun spentForeignNfcTokenNeverBecomesSpendableThroughRecovery() = runBlocking {
+        assumeNativeMatrixEnabled()
+        assertMintEndpointReady(nutshellMintUrl)
+        assertMintEndpointReady(cdkMintUrl)
+        workDir.mkdirs()
+        val payer = TestWallet("spent-nfc-payer")
+        val receiver = TestWallet("spent-nfc-receiver")
+        try {
+            payer.open()
+            receiver.open()
+            payer.gateway.ensureWallet(nutshellMintUrl)
+            receiver.gateway.ensureWallet(cdkMintUrl)
+            val quote = payer.gateway.createMintQuote(1_000, PaymentMethodKind.Bolt11, nutshellMintUrl, "sat")
+            payer.gateway.mintTokens(quote.awaitPaid(payer.gateway).id)
+            val token = payer.gateway.sendEcashToken(1_000, null, null, nutshellMintUrl).token
+            // The sender redeemed the bearer token before presenting its old
+            // copy over NFC. Compensation must never credit those spent proofs.
+            assertEquals(1_000L, payer.gateway.receiveEcashToken(token))
+            val failure = runCatching { receiver.gateway.settleForeignNfcToken(token, cdkMintUrl) }
+            assertTrue("Spent token must be rejected", failure.isFailure)
+            receiver.gateway.recoverIncompleteSagas(nutshellMintUrl)
+            assertEquals(0L, receiver.gateway.totalBalance(nutshellMintUrl))
+            assertEquals(0L, receiver.gateway.totalBalance(cdkMintUrl))
+
+            val seed = receiver.mnemonic
+            receiver.close()
+            receiver.open(seed)
+            // Startup recreates tracked mints; the rejected token never made
+            // a quote or transaction that would persist the target wallet.
+            receiver.gateway.ensureWallet(nutshellMintUrl)
+            receiver.gateway.ensureWallet(cdkMintUrl)
+            receiver.gateway.recoverIncompleteSagas(nutshellMintUrl)
+            assertEquals(0L, receiver.gateway.totalBalance(nutshellMintUrl))
+            assertEquals(0L, receiver.gateway.totalBalance(cdkMintUrl))
+        } finally {
+            payer.close()
+            receiver.close()
+        }
+    }
+
     @FullOnly
     @Test
     fun nativeCdkWalletMatrixAgainstLocalMints() = runBlocking {

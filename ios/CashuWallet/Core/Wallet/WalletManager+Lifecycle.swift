@@ -729,31 +729,38 @@ extension WalletManager {
     func deleteWallet() async throws {
         isLoading = true
         defer { isLoading = false }
+        try lightningService.requireNoActiveMeltSettlement()
 
         // Stop accepting listener work and let an already-started token receive
         // finish all attribution/cache side effects before removing its wallet.
         await CashuRequestListener.shared.resetForWalletBoundary()
         await NWCManager.shared.stop()
-        try await operationCoordinator.perform(kind: .recovery, priority: .recovery) {
-            await self.operationCoordinator.cancelPendingOperations()
-            resetRuntimeState()
-            try await recoverWalletReplacement()
-            try keychainService.deleteMnemonic()
-            try? keychainService.deleteNostrPrivateKey()
-            OnboardingCompletionState.clear()
-            try removeWalletDatabaseFiles()
-            walletStore.removeAllWalletData()
-            SettingsManager.shared.resetWalletScopedData()
-            NWCManager.shared.resetForWalletBoundary()
-            CashuRequestStore.shared.resetForWalletBoundary()
-            MintLogoCache.shared.clear()
-            processedQuotes.removeAll()
-            // iCloud backup survives a local deletion — the user can restore it from
-            // Restore Wallet → Restore from iCloud.
-            needsOnboarding = true
-            isInitialized = true
-            isRuntimeReady = true
-            SentryService.breadcrumb("Wallet deleted", category: "wallet.lifecycle")
+        do {
+            try await operationCoordinator.perform(kind: .recovery, priority: .recovery) {
+                try lightningService.requireNoActiveMeltSettlement()
+                await self.operationCoordinator.cancelPendingOperations()
+                resetRuntimeState()
+                try await recoverWalletReplacement()
+                try keychainService.deleteMnemonic()
+                try? keychainService.deleteNostrPrivateKey()
+                OnboardingCompletionState.clear()
+                try removeWalletDatabaseFiles()
+                walletStore.removeAllWalletData()
+                SettingsManager.shared.resetWalletScopedData()
+                NWCManager.shared.resetForWalletBoundary()
+                CashuRequestStore.shared.resetForWalletBoundary()
+                MintLogoCache.shared.clear()
+                processedQuotes.removeAll()
+                // iCloud backup survives a local deletion — the user can restore it from
+                // Restore Wallet → Restore from iCloud.
+                needsOnboarding = true
+                isInitialized = true
+                isRuntimeReady = true
+                SentryService.breadcrumb("Wallet deleted", category: "wallet.lifecycle")
+            }
+        } catch {
+            await resumeServicesAfterWalletBoundaryFailure()
+            throw error
         }
     }
 
@@ -803,12 +810,27 @@ extension WalletManager {
     }
 
     private func installCleanWallet(mnemonic newMnemonic: String, restoring: Bool = false) async throws {
+        try lightningService.requireNoActiveMeltSettlement()
         await CashuRequestListener.shared.resetForWalletBoundary()
         await NWCManager.shared.stop()
-        try await operationCoordinator.perform(kind: .recovery, priority: .recovery) {
-            await self.operationCoordinator.cancelPendingOperations()
-            try await self.installCleanWalletAssumingLease(mnemonic: newMnemonic, restoring: restoring)
+        do {
+            try await operationCoordinator.perform(kind: .recovery, priority: .recovery) {
+                // Recheck with the lease held: a payment could have started while
+                // listener/NWC shutdown was suspended above.
+                try lightningService.requireNoActiveMeltSettlement()
+                await self.operationCoordinator.cancelPendingOperations()
+                try await self.installCleanWalletAssumingLease(mnemonic: newMnemonic, restoring: restoring)
+            }
+        } catch {
+            await resumeServicesAfterWalletBoundaryFailure()
+            throw error
         }
+    }
+
+    private func resumeServicesAfterWalletBoundaryFailure() async {
+        guard isRuntimeReady, walletRepository != nil else { return }
+        resumeCashuRequestListenerAfterWalletBoundaryRollback()
+        await NWCManager.shared.startIfEnabled()
     }
 
     private func installCleanWalletAssumingLease(mnemonic newMnemonic: String, restoring: Bool) async throws {
