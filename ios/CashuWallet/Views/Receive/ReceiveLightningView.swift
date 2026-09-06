@@ -47,8 +47,8 @@ struct ReceiveLightningView: View {
     /// Reusable BOLT12 offer: drives the Description-row pencil → editor sheet.
     @State private var showReusableDescriptionEditor = false
     /// Description the next reusable BOLT12 offer is minted with. Initialized
-    /// once from the newest stored offer intent for this mint so re-opening the
-    /// screen reloads the described offer instead of minting a duplicate (CDK
+    /// once from the last presented amountless offer for this mint and unit, so
+    /// reopening reloads the described offer instead of minting a duplicate (CDK
     /// never returns offer descriptions — the local memo is the only record).
     @State private var offerDescription: String?
     @State private var offerDescriptionLoaded = false
@@ -1308,7 +1308,7 @@ struct ReceiveLightningView: View {
         // after a payment on an amountless offer, and reminting that as a
         // fixed offer would drop reuse (Android `!quote.isAmountless` parity).
         if let quote = mintQuote, quote.paymentMethod == .bolt12,
-           !isAmountless, let amount = quote.amount, amount > 0 {
+           !quote.isAmountless, let amount = quote.amount, amount > 0 {
             setReusableOfferAmount(amount)
         } else {
             amountString = ""
