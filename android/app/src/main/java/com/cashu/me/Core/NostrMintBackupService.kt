@@ -15,6 +15,7 @@ sealed class NostrMintBackupException(message: String) : IllegalStateException(m
     class WebSocketsDisabled : NostrMintBackupException("Websocket connections are disabled.")
     class NoRelays : NostrMintBackupException("No Nostr relays are configured.")
     class NothingToBackUp : NostrMintBackupException("There are no mints to back up yet.")
+    class RestoreIncomplete : NostrMintBackupException("Finish restoring the wallet before replacing its backup.")
 }
 
 /**
@@ -40,6 +41,7 @@ class NostrMintBackupService(
      * triggered the backup must not surface a relay error.
      */
     suspend fun backupCurrentMintsIfEnabled() {
+        if (settingsStore.walletRestoreIncomplete) return
         if (!settingsManager.state.value.nostrMintBackupEnabled) return
         try {
             backupMints()
@@ -51,6 +53,7 @@ class NostrMintBackupService(
     }
 
     suspend fun backupMints() {
+        if (settingsStore.walletRestoreIncomplete) throw NostrMintBackupException.RestoreIncomplete()
         val relays = requireBackupPreconditions()
 
         // NUT-27 backups are addressable events: publishing replaces the

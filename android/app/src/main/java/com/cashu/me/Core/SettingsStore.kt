@@ -99,6 +99,10 @@ class SettingsStore(
         get() = store.boolean(StorageKeys.onboardingCompleted, false)
         set(value) = store.putBoolean(StorageKeys.onboardingCompleted, value)
 
+    var walletRestoreIncomplete: Boolean
+        get() = store.boolean(StorageKeys.walletRestoreIncomplete, false)
+        set(value) = store.putBoolean(StorageKeys.walletRestoreIncomplete, value)
+
     val hasOnboardingCompletionMarker: Boolean
         get() = StorageKeys.onboardingCompleted in store.keys()
 
@@ -294,6 +298,7 @@ class SettingsStore(
         StorageKeys.nwcSelectedMint,
         StorageKeys.nwcBudgetSats,
         StorageKeys.onboardingCompleted,
+        StorageKeys.walletRestoreIncomplete,
     )
 }
 

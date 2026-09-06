@@ -26,6 +26,7 @@ data class NwcState(
     val errorMessage: String? = null,
 )
 
+@kotlinx.serialization.Serializable
 internal data class NwcStoredSettings(
     val isEnabled: Boolean = false,
     val selectedMintUrl: String? = null,
@@ -88,6 +89,7 @@ internal class SecureNwcStore(
     }
 }
 
+@kotlinx.serialization.Serializable
 internal data class NwcWalletScopedSnapshot(val settings: NwcStoredSettings)
 
 /**
@@ -127,6 +129,8 @@ class NwcManager internal constructor(
             withBusy { startServiceLocked() }
         }
     }
+
+    internal suspend fun stop() = lifecycleMutex.withLock { stopServiceLocked() }
 
     suspend fun setEnabled(value: Boolean, defaultMintUrl: String? = null) = lifecycleMutex.withLock {
         if (value && mutableState.value.selectedMintUrl == null) {

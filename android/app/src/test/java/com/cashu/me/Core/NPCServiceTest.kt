@@ -4,9 +4,34 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import kotlinx.coroutines.cancel
 import org.cashudevkit.NpubCashQuote
 
 class NPCServiceTest {
+    @Test
+    fun walletReplacementRestoresSeparateNpcPreferencesAndRuntimeState() = kotlinx.coroutines.runBlocking {
+        val prefs = InMemorySharedPreferences()
+        prefs.edit()
+            .putBoolean(com.cashu.me.Core.Protocols.StorageKeys.npcEnabled, true)
+            .putBoolean(com.cashu.me.Core.Protocols.StorageKeys.npcAutomaticClaim, false)
+            .putString(com.cashu.me.Core.Protocols.StorageKeys.npcSelectedMint, "https://mint.example")
+            .putLong(com.cashu.me.Core.Protocols.StorageKeys.npcLastCheck, 123L)
+            .commit()
+        val scope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob() + kotlinx.coroutines.Dispatchers.Unconfined)
+        try {
+            val service = NPCService(prefs, kotlinx.coroutines.flow.MutableStateFlow(SettingsState()), scope)
+            service.pauseForWalletBoundary()
+            val snapshot = service.snapshotWalletScopedData()
+            service.resetForWalletBoundary()
+            assertFalse(service.state.value.isEnabled)
+            service.restoreWalletScopedData(snapshot)
+            assertTrue(service.state.value.isEnabled)
+            assertFalse(service.state.value.automaticClaim)
+            assertEquals("https://mint.example", service.state.value.selectedMintUrl)
+            assertEquals(123L, service.state.value.lastCheckEpochMillis)
+        } finally { scope.cancel() }
+    }
+
     @Test
     fun mapsCdkQuoteWithoutReimplementingTheWireFormat() {
         val quote = NPCService.fromCdkQuote(

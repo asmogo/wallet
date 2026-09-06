@@ -15,6 +15,7 @@ data class WalletMessage(
     val text: String,
     val severity: WalletMessageSeverity = WalletMessageSeverity.Error,
     val isTerminal: Boolean = false,
+    val title: String? = null,
 ) {
     val isRetryable: Boolean get() = !isTerminal
 }
@@ -42,6 +43,14 @@ object WalletErrorMessages {
         "The wallet couldn't finish that action. Try again in a moment."
 
     fun classify(error: Throwable): WalletMessage {
+        if (error is com.cashu.me.Core.CDK.MeltPaymentRecoveryException) {
+            return WalletMessage(
+                text = checkNotNull(error.message),
+                severity = WalletMessageSeverity.Caution,
+                isTerminal = true,
+                title = if (error.unresolved) "Payment status unknown" else "Payment returned",
+            )
+        }
         val raw = error.message ?: error.toString()
 
         classifyRawMessage(raw)?.let { return it }

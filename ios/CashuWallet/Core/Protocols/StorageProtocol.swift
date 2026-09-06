@@ -278,7 +278,7 @@ enum StorageKeys {
 
     static var walletBoundaryKeys: [String] {
         walletDataKeys + walletDataLegacyKeys + walletScopedSettingsKeys + walletScopedSettingsLegacyKeys
-            + [onboardingCompleted]
+            + [onboardingCompleted, ICloudRestoreState.incompleteKey]
     }
     
     // Keychain (Secure Storage)

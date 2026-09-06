@@ -108,6 +108,7 @@ data class PrimaryP2PKKey(
     val privateKeyHex: String,
 )
 
+@kotlinx.serialization.Serializable
 internal data class SettingsWalletScopedSnapshot(
     val preferences: PreferenceSnapshot,
     val p2pkKeys: List<P2PKKeyInfo>,
@@ -442,6 +443,10 @@ class SettingsManager internal constructor(
 
     val hasOnboardingCompletionMarker: Boolean
         get() = settingsStore.hasOnboardingCompletionMarker
+
+    var walletRestoreIncomplete: Boolean
+        get() = settingsStore.walletRestoreIncomplete
+        set(value) { settingsStore.walletRestoreIncomplete = value }
 
     internal fun snapshotWalletScopedData(): SettingsWalletScopedSnapshot =
         SettingsWalletScopedSnapshot(

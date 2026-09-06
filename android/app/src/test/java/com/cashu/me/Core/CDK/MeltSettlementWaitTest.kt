@@ -71,10 +71,14 @@ class MeltSettlementWaitTest {
     }
 
     @Test
-    fun `an ambiguous wait failure falls back to pending`() = runBlocking {
-        val result = awaitLightningSettlementOrNull(method = CdkPaymentMethod.Bolt11) {
-            throw IllegalStateException("transport died")
+    fun `an ambiguous wait failure reaches status recovery`() = runBlocking {
+        try {
+            awaitLightningSettlementOrNull(method = CdkPaymentMethod.Bolt11) {
+                throw IllegalStateException("transport died")
+            }
+            org.junit.Assert.fail("The caller must reconcile an ambiguous failure")
+        } catch (error: IllegalStateException) {
+            assertEquals("transport died", error.message)
         }
-        assertNull(result)
     }
 }

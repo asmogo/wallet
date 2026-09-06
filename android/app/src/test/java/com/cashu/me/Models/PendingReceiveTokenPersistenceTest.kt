@@ -11,6 +11,26 @@ class PendingReceiveTokenPersistenceTest {
     private val json = Json { encodeDefaults = true }
 
     @Test
+    fun distinctTokensWithTheSamePrefixSurviveSaveAndReload() {
+        val prefix = "cashuA" + "a".repeat(80)
+        val first = pendingReceiveToken(null).copy(token = prefix + "first", tokenId = prefix.take(64))
+        val second = first.copy(token = prefix + "second")
+        val saved = PendingReceiveToken.upsert(listOf(first), second)
+        val restored = json.decodeFromString<List<PendingReceiveToken>>(json.encodeToString(saved))
+        assertEquals(listOf(first.token, second.token), restored.map { it.token })
+        org.junit.Assert.assertNotEquals(restored[0].id, restored[1].id)
+    }
+
+    @Test
+    fun receivingTheSameLegacyTokenAgainUpdatesWithoutDuplicatingIt() {
+        val legacy = pendingReceiveToken(null)
+        val saved = PendingReceiveToken.upsert(listOf(legacy), legacy.copy(memo = "Updated"))
+        assertEquals(1, saved.size)
+        assertEquals("Updated", saved.single().memo)
+        assertEquals(PendingReceiveToken.idFor(legacy.token), saved.single().id)
+    }
+
+    @Test
     fun memoSurvivesPersistenceRoundTrip() {
         val original = pendingReceiveToken(memo = "Coffee from Alice")
 

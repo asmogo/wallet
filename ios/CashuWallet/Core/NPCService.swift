@@ -12,7 +12,7 @@ class NPCService: ObservableObject {
     
     @Published var isEnabled: Bool {
         didSet {
-            guard isEnabled != oldValue else { return }
+            guard !suppressSettingsSideEffects, isEnabled != oldValue else { return }
             settingsStore.npcEnabled = isEnabled
             if isEnabled {
                 Task { await connect() }
@@ -61,6 +61,7 @@ class NPCService: ObservableObject {
     // MARK: - Private
     
     private var client: (any NpubCashClientProtocol)?
+    private var suppressSettingsSideEffects = false
     private var connectionTask: Task<Void, Never>?
     private var sessionID = UUID()
     private let makeClient: (String, String) throws -> any NpubCashClientProtocol
@@ -100,6 +101,15 @@ class NPCService: ObservableObject {
     func initializeIfEnabled() async {
         await connect()
         applyPollingPreferences()
+    }
+
+    func reloadWalletScopedData() {
+        suppressSettingsSideEffects = true
+        defer { suppressSettingsSideEffects = false }
+        isEnabled = settingsStore.npcEnabled
+        automaticClaim = settingsStore.npcAutomaticClaim
+        selectedMintUrl = settingsStore.npcSelectedMint
+        lastCheck = settingsStore.npcLastCheck
     }
 
     // MARK: - Key Derivation

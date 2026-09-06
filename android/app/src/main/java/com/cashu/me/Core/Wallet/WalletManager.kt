@@ -11,6 +11,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.channels.BufferOverflow
+import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -30,7 +31,9 @@ import org.cashudevkit.QuoteState as CdkQuoteState
 import org.cashudevkit.npubcashDeriveSecretKeyFromSeed
 import com.cashu.me.Core.CDK.CdkWalletGateway
 import com.cashu.me.Core.Platform.WalletDatabasePathManager
-import com.cashu.me.Core.Platform.WalletFileBackup
+import kotlinx.serialization.Serializable
+import kotlinx.serialization.encodeToString
+import kotlinx.serialization.json.Json
 import com.cashu.me.Core.Protocols.SecureStorage
 import com.cashu.me.Core.Protocols.StorageKeys
 import com.cashu.me.Core.Protocols.WalletServiceProtocol
@@ -68,11 +71,14 @@ class WalletManager(
     private val externalServicesEnabled: Boolean = true,
     private val allowCleartextLocalTestMints: Boolean = false,
 ) : WalletServiceProtocol, NPCQuoteClaimHandler {
+    @Serializable
     private data class WalletReplacementSnapshot(
-        val databaseBackups: List<WalletFileBackup>,
+        val mnemonic: String?,
+        val nostrPrivateKey: String?,
         val wallet: PreferenceSnapshot,
         val settings: SettingsWalletScopedSnapshot,
         val nwc: NwcWalletScopedSnapshot,
+        val npc: PreferenceSnapshot,
     )
 
     internal var cashuRequestListener: CashuRequestListener? = null
@@ -90,6 +96,7 @@ class WalletManager(
     )
     val receivedPayments: SharedFlow<ReceivedPaymentEvent> = mutableReceivedPayments.asSharedFlow()
     private val initializationMutex = Mutex()
+    private val replacement = DurableWalletReplacement(secureStorage, databasePathManager.replacementBoundaryFiles())
     private val mintMetadataFetcher = WalletMintMetadataFetcher(allowCleartextLocalTestMints)
     private val mintQuoteSyncService = WalletMintQuoteSyncService(gateway, walletStore)
     private val focusedMintQuoteMonitor = FocusedMintQuoteMonitor()
@@ -119,12 +126,22 @@ class WalletManager(
     // mint + melt quotes while the app is active so a payment lands without
     // pull-to-refresh (iOS parity).
     private var pendingQuotePollJob: Job? = null
+    private var startupMaintenanceJob: Job? = null
 
     override suspend fun initialize() {
         initializationMutex.withLock {
             if (mutableState.value.isRuntimeReady) return@withLock
 
             withContext(Dispatchers.IO) {
+                try {
+                    recoverWalletReplacement()
+                } catch (error: Exception) {
+                    AppLogger.wallet.error("Wallet replacement recovery failed", error)
+                    update { copy(isInitialized = true, isRuntimeReady = false, isLoading = false,
+                        startupFailure = walletStartupFailure(true),
+                        errorMessage = "Wallet recovery could not finish. Restart to try again.") }
+                    return@withContext
+                }
                 val hasStoredWallet = secureStorage.contains(StorageKeys.secureWalletMnemonic)
 
                 // Publish the complete cached home model before opening SQLite,
@@ -138,7 +155,7 @@ class WalletManager(
                     if (!settingsManager.hasOnboardingCompletionMarker) {
                         settingsManager.onboardingCompleted = true
                     }
-                    loadCachedState(needsOnboarding = !settingsManager.onboardingCompleted)
+                    loadCachedState(needsOnboarding = !settingsManager.onboardingCompleted || settingsManager.walletRestoreIncomplete)
                 } else {
                     update {
                         copy(
@@ -212,7 +229,8 @@ class WalletManager(
     }
 
     private fun startDeferredStartupMaintenance(hasStoredWallet: Boolean) {
-        scope.launch(Dispatchers.IO) {
+        startupMaintenanceJob?.cancel()
+        startupMaintenanceJob = scope.launch(Dispatchers.IO) {
             // Give Compose a scheduling opportunity to render cached state before
             // background maintenance contends for CDK's operation mutex.
             kotlinx.coroutines.yield()
@@ -330,25 +348,20 @@ class WalletManager(
         }
         require(gateway.validateMnemonic(normalized)) { "Invalid seed phrase." }
         val keepOnboarding = mutableState.value.needsOnboarding
-        withLoading { installCleanWallet(normalized, needsOnboarding = keepOnboarding) }
+        withLoading { installCleanWallet(normalized, needsOnboarding = keepOnboarding, restoring = true) }
     }
 
     override suspend fun restoreWallet(mnemonic: String) {
-        val normalized = MnemonicInput.normalize(mnemonic)
-        require(MnemonicInput.hasSupportedWordCount(normalized)) {
-            "Seed phrase must be ${MnemonicInput.supportedWordCountLabel} words."
-        }
-        require(gateway.validateMnemonic(normalized)) { "Invalid seed phrase." }
-        withLoading {
-            installCleanWallet(normalized, needsOnboarding = false)
-        }
+        initializeRestoredWallet(mnemonic)
     }
 
     override suspend fun deleteWallet() {
         withLoading {
             cashuRequestListener?.pauseForWalletBoundary()
-            nwcManager.resetForWalletBoundary()
+            nwcManager.stop()
             gateway.closeWalletRepository()
+            recoverWalletReplacement()
+            nwcManager.resetForWalletBoundary()
             secureStorage.delete(StorageKeys.secureWalletMnemonic)
             secureStorage.delete(StorageKeys.secureNostrPrivateKey)
             databasePathManager.removeWalletDatabaseFiles()
@@ -828,7 +841,13 @@ class WalletManager(
 
     override suspend fun meltTokens(quoteId: String, mintUrl: String?): MeltPaymentResult =
         withLoadingResult {
-            val confirmation = gateway.meltTokens(quoteId, mintUrl)
+            val confirmation = try {
+                gateway.meltTokens(quoteId, mintUrl)
+            } catch (failure: com.cashu.me.Core.CDK.MeltPaymentRecoveryException) {
+                refreshBalance()
+                loadTransactions()
+                throw failure
+            }
             val result = confirmation.result
             val pendingMelt = confirmation.pendingMelt
             if (pendingMelt != null) {
@@ -1096,10 +1115,18 @@ class WalletManager(
         val unit = com.cashu.me.Models.TokenInfo.parse(tokenString)?.unit ?: "sat"
         val settlement = withLoadingResult {
             require(processedId !in walletStore.loadProcessedCashuRequests()) { "This payment was already received." }
-            gateway.settleForeignNfcToken(tokenString, settlementMintUrl).also {
-                walletStore.saveProcessedCashuRequests(
-                    (walletStore.loadProcessedCashuRequests() + processedId).distinct().sorted(),
-                )
+            val source = requireNotNull(com.cashu.me.Models.TokenInfo.parse(tokenString)) { "Invalid token." }
+            // Persist discovery before CDK may consume proofs. Source change and
+            // compensated funds must remain visible and participate in startup recovery.
+            ensureMintTracked(source.mint)
+            ensureMintTracked(settlementMintUrl)
+            try {
+                gateway.settleForeignNfcToken(tokenString, settlementMintUrl).also {
+                    walletStore.saveProcessedCashuRequests(
+                        (walletStore.loadProcessedCashuRequests() + processedId).distinct().sorted(),
+                    )
+                }
+            } finally {
                 refreshBalance()
                 loadTransactions()
             }
@@ -1114,7 +1141,7 @@ class WalletManager(
 
     fun savePendingReceiveToken(token: PendingReceiveToken) {
         val current = walletStore.loadPendingReceiveTokens()
-        val updated = current.filterNot { it.tokenId == token.tokenId } + token
+        val updated = PendingReceiveToken.upsert(current, token)
         walletStore.savePendingReceiveTokens(updated)
         update { copy(pendingReceiveTokens = updated) }
     }
@@ -1427,6 +1454,7 @@ class WalletManager(
 
     suspend fun completeOnboarding() {
         settingsManager.onboardingCompleted = true
+        settingsManager.walletRestoreIncomplete = false
         loadCachedState(needsOnboarding = false)
         refreshBalance()
         loadTransactions()
@@ -1443,114 +1471,99 @@ class WalletManager(
         }
     }
 
-    private suspend fun installCleanWallet(mnemonic: String, needsOnboarding: Boolean) {
+    private fun decodeReplacementSnapshot(encoded: String): WalletReplacementSnapshot = try {
+        Json.decodeFromString<WalletReplacementSnapshot>(encoded)
+    } catch (_: Exception) {
+        // Serialization diagnostics can include input values; this payload contains secrets.
+        throw IllegalStateException("Wallet recovery state could not be decoded.")
+    }
+
+    private suspend fun recoverWalletReplacement() = withContext(Dispatchers.IO) {
+        replacement.recover(
+            restoreState = { encoded ->
+                val snapshot = decodeReplacementSnapshot(encoded)
+                if (snapshot.mnemonic == null) secureStorage.delete(StorageKeys.secureWalletMnemonic)
+                else secureStorage.saveString(StorageKeys.secureWalletMnemonic, snapshot.mnemonic)
+                walletStore.restoreWalletScopedData(snapshot.wallet)
+                settingsManager.restoreWalletScopedData(snapshot.settings)
+                nwcManager.restoreWalletScopedData(snapshot.nwc)
+                npcService.restoreWalletScopedData(snapshot.npc)
+                cashuRequestStore.reload()
+                nostrMintBackupService.reloadStoredState()
+            },
+            cleanupCommittedState = { encoded ->
+                val snapshot = decodeReplacementSnapshot(encoded)
+                settingsManager.deleteWalletScopedSecrets(snapshot.settings, deleteNostrPrivateKey = false)
+                // Cleanup may be retried on a later launch. Do not delete a new
+                // imported key the user saved after this replacement committed.
+                if (snapshot.nostrPrivateKey != null &&
+                    secureStorage.loadString(StorageKeys.secureNostrPrivateKey) == snapshot.nostrPrivateKey
+                ) secureStorage.delete(StorageKeys.secureNostrPrivateKey)
+            },
+        )
+    }
+
+    private suspend fun installCleanWallet(mnemonic: String, needsOnboarding: Boolean, restoring: Boolean = false) = initializationMutex.withLock {
+        // Finish any previous recovery before starting another replacement.
+        recoverWalletReplacement()
         val previousMnemonic = secureStorage.loadString(StorageKeys.secureWalletMnemonic)
         cashuRequestListener?.pauseForWalletBoundary()
-        val replacementSnapshot = try {
-            WalletReplacementSnapshot(
-                // Capture preference state before moving the database so a
-                // preparation failure can resume the untouched wallet.
-                wallet = walletStore.snapshotWalletScopedData(),
-                settings = settingsManager.snapshotWalletScopedData(),
-                nwc = nwcManager.snapshotWalletScopedData(),
-                databaseBackups = databasePathManager.backupWalletDatabaseFiles(),
-            )
-        } catch (error: Throwable) {
-            cashuRequestListener?.resetForWalletBoundary(
-                restart = externalServicesEnabled && previousMnemonic != null,
-            )
-            throw error
-        }
-        val backups = replacementSnapshot.databaseBackups
-        val walletSnapshot = replacementSnapshot.wallet
-        val settingsSnapshot = replacementSnapshot.settings
-        val nwcSnapshot = replacementSnapshot.nwc
+        npcService.pauseForWalletBoundary()
+        pendingQuotePollJob?.cancelAndJoin()
+        startupMaintenanceJob?.cancelAndJoin()
+        pendingMeltWaiters.values.toList().forEach { it.cancelAndJoin() }
+        pendingMeltWaiters.clear()
+        nwcManager.stop()
+        gateway.closeWalletRepository()
+        update { copy(isRuntimeReady = false) }
 
         runWalletReplacementCommit(
             installAndCommit = {
-                // NwcService retains the native CDK wallet, so it must stop before
-                // the repository/database it is backed by is closed.
+                withContext(Dispatchers.IO) { databasePathManager.checkpointBeforeReplacement() }
+                val snapshot = WalletReplacementSnapshot(
+                    mnemonic = previousMnemonic,
+                    nostrPrivateKey = secureStorage.loadString(StorageKeys.secureNostrPrivateKey),
+                    wallet = walletStore.snapshotWalletScopedData(),
+                    settings = settingsManager.snapshotWalletScopedData(),
+                    nwc = nwcManager.snapshotWalletScopedData(),
+                    npc = npcService.snapshotWalletScopedData(),
+                )
+                withContext(Dispatchers.IO) { replacement.begin(Json.encodeToString(snapshot)) }
                 nwcManager.resetForWalletBoundary()
-                gateway.closeWalletRepository()
                 cashuRequestStore.resetForWalletBoundary()
                 walletStore.removeAllWalletData()
                 settingsManager.prepareForWalletReplacement()
+                settingsManager.walletRestoreIncomplete = restoring
                 nostrService.resetForWalletBoundary(deleteStoredKey = false)
                 npcService.resetForWalletBoundary()
                 openWalletRepositoryWithRecovery(mnemonic)
                 deriveNostrKey(mnemonic)
                 secureStorage.saveString(StorageKeys.secureWalletMnemonic, mnemonic)
                 nostrMintBackupService.resetForWalletBoundary()
-                loadCachedState(needsOnboarding = needsOnboarding)
-                // A wallet installed during first-launch onboarding is incomplete
-                // until completeOnboarding(); installs from Settings skip
-                // onboarding entirely and are complete immediately. This durable
-                // marker is the final rollback-eligible commit step.
                 settingsManager.onboardingCompleted = !needsOnboarding
+                withContext(Dispatchers.IO) { replacement.commit() }
             },
             rollback = {
-                try {
-                    gateway.closeWalletRepository()
-                    databasePathManager.restoreWalletFileBackups(
-                        backups = backups,
-                        beforeCommit = {
-                            if (previousMnemonic != null) {
-                                secureStorage.saveString(StorageKeys.secureWalletMnemonic, previousMnemonic)
-                            } else {
-                                secureStorage.delete(StorageKeys.secureWalletMnemonic)
-                            }
-                        },
-                        onRollback = {
-                            secureStorage.saveString(StorageKeys.secureWalletMnemonic, mnemonic)
-                        },
-                    )
-                    walletStore.restoreWalletScopedData(walletSnapshot)
-                    cashuRequestStore.reload()
-                    settingsManager.restoreWalletScopedData(settingsSnapshot)
-                    nwcManager.restoreWalletScopedData(nwcSnapshot)
-                    nostrMintBackupService.reloadStoredState()
-                    if (previousMnemonic != null) {
-                        runCatching {
-                            openWalletRepositoryWithRecovery(previousMnemonic)
-                            deriveNostrKey(previousMnemonic)
-                            loadCachedState(needsOnboarding = false)
-                            if (startNwc) nwcManager.startIfEnabled()
-                        }
-                        cashuRequestListener?.resetForWalletBoundary(restart = externalServicesEnabled)
-                    } else {
-                        update {
-                            WalletState(
-                                isInitialized = true,
-                                isRuntimeReady = true,
-                                needsOnboarding = true,
-                                canExitOnboarding = false,
-                            )
-                        }
-                        cashuRequestListener?.resetForWalletBoundary(restart = false)
-                    }
-                } catch (rollbackError: Throwable) {
-                    AppLogger.wallet.error("Failed to restore the previous wallet transaction", rollbackError)
-                    runCatching {
-                        cashuRequestListener?.resetForWalletBoundary(restart = false)
-                    }.exceptionOrNull()?.let(rollbackError::addSuppressed)
-                    throw rollbackError
+                gateway.closeWalletRepository()
+                recoverWalletReplacement()
+                val recoveredMnemonic = secureStorage.loadString(StorageKeys.secureWalletMnemonic)
+                if (recoveredMnemonic != null) {
+                    npcService.reloadStoredSettings()
+                    openWalletRepositoryWithRecovery(recoveredMnemonic)
+                    deriveNostrKey(recoveredMnemonic)
+                    loadCachedState(needsOnboarding = !settingsManager.onboardingCompleted || settingsManager.walletRestoreIncomplete)
+                    update { copy(isRuntimeReady = true) }
+                    if (startNwc) nwcManager.startIfEnabled()
+                } else {
+                    update { WalletState(isInitialized = true, isRuntimeReady = true, needsOnboarding = true) }
                 }
+                cashuRequestListener?.resetForWalletBoundary(restart = externalServicesEnabled && previousMnemonic != null)
             },
-            cleanupSteps = listOf(
-                WalletReplacementCleanupStep("old wallet secrets") {
-                    settingsManager.deleteWalletScopedSecrets(
-                        settingsSnapshot,
-                        deleteNostrPrivateKey = true,
-                    )
-                },
-                WalletReplacementCleanupStep("wallet database backups") {
-                    databasePathManager.removeWalletFileBackups(backups)
-                },
-            ),
-            onCleanupFailure = { description, error ->
-                AppLogger.wallet.error("Post-commit $description cleanup failed", error)
-            },
+            cleanupSteps = listOf(WalletReplacementCleanupStep("wallet recovery journal") { recoverWalletReplacement() }),
+            onCleanupFailure = { description, error -> AppLogger.wallet.error("Post-commit $description cleanup failed", error) },
         )
+        loadCachedState(needsOnboarding = needsOnboarding)
+        update { copy(isRuntimeReady = true) }
         cashuRequestListener?.resetForWalletBoundary(restart = externalServicesEnabled && !needsOnboarding)
     }
 

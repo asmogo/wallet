@@ -19,7 +19,8 @@ enum ICloudBackupOutcome: Equatable {
 }
 
 enum ICloudRestoreState {
-    private static let incompleteKey = "cashu.local.icloudRestoreIncomplete"
+    // Retain the existing key for upgrades; the barrier now covers every seed restore.
+    static let incompleteKey = "cashu.local.icloudRestoreIncomplete"
 
     static func isIncomplete(defaults: UserDefaults = .standard) -> Bool {
         defaults.bool(forKey: incompleteKey)
@@ -240,7 +241,6 @@ extension WalletManager {
         // Keep the user's backup preference intact while independently
         // suppressing writes. Persist the marker so an interruption cannot make
         // a partial wallet look complete on the next launch.
-        setICloudRestoreIncomplete(true)
         try await initializeRestoredWallet(mnemonic: recoveredMnemonic)
 
         var failedMintCount = 0

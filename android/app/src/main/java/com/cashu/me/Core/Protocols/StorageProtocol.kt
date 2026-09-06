@@ -41,6 +41,7 @@ fun SecureStorage.hasNostrPrivateKey(): Boolean = contains(StorageKeys.secureNos
 
 object StorageKeys {
     const val walletDataPrefix = "wallet."
+    const val walletRestoreIncomplete = "wallet.restoreIncomplete"
     const val settingsDataPrefix = "settings."
     const val npcDataPrefix = "npc."
     const val priceDataPrefix = "price."
