@@ -19,6 +19,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -184,7 +185,10 @@ fun DescriptionDetailRow(description: String, label: String = "Description") {
         }
     }
     if (showFullDescription) {
-        ModalBottomSheet(onDismissRequest = { showFullDescription = false }) {
+        ModalBottomSheet(
+            onDismissRequest = { showFullDescription = false },
+            sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+        ) {
             Column(
                 modifier = Modifier
                     .fillMaxWidth()

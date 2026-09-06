@@ -290,7 +290,7 @@ class FunctionalWalletJourneyTest {
             .awaitTag(UiTestTags.SettingsScreen)
             .scrollToText(UiTestTags.SettingsList, "Delete Wallet")
             .tapText("Delete Wallet")
-            .awaitText("Are you sure", substring = true)
+            .awaitText("Delete wallet?")
             .tapText("Delete")
             .awaitTag(UiTestTags.OnboardingRoot)
             .awaitText("Create Wallet")
