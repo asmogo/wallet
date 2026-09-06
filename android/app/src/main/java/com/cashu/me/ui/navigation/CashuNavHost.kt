@@ -270,14 +270,10 @@ fun CashuNavHost(
             request = request,
             walletManager = container.walletManager,
             settingsManager = container.settingsManager,
-            priceService = container.priceService,
+            nostrService = container.nostrService,
+            nfcReceiveCoordinator = container.nfcReceiveCoordinator,
             store = container.cashuRequestStore,
             onDismissRequest = { receiptRequest = null },
-            onManageRequest = { id ->
-                receiptRequest = null
-                navController.navigate(cashuRequestDetailRouteFor(id))
-            },
-            onOpenPayment = { payment -> receiptTransaction = payment },
         )
     }
 

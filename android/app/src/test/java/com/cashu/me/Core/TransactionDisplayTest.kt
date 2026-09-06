@@ -184,7 +184,7 @@ class TransactionDisplayTest {
                     ).copy(status = status)
                     val expected = status == TransactionStatus.Pending &&
                         if (kind == TransactionKind.Ecash) direction == TransactionType.Outgoing
-                        else direction == TransactionType.Incoming
+                        else true
                     assertEquals("$kind $direction $status", expected, TransactionDisplay.showsQr(tx))
                 }
             }
@@ -192,12 +192,12 @@ class TransactionDisplayTest {
     }
 
     @Test
-    fun failedAndOutgoingReusableOfferPaymentsDoNotExposeCodes() {
+    fun failedOffersRetireWhilePendingOutgoingArtifactsRemainAvailable() {
         val offer = transaction(kind = TransactionKind.Lightning, type = TransactionType.Incoming,
             invoice = "LNO1offer")
         assertTrue(TransactionDisplay.showsQr(offer))
         assertTrue(!TransactionDisplay.showsQr(offer.copy(status = TransactionStatus.Failed)))
-        assertTrue(!TransactionDisplay.showsQr(offer.copy(type = TransactionType.Outgoing,
+        assertTrue(TransactionDisplay.showsQr(offer.copy(type = TransactionType.Outgoing,
             status = TransactionStatus.Pending)))
     }
 

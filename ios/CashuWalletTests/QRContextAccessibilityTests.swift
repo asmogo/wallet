@@ -37,7 +37,7 @@ final class QRContextAccessibilityTests: XCTestCase {
                         invoice: kind == .ecash ? nil : "one-shot-request"
                     )
                     let expected = status == .pending &&
-                        (kind == .ecash ? direction == .outgoing : direction == .incoming)
+                        (kind != .ecash || direction == .outgoing)
                     XCTAssertEqual(transaction.hasActionablePaymentCode, expected,
                                    "Unexpected QR availability for \(kind), \(direction), \(status)")
                 }
@@ -45,7 +45,7 @@ final class QRContextAccessibilityTests: XCTestCase {
         }
     }
 
-    func testReusableOfferStaysAvailableAfterPaymentButNeverOnOutgoingReceipt() {
+    func testReusableOfferStaysAvailableAndPendingOutgoingArtifactIsPreserved() {
         var transaction = WalletTransaction(
             id: "offer", amount: 21, type: .incoming, kind: .lightning, date: .now,
             status: .completed, invoice: "LNO1offer"
@@ -57,7 +57,7 @@ final class QRContextAccessibilityTests: XCTestCase {
             id: "payment", amount: 21, type: .outgoing, kind: .lightning, date: .now,
             status: .pending, invoice: "lno1offer"
         )
-        XCTAssertFalse(outgoing.hasActionablePaymentCode)
+        XCTAssertTrue(outgoing.hasActionablePaymentCode)
     }
 
 }

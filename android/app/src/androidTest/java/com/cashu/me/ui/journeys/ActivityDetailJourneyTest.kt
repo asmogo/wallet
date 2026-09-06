@@ -5,6 +5,9 @@ import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.performClick
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import androidx.test.core.graphics.writeToTestStorage
@@ -45,12 +48,15 @@ class ActivityDetailJourneyTest {
         compose.onNodeWithText("Status").performScrollTo().assertIsDisplayed()
         compose.onNodeWithText("Date").performScrollTo().assertIsDisplayed()
         compose.onNodeWithContentDescription("Close").assertDoesNotExist()
+        compose.onNodeWithContentDescription("Share").assertIsDisplayed()
         screenshot("activity-pending")
         compose.onNodeWithContentDescription("QR code. Long press for copy and share options.")
             .performScrollTo().assertIsDisplayed()
         fixture.fakeGateway!!.addTransaction(tx.copy(status = TransactionStatus.Completed, isUnpaidInvoice = false))
         runBlocking { fixture.container.walletManager.loadTransactions() }
         robot.awaitText("Paid")
+        compose.onNodeWithContentDescription("Completed").assertIsDisplayed()
+        compose.onNodeWithContentDescription("Share").assertDoesNotExist()
         compose.onNodeWithText("Show QR code").assertDoesNotExist()
         compose.onNodeWithText("Hide QR code").assertDoesNotExist()
         compose.onNodeWithContentDescription("QR code. Long press for copy and share options.").assertDoesNotExist()
@@ -69,15 +75,55 @@ class ActivityDetailJourneyTest {
             dateEpochMillis = System.currentTimeMillis(), status = TransactionStatus.Completed,
             mintUrl = FakeWalletGateway.TestMintUrl, quoteId = "activity-offer"))
         runBlocking { fixture.container.walletManager.loadTransactions() }
-        robot.tapText("History").tapText("Reusable Invoice").awaitText("Active")
-        compose.onNodeWithText("Status").performScrollTo().assertIsDisplayed()
-        compose.onNodeWithText("Date").performScrollTo().assertIsDisplayed()
+        robot.tapText("History").tapText("Reusable Invoice").awaitText("1 payment received")
+        compose.onNodeWithText("Created").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithContentDescription("Share").assertIsDisplayed()
+        compose.onNodeWithText("New Request").assertDoesNotExist()
         compose.onNodeWithText("Total received").assertIsDisplayed()
         compose.onNodeWithContentDescription("Close").assertDoesNotExist()
         screenshot("activity-reusable")
         compose.onNodeWithContentDescription("QR code. Long press for copy and share options.")
             .performScrollTo().assertIsDisplayed()
         robot.pressSystemBack().awaitTag(UiTestTags.HistoryScreen)
+    }
+
+    @Test fun cashuRequestKeepsInlineEditingAndNewRequest() {
+        launched = AppTestFixture.launch(FixtureMode.SeededWithMint)
+        val fixture = launched!!
+        robot.awaitTag(UiTestTags.WalletScreen)
+        val original = fixture.container.cashuRequestStore.createNew(
+            id = "activity-request", mints = listOf(FakeWalletGateway.TestMintUrl),
+            memo = "Coffee tips", encoded = "creqAfixture")
+        robot.tapText("History").tapText("Cashu Request").awaitText("New Request")
+        compose.onNodeWithContentDescription("Close").assertDoesNotExist()
+        compose.onNodeWithContentDescription("Share").assertIsDisplayed()
+        compose.onNodeWithText("Copy").assertIsDisplayed()
+        compose.onNodeWithText("New Request").assertIsDisplayed().performClick()
+        compose.waitUntil(5_000) {
+            fixture.container.cashuRequestStore.request(original.id)?.encoded != original.encoded
+        }
+        val updated = checkNotNull(fixture.container.cashuRequestStore.request(original.id))
+        assertTrue(updated.encoded.startsWith("creqA"))
+        assertEquals(original.memo, updated.memo)
+        assertEquals(original.mints, updated.mints)
+        assertEquals(1, fixture.container.cashuRequestStore.state.value.requests.size)
+        compose.onNodeWithText("Amount").performScrollTo().performClick()
+        robot.awaitText("Done").pressSystemBack().awaitText("New Request")
+        robot.pressSystemBack().awaitTag(UiTestTags.HistoryScreen)
+    }
+
+    @Test fun failedPaymentKeepsRedFailureGlyph() {
+        launched = AppTestFixture.launch(FixtureMode.SeededWithMint)
+        val fixture = launched!!
+        robot.awaitTag(UiTestTags.WalletScreen)
+        fixture.fakeGateway!!.addTransaction(WalletTransaction(
+            id = "activity-failed", amount = 2100, type = TransactionType.Outgoing,
+            kind = TransactionKind.Lightning, dateEpochMillis = System.currentTimeMillis(),
+            status = TransactionStatus.Failed, mintUrl = FakeWalletGateway.TestMintUrl))
+        runBlocking { fixture.container.walletManager.loadTransactions() }
+        robot.tapText("History").tapText("Lightning paid").awaitTag(UiTestTags.TransactionReceiptSheet)
+        compose.onNodeWithContentDescription("Failed").assertIsDisplayed()
+        compose.onNodeWithText("Failed").assertIsDisplayed()
     }
 
     private fun screenshot(name: String) {

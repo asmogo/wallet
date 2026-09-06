@@ -195,28 +195,27 @@ What this system explicitly rejects, pulled verbatim from docs/product/PRODUCT.m
 
 ### Unified activity detail sheets (2026-09-06)
 
-This contract supersedes the older status-hero and share-at-top rules
-below **for History and Home activity details** on both iOS and Android. Creation,
-request management, and live payment success screens retain their own flow UI.
+History and Home activity details share native sheet presentation on iOS and
+Android, while retaining the existing payment-specific content and actions.
 
-- Every incoming/outgoing transaction and stored receive request opens a native,
-  content-fitting bottom sheet with a centered title and drag handle. Dismiss by
-  swiping, native accessibility dismissal, or Android Back; no close/share toolbar.
-- Stable order: actionable QR when available, amount at `amountConfirm`, Status,
-  Date, fee when applicable, Mint, Description, reference/proof rows, then actions.
-  No check/X hero and no changing amount scale between payment states.
-- Actionable QR codes remain visible above the amount and facts, with no expand/
-  collapse control. Keep native Copy/Share context actions and a visible Copy button.
-- QR eligibility: pending outgoing ecash; pending incoming Lightning/on-chain;
-  active reusable ecash requests and BOLT12 offers. Settled/expired/failed one-shot
-  codes, incoming tokens to claim, and outgoing Lightning/on-chain payments never
-  offer payment QR codes. Settled ecash keeps its existing passive Copy receipt.
-- Reusable requests show **Total received**, **Active** after a payment, requested
-  amount, payment count, and links to individual payment receipts. They keep their
-  code available after receiving. **Manage request** opens the ecash request editor.
-- Unclaimed incoming ecash opens the same inspector and offers **Receive** to enter
-  the claim flow. Manual outgoing-token status checks remain available as before.
-- Content scrolls at large text sizes and on short screens.
+- Every transaction and stored receive request opens a sheet over its list with
+  a centered title and drag handle. Dismiss by swipe, native accessibility escape,
+  or Android Back. No redundant top-left close X.
+- Show a visible Share action at the top right whenever the payment artifact is
+  shareable. QR context-menu Copy/Share and the visible Copy button remain.
+- Keep QR codes immediately visible in their original position above the amount.
+  Preserve adaptive QR sizing, compact amounts beside a QR, normal receipt amounts,
+  and the existing rows and spacing. No QR disclosure or collapse animation.
+- Preserve the green check for completed receipts and red cross for failed
+  receipts, plus the lifecycle text. Reusable requests retain their payment-count
+  status and live QR after receiving payments.
+- Keep Copy, New Request, and inline Mint/Amount/Unit editing directly available
+  on Cashu Requests. Reuse the existing request view and its delivery behavior.
+- Preserve pending outbound invoice/address QR and copy/share availability,
+  settled ecash Copy, explorer/proof references, and manual token status checks.
+  Settled one-shot codes retire as before.
+- Unclaimed incoming ecash opens the shared sheet with Receive to enter the
+  claim flow. Keep action footers visible while long detail content scrolls.
 
 ## 2. Colors: The Inverted-Ink Palette
 

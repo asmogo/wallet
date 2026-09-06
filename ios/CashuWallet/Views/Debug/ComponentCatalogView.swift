@@ -166,6 +166,8 @@ private struct ActivityDetailCatalog: View {
             .init(id: "sent-lightning", amount: 2100, type: .outgoing, kind: .lightning,
                   date: date, status: .completed, mintUrl: "https://mint.example",
                   preimage: "0123456789abcdef0123456789abcdef", fee: 2),
+            .init(id: "failed-lightning", amount: 2100, type: .outgoing, kind: .lightning,
+                  date: date, status: .failed, mintUrl: "https://mint.example"),
             .init(id: "pending-ecash", amount: 2100, type: .outgoing, kind: .ecash,
                   date: date, status: .pending, mintUrl: "https://mint.example", token: "cashu-token"),
             .init(id: "received-ecash", amount: 2100, type: .incoming, kind: .ecash,
@@ -183,19 +185,29 @@ private struct ActivityDetailCatalog: View {
                 Button(transaction.displayTitle) { selectedTransaction = transaction }
                     .accessibilityIdentifier(transaction.id)
             }
-            Button("Reusable Invoice") {
-                selectedRequest = CashuRequest(
-                    id: "catalog-offer", encoded: "lno1fixture", mints: ["https://mint.example"],
-                    memo: "Coffee tips", createdAt: date,
-                    receivedPayments: [.init(transactionId: "fixture-payment", amount: 2100, receivedAt: date)],
-                    rail: .bolt12, reusable: true
-                )
-            }
-            .accessibilityIdentifier("reusable-invoice")
+            Button("Reusable Invoice") { openRequest(rail: .bolt12) }
+                .accessibilityIdentifier("reusable-invoice")
+            Button("Cashu Request") { openRequest(rail: .ecash) }
+                .accessibilityIdentifier("cashu-request")
         }
         .sheet(item: $selectedTransaction) { TransactionDetailView(transaction: $0) }
         .sheet(item: $selectedRequest) { CashuRequestReceiptView(request: $0) }
     }
+
+    private func openRequest(rail: CashuRequest.Rail) {
+        let store = CashuRequestStore.shared
+        let id = rail == .ecash ? "catalog-request" : "catalog-offer"
+        store.delete(id: id)
+        let request = store.create(
+            id: id, rail: rail, encoded: rail == .ecash ? "creqAfixture" : "lno1fixture",
+            mints: ["https://mint.example"], memo: "Coffee tips", reusable: true
+        )
+        if rail == .bolt12 {
+            store.attachPayment(requestId: id, transactionId: "fixture-payment", amount: 2100)
+        }
+        selectedRequest = store.request(withId: id) ?? request
+    }
+
 }
 
 #Preview("Inline error catalog — matrix") {

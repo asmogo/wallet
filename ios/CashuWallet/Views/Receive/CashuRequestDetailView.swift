@@ -10,6 +10,7 @@ struct CashuRequestDetailView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     let onClose: (() -> Void)?
+    let showsNavigationHeader: Bool
 
     @State private var requestId: String
     @State private var showMintPicker = false
@@ -25,12 +26,13 @@ struct CashuRequestDetailView: View {
     /// imperatively, so the accessibility action presents the share sheet.
     @State private var showShareSheet = false
 
-    init(request: CashuRequest, onClose: (() -> Void)? = nil) {
+    init(request: CashuRequest, onClose: (() -> Void)? = nil, showsNavigationHeader: Bool = true) {
         self._requestId = State(initialValue: request.id)
         self._paymentObservation = State(
             initialValue: CashuRequestPaymentObservation(existingPayments: request.receivedPayments)
         )
         self.onClose = onClose
+        self.showsNavigationHeader = showsNavigationHeader
     }
 
     private var request: CashuRequest? {
@@ -65,22 +67,24 @@ struct CashuRequestDetailView: View {
         .navigationBarBackButtonHidden(true)
         .toolbarBackground(.hidden, for: .navigationBar)
         .toolbar {
-            ToolbarItem(placement: .principal) {
-                Text(request?.displayTitle ?? "Cashu Request")
-                    .font(.headline)
-            }
-            ToolbarItem(placement: .cancellationAction) {
-                SheetCloseButton {
-                    if let onClose { onClose() } else { dismiss() }
+            if showsNavigationHeader {
+                ToolbarItem(placement: .principal) {
+                    Text(request?.displayTitle ?? "Cashu Request")
+                        .font(.headline)
                 }
-            }
-            ToolbarItem(placement: .topBarTrailing) {
-                if let request {
-                    ShareLink(item: request.encoded) {
-                        Image(systemName: "square.and.arrow.up")
-                            .toolbarIconTapTarget()
+                ToolbarItem(placement: .cancellationAction) {
+                    SheetCloseButton {
+                        if let onClose { onClose() } else { dismiss() }
                     }
-                    .accessibilityLabel("Share request")
+                }
+                ToolbarItem(placement: .topBarTrailing) {
+                    if let request {
+                        ShareLink(item: request.encoded) {
+                            Image(systemName: "square.and.arrow.up")
+                                .toolbarIconTapTarget()
+                        }
+                        .accessibilityLabel("Share request")
+                    }
                 }
             }
         }
@@ -305,6 +309,7 @@ struct CashuRequestDetailView: View {
             onCopy: { copy(request.encoded) },
             onShare: { showShareSheet = true }
         )
+        .accessibilityIdentifier("cashu.history.payment-code")
         .frame(width: size, height: size)
         .padding(16)
         .background(Color.white, in: RoundedRectangle(cornerRadius: 20))

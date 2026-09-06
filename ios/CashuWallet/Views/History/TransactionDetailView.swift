@@ -9,6 +9,7 @@ struct TransactionDetailView: View {
     @ObservedObject var settings = SettingsManager.shared
     @ObservedObject private var priceService = PriceService.shared
 
+    @State private var contentHeight: CGFloat = 0
     @State private var claimReceiveToken: PendingReceiveToken?
     @State private var showShareSheet = false
     @State private var isCheckingClaim = false
@@ -44,8 +45,7 @@ struct TransactionDetailView: View {
     /// See DESIGN.md → the settled-ecash receipt carve-out.
     private var copyableContent: String? {
         if showsQR { return qrContent }
-        if transaction.kind == .ecash, transaction.status == .completed,
-           let token = transaction.token { return token }
+        if transaction.kind == .ecash, let token = transaction.token { return token }
         return nil
     }
 
@@ -77,35 +77,59 @@ struct TransactionDetailView: View {
         }
     }
 
+    // Keep upstream's content-fitting receipt sizing. Described live QRs use
+    // the adaptive receive layout so Mint and Description remain visible.
+    private var usesAdaptiveQR: Bool { showsQR && transaction.displayDescription != nil }
+
     var body: some View {
-        ActivityDetailSheet(title: transaction.displayTitle) {
-            if showsQR, let content = qrContent {
-                ActivityPaymentCode(
-                    content: content,
-                    staticOnly: transaction.kind != .ecash,
-                    onCopy: { copyContent(content) },
-                    onShare: { showShareSheet = true }
-                )
+        ActivityDetailSheet(
+            title: transaction.displayTitle,
+            contentHeight: contentHeight,
+            fitsContent: !usesAdaptiveQR,
+            onShare: showsQR ? { showShareSheet = true } : nil
+        ) {
+            Group {
+                if usesAdaptiveQR {
+                    VStack(spacing: 0) {
+                        PaymentDetailContent { qrSize in
+                            heroSlot(qrSize: qrSize)
+                        } details: {
+                            receiptDetails
+                        }
+                        receiptActions
+                            .padding(.horizontal)
+                            .padding(.bottom, 16)
+                    }
+                } else {
+                    VStack(spacing: 12) {
+                        VStack(spacing: 16) {
+                            heroSlot(qrSize: 280)
+                            receiptDetails
+                        }
+                        receiptActions
+                    }
+                    .padding(.horizontal)
+                    .padding(.bottom, 16)
+                    .contentFitMeasured { contentHeight = $0 }
+                }
             }
-            receiptDetails
-            receiptActions
-        }
-        .sheet(isPresented: $showShareSheet) {
-            if let token = transaction.token {
-                CashuTokenShareSheet(token: token)
-            } else if let invoice = transaction.invoice {
-                ShareSheet(items: [invoice])
+            .sheet(isPresented: $showShareSheet) {
+                if let token = transaction.token {
+                    CashuTokenShareSheet(token: token)
+                } else if let invoice = transaction.invoice {
+                    ShareSheet(items: [invoice])
+                }
             }
-        }
-        // Single-quote check on open (not the full pending list). Re-checks
-        // this mint quote against the mint and mints if already paid —
-        // Android TransactionDetailScreen parity.
-        .task(id: seed.id) {
-            guard let quoteId = seed.mintQuoteIdForStatusRefresh else { return }
-            _ = await walletManager.refreshPendingMintQuote(quoteId: quoteId)
-        }
-        .onDisappear {
-            manualClaimCheckTask?.cancel()
+            // Single-quote check on open (not the full pending list). Re-checks
+            // this mint quote against the mint and mints if already paid —
+            // Android TransactionDetailScreen parity.
+            .task(id: seed.id) {
+                guard let quoteId = seed.mintQuoteIdForStatusRefresh else { return }
+                _ = await walletManager.refreshPendingMintQuote(quoteId: quoteId)
+            }
+            .onDisappear {
+                manualClaimCheckTask?.cancel()
+            }
         }
         .fullScreenCover(item: $claimReceiveToken) { pending in
             ReceiveTokenDetailView(
@@ -125,16 +149,17 @@ struct TransactionDetailView: View {
     private var receiptDetails: some View {
         VStack(spacing: 24) {
             // Receipt amounts use the same primary/secondary ordering
-            // as Home and History, at one stable scale for every lifecycle.
+            // as Home and History. The glyph above carries state colour.
             TransactionReceiptAmountPair(
                 transaction: transaction,
-                role: .amountConfirm,
+                role: showsQR ? .amountCompact : .amountConfirm,
                 preferredPrimary: settings.homeBalancePrimary,
                 showFiat: settings.showFiatBalance,
                 btcPrice: priceService.btcPriceUSD,
                 currencyCode: settings.bitcoinPriceCurrency,
                 useBitcoinSymbol: settings.useBitcoinSymbol
             )
+            .padding(.top, heroSlotIsEmpty ? 16 : 0)
 
             // Detail rows on canvas, led by Status + Date. Type is
             // omitted — the nav title names it.
@@ -222,7 +247,63 @@ struct TransactionDetailView: View {
         return walletManager.pendingReceiveTokens.first { $0.tokenId == transaction.id }
     }
 
-    /// Direction and rail come from the title; this row names the lifecycle.
+    /// The hero above the amount. An actionable request shows its QR; otherwise a
+    /// state glyph bounces in on open — green check (completed) / red X (failed),
+    /// same size as the payment-success screen. A pending, no-QR tx shows nothing.
+    @ViewBuilder
+    private func heroSlot(qrSize: CGFloat) -> some View {
+        if showsQR, let content = qrContent {
+            QRCodeView(
+                content: content,
+                showControls: false,
+                // Lightning invoices / Bitcoin addresses are standard QR formats;
+                // ecash tokens are long and benefit from UR-animated encoding.
+                staticOnly: transaction.kind != .ecash,
+                onCopy: { copyContent(content) },
+                onShare: { showShareSheet = true }
+            )
+            .accessibilityIdentifier("cashu.history.payment-code")
+            .frame(width: qrSize, height: qrSize)
+            .padding(16)
+            .background(Color.white, in: RoundedRectangle(cornerRadius: 20))
+            .contextMenu {
+                Button(action: { copyContent(content) }) {
+                    Label("Copy", systemImage: "doc.on.doc")
+                }
+                Button(action: { showShareSheet = true }) {
+                    Label("Share", systemImage: "square.and.arrow.up")
+                }
+            }
+        } else if transaction.status == .completed {
+            // Static glyph — no `.symbolEffect(.bounce)`. This is historical review
+            // (a detail screen re-opened often), not the live payment-received moment
+            // that owns the bounce (DESIGN.md §6). The status already happened.
+            // Status hero, not an inline notice — but it speaks the same
+            // severity vocabulary, so it takes the same tokens rather than
+            // raw .green/.red.
+            Image(systemName: "checkmark.circle.fill")
+                .font(.statusGlyph)
+                .foregroundStyle(ErrorSeverity.success.foreground)
+                .padding(.top, 16)
+                .accessibilityLabel("Completed")
+        } else if transaction.status == .failed {
+            Image(systemName: "xmark.circle.fill")
+                .font(.statusGlyph)
+                .foregroundStyle(ErrorSeverity.error.foreground)
+                .padding(.top, 16)
+                .accessibilityLabel("Failed")
+        }
+    }
+
+    /// True when the hero renders nothing (a no-QR transaction still pending, or
+    /// an expired invoice — deliberately quiet, no glyph), so the amount gets top
+    /// breathing room instead of butting against the nav bar.
+    private var heroSlotIsEmpty: Bool {
+        !showsQR && transaction.isUnsettled
+    }
+
+    /// The lifecycle word for the Status row. Direction/rail come from the nav
+    /// title, so this only names the state: completed → Claimed/Paid/Confirmed.
     private var statusFieldValue: String {
         switch transaction.status {
         case .completed:
@@ -576,152 +657,21 @@ private struct PaymentDescriptionView: View {
     }
 }
 
-/// Stored receive intents use the same inspector as individual transactions.
-/// Creating or editing a request remains an explicit action from the receipt.
+
+/// History keeps the original request controls inside the shared activity sheet.
 struct CashuRequestReceiptView: View {
-    private let seed: CashuRequest
-    @EnvironmentObject private var walletManager: WalletManager
+    let request: CashuRequest
     @ObservedObject private var store = CashuRequestStore.shared
-    @ObservedObject private var settings = SettingsManager.shared
-    @ObservedObject private var priceService = PriceService.shared
     @State private var showShareSheet = false
-    @State private var showManageRequest = false
-    @State private var selectedPayment: WalletTransaction?
 
-    init(request: CashuRequest) { seed = request }
-
-    private var request: CashuRequest { store.request(withId: seed.id) ?? seed }
-    private var payments: [WalletTransaction] {
-        let ids = Set(request.receivedPayments.map(\.transactionId))
-        return walletManager.transactions.filter { ids.contains($0.id) }
-    }
-    private var totalReceived: UInt64 {
-        request.receivedPayments.reduce(0) { total, payment in
-            total + (payments.first { $0.id == payment.transactionId }?.amount ?? payment.amount)
-        }
-    }
-    private var status: String {
-        switch request.lifecycle {
-        case .waiting: return "Waiting for payment"
-        case .collecting: return "Active"
-        case .received: return request.rail == .onchain ? "Confirmed" : "Paid"
-        case .expired: return "Expired"
-        }
-    }
-    private var codeAvailable: Bool {
-        !request.encoded.isEmpty && (request.lifecycle == .waiting || request.lifecycle == .collecting)
-    }
+    private var current: CashuRequest { store.request(withId: request.id) ?? request }
 
     var body: some View {
-        // One-shot expiry can pass while a receipt is open, even without a store update.
-        TimelineView(.periodic(from: .now, by: 1)) { _ in
-            ActivityDetailSheet(title: request.displayTitle) {
-                if codeAvailable {
-                    ActivityPaymentCode(content: request.encoded,
-                                        onCopy: copyRequest, onShare: { showShareSheet = true })
-                }
-                VStack(spacing: 4) {
-                    if !request.receivedPayments.isEmpty {
-                        Text("Total received").font(.subheadline).foregroundStyle(.secondary)
-                    }
-                    if let amount = request.receivedPayments.isEmpty ? request.amount : totalReceived {
-                        let display = amountDisplay(amount)
-                        AmountLockup(parts: display.primaryParts, role: .amountConfirm,
-                                     value: Double(amount), accessibilityPrefix: "Amount")
-                        if let secondary = display.secondary {
-                            Text(secondary).cashuText(.bodyEmphasis).monospacedDigit()
-                                .foregroundStyle(.secondary)
-                        }
-                    } else {
-                        Text("Any amount").cashuText(.amountConfirm)
-                    }
-                }
-
-                VStack(spacing: 0) {
-                    row("Status", status)
-                    row("Date", request.createdAt.formatted(date: .abbreviated, time: .shortened))
-                    row("Mint", request.mints.isEmpty ? "Any mint" : request.mints.map { url in
-                        walletManager.mints.first { $0.url == url }?.name ?? URL(string: url)?.host ?? url
-                    }.joined(separator: ", "))
-                    if let description = request.displayDescription {
-                        DescriptionDetailRow(description: description)
-                    }
-                    if request.reusable {
-                        row("Requested amount", request.amount.map { amountDisplay($0).primary } ?? "Any amount")
-                        row("Payments received", "\(request.receivedPayments.count)")
-                    }
-                    ForEach(payments) { payment in
-                        Button { selectedPayment = payment } label: {
-                            HStack {
-                                Text(payment.date.formatted(date: .abbreviated, time: .shortened))
-                                    .foregroundStyle(.secondary)
-                                Spacer()
-                                Text(amountDisplay(payment.amount).primary)
-                                Image(systemName: "chevron.right").font(.caption)
-                            }
-                            .font(.subheadline)
-                            .padding(.vertical, 12)
-                            .frame(minHeight: 44)
-                        }
-                        .buttonStyle(.plain)
-                        .accessibilityHint("Opens payment details")
-                    }
-                }
-                if codeAvailable {
-                    Button("Copy", action: copyRequest)
-                        .flatSheetSecondaryButton()
-                        .accessibilityLabel("Copy payment request")
-                }
-                if request.rail == .ecash {
-                    Button("Manage request") { showManageRequest = true }
-                        .flatSheetSecondaryButton()
-                }
-            }
+        ActivityDetailSheet(title: current.displayTitle, onShare: { showShareSheet = true }) {
+            CashuRequestDetailView(request: current, showsNavigationHeader: false)
         }
-        .sheet(isPresented: $showShareSheet) { ShareSheet(items: [request.encoded]) }
-        .sheet(isPresented: $showManageRequest) {
-            NavigationStack {
-                CashuRequestDetailView(request: request)
-                    .environmentObject(walletManager)
-            }
+        .sheet(isPresented: $showShareSheet) {
+            ShareSheet(items: [current.encoded])
         }
-        .sheet(item: $selectedPayment) { payment in
-            TransactionDetailView(transaction: payment).environmentObject(walletManager)
-        }
-        .task(id: seed.id) {
-            if let quoteId = request.quoteId {
-                _ = await walletManager.refreshPendingMintQuote(quoteId: quoteId)
-            }
-        }
-    }
-
-    private func row(_ label: String, _ value: String) -> some View {
-        HStack {
-            Text(label).foregroundStyle(.secondary)
-            Spacer()
-            Text(value).fontWeight(.medium).multilineTextAlignment(.trailing)
-                .fixedSize(horizontal: false, vertical: true).textSelection(.enabled)
-        }
-        .font(.subheadline)
-        .padding(.horizontal, 4)
-        .padding(.vertical, 12)
-        .frame(minHeight: 44)
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel(label)
-        .accessibilityValue(value)
-    }
-
-    private func amountDisplay(_ amount: UInt64) -> AmountDisplayText {
-        AmountFormatter.displayMintUnitAmount(
-            amount: amount, unit: request.unit, preferredPrimary: settings.homeBalancePrimary,
-            showFiat: settings.showFiatBalance, btcPrice: priceService.btcPriceUSD,
-            currencyCode: settings.bitcoinPriceCurrency, useBitcoinSymbol: settings.useBitcoinSymbol
-        )
-    }
-
-    private func copyRequest() {
-        UIPasteboard.general.string = request.encoded
-        HapticFeedback.notification(.success)
-        ConfirmationToast.show("Copied payment request")
     }
 }

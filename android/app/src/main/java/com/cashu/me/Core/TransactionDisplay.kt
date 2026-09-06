@@ -53,23 +53,19 @@ object TransactionDisplay {
     fun qrContent(transaction: WalletTransaction): String? =
         transaction.token ?: transaction.invoice
 
-    /**
-     * Availability behind Show QR code. Incoming tokens need claiming; outgoing
-     * Lightning/on-chain payments are receipts. Reusable incoming offers remain
-     * usable after payment, while settled one-shot artifacts retire.
-     */
+    /** Pending payment artifacts retain their QR, Copy and Share; reusable offers stay live. */
     fun showsQr(transaction: WalletTransaction): Boolean = when (transaction.kind) {
         TransactionKind.Ecash ->
             !transaction.token.isNullOrEmpty() &&
                 transaction.type == TransactionType.Outgoing &&
                 transaction.status == TransactionStatus.Pending
         TransactionKind.Lightning ->
-            transaction.type == TransactionType.Incoming && !transaction.invoice.isNullOrEmpty() &&
+            !transaction.invoice.isNullOrEmpty() &&
                 (transaction.status == TransactionStatus.Pending ||
                     (transaction.status == TransactionStatus.Completed &&
                         transaction.invoice.startsWith("lno", ignoreCase = true)))
         TransactionKind.Onchain ->
-            transaction.type == TransactionType.Incoming && !transaction.invoice.isNullOrEmpty() &&
+            !transaction.invoice.isNullOrEmpty() &&
                 transaction.status == TransactionStatus.Pending
     }
 

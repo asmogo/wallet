@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -67,6 +68,7 @@ import com.cashu.me.Core.UnitAmountEntry
 import com.cashu.me.Core.Wallet.userFacingWalletMessage
 import com.cashu.me.Core.WalletManager
 import com.cashu.me.Models.CashuRequestPayment
+import com.cashu.me.ui.components.ActivityDetailSheet
 import com.cashu.me.ui.components.AmountEntryHero
 import com.cashu.me.ui.components.AmountText
 import com.cashu.me.ui.components.DetailActionFooter
@@ -105,6 +107,7 @@ fun CashuRequestDetailScreen(
     nfcReceiveCoordinator: NfcReceiveCoordinator,
     requestId: String,
     onClose: () -> Unit,
+    asActivitySheet: Boolean = false,
 ) {
     val storeState by cashuRequestStore.state.collectAsState()
     val walletState by walletManager.state.collectAsState()
@@ -228,16 +231,11 @@ fun CashuRequestDetailScreen(
             val mintName = creditedMintUrl?.let { url ->
                 walletState.mints.firstOrNull { it.url == url }?.name ?: url
             }
-            Scaffold(
-                topBar = {
-                    CashuRequestDetailTopBar(
-                        title = request.displayTitle,
-                        onClose = onClose,
-                        onShare = {
-                            context.shareText(request.encoded, subject = request.displayTitle)
-                        },
-                    )
-                },
+            CashuRequestDetailContainer(
+                title = request.displayTitle,
+                onClose = onClose,
+                onShare = { context.shareText(request.encoded, subject = request.displayTitle) },
+                asActivitySheet = asActivitySheet,
             ) { padding ->
                 CashuRequestSuccessTerminal(
                     amountLabel = amountLabel,
@@ -251,21 +249,13 @@ fun CashuRequestDetailScreen(
             }
         } else {
 
-        Scaffold(
-            topBar = {
-                CashuRequestDetailTopBar(
-                    title = request?.displayTitle ?: "Cashu Request",
-                    onClose = onClose,
-                    onShare = request?.let { current ->
-                        {
-                            context.shareText(
-                                current.encoded,
-                                subject = current.displayTitle,
-                            )
-                        }
-                    },
-                )
+        CashuRequestDetailContainer(
+            title = request?.displayTitle ?: "Cashu Request",
+            onClose = onClose,
+            onShare = request?.let { current ->
+                { context.shareText(current.encoded, subject = current.displayTitle) }
             },
+            asActivitySheet = asActivitySheet,
         ) { padding ->
             if (request == null) {
                 Column(
@@ -282,7 +272,7 @@ fun CashuRequestDetailScreen(
                     Spacer(Modifier.height(CashuTheme.spacing.comfortable))
                     GhostButton(text = "Back", onClick = onClose)
                 }
-                return@Scaffold
+                return@CashuRequestDetailContainer
             }
 
             if (keepNfcSessionMounted) {
@@ -511,6 +501,27 @@ fun CashuRequestDetailScreen(
             )
         }
         }
+    }
+}
+
+/** History uses the sheet header while creation flows retain their full-screen toolbar. */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun CashuRequestDetailContainer(
+    title: String,
+    onClose: () -> Unit,
+    onShare: (() -> Unit)?,
+    asActivitySheet: Boolean,
+    content: @Composable (PaddingValues) -> Unit,
+) {
+    if (asActivitySheet) {
+        ActivityDetailSheet(title = title, onDismissRequest = onClose, onShare = onShare) {
+            content(PaddingValues())
+        }
+    } else {
+        Scaffold(topBar = {
+            CashuRequestDetailTopBar(title = title, onClose = onClose, onShare = onShare)
+        }, content = content)
     }
 }
 

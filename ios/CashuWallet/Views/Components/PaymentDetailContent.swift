@@ -31,56 +31,40 @@ struct PaymentDetailContent<Hero: View, Details: View>: View {
     }
 }
 
-/// Shared history inspector with an optional visible QR above the amount and facts.
+
+/// Native activity presentation shared by transactions and stored requests.
+/// Each body retains its adaptive QR, status cues and pinned actions.
 struct ActivityDetailSheet<Content: View>: View {
     let title: String
+    var contentHeight: CGFloat = 0
+    var fitsContent = false
+    var onShare: (() -> Void)?
     @ViewBuilder var content: () -> Content
     @Environment(\.dismiss) private var dismiss
-    @State private var contentHeight: CGFloat = 0
 
     var body: some View {
         NavigationStack {
-            VStack(spacing: 24, content: content)
-                .padding(.horizontal, 16)
-                .padding(.top, 16)
-                .padding(.bottom, 16)
-                .contentFitMeasured { contentHeight = $0 }
-                .navigationTitle(title)
+            content()
                 .navigationBarTitleDisplayMode(.inline)
                 .toolbarBackground(.hidden, for: .navigationBar)
+                .toolbar {
+                    ToolbarItem(placement: .principal) {
+                        Text(title).font(.headline)
+                    }
+                    if let onShare {
+                        ToolbarItem(placement: .topBarTrailing) {
+                            Button(action: onShare) {
+                                Image(systemName: "square.and.arrow.up")
+                                    .toolbarIconTapTarget()
+                            }
+                            .accessibilityLabel("Share")
+                        }
+                    }
+                }
         }
         .compactBottomSheetSurface()
-        .contentFitDetent(contentHeight, estimate: 420, navigationBar: true)
+        .contentFitDetent(contentHeight, enabled: fitsContent, estimate: 500, navigationBar: true)
         .presentationDragIndicator(.visible)
         .accessibilityAction(.escape) { dismiss() }
-    }
-}
-
-struct ActivityPaymentCode: View {
-    let content: String
-    var staticOnly = true
-    let onCopy: () -> Void
-    let onShare: () -> Void
-
-    var body: some View {
-        ViewThatFits(in: .horizontal) {
-            code(size: 240)
-            code(size: 180)
-            code(size: 120)
-        }
-        .frame(maxWidth: .infinity)
-        .accessibilityIdentifier("cashu.history.payment-code")
-    }
-
-    private func code(size: CGFloat) -> some View {
-        QRCodeView(content: content, showControls: false, staticOnly: staticOnly,
-                   onCopy: onCopy, onShare: onShare)
-            .frame(width: size, height: size)
-            .padding(16)
-            .background(Color.white, in: RoundedRectangle(cornerRadius: 20))
-            .contextMenu {
-                Button("Copy", systemImage: "doc.on.doc", action: onCopy)
-                Button("Share", systemImage: "square.and.arrow.up", action: onShare)
-            }
     }
 }

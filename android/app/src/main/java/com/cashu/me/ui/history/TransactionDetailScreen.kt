@@ -3,12 +3,20 @@ package com.cashu.me.ui.history
 import android.content.ClipData
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Cancel
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.outlined.ContentCopy
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -21,14 +29,15 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.ClipEntry
-import androidx.compose.ui.platform.LocalClipboard
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalClipboard
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.launch
@@ -50,7 +59,7 @@ import com.cashu.me.Models.TransactionType
 import com.cashu.me.Models.WalletTransaction
 import com.cashu.me.Models.liveDetail
 import com.cashu.me.ui.components.ActivityDetailSheet
-import com.cashu.me.ui.components.ActivityPaymentCode
+import com.cashu.me.ui.components.shareText
 import com.cashu.me.ui.components.AmountText
 import com.cashu.me.ui.components.AmountHero
 import com.cashu.me.ui.components.ExplorerLinkRow
@@ -60,6 +69,8 @@ import com.cashu.me.ui.components.InlineNotice
 import com.cashu.me.ui.components.LocalConfirmationToastController
 import com.cashu.me.ui.components.NoticeSeverity
 import com.cashu.me.ui.components.PrimaryButton
+import com.cashu.me.ui.components.PaymentDetailContent
+import com.cashu.me.ui.components.QrCard
 import com.cashu.me.ui.components.SecondaryButton
 import com.cashu.me.ui.components.openInBrowser
 import com.cashu.me.ui.theme.AmountScale
@@ -69,7 +80,14 @@ import com.cashu.me.ui.theme.atSize
 import com.cashu.me.ui.theme.withMonoDigits
 import com.cashu.me.ui.testing.UiTestTags
 
-/** Receipt-first history sheet shared by all incoming and outgoing rails. */
+/**
+ * Content-fitting bottom sheet for any transaction, settled or live. Every
+ * detail opens over the originating list instead of replacing it with a pushed
+ * full-screen destination (iOS `TransactionDetailView` parity): a live request
+ * shows its QR hero, a completed receipt the green check, a failed one the red
+ * X, above the shared rows and actions. Live artifacts share through the
+ * visible trailing Share action and the QR long-press menu.
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun TransactionReceiptSheet(
@@ -146,6 +164,31 @@ fun TransactionReceiptSheet(
         transaction = current,
     )
 
+    val hero: @Composable (Dp) -> Unit = { qrSize ->
+        when {
+            showsQr && qrContent != null -> QrCard(
+                content = qrContent,
+                size = qrSize,
+                staticOnly = current.kind != TransactionKind.Ecash,
+                shareSubject = title,
+                confirmationMessage =
+                    "Copied ${TransactionDisplay.qrLabel(current).replaceFirstChar { it.lowercase() }}",
+            )
+            current.status == TransactionStatus.Completed -> Icon(
+                imageVector = Icons.Filled.CheckCircle,
+                contentDescription = "Completed",
+                tint = CashuTheme.colors.onReceivedContainer,
+                modifier = Modifier.size(COMPLETED_RECEIPT_GLYPH_SIZE),
+            )
+            current.status == TransactionStatus.Failed -> Icon(
+                imageVector = Icons.Filled.Cancel,
+                contentDescription = "Failed",
+                tint = MaterialTheme.colorScheme.error,
+                modifier = Modifier.size(FAILED_GLYPH_SIZE),
+            )
+            else -> Unit
+        }
+    }
     val details: @Composable () -> Unit = {
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
@@ -159,6 +202,7 @@ fun TransactionReceiptSheet(
                 showFiat = settings.showFiatBalance,
                 btcPrice = priceState.btcPrice,
                 currencyCode = priceState.currencyCode,
+                compact = showsQr,
             )
 
             Column(modifier = Modifier.fillMaxWidth()) {
@@ -233,7 +277,7 @@ fun TransactionReceiptSheet(
                 )
             } else {
                 if (copyableContent != null) {
-                    SecondaryButton(
+                        SecondaryButton(
                         text = "Copy",
                         onClick = {
                             scope.launch {
@@ -288,20 +332,43 @@ fun TransactionReceiptSheet(
     ActivityDetailSheet(
         title = title,
         onDismissRequest = onDismissRequest,
+        onShare = if (showsQr && qrContent != null) {
+            { context.shareText(qrContent, subject = title) }
+        } else null,
         modifier = Modifier.testTag(UiTestTags.TransactionReceiptSheet),
     ) {
-        if (showsQr && qrContent != null) {
-            ActivityPaymentCode(
-                content = qrContent,
-                title = title,
-                staticOnly = current.kind != TransactionKind.Ecash,
-                confirmationMessage = "Copied ${TransactionDisplay.qrLabel(current).replaceFirstChar { it.lowercase() }}",
-            )
+        if (showsQr && description != null) {
+            PaymentDetailContent(
+                modifier = Modifier.weight(1f, fill = false),
+                hero = hero,
+            ) { details() }
+            Column(modifier = Modifier.padding(horizontal = CashuTheme.spacing.comfortable)) {
+                actions()
+            }
+            Spacer(Modifier.height(CashuTheme.spacing.comfortable))
+        } else {
+            Column(
+                modifier = Modifier.fillMaxWidth().verticalScroll(rememberScrollState())
+                    .padding(horizontal = CashuTheme.spacing.comfortable)
+                    .padding(bottom = CashuTheme.spacing.comfortable),
+                verticalArrangement = Arrangement.spacedBy(CashuTheme.spacing.default),
+            ) {
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(CashuTheme.spacing.comfortable),
+                ) {
+                    hero(280.dp)
+                    details()
+                }
+                actions()
+            }
         }
-        details()
-        actions()
     }
 }
+
+// Status glyphs stay at the same restrained scale for every outcome.
+private val COMPLETED_RECEIPT_GLYPH_SIZE = 64.dp
+private val FAILED_GLYPH_SIZE = 64.dp
 
 private val MonospacedLabels = setOf("Request", "Address", "Payment Proof", "Transaction ID", "Quote ID", "Mint")
 
@@ -324,6 +391,7 @@ private fun HeroAmount(
     showFiat: Boolean,
     btcPrice: Double,
     currencyCode: String,
+    compact: Boolean,
 ) {
     val display = transactionReceiptAmountDisplay(
         transaction = transaction,
@@ -340,7 +408,7 @@ private fun HeroAmount(
     ) {
         AmountHero(
             parts = display.primaryParts,
-            scale = AmountScale.Confirm,
+            scale = if (compact) AmountScale.Compact else AmountScale.Confirm,
             accessibilityPrefix = "Amount",
         )
         display.secondary?.let { secondary ->

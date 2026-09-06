@@ -123,12 +123,21 @@ final class ActivityDetailUITests: XCTestCase {
         app.launch()
         defer { app.terminate() }
 
-        for id in ["pending-lightning", "paid-lightning", "sent-lightning", "received-ecash", "received-bitcoin", "reusable-invoice"] {
+        for id in ["pending-lightning", "paid-lightning", "sent-lightning", "received-ecash", "received-bitcoin", "failed-lightning", "reusable-invoice", "cashu-request"] {
             let row = app.buttons[id]
             XCTAssertTrue(row.waitForExistence(timeout: 10))
             row.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
-            XCTAssertTrue(app.staticTexts["Status"].waitForExistence(timeout: 5))
-            XCTAssertTrue(app.staticTexts["Date"].exists)
+            let isRequest = id == "reusable-invoice" || id == "cashu-request"
+            XCTAssertTrue(app.staticTexts[isRequest ? "Created" : "Status"].waitForExistence(timeout: 5))
+            if !isRequest { XCTAssertTrue(app.staticTexts["Date"].exists) }
+            if id == "cashu-request" {
+                XCTAssertTrue(app.buttons["New Request"].isHittable)
+                XCTAssertTrue(app.buttons["Amount"].isHittable)
+            }
+            if id == "failed-lightning" { XCTAssertTrue(app.images["Failed"].exists) }
+            if ["paid-lightning", "sent-lightning", "received-ecash", "received-bitcoin"].contains(id) {
+                XCTAssertTrue(app.images["Completed"].exists)
+            }
             XCTAssertTrue(app.staticTexts["Mint"].exists)
             XCTAssertFalse(app.buttons["Close"].exists)
             let attachment = XCTAttachment(screenshot: app.screenshot())
@@ -136,7 +145,8 @@ final class ActivityDetailUITests: XCTestCase {
             attachment.lifetime = .keepAlways
             add(attachment)
 
-            if id == "pending-lightning" || id == "reusable-invoice" {
+            if id == "pending-lightning" || isRequest {
+                XCTAssertTrue(app.buttons["Share"].isHittable)
                 XCTAssertTrue(app.descendants(matching: .any)["cashu.history.payment-code"].firstMatch.exists)
             } else {
                 XCTAssertFalse(app.descendants(matching: .any)["cashu.history.payment-code"].firstMatch.exists)

@@ -76,17 +76,17 @@ struct WalletTransaction: Identifiable {
         return quoteId ?? id
     }
 
-    /// Only artifacts that can still receive money belong behind Show QR code.
+    /// Preserve pending payment artifacts and live reusable offers in history.
     var hasActionablePaymentCode: Bool {
         switch kind {
         case .ecash:
             return type == .outgoing && status == .pending && token?.isEmpty == false
         case .lightning:
-            guard type == .incoming, let invoice, !invoice.isEmpty else { return false }
+            guard let invoice, !invoice.isEmpty else { return false }
             return status == .pending ||
                 (status == .completed && invoice.lowercased().hasPrefix("lno"))
         case .onchain:
-            return type == .incoming && status == .pending && invoice?.isEmpty == false
+            return status == .pending && invoice?.isEmpty == false
         }
     }
 
