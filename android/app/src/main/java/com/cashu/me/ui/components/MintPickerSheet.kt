@@ -21,7 +21,6 @@ import androidx.compose.material.icons.outlined.AllInclusive
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
@@ -60,10 +59,12 @@ fun MintPickerSheet(
     mintSubtitle: ((MintInfo) -> String)? = null,
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    val dismiss = rememberSheetDismissAction(sheetState)
     val formatter = remember { AmountFormatter() }
-    ModalBottomSheet(
+    CashuModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = sheetState,
+        sheetGesturesEnabled = !dismiss.isDismissing,
         containerColor = CashuTheme.colors.compactSheetContainer,
     ) {
         CompactSheetContent {
@@ -83,7 +84,7 @@ fun MintPickerSheet(
                         item(key = "any-mint") {
                             MintPickerAnyRow(
                                 selected = activeMintUrl == null,
-                                onClick = { onSelect(null) },
+                                onClick = { dismiss { onSelect(null) } },
                             )
                         }
                     }
@@ -93,7 +94,7 @@ fun MintPickerSheet(
                             balanceText = mintSubtitle?.invoke(mint)
                                 ?: formatter.formatSats(mint.balance),
                             selected = mint.url == activeMintUrl,
-                            onClick = { onSelect(mint) },
+                            onClick = { dismiss { onSelect(mint) } },
                         )
                     }
                 }

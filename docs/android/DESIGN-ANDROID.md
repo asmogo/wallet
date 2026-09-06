@@ -95,6 +95,14 @@ like a port, make the Android-native choice instead.
 - **Navigation**: shared-axis X (slide + fade) for push/pop; fade-through for
   tab switches (`CashuNavHost.kt`). Predictive back is enabled
   (`android:enableOnBackInvokedCallback`).
+- **Sheet dismissal**: payment flows, activity receipts, and mint/unit/currency
+  pickers use `CashuModalBottomSheet`. It retains the native Material sheet and
+  gestures, but uses a spatial spring for dismissal while Material3 applies an
+  effects spring to that translation. Sheet content keeps the normal motion
+  scheme. `rememberSheetDismissAction` waits for a completed hide before a
+  selection or navigation callback; repeated taps cannot dispatch twice and
+  interruption cancels the pending action. Receipt backdrop blur clears when
+  dismissal starts and returns if the sheet settles open again.
 - **No hard cuts**: full-screen overlays (scanner, contactless) slide over the
   shell (`CashuApp.kt`); the bottom bar animates away on push
   (`WalletScaffold.kt`). The payment terminal's entrance splits by mount:

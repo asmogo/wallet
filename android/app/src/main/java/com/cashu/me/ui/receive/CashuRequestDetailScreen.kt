@@ -112,6 +112,7 @@ fun CashuRequestDetailScreen(
     requestId: String,
     onClose: () -> Unit,
     asActivitySheet: Boolean = false,
+    onBackdropVisibilityChanged: (Boolean) -> Unit = {},
 ) {
     val storeState by cashuRequestStore.state.collectAsState()
     val walletState by walletManager.state.collectAsState()
@@ -265,6 +266,7 @@ fun CashuRequestDetailScreen(
                 onClose = onClose,
                 onShare = { context.shareText(request.encoded, subject = request.displayTitle) },
                 asActivitySheet = asActivitySheet,
+                onBackdropVisibilityChanged = onBackdropVisibilityChanged,
             ) { padding ->
                 CashuRequestSuccessTerminal(
                     amountLabel = amountLabel,
@@ -282,6 +284,7 @@ fun CashuRequestDetailScreen(
                 { context.shareText(current.encoded, subject = current.displayTitle) }
             },
             asActivitySheet = asActivitySheet,
+            onBackdropVisibilityChanged = onBackdropVisibilityChanged,
         ) { padding ->
             if (request == null) {
                 Column(
@@ -535,10 +538,16 @@ private fun CashuRequestDetailContainer(
     onClose: () -> Unit,
     onShare: (() -> Unit)?,
     asActivitySheet: Boolean,
+    onBackdropVisibilityChanged: (Boolean) -> Unit,
     content: @Composable (PaddingValues) -> Unit,
 ) {
     if (asActivitySheet) {
-        ActivityDetailSheet(title = title, onDismissRequest = onClose, onShare = onShare) {
+        ActivityDetailSheet(
+            title = title,
+            onDismissRequest = onClose,
+            onShare = onShare,
+            onBackdropVisibilityChanged = onBackdropVisibilityChanged,
+        ) {
             content(PaddingValues())
         }
     } else {

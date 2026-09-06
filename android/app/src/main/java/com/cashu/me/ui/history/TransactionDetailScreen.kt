@@ -16,8 +16,10 @@ import androidx.compose.material.icons.filled.Cancel
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.outlined.ContentCopy
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.SheetValue
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.rememberBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -62,6 +64,7 @@ import com.cashu.me.Models.TransactionType
 import com.cashu.me.Models.WalletTransaction
 import com.cashu.me.Models.liveDetail
 import com.cashu.me.ui.components.ActivityDetailSheet
+import com.cashu.me.ui.components.rememberSheetDismissAction
 import com.cashu.me.ui.components.shareText
 import com.cashu.me.ui.components.AmountText
 import com.cashu.me.ui.components.AmountHero
@@ -100,7 +103,13 @@ fun TransactionReceiptSheet(
     priceService: PriceService,
     onDismissRequest: () -> Unit,
     onClaimReceiveToken: ((String) -> Unit)? = null,
+    onBackdropVisibilityChanged: (Boolean) -> Unit = {},
 ) {
+    val sheetState = rememberBottomSheetState(
+        initialValue = SheetValue.Hidden,
+        enabledValues = setOf(SheetValue.Hidden, SheetValue.Expanded),
+    )
+    val dismiss = rememberSheetDismissAction(sheetState)
     val walletState by walletManager.state.collectAsState()
     val settings by settingsManager.state.collectAsState()
     val priceState by priceService.state.collectAsState()
@@ -279,7 +288,7 @@ fun TransactionReceiptSheet(
             if (pendingReceiveToken != null && onClaimReceiveToken != null) {
                 PrimaryButton(
                     text = "Receive",
-                    onClick = { onClaimReceiveToken(pendingReceiveToken) },
+                    onClick = { dismiss { onClaimReceiveToken(pendingReceiveToken) } },
                     modifier = Modifier.fillMaxWidth(),
                 )
             } else {
@@ -339,6 +348,9 @@ fun TransactionReceiptSheet(
     ActivityDetailSheet(
         title = title,
         onDismissRequest = onDismissRequest,
+        sheetState = sheetState,
+        sheetGesturesEnabled = !dismiss.isDismissing,
+        onBackdropVisibilityChanged = onBackdropVisibilityChanged,
         onShare = if (showsQr && qrContent != null) {
             { context.shareText(qrContent, subject = title) }
         } else null,

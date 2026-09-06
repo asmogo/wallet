@@ -21,7 +21,6 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
@@ -36,6 +35,8 @@ import java.util.Locale
 import com.cashu.me.Core.PriceService
 import com.cashu.me.Core.SettingsManager
 import com.cashu.me.ui.components.FlowSheetTitle
+import com.cashu.me.ui.components.CashuModalBottomSheet
+import com.cashu.me.ui.components.rememberSheetDismissAction
 import com.cashu.me.ui.components.formatRelativeRecency
 import com.cashu.me.ui.theme.CashuTheme
 import com.cashu.me.ui.theme.withMonoDigits
@@ -58,11 +59,13 @@ fun CurrencyPickerSheet(
     val settings by settingsManager.state.collectAsState()
     val price by priceService.state.collectAsState()
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    val dismiss = rememberSheetDismissAction(sheetState)
     val fiatOn = settings.showFiatBalance
 
-    ModalBottomSheet(
+    CashuModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = sheetState,
+        sheetGesturesEnabled = !dismiss.isDismissing,
     ) {
         Column(modifier = Modifier.navigationBarsPadding()) {
             FlowSheetTitle(title = "Currency")
@@ -81,9 +84,11 @@ fun CurrencyPickerSheet(
                             )
                         },
                         onClick = {
-                            settingsManager.setShowFiatBalance(false)
-                            priceService.syncFromSettings(refresh = false)
-                            onDismiss()
+                            dismiss {
+                                settingsManager.setShowFiatBalance(false)
+                                priceService.syncFromSettings(refresh = false)
+                                onDismiss()
+                            }
                         },
                     )
                 }
@@ -100,10 +105,12 @@ fun CurrencyPickerSheet(
                             )
                         },
                         onClick = {
-                            settingsManager.setShowFiatBalance(true)
-                            settingsManager.setBitcoinPriceCurrency(code)
-                            priceService.syncFromSettings(refresh = true)
-                            onDismiss()
+                            dismiss {
+                                settingsManager.setShowFiatBalance(true)
+                                settingsManager.setBitcoinPriceCurrency(code)
+                                priceService.syncFromSettings(refresh = true)
+                                onDismiss()
+                            }
                         },
                     )
                 }

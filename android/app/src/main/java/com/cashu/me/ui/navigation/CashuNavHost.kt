@@ -15,6 +15,7 @@ import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -82,9 +83,16 @@ fun CashuNavHost(
 ) {
     var receiptTransaction by remember { mutableStateOf<WalletTransaction?>(null) }
     var receiptRequest by remember { mutableStateOf<CashuRequest?>(null) }
+    var receiptBackdropVisible by remember { mutableStateOf(false) }
+    LaunchedEffect(receiptTransaction, receiptRequest) {
+        receiptBackdropVisible = receiptTransaction != null || receiptRequest != null
+    }
     val receiptBackdropBlur by animateDpAsState(
-        targetValue = if (receiptTransaction != null || receiptRequest != null) 2.dp else 0.dp,
-        animationSpec = tween(durationMillis = 180),
+        targetValue = if (receiptBackdropVisible) 2.dp else 0.dp,
+        animationSpec = tween(
+            durationMillis = if (receiptBackdropVisible) 180 else 30,
+            easing = LinearOutSlowInEasing,
+        ),
         label = "transaction-receipt-backdrop-blur",
     )
 
@@ -274,6 +282,7 @@ fun CashuNavHost(
             nfcReceiveCoordinator = container.nfcReceiveCoordinator,
             store = container.cashuRequestStore,
             onDismissRequest = { receiptRequest = null },
+            onBackdropVisibilityChanged = { receiptBackdropVisible = it },
         )
     }
 
@@ -284,6 +293,7 @@ fun CashuNavHost(
             settingsManager = container.settingsManager,
             priceService = container.priceService,
             onDismissRequest = { receiptTransaction = null },
+            onBackdropVisibilityChanged = { receiptBackdropVisible = it },
             // The claim flow presents at app level; the sheet steps aside first.
             onClaimReceiveToken = { token ->
                 receiptTransaction = null
