@@ -10,6 +10,7 @@ struct TransactionDetailView: View {
     @ObservedObject private var priceService = PriceService.shared
 
     @State private var contentHeight: CGFloat = 0
+    @State private var claimReceiveToken: PendingReceiveToken?
     @State private var showShareSheet = false
     @State private var isCheckingClaim = false
     @State private var manualClaimCheckResult: PendingTokenClaimCheckResult?
@@ -58,35 +59,7 @@ struct TransactionDetailView: View {
         )
     }
 
-    /// A reusable BOLT12 offer — its bech32 human-readable prefix is `lno`.
-    private var isReusableOffer: Bool {
-        transaction.invoice?.lowercased().hasPrefix("lno") == true
-    }
-
-    /// Whether the stored request is still worth showing as a QR. A record of a
-    /// *settled* one-shot invoice shouldn't reoffer a dead payment code, so the QR
-    /// (and its Copy / Share) appears only while the content is still actionable.
-    private var showsQR: Bool {
-        switch transaction.kind {
-        case .ecash:
-            // Governs the scannable/shareable artifacts (QR hero + top Share).
-            // A claimed token is spent, so only an unclaimed (pending) send is
-            // still worth re-presenting. The passive Copy button is separate — it
-            // extends to settled tokens as a receipt via `copyableContent`.
-            // An unclaimed *incoming* token is money to claim, not a payment
-            // code to hand out — its detail leads with the Receive button.
-            if transaction.isPendingReceiveToken { return false }
-            return transaction.token != nil && transaction.status == .pending
-        case .lightning:
-            guard transaction.invoice != nil else { return false }
-            return transaction.status == .pending || isReusableOffer
-        case .onchain:
-            // The address is only worth re-presenting while the deposit is
-            // still awaited; once confirmed this is a historical receipt like
-            // a settled invoice — checkmark hero, no QR.
-            return transaction.invoice != nil && transaction.status == .pending
-        }
-    }
+    private var showsQR: Bool { transaction.hasActionablePaymentCode }
 
     private var qrContentTypeLabel: String {
         switch transaction.kind {
@@ -109,7 +82,12 @@ struct TransactionDetailView: View {
     private var usesAdaptiveQR: Bool { showsQR && transaction.displayDescription != nil }
 
     var body: some View {
-        NavigationStack {
+        ActivityDetailSheet(
+            title: transaction.displayTitle,
+            contentHeight: contentHeight,
+            fitsContent: !usesAdaptiveQR,
+            onShare: showsQR ? { showShareSheet = true } : nil
+        ) {
             Group {
                 if usesAdaptiveQR {
                     VStack(spacing: 0) {
@@ -135,16 +113,6 @@ struct TransactionDetailView: View {
                     .contentFitMeasured { contentHeight = $0 }
                 }
             }
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbarBackground(.hidden, for: .navigationBar)
-            .toolbar {
-                // Title only — no close or share chrome. Like every receipt
-                // sheet, dismissal is the drag indicator / swipe, and sharing
-                // stays on the QR itself (context menu + VoiceOver action).
-                ToolbarItem(placement: .principal) {
-                    Text(transaction.displayTitle).font(.headline)
-                }
-            }
             .sheet(isPresented: $showShareSheet) {
                 if let token = transaction.token {
                     CashuTokenShareSheet(token: token)
@@ -163,9 +131,17 @@ struct TransactionDetailView: View {
                 manualClaimCheckTask?.cancel()
             }
         }
-        .compactBottomSheetSurface()
-        .contentFitDetent(contentHeight, enabled: !usesAdaptiveQR, estimate: 500, navigationBar: true)
-        .presentationDragIndicator(.visible)
+        .fullScreenCover(item: $claimReceiveToken) { pending in
+            ReceiveTokenDetailView(
+                tokenString: pending.token,
+                onComplete: {
+                    claimReceiveToken = nil
+                    dismiss()
+                },
+                claim: { try await walletManager.claimPendingReceiveToken(pending) }
+            )
+            .environmentObject(walletManager)
+        }
     }
 
     // MARK: - Subviews
@@ -232,8 +208,12 @@ struct TransactionDetailView: View {
 
     @ViewBuilder
     private var receiptActions: some View {
-        if offersManualClaimCheck || copyableContent != nil {
+        if offersManualClaimCheck || copyableContent != nil || pendingReceive != nil {
             VStack(spacing: 12) {
+                if let pending = pendingReceive {
+                    Button("Receive") { claimReceiveToken = pending }
+                        .glassButton()
+                }
                 if let content = copyableContent {
                     Button(action: { copyContent(content) }) {
                         Text("Copy")
@@ -262,6 +242,11 @@ struct TransactionDetailView: View {
     }
 
 
+    private var pendingReceive: PendingReceiveToken? {
+        guard transaction.isPendingReceiveToken, transaction.status == .pending else { return nil }
+        return walletManager.pendingReceiveTokens.first { $0.tokenId == transaction.id }
+    }
+
     /// The hero above the amount. An actionable request shows its QR; otherwise a
     /// state glyph bounces in on open — green check (completed) / red X (failed),
     /// same size as the payment-success screen. A pending, no-QR tx shows nothing.
@@ -277,6 +262,7 @@ struct TransactionDetailView: View {
                 onCopy: { copyContent(content) },
                 onShare: { showShareSheet = true }
             )
+            .accessibilityIdentifier("cashu.history.payment-code")
             .frame(width: qrSize, height: qrSize)
             .padding(16)
             .background(Color.white, in: RoundedRectangle(cornerRadius: 20))
@@ -387,8 +373,7 @@ struct TransactionDetailView: View {
             Text(value)
                 .fontWeight(.medium)
                 .multilineTextAlignment(.trailing)
-                .lineLimit(1)
-                .truncationMode(.middle)
+                .fixedSize(horizontal: false, vertical: true)
                 .textSelection(.enabled)
         }
         .font(.subheadline)
@@ -668,6 +653,25 @@ private struct PaymentDescriptionView: View {
                     Button("Done") { dismiss() }
                 }
             }
+        }
+    }
+}
+
+
+/// History keeps the original request controls inside the shared activity sheet.
+struct CashuRequestReceiptView: View {
+    let request: CashuRequest
+    @ObservedObject private var store = CashuRequestStore.shared
+    @State private var showShareSheet = false
+
+    private var current: CashuRequest { store.request(withId: request.id) ?? request }
+
+    var body: some View {
+        ActivityDetailSheet(title: current.displayTitle, onShare: { showShareSheet = true }) {
+            CashuRequestDetailView(request: current, showsNavigationHeader: false)
+        }
+        .sheet(isPresented: $showShareSheet) {
+            ShareSheet(items: [current.encoded])
         }
     }
 }

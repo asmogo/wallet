@@ -111,3 +111,53 @@ final class MainTabUITests: UITestBase {
         tapTab("Wallet")
     }
 }
+
+
+/// Actual receipt sheets with deterministic catalog records, without a live mint.
+final class ActivityDetailUITests: XCTestCase {
+    func testReceiptLayoutAndVisiblePaymentCode() {
+        continueAfterFailure = false
+        let app = XCUIApplication()
+        app.launchEnvironment = ["SHOW_COMPONENT_CATALOG": "activity", "CI_INTEGRATION_TEST": "1"]
+        app.launchArguments = ["-AppleLanguages", "(en)", "-AppleLocale", "en_US"]
+        app.launch()
+        defer { app.terminate() }
+
+        for id in ["pending-lightning", "paid-lightning", "sent-lightning", "received-ecash", "received-bitcoin", "failed-lightning", "reusable-invoice", "cashu-request"] {
+            let row = app.buttons[id]
+            XCTAssertTrue(row.waitForExistence(timeout: 10))
+            row.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
+            let isRequest = id == "reusable-invoice" || id == "cashu-request"
+            XCTAssertTrue(app.staticTexts[isRequest ? "Created" : "Status"].waitForExistence(timeout: 5))
+            if !isRequest { XCTAssertTrue(app.staticTexts["Date"].exists) }
+            if id == "cashu-request" {
+                XCTAssertTrue(app.buttons["New Request"].isHittable)
+                XCTAssertTrue(app.buttons["Amount"].isHittable)
+            }
+            if id == "failed-lightning" { XCTAssertTrue(app.images["Failed"].exists) }
+            if ["paid-lightning", "sent-lightning", "received-ecash", "received-bitcoin"].contains(id) {
+                XCTAssertTrue(app.images["Completed"].exists)
+            }
+            XCTAssertTrue(app.staticTexts["Mint"].exists)
+            XCTAssertFalse(app.buttons["Close"].exists)
+            let attachment = XCTAttachment(screenshot: app.screenshot())
+            attachment.name = id
+            attachment.lifetime = .keepAlways
+            add(attachment)
+
+            if id == "pending-lightning" || isRequest {
+                XCTAssertTrue(app.buttons["Share"].isHittable)
+                XCTAssertTrue(app.descendants(matching: .any)["cashu.history.payment-code"].firstMatch.exists)
+            } else {
+                XCTAssertFalse(app.descendants(matching: .any)["cashu.history.payment-code"].firstMatch.exists)
+            }
+            XCTAssertFalse(app.buttons["Show QR code"].exists)
+            XCTAssertFalse(app.buttons["Hide QR code"].exists)
+            // Native sheet gesture, starting on the title to avoid scrolling its body.
+            let title = app.navigationBars.firstMatch
+            title.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
+                .press(forDuration: 0.1, thenDragTo: app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.98)))
+            XCTAssertTrue(title.waitForNonExistence(timeout: 5))
+        }
+    }
+}

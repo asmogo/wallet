@@ -40,8 +40,7 @@ struct WalletTransaction: Identifiable {
     var sagaId: String? = nil
 
     /// Incoming ecash the user hasn't claimed yet (a "Receive Later" token or
-    /// a NUT-18 payment held for approval). Rows with this flag open the
-    /// claim flow instead of a plain receipt.
+    /// a NUT-18 payment held for approval). Its receipt offers the claim flow.
     var isPendingReceiveToken: Bool = false
 
     /// Source Cashu Request id when this incoming ecash transaction was
@@ -75,6 +74,20 @@ struct WalletTransaction: Identifiable {
         guard invoice != nil else { return nil }
         guard status == .pending || status == .expired else { return nil }
         return quoteId ?? id
+    }
+
+    /// Preserve pending payment artifacts and live reusable offers in history.
+    var hasActionablePaymentCode: Bool {
+        switch kind {
+        case .ecash:
+            return type == .outgoing && status == .pending && token?.isEmpty == false
+        case .lightning:
+            guard let invoice, !invoice.isEmpty else { return false }
+            return status == .pending ||
+                (status == .completed && invoice.lowercased().hasPrefix("lno"))
+        case .onchain:
+            return status == .pending && invoice?.isEmpty == false
+        }
     }
 
     var displayStatusText: String {

@@ -193,6 +193,30 @@ What this system explicitly rejects, pulled verbatim from docs/product/PRODUCT.m
   `pencil` hint glyph. Tap opens a `.medium`-detent sub-sheet rather than pushing
   a screen. No leading field icon — see The Iconless-Row Rule, §5.
 
+### Unified activity detail sheets (2026-09-06)
+
+History and Home activity details share native sheet presentation on iOS and
+Android, while retaining the existing payment-specific content and actions.
+
+- Every transaction and stored receive request opens a sheet over its list with
+  a centered title and drag handle. Dismiss by swipe, native accessibility escape,
+  or Android Back. No redundant top-left close X.
+- Show a visible Share action at the top right whenever the payment artifact is
+  shareable. QR context-menu Copy/Share and the visible Copy button remain.
+- Keep QR codes immediately visible in their original position above the amount.
+  Preserve adaptive QR sizing, compact amounts beside a QR, normal receipt amounts,
+  and the existing rows and spacing. No QR disclosure or collapse animation.
+- Preserve the green check for completed receipts and red cross for failed
+  receipts, plus the lifecycle text. Reusable requests retain their payment-count
+  status and live QR after receiving payments.
+- Keep Copy, New Request, and inline Mint/Amount/Unit editing directly available
+  on Cashu Requests. Reuse the existing request view and its delivery behavior.
+- Preserve pending outbound invoice/address QR and copy/share availability,
+  settled ecash Copy, explorer/proof references, and manual token status checks.
+  Settled one-shot codes retire as before.
+- Unclaimed incoming ecash opens the shared sheet with Receive to enter the
+  claim flow. Keep action footers visible while long detail content scrolls.
+
 ## 2. Colors: The Inverted-Ink Palette
 
 A semantic-only palette built on iOS system colors plus three state hues. The

@@ -2,7 +2,6 @@ package com.cashu.me.ui.history
 
 import android.content.ClipData
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -19,9 +18,6 @@ import androidx.compose.material.icons.outlined.ContentCopy
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
-import androidx.compose.material3.SheetValue
-import androidx.compose.material3.rememberBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -33,8 +29,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.ClipEntry
-import androidx.compose.ui.platform.LocalClipboard
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalClipboard
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.contentDescription
@@ -62,9 +58,10 @@ import com.cashu.me.Models.TransactionStatus
 import com.cashu.me.Models.TransactionType
 import com.cashu.me.Models.WalletTransaction
 import com.cashu.me.Models.liveDetail
+import com.cashu.me.ui.components.ActivityDetailSheet
+import com.cashu.me.ui.components.shareText
 import com.cashu.me.ui.components.AmountText
 import com.cashu.me.ui.components.AmountHero
-import com.cashu.me.ui.components.CompactSheetContent
 import com.cashu.me.ui.components.ExplorerLinkRow
 import com.cashu.me.ui.components.DescriptionDetailRow
 import com.cashu.me.ui.components.InspectorRow
@@ -75,7 +72,6 @@ import com.cashu.me.ui.components.PrimaryButton
 import com.cashu.me.ui.components.PaymentDetailContent
 import com.cashu.me.ui.components.QrCard
 import com.cashu.me.ui.components.SecondaryButton
-import com.cashu.me.ui.components.SheetHeader
 import com.cashu.me.ui.components.openInBrowser
 import com.cashu.me.ui.theme.AmountScale
 import com.cashu.me.ui.theme.CashuTheme
@@ -89,8 +85,8 @@ import com.cashu.me.ui.testing.UiTestTags
  * detail opens over the originating list instead of replacing it with a pushed
  * full-screen destination (iOS `TransactionDetailView` parity): a live request
  * shows its QR hero, a completed receipt the green check, a failed one the red
- * X, above the shared rows and actions. Sharing a live artifact stays on the
- * QR itself (long-press menu), not in chrome.
+ * X, above the shared rows and actions. Live artifacts share through the
+ * visible trailing Share action and the QR long-press menu.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -109,10 +105,6 @@ fun TransactionReceiptSheet(
     val clipboard = LocalClipboard.current
     val scope = rememberCoroutineScope()
     val formatter = remember { AmountFormatter() }
-    val sheetState = rememberBottomSheetState(
-        initialValue = SheetValue.Hidden,
-        enabledValues = setOf(SheetValue.Hidden, SheetValue.Expanded),
-    )
     val confirmationToastController = LocalConfirmationToastController.current
 
     // Pending mint-quote rows use id == quoteId; after mint CDK swaps in a new
@@ -337,48 +329,38 @@ fun TransactionReceiptSheet(
         }
     }
 
-    ModalBottomSheet(
+    ActivityDetailSheet(
+        title = title,
         onDismissRequest = onDismissRequest,
-        sheetState = sheetState,
-        containerColor = CashuTheme.colors.compactSheetContainer,
+        onShare = if (showsQr && qrContent != null) {
+            { context.shareText(qrContent, subject = title) }
+        } else null,
+        modifier = Modifier.testTag(UiTestTags.TransactionReceiptSheet),
     ) {
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .testTag(UiTestTags.TransactionReceiptSheet),
-        ) {
-            CompactSheetContent {
-                if (showsQr && description != null) {
-                    Column(modifier = Modifier.fillMaxWidth()) {
-                        SheetHeader(title = title)
-                        PaymentDetailContent(
-                            modifier = Modifier.weight(1f, fill = false),
-                            hero = hero,
-                        ) { details() }
-                        Column(modifier = Modifier.padding(horizontal = CashuTheme.spacing.comfortable)) {
-                            actions()
-                        }
-                        Spacer(Modifier.height(CashuTheme.spacing.comfortable))
-                    }
-                } else {
-                    Column(modifier = Modifier.fillMaxWidth().verticalScroll(rememberScrollState())) {
-                        SheetHeader(title = title)
-                        Column(
-                            modifier = Modifier.fillMaxWidth().padding(horizontal = CashuTheme.spacing.comfortable)
-                                .padding(bottom = CashuTheme.spacing.comfortable),
-                            verticalArrangement = Arrangement.spacedBy(CashuTheme.spacing.default),
-                        ) {
-                            Column(
-                                horizontalAlignment = Alignment.CenterHorizontally,
-                                verticalArrangement = Arrangement.spacedBy(CashuTheme.spacing.comfortable),
-                            ) {
-                                hero(280.dp)
-                                details()
-                            }
-                            actions()
-                        }
-                    }
+        if (showsQr && description != null) {
+            PaymentDetailContent(
+                modifier = Modifier.weight(1f, fill = false),
+                hero = hero,
+            ) { details() }
+            Column(modifier = Modifier.padding(horizontal = CashuTheme.spacing.comfortable)) {
+                actions()
+            }
+            Spacer(Modifier.height(CashuTheme.spacing.comfortable))
+        } else {
+            Column(
+                modifier = Modifier.fillMaxWidth().verticalScroll(rememberScrollState())
+                    .padding(horizontal = CashuTheme.spacing.comfortable)
+                    .padding(bottom = CashuTheme.spacing.comfortable),
+                verticalArrangement = Arrangement.spacedBy(CashuTheme.spacing.default),
+            ) {
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(CashuTheme.spacing.comfortable),
+                ) {
+                    hero(280.dp)
+                    details()
                 }
+                actions()
             }
         }
     }

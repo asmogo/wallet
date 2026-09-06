@@ -136,6 +136,8 @@ class FunctionalWalletJourneyTest {
         robot.tapText("History")
             .awaitTag(UiTestTags.HistoryScreen)
             .tapTag(UiTestTags.transactionRow(pending.tokenId))
+            .awaitTag(UiTestTags.TransactionReceiptSheet)
+            .tapTextWithinTag(UiTestTags.TransactionReceiptSheet, "Receive")
             .awaitTag(UiTestTags.ReceiveEcashDetail)
             .awaitTextWithinTag(UiTestTags.ReceiveEcashDetail, "Memo")
             .awaitTextWithinTag(UiTestTags.ReceiveEcashDetail, "Coffee from Alice")

@@ -54,6 +54,7 @@ struct CashuWalletApp: App {
                 ComponentCatalogView(
                     page: .init(rawValue: IntegrationTestConfig.componentCatalogPage)
                 )
+                .environmentObject(walletManager)
             } else {
                 root
             }

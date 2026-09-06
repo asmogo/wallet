@@ -95,7 +95,6 @@ fun HistoryScreen(
     priceService: PriceService,
     cashuRequestStore: CashuRequestStore,
     onOpenTransaction: (WalletTransaction) -> Unit,
-    onClaimReceiveToken: (String) -> Unit,
     onOpenCashuRequest: (CashuRequest) -> Unit,
     contentPadding: PaddingValues,
 ) {
@@ -317,13 +316,7 @@ fun HistoryScreen(
                                             ),
                                             onClick = {
                                                 keyboardController?.hide()
-                                                val pending = walletState.pendingReceiveTokens
-                                                    .firstOrNull { it.tokenId == tx.id }
-                                                if (tx.isPendingReceiveToken && pending != null) {
-                                                    onClaimReceiveToken(pending.token)
-                                                } else {
-                                                    onOpenTransaction(tx)
-                                                }
+                                                onOpenTransaction(tx)
                                             },
                                             onLongClick = if (tx.isPendingReceiveToken) {
                                                 { receiveTokenPendingDelete = tx }
