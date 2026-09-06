@@ -189,21 +189,33 @@ private struct ActivityDetailCatalog: View {
                 .accessibilityIdentifier("reusable-invoice")
             Button("Cashu Request") { openRequest(rail: .ecash) }
                 .accessibilityIdentifier("cashu-request")
+            Button("Cashu Request · received") { openRequest(rail: .ecash, paid: true) }
+                .accessibilityIdentifier("cashu-request-received")
+            Button("Cashu Request · USD") { openRequest(rail: .ecash, paid: true, unit: "usd") }
+                .accessibilityIdentifier("cashu-request-usd")
         }
         .sheet(item: $selectedTransaction) { TransactionDetailView(transaction: $0) }
         .sheet(item: $selectedRequest) { CashuRequestReceiptView(request: $0) }
+        .onAppear {
+            if IntegrationTestConfig.isEnabled {
+                SettingsManager.shared.useBitcoinSymbol = true
+            }
+        }
     }
 
-    private func openRequest(rail: CashuRequest.Rail) {
+    private func openRequest(rail: CashuRequest.Rail, paid: Bool = false, unit: String = "sat") {
         let store = CashuRequestStore.shared
         let id = rail == .ecash ? "catalog-request" : "catalog-offer"
         store.delete(id: id)
         let request = store.create(
             id: id, rail: rail, encoded: rail == .ecash ? "creqAfixture" : "lno1fixture",
-            mints: ["https://mint.example"], memo: "Coffee tips", reusable: true
+            unit: unit, mints: ["https://mint.example"], memo: "Coffee tips", reusable: true
         )
         if rail == .bolt12 {
             store.attachPayment(requestId: id, transactionId: "fixture-payment", amount: 2100)
+        } else if paid {
+            store.attachPayment(requestId: id, transactionId: "fixture-payment-1", amount: 1200)
+            store.attachPayment(requestId: id, transactionId: "fixture-payment-2", amount: 34)
         }
         selectedRequest = store.request(withId: id) ?? request
     }

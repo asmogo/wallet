@@ -9,6 +9,8 @@ struct CashuRequestDetailView: View {
     @ObservedObject private var settings = SettingsManager.shared
     @ObservedObject private var nostr = NostrService.shared
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @Environment(\.colorScheme) private var colorScheme
 
     let onClose: (() -> Void)?
     let showsNavigationHeader: Bool
@@ -249,12 +251,21 @@ struct CashuRequestDetailView: View {
                             label: "Created",
                             value: request.createdAt.formatted(date: .abbreviated, time: .shortened)
                         )
+                        if request.totalReceived > 0 {
+                            detailRow(
+                                label: "Total received",
+                                value: formatAmount(request.totalReceived, unit: request.unit)
+                            )
+                        }
                     }
                     .padding(.horizontal, 4)
                 }
             }
 
-            HStack(spacing: 12) {
+            let actionLayout = dynamicTypeSize.isAccessibilitySize
+                ? AnyLayout(VStackLayout(spacing: 12))
+                : AnyLayout(HStackLayout(spacing: 12))
+            actionLayout {
                 Button(action: { copy(request.encoded) }) {
                     Text("Copy")
                 }
@@ -270,6 +281,7 @@ struct CashuRequestDetailView: View {
                     .accessibilityHint("Generates a fresh Cashu Request and rotates the QR")
                 }
             }
+            .multilineTextAlignment(.center)
             .padding(.horizontal)
             .padding(.bottom, 16)
         }
@@ -279,22 +291,30 @@ struct CashuRequestDetailView: View {
         Group {
             if paymentCount > 0 {
                 HStack(spacing: 6) {
-                    Image(systemName: "checkmark.seal.fill")
+                    Image(systemName: "checkmark.circle")
                     Text(paymentCount == 1 ? "1 payment received" : "\(paymentCount) payments received")
                 }
                 .font(.subheadline.weight(.medium))
-                .foregroundStyle(.green)
+                .foregroundStyle(receivedStatusColor)
             } else {
                 HStack(spacing: 6) {
                     Image(systemName: "clock")
+                        .foregroundStyle(.orange)
                         .symbolEffect(.pulse, options: .repeating, isActive: !reduceMotion)
                     Text("Waiting for payment…")
                 }
                 .font(.subheadline)
-                .foregroundStyle(.orange)
+                .foregroundStyle(.primary)
             }
         }
         .animation(.easeInOut(duration: 0.2), value: paymentCount)
+    }
+
+    /// Matches Android's received status ink with readable contrast on the sheet.
+    private var receivedStatusColor: Color {
+        colorScheme == .dark
+            ? Color(red: 183 / 255, green: 240 / 255, blue: 200 / 255)
+            : Color(red: 11 / 255, green: 82 / 255, blue: 39 / 255)
     }
 
     @ViewBuilder

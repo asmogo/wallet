@@ -12,9 +12,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 
 /**
- * The shared top bar for the top-level tab screens (History, Mints, Settings).
+ * The shared top bar for the top-level tab screens (History and Mints).
  *
- * Every tab routes through this one wrapper so the three titles are identical by
+ * Both tabs route through this wrapper so their titles are identical by
  * construction — same big collapsing `LargeFlexibleTopAppBar`, same background,
  * same weight. Titles render **Bold** (a deliberate carve-out from stock M3
  * `Typography()` W400) for cross-platform brand parity with the iOS large title;
@@ -24,8 +24,8 @@ import androidx.compose.ui.text.font.FontWeight
  * title, exactly as iOS does. See DESIGN-ANDROID.md §1.
  *
  * [navigationIcon] defaults to empty (History/Mints are bottom-nav tabs with no
- * back affordance); Settings — a pushed wallet-origin destination — supplies a
- * top-left back arrow while keeping this same large brand title.
+ * back affordance). Pushed destinations such as Settings use a compact native
+ * top app bar, matching the iOS navigation hierarchy.
  */
 @OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable

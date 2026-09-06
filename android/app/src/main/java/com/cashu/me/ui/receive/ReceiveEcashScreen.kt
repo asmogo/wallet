@@ -274,36 +274,34 @@ fun ReceiveEcashScreen(
                 maxLines = 4,
                 keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.None),
                 // Paste ↔ Clear cross-fade, identical to the Send input face.
-                trailingIcon = if (input.isNotBlank() || clipboard.hasText()) {
-                    {
-                        AnimatedContent(
-                            targetState = input.isNotBlank(),
-                            transitionSpec = {
-                                fadeIn(spring(stiffness = Spring.StiffnessMedium))
-                                    .togetherWith(fadeOut(spring(stiffness = Spring.StiffnessMedium)))
-                            },
-                            label = "input-trailing",
-                        ) { hasInput ->
-                            if (hasInput) {
-                                IconButton(onClick = {
-                                    input = ""
-                                    inputHint = null
-                                    routed = false
-                                }) {
-                                    Icon(Icons.Outlined.Cancel, contentDescription = "Clear")
-                                }
-                            } else {
-                                GhostButton(context = TextButtonContext.Compact, text = "Paste", onClick = {
-                                    val clip = clipboard.getText()?.text?.trim().orEmpty()
-                                    if (clip.isNotEmpty()) {
-                                        input = clip
-                                        routeInput(clip)
-                                    }
-                                })
+                trailingIcon = {
+                    AnimatedContent(
+                        targetState = input.isNotBlank(),
+                        transitionSpec = {
+                            fadeIn(spring(stiffness = Spring.StiffnessMedium))
+                                .togetherWith(fadeOut(spring(stiffness = Spring.StiffnessMedium)))
+                        },
+                        label = "input-trailing",
+                    ) { hasInput ->
+                        if (hasInput) {
+                            IconButton(onClick = {
+                                input = ""
+                                inputHint = null
+                                routed = false
+                            }) {
+                                Icon(Icons.Outlined.Cancel, contentDescription = "Clear")
                             }
+                        } else {
+                            GhostButton(context = TextButtonContext.Compact, text = "Paste", onClick = {
+                                val clip = clipboard.getText()?.text?.trim().orEmpty()
+                                if (clip.isNotEmpty()) {
+                                    input = clip
+                                    routeInput(clip)
+                                }
+                            })
                         }
                     }
-                } else null,
+                },
             )
             val reduceMotion = rememberReducedMotion()
             AnimatedContent(

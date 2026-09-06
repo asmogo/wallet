@@ -115,6 +115,30 @@ final class MainTabUITests: UITestBase {
 
 /// Actual receipt sheets with deterministic catalog records, without a live mint.
 final class ActivityDetailUITests: XCTestCase {
+    func testLargeTextRequestActionsRemainReadable() {
+        continueAfterFailure = false
+        let app = XCUIApplication()
+        app.launchEnvironment = ["SHOW_COMPONENT_CATALOG": "activity", "CI_INTEGRATION_TEST": "1"]
+        app.launchArguments = ["-AppleLanguages", "(en)", "-AppleLocale", "en_US",
+                               "-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryAccessibilityL"]
+        app.launch()
+        defer { app.terminate() }
+        let request = app.buttons["cashu-request-received"]
+        XCTAssertTrue(request.waitForExistence(timeout: 10))
+        request.tap()
+        let copy = app.buttons["Copy"]
+        let newRequest = app.buttons["New Request"]
+        XCTAssertTrue(newRequest.waitForExistence(timeout: 5))
+        XCTAssertTrue(copy.isHittable)
+        XCTAssertTrue(newRequest.isHittable)
+        XCTAssertGreaterThanOrEqual(newRequest.frame.minY, copy.frame.maxY)
+        XCTAssertEqual(copy.frame.width, newRequest.frame.width, accuracy: 1)
+        let attachment = XCTAttachment(screenshot: app.screenshot())
+        attachment.name = "cashu-request-large-text"
+        attachment.lifetime = .keepAlways
+        add(attachment)
+    }
+
     func testReceiptLayoutAndVisiblePaymentCode() {
         continueAfterFailure = false
         let app = XCUIApplication()
@@ -123,16 +147,24 @@ final class ActivityDetailUITests: XCTestCase {
         app.launch()
         defer { app.terminate() }
 
-        for id in ["pending-lightning", "paid-lightning", "sent-lightning", "received-ecash", "received-bitcoin", "failed-lightning", "reusable-invoice", "cashu-request"] {
+        for id in ["pending-lightning", "paid-lightning", "sent-lightning", "received-ecash", "received-bitcoin", "failed-lightning", "reusable-invoice", "cashu-request", "cashu-request-received", "cashu-request-usd"] {
             let row = app.buttons[id]
             XCTAssertTrue(row.waitForExistence(timeout: 10))
             row.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
-            let isRequest = id == "reusable-invoice" || id == "cashu-request"
+            let isRequest = id == "reusable-invoice" || id.hasPrefix("cashu-request")
             XCTAssertTrue(app.staticTexts[isRequest ? "Created" : "Status"].waitForExistence(timeout: 5))
             if !isRequest { XCTAssertTrue(app.staticTexts["Date"].exists) }
-            if id == "cashu-request" {
+            if id.hasPrefix("cashu-request") {
                 XCTAssertTrue(app.buttons["New Request"].isHittable)
                 XCTAssertTrue(app.buttons["Amount"].isHittable)
+            }
+            if id == "reusable-invoice" || id == "cashu-request-received" || id == "cashu-request-usd" {
+                let total = app.descendants(matching: .any).matching(identifier: "Total received").firstMatch
+                XCTAssertTrue(total.exists)
+                let expected = id == "cashu-request-usd" ? "$12.34" : id == "reusable-invoice" ? "₿2,100" : "₿1,234"
+                XCTAssertEqual(total.value as? String, expected)
+            } else if id == "cashu-request" {
+                XCTAssertFalse(app.descendants(matching: .any).matching(identifier: "Total received").firstMatch.exists)
             }
             if id == "failed-lightning" { XCTAssertTrue(app.images["Failed"].exists) }
             if ["paid-lightning", "sent-lightning", "received-ecash", "received-bitcoin"].contains(id) {
