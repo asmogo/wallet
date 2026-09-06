@@ -1,6 +1,7 @@
 package com.cashu.me.Core.Platform
 
 import android.content.Context
+import android.database.sqlite.SQLiteDatabase
 import com.cashu.me.Core.AppLogger
 import java.io.File
 import java.io.IOException
@@ -8,6 +9,35 @@ import java.util.UUID
 
 class WalletDatabasePathManager(context: Context) {
     private val files = WalletDatabaseFiles(context.applicationContext.filesDir)
+
+    internal fun replacementBoundaryFiles(): List<File> = files.walletBoundaryFiles()
+
+    internal fun checkpointBeforeReplacement() {
+        val databases = files.walletBoundaryFiles().flatMap { file ->
+            if (file.isDirectory) file.listFiles()?.filter { it.name.endsWith(".db") }.orEmpty()
+            else listOf(file).filter { it.name.endsWith(".db") }
+        }
+        databases.filter(File::exists).forEach { file ->
+            // Flush WAL before copying. Native wrapper destruction can outlive
+            // the repository reference; a busy writer must block replacement.
+            SQLiteDatabase.openDatabase(
+                file.path,
+                null,
+                SQLiteDatabase.OPEN_READWRITE or SQLiteDatabase.NO_LOCALIZED_COLLATORS,
+                android.database.DatabaseErrorHandler {
+                    // Android's default corruption handler deletes database files.
+                    // Replacement preparation must preserve them on every failure.
+                    throw IOException("Cannot checkpoint the wallet database; original files were preserved.")
+                },
+            ).use { db ->
+                db.rawQuery("PRAGMA wal_checkpoint(TRUNCATE)", null).use { cursor ->
+                    if (!cursor.moveToFirst() || cursor.getInt(0) != 0) {
+                        throw IOException("Wallet database is still busy. Try again in a moment.")
+                    }
+                }
+            }
+        }
+    }
 
     val walletDirectory: File
         get() = files.walletDirectory
@@ -507,7 +537,7 @@ internal class WalletDatabaseFiles(
         "${destination.name}.move-displaced.${UUID.randomUUID()}",
     )
 
-    private fun walletBoundaryFiles(): List<File> {
+    internal fun walletBoundaryFiles(): List<File> {
         val legacy = File(filesDir, legacyDatabaseFilename)
         return listOf(walletDirectoryFile, legacy) + sidecars.map { File(legacy.absolutePath + it) }
     }

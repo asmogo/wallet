@@ -29,6 +29,60 @@ class StorageDataStoreInstrumentedTest {
     private val json = Json { encodeDefaults = true }
 
     @Test
+    fun restoreBackupBarrierSurvivesReloadAndWalletRollback() {
+        val storeName = uniqueStoreName("restore_barrier")
+        val store = SettingsStore(context, storeName)
+        store.walletRestoreIncomplete = true
+        val snapshot = store.snapshotWalletScopedData()
+        store.clearWalletScopedData()
+        assertFalse(SettingsStore(context, storeName).walletRestoreIncomplete)
+        store.restoreWalletScopedData(snapshot)
+        assertTrue(SettingsStore(context, storeName).walletRestoreIncomplete)
+    }
+
+    @Test
+    fun replacementCheckpointPreservesSqliteWalContents() {
+        val root = java.io.File(context.cacheDir, "replacement-checkpoint-" + UUID.randomUUID()).apply { mkdirs() }
+        val isolatedContext = object : android.content.ContextWrapper(context) {
+            override fun getApplicationContext(): Context = this
+            override fun getFilesDir(): java.io.File = root
+        }
+        val paths = com.cashu.me.Core.Platform.WalletDatabasePathManager(isolatedContext)
+        try {
+            android.database.sqlite.SQLiteDatabase.openOrCreateDatabase(paths.databaseFile, null).use { db ->
+                db.enableWriteAheadLogging()
+                db.execSQL("CREATE TABLE recovery_test (value TEXT NOT NULL)")
+                db.execSQL("INSERT INTO recovery_test VALUES ('proofs before replacement')")
+                paths.checkpointBeforeReplacement()
+            }
+            android.database.sqlite.SQLiteDatabase.openDatabase(paths.databaseFile.path, null, 0).use { reopened ->
+                reopened.rawQuery("SELECT value FROM recovery_test", null).use { cursor ->
+                    assertTrue(cursor.moveToFirst())
+                    assertEquals("proofs before replacement", cursor.getString(0))
+                }
+            }
+        } finally { root.deleteRecursively() }
+    }
+
+    @Test
+    fun replacementCheckpointNeverDeletesAnUnreadableDatabase() {
+        val root = java.io.File(context.cacheDir, "replacement-corrupt-" + UUID.randomUUID()).apply { mkdirs() }
+        val isolatedContext = object : android.content.ContextWrapper(context) {
+            override fun getApplicationContext(): Context = this
+            override fun getFilesDir(): java.io.File = root
+        }
+        val paths = com.cashu.me.Core.Platform.WalletDatabasePathManager(isolatedContext)
+        try {
+            paths.databaseFile.writeText("unreadable original database")
+            try {
+                paths.checkpointBeforeReplacement()
+                org.junit.Assert.fail("Unreadable database must block preparation")
+            } catch (_: Exception) { }
+            assertEquals("unreadable original database", paths.databaseFile.readText())
+        } finally { root.deleteRecursively() }
+    }
+
+    @Test
     fun walletStoreMigratesSharedPreferencesAndClearsWalletBoundary() {
         val storeName = uniqueStoreName("wallet_store")
         val mint = MintInfo(url = "https://mint.example.com", name = "Example", balance = 21)

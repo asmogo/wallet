@@ -14,6 +14,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -185,15 +186,37 @@ class NPCService internal constructor(
 
     suspend fun resetForWalletBoundary() = withContext(scope.coroutineContext.minusKey(Job)) {
         disconnect()
-        prefs.edit()
+        val committed = prefs.edit()
             .remove(StorageKeys.npcEnabled)
             .remove(StorageKeys.npcAutomaticClaim)
             .remove(StorageKeys.npcSelectedMint)
             .remove(StorageKeys.npcLastCheck)
-            .apply()
+            .commit()
+        check(committed) { "npub.cash settings could not be cleared." }
         mutableState.value = NPCState()
         nostrSecretKey = null
         nostrPublicKey = null
+    }
+
+    internal fun snapshotWalletScopedData(): PreferenceSnapshot = prefs.snapshot(setOf(
+        StorageKeys.npcEnabled, StorageKeys.npcAutomaticClaim, StorageKeys.npcSelectedMint, StorageKeys.npcLastCheck,
+    ))
+
+    internal suspend fun pauseForWalletBoundary() = withContext(scope.coroutineContext.minusKey(Job)) {
+        val jobs = listOfNotNull(refreshJob, paymentCheckJob, connectionAttempt)
+        disconnect()
+        mutableState.value = mutableState.value.copy(isEnabled = false)
+        jobs.forEach { it.cancelAndJoin() }
+    }
+
+    internal suspend fun restoreWalletScopedData(snapshot: PreferenceSnapshot) {
+        prefs.restore(snapshot, synchronous = true)
+        reloadStoredSettings()
+    }
+
+    internal suspend fun reloadStoredSettings() = withContext(scope.coroutineContext.minusKey(Job)) {
+        disconnect()
+        mutableState.value = loadInitialState()
     }
 
     internal suspend fun connect() {

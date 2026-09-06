@@ -250,7 +250,7 @@ internal suspend fun claimToken(
 /** "Receive later": persist the token for a future claim. */
 internal fun pendingReceiveTokenFrom(review: TokenReview): PendingReceiveToken =
     PendingReceiveToken(
-        tokenId = review.token.take(64),
+        tokenId = PendingReceiveToken.idFor(review.token),
         token = review.token,
         amount = review.info.amount,
         mintUrl = review.info.mint,

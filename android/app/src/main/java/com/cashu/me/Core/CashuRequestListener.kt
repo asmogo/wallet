@@ -274,7 +274,7 @@ class CashuRequestListener(
         }
 
         val pending = PendingReceiveToken(
-            tokenId = payload.token.take(64),
+            tokenId = PendingReceiveToken.idFor(payload.token),
             token = payload.token,
             amount = info.amount,
             dateEpochMillis = System.currentTimeMillis(),

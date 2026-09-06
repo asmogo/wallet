@@ -425,6 +425,26 @@ class SettingsManager: ObservableObject {
         NostrMintBackupService.shared.resetForWalletBoundary()
         settingsStore.clearWalletScopedData()
     }
+
+    /// Included in the encrypted replacement journal before any keys are removed.
+    var walletReplacementSecretKeys: [String] {
+        let ids = Set(p2pkKeys.map(\.id)).union(settingsStore.p2pkPendingDeletionIDs)
+        return ids.flatMap { [Self.secureP2PKPrivateKey($0), Self.secureP2PKRemovalFallback($0)] }
+            + [StorageKeys.Secure.nostrPrivateKey]
+    }
+
+    func reloadWalletScopedData() {
+        let previousSuppression = suppressPaymentRequestSideEffects
+        suppressPaymentRequestSideEffects = true
+        defer { suppressPaymentRequestSideEffects = previousSuppression }
+        let loaded = Self.loadP2PKKeys(settingsStore: settingsStore, secureStorage: secureStorage)
+        pendingLegacyP2PKSecrets = loaded.pendingLegacySecrets
+        p2pkKeys = loaded.keys
+        showP2PKButtonInDrawer = settingsStore.showP2PKButtonInDrawer
+        enablePaymentRequests = settingsStore.enablePaymentRequests
+        receivePaymentRequestsAutomatically = settingsStore.receivePaymentRequestsAutomatically
+        nostrMintBackupEnabled = settingsStore.nostrMintBackupEnabled
+    }
     
     private struct LoadedP2PKKeys {
         let keys: [P2PKKey]

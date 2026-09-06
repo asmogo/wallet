@@ -893,7 +893,7 @@ private fun SendStatusTerminal(
         title = when (status) {
             is SendStatus.Sending -> "Sending payment…"
             is SendStatus.Sent -> if (settlementPending) "Payment processing" else "Payment sent"
-            is SendStatus.Failed -> "Payment failed"
+            is SendStatus.Failed -> status.message.title ?: "Payment failed"
         },
         detail = when {
             failure != null -> failure.text

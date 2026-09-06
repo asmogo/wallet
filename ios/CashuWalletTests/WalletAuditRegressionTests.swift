@@ -1,10 +1,120 @@
 import Cdk
 import XCTest
+import SQLite3
 @testable import CashuWallet
 
 @MainActor
 final class WalletAuditRegressionTests: XCTestCase {
     private enum Failure: Error { case offline }
+
+    func testReplacementCheckpointPreservesSqliteWalContents() throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let database = directory.appendingPathComponent("wallet.db")
+        var connection: OpaquePointer?
+        XCTAssertEqual(sqlite3_open(database.path, &connection), SQLITE_OK)
+        defer { sqlite3_close(connection) }
+        XCTAssertEqual(sqlite3_exec(connection, "PRAGMA journal_mode=WAL; CREATE TABLE recovery_test(value TEXT); INSERT INTO recovery_test VALUES ('proofs before replacement');", nil, nil, nil), SQLITE_OK)
+        try WalletReplacementCheckpoint.flushDatabases(in: [directory])
+        let copy = directory.appendingPathComponent("snapshot.db")
+        try FileManager.default.copyItem(at: database, to: copy)
+        var reopened: OpaquePointer?
+        XCTAssertEqual(sqlite3_open(copy.path, &reopened), SQLITE_OK)
+        defer { sqlite3_close(reopened) }
+        var statement: OpaquePointer?
+        XCTAssertEqual(sqlite3_prepare_v2(reopened, "SELECT value FROM recovery_test", -1, &statement, nil), SQLITE_OK)
+        defer { sqlite3_finalize(statement) }
+        XCTAssertEqual(sqlite3_step(statement), SQLITE_ROW)
+        XCTAssertEqual(String(cString: sqlite3_column_text(statement, 0)), "proofs before replacement")
+    }
+
+    func testReplacementRelaunchRestoresSeedDefaultsAndDatabase() throws {
+        let storage = ReplacementJournalStorage()
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let db = directory.appendingPathComponent("wallet.db")
+        try Data("old proofs".utf8).write(to: db)
+        let state = Data("old seed and preferences".utf8)
+        try DurableWalletReplacement(storage: storage, urls: [db]).begin(state: state)
+        try Data("new proofs".utf8).write(to: db)
+        var restored: Data?
+        try DurableWalletReplacement(storage: storage, urls: [db]).recover { restored = $0 }
+        XCTAssertEqual(restored, state)
+        XCTAssertEqual(try Data(contentsOf: db), Data("old proofs".utf8))
+        XCTAssertFalse(storage.hasSecret(forKey: DurableWalletReplacement.key))
+    }
+
+    func testReplacementRollbackCanBeInterruptedAndReplayed() throws {
+        let storage = ReplacementJournalStorage()
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let db = directory.appendingPathComponent("wallet.db")
+        try Data("old".utf8).write(to: db)
+        try DurableWalletReplacement(storage: storage, urls: [db]).begin(state: Data())
+        XCTAssertThrowsError(try DurableWalletReplacement(storage: storage, urls: [db]).recover { _ in throw Failure.offline })
+        try Data("interrupted rollback".utf8).write(to: db)
+        try DurableWalletReplacement(storage: storage, urls: [db]).recover { _ in }
+        XCTAssertEqual(try Data(contentsOf: db), Data("old".utf8))
+    }
+
+    func testCommittedReplacementNeverRestoresPreviousSeed() throws {
+        let storage = ReplacementJournalStorage()
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let db = directory.appendingPathComponent("wallet.db")
+        try Data("old".utf8).write(to: db)
+        let journal = DurableWalletReplacement(storage: storage, urls: [db])
+        try journal.begin(state: Data())
+        try Data("new".utf8).write(to: db)
+        try journal.commit()
+        try DurableWalletReplacement(storage: storage, urls: [db]).recover { _ in XCTFail("Committed replacement must not roll back") }
+        XCTAssertEqual(try Data(contentsOf: db), Data("new".utf8))
+    }
+
+    func testPreparingReplacementNeverTouchesOriginalFiles() throws {
+        let storage = ReplacementJournalStorage()
+        storage.failWrite = 2
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let db = directory.appendingPathComponent("wallet.db")
+        try Data("old".utf8).write(to: db)
+        XCTAssertThrowsError(try DurableWalletReplacement(storage: storage, urls: [db]).begin(state: Data()))
+        try DurableWalletReplacement(storage: storage, urls: [db]).recover { _ in XCTFail("Preferences are still untouched") }
+        XCTAssertEqual(try Data(contentsOf: db), Data("old".utf8))
+    }
+
+    func testMissingReplacementBackupBlocksRecoveryBeforeSeedChanges() throws {
+        let storage = ReplacementJournalStorage()
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let db = directory.appendingPathComponent("wallet.db")
+        try Data("old".utf8).write(to: db)
+        try DurableWalletReplacement(storage: storage, urls: [db]).begin(state: Data())
+        try FileManager.default.removeItem(atPath: db.path + ".replacement-backup-v1")
+        try Data("new".utf8).write(to: db)
+        XCTAssertThrowsError(try DurableWalletReplacement(storage: storage, urls: [db]).recover { _ in XCTFail("Must not mismatch the seed") })
+        XCTAssertEqual(try Data(contentsOf: db), Data("new".utf8))
+        XCTAssertTrue(storage.hasSecret(forKey: DurableWalletReplacement.key))
+    }
+
+    func testManualRestoreBackupBarrierSurvivesDefaultsReload() throws {
+        let suite = "WalletRestoreBarrierTests-" + UUID().uuidString
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        ICloudRestoreState.setIncomplete(true, defaults: defaults)
+        XCTAssertTrue(defaults.synchronize())
+        let reopened = try XCTUnwrap(UserDefaults(suiteName: suite))
+        XCTAssertFalse(ICloudRestorePolicy.shouldPerformBackup(restoreIncomplete: ICloudRestoreState.isIncomplete(defaults: reopened)))
+        XCTAssertTrue(StorageKeys.walletBoundaryKeys.contains(ICloudRestoreState.incompleteKey))
+        ICloudRestoreState.setIncomplete(false, defaults: reopened)
+        XCTAssertTrue(ICloudRestorePolicy.shouldPerformBackup(restoreIncomplete: ICloudRestoreState.isIncomplete(defaults: reopened)))
+    }
 
     func testMeltAmountRejectsOverflowingFee() throws {
         XCTAssertEqual(try LightningService.requiredMeltAmount(amount: 10, feeReserve: 2), 12)
@@ -206,4 +316,18 @@ final class WalletAuditRegressionTests: XCTestCase {
             usedByOperation: reservation, version: 0
         )
     }
+}
+
+private final class ReplacementJournalStorage: SecureStorageProtocol {
+    private var values: [String: String] = [:]
+    var failWrite = 0
+    private var writes = 0
+    func saveSecret(_ secret: String, forKey key: String) throws {
+        writes += 1
+        if writes == failWrite { throw CocoaError(.fileWriteUnknown) }
+        values[key] = secret
+    }
+    func loadSecret(forKey key: String) throws -> String? { values[key] }
+    func deleteSecret(forKey key: String) throws { values.removeValue(forKey: key) }
+    func hasSecret(forKey key: String) -> Bool { values[key] != nil }
 }

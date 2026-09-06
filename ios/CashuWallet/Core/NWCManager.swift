@@ -101,6 +101,15 @@ final class NWCManager: ObservableObject {
 
     // MARK: - Wiring
 
+    func reloadWalletScopedData() {
+        suppressSideEffects = true
+        defer { suppressSideEffects = false }
+        isEnabled = settingsStore.nwcEnabled
+        selectedMintUrl = settingsStore.nwcSelectedMint
+        budgetSats = settingsStore.nwcBudgetSats
+        connectionUri = settingsStore.nwcConnectionUri
+    }
+
     /// Inject the wallet/seed providers. Call once from `WalletManager` after the
     /// wallet is available.
     func configure(
