@@ -148,7 +148,7 @@ Platform-specific capabilities remain intentionally outside parity, including iC
 
 - [x] **[P1 · iOS → Android] Explain unavailable App Lock and preserve access.** iOS detects the absence of a device passcode, gives setup guidance, and explains that seed reveal always authenticates; Android exposes no equivalent guidance. Android’s manager currently fails open, so this is not an established lockout bug. **Done when:** Android reports capability state, points to device security setup, states the seed-reveal guarantee, and never presents an unavailable lock as active.
 
-- [ ] **[P1 · iOS → Android] Show wallet-deletion failures.** iOS catches deletion errors and displays a banner; Android starts deletion without dedicated error feedback. **Done when:** Android reports failure and leaves the existing wallet state intact and understandable.
+- [ ] **[P1 · iOS → Android] Show wallet-deletion failures.** The wallet-owned deletion action suppresses duplicate submissions and presents mapped failures in a native snackbar. Every new attempt still requires confirmation. Regression tests cover failure, cancellation, and retry. **Verification:** implementation ready; final device review pending.
 
 - [x] **[P1 · Android → iOS] Read the app version from build metadata.** Android uses `BuildConfig.VERSION_NAME`; iOS hard-codes `1.0.0`. **Done when:** iOS displays the shipped bundle version and, if included, its build number from metadata.
 
