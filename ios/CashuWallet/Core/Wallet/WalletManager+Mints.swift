@@ -201,33 +201,24 @@ extension WalletManager {
             return
         }
 
-        var balancesByMintURL = Dictionary(uniqueKeysWithValues: mintUrls.map { ($0, UInt64(0)) })
-        var unitTotals: [String: UInt64] = [:]
-        var failedUnits: Set<String> = []
-        let wallets = await walletRepository.getWallets()
-
-        for mintURL in mintUrls {
-            for wallet in wallets where MintURLIdentity.normalized(wallet.mintUrl().url) == MintURLIdentity.normalized(mintURL) {
-                let unit = PaymentRequestDecoder.unitDescription(wallet.unit())
-                do {
-                    let amount = try await wallet.totalBalance().value
-                    unitTotals[unit, default: 0] += amount
-                    if unit == "sat" { balancesByMintURL[mintURL] = amount }
-                } catch {
-                    failedUnits.insert(unit)
-                    if unit == "sat" {
-                        balancesByMintURL[mintURL] = mints.first { $0.url == mintURL }?.balance ?? 0
-                    }
-                    AppLogger.wallet.error(
-                        "balance refresh failed resource=\(WalletOperationCoordinator.privacySafeIdentifier(mintURL), privacy: .public) error_type=\(String(reflecting: type(of: error)), privacy: .public)"
-                    )
-                }
+        guard let db else { return }
+        let projection: StoredBalanceProjection
+        do {
+            let accounts = try await StoredWalletAccount.discover(database: db, repository: walletRepository)
+                .filter { account in mintUrls.contains { MintURLIdentity.normalized($0) == account.mintURL } }
+            projection = try await StoredBalanceProjection.load(accounts: accounts, previousTotals: balancesByUnit) { account in
+                try await db.getBalance(mintUrl: MintUrl(url: account.mintURL), unit: account.unit, state: [.unspent])
             }
+        } catch {
+            AppLogger.wallet.error("Unable to discover stored currency accounts")
+            return
         }
         guard !Task.isCancelled else { return }
-        // A failed read is not a zero balance. Keep that unit's last complete
-        // total until all of its accounts can be read successfully.
-        for unit in failedUnits { unitTotals[unit] = balancesByUnit[unit] }
+        let unitTotals = projection.totals
+        let balancesByMintURL = Dictionary(uniqueKeysWithValues: mintUrls.map { url in
+            let account = StoredWalletAccount(mintURL: url, unit: .sat)
+            return (url, projection.balances[account] ?? mints.first { $0.url == url }?.balance ?? 0)
+        })
         mintService.updateMintBalances(balancesByMintURL)
         balance = unitTotals["sat"] ?? 0
         balancesByUnit = unitTotals

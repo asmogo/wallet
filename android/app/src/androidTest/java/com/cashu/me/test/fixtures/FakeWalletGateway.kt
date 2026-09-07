@@ -141,6 +141,13 @@ class FakeWalletGateway(
         )
     }
 
+    override suspend fun storedAccounts() = walletUnits.flatMap { (url, units) ->
+        units.map { com.cashu.me.Core.CDK.WalletAccountReference(url, it) }
+    } + transactions.mapNotNull { tx -> tx.mintUrl?.let { com.cashu.me.Core.CDK.WalletAccountReference(it, tx.unit) } }
+
+    override suspend fun storedAccountBalance(account: com.cashu.me.Core.CDK.WalletAccountReference): Long =
+        unitBalance(account.mintUrl, account.unit)
+
     override suspend fun totalBalance(mintUrl: String): Long =
         balances[normalize(mintUrl)] ?: 0
 

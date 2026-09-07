@@ -468,21 +468,22 @@ class WalletManager(
 
     suspend fun refreshBalance() {
         val mints = mutableState.value.mints
-        var total = 0L
-        val unitTotals = mutableMapOf<String, Long>()
-        val updated = mints.map { mint ->
-            val balance = runCatching { gateway.totalBalance(mint.url) }.getOrDefault(mint.balance)
-            total += balance
-            // Only sum unit wallets that already exist — never register a unit
-            // wallet just because the mint advertises the unit.
-            mint.units.filter { !it.equals("sat", ignoreCase = true) }.forEach { unit ->
-                runCatching { gateway.unitBalanceIfExists(mint.url, unit) }.getOrNull()?.let {
-                    unitTotals[unit] = (unitTotals[unit] ?: 0L) + it
-                }
-            }
-            mint.copy(balance = balance)
+        val accounts = try { gateway.storedAccounts() } catch (error: Exception) {
+            if (error is kotlinx.coroutines.CancellationException) throw error
+            AppLogger.wallet.error("Unable to discover stored currency accounts", error)
+            return
         }
-        unitTotals["sat"] = total
+        val projection = projectStoredBalances(
+            accounts = accounts.filter { account -> mints.any { com.cashu.me.Core.CDK.mintRemovalUrlsMatch(it.url, account.mintUrl) } },
+            previousTotals = mutableState.value.balancesByUnit,
+            read = gateway::storedAccountBalance,
+        )
+        val unitTotals = projection.totals
+        val total = unitTotals["sat"] ?: 0L
+        val updated = mints.map { mint ->
+            val account = accounts.firstOrNull { it.unit == "sat" && com.cashu.me.Core.CDK.mintRemovalUrlsMatch(it.mintUrl, mint.url) }
+            mint.copy(balance = if (account == null) 0L else projection.balances[account] ?: mint.balance)
+        }
         walletStore.saveMints(updated)
         walletStore.saveBalancesByUnit(unitTotals)
         update {

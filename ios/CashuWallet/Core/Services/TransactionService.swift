@@ -50,7 +50,7 @@ class TransactionService: ObservableObject {
         includeRemoteObservations: Bool = true,
         observingQuoteID: String? = nil
     ) async {
-        guard let repo = walletRepository() else { return }
+        guard let repo = walletRepository(), let database = walletDatabase() else { return }
 
         loadPendingReceiveTokens()
         var mintQuoteTimestamps = loadMintQuoteTimestamps()
@@ -62,13 +62,21 @@ class TransactionService: ObservableObject {
         var quoteIdsWithTransactions: Set<String> = []
         let trackedMintUrls = Set(getTrackedMintUrls().filter { !$0.isEmpty })
 
-        let registeredWallets = await repo.getWallets()
-        for mintUrlString in trackedMintUrls {
-            for wallet in registeredWallets where MintURLIdentity.normalized(wallet.mintUrl().url) == MintURLIdentity.normalized(mintUrlString) {
-                let currencyUnit = wallet.unit()
-                let unitString = PaymentRequestDecoder.unitDescription(currencyUnit)
+        let accounts: [StoredWalletAccount]
+        do {
+            accounts = try await StoredWalletAccount.discover(database: database, repository: repo)
+                .filter { account in trackedMintUrls.contains { MintURLIdentity.normalized($0) == account.mintURL } }
+        } catch {
+            // Preserve existing history when discovery could only be partial.
+            AppLogger.wallet.error("Unable to discover stored transaction accounts")
+            return
+        }
+        for account in accounts {
+                let mintUrlString = account.mintURL
+                let currencyUnit = account.unit
+                let unitString = account.unitName
                 do {
-                    let txs = try await wallet.listTransactions(direction: nil)
+                    let txs = try await database.listTransactions(mintUrl: MintUrl(url: mintUrlString), direction: nil, unit: currencyUnit)
                     var walletTxs: [WalletTransaction] = txs.map { tx in
                         if let quoteId = tx.quoteId {
                             quoteIdsWithTransactions.insert(quoteId)
@@ -105,7 +113,7 @@ class TransactionService: ObservableObject {
                         walletTransaction.fee = tx.fee.value
                         walletTransaction.quoteId = tx.quoteId
                         walletTransaction.sagaId = tx.sagaId
-                        walletTransaction.unit = PaymentRequestDecoder.unitDescription(currencyUnit)
+                        walletTransaction.unit = PaymentRequestDecoder.unitDescription(tx.unit)
                         return walletTransaction
                     }
                     // A sent token's string survives in the send saga until the
@@ -124,12 +132,16 @@ class TransactionService: ObservableObject {
                     }
                     allTransactions.append(contentsOf: walletTxs)
                 } catch {
-                    // Keep the other registered accounts visible if this read fails.
+                    let retained = transactions.filter {
+                        !$0.isPendingReceiveToken && $0.unit == unitString
+                            && $0.mintUrl.map(MintURLIdentity.normalized) == mintUrlString
+                    }
+                    allTransactions.append(contentsOf: retained)
+                    quoteIdsWithTransactions.formUnion(retained.compactMap(\.quoteId))
                     AppLogger.wallet.error(
                         "Failed to load transactions for mint \(mintUrlString), unit \(unitString): \(error)"
                     )
                 }
-            }
         }
 
         if let walletDatabase = walletDatabase() {
@@ -149,6 +161,11 @@ class TransactionService: ObservableObject {
                 )
                 allTransactions.append(contentsOf: pendingQuoteTransactions)
             } catch {
+                allTransactions.append(contentsOf: transactions.filter {
+                    !$0.isPendingReceiveToken && $0.quoteId != nil
+                        && !quoteIdsWithTransactions.contains($0.quoteId!)
+                        && $0.mintUrl.map(trackedMintUrls.contains) == true
+                })
                 AppLogger.wallet.error("Failed to load stored payment quotes: \(error)")
             }
         }
