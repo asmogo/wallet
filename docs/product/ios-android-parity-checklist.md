@@ -106,7 +106,7 @@ Platform-specific capabilities remain intentionally outside parity, including iC
 
 - [ ] **[P2 · iOS → Android] Search a Cashu Request’s Total received amount.** iOS includes the aggregate received value in search; Android only searches the requested amount. **Done when:** Android matches both configured and received totals using the same normalized amount formats as other History search.
 
-- [ ] **[P1 · iOS → Android] Explain all consequences of removing a Cashu Request row.** iOS says the QR and pending payment routing remain valid; Android only says received payments stay in the wallet. **Done when:** Android states before deletion that previously received funds remain, the QR and payment routing remain valid, and only the History row is removed.
+- [ ] **[P1 · iOS → Android] Explain all consequences of removing a Cashu Request row.** Android confirmation states that received funds stay in the wallet, the QR and pending payment routing remain valid, and only the History entry is removed. Removal behavior is unchanged. **Verification:** implementation ready; final device review pending.
 
 - [ ] **[P1 · iOS → Android] Add removal for an ordinary parked incoming token.** Android already supports declining a held Cashu Request payment, but it has no equivalent removal for a normal unclaimed token. **Done when:** Android provides a discoverable removal action for ordinary parked tokens and warns that the ecash will be discarded and only the sender can reissue it.
 
