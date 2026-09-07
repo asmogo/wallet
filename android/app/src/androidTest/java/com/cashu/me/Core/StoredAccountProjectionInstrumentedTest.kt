@@ -35,6 +35,7 @@ class StoredAccountProjectionInstrumentedTest {
             gateway.openWalletRepository(mnemonic, path)
             val account = gateway.storedAccounts().single { it.unit == "usd" }
             assertEquals(0L, gateway.storedAccountBalance(account))
+            assertEquals(0L, gateway.unitBalance(mint.url, "usd"))
             val store = WalletStore(context, "stored_accounts_" + UUID.randomUUID())
             val loader = WalletTransactionLoader(store, gateway)
             val mints = listOf(MintInfo(url = mint.url, units = listOf("sat")))

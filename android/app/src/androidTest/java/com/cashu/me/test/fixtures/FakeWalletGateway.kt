@@ -43,6 +43,7 @@ class FakeWalletGateway(
     private val walletUnits = linkedMapOf<String, MutableSet<String>>()
     private val mintInfo = linkedMapOf<String, MintInfo>()
     private val balances = initialBalances.toMutableMap()
+    private val nonSatBalances = mutableMapOf<Pair<String, String>, Long>()
     private val transactions = initialTransactions.toMutableList()
     private val mintQuotes = linkedMapOf<String, MutableStateFlow<MintQuoteInfo>>()
     private val meltQuotes = linkedMapOf<String, MeltQuoteInfo>()
@@ -51,6 +52,11 @@ class FakeWalletGateway(
     var nextFailure: Throwable? = null
     val latestMintQuoteId: String?
         get() = mintQuotes.keys.lastOrNull()
+
+    suspend fun setUnitBalance(mintUrl: String, unit: String, amount: Long) {
+        ensureWallet(mintUrl, unit)
+        nonSatBalances[normalize(mintUrl) to unit] = amount
+    }
 
     fun setBalance(mintUrl: String, amount: Long) {
         balances[normalize(mintUrl)] = amount
@@ -152,7 +158,7 @@ class FakeWalletGateway(
         balances[normalize(mintUrl)] ?: 0
 
     override suspend fun unitBalance(mintUrl: String, unit: String): Long =
-        if (unit.equals("sat", ignoreCase = true)) totalBalance(mintUrl) else 0
+        if (unit.equals("sat", ignoreCase = true)) totalBalance(mintUrl) else nonSatBalances[normalize(mintUrl) to unit] ?: 0
 
     override suspend fun unitBalanceIfExists(mintUrl: String, unit: String): Long? =
         if (unit.equals("sat", ignoreCase = true)) totalBalance(mintUrl) else null

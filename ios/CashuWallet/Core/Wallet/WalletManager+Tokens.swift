@@ -55,15 +55,21 @@ extension WalletManager {
         return result
     }
 
-    /// Balance of a specific (mint, unit) wallet, in that unit's base units.
-    /// "sat" resolves from the cached per-mint balance; other units query CDK
-    /// directly since the app doesn't cache non-sat balances. Returns nil on any
-    /// failure (e.g. a mint that doesn't actually support the unit).
+    /// Existing units for balance displays; payment options still use metadata.
+    func storedAccountUnits(mintURL: String) async -> [String]? {
+        guard let db, let repo = walletRepository else { return nil }
+        return try? await operationCoordinator.perform(kind: .balance, resourceID: mintURL) {
+            try await StoredWalletAccount.discover(database: db, repository: repo)
+                .filter { MintRemovalPolicy.matches($0.mintURL, mintURL) }.map(\.unitName).sorted()
+        }
+    }
+
+    /// Balance of a durable account. Returns nil when storage is unavailable.
     func unitBalance(mintURL: String, unit: String) async -> UInt64? {
         if unit.lowercased() == "sat" {
             return mints.first(where: { $0.url == mintURL })?.balance
         }
-        guard let repo = walletRepository else { return nil }
+        guard let db else { return nil }
         do {
             return try await operationCoordinator.perform(
                 kind: .balance,
@@ -71,9 +77,7 @@ extension WalletManager {
             ) {
                 let mintUrl = MintUrl(url: mintURL)
                 let currencyUnit = PaymentRequestDecoder.currencyUnit(from: unit)
-                try await repo.createWallet(mintUrl: mintUrl, unit: currencyUnit, targetProofCount: nil)
-                let wallet = try await repo.getWallet(mintUrl: mintUrl, unit: currencyUnit)
-                return try await wallet.totalBalance().value
+                return try await db.getBalance(mintUrl: mintUrl, unit: currencyUnit, state: [.unspent])
             }
         } catch {
             AppLogger.wallet.debug(

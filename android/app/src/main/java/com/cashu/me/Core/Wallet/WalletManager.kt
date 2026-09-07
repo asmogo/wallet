@@ -550,10 +550,12 @@ class WalletManager(
         }
     }
 
-    /**
-     * Balance of one (mint, unit). Sat answers from the cached mint balance;
-     * non-sat registers the unit wallet on demand. Null when unavailable.
-     */
+    /** Existing units for balance displays; payment options still use metadata. */
+    suspend fun storedAccountUnits(mintUrl: String): List<String> = withContext(Dispatchers.IO) {
+        gateway.storedAccounts().filter { com.cashu.me.Core.CDK.mintRemovalUrlsMatch(it.mintUrl, mintUrl) }.map { it.unit }.distinct().sorted()
+    }
+
+    /** Balance of one durable account. Null when storage is unavailable. */
     suspend fun unitBalance(mintUrl: String, unit: String): Long? {
         if (unit.equals("sat", ignoreCase = true)) {
             return mutableState.value.mints.firstOrNull { it.url == mintUrl }?.balance

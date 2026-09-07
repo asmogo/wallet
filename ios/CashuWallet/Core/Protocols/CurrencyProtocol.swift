@@ -169,13 +169,9 @@ enum HomeBalance {
         units.contains(unit) ? unit : "sat"
     }
 
-    /// The home hero pages (swipe/dots) only when the active/default mint is
-    /// multi-unit AND the wallet holds a non-sat balance. A single-unit default
-    /// mint keeps the single sat hero even if a non-sat balance exists at another
-    /// mint (that balance stays visible on Send + Mint Detail).
-    static func showsUnitPager(activeMintSupportsMultipleUnits: Bool,
-                               balancesByUnit: [String: UInt64]) -> Bool {
-        activeMintSupportsMultipleUnits && homeBalanceUnits(balancesByUnit).count > 1
+    /// Held funds stay visible when the active mint's payment options change.
+    static func showsUnitPager(balancesByUnit: [String: UInt64]) -> Bool {
+        homeBalanceUnits(balancesByUnit).count > 1
     }
 }
 

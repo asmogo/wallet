@@ -501,33 +501,29 @@ final class MultiUnitSupportTests: XCTestCase {
         XCTAssertEqual(HomeBalance.resolvedUnit("eur", in: ["sat"]), "sat")
     }
 
-    // MARK: - Pager gate (active/default mint)
+    // MARK: - Pager visibility (held funds)
 
-    func testShowsPagerWhenMultiUnitDefaultAndNonSatHeld() {
+    func testShowsPagerWhenNonSatHeld() {
         XCTAssertTrue(HomeBalance.showsUnitPager(
-            activeMintSupportsMultipleUnits: true,
             balancesByUnit: ["sat": 100, "eur": 5]
         ))
     }
 
-    func testNoPagerWhenDefaultMintIsSingleUnit() {
-        // Non-sat balance held elsewhere, but the default mint is single-unit.
-        XCTAssertFalse(HomeBalance.showsUnitPager(
-            activeMintSupportsMultipleUnits: false,
-            balancesByUnit: ["sat": 100, "eur": 5]
+    func testShowsPagerWithDiscontinuedCurrencyBalance() {
+        // USD remains visible after its mint stops advertising that unit.
+        XCTAssertTrue(HomeBalance.showsUnitPager(
+            balancesByUnit: ["sat": 100, "usd": 5]
         ))
     }
 
     func testNoPagerWhenNoNonSatBalance() {
         XCTAssertFalse(HomeBalance.showsUnitPager(
-            activeMintSupportsMultipleUnits: true,
             balancesByUnit: ["sat": 100]
         ))
     }
 
     func testNoPagerWhenNonSatBalanceIsZero() {
         XCTAssertFalse(HomeBalance.showsUnitPager(
-            activeMintSupportsMultipleUnits: true,
             balancesByUnit: ["sat": 100, "eur": 0]
         ))
     }

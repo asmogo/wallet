@@ -284,9 +284,7 @@ class CdkWalletGatewayImpl : WalletGateway {
     }
 
     override suspend fun unitBalance(mintUrl: String, unit: String): Long = cdkCall {
-        val cdkUnit = cdkUnit(unit)
-        ensureWalletUnlocked(mintUrl, cdkUnit)
-        walletFor(mintUrl, cdkUnit).totalBalance().value.toLong()
+        checkNotNull(database).getBalance(CdkMintUrl(mintUrl), cdkUnit(unit), listOf(org.cashudevkit.ProofState.UNSPENT)).toLong()
     }
 
     override suspend fun unitBalanceIfExists(mintUrl: String, unit: String): Long? = cdkCall {

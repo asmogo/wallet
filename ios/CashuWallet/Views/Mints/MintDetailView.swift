@@ -29,6 +29,7 @@ struct MintDetailView: View {
     /// Balances for the mint's non-sat units, loaded on demand (the sat balance
     /// is the cached `mint.balance`). Where a freshly-minted eur/usd shows up.
     @State private var unitBalances: [String: UInt64] = [:]
+    @State private var storedUnits: [String] = []
 
     private var cdkInfo: Cdk.MintInfo? { infoLoader.info }
     private var isLoading: Bool { infoLoader.isLoading }
@@ -36,7 +37,7 @@ struct MintDetailView: View {
 
     /// The mint's non-sat units (sat is shown by `balanceRow`).
     private var nonSatUnits: [String] {
-        liveMint.units.filter { $0.lowercased() != "sat" }.sorted()
+        Set(liveMint.units + storedUnits).filter { $0.lowercased() != "sat" }.sorted()
     }
 
     private var isDefaultMint: Bool {
@@ -745,9 +746,9 @@ struct MintDetailView: View {
         }
     }
 
-    /// Fetch each non-sat unit's balance so a minted eur/usd is visible here
-    /// (the app's aggregate balance is sat-only).
+    /// Durable account units remain visible when metadata removes a payment unit.
     private func loadUnitBalances() async {
+        if let units = await walletManager.storedAccountUnits(mintURL: liveMint.url) { storedUnits = units }
         for unit in nonSatUnits {
             if let balance = await walletManager.unitBalance(mintURL: liveMint.url, unit: unit) {
                 unitBalances[unit] = balance

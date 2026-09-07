@@ -73,12 +73,9 @@ struct MainWalletView: View {
         HomeBalance.homeBalanceUnits(walletManager.balancesByUnit)
     }
 
-    /// Whether to show the swipe/dots pager: only when the active (default) mint
-    /// is multi-unit AND a non-sat balance is held. A single-unit default mint
-    /// keeps the single sat hero.
+    /// Page through every held currency, independently of mint advertisements.
     private var showsUnitPager: Bool {
         HomeBalance.showsUnitPager(
-            activeMintSupportsMultipleUnits: walletManager.activeMint?.supportsMultipleUnits ?? false,
             balancesByUnit: walletManager.balancesByUnit
         )
     }
