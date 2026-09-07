@@ -162,14 +162,17 @@ class CashuRequestStoreTest {
         val updated = store.update(
             id = "request-a",
             amount = 12,
-            unit = "usd",
+            unit = "sat",
             mints = listOf("https://mint-b.example"),
             memo = " ",
-            encoded = "creq-updated",
+            encoded = { id ->
+                assertEquals("request-a", id)
+                "creq-updated"
+            },
         )!!
 
         assertEquals(12L, updated.amount)
-        assertEquals("usd", updated.unit)
+        assertEquals("sat", updated.unit)
         assertEquals(listOf("https://mint-b.example"), updated.mints)
         assertNull(updated.memo)
         assertEquals("creq-updated", updated.encoded)
@@ -195,6 +198,57 @@ class CashuRequestStoreTest {
         assertNull(persistence.currentCashuRequestId)
         assertTrue(store.state.value.requests.isEmpty())
         assertNull(store.state.value.currentRequestId)
+    }
+
+    @Test
+    fun currencyChangeKeepsOriginalAndLatePaymentsInTheirOwnIntent() {
+        for (alreadyPaid in listOf(false, true)) {
+            val persistence = MemoryCashuRequestPersistence()
+            val store = CashuRequestStore(persistence)
+            val original = store.createNew(id = "sat-request", amount = 500, unit = "sat",
+                mints = listOf("https://sat.example"), memo = "Coffee", encoded = "old-code")
+            if (alreadyPaid) {
+                store.attachPayment(original.id, "first", 1200)
+                store.attachPayment(original.id, "second", 34)
+            }
+            val prior = store.request(original.id)
+            val updated = store.update(id = original.id, amount = null, unit = "usd",
+                mints = listOf("https://usd.example"), memo = original.memo) { id -> "code-$id" }!!
+            assertTrue(updated.id != original.id)
+            assertEquals("code-${updated.id}", updated.encoded)
+            assertNull(updated.amount)
+            assertEquals("usd", updated.unit)
+            assertEquals(original.memo, updated.memo)
+            assertEquals(0L, updated.totalReceived)
+            assertEquals(prior, store.request(original.id))
+            assertEquals(updated.id, store.state.value.currentRequestId)
+
+            // Codes shared before the edit still belong to the sat intent.
+            store.attachPayment(original.id, "late", 10)
+            store.attachPayment(updated.id, "usd-payment", 99)
+            val reloaded = CashuRequestStore(persistence)
+            assertEquals(2, reloaded.state.value.requests.size)
+            assertEquals("sat", reloaded.request(original.id)?.unit)
+            assertEquals(if (alreadyPaid) 1244L else 10L, reloaded.request(original.id)?.totalReceived)
+            assertEquals(99L, reloaded.request(updated.id)?.totalReceived)
+            assertEquals(updated.id, reloaded.state.value.currentRequestId)
+        }
+    }
+
+    @Test
+    fun failedCurrencyEncodingLeavesRequestAndCurrentPointerUntouched() {
+        val persistence = MemoryCashuRequestPersistence()
+        val store = CashuRequestStore(persistence)
+        val original = store.createNew(id = "original", encoded = "old-code")
+        val result = runCatching {
+            store.update(id = original.id, amount = null, unit = "usd", mints = emptyList(), memo = null) {
+                error("Encoding failed")
+            }
+        }
+        assertTrue(result.isFailure)
+        assertEquals(listOf(original), store.state.value.requests)
+        assertEquals(original.id, store.state.value.currentRequestId)
+        assertEquals(listOf(original), CashuRequestStore(persistence).state.value.requests)
     }
 
     @Test

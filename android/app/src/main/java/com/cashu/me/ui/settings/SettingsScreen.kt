@@ -27,20 +27,18 @@ import androidx.compose.material.icons.outlined.Public
 import androidx.compose.material.icons.outlined.Security
 import androidx.compose.material.icons.outlined.VisibilityOff
 import androidx.compose.material.icons.outlined.VpnKey
-import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
+import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBarDefaults
-import androidx.compose.material3.rememberTopAppBarState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.style.TextAlign
@@ -51,7 +49,6 @@ import com.cashu.me.Core.WalletManager
 import com.cashu.me.ui.components.ActionConfirmationSheet
 import com.cashu.me.ui.components.NavRow
 import com.cashu.me.ui.components.SectionHeader
-import com.cashu.me.ui.components.TabTopBar
 import com.cashu.me.ui.components.ToggleRow
 import com.cashu.me.ui.components.ToolbarIcon
 import com.cashu.me.ui.theme.CashuTheme
@@ -62,7 +59,7 @@ import com.cashu.me.ui.testing.UiTestTags
  * Display · Backup & Security · Payments · Integrations · Privacy · About ·
  * Danger, with the version footer.
  */
-@OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3ExpressiveApi::class)
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(
     walletManager: WalletManager,
@@ -83,21 +80,19 @@ fun SettingsScreen(
     var confirmDelete by remember { mutableStateOf(false) }
     var currencyPickerOpen by remember { mutableStateOf(false) }
 
-    val topBarState = rememberTopAppBarState()
-    val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior(state = topBarState)
-
     Scaffold(
         modifier = Modifier
             .testTag(UiTestTags.SettingsScreen)
             .padding(contentPadding)
             // The shell scaffold's padding already carries the status-bar inset;
             // consume it so the nested TopAppBar doesn't apply it a second time.
-            .consumeWindowInsets(contentPadding)
-            .nestedScroll(scrollBehavior.nestedScrollConnection),
+            .consumeWindowInsets(contentPadding),
         topBar = {
-            TabTopBar(
-                title = "Settings",
-                scrollBehavior = scrollBehavior,
+            CenterAlignedTopAppBar(
+                title = { Text("Settings", style = CashuTheme.type.sheetTitle) },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.background,
+                ),
                 navigationIcon = {
                     IconButton(onClick = onClose) {
                         ToolbarIcon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = "Back")

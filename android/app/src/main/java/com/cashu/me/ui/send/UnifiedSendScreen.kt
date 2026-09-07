@@ -984,6 +984,7 @@ private fun InputFace(
                 supporting = "Receive some ecash before you can send.",
                 actionLabel = "Receive",
                 onAction = onReceive,
+                prominentAction = true,
                 fillHeight = false,
                 size = EmptyStateSize.Section,
                 modifier = Modifier

@@ -11,6 +11,7 @@ import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Spacer
@@ -48,6 +49,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -56,6 +58,7 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.repeatOnLifecycle
 import java.text.DateFormat
 import java.util.Date
+import java.net.URI
 import com.cashu.me.Core.AmountFormatter
 import com.cashu.me.Core.CashuRequestStore
 import com.cashu.me.Core.CashuRequestNostrReadiness
@@ -126,7 +129,8 @@ fun CashuRequestDetailScreen(
     val confirmationToastController = LocalConfirmationToastController.current
     val lifecycleOwner = LocalLifecycleOwner.current
 
-    val request = storeState.requests.firstOrNull { it.id == requestId }
+    var displayedRequestId by rememberSaveable(requestId) { mutableStateOf(requestId) }
+    val request = storeState.requests.firstOrNull { it.id == displayedRequestId }
     val requestReadiness = remember(settings, nostrState) {
         CashuRequestNostrReadiness.current(nostrService, settingsManager)
     }
@@ -138,9 +142,8 @@ fun CashuRequestDetailScreen(
     val keepNfcSessionMounted = shouldKeepNfcSessionMounted(offerNfcReceive, nfcState.phase)
     val nfcTransferActive = keepNfcSessionMounted && nfcState.phase.isNfcTransferActive()
 
-    // Re-signs the same NUT-18 request in place (same id/history entry) — used
-    // by the Mint sheet, the Amount sheet's Done, and "New Request" (called
-    // with no args, which just re-signs the current values).
+    // Edits share an identity within one currency. A unit change preserves the
+    // old intent and displays the new one, including after a mint changes unit.
     fun regenerate(
         nextAmount: Long? = request?.amount,
         nextMints: List<String> = request?.mints.orEmpty(),
@@ -160,24 +163,25 @@ fun CashuRequestDetailScreen(
         // it instead of silently turning (for example) 500 sat into 500 cents.
         val resolvedAmount = nextAmount.takeUnless { resolvedUnit != req.unit }
         runCatching {
-            PaymentRequestBuilder.build(
-                id = req.id,
-                amount = resolvedAmount,
-                unit = resolvedUnit,
-                mints = nextMints,
-                description = req.memo,
-                nostrPubkeyHex = configuration.publicKeyHex,
-                relays = configuration.relays,
-            )
-        }.onSuccess { encoded ->
             cashuRequestStore.update(
                 id = req.id,
                 amount = resolvedAmount,
                 unit = resolvedUnit,
                 mints = nextMints,
                 memo = req.memo,
-                encoded = encoded,
-            )
+            ) { id ->
+                PaymentRequestBuilder.build(
+                    id = id,
+                    amount = resolvedAmount,
+                    unit = resolvedUnit,
+                    mints = nextMints,
+                    description = req.memo,
+                    nostrPubkeyHex = configuration.publicKeyHex,
+                    relays = configuration.relays,
+                )
+            }
+        }.onSuccess { updated ->
+            if (updated != null) displayedRequestId = updated.id
             regenerateError = null
         }.onFailure { regenerateError = it.userFacingWalletMessage }
     }
@@ -194,11 +198,11 @@ fun CashuRequestDetailScreen(
     }
 
     val paymentCount = request?.receivedPayments?.size ?: 0
-    var observedPaymentIds by rememberSaveable(requestId) {
+    var observedPaymentIds by rememberSaveable(displayedRequestId) {
         mutableStateOf(request?.receivedPayments?.map { it.transactionId })
     }
-    var successPaymentId by rememberSaveable(requestId) { mutableStateOf<String?>(null) }
-    LaunchedEffect(requestId, request?.receivedPayments, successPaymentId) {
+    var successPaymentId by rememberSaveable(displayedRequestId) { mutableStateOf<String?>(null) }
+    LaunchedEffect(displayedRequestId, request?.receivedPayments, successPaymentId) {
         if (successPaymentId != null) return@LaunchedEffect
         val currentPayments = request?.receivedPayments ?: return@LaunchedEffect
         newestUnseenPayment(observedPaymentIds, currentPayments)?.let { payment ->
@@ -373,25 +377,23 @@ fun CashuRequestDetailScreen(
                             walletState.mints.firstOrNull { it.url == url }
                         }
                         val mintLabel = activeMintUrl?.let { url ->
-                            requestMint?.name ?: url
+                            requestMint?.name ?: runCatching { URI(url).host }.getOrNull() ?: url
                         } ?: "Any mint"
                         val requestEditable = request.isEcashRequest && !nfcTransferActive
                         InspectorRow(
                             label = "Mint",
                             value = mintLabel,
                             editable = requestEditable,
-                            onClick = { mintPickerOpen = true },
+                            onClick = if (requestEditable) ({ mintPickerOpen = true }) else null,
                         )
                         request.displayDescription?.let { DescriptionDetailRow(it) }
                         if (request.isEcashRequest || request.amount == null) {
                             InspectorRow(
                                 label = "Amount",
-                                value = request.amount?.let {
-                                    if (isSatRequest) "$it sat" else formatRequestAmount(it)
-                                } ?: "Any",
+                                value = request.amount?.takeIf { it > 0L }?.let(::formatRequestAmount) ?: "Any",
                                 valueMonospaced = true,
                                 editable = requestEditable,
-                                onClick = { amountPickerOpen = true },
+                                onClick = if (requestEditable) ({ amountPickerOpen = true }) else null,
                             )
                         }
                         if (request.isEcashRequest) {
@@ -399,7 +401,9 @@ fun CashuRequestDetailScreen(
                                 label = "Unit",
                                 value = request.unit.uppercase(),
                                 editable = requestEditable && requestMint?.supportsMultipleMintUnits == true,
-                                onClick = { unitPickerOpen = true },
+                                onClick = if (requestEditable && requestMint?.supportsMultipleMintUnits == true) {
+                                    { unitPickerOpen = true }
+                                } else null,
                             )
                         }
                         InspectorRow(
@@ -425,9 +429,11 @@ fun CashuRequestDetailScreen(
                 }
 
                 DetailActionFooter {
-                    Row(
+                    FlowRow(
                         modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(CashuTheme.spacing.snug),
+                        horizontalArrangement = Arrangement.spacedBy(CashuTheme.spacing.default),
+                        verticalArrangement = Arrangement.spacedBy(CashuTheme.spacing.default),
+                        maxItemsInEachRow = if (LocalConfiguration.current.fontScale > 1.3f) 1 else 2,
                     ) {
                         SecondaryButton(
                             text = "Copy",
@@ -436,6 +442,7 @@ fun CashuRequestDetailScreen(
                                 confirmationToastController?.show("Copied Cashu request")
                             },
                             modifier = Modifier.weight(1f),
+                            compact = true,
                         )
                         // Quote-backed invoices/addresses cannot be regenerated in
                         // place; only a NUT-18 ecash request owns this action.
@@ -445,6 +452,7 @@ fun CashuRequestDetailScreen(
                                 onClick = { regenerate() },
                                 modifier = Modifier.weight(1f),
                                 enabled = !nfcTransferActive,
+                                compact = true,
                             )
                         }
                     }

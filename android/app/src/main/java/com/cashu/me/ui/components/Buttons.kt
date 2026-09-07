@@ -49,6 +49,7 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.text.style.TextAlign
 import com.cashu.me.ui.theme.CashuTheme
 import com.cashu.me.ui.theme.rememberReducedMotion
 
@@ -261,13 +262,17 @@ fun PrimaryButton(
     }
 }
 
-/** The secondary full-width CTA: tonal, one step quieter than [PrimaryButton]. */
+/**
+ * The secondary full-width CTA. Compact receipt actions match the quiet,
+ * 56dp capsules used by iOS flatSheetSecondaryButton.
+ */
 @Composable
 fun SecondaryButton(
     text: String,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
+    compact: Boolean = false,
 ) {
     val interactionSource = remember { MutableInteractionSource() }
     val scale = rememberPressScale(interactionSource)
@@ -275,18 +280,28 @@ fun SecondaryButton(
         onClick = onClick,
         modifier = modifier
             .fillMaxWidth()
-            .heightIn(min = ButtonMinHeight)
+            .heightIn(min = if (compact) 56.dp else ButtonMinHeight)
             .graphicsLayer {
                 scaleX = scale
                 scaleY = scale
             },
         enabled = enabled,
         interactionSource = interactionSource,
-        contentPadding = PaddingValues(horizontal = CashuTheme.spacing.section, vertical = ButtonContentVertical),
+        colors = if (compact) ButtonDefaults.filledTonalButtonColors(
+            containerColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.11f),
+            contentColor = MaterialTheme.colorScheme.onSurface,
+            disabledContainerColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.06f),
+        ) else ButtonDefaults.filledTonalButtonColors(),
+        contentPadding = PaddingValues(
+            horizontal = if (compact) CashuTheme.spacing.comfortable else CashuTheme.spacing.section,
+            vertical = ButtonContentVertical,
+        ),
     ) {
         Text(
             text = text,
-            style = CashuTheme.type.buttonLabel,
+            style = if (compact) CashuTheme.type.compactButtonLabel
+                else CashuTheme.type.buttonLabel,
+            textAlign = TextAlign.Center,
         )
     }
 }

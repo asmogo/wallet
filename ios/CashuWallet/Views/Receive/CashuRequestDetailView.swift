@@ -9,6 +9,8 @@ struct CashuRequestDetailView: View {
     @ObservedObject private var settings = SettingsManager.shared
     @ObservedObject private var nostr = NostrService.shared
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @Environment(\.colorScheme) private var colorScheme
 
     let onClose: (() -> Void)?
     let showsNavigationHeader: Bool
@@ -249,12 +251,21 @@ struct CashuRequestDetailView: View {
                             label: "Created",
                             value: request.createdAt.formatted(date: .abbreviated, time: .shortened)
                         )
+                        if request.totalReceived > 0 {
+                            detailRow(
+                                label: "Total received",
+                                value: formatAmount(request.totalReceived, unit: request.unit)
+                            )
+                        }
                     }
                     .padding(.horizontal, 4)
                 }
             }
 
-            HStack(spacing: 12) {
+            let actionLayout = dynamicTypeSize.isAccessibilitySize
+                ? AnyLayout(VStackLayout(spacing: 12))
+                : AnyLayout(HStackLayout(spacing: 12))
+            actionLayout {
                 Button(action: { copy(request.encoded) }) {
                     Text("Copy")
                 }
@@ -270,6 +281,7 @@ struct CashuRequestDetailView: View {
                     .accessibilityHint("Generates a fresh Cashu Request and rotates the QR")
                 }
             }
+            .multilineTextAlignment(.center)
             .padding(.horizontal)
             .padding(.bottom, 16)
         }
@@ -279,22 +291,30 @@ struct CashuRequestDetailView: View {
         Group {
             if paymentCount > 0 {
                 HStack(spacing: 6) {
-                    Image(systemName: "checkmark.seal.fill")
+                    Image(systemName: "checkmark.circle")
                     Text(paymentCount == 1 ? "1 payment received" : "\(paymentCount) payments received")
                 }
                 .font(.subheadline.weight(.medium))
-                .foregroundStyle(.green)
+                .foregroundStyle(receivedStatusColor)
             } else {
                 HStack(spacing: 6) {
                     Image(systemName: "clock")
+                        .foregroundStyle(.orange)
                         .symbolEffect(.pulse, options: .repeating, isActive: !reduceMotion)
                     Text("Waiting for payment…")
                 }
                 .font(.subheadline)
-                .foregroundStyle(.orange)
+                .foregroundStyle(.primary)
             }
         }
         .animation(.easeInOut(duration: 0.2), value: paymentCount)
+    }
+
+    /// Matches Android's received status ink with readable contrast on the sheet.
+    private var receivedStatusColor: Color {
+        colorScheme == .dark
+            ? Color(red: 183 / 255, green: 240 / 255, blue: 200 / 255)
+            : Color(red: 11 / 255, green: 82 / 255, blue: 39 / 255)
     }
 
     @ViewBuilder
@@ -419,11 +439,8 @@ struct CashuRequestDetailView: View {
         ConfirmationToast.show("Copied Cashu request")
     }
 
-    /// Re-encodes the displayed request with optional overrides, keeping the same
-    /// NUT-18 id. Defaults preserve the current request's params. Amount / mint
-    /// edits re-parameterize the one live request in place — payments to any
-    /// previously shared copy still land on this row, and history never grows a
-    /// second entry for the same receive intent.
+    /// Amount/mint edits reuse the intent within one currency. Changing unit
+    /// starts a new request while preserving the old code and its payments.
     private func regenerate(amount: UInt64?? = nil, unit: String? = nil, mints: [String]? = nil) {
         HapticFeedback.selection()
         guard let existing = request else { return }
@@ -451,16 +468,23 @@ struct CashuRequestDetailView: View {
             nextAmount = (nextUnit == existing.unit) ? existing.amount : nil
         }
         do {
-            let encoded = try PaymentRequestBuilder.build(
-                id: existing.id,
-                amount: nextAmount,
-                unit: nextUnit,
-                mints: nextMints,
-                description: existing.memo,
-                nostrPubkeyHex: configuration.publicKeyHex,
-                relays: configuration.relays
-            )
-            store.update(id: existing.id, amount: nextAmount, unit: nextUnit, mints: nextMints, encoded: encoded)
+            let updated = try store.update(
+                id: existing.id, amount: nextAmount, unit: nextUnit, mints: nextMints
+            ) { id in
+                try PaymentRequestBuilder.build(
+                    id: id,
+                    amount: nextAmount,
+                    unit: nextUnit,
+                    mints: nextMints,
+                    description: existing.memo,
+                    nostrPubkeyHex: configuration.publicKeyHex,
+                    relays: configuration.relays
+                )
+            }
+            if let updated, updated.id != requestId {
+                paymentObservation = CashuRequestPaymentObservation(existingPayments: updated.receivedPayments)
+                requestId = updated.id
+            }
             regenerationError = nil
         } catch {
             AppLogger.wallet.error("Could not regenerate request: \(String(describing: error))")

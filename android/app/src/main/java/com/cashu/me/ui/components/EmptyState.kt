@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material3.Icon
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -81,6 +82,7 @@ fun EmptyState(
     onAction: (() -> Unit)? = null,
     fillHeight: Boolean = true,
     size: EmptyStateSize = EmptyStateSize.FullScreen,
+    prominentAction: Boolean = false,
 ) {
     val reduceMotion = rememberReducedMotion()
     val allowsEntranceMotion = size != EmptyStateSize.FullScreen
@@ -167,6 +169,7 @@ fun EmptyState(
             PrimaryButton(
                 text = actionLabel,
                 onClick = onAction,
+                colors = if (prominentAction) ButtonDefaults.buttonColors() else null,
                 // Full width at 32dp side margins (16dp component padding +
                 // 16dp here) — iOS renders every primary CTA as a full-width
                 // capsule inset 32pt, including this one.

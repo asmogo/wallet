@@ -151,6 +151,7 @@ struct ComponentCatalogView: View {
 
 /// Deterministic receipts for native UI checks; no wallet initialization or mint is needed.
 private struct ActivityDetailCatalog: View {
+    @EnvironmentObject private var walletManager: WalletManager
     @State private var selectedTransaction: WalletTransaction?
     @State private var selectedRequest: CashuRequest?
     private let date = Date(timeIntervalSince1970: 1_788_768_000)
@@ -189,21 +190,42 @@ private struct ActivityDetailCatalog: View {
                 .accessibilityIdentifier("reusable-invoice")
             Button("Cashu Request") { openRequest(rail: .ecash) }
                 .accessibilityIdentifier("cashu-request")
+            Button("Cashu Request · received") { openRequest(rail: .ecash, paid: true) }
+                .accessibilityIdentifier("cashu-request-received")
+            Button("Cashu Request · USD") { openRequest(rail: .ecash, paid: true, unit: "usd") }
+                .accessibilityIdentifier("cashu-request-usd")
         }
         .sheet(item: $selectedTransaction) { TransactionDetailView(transaction: $0) }
         .sheet(item: $selectedRequest) { CashuRequestReceiptView(request: $0) }
+        .onAppear {
+            if IntegrationTestConfig.isEnabled {
+                SettingsManager.shared.useBitcoinSymbol = true
+                if ProcessInfo.processInfo.environment["UITEST_REQUEST_CURRENCY_EDITS"] == "1" {
+                    SettingsManager.shared.enablePaymentRequests = true
+                    walletManager.initializeNostrKeypairLocally(mnemonic: IntegrationTestConfig.seedMnemonic)
+                    walletManager.mints = [
+                        MintInfo(url: "https://mint.example", name: "Multi-unit mint", isActive: true,
+                                 balance: 0, units: ["sat", "usd"], mintUnits: ["sat", "usd"]),
+                        MintInfo(url: "https://sat.example", name: "Sat mint", isActive: false, balance: 0),
+                    ]
+                }
+            }
+        }
     }
 
-    private func openRequest(rail: CashuRequest.Rail) {
+    private func openRequest(rail: CashuRequest.Rail, paid: Bool = false, unit: String = "sat") {
         let store = CashuRequestStore.shared
         let id = rail == .ecash ? "catalog-request" : "catalog-offer"
         store.delete(id: id)
         let request = store.create(
             id: id, rail: rail, encoded: rail == .ecash ? "creqAfixture" : "lno1fixture",
-            mints: ["https://mint.example"], memo: "Coffee tips", reusable: true
+            unit: unit, mints: ["https://mint.example"], memo: "Coffee tips", reusable: true
         )
         if rail == .bolt12 {
             store.attachPayment(requestId: id, transactionId: "fixture-payment", amount: 2100)
+        } else if paid {
+            store.attachPayment(requestId: id, transactionId: "fixture-payment-1", amount: 1200)
+            store.attachPayment(requestId: id, transactionId: "fixture-payment-2", amount: 34)
         }
         selectedRequest = store.request(withId: id) ?? request
     }
