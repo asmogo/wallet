@@ -1545,7 +1545,7 @@
 			repositoryURL = "https://github.com/cashubtc/cdk-swift";
 			requirement = {
 				kind = exactVersion;
-				version = "0.18.0-rc.3";
+				version = 0.18.0;
 			};
 		};
 		AACC000000000001 /* XCRemoteSwiftPackageReference "sentry-cocoa" */ = {
