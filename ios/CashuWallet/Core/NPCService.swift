@@ -465,3 +465,20 @@ private extension NpubCashQuote {
         state?.caseInsensitiveCompare("PAID") == .orderedSame
     }
 }
+
+/// Retry orchestration with injectable boundaries; identity derivation stays in NPCService.
+@MainActor
+enum LightningAddressSetupRecovery {
+    static func retry(
+        isRuntimeReady: () -> Bool,
+        initializeRuntime: () async -> Void,
+        isAddressInitialized: () -> Bool,
+        loadSeed: () throws -> Data,
+        initializeAddress: (Data) throws -> Void
+    ) async throws {
+        if !isRuntimeReady() { await initializeRuntime() }
+        guard isRuntimeReady() else { throw WalletError.notInitialized }
+        guard !isAddressInitialized() else { return }
+        try initializeAddress(loadSeed())
+    }
+}

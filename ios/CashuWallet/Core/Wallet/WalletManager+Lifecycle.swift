@@ -494,6 +494,22 @@ extension WalletManager {
         await loadWalletState()
     }
 
+    /// Recover only missing Lightning-address prerequisites using the existing wallet.
+    func retryLightningAddressSetup() async throws {
+        try await LightningAddressSetupRecovery.retry(
+            isRuntimeReady: { self.isRuntimeReady },
+            initializeRuntime: { await self.loadWalletState() },
+            isAddressInitialized: { NPCService.shared.isInitialized },
+            loadSeed: {
+                guard let mnemonic = try self.keychainService.loadMnemonic() else {
+                    throw WalletError.notInitialized
+                }
+                return try Self.bip39Seed(mnemonic: mnemonic)
+            },
+            initializeAddress: { try NPCService.shared.initializeWithSeed($0) }
+        )
+    }
+
     private func loadWalletState() async {
         let signpostID = WalletStartupInstrumentation.signposter.makeSignpostID()
         let interval = WalletStartupInstrumentation.signposter.beginInterval(

@@ -10,6 +10,8 @@ struct LightningAddressSettingsSection: View {
     @Binding var showMintPicker: Bool
 
     @State private var showAddressQR = false
+    @State private var retryingSetup = false
+    @State private var setupError: String?
 
     var body: some View {
         LazyVStack(spacing: 0) {
@@ -51,12 +53,31 @@ struct LightningAddressSettingsSection: View {
                 }
             } else if npcService.isEnabled && !npcService.isInitialized {
                 SettingsSectionGroup(nil) {
-                    HStack(spacing: 10) {
-                        Image(systemName: "exclamationmark.triangle.fill")
-                            .foregroundStyle(.orange)
-                        Text("Wallet not fully initialized. Please restart the app.")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
+                    VStack(spacing: 12) {
+                        InlineNotice(
+                            message: setupError ?? "Wallet not fully initialized. Try setup again to finish your Lightning address.",
+                            severity: .error
+                        )
+                        Button {
+                            guard !retryingSetup else { return }
+                            retryingSetup = true
+                            setupError = nil
+                            Task { @MainActor in
+                                defer { retryingSetup = false }
+                                do {
+                                    try await walletManager.retryLightningAddressSetup()
+                                } catch {
+                                    setupError = "Lightning address setup couldn't finish. Try again or restart the app."
+                                }
+                            }
+                        } label: {
+                            HStack {
+                                if retryingSetup { ProgressView() }
+                                Text("Try setup again")
+                            }
+                        }
+                        .glassButton(prominent: true)
+                        .disabled(retryingSetup)
                     }
                     .padding(.horizontal, 4)
                     .padding(.vertical, 14)

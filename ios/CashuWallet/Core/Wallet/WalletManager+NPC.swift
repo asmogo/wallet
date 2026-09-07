@@ -28,7 +28,7 @@ extension WalletManager {
 
     /// BIP39 seed (PBKDF2-HMAC-SHA512, 2048 rounds, empty passphrase),
     /// matching cdk's `Mnemonic::to_seed_normalized("")`.
-    private static func bip39Seed(mnemonic: String, passphrase: String = "") throws -> Data {
+    static func bip39Seed(mnemonic: String, passphrase: String = "") throws -> Data {
         let password = Array(mnemonic.decomposedStringWithCompatibilityMapping.utf8)
         let salt = Array(("mnemonic" + passphrase).decomposedStringWithCompatibilityMapping.utf8)
         var seed = [UInt8](repeating: 0, count: 64)
