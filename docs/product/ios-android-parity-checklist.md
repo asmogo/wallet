@@ -98,7 +98,7 @@ Platform-specific capabilities remain intentionally outside parity, including iC
 
 - [x] **[P1 · Android → iOS] Correlate an open Cashu Request success to a new payment record.** Android watches the request’s received-payment IDs; iOS has a fallback that treats any balance increase while the receive sheet is open as payment for that request. **Done when:** iOS cannot show request success for an unrelated balance increase, with regression coverage for concurrent balance changes.
 
-- [ ] **[P2 · Android → iOS] Show Total received in Cashu Request details.** The total row landed in #344. Regression coverage now checks cumulative mint-unit totals across live payments, duplicate delivery, and reopening from persisted History. Requested amounts and payment counts remain separate. **Verification:** implementation ready; final device review pending.
+- [x] **[P2 · Android → iOS] Show Total received in Cashu Request details.** The total row landed in #344. Regression coverage now checks cumulative mint-unit totals across live payments, duplicate delivery, and reopening from persisted History. Requested amounts and payment counts remain separate. **Verification:** Six payment-observation tests passed, including cumulative totals and reopening. Native sat/USD receipt captures and iOS builds passed.
 
 ### History and transaction details
 
