@@ -6,9 +6,9 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.IosShare
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.SheetValue
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.SheetState
 import androidx.compose.material3.rememberBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
@@ -22,16 +22,20 @@ fun ActivityDetailSheet(
     onDismissRequest: () -> Unit,
     modifier: Modifier = Modifier,
     onShare: (() -> Unit)? = null,
-    content: @Composable ColumnScope.() -> Unit,
-) {
-    val state = rememberBottomSheetState(
+    sheetState: SheetState = rememberBottomSheetState(
         initialValue = SheetValue.Hidden,
         enabledValues = setOf(SheetValue.Hidden, SheetValue.Expanded),
-    )
-    ModalBottomSheet(
+    ),
+    onBackdropVisibilityChanged: (Boolean) -> Unit = {},
+    sheetGesturesEnabled: Boolean = true,
+    content: @Composable ColumnScope.() -> Unit,
+) {
+    CashuModalBottomSheet(
         onDismissRequest = onDismissRequest,
-        sheetState = state,
+        sheetState = sheetState,
         containerColor = CashuTheme.colors.compactSheetContainer,
+        onBackdropVisibilityChanged = onBackdropVisibilityChanged,
+        sheetGesturesEnabled = sheetGesturesEnabled,
     ) {
         CompactSheetContent {
             Column(modifier = modifier.fillMaxWidth()) {

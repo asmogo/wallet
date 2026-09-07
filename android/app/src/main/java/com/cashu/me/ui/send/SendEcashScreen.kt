@@ -115,6 +115,7 @@ import com.cashu.me.ui.components.NumberPadFooter
 import com.cashu.me.ui.components.PrimaryButton
 import com.cashu.me.ui.components.QrCard
 import com.cashu.me.ui.components.SheetHeader
+import com.cashu.me.ui.components.TextButtonContext
 import com.cashu.me.ui.components.ToolbarIcon
 import com.cashu.me.ui.components.TwoFaceScreen
 import com.cashu.me.ui.components.UnitPickerSheet
@@ -717,6 +718,7 @@ private fun InputFace(
                 mint = activeMint,
                 balanceText = balanceText,
                 showBalance = true,
+                modifier = Modifier.padding(horizontal = CashuTheme.spacing.snug),
                 onPickMint = onPickMint,
                 onUseMax = if (canUseMax) onUseMax else null,
             )
@@ -1009,11 +1011,13 @@ internal fun P2pkLockSection(
             horizontalArrangement = Arrangement.spacedBy(CashuTheme.spacing.tight),
         ) {
             com.cashu.me.ui.components.GhostButton(
+                context = TextButtonContext.Compact,
                 text = "Scan key",
                 onClick = onScanKey,
                 modifier = Modifier.weight(1f),
             )
             com.cashu.me.ui.components.GhostButton(
+                context = TextButtonContext.Compact,
                 text = "Paste key",
                 onClick = onPasteKey,
                 modifier = Modifier.weight(1f),
@@ -1022,6 +1026,7 @@ internal fun P2pkLockSection(
         }
         if (myKeyHex != null) {
             com.cashu.me.ui.components.GhostButton(
+                context = TextButtonContext.Compact,
                 text = "Lock ecash to my key",
                 onClick = onUseMyKey,
             )

@@ -91,6 +91,7 @@ import com.cashu.me.ui.components.PaymentDetailContent
 import com.cashu.me.ui.components.QrCard
 import com.cashu.me.ui.components.SecondaryButton
 import com.cashu.me.ui.components.SheetHeader
+import com.cashu.me.ui.components.TextButtonContext
 import com.cashu.me.ui.components.ToolbarIcon
 import com.cashu.me.ui.components.UnitPickerSheet
 import com.cashu.me.ui.components.WaitingForPaymentRow
@@ -112,6 +113,7 @@ fun CashuRequestDetailScreen(
     requestId: String,
     onClose: () -> Unit,
     asActivitySheet: Boolean = false,
+    onBackdropVisibilityChanged: (Boolean) -> Unit = {},
 ) {
     val storeState by cashuRequestStore.state.collectAsState()
     val walletState by walletManager.state.collectAsState()
@@ -265,6 +267,7 @@ fun CashuRequestDetailScreen(
                 onClose = onClose,
                 onShare = { context.shareText(request.encoded, subject = request.displayTitle) },
                 asActivitySheet = asActivitySheet,
+                onBackdropVisibilityChanged = onBackdropVisibilityChanged,
             ) { padding ->
                 CashuRequestSuccessTerminal(
                     amountLabel = amountLabel,
@@ -282,6 +285,7 @@ fun CashuRequestDetailScreen(
                 { context.shareText(current.encoded, subject = current.displayTitle) }
             },
             asActivitySheet = asActivitySheet,
+            onBackdropVisibilityChanged = onBackdropVisibilityChanged,
         ) { padding ->
             if (request == null) {
                 Column(
@@ -296,7 +300,7 @@ fun CashuRequestDetailScreen(
                         style = MaterialTheme.typography.titleMedium,
                     )
                     Spacer(Modifier.height(CashuTheme.spacing.comfortable))
-                    GhostButton(text = "Back", onClick = onClose)
+                    GhostButton(context = TextButtonContext.Screen, text = "Back", onClick = onClose)
                 }
                 return@CashuRequestDetailContainer
             }
@@ -535,10 +539,16 @@ private fun CashuRequestDetailContainer(
     onClose: () -> Unit,
     onShare: (() -> Unit)?,
     asActivitySheet: Boolean,
+    onBackdropVisibilityChanged: (Boolean) -> Unit,
     content: @Composable (PaddingValues) -> Unit,
 ) {
     if (asActivitySheet) {
-        ActivityDetailSheet(title = title, onDismissRequest = onClose, onShare = onShare) {
+        ActivityDetailSheet(
+            title = title,
+            onDismissRequest = onClose,
+            onShare = onShare,
+            onBackdropVisibilityChanged = onBackdropVisibilityChanged,
+        ) {
             content(PaddingValues())
         }
     } else {

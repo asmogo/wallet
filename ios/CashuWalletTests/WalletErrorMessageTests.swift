@@ -72,4 +72,56 @@ final class WalletErrorMessageTests: XCTestCase {
         XCTAssertFalse(text.contains("`0`"))
         XCTAssertFalse(text.lowercased().contains("must be between"))
     }
+    func testLightningDNSFailureNamesTheServiceWithoutRawDetails() {
+        let error = RawMintError(description: "errorMessage=HTTP request failed: failed to lookup address information: No address associated with hostname")
+        XCTAssertEqual(
+            ActionErrorMessages.message(for: error, context: .lightningConnection),
+            "Couldn't connect to the Lightning address service. Try again shortly."
+        )
+        XCTAssertEqual(
+            ActionErrorMessages.message(for: error, context: .lightningPayments),
+            "Couldn't check for Lightning payments. Try again shortly."
+        )
+    }
+
+    func testSettingsFailuresNeverExposeCredentialsOrStorageDetails() {
+        let contexts: [ActionErrorMessages.Context] = [
+            .lightningConnection, .lightningPayments, .lightningMint, .walletConnect, .mintBackup,
+            .keyUpdate, .keyGenerate, .keyImport, .keyRemove, .keyRename,
+        ]
+        let error = RawMintError(description: "errorMessage=failed at internal/path with nsec1private https://user:secret@example.test")
+        for context in contexts {
+            let message = ActionErrorMessages.message(for: error, context: context)
+            for detail in ["errorMessage", "internal/path", "nsec1private", "https://", "secret"] {
+                XCTAssertFalse(message.contains(detail))
+            }
+        }
+    }
+
+    func testKeyImportRetainsUsefulValidationAndDuplicateGuidance() {
+        XCTAssertEqual(
+            ActionErrorMessages.message(for: RawMintError(description: "Invalid nsec format"), context: .keyImport),
+            "That private key doesn't look right. Check that you copied the complete nsec key."
+        )
+        XCTAssertEqual(
+            ActionErrorMessages.message(for: RawMintError(description: "Key already exists"), context: .keyImport),
+            "This key is already in your wallet."
+        )
+        XCTAssertEqual(
+            ActionErrorMessages.message(for: RawMintError(description: "Failed to save encrypted nsec"), context: .keyImport),
+            "Couldn't import this key. Check it and try again."
+        )
+        XCTAssertEqual(
+            ActionErrorMessages.message(for: RawMintError(description: "Invalid nsec metadata"), context: .keyRemove),
+            "Couldn't remove this key. Try again."
+        )
+    }
+
+    func testSecureStorageFailureDoesNotExposeOSStatus() {
+        XCTAssertEqual(
+            KeychainError.loadFailed(-34018).userFacingWalletMessage,
+            "Couldn't access the wallet's secure storage. Restart the app and try again."
+        )
+    }
+
 }

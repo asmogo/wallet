@@ -1,5 +1,6 @@
 package com.cashu.me.ui.history
 
+import androidx.compose.runtime.setValue
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.layout.Box
 import androidx.compose.animation.core.Spring
@@ -23,12 +24,10 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.FilterList
 import androidx.compose.material.icons.outlined.Check
-import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.FilterList
 import androidx.compose.material.icons.outlined.History
 import androidx.compose.material.icons.outlined.Schedule
 import androidx.compose.material.icons.outlined.Search
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -38,7 +37,6 @@ import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.material3.rememberTopAppBarState
@@ -50,7 +48,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.focus.FocusRequester
@@ -69,10 +66,10 @@ import com.cashu.me.Core.PriceService
 import com.cashu.me.Core.SettingsManager
 import com.cashu.me.Core.TransactionDisplay
 import com.cashu.me.Core.WalletManager
-import com.cashu.me.Core.displayText
 import com.cashu.me.Models.CashuRequest
 import com.cashu.me.Models.TransactionStatus
 import com.cashu.me.Models.WalletTransaction
+import com.cashu.me.ui.components.ActionConfirmationSheet
 import com.cashu.me.ui.components.CashuRequestRow
 import com.cashu.me.ui.components.requestRowDisplay
 import com.cashu.me.ui.components.CashuSearchBar
@@ -366,53 +363,31 @@ fun HistoryScreen(
     }
 
     requestPendingDelete?.let { req ->
-        AlertDialog(
-            onDismissRequest = { requestPendingDelete = null },
-            title = { Text("Remove from history?") },
-            text = {
-                Text(
-                    "Payments already received stay in your wallet; only the request entry is removed.",
-                    style = MaterialTheme.typography.bodyMedium,
-                )
+        ActionConfirmationSheet(
+            title = "Remove from history?",
+            message = "Only this request is removed from history. Payments already received stay in your wallet, and the request can still receive payments.",
+            actionLabel = "Remove",
+            destructive = true,
+            onConfirm = {
+                cashuRequestStore.delete(req.id)
+                requestPendingDelete = null
             },
-            confirmButton = {
-                TextButton(onClick = {
-                    cashuRequestStore.delete(req.id)
-                    requestPendingDelete = null
-                }) {
-                    Text("Remove", color = MaterialTheme.colorScheme.error)
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { requestPendingDelete = null }) { Text("Cancel") }
-            },
+            onDismiss = { requestPendingDelete = null },
         )
     }
 
     receiveTokenPendingDelete?.let { transaction ->
-        AlertDialog(
-            onDismissRequest = { receiveTokenPendingDelete = null },
-            title = { Text("Remove this unclaimed ecash?") },
-            text = {
-                Text(
-                    "This ecash hasn't been claimed. Removing it discards the token. Only the sender can re-issue it.",
-                    style = MaterialTheme.typography.bodyMedium,
-                )
+        ActionConfirmationSheet(
+            title = "Remove unclaimed ecash?",
+            message = "This ecash has not been claimed. Removing it discards the token. You will need the token again to claim it.",
+            actionLabel = "Remove",
+            destructive = true,
+            onConfirm = {
+                walletManager.removePendingReceiveToken(transaction.id)
+                receiveTokenPendingDelete = null
+                scope.launch { walletManager.loadTransactions() }
             },
-            confirmButton = {
-                TextButton(onClick = {
-                    walletManager.removePendingReceiveToken(transaction.id)
-                    receiveTokenPendingDelete = null
-                    scope.launch { walletManager.loadTransactions() }
-                }) {
-                    Text("Remove", color = MaterialTheme.colorScheme.error)
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { receiveTokenPendingDelete = null }) {
-                    Text("Cancel")
-                }
-            },
+            onDismiss = { receiveTokenPendingDelete = null },
         )
     }
 }

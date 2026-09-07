@@ -81,7 +81,11 @@ class MintDetailInfoLoaderTest {
         assertEquals("The mint did not respond.", loader.errorMessage)
         assertEquals(MintConnectionState.Offline, loader.connection)
 
-        loader.load { "fresh" }
+        loader.load {
+            assertEquals(MintConnectionState.Checking, loader.connection)
+            assertEquals("The mint did not respond.", loader.errorMessage)
+            "fresh"
+        }
         assertEquals("fresh", loader.info)
         assertNull(loader.errorMessage)
         assertEquals(MintConnectionState.Online, loader.connection)

@@ -81,7 +81,7 @@ struct LightningAddressSettingsSection: View {
                         } catch is CancellationError {
                             // The address was disabled or the wallet changed.
                         } catch {
-                            npcService.errorMessage = error.userFacingWalletMessage
+                            npcService.errorMessage = ActionErrorMessages.message(for: error, context: .lightningMint)
                         }
                     }
                 }
@@ -105,7 +105,7 @@ struct LightningAddressSettingsSection: View {
             }
         } else if let error = npcService.errorMessage {
             SettingsSectionFooter {
-                InlineNotice(message: error, severity: .error, showsIcon: false)
+                InlineNotice(message: error, severity: .error)
             }
         } else if !npcService.isInitialized {
             SettingsSectionFooter {
@@ -166,7 +166,7 @@ struct LightningAddressSettingsSection: View {
     }
 
     private var statusLabel: String {
-        if let error = npcService.errorMessage { return error }
+        if npcService.errorMessage != nil { return npcService.isConnected ? "Needs attention" : "Not connected" }
         if npcService.isConnected { return "Connected" }
         return npcService.isLoading ? "Connecting" : "Not connected"
     }

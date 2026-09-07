@@ -21,6 +21,7 @@ class DestructiveTextButtonAccessibilityComposeTest {
     fun destructiveActionExposesButtonRoleAndAccessibleWarning() {
         compose.setCashuContent {
             DestructiveTextButton(
+                context = TextButtonContext.Compact,
                 text = "Generate",
                 onClick = {},
             )

@@ -21,6 +21,8 @@ struct NostrKeysSettingsSection: View {
     @State private var showResetKeyConfirm = false
     @State private var nostrKeyError: String?
     @State private var showNsecReveal = false
+    @State private var showSwitchConfirm = false
+    @State private var pendingSignerType: NostrSignerType?
 
     var body: some View {
         VStack(spacing: 0) {
@@ -67,22 +69,38 @@ struct NostrKeysSettingsSection: View {
         .animation(.easeInOut(duration: 0.2), value: nostrService.signerType)
         .animation(.easeInOut(duration: 0.2), value: nostrKeyError)
         .backdropSheet(isPresented: $showGenerateKeyConfirm) {
-            KeyActionConfirmSheet(
-                title: "Generate New Key?",
+            ActionConfirmationSheet(
+                title: "Generate new key?",
                 message: NostrIdentityReplacementWarning.generate,
                 actionLabel: "Generate",
                 action: generateNewKey
             )
         }
         .backdropSheet(isPresented: $showResetKeyConfirm) {
-            KeyActionConfirmSheet(
-                title: "Reset to Wallet Seed?",
+            ActionConfirmationSheet(
+                title: "Reset to wallet seed?",
                 message: NostrIdentityReplacementWarning.reset,
                 actionLabel: "Reset",
                 // Deletes the custom key — the commit wears destructive red.
                 destructive: true,
                 action: resetToSeedKey
             )
+        }
+        .backdropSheet(isPresented: $showSwitchConfirm, onDismiss: { pendingSignerType = nil }) {
+            if let type = pendingSignerType {
+                ActionConfirmationSheet(
+                    title: "Switch Nostr key?",
+                    message: "This switches to \(type.displayName). Your Lightning address will change, and Nostr apps and messages will use a different identity.",
+                    actionLabel: "Switch",
+                    destructive: true
+                ) {
+                    do {
+                        try nostrService.switchSignerType(to: type)
+                    } catch {
+                        nostrKeyError = ActionErrorMessages.message(for: error, context: .keyUpdate)
+                    }
+                }
+            }
         }
         .backdropSheet(isPresented: $showImportNsec) {
             ImportNsecSheet(
@@ -173,7 +191,7 @@ struct NostrKeysSettingsSection: View {
         do {
             try nostrService.generateRandomKeypair()
         } catch {
-            nostrKeyError = error.localizedDescription
+            nostrKeyError = ActionErrorMessages.message(for: error, context: .keyGenerate)
         }
     }
 
@@ -191,7 +209,7 @@ struct NostrKeysSettingsSection: View {
             // dismisses itself from Done.
             return nil
         } catch {
-            return error.localizedDescription
+            return ActionErrorMessages.message(for: error, context: .keyImport)
         }
     }
 
@@ -200,7 +218,7 @@ struct NostrKeysSettingsSection: View {
         do {
             try nostrService.resetToSeedKey()
         } catch {
-            nostrKeyError = error.localizedDescription
+            nostrKeyError = ActionErrorMessages.message(for: error, context: .keyUpdate)
         }
     }
 
@@ -216,11 +234,8 @@ struct NostrKeysSettingsSection: View {
             showResetKeyConfirm = true
             return
         }
-        do {
-            try nostrService.switchSignerType(to: type)
-        } catch {
-            nostrKeyError = error.localizedDescription
-        }
+        pendingSignerType = type
+        showSwitchConfirm = true
     }
 }
 
@@ -234,6 +249,7 @@ struct NostrRelaysSettingsSection: View {
 
     @State private var relayInput = ""
     @State private var relayError: String?
+    @State private var showRelayResetConfirm = false
 
     private var canAdd: Bool {
         !relayInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
@@ -285,12 +301,28 @@ struct NostrRelaysSettingsSection: View {
             SettingsSectionGroup(nil) {
                 Button(action: {
                     HapticFeedback.selection()
-                    settings.resetNostrRelaysToDefault()
                     relayError = nil
+                    if settings.nostrRelays.contains(where: { relay in
+                        !SettingsManager.defaultNostrRelays.contains { $0.caseInsensitiveCompare(relay) == .orderedSame }
+                    }) {
+                        showRelayResetConfirm = true
+                    } else {
+                        settings.resetNostrRelaysToDefault()
+                    }
                 }) {
                     settingsActionRow("Reset to default relays", systemImage: "arrow.counterclockwise")
                 }
                 .buttonStyle(.plain)
+            }
+        }
+        .backdropSheet(isPresented: $showRelayResetConfirm) {
+            ActionConfirmationSheet(
+                title: "Reset to default relays?",
+                message: "This replaces your relay list with " + SettingsManager.defaultNostrRelays.joined(separator: ", ") + ".",
+                actionLabel: "Reset",
+                destructive: true
+            ) {
+                settings.resetNostrRelaysToDefault()
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -449,7 +481,7 @@ struct NostrMintBackupSettingsSection: View {
                 try await backupService.backupMints()
                 HapticFeedback.notification(.success)
             } catch {
-                backupError = error.localizedDescription
+                backupError = ActionErrorMessages.message(for: error, context: .mintBackup)
             }
         }
     }
@@ -470,49 +502,4 @@ private func settingsActionRow(_ title: String, systemImage: String) -> some Vie
     .padding(.horizontal, 4)
     .padding(.vertical, 14)
     .contentShape(Rectangle())
-}
-
-/// Single-face confirmation sheet for a Nostr key mutation, on the same recipe
-/// as the import sheet's confirm face: in-content title, centered warning
-/// copy, and a Cancel/action row on a content-fit sheet dismissed by drag —
-/// instead of an alert stacked over the screen.
-private struct KeyActionConfirmSheet: View {
-    let title: String
-    let message: String
-    let actionLabel: String
-    /// Red commit button for the mutation that destroys a key outright
-    /// (Reset deletes the custom key); false keeps the neutral primary.
-    var destructive: Bool = false
-    let action: () -> Void
-
-    @Environment(\.dismiss) private var dismiss
-    @State private var contentHeight: CGFloat = 0
-
-    var body: some View {
-        VStack(spacing: 24) {
-            Text(title)
-                .font(.title2.weight(.semibold))
-
-            Text(message)
-                .foregroundStyle(.secondary)
-                .multilineTextAlignment(.center)
-
-            HStack(spacing: 12) {
-                Button("Cancel") { dismiss() }
-                    .flatSheetSecondaryButton()
-
-                Button(actionLabel) {
-                    dismiss()
-                    action()
-                }
-                .glassButton(destructive: destructive)
-            }
-        }
-        .padding(.horizontal, 24)
-        .padding(.vertical, 20)
-        .contentFitMeasured { contentHeight = $0 }
-        .contentFitDetent(contentHeight, estimate: 280, navigationBar: false)
-        .presentationDragIndicator(.visible)
-        .flatBottomSheetSurface()
-    }
 }

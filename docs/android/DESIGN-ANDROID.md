@@ -95,6 +95,14 @@ like a port, make the Android-native choice instead.
 - **Navigation**: shared-axis X (slide + fade) for push/pop; fade-through for
   tab switches (`CashuNavHost.kt`). Predictive back is enabled
   (`android:enableOnBackInvokedCallback`).
+- **Sheet dismissal**: payment flows, activity receipts, and mint/unit/currency
+  pickers use `CashuModalBottomSheet`. It retains the native Material sheet and
+  gestures, but uses a spatial spring for dismissal while Material3 applies an
+  effects spring to that translation. Sheet content keeps the normal motion
+  scheme. `rememberSheetDismissAction` waits for a completed hide before a
+  selection or navigation callback; repeated taps cannot dispatch twice and
+  interruption cancels the pending action. Receipt backdrop blur clears when
+  dismissal starts and returns if the sheet settles open again.
 - **No hard cuts**: full-screen overlays (scanner, contactless) slide over the
   shell (`CashuApp.kt`); the bottom bar animates away on push
   (`WalletScaffold.kt`). The payment terminal's entrance splits by mount:
@@ -186,9 +194,18 @@ like a port, make the Android-native choice instead.
 - Button hierarchy: filled `Button` (primary action) → `FilledTonalButton`
   (secondary) → `TextButton` (inline). See `PrimaryButton` / `SecondaryButton`
   / `GhostButton` / `DestructiveTextButton` in `Buttons.kt`.
+- Button typography is owned by `Type.kt` and the shared components. Primary
+  and secondary buttons use `buttonLabel` (18sp semibold); screen text actions
+  use `textButtonLabel` (the same metrics, regular weight). Every `GhostButton`
+  and `DestructiveTextButton` must specify `TextButtonContext.Screen` for
+  standalone actions and alternatives below a CTA, or `.Compact` for field
+  helpers, row actions, and dialogs (Material `labelLarge`). Screen code must
+  not override button text styles. Destructive actions use the same component
+  and sizing rules with error-colored text and an accessible warning.
 - Bottom sheets (`ModalBottomSheet`) for choosers/pickers/inspectors; pushed
-  destinations for flows. `NavigationBar` for tabs. `AlertDialog` for
-  confirmation, destructive action tinted `error`.
+  destinations for flows. `NavigationBar` for tabs. Simple confirmations use
+  `ActionConfirmationSheet`; destructive actions use a red primary button
+  with white text.
 - Text inputs go through `CashuTextField`. **One carve-out (2026-08-08):** the
   seed-entry card in `SeedWordEntry.kt` uses a bare `BasicTextField`, because
   `CashuTextField`'s job is to supply the container and here the *card is* the

@@ -57,6 +57,7 @@ import com.cashu.me.ui.components.MethodActionRow
 import com.cashu.me.ui.components.NoticeSeverity
 import com.cashu.me.ui.components.PaymentStatusPhase
 import com.cashu.me.ui.components.PaymentStatusScreen
+import com.cashu.me.ui.components.TextButtonContext
 import com.cashu.me.ui.send.SendDestinationResolution
 import com.cashu.me.ui.send.resolveSendDestination
 import com.cashu.me.ui.theme.CashuTheme
@@ -292,7 +293,7 @@ fun ReceiveEcashScreen(
                                     Icon(Icons.Outlined.Cancel, contentDescription = "Clear")
                                 }
                             } else {
-                                GhostButton(text = "Paste", onClick = {
+                                GhostButton(context = TextButtonContext.Compact, text = "Paste", onClick = {
                                     val clip = clipboard.getText()?.text?.trim().orEmpty()
                                     if (clip.isNotEmpty()) {
                                         input = clip

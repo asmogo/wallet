@@ -35,6 +35,60 @@ final class SettingsUITests: UITestBase {
         waitForSelectedTab("Wallet")
     }
 
+    func testDeleteWalletSheetCancelPreservesWallet() throws {
+        navigateToSettings()
+        let deleteRow = app.buttons["Delete Wallet"]
+        for _ in 0..<6 {
+            if deleteRow.isHittable { break }
+            app.scrollViews.firstMatch.swipeUp()
+        }
+        tapWhenReady(deleteRow)
+        XCTAssertTrue(app.staticTexts["Delete wallet?"].waitForExistence(timeout: 5))
+        XCTAssertEqual(app.alerts.count, 0)
+        XCTAssertTrue(app.buttons["Delete"].exists)
+        let attachment = XCTAttachment(screenshot: app.screenshot())
+        attachment.name = "Delete wallet confirmation"
+        attachment.lifetime = .keepAlways
+        add(attachment)
+        tapWhenReady(app.buttons["Cancel"])
+        XCTAssertFalse(app.staticTexts["Delete wallet?"].exists)
+        XCTAssertTrue(screen("settings-screen").exists)
+        tapWhenReady(app.navigationBars.buttons.element(boundBy: 0))
+        XCTAssertTrue(app.buttons["wallet-settings-button"].waitForExistence(timeout: 5))
+    }
+
+    func testMintRemovalUsesTheSameSheetFromListAndDetail() throws {
+        app.terminate()
+        app.launchEnvironment["UITEST_SEED_MINT"] = "1"
+        app.launchEnvironment["UITEST_SEED_MINT_URL"] = "https://mint.example.invalid"
+        app.launch()
+        waitForMainTab()
+        tapTab("Mints")
+        let mintRow = app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "Cashu mint")).firstMatch
+        tapWhenReady(mintRow)
+        let removeRow = app.buttons["Remove mint"]
+        for _ in 0..<6 {
+            if removeRow.isHittable { break }
+            app.scrollViews.firstMatch.swipeUp()
+        }
+        tapWhenReady(removeRow)
+        XCTAssertTrue(app.staticTexts["Remove mint?"].waitForExistence(timeout: 5))
+        XCTAssertEqual(app.alerts.count, 0)
+        let attachment = XCTAttachment(screenshot: app.screenshot())
+        attachment.name = "Remove mint confirmation"
+        attachment.lifetime = .keepAlways
+        add(attachment)
+        tapWhenReady(app.buttons["Cancel"])
+        tapWhenReady(app.navigationBars.buttons.element(boundBy: 0))
+        XCTAssertTrue(mintRow.waitForExistence(timeout: 5))
+        mintRow.swipeLeft()
+        tapWhenReady(app.buttons["Remove"])
+        XCTAssertTrue(app.staticTexts["Remove mint?"].waitForExistence(timeout: 5))
+        XCTAssertEqual(app.alerts.count, 0)
+        tapWhenReady(app.buttons["Cancel"])
+        XCTAssertTrue(mintRow.waitForExistence(timeout: 5))
+    }
+
     private func privacySwitch(_ labelPrefix: String) -> XCUIElement {
         app.switches
             .matching(NSPredicate(format: "label BEGINSWITH %@", labelPrefix))

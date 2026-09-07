@@ -15,7 +15,6 @@ import androidx.compose.material.icons.filled.Check
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
@@ -39,9 +38,11 @@ fun UnitPickerSheet(
     title: String = "Choose unit",
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-    ModalBottomSheet(
+    val dismiss = rememberSheetDismissAction(sheetState)
+    CashuModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = sheetState,
+        sheetGesturesEnabled = !dismiss.isDismissing,
         containerColor = CashuTheme.colors.compactSheetContainer,
     ) {
         CompactSheetContent {
@@ -58,7 +59,7 @@ fun UnitPickerSheet(
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .clickable { onSelect(unit) }
+                            .clickable { dismiss { onSelect(unit) } }
                             .padding(
                                 horizontal = CashuTheme.spacing.snug,
                                 vertical = CashuTheme.spacing.default,

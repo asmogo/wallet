@@ -1,5 +1,9 @@
 # Inline Errors — One Contract, Two Native Expressions
 
+> Presentation update: [Confirmations and errors](confirmation-and-error-consistency.md)
+> supersedes the default Android tonal-container treatment below. Routine notices
+> now use plain supporting text and a semantic status icon on both platforms.
+
 The actionable sequel to [`inline-error-audit.md`](inline-error-audit.md), which
 inventoried 47 Android and 45 iOS inline-error call sites and found 12 Android
 and 8 iOS visual variants.

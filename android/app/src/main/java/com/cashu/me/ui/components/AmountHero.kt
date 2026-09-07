@@ -14,7 +14,6 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.withStyle
@@ -140,9 +139,9 @@ private fun lockup(parts: AmountParts, style: TextStyle): AnnotatedString {
     )
     val symbolSpan = SpanStyle(fontSize = style.fontSize * SymbolScale)
     val bitcoinSymbolSpan = SpanStyle(
-        fontSize = style.fontSize * SymbolScale,
+        fontSize = style.fontSize,
         fontFamily = BitcoinSymbol,
-        fontWeight = FontWeight.Bold,
+        fontWeight = style.fontWeight,
     )
 
     return buildAnnotatedString {

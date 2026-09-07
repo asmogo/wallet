@@ -201,6 +201,9 @@ object WalletErrorMessages {
             has("not found") ->
                 error("The mint could not find that quote. Create a new request and try again.")
 
+            has("keystore", "keychain", "secure storage") ->
+                error("Couldn't access the wallet's secure storage. Restart the app and try again.")
+
             has("sqlite", "database", "corrupt", "malformed") ->
                 error("The wallet database could not be opened. Restart the app and try again.")
 

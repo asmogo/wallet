@@ -60,6 +60,30 @@ class HistoryDescriptionTest {
         assertNull(request.copy(encoded = "invalid", memo = " ").displayDescription)
     }
 
+    @Test fun hashedDescriptionUsesTruncatedCopyableRowWithoutChangingStoredText() {
+        val hash = "0123456789abcdef".repeat(4)
+        for (type in listOf(TransactionType.Incoming, TransactionType.Outgoing)) {
+            val receipt = payment(type = type).copy(memo = "Hash: $hash", preimage = "proof")
+            assertEquals(hash, receipt.descriptionHash)
+            assertEquals(receipt.memo, receipt.displayDescription)
+            val fields = TransactionDisplay.detailFields(receipt)
+            assertEquals(listOf("Status", "Date", "Mint", "Hash", "Payment Proof"), fields.map { it.label })
+            assertEquals(TransactionDetailField("Hash", "01234567…abcdef", hash), fields.single { it.label == "Hash" })
+            assertEquals(hash.uppercase(), receipt.copy(memo = " \nHash:\n${hash.uppercase()} \n").descriptionHash)
+        }
+    }
+
+    @Test fun ordinaryDescriptionsAreNotMistakenForHashReferences() {
+        val hash = "a".repeat(64)
+        for (memo in listOf("Hash: breakfast", "Hash: $hash extra", "Hash: ${hash.dropLast(1)}",
+            "Hash: ${"g".repeat(64)}", hash, "Personal memo")) {
+            val receipt = payment().copy(memo = memo)
+            assertNull(receipt.descriptionHash)
+            assertEquals(memo, TransactionDisplay.detailFields(receipt).single { it.label == "Memo" }.value)
+        }
+        assertNull(payment().copy(kind = TransactionKind.Ecash, memo = "Hash: $hash").descriptionHash)
+    }
+
     @Test fun cashuRequestDescriptionSurvivesClaimedReceiptWithoutInvoice() {
         val encoded = PaymentRequestBuilder.build(id = "cashu", amount = 21, unit = "sat",
             mints = listOf("https://mint.example"), description = description,

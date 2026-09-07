@@ -32,7 +32,7 @@ struct MintDetailView: View {
 
     private var cdkInfo: Cdk.MintInfo? { infoLoader.info }
     private var isLoading: Bool { infoLoader.isLoading }
-    private var errorMessage: String? { infoLoader.errorMessage }
+    private var showsConnectionRecovery: Bool { infoLoader.errorMessage != nil }
 
     /// The mint's non-sat units (sat is shown by `balanceRow`).
     private var nonSatUnits: [String] {
@@ -54,15 +54,6 @@ struct MintDetailView: View {
                     .padding(.top, 8)
                     .padding(.bottom, 24)
 
-                if let errorMessage {
-                    ErrorBannerView(
-                        message: errorMessage,
-                        severity: .error,
-                        retry: { refreshID = UUID() }
-                    )
-                        .padding(.bottom, 12)
-                }
-
                 // Identity stats — available immediately from local mint data.
                 VStack(spacing: 0) {
                     balanceRow
@@ -74,20 +65,13 @@ struct MintDetailView: View {
                 }
                 .padding(.bottom, 24)
 
-                // Remote metadata fills in after the fetch.
-                Group {
-                    if cdkInfo == nil && isLoading {
-                        loadingRow
-                    } else {
-                        aboutSection
-                        motdSection
-                        capabilitiesSection
-                        paymentMethodsSection
-                        contactSection
-                        detailsSection
-                    }
-                }
-                .animation(reduceMotion ? nil : .easeOut(duration: 0.2), value: isLoading)
+                // Saved metadata remains visible during initial loading and retries.
+                aboutSection
+                motdSection
+                capabilitiesSection
+                paymentMethodsSection
+                contactSection
+                detailsSection
 
                 footerNote
 
@@ -119,16 +103,16 @@ struct MintDetailView: View {
         }
         .task(id: refreshID) { await loadMintInfo() }
         .task { await loadUnitBalances() }
-        .confirmationDialog(
-            "Remove Mint",
-            isPresented: $showRemoveConfirmation,
-            titleVisibility: .visible
-        ) {
-            Button("Remove", role: .destructive) { removeMint() }
-            Button("Cancel", role: .cancel) {}
-        } message: {
-            Text("Remove \(liveMint.name)? Any unspent ecash will need to be restored from your seed phrase.")
+        .backdropSheet(isPresented: $showRemoveConfirmation) {
+            ActionConfirmationSheet(
+                title: "Remove mint?",
+                message: "Remove \(liveMint.name) from your wallet? Any unspent ecash on this mint will need to be restored from your seed phrase.",
+                actionLabel: "Remove",
+                destructive: true,
+                action: removeMint
+            )
         }
+        .bottomSheetBackdropHost()
     }
 
     // MARK: - Header
@@ -246,36 +230,97 @@ struct MintDetailView: View {
     }
 
     private var connectionRow: some View {
-        HStack {
-            Label("Connection", systemImage: "network")
-                .foregroundStyle(.secondary)
-            Spacer()
-            switch infoLoader.connection {
-            case .notChecked:
-                Text("Not checked").foregroundStyle(.secondary)
-            case .checking:
-                Text("Checking…").foregroundStyle(.secondary)
-            case .online:
-                Text("Online").foregroundStyle(.primary)
-            case .offline:
-                Text("Offline").foregroundStyle(ErrorSeverity.error.foreground)
+        VStack(alignment: .leading, spacing: 4) {
+            ViewThatFits(in: .horizontal) {
+                HStack {
+                    Label("Connection", systemImage: "network")
+                        .foregroundStyle(.secondary)
+                        .fixedSize()
+                    Spacer(minLength: 12)
+                    connectionStatus.fixedSize()
+                }
+                VStack(alignment: .leading, spacing: 8) {
+                    Label("Connection", systemImage: "network")
+                        .foregroundStyle(.secondary)
+                    connectionStatus
+                }
+            }
+            .font(.body)
+            .accessibilityElement(children: .combine)
+
+            if showsConnectionRecovery {
+                ViewThatFits(in: .horizontal) {
+                    HStack(alignment: .center, spacing: 12) {
+                        connectionRecoveryText.fixedSize()
+                        Spacer(minLength: 0)
+                        connectionRetryButton
+                    }
+                    VStack(alignment: .leading, spacing: 4) {
+                        connectionRecoveryText
+                        connectionRetryButton
+                    }
+                }
             }
         }
-        .font(.body)
         .padding(.horizontal, 4)
         .padding(.vertical, 14)
+        .onChange(of: infoLoader.connection) { _, connection in
+            if connection == .offline {
+                AccessibilityNotification.Announcement(
+                    "Mint unreachable. Couldn't refresh mint information. Showing saved information."
+                ).post()
+            } else if connection == .online {
+                AccessibilityNotification.Announcement("Mint online.").post()
+            }
+        }
     }
 
-    private var loadingRow: some View {
-        HStack(spacing: 10) {
-            ProgressView()
-            Text("Loading mint info…")
-                .font(.body)
-                .foregroundStyle(.secondary)
-            Spacer()
+    @ViewBuilder
+    private var connectionStatus: some View {
+        switch infoLoader.connection {
+        case .notChecked:
+            Text("Not checked").foregroundStyle(.secondary)
+        case .checking:
+            if showsConnectionRecovery {
+                Text("Refreshing").foregroundStyle(.secondary)
+            } else {
+                HStack(spacing: 8) {
+                    ProgressView().accessibilityHidden(true)
+                    Text("Checking…").foregroundStyle(.secondary)
+                }
+            }
+        case .online:
+            Text("Online").foregroundStyle(.primary)
+        case .offline:
+            Text("Unreachable").foregroundStyle(.secondary)
         }
-        .padding(.horizontal, 4)
-        .padding(.vertical, 20)
+    }
+
+    private var connectionRecoveryText: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text("Couldn't refresh mint information.")
+            Text("Showing saved information.")
+        }
+        .font(.caption)
+        .foregroundStyle(.secondary)
+        .fixedSize(horizontal: false, vertical: true)
+    }
+
+    private var connectionRetryButton: some View {
+        Button { refreshID = UUID() } label: {
+            HStack(spacing: 6) {
+                if isLoading {
+                    ProgressView().controlSize(.small).accessibilityHidden(true)
+                }
+                Text(isLoading ? "Checking…" : "Retry")
+            }
+            .font(.subheadline.weight(.medium))
+            .frame(minWidth: 44, minHeight: 44)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .disabled(isLoading)
+        .accessibilityLabel(isLoading ? "Checking mint connection" : "Retry mint connection")
     }
 
     // MARK: - About / Message
@@ -575,7 +620,7 @@ struct MintDetailView: View {
                 showRemoveConfirmation = true
             } label: {
                 HStack(spacing: 8) {
-                    Text("Remove Mint")
+                    Text("Remove mint")
                     if isRemovingMint {
                         ProgressView().tint(.red)
                     }

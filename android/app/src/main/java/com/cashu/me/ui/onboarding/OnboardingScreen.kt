@@ -1,5 +1,8 @@
 package com.cashu.me.ui.onboarding
 
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.getValue
+import com.cashu.me.Core.Wallet.userFacingWalletMessage
 import android.os.Build
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContent
@@ -36,7 +39,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Cancel
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Warning
@@ -59,13 +61,11 @@ import androidx.compose.material3.rememberBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.blur
@@ -95,8 +95,6 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
-import com.cashu.me.Core.Bip39WordList
 import com.cashu.me.Core.CommitOutcome
 import com.cashu.me.Core.MnemonicInput
 import com.cashu.me.Core.NostrMintBackupService
@@ -111,6 +109,7 @@ import com.cashu.me.ui.components.LocalConfirmationToastController
 import com.cashu.me.ui.components.MintAvatar
 import com.cashu.me.ui.components.NoticeSeverity
 import com.cashu.me.ui.components.PrimaryButton
+import com.cashu.me.ui.components.TextButtonContext
 import com.cashu.me.ui.components.morphBlur
 import com.cashu.me.ui.mints.RecommendedMints
 import com.cashu.me.ui.restore.RestoreMintsStageContent
@@ -317,7 +316,7 @@ internal fun OnboardingScreen(
     LaunchedEffect(step) {
         val firstMintStep = step as? OnboardingStep.FirstMint ?: return@LaunchedEffect
         runCatching { ensureWalletInstalled(firstMintStep.mnemonic) }
-            .onFailure { firstMintError = it.message ?: "Couldn't set up the wallet." }
+            .onFailure { firstMintError = it.userFacingWalletMessage }
     }
 
     // A URL can be staged before repository preparation finishes. Keying this
@@ -1244,6 +1243,7 @@ internal fun ShowMnemonicStageContent(
                     .padding(horizontal = HeaderPadding),
             )
             GhostButton(
+                context = TextButtonContext.Compact,
                 text = "Copy",
                 leadingIcon = Icons.Outlined.ContentCopy,
                 onClick = {
@@ -1556,6 +1556,7 @@ private fun FirstMintList(
             // `.textLinkButton()`; GhostButton is that style's analog, so the
             // two stay centered and share press feedback on both platforms.
             GhostButton(
+                context = TextButtonContext.Screen,
                 text = "Add by URL",
                 onClick = { state.customInputOpen = true },
                 enabled = !busy,

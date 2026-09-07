@@ -12,7 +12,7 @@ internal enum class MintConnectionState(val label: String) {
     NotChecked("Not checked"),
     Checking("Checking…"),
     Online("Online"),
-    Offline("Offline"),
+    Offline("Unreachable"),
 }
 
 /** Used from the UI coroutine scope; only the latest request may publish state. */
@@ -29,7 +29,7 @@ internal class MintDetailInfoLoader<Info : Any> {
         currentCoroutineContext().ensureActive()
         val request = ++requestID
         connection = MintConnectionState.Checking
-        errorMessage = null
+        // Keep the recovery explanation visible until a retry succeeds.
         try {
             val fetched = fetch()
             currentCoroutineContext().ensureActive()
@@ -39,6 +39,7 @@ internal class MintDetailInfoLoader<Info : Any> {
                 errorMessage = "The mint did not respond."
             } else {
                 info = fetched
+                errorMessage = null
                 connection = MintConnectionState.Online
             }
         } catch (cancellation: CancellationException) {

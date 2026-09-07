@@ -440,7 +440,7 @@ private struct AdvancedKeysView: View {
         do {
             try settings.generateP2PKKey()
         } catch {
-            actionError = error.localizedDescription
+            actionError = ActionErrorMessages.message(for: error, context: .keyGenerate)
         }
     }
 
@@ -562,19 +562,21 @@ private struct DeviceKeyDetailView: View {
                 try settings.importP2PKNsec(nsec)
             }
         }
-        .alert("Remove this key?", isPresented: $showRemoveConfirm) {
-            Button("Remove Key", role: .destructive) {
+        .backdropSheet(isPresented: $showRemoveConfirm) {
+            ActionConfirmationSheet(
+                title: "Remove this key?",
+                message: "Ecash locked to this key can only be claimed with it. This cannot be undone.",
+                actionLabel: "Remove Key",
+                destructive: true
+            ) {
                 guard let key else { return }
                 actionError = nil
                 do {
                     try settings.removeP2PKKey(key)
                 } catch {
-                    actionError = error.localizedDescription
+                    actionError = ActionErrorMessages.message(for: error, context: .keyRemove)
                 }
             }
-            Button("Cancel", role: .cancel) {}
-        } message: {
-            Text("Ecash locked to this key can only be claimed with it. This can't be undone.")
         }
         .bottomSheetBackdropHost()
     }

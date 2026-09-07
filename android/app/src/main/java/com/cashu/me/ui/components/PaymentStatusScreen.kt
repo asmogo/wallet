@@ -100,13 +100,14 @@ fun PaymentStatusScreen(
 ) {
     val haptics = LocalHapticFeedback.current
     val inspectionMode = LocalInspectionMode.current
+    val reducedMotion = rememberReducedMotion()
     // Celebration-mount gate (DESIGN.md §6 animation 6): a terminal MOUNTED
     // already at Success — a payment landing while a waiting face was up —
     // stages its entrance: glyph beat at ~100ms, title band, then rows + Done.
     // Failure and settlement-pending mounts stay deliberately still, and the
     // morph path (mounted at Processing) keeps its phase-driven choreography.
     val mountedCelebrating = remember { phase == PaymentStatusPhase.Success && !settlementPending }
-    val staged = mountedCelebrating && !rememberReducedMotion() && !inspectionMode
+    val staged = mountedCelebrating && !reducedMotion && !inspectionMode
     var entered by remember { mutableStateOf(!staged) }
     LaunchedEffect(Unit) {
         if (!entered) {
@@ -165,8 +166,8 @@ fun PaymentStatusScreen(
                 } else {
                     Modifier.graphicsLayer {
                         alpha = entranceAlpha
-                        scaleX = entranceScale
-                        scaleY = entranceScale
+                        scaleX = if (reducedMotion) 1f else entranceScale
+                        scaleY = if (reducedMotion) 1f else entranceScale
                     }
                 },
             ),
@@ -195,13 +196,18 @@ fun PaymentStatusScreen(
                     AnimatedContent(
                         targetState = phase,
                         transitionSpec = {
-                            // The check/X grows in gently from 0.9; the spinner just fades.
-                            val enter = if (targetState == PaymentStatusPhase.Processing) {
+                            // Only completed payments get overshoot. Failure and pending
+                            // settle without bounce; reduced motion keeps the fade alone.
+                            val enter = if (reducedMotion || targetState == PaymentStatusPhase.Processing) {
                                 fadeIn(tween(200))
                             } else {
                                 fadeIn(tween(200)) + scaleIn(
                                     animationSpec = spring(
-                                        dampingRatio = 0.7f,
+                                        dampingRatio = if (targetState == PaymentStatusPhase.Success && !settlementPending) {
+                                            0.7f
+                                        } else {
+                                            Spring.DampingRatioNoBouncy
+                                        },
                                         stiffness = Spring.StiffnessMediumLow,
                                     ),
                                     initialScale = 0.9f,

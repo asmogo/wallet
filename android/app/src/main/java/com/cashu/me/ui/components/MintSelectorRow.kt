@@ -46,7 +46,7 @@ enum class MintSelectorDirection(val label: String) {
 }
 
 private val ChevronSize = 18.dp
-private val RowMinHeight = 56.dp
+private val RowMinHeight = 48.dp
 private val MinimumTouchTarget = 48.dp
 private val RowVerticalPadding = 6.dp
 
@@ -134,7 +134,7 @@ fun MintSelectorRow(
                 ) {
                     Text(
                         text = "Send Max",
-                        style = MaterialTheme.typography.bodyMedium,
+                        style = CashuTheme.type.mintSelector,
                         fontWeight = FontWeight.SemiBold,
                         color = MaterialTheme.colorScheme.onSurface,
                         maxLines = 1,
@@ -203,29 +203,31 @@ private fun MintIdentity(
         )
         .padding(vertical = RowVerticalPadding)
 
-    Row(
-        verticalAlignment = Alignment.CenterVertically,
-        modifier = identityModifier,
-    ) {
-        if (showBalance && balanceText != null && stacksBalance) {
-            Column(modifier = Modifier.weight(1f)) {
-                MintName(mint.name)
-                MintBalance(balanceText)
-            }
-        } else {
-            Text(
-                text = mint.name,
-                style = MaterialTheme.typography.bodyMedium,
-                fontWeight = FontWeight.SemiBold,
-                color = MaterialTheme.colorScheme.onSurface,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier
-                    .weight(1f, fill = false),
-            )
-            if (showBalance && balanceText != null) {
-                Spacer(Modifier.width(CashuTheme.spacing.snug))
-                MintBalance(balanceText)
+    Box(modifier = identityModifier, contentAlignment = Alignment.CenterStart) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            if (showBalance && balanceText != null && stacksBalance) {
+                Column(modifier = Modifier.weight(1f)) {
+                    MintName(mint.name)
+                    MintBalance(balanceText)
+                }
+            } else {
+                Text(
+                    text = mint.name,
+                    style = CashuTheme.type.mintSelector,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier
+                        .weight(1f, fill = false)
+                        .alignByBaseline(),
+                )
+                if (showBalance && balanceText != null) {
+                    Spacer(Modifier.width(CashuTheme.spacing.snug))
+                    MintBalance(balanceText, Modifier.alignByBaseline())
+                }
             }
         }
     }
@@ -235,7 +237,7 @@ private fun MintIdentity(
 private fun MintName(name: String) {
     Text(
         text = name,
-        style = MaterialTheme.typography.bodyMedium,
+        style = CashuTheme.type.mintSelector,
         fontWeight = FontWeight.SemiBold,
         color = MaterialTheme.colorScheme.onSurface,
         maxLines = 1,
@@ -245,16 +247,17 @@ private fun MintName(name: String) {
 
 /**
  * The row speaks in one voice: mint name, balance and Send Max all share
- * `bodyMedium` + SemiBold + `onSurface`, so the whole row is a single treatment
+ * `mintSelector` + SemiBold + `onSurface`, so the whole row is a single treatment
  * rather than three competing ones. It previously ran three sizes across two
  * inks and two weights, with the balance at the 12sp floor *under* secondary
  * ink — a double demotion.
  */
 @Composable
-private fun MintBalance(balanceText: String) {
+private fun MintBalance(balanceText: String, modifier: Modifier = Modifier) {
     Text(
-        text = balanceText,
-        style = MaterialTheme.typography.bodyMedium,
+        text = bitcoinAmountText(balanceText),
+        modifier = modifier,
+        style = CashuTheme.type.mintSelector,
         fontWeight = FontWeight.SemiBold,
         color = MaterialTheme.colorScheme.onSurface,
         maxLines = 1,

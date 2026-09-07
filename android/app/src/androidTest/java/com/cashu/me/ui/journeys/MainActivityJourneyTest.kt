@@ -200,7 +200,7 @@ class MainActivityJourneyTest {
         robot.awaitTag(UiTestTags.SettingsScreen)
             .scrollToText(UiTestTags.SettingsList, "Delete Wallet")
             .tapText("Delete Wallet")
-            .awaitText("Are you sure", substring = true)
+            .awaitText("Delete wallet?")
             .tapText("Cancel")
             .awaitTag(UiTestTags.SettingsScreen)
         assertEquals(

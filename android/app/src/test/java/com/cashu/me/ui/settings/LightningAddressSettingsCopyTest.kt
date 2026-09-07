@@ -11,7 +11,8 @@ class LightningAddressSettingsCopyTest {
         assertEquals("Not connected", npcStatusLabel(state))
         assertEquals("Connecting", npcStatusLabel(state.copy(isLoading = true)))
         assertEquals("Connected", npcStatusLabel(state.copy(isConnected = true)))
-        assertEquals("Offline", npcStatusLabel(state.copy(errorMessage = "Offline")))
+        assertEquals("Not connected", npcStatusLabel(state.copy(errorMessage = "errorMessage=HTTP failed")))
+        assertEquals("Needs attention", npcStatusLabel(state.copy(isConnected = true, errorMessage = "Claim failed")))
     }
 
     @Test

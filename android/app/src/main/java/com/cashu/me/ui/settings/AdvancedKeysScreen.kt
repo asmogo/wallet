@@ -1,5 +1,9 @@
 package com.cashu.me.ui.settings
 
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.getValue
+import com.cashu.me.Core.Wallet.ActionErrorMessages
+
 import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -18,7 +22,6 @@ import androidx.compose.material.icons.outlined.AddCircleOutline
 import androidx.compose.material.icons.outlined.FileDownload
 import androidx.compose.material.icons.outlined.Key
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
@@ -30,13 +33,10 @@ import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.rememberBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.IntSize
-import androidx.compose.ui.unit.dp
 import com.cashu.me.Core.SettingsManager
 import com.cashu.me.Models.P2PKKeyInfo
 import com.cashu.me.ui.components.CashuTextField
@@ -98,7 +98,7 @@ fun AdvancedKeysScreen(
                     actionError = null
                     runCatching { settingsManager.generateP2PKKey() }
                         .onFailure {
-                            actionError = it.message ?: "Couldn't generate a key. Please try again."
+                            actionError = ActionErrorMessages.message(it, ActionErrorMessages.Context.KeyGenerate)
                         }
                 },
             )
@@ -238,7 +238,7 @@ internal fun ImportP2PKSheet(
                     }
                     onImport(trimmed)
                         .onSuccess { onDismiss() }
-                        .onFailure { inputError = it.message ?: "Could not import key." }
+                        .onFailure { inputError = ActionErrorMessages.message(it, ActionErrorMessages.Context.KeyImport) }
                 },
             )
         }

@@ -1,5 +1,9 @@
 package com.cashu.me.ui.settings
 
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.getValue
+import com.cashu.me.Core.Wallet.ActionErrorMessages
+
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
@@ -19,11 +23,9 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import kotlinx.coroutines.launch
 import com.cashu.me.Core.AppLockManager
@@ -113,7 +115,7 @@ fun BackupRestoreScreen(
                     backupError = null
                     scope.launch {
                         runCatching { nostrMintBackupService.backupMints() }
-                            .onFailure { backupError = it.message ?: "Could not back up the mint list." }
+                            .onFailure { backupError = ActionErrorMessages.message(it, ActionErrorMessages.Context.MintBackup) }
                     }
                 },
             )

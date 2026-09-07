@@ -222,7 +222,7 @@ class NPCService: ObservableObject {
             guard isCurrentSession(session), !Task.isCancelled else { return }
             client = nil
             isConnected = false
-            errorMessage = error.userFacingWalletMessage
+            errorMessage = ActionErrorMessages.message(for: error, context: .lightningConnection)
             // Keep periodic recovery available after a failed initial attempt.
             startBackgroundRefresh()
         }
@@ -324,7 +324,7 @@ class NPCService: ObservableObject {
             guard isCurrentSession(session), !Task.isCancelled else { return }
             isConnected = false
             client = nil
-            errorMessage = error.userFacingWalletMessage
+            errorMessage = ActionErrorMessages.message(for: error, context: .lightningPayments)
             print("Failed to check NPC payments: \(error)")
         }
     }

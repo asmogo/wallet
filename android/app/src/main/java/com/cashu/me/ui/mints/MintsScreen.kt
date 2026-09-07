@@ -1,5 +1,7 @@
 package com.cashu.me.ui.mints
 
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.getValue
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -25,7 +27,6 @@ import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.Check
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.Search
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -37,7 +38,6 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SwipeToDismissBox
 import androidx.compose.material3.SwipeToDismissBoxValue
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.material3.rememberSwipeToDismissBoxState
@@ -45,11 +45,9 @@ import androidx.compose.material3.rememberTopAppBarState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
@@ -61,7 +59,6 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
 import com.cashu.me.Core.MintDiscoveryManager
 import com.cashu.me.Core.SettingsManager
@@ -70,6 +67,7 @@ import com.cashu.me.Core.WalletManager
 import com.cashu.me.Core.normalizeUserMintUrl
 import com.cashu.me.Core.shortenMintUrl
 import com.cashu.me.Models.MintInfo
+import com.cashu.me.ui.components.ActionConfirmationSheet
 import com.cashu.me.ui.components.MintAvatar
 import com.cashu.me.ui.components.InlineNotice
 import com.cashu.me.ui.components.NoticeSeverity
@@ -254,36 +252,26 @@ fun MintsScreen(
     }
 
     pendingRemoval?.let { mint ->
-        AlertDialog(
-            onDismissRequest = { pendingRemoval = null },
-            title = { Text("Remove Mint") },
-            text = {
-                Text(
-                    "Remove ${mint.name}? Any unspent ecash on this mint will need to be restored from your seed phrase.",
-                    style = MaterialTheme.typography.bodyMedium,
-                )
-            },
-            confirmButton = {
-                TextButton(onClick = {
-                    val target = mint
-                    pendingRemoval = null
-                    removalError = null
-                    scope.launch {
-                        try {
-                            walletManager.removeMint(target)
-                        } catch (cancellation: CancellationException) {
-                            throw cancellation
-                        } catch (error: Throwable) {
-                            removalError = error.userFacingWalletMessage
-                        }
+        ActionConfirmationSheet(
+            title = "Remove mint?",
+            message = "Remove ${mint.name} from your wallet? Any unspent ecash on this mint will need to be restored from your seed phrase.",
+            actionLabel = "Remove",
+            destructive = true,
+            onConfirm = {
+                val target = mint
+                pendingRemoval = null
+                removalError = null
+                scope.launch {
+                    try {
+                        walletManager.removeMint(target)
+                    } catch (cancellation: CancellationException) {
+                        throw cancellation
+                    } catch (error: Throwable) {
+                        removalError = error.userFacingWalletMessage
                     }
-                }) {
-                    Text("Remove", color = MaterialTheme.colorScheme.error)
                 }
             },
-            dismissButton = {
-                TextButton(onClick = { pendingRemoval = null }) { Text("Cancel") }
-            },
+            onDismiss = { pendingRemoval = null },
         )
     }
 }

@@ -158,44 +158,26 @@ struct HistoryView: View {
                     .environmentObject(walletManager)
                     .observeBottomSheetDismissal { isSheetDismissing = $0 }
             }
-            .confirmationDialog(
-                "Remove this Cashu Request from history?",
-                isPresented: Binding(
-                    get: { requestPendingDeletion != nil },
-                    set: { if !$0 { requestPendingDeletion = nil } }
-                ),
-                titleVisibility: .visible,
-                presenting: requestPendingDeletion
-            ) { request in
-                Button("Remove", role: .destructive) {
+            .backdropSheet(item: $requestPendingDeletion) { request in
+                ActionConfirmationSheet(
+                    title: "Remove from history?",
+                    message: "Only this request is removed from history. Payments already received stay in your wallet, and the request can still receive payments.",
+                    actionLabel: "Remove",
+                    destructive: true
+                ) {
                     requestStore.delete(id: request.id)
-                    requestPendingDeletion = nil
                 }
-                Button("Cancel", role: .cancel) {
-                    requestPendingDeletion = nil
-                }
-            } message: { _ in
-                Text("The QR and any pending payment routing stay valid; this only removes the row from your history.")
             }
-            .confirmationDialog(
-                "Remove this unclaimed ecash?",
-                isPresented: Binding(
-                    get: { receiveTokenPendingDeletion != nil },
-                    set: { if !$0 { receiveTokenPendingDeletion = nil } }
-                ),
-                titleVisibility: .visible,
-                presenting: receiveTokenPendingDeletion
-            ) { transaction in
-                Button("Remove", role: .destructive) {
+            .backdropSheet(item: $receiveTokenPendingDeletion) { transaction in
+                ActionConfirmationSheet(
+                    title: "Remove unclaimed ecash?",
+                    message: "This ecash has not been claimed. Removing it discards the token. You will need the token again to claim it.",
+                    actionLabel: "Remove",
+                    destructive: true
+                ) {
                     walletManager.removePendingReceiveToken(tokenId: transaction.id)
-                    receiveTokenPendingDeletion = nil
                     Task { await walletManager.loadTransactions() }
                 }
-                Button("Cancel", role: .cancel) {
-                    receiveTokenPendingDeletion = nil
-                }
-            } message: { _ in
-                Text("This ecash hasn't been claimed. Removing it discards the token — only the sender can re-issue it.")
             }
             .task {
                 // Show the current ledger immediately, then quietly re-check
@@ -210,6 +192,7 @@ struct HistoryView: View {
                 visibleCount = min(visibleCount, max(pageStep, filteredItems.count))
             }
         }
+        .bottomSheetBackdropHost()
         .accessibilityIdentifier("history-screen")
         .bottomSheetBackdrop(
             isPresented: isBottomSheetPresented && !isSheetDismissing
@@ -520,11 +503,12 @@ struct HistoryView: View {
         )
         .accessibilityHint("Opens request details")
         .swipeActions(edge: .trailing, allowsFullSwipe: true) {
-            Button(role: .destructive) {
+            Button {
                 requestPendingDeletion = request
             } label: {
                 Label("Remove", systemImage: "trash")
             }
+            .tint(.red)
         }
     }
 
@@ -594,11 +578,12 @@ struct HistoryView: View {
         )
         .swipeActions(edge: .trailing, allowsFullSwipe: false) {
             if transaction.isPendingReceiveToken {
-                Button(role: .destructive) {
+                Button {
                     receiveTokenPendingDeletion = transaction
                 } label: {
                     Label("Remove", systemImage: "trash")
                 }
+                .tint(.red)
             }
         }
     }

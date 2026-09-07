@@ -1,5 +1,7 @@
 package com.cashu.me.ui.settings
 
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.getValue
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.spring
@@ -35,11 +37,9 @@ import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
@@ -48,7 +48,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.dp
 import com.cashu.me.Core.NPCService
 import com.cashu.me.Core.NPCState
 import com.cashu.me.Core.SettingsManager
@@ -347,14 +346,20 @@ private fun LightningAddressRow(
                 .clip(CircleShape)
                 .background(statusColor),
         )
-        Text(
-            text = address,
-            style = MaterialTheme.typography.bodyLarge.copy(fontFamily = CashuTheme.fonts.mono).withSlashedZero(),
-            color = MaterialTheme.colorScheme.onSurface,
-            modifier = Modifier.weight(1f),
-            maxLines = 1,
-            overflow = TextOverflow.MiddleEllipsis,
-        )
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = address,
+                style = MaterialTheme.typography.bodyLarge.copy(fontFamily = CashuTheme.fonts.mono).withSlashedZero(),
+                color = MaterialTheme.colorScheme.onSurface,
+                maxLines = 1,
+                overflow = TextOverflow.MiddleEllipsis,
+            )
+            Text(
+                text = statusLabel,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
         Icon(
             imageVector = Icons.Outlined.QrCode2,
             contentDescription = "Show QR",
@@ -424,7 +429,8 @@ private fun npcStatusColor(state: NPCState): Color {
 }
 
 internal fun npcStatusLabel(state: NPCState): String =
-    state.errorMessage ?: when {
+    when {
+        state.errorMessage != null -> if (state.isConnected) "Needs attention" else "Not connected"
         state.isConnected -> "Connected"
         state.isLoading -> "Connecting"
         else -> "Not connected"

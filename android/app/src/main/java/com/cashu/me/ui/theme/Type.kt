@@ -197,6 +197,8 @@ data class CashuTypeRoles(
     val amountConfirm: TextStyle,
     val amountCompact: TextStyle,
     val amountRow: TextStyle,
+    val amountSecondary: TextStyle,
+    val mintSelector: TextStyle,
     // Structure.
     val title: TextStyle,
     val overline: TextStyle,
@@ -209,6 +211,10 @@ data class CashuTypeRoles(
     val monoBody: TextStyle,
     val monoCaption: TextStyle,
 ) {
+    /** Screen text actions share the main button's metrics, with quieter weight. */
+    val textButtonLabel: TextStyle
+        get() = buttonLabel.copy(fontWeight = FontWeight.Normal)
+
     fun amount(scale: AmountScale): TextStyle = when (scale) {
         AmountScale.Hero -> amountHero
         AmountScale.Confirm -> amountConfirm
@@ -268,8 +274,19 @@ fun cashuTypeRoles(fonts: CashuFonts = CashuFonts.Geist): CashuTypeRoles {
             .atSize(19.sp, leading = 1.26f, trackingEm = t.sheetTitle)
             .copy(fontWeight = FontWeight.SemiBold),
 
-        // Tabular, so key widths don't shimmer as the pressed digit changes.
-        numberPadKey = m3.headlineSmall.withMonoDigits(),
+        // iOS uses a 17pt semibold supporting amount and a 15pt mint row.
+        amountSecondary = m3.bodyLarge
+            .atSize(17.sp, leading = LeadingLabel)
+            .copy(fontWeight = FontWeight.SemiBold)
+            .withMonoDigits(),
+        mintSelector = m3.bodyMedium
+            .atSize(15.sp, leading = LeadingText)
+            .copy(fontWeight = FontWeight.SemiBold),
+
+        // Match the iOS title-sized keypad without changing the font family.
+        numberPadKey = m3.headlineSmall
+            .atSize(28.sp, leading = LeadingLabel)
+            .withMonoDigits(),
 
         // Timestamps and secondary row text. One step up from the 12sp floor:
         // metadata is already demoted by secondary ink, and 12sp on top of that

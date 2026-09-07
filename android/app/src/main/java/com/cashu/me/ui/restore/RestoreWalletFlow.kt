@@ -1,5 +1,7 @@
 package com.cashu.me.ui.restore
 
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.getValue
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.layout.Arrangement
@@ -34,12 +36,10 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -48,7 +48,6 @@ import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.ClipboardManager
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalHapticFeedback
-import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
@@ -58,7 +57,6 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.cashu.me.Core.Bip39WordList
 import com.cashu.me.Core.CommitOutcome
 import com.cashu.me.Core.NostrMintBackupService
 import com.cashu.me.Core.PasteOutcome
@@ -69,19 +67,16 @@ import com.cashu.me.Models.MintInfo
 import com.cashu.me.Models.RestoreMintResult
 import com.cashu.me.ui.components.CashuTextField
 import com.cashu.me.ui.components.GhostButton
-import com.cashu.me.ui.components.IconSwap
 import com.cashu.me.ui.components.InlineNotice
 import com.cashu.me.ui.components.MintAvatar
 import com.cashu.me.ui.components.NoticeSeverity
 import com.cashu.me.ui.components.PrimaryButton
 import com.cashu.me.ui.components.ScrollFadeBand
-import com.cashu.me.ui.components.ghostButtonUnderCtaTextStyle
+import com.cashu.me.ui.components.TextButtonContext
 import com.cashu.me.ui.components.scrollEdgeFade
-import com.cashu.me.ui.testing.UiTestTags
 import com.cashu.me.ui.theme.CapsuleShape
 import com.cashu.me.ui.theme.CashuTheme
 import com.cashu.me.ui.theme.withMonoDigits
-import com.cashu.me.ui.theme.withSlashedZero
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 
@@ -380,10 +375,10 @@ fun RestoreSeedStep(
             )
             if (onBack != null) {
                 GhostButton(
+                    context = TextButtonContext.Screen,
                     text = "Back",
                     onClick = onBack,
                     enabled = !restoring,
-                    textStyle = ghostButtonUnderCtaTextStyle,
                 )
             }
         }
@@ -823,12 +818,12 @@ fun RestoreMintsStep(
             )
             if (showBottomBack) {
                 GhostButton(
+                    context = TextButtonContext.Screen,
                     text = "Back",
                     onClick = {
                         staging.reset()
                         onBack()
                     },
-                    textStyle = ghostButtonUnderCtaTextStyle,
                 )
             }
         }
@@ -1346,7 +1341,7 @@ private fun RestoreProgressRow(
                 }
             }
             is RestoreMintPhase.Failed -> {
-                GhostButton(text = "Retry", onClick = onRetry)
+                GhostButton(context = TextButtonContext.Compact, text = "Retry", onClick = onRetry)
             }
         }
     }
@@ -1365,7 +1360,7 @@ fun restoreSeedInstallErrorMessage(error: Throwable): String {
     return if (looksInvalid) {
         "That seed phrase doesn't look right. Check the spelling and try again."
     } else {
-        "Couldn't restore the wallet. ${error.message ?: "Try again."}"
+        error.userFacingWalletMessage
     }
 }
 

@@ -166,9 +166,10 @@ fun numberPadIntegerScreenshot() {
 
 @PreviewTest
 @Preview(name = "mixed-history", widthDp = 390, heightDp = 280, showBackground = true)
+@Preview(name = "mixed-history-dark", widthDp = 390, heightDp = 280, uiMode = Configuration.UI_MODE_NIGHT_YES)
 @Composable
 fun mixedTransactionStatesScreenshot() {
-    PreviewFrame(contentPadding = 0.dp) {
+    PreviewFrame(darkTheme = androidx.compose.foundation.isSystemInDarkTheme(), contentPadding = 0.dp) {
         Column {
             TransactionRow(
                 model = transactionModel(

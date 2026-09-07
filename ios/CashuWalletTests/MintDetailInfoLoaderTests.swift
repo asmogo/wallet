@@ -59,7 +59,11 @@ final class MintDetailInfoLoaderTests: XCTestCase {
         XCTAssertEqual(loader.errorMessage, "The mint did not respond.")
         XCTAssertEqual(loader.connection, .offline)
 
-        await loader.load { "fresh" }
+        await loader.load {
+            XCTAssertTrue(loader.isLoading)
+            XCTAssertEqual(loader.errorMessage, "The mint did not respond.")
+            return "fresh"
+        }
         XCTAssertEqual(loader.info, "fresh")
         XCTAssertNil(loader.errorMessage)
         XCTAssertEqual(loader.connection, .online)

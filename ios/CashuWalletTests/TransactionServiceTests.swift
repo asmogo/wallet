@@ -541,6 +541,33 @@ final class HistoryDescriptionTests: XCTestCase {
         XCTAssertNil(CashuRequest(encoded: "invalid", memo: " ").displayDescription)
     }
 
+    func testHashedDescriptionIsAReferenceWithoutChangingStoredText() {
+        let hash = String(repeating: "0123456789abcdef", count: 4)
+        for type: WalletTransaction.TransactionType in [.incoming, .outgoing] {
+            var tx = payment(type: type)
+            tx.memo = "Hash: \(hash)"
+            XCTAssertEqual(tx.descriptionHash, hash)
+            XCTAssertEqual(tx.displayDescription, tx.memo)
+            XCTAssertEqual(PaymentRequestDecoder.middleTruncated(hash), "01234567…abcdef")
+            tx.memo = " \nHash:\n\(hash.uppercased()) \n"
+            XCTAssertEqual(tx.descriptionHash, hash.uppercased())
+        }
+    }
+
+    func testOrdinaryDescriptionsAreNotMistakenForHashReferences() {
+        let hash = String(repeating: "a", count: 64)
+        var tx = payment()
+        for memo in ["Hash: breakfast", "Hash: \(hash) extra", "Hash: \(hash.dropLast())",
+                     "Hash: \(String(repeating: "g", count: 64))", hash, "Personal memo"] {
+            tx.memo = memo
+            XCTAssertNil(tx.descriptionHash)
+            XCTAssertEqual(tx.displayDescription, memo)
+        }
+        let ecash = WalletTransaction(id: "ecash", amount: 21, type: .incoming, kind: .ecash,
+            date: Date(), memo: "Hash: \(hash)", status: .completed)
+        XCTAssertNil(ecash.descriptionHash)
+    }
+
     func testCashuRequestDescriptionSurvivesClaimedReceiptWithoutInvoice() {
         let request = CashuRequest(id: "cashu", encoded: "creq", memo: expectedDescription,
             receivedPayments: [.init(transactionId: "payment", amount: 21, receivedAt: Date())])

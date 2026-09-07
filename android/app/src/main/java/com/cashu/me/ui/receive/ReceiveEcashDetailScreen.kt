@@ -52,8 +52,8 @@ import com.cashu.me.ui.components.NoticeSeverity
 import com.cashu.me.ui.components.PaymentStatusPhase
 import com.cashu.me.ui.components.PaymentStatusScreen
 import com.cashu.me.ui.components.PrimaryButton
+import com.cashu.me.ui.components.TextButtonContext
 import com.cashu.me.ui.components.ToolbarIcon
-import com.cashu.me.ui.components.ghostButtonUnderCtaTextStyle
 import com.cashu.me.ui.theme.CashuTheme
 import com.cashu.me.ui.theme.withMonoDigits
 import com.cashu.me.ui.testing.UiTestTags
@@ -304,9 +304,9 @@ private fun ConfirmContent(
             )
             Spacer(Modifier.height(CashuTheme.spacing.snug))
             GhostButton(
+                context = TextButtonContext.Screen,
                 text = secondaryActionText,
                 onClick = onSecondaryAction,
-                textStyle = ghostButtonUnderCtaTextStyle,
             )
             Spacer(Modifier.navigationBarsPadding())
         }
