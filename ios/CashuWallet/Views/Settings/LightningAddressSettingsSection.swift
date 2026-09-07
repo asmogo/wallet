@@ -128,7 +128,7 @@ struct LightningAddressSettingsSection: View {
             SettingsSectionFooter {
                 InlineNotice(message: error, severity: .error)
             }
-        } else if !npcService.isInitialized {
+        } else if !npcService.isInitialized && retryingSetup {
             SettingsSectionFooter {
                 Text("Setting up Lightning address…")
             }
