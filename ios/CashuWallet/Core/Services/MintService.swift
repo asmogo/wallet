@@ -309,6 +309,25 @@ class MintService: ObservableObject {
         mints.contains { MintRemovalPolicy.matches($0.url, normalizeUrl(url)) }
     }
 
+    /// Persist receipt evidence before metadata lookup or network recovery.
+    func trackReceivedMintLocally(url: String, unit: CurrencyUnit) {
+        let normalized = normalizeUrl(url)
+        if let index = mints.firstIndex(where: { MintRemovalPolicy.matches($0.url, normalized) }) {
+            let unitName = PaymentRequestDecoder.unitDescription(unit)
+            if mints[index].name == "Unknown Mint", !mints[index].units.contains(unitName) {
+                mints[index].units.append(unitName)
+                saveMints()
+                if activeMint?.url == mints[index].url { activeMint = mints[index] }
+            }
+            return
+        }
+        var placeholder = MintInfo(url: normalized, name: "Unknown Mint", isActive: true, balance: 0)
+        placeholder.units = [PaymentRequestDecoder.unitDescription(unit)]
+        mints.append(placeholder)
+        saveMints()
+        if activeMint == nil { activeMint = placeholder }
+    }
+
     /// Ensure a mint discovered via an incoming token or NPC quote is tracked with
     /// full metadata (NUT-04/05 payment methods, on-chain confirmations), not a bare
     /// placeholder. Fetches mint info through the CDK wallet so the send/receive

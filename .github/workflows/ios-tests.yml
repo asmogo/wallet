@@ -114,6 +114,8 @@ jobs:
         ./CI/start-cdk.sh &
         CDK_START_PID=$!
 
+        python3 CI/receipt-recovery-proxy.py > "$RUNNER_TEMP/receipt-proxy.log" 2>&1 &
+        echo $! > "$RUNNER_TEMP/receipt-proxy.pid"
         STATUS=0
         wait "$NUTSHELL_START_PID" || STATUS=$?
         wait "$CDK_START_PID" || STATUS=$?
@@ -169,6 +171,7 @@ jobs:
       if: always()
       run: |
         chmod +x CI/stop-nutshell.sh CI/stop-cdk.sh
+        if [ -f "$RUNNER_TEMP/receipt-proxy.pid" ]; then kill "$(cat "$RUNNER_TEMP/receipt-proxy.pid")" || true; fi
         ./CI/stop-nutshell.sh &
         NUTSHELL_STOP_PID=$!
         ./CI/stop-cdk.sh &

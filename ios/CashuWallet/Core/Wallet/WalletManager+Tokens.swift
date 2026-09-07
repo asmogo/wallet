@@ -135,9 +135,13 @@ extension WalletManager {
                     .subtracting(beforeIds)
                     .first
 
+                if let recoveryContext {
+                    self.mintService.trackReceivedMintLocally(url: recoveryContext.mintURL, unit: recoveryContext.unit)
+                }
                 try? await self.ensureMintTrackedForToken(tokenString)
                 return (amount, newTransactionID)
             } catch {
+                await self.reconcileReceivedAccountsAssumingLease()
                 await self.captureWalletFailureDiagnostics(kind: .receive)
                 await self.recoverWalletStateAfterFailureAssumingWalletOperationLease(
                     kind: .receive,

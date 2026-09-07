@@ -235,6 +235,7 @@ class WalletManager(
             // background maintenance contends for CDK's operation mutex.
             kotlinx.coroutines.yield()
             if (hasStoredWallet) {
+                reconcileReceivedAccounts()
                 runCatching { refreshBalance() }
                     .onFailure { AppLogger.wallet.error("Deferred balance refresh failed", it) }
 
@@ -1033,7 +1034,16 @@ class WalletManager(
         val amount = withLoadingResult {
             val p2pkPubkeys = TokenParser.p2pkPubkeys(tokenString)
             val signingKeys = settingsManager.p2pkSigningKeysFor(p2pkPubkeys)
-            gateway.receiveEcashToken(tokenString, signingKeys).also {
+            val received = try {
+                gateway.receiveEcashToken(tokenString, signingKeys)
+            } catch (error: Exception) {
+                if (error is kotlinx.coroutines.CancellationException) throw error
+                // The mint may have accepted the swap before the response was
+                // lost. Resume CDK's saga; never submit the original token again.
+                reconcileReceivedAccounts()
+                throw error
+            }
+            received.also {
                 p2pkPubkeys.forEach(settingsManager::markP2PKKeyUsed)
                 // iOS parity (WalletManager+Tokens.receiveTokens): track the
                 // token's mint only after a successful receive, so an
@@ -1045,7 +1055,7 @@ class WalletManager(
                     onTrackingFailed = {
                         AppLogger.wallet.error("Failed to track mint for received token", it)
                     },
-                    ensureMintTracked = { ensureMintTracked(it) },
+                    ensureMintTracked = { trackReceivedMintLocally(it, unit) },
                 )
                 refreshBalance()
                 loadTransactions()
@@ -1604,6 +1614,43 @@ class WalletManager(
     private fun activeMintFrom(mints: List<MintInfo>): MintInfo? {
         val saved = walletStore.activeMintURL
         return mints.firstOrNull { it.url == saved } ?: mints.firstOrNull()
+    }
+
+    /** Publish the durable mint before any online reconciliation can fail. */
+    private fun trackReceivedMintLocally(url: String, unit: String) {
+        val normalized = mintMetadataFetcher.normalizeMintUrl(url)
+        val current = walletStore.loadMints()
+        val existing = current.firstOrNull { com.cashu.me.Core.CDK.mintRemovalUrlsMatch(it.url, normalized) }
+        if (existing != null && (existing.name != "Unknown Mint" || unit in existing.units)) return
+        val updated = if (existing == null) {
+            current + MintInfo(url = normalized, name = "Unknown Mint", units = listOf(unit))
+        } else {
+            current.map { if (it == existing) it.copy(units = (it.units + unit).distinct()) else it }
+        }
+        walletStore.saveMints(updated)
+        if (walletStore.activeMintURL == null) walletStore.activeMintURL = normalized
+        update { copy(mints = updated, activeMint = activeMintFrom(updated)) }
+    }
+
+    internal suspend fun reconcileReceivedAccounts() {
+        val candidates = try { gateway.receiveRecoveryCandidates() } catch (error: Exception) {
+            if (error is kotlinx.coroutines.CancellationException) throw error
+            AppLogger.wallet.error("Unable to discover interrupted receipts", error)
+            return
+        }
+        // Track every candidate before network recovery of any one account.
+        candidates.forEach { trackReceivedMintLocally(it.mintUrl, it.unit) }
+        for (candidate in candidates) {
+            try { gateway.recoverReceiveAccount(candidate) } catch (error: Exception) {
+                if (error is kotlinx.coroutines.CancellationException) throw error
+                AppLogger.wallet.error("Receipt recovery remains pending", error)
+            }
+        }
+        if (candidates.isNotEmpty()) {
+            refreshBalance()
+            loadTransactions()
+        }
+        // Deliberately no receive confirmation or token redemption here.
     }
 
     private suspend fun ensureMintTracked(url: String): String {

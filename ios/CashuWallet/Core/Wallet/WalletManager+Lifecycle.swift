@@ -1442,6 +1442,7 @@ extension WalletManager {
 
     private func performBestEffortWalletStartupMaintenanceAssumingLease() async -> Bool {
         guard walletRepository != nil else { return false }
+        let reconciledReceipts = await reconcileReceivedAccountsAssumingLease()
         let mintUrls = trackedMintUrlsForWalletAccess()
         guard !mintUrls.isEmpty else { return false }
 
@@ -1450,7 +1451,7 @@ extension WalletManager {
         var keysetRefreshTimestamps = storedKeysetRefreshTimestamps
             .filter { mintUrls.contains($0.key) }
         var timestampsChanged = keysetRefreshTimestamps != storedKeysetRefreshTimestamps
-        var recoveredWalletState = false
+        var recoveredWalletState = reconciledReceipts
 
         let wallets = await trackedWalletsAssumingWalletOperationLease()
         for mintUrlString in mintUrls {

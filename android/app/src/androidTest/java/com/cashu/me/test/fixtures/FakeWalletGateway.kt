@@ -49,6 +49,9 @@ class FakeWalletGateway(
     private val meltQuotes = linkedMapOf<String, MeltQuoteInfo>()
     private var repositoryOpen = false
 
+    var receiveCandidates = emptyList<com.cashu.me.Core.CDK.ReceiveRecoveryCandidate>()
+    var receiveRecoveryCalls = 0
+    var metadataFetches = 0
     var nextFailure: Throwable? = null
     var nextCloseFailure: Throwable? = null
     val latestMintQuoteId: String?
@@ -135,6 +138,7 @@ class FakeWalletGateway(
     }
 
     override suspend fun fetchMintInfo(mintUrl: String): MintInfo? {
+        metadataFetches++
         failIfRequested()
         check(repositoryOpen) { "Fake wallet repository is not open." }
         val normalized = normalize(mintUrl)
@@ -308,6 +312,13 @@ class FakeWalletGateway(
 
     override suspend fun checkMeltQuoteStatus(quoteId: String, mintUrl: String?): MeltQuoteInfo =
         checkNotNull(meltQuotes[quoteId]) { "Unknown fake melt quote $quoteId" }
+
+    override suspend fun receiveRecoveryCandidates() = receiveCandidates
+    override suspend fun recoverReceiveAccount(candidate: com.cashu.me.Core.CDK.ReceiveRecoveryCandidate): SagaRecoveryReport {
+        receiveRecoveryCalls++
+        failIfRequested()
+        return SagaRecoveryReport(0, 0, 0, 0)
+    }
 
     override suspend fun recoverIncompleteSagas(mintUrl: String): SagaRecoveryReport =
         SagaRecoveryReport(recovered = 0, compensated = 0, skipped = 0, failed = 0)
