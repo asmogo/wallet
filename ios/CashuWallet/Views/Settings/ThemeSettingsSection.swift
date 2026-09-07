@@ -109,7 +109,7 @@ struct CurrencyPickerSheet: View {
                             VStack(alignment: .leading, spacing: 2) {
                                 Text(code)
                                     .font(.body.weight(.medium))
-                                if let name = Locale.current.localizedString(forCurrencyCode: code), name != code {
+                                if let name = currencyNameLocale.localizedString(forCurrencyCode: code), name != code {
                                     Text(name)
                                         .font(.subheadline)
                                         .foregroundStyle(.secondary)
@@ -188,8 +188,14 @@ struct CurrencyPickerSheet: View {
 
     // MARK: - Selection
 
+    // Currency names follow the user's language even before the app's other
+    // strings have a translation in that language.
+    private var currencyNameLocale: Locale {
+        Locale(identifier: Locale.preferredLanguages.first ?? Locale.current.identifier)
+    }
+
     private func currencyAccessibilityLabel(_ code: String) -> String {
-        guard let name = Locale.current.localizedString(forCurrencyCode: code), name != code else { return code }
+        guard let name = currencyNameLocale.localizedString(forCurrencyCode: code), name != code else { return code }
         return "\(code), \(name)"
     }
 

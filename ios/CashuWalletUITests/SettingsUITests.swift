@@ -17,7 +17,7 @@ final class SettingsUITests: UITestBase {
     func testCurrencyNamesRemainAccessibleAtLargeTextSizes() {
         for (language, locale) in [("en", "en_US"), ("de", "de_DE")] {
             app.terminate()
-            app.launchArguments += ["-AppleLanguages", "(\(language))", "-AppleLocale", locale,
+            app.launchArguments = ["-AppleLanguages", "(\(language))", "-AppleLocale", locale,
                                     "-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryAccessibilityL"]
             app.launch()
             navigateToSettings()
