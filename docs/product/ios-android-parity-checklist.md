@@ -104,7 +104,7 @@ Platform-specific capabilities remain intentionally outside parity, including iC
 
 - [x] **[P1 · Android → iOS] Search transaction and request memos.** Android includes memos in History search; iOS searches titles and numeric amounts only. **Done when:** iOS matches memo text case-insensitively for both item types.
 
-- [ ] **[P2 · iOS → Android] Search a Cashu Request’s Total received amount.** Android searches positive cumulative received totals alongside requested amounts, titles, and descriptions. Queries are trimmed before matching; filters and ordering remain unchanged. **Verification:** implementation ready; final device review pending.
+- [x] **[P2 · iOS → Android] Search a Cashu Request’s Total received amount.** Android searches positive cumulative received totals alongside requested amounts, titles, and descriptions. Queries are trimmed before matching; filters and ordering remain unchanged. **Verification:** Focused total-search regressions, Android unit/lint/build checks, and matched History search captures passed.
 
 - [ ] **[P1 · iOS → Android] Explain all consequences of removing a Cashu Request row.** iOS says the QR and pending payment routing remain valid; Android only says received payments stay in the wallet. **Done when:** Android states before deletion that previously received funds remain, the QR and payment routing remain valid, and only the History row is removed.
 
