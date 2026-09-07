@@ -89,20 +89,8 @@ struct CashuWalletApp: App {
                         navigationManager.handleDeepLink(url: url)
                     }
 
-                // App-switcher privacy cover (no lock yet). Sits above sheets so
-                // backgrounding mid-presentation never leaks content.
-                if appLockManager.isObscured && !appLockManager.isLocked {
-                    PrivacyCoverView()
-                }
-
-                // Lock gate. Window-level so it covers ContentView's full-screen
-                // covers and MainTabView's sheets too.
-                if appLockManager.isLocked {
-                    AppLockView()
-                        .environmentObject(appLockManager)
-                }
             }
-            .animation(.easeInOut(duration: 0.2), value: appLockManager.isLocked)
+            .background { AppLockWindowBridge(manager: appLockManager).frame(width: 0, height: 0) }
             .transaction { transaction in
                 if IntegrationTestConfig.shouldDisableAnimations {
                     transaction.disablesAnimations = true

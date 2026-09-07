@@ -186,6 +186,8 @@
 		T2B0000000000013 /* AsciiFieldErosionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = T1B0000000000013 /* AsciiFieldErosionTests.swift */; };
 		T2B0000000000014 /* MintQuoteDomainTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = T1B0000000000014 /* MintQuoteDomainTests.swift */; };
 		T2B0000000000100 /* ConnectMintContextTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = T1B0000000000100 /* ConnectMintContextTests.swift */; };
+		36245814414F1DB5CF522A7E /* AppLockWindow.swift in Sources */ = {isa = PBXBuildFile; fileRef = 65B376BD104CC679F24FFE37 /* AppLockWindow.swift */; };
+		CCCBC379C1AF8196BDD9CAD9 /* AppLockPresentationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 163973969F1D25EA091AC4FF /* AppLockPresentationTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -383,6 +385,8 @@
 		T1B0000000000013 /* AsciiFieldErosionTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = AsciiFieldErosionTests.swift; path = CashuWalletTests/AsciiFieldErosionTests.swift; sourceTree = "<group>"; };
 		T1B0000000000014 /* MintQuoteDomainTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = MintQuoteDomainTests.swift; path = CashuWalletTests/MintQuoteDomainTests.swift; sourceTree = "<group>"; };
 		T1B0000000000100 /* ConnectMintContextTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = ConnectMintContextTests.swift; path = CashuWalletTests/ConnectMintContextTests.swift; sourceTree = "<group>"; };
+		65B376BD104CC679F24FFE37 /* AppLockWindow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ../../App/AppLockWindow.swift; sourceTree = "<group>"; };
+		163973969F1D25EA091AC4FF /* AppLockPresentationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CashuWalletTests/AppLockPresentationTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -445,6 +449,7 @@
 				AV00000000000012 /* AppVersionTests.swift */,
 				MW00000000000011 /* MeltSettlementWaitTests.swift */,
 				A09100000000000000000006 /* WalletAuditRegressionTests.swift */,
+				163973969F1D25EA091AC4FF /* AppLockPresentationTests.swift */,
 				TG00000000000012 /* TypographyGuardTests.swift */,
 				WE00000000000012 /* WalletErrorMessageTests.swift */,
 				AA9600000000000000000002 /* NPCServiceTests.swift */,
@@ -754,6 +759,7 @@
 			isa = PBXGroup;
 			children = (
 				2100000000000004 /* WalletManager.swift */,
+				65B376BD104CC679F24FFE37 /* AppLockWindow.swift */,
 				D100000000000101 /* WalletManager+Lifecycle.swift */,
 				D100000000000102 /* WalletManager+NPC.swift */,
 				D100000000000103 /* WalletManager+Mints.swift */,
@@ -1048,6 +1054,7 @@
 				AV00000000000002 /* AppVersionTests.swift in Sources */,
 				MW00000000000001 /* MeltSettlementWaitTests.swift in Sources */,
 				A09100000000000000000005 /* WalletAuditRegressionTests.swift in Sources */,
+				CCCBC379C1AF8196BDD9CAD9 /* AppLockPresentationTests.swift in Sources */,
 				TG00000000000002 /* TypographyGuardTests.swift in Sources */,
 				WE00000000000002 /* WalletErrorMessageTests.swift in Sources */,
 				AA9600000000000000000001 /* NPCServiceTests.swift in Sources */,
@@ -1070,6 +1077,7 @@
 				1100000000000002 /* ContentView.swift in Sources */,
 				6A8EC9362F244C8C0058C21B /* TransactionDetailView.swift in Sources */,
 				1100000000000004 /* WalletManager.swift in Sources */,
+				36245814414F1DB5CF522A7E /* AppLockWindow.swift in Sources */,
 				D200000000000101 /* WalletManager+Lifecycle.swift in Sources */,
 				D200000000000102 /* WalletManager+NPC.swift in Sources */,
 				D200000000000103 /* WalletManager+Mints.swift in Sources */,
