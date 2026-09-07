@@ -439,11 +439,8 @@ struct CashuRequestDetailView: View {
         ConfirmationToast.show("Copied Cashu request")
     }
 
-    /// Re-encodes the displayed request with optional overrides, keeping the same
-    /// NUT-18 id. Defaults preserve the current request's params. Amount / mint
-    /// edits re-parameterize the one live request in place — payments to any
-    /// previously shared copy still land on this row, and history never grows a
-    /// second entry for the same receive intent.
+    /// Amount/mint edits reuse the intent within one currency. Changing unit
+    /// starts a new request while preserving the old code and its payments.
     private func regenerate(amount: UInt64?? = nil, unit: String? = nil, mints: [String]? = nil) {
         HapticFeedback.selection()
         guard let existing = request else { return }
@@ -471,16 +468,23 @@ struct CashuRequestDetailView: View {
             nextAmount = (nextUnit == existing.unit) ? existing.amount : nil
         }
         do {
-            let encoded = try PaymentRequestBuilder.build(
-                id: existing.id,
-                amount: nextAmount,
-                unit: nextUnit,
-                mints: nextMints,
-                description: existing.memo,
-                nostrPubkeyHex: configuration.publicKeyHex,
-                relays: configuration.relays
-            )
-            store.update(id: existing.id, amount: nextAmount, unit: nextUnit, mints: nextMints, encoded: encoded)
+            let updated = try store.update(
+                id: existing.id, amount: nextAmount, unit: nextUnit, mints: nextMints
+            ) { id in
+                try PaymentRequestBuilder.build(
+                    id: id,
+                    amount: nextAmount,
+                    unit: nextUnit,
+                    mints: nextMints,
+                    description: existing.memo,
+                    nostrPubkeyHex: configuration.publicKeyHex,
+                    relays: configuration.relays
+                )
+            }
+            if let updated, updated.id != requestId {
+                paymentObservation = CashuRequestPaymentObservation(existingPayments: updated.receivedPayments)
+                requestId = updated.id
+            }
             regenerationError = nil
         } catch {
             AppLogger.wallet.error("Could not regenerate request: \(String(describing: error))")

@@ -886,15 +886,18 @@ final class CashuRequestStoreTests: XCTestCase {
         store.update(
             id: "request-id",
             amount: 42,
-            unit: "eur",
+            unit: "sat",
             mints: ["https://mint.example.com"],
-            encoded: "creqAamounted"
+            encoded: { id in
+                XCTAssertEqual(id, "request-id")
+                return "creqAamounted"
+            }
         )
 
         XCTAssertEqual(store.requests.count, 1)
         let updated = store.request(withId: "request-id")
         XCTAssertEqual(updated?.amount, 42)
-        XCTAssertEqual(updated?.unit, "eur")
+        XCTAssertEqual(updated?.unit, "sat")
         XCTAssertEqual(updated?.mints, ["https://mint.example.com"])
         XCTAssertEqual(updated?.encoded, "creqAamounted")
         XCTAssertEqual(updated?.receivedPayments.first?.transactionId, "tx-1")
@@ -903,8 +906,55 @@ final class CashuRequestStoreTests: XCTestCase {
         let reloaded = CashuRequestStore(userDefaults: defaults)
         XCTAssertEqual(reloaded.requests.count, 1)
         XCTAssertEqual(reloaded.request(withId: "request-id")?.encoded, "creqAamounted")
-        XCTAssertEqual(reloaded.request(withId: "request-id")?.unit, "eur")
+        XCTAssertEqual(reloaded.request(withId: "request-id")?.unit, "sat")
     }
+
+    func testCurrencyChangeKeepsOriginalPaymentsAndLatePaymentsInTheirOwnIntent() throws {
+        for alreadyPaid in [false, true] {
+            let store = CashuRequestStore(userDefaults: defaults)
+            store.resetForWalletBoundary()
+            let original = store.createNew(id: "sat-request", amount: 500, unit: "sat",
+                                           mints: ["https://sat.example"], memo: "Coffee", encoded: "old-code")
+            if alreadyPaid {
+                store.attachPayment(requestId: original.id, transactionId: "first", amount: 1200)
+                store.attachPayment(requestId: original.id, transactionId: "second", amount: 34)
+            }
+            let prior = store.request(withId: original.id)
+            let updated = try XCTUnwrap(store.update(id: original.id, amount: nil, unit: "usd",
+                                                     mints: ["https://usd.example"]) { id in "code-\(id)" })
+            XCTAssertNotEqual(updated.id, original.id)
+            XCTAssertEqual(updated.encoded, "code-\(updated.id)")
+            XCTAssertNil(updated.amount)
+            XCTAssertEqual(updated.unit, "usd")
+            XCTAssertEqual(updated.memo, original.memo)
+            XCTAssertEqual(updated.totalReceived, 0)
+            XCTAssertEqual(store.request(withId: original.id), prior)
+            XCTAssertEqual(store.currentRequestId, updated.id)
+
+            // Previously shared codes must still correlate to the sat intent.
+            store.attachPayment(requestId: original.id, transactionId: "late", amount: 10)
+            store.attachPayment(requestId: updated.id, transactionId: "usd-payment", amount: 99)
+            let reloaded = CashuRequestStore(userDefaults: defaults)
+            XCTAssertEqual(reloaded.requests.count, 2)
+            XCTAssertEqual(reloaded.request(withId: original.id)?.unit, "sat")
+            XCTAssertEqual(reloaded.request(withId: original.id)?.totalReceived, alreadyPaid ? 1244 : 10)
+            XCTAssertEqual(reloaded.request(withId: updated.id)?.totalReceived, 99)
+            XCTAssertEqual(reloaded.currentRequestId, updated.id)
+        }
+    }
+
+    func testFailedCurrencyEncodingLeavesRequestAndCurrentPointerUntouched() {
+        enum EncodingError: Error { case failed }
+        let store = CashuRequestStore(userDefaults: defaults)
+        let original = store.createNew(id: "original", encoded: "old-code")
+        XCTAssertThrowsError(try store.update(id: original.id, amount: nil, unit: "usd", mints: []) { _ in
+            throw EncodingError.failed
+        })
+        XCTAssertEqual(store.requests, [original])
+        XCTAssertEqual(store.currentRequestId, original.id)
+        XCTAssertEqual(CashuRequestStore(userDefaults: defaults).requests, [original])
+    }
+
 }
 
 final class WalletReplacementSafetyTests: XCTestCase {

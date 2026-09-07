@@ -55,21 +55,31 @@ class CashuRequestStore(
         return request
     }
 
+    /**
+     * Keep amount/mint edits in place within one currency. A currency change
+     * starts a separate intent so payments to old codes retain their unit.
+     * Encoding must succeed before either intent is persisted.
+     */
     fun update(
         id: String,
         amount: Long?,
         unit: String,
         mints: List<String>,
         memo: String?,
-        encoded: String,
+        encoded: (String) -> String,
     ): CashuRequest? {
         val existing = request(id) ?: return null
+        if (!existing.unit.equals(unit, ignoreCase = true)) {
+            val newId = CashuRequest.newId()
+            val newEncoded = encoded(newId)
+            return createNew(id = newId, amount = amount, unit = unit, mints = mints, memo = memo, encoded = newEncoded)
+        }
         val updatedRequest = existing.copy(
             amount = amount,
             unit = unit,
             mints = mints,
             memo = memo?.takeIf { it.isNotBlank() },
-            encoded = encoded,
+            encoded = encoded(existing.id),
         )
         upsert(updatedRequest, makeCurrent = mutableState.value.currentRequestId == id)
         return updatedRequest

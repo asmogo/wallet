@@ -171,13 +171,11 @@ struct UnifiedReceiveView: View {
                 .autocorrectionDisabled()
 
             if tokenInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                if UIPasteboard.general.hasStrings {
-                    Button("Paste", action: pasteFromClipboard)
-                        .font(.subheadline.weight(.semibold))
-                        .foregroundStyle(.primary)
-                        .buttonStyle(.plain)
-                        .accessibilityLabel("Paste from clipboard")
-                }
+                Button("Paste", action: pasteFromClipboard)
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(.primary)
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Paste from clipboard")
             } else {
                 Button {
                     HapticFeedback.selection()

@@ -10,7 +10,7 @@ The baseline is commit `7d5ab9b5`; after captures show the local changes in this
 - Request status icon and readable green ink agree across platforms; waiting text uses primary ink with an orange clock.
 - Android request and receipt secondary actions use compact native buttons with matching neutral fill and label treatment. Cashu request actions use equal widths and a 12dp gap; both platforms stack them for large text.
 - Android request amount metadata honors the Bitcoin-symbol preference and grouping. Unknown mint names fall back to the hostname. Read-only rows do not expose edit actions.
-- Android Settings uses a compact native top bar. The empty Send sheet uses a prominent Receive action. Receive keeps Paste visible with an empty clipboard.
+- Android Settings uses a compact native top bar. The empty Send sheet uses a prominent Receive action. Receive keeps Paste visible with an empty clipboard on both platforms.
 
 ## Verification
 
@@ -18,6 +18,21 @@ The baseline is commit `7d5ab9b5`; after captures show the local changes in this
 - Six `ActivityDetailJourneyTest` journeys pass separately, covering request edits, request totals in sat and USD, currency preference changes, reusable invoice persistence, invoice settlement, failed receipts, and navigation through the main screens. The request footer also passes in dark mode at 1.6× text.
 - iOS: five `CashuRequestPaymentObservationTests` and two `ActivityDetailUITests` pass. Both UI tests were rerun after the final status styling change. They verify visible totals, currency formatting, preserved receipt controls, and stacked accessible actions.
 - PNG captures are retained in `screenshots/` with their pixel data unchanged. Embedded capture metadata is removed; simulator identifiers and local logs are excluded.
+
+## Review fixes: currency history and Paste
+
+Changing a Cashu request's unit now creates a new request on both platforms. The old request, its encoded code, creation date, and received payments remain intact in History. This applies both to the Unit picker and to choosing a mint whose default unit differs. The fixed amount resets to Any, and the new request starts with no received total. Amount and mint edits within the same currency retain the existing request ID.
+
+This also handles edits made before the first payment: payments to an earlier shared code still attach to the original currency's request. QR generation happens before persistence, so an encoding failure leaves both history and the current request unchanged.
+
+Receive now keeps Paste visible with an empty clipboard on iOS as well as Android. Tapping it with no clipboard text leaves the field empty.
+
+Follow-up verification on iOS 26.5 and Android API 37:
+
+- iOS: 9 request-store/payment-observation unit tests and 4 UI tests pass. UI coverage includes explicit unit changes, mint-driven unit changes, empty-clipboard Paste, large text, and the existing receipt matrix.
+- Android: 16 request-store/payment-observation unit tests and all 8 activity-detail journeys pass. The currency journey verifies that a late payment to the old request does not show success in the new request, while a payment to the new request does.
+- Android lint and `git diff --check` pass.
+- Four additional native screenshots show the new request after changing currency and Receive with an empty clipboard. The iOS capture changes sat to USD; Android changes USD to sat through the mint picker. These demonstrate the same history-preserving behavior with opposite unit transitions, rather than matched payment data.
 
 ## Reproduce
 

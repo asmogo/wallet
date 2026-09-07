@@ -129,14 +129,25 @@ class CashuRequestStore: ObservableObject {
         }.max { ($0.lastPresentedAt ?? $0.createdAt) < ($1.lastPresentedAt ?? $1.createdAt) }
     }
 
-    /// Re-parameterize an existing intent in place (amount / mint-filter edits).
-    /// The NUT-18 id stays stable across edits, so every handed-out copy of the
-    /// request — the original amountless one and any later amounted re-encoding —
-    /// keeps attaching payments to this single row instead of spawning a new
-    /// request (and a new thing to track) per edit.
-    func update(id: String, amount: UInt64?, unit: String, mints: [String], encoded: String) {
-        guard let index = requests.firstIndex(where: { $0.id == id }) else { return }
+    /// Amount and mint edits keep the NUT-18 identity within one currency.
+    /// Changing currency creates a separate intent so old copies and their
+    /// payments keep their original denomination. Encode before mutating state.
+    @discardableResult
+    func update(
+        id: String,
+        amount: UInt64?,
+        unit: String,
+        mints: [String],
+        encoded encode: (String) throws -> String
+    ) rethrows -> CashuRequest? {
+        guard let index = requests.firstIndex(where: { $0.id == id }) else { return nil }
         let old = requests[index]
+        if old.unit.caseInsensitiveCompare(unit) != .orderedSame {
+            let newId = CashuRequest.newId()
+            let encoded = try encode(newId)
+            return createNew(id: newId, amount: amount, unit: unit, mints: mints, memo: old.memo, encoded: encoded)
+        }
+        let encoded = try encode(old.id)
         requests[index] = CashuRequest(
             id: old.id,
             encoded: encoded,
@@ -153,6 +164,7 @@ class CashuRequestStore: ObservableObject {
             lastPresentedAt: old.lastPresentedAt
         )
         persist()
+        return requests[index]
     }
 
     func attachPayment(requestId: String, transactionId: String, amount: UInt64) {

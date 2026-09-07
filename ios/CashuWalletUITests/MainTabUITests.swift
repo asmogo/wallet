@@ -1,4 +1,5 @@
 import XCTest
+import UIKit
 
 /// UI tests verifying tab-bar navigation after wallet creation.
 final class MainTabUITests: UITestBase {
@@ -115,6 +116,36 @@ final class MainTabUITests: UITestBase {
 
 /// Actual receipt sheets with deterministic catalog records, without a live mint.
 final class ActivityDetailUITests: XCTestCase {
+    func testCurrencyAndMintEditsShowNewRequestWithoutRelabelingOldPayments() {
+        continueAfterFailure = false
+        let app = XCUIApplication()
+        app.launchEnvironment = ["SHOW_COMPONENT_CATALOG": "activity", "CI_INTEGRATION_TEST": "1",
+                                 "UITEST_REQUEST_CURRENCY_EDITS": "1", "UITEST_DISABLE_ANIMATIONS": "1"]
+        app.launchArguments = ["-AppleLanguages", "(en)", "-AppleLocale", "en_US"]
+        app.launch()
+        defer { app.terminate() }
+        let row = app.buttons["cashu-request-received"]
+        XCTAssertTrue(row.waitForExistence(timeout: 10))
+        row.tap()
+        let total = app.descendants(matching: .any).matching(identifier: "Total received").firstMatch
+        XCTAssertEqual(total.value as? String, "₿1,234")
+        app.buttons["Unit"].tap()
+        app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", "USD")).firstMatch.tap()
+        XCTAssertTrue(app.staticTexts["Waiting for payment…"].waitForExistence(timeout: 5))
+        XCTAssertEqual(app.buttons["Unit"].value as? String, "USD")
+        XCTAssertFalse(total.exists)
+        let attachment = XCTAttachment(screenshot: app.screenshot())
+        attachment.name = "request-after-currency-change"
+        attachment.lifetime = .keepAlways
+        add(attachment)
+        app.buttons["Mint"].tap()
+        app.staticTexts["Sat mint"].tap()
+        XCTAssertTrue(app.staticTexts["Waiting for payment…"].waitForExistence(timeout: 5))
+        XCTAssertFalse(total.exists)
+        let unit = app.descendants(matching: .any).matching(identifier: "Unit").firstMatch
+        XCTAssertEqual(unit.value as? String, "SAT")
+    }
+
     func testLargeTextRequestActionsRemainReadable() {
         continueAfterFailure = false
         let app = XCUIApplication()
@@ -191,5 +222,26 @@ final class ActivityDetailUITests: XCTestCase {
                 .press(forDuration: 0.1, thenDragTo: app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.98)))
             XCTAssertTrue(title.waitForNonExistence(timeout: 5))
         }
+    }
+}
+
+
+final class ReceivePasteUITests: UITestBase {
+    override var launchMode: LaunchMode { .seededWalletWithMint }
+
+    func testPasteRemainsAvailableWithEmptyClipboard() {
+        waitForMainTab()
+        UIPasteboard.general.items = []
+        tapWhenReady(app.buttons["wallet-action-receive"])
+        let paste = app.buttons["Paste from clipboard"]
+        XCTAssertTrue(paste.waitForExistence(timeout: 5))
+        XCTAssertTrue(paste.isHittable)
+        paste.tap()
+        XCTAssertTrue(paste.exists)
+        XCTAssertFalse(app.buttons["Clear"].exists)
+        let attachment = XCTAttachment(screenshot: app.screenshot())
+        attachment.name = "receive-empty-clipboard"
+        attachment.lifetime = .keepAlways
+        add(attachment)
     }
 }

@@ -151,6 +151,7 @@ struct ComponentCatalogView: View {
 
 /// Deterministic receipts for native UI checks; no wallet initialization or mint is needed.
 private struct ActivityDetailCatalog: View {
+    @EnvironmentObject private var walletManager: WalletManager
     @State private var selectedTransaction: WalletTransaction?
     @State private var selectedRequest: CashuRequest?
     private let date = Date(timeIntervalSince1970: 1_788_768_000)
@@ -199,6 +200,15 @@ private struct ActivityDetailCatalog: View {
         .onAppear {
             if IntegrationTestConfig.isEnabled {
                 SettingsManager.shared.useBitcoinSymbol = true
+                if ProcessInfo.processInfo.environment["UITEST_REQUEST_CURRENCY_EDITS"] == "1" {
+                    SettingsManager.shared.enablePaymentRequests = true
+                    walletManager.initializeNostrKeypairLocally(mnemonic: IntegrationTestConfig.seedMnemonic)
+                    walletManager.mints = [
+                        MintInfo(url: "https://mint.example", name: "Multi-unit mint", isActive: true,
+                                 balance: 0, units: ["sat", "usd"], mintUnits: ["sat", "usd"]),
+                        MintInfo(url: "https://sat.example", name: "Sat mint", isActive: false, balance: 0),
+                    ]
+                }
             }
         }
     }

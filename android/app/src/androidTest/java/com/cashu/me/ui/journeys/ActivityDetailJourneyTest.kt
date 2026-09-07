@@ -183,6 +183,49 @@ class ActivityDetailJourneyTest {
         compose.onNodeWithText("Total received").assertDoesNotExist()
     }
 
+    @Test fun changingMintCurrencyShowsNewRequestAndPreservesOldTotal() {
+        launched = AppTestFixture.launch(FixtureMode.SeededWithMint)
+        val fixture = launched!!
+        val store = fixture.container.cashuRequestStore
+        robot.awaitTag(UiTestTags.WalletScreen)
+        val original = store.createNew(id = "usd-request", amount = 500, unit = "usd",
+            mints = listOf("https://usd.example"), memo = "Coffee", encoded = "creqAoriginal")
+        store.attachPayment(original.id, "first", 1200)
+        store.attachPayment(original.id, "second", 34)
+        robot.tapText("History").tapText("Cashu Request").awaitText("2 payments received")
+        compose.onNodeWithText("Mint").performScrollTo().performClick()
+        robot.tapText("Nutshell UI Test Mint").awaitText("Waiting for payment…")
+        compose.onNodeWithText("Total received").assertDoesNotExist()
+        compose.onNodeWithText("SAT").assertIsDisplayed()
+        compose.onNode(hasText("Amount").and(hasText("Any"))).assertExists()
+        val next = checkNotNull(store.state.value.currentRequest)
+        assertTrue(next.id != original.id)
+        assertEquals("sat", next.unit)
+        assertEquals(0L, next.totalReceived)
+        assertEquals("usd", store.request(original.id)?.unit)
+        assertEquals(1234L, store.request(original.id)?.totalReceived)
+        screenshot("request-after-currency-change")
+        // A payment to the previous code must not trigger success on this sheet.
+        compose.runOnIdle { store.attachPayment(original.id, "late", 10) }
+        robot.awaitText("Waiting for payment…")
+        compose.runOnIdle { store.attachPayment(next.id, "new", 21) }
+        robot.awaitText("Payment Received!")
+    }
+
+    @Test fun pasteRemainsAvailableWithEmptyClipboard() {
+        launched = AppTestFixture.launch(FixtureMode.SeededWithMint)
+        robot.awaitTag(UiTestTags.WalletScreen)
+        compose.runOnIdle {
+            val context = InstrumentationRegistry.getInstrumentation().targetContext
+            context.getSystemService(android.content.ClipboardManager::class.java).clearPrimaryClip()
+        }
+        robot.tapTag(UiTestTags.WalletReceive).awaitTag(UiTestTags.ReceiveSheet)
+        compose.onNodeWithText("Paste").assertIsDisplayed().performClick()
+        compose.onNodeWithText("Paste").assertIsDisplayed()
+        compose.onNodeWithContentDescription("Clear").assertDoesNotExist()
+        screenshot("receive-empty-clipboard")
+    }
+
     @Test fun captureMainScreensAndReceiptStates() {
         launched = AppTestFixture.launch(FixtureMode.SeededWithMint)
         val fixture = launched!!

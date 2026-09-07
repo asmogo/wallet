@@ -129,7 +129,8 @@ fun CashuRequestDetailScreen(
     val confirmationToastController = LocalConfirmationToastController.current
     val lifecycleOwner = LocalLifecycleOwner.current
 
-    val request = storeState.requests.firstOrNull { it.id == requestId }
+    var displayedRequestId by rememberSaveable(requestId) { mutableStateOf(requestId) }
+    val request = storeState.requests.firstOrNull { it.id == displayedRequestId }
     val requestReadiness = remember(settings, nostrState) {
         CashuRequestNostrReadiness.current(nostrService, settingsManager)
     }
@@ -141,9 +142,8 @@ fun CashuRequestDetailScreen(
     val keepNfcSessionMounted = shouldKeepNfcSessionMounted(offerNfcReceive, nfcState.phase)
     val nfcTransferActive = keepNfcSessionMounted && nfcState.phase.isNfcTransferActive()
 
-    // Re-signs the same NUT-18 request in place (same id/history entry) — used
-    // by the Mint sheet, the Amount sheet's Done, and "New Request" (called
-    // with no args, which just re-signs the current values).
+    // Edits share an identity within one currency. A unit change preserves the
+    // old intent and displays the new one, including after a mint changes unit.
     fun regenerate(
         nextAmount: Long? = request?.amount,
         nextMints: List<String> = request?.mints.orEmpty(),
@@ -163,24 +163,25 @@ fun CashuRequestDetailScreen(
         // it instead of silently turning (for example) 500 sat into 500 cents.
         val resolvedAmount = nextAmount.takeUnless { resolvedUnit != req.unit }
         runCatching {
-            PaymentRequestBuilder.build(
-                id = req.id,
-                amount = resolvedAmount,
-                unit = resolvedUnit,
-                mints = nextMints,
-                description = req.memo,
-                nostrPubkeyHex = configuration.publicKeyHex,
-                relays = configuration.relays,
-            )
-        }.onSuccess { encoded ->
             cashuRequestStore.update(
                 id = req.id,
                 amount = resolvedAmount,
                 unit = resolvedUnit,
                 mints = nextMints,
                 memo = req.memo,
-                encoded = encoded,
-            )
+            ) { id ->
+                PaymentRequestBuilder.build(
+                    id = id,
+                    amount = resolvedAmount,
+                    unit = resolvedUnit,
+                    mints = nextMints,
+                    description = req.memo,
+                    nostrPubkeyHex = configuration.publicKeyHex,
+                    relays = configuration.relays,
+                )
+            }
+        }.onSuccess { updated ->
+            if (updated != null) displayedRequestId = updated.id
             regenerateError = null
         }.onFailure { regenerateError = it.userFacingWalletMessage }
     }
@@ -197,11 +198,11 @@ fun CashuRequestDetailScreen(
     }
 
     val paymentCount = request?.receivedPayments?.size ?: 0
-    var observedPaymentIds by rememberSaveable(requestId) {
+    var observedPaymentIds by rememberSaveable(displayedRequestId) {
         mutableStateOf(request?.receivedPayments?.map { it.transactionId })
     }
-    var successPaymentId by rememberSaveable(requestId) { mutableStateOf<String?>(null) }
-    LaunchedEffect(requestId, request?.receivedPayments, successPaymentId) {
+    var successPaymentId by rememberSaveable(displayedRequestId) { mutableStateOf<String?>(null) }
+    LaunchedEffect(displayedRequestId, request?.receivedPayments, successPaymentId) {
         if (successPaymentId != null) return@LaunchedEffect
         val currentPayments = request?.receivedPayments ?: return@LaunchedEffect
         newestUnseenPayment(observedPaymentIds, currentPayments)?.let { payment ->
