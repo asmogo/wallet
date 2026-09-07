@@ -106,8 +106,16 @@ struct CurrencyPickerSheet: View {
                     Button { select(code) } label: {
                         HStack(spacing: 12) {
                             CurrencyAvatar(glyph: .flag(CurrencyFlag.emoji(for: code)))
-                            Text(code)
-                                .font(.body.weight(.medium))
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(code)
+                                    .font(.body.weight(.medium))
+                                if let name = Locale.current.localizedString(forCurrencyCode: code), name != code {
+                                    Text(name)
+                                        .font(.subheadline)
+                                        .foregroundStyle(.secondary)
+                                        .fixedSize(horizontal: false, vertical: true)
+                                }
+                            }
                             Spacer()
                             if isSelected(code) {
                                 Image(systemName: "checkmark")
@@ -118,7 +126,7 @@ struct CurrencyPickerSheet: View {
                     }
                     .listRowSeparator(.hidden)
                     .buttonStyle(.plain)
-                    .accessibilityLabel(code)
+                    .accessibilityLabel(currencyAccessibilityLabel(code))
                     .accessibilityAddTraits(isSelected(code) ? [.isSelected] : [])
                 }
             }
@@ -179,6 +187,11 @@ struct CurrencyPickerSheet: View {
     }
 
     // MARK: - Selection
+
+    private func currencyAccessibilityLabel(_ code: String) -> String {
+        guard let name = Locale.current.localizedString(forCurrencyCode: code), name != code else { return code }
+        return "\(code), \(name)"
+    }
 
     private func isSelected(_ code: String) -> Bool {
         settings.showFiatBalance && settings.bitcoinPriceCurrency == code
