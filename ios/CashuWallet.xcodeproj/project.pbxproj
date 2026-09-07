@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		E20100000000000000000001 /* PaymentSafetyIntegrationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E20100000000000000000002; };
 		AA9600000000000000000001 /* NPCServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA9600000000000000000002 /* NPCServiceTests.swift */; };
 		BD0100000000000000000002 /* ReceivedBalanceFeedback.swift in Sources */ = {isa = PBXBuildFile; fileRef = BD0100000000000000000001 /* ReceivedBalanceFeedback.swift */; };
 		BD0100000000000000000004 /* ReceivedBalanceFeedbackTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BD0100000000000000000003 /* ReceivedBalanceFeedbackTests.swift */; };
@@ -213,6 +214,7 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
+		E20100000000000000000002 /* PaymentSafetyIntegrationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = PaymentSafetyIntegrationTests.swift; path = ../CI/IntegrationTests/Tests/PaymentSafetyIntegrationTests.swift; sourceTree = "<group>"; };
 		AA9600000000000000000002 /* NPCServiceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CashuWalletTests/NPCServiceTests.swift; sourceTree = "<group>"; };
 		BD0100000000000000000001 /* ReceivedBalanceFeedback.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReceivedBalanceFeedback.swift; sourceTree = "<group>"; };
 		BD0100000000000000000003 /* ReceivedBalanceFeedbackTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = ReceivedBalanceFeedbackTests.swift; path = CashuWalletTests/ReceivedBalanceFeedbackTests.swift; sourceTree = "<group>"; };
@@ -435,6 +437,7 @@
 			children = (
 				323A00000000000000000002 /* PriceServiceTests.swift */,
 				F1CF8C0C2E1379BCD23CF8C6 /* IntegrationTestBase.swift */,
+				E20100000000000000000002 /* PaymentSafetyIntegrationTests.swift */,
 				72DD529F60A8D9D1A81E3FBB /* NutshellIntegrationTests.swift */,
 				T1B0000000000001 /* InMemoryStorage.swift */,
 				T1B0000000000002 /* WalletStoreTests.swift */,
@@ -1045,6 +1048,7 @@
 			files = (
 				323A00000000000000000001 /* PriceServiceTests.swift in Sources */,
 				BF36C01CE0AB810E1B462448 /* IntegrationTestBase.swift in Sources */,
+				E20100000000000000000001 /* PaymentSafetyIntegrationTests.swift in Sources */,
 				349E3802577110813AC1A9E3 /* NutshellIntegrationTests.swift in Sources */,
 				T2B0000000000001 /* InMemoryStorage.swift in Sources */,
 				T2B0000000000002 /* WalletStoreTests.swift in Sources */,

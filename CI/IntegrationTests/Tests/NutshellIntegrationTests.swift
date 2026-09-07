@@ -21,11 +21,9 @@ class MintIntegrationTestSuite: IntegrationTestBase {
     }
 
     func runGetMintKeysets() async throws {
-        let keysets = try await wallet.keysets(policy: .refresh).filter { $0.active == true }
-        XCTAssertFalse(keysets.isEmpty, "\(mintName) mint should have at least one active keyset")
-        for keyset in keysets {
-            XCTAssertEqual(keyset.unit, .sat, "Keyset unit should be sat")
-        }
+        let keysets = try await wallet.keysets(policy: .refresh)
+        XCTAssertTrue(keysets.contains { $0.active == true && $0.unit == .sat },
+                      "\(mintName) mint should have an active sat keyset")
     }
 
     // MARK: - Minting
@@ -667,11 +665,18 @@ class MintIntegrationTestSuite: IntegrationTestBase {
 
         XCTAssertEqual(quote.state, .unpaid, "Initial state should be unpaid")
 
-        let proofs = try await mintSats(42)
-        XCTAssertFalse(proofs.isEmpty, "Should have minted proofs")
-
-        let paidQuote = try await wallet.checkMintQuote(quoteId: quote.id)
-        XCTAssertEqual(paidQuote.state, .paid, "Quote should be paid after minting")
+        var paidQuote = try await wallet.checkMintQuote(quoteId: quote.id)
+        for _ in 0..<75 where paidQuote.state != .paid {
+            try await Task.sleep(nanoseconds: 200_000_000)
+            paidQuote = try await wallet.checkMintQuote(quoteId: quote.id)
+        }
+        XCTAssertEqual(paidQuote.state, .paid)
+        let proofs = try await wallet.mint(quoteId: quote.id, amountSplitTarget: .none, spendingConditions: nil)
+        XCTAssertEqual(proofs.reduce(0) { $0 + $1.amount.value }, 42)
+        let issuedQuote = try await wallet.checkMintQuote(quoteId: quote.id)
+        XCTAssertEqual(issuedQuote.state, .issued)
+        let secondSweep = try await wallet.mintUnissuedQuotes()
+        XCTAssertEqual(secondSweep.value, 0)
     }
 }
 

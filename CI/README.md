@@ -82,6 +82,14 @@ xcodebuild test \
 ./CI/stop-cdk.sh
 ```
 
+## Payment safety pack
+
+The [payment coverage review and runbook](payment-tests/README.md) describes the
+new scenario-isolated fault proxy, controlled fee/no-fee mints, native payment
+suites, live UI journeys, required-test manifest, known regression, and prioritized
+remaining gaps. Both platform workflows run core payment cases on PRs and the
+expanded request/NWC/unit matrix nightly.
+
 ## Test Coverage
 
 The integration tests verify **CDK-Swift ↔ real mint** compatibility:

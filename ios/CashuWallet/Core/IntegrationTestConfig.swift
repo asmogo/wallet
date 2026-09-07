@@ -42,6 +42,28 @@ struct IntegrationTestConfig {
         isEnabled
     }
 
+    /// Explicit live-payment tests retain real recovery and local relay listeners.
+    /// This is independent of visual determinism and telemetry suppression.
+    static var shouldRunPaymentServices: Bool {
+        #if DEBUG
+        return !isEnabled || ProcessInfo.processInfo.environment["UITEST_LIVE_PAYMENTS"] == "1"
+        #else
+        return !isEnabled
+        #endif
+    }
+
+    static var localPaymentTestRelay: String? {
+        #if DEBUG
+        guard isEnabled, shouldRunPaymentServices,
+              let value = ProcessInfo.processInfo.environment["UITEST_PAYMENT_RELAY"],
+              let url = URL(string: value), url.scheme == "ws",
+              ["localhost", "127.0.0.1"].contains(url.host ?? "") else { return nil }
+        return value
+        #else
+        return nil
+        #endif
+    }
+
     static var shouldDisableAnimations: Bool {
         ProcessInfo.processInfo.environment["UITEST_DISABLE_ANIMATIONS"] == "1"
     }

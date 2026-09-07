@@ -81,3 +81,8 @@ iOSInjectionProject/
 # Impeccable (design critique tool output / hook cache)
 .impeccable/
 .sentryclirc
+
+# Local payment integration fixtures
+CI/.payment-workdir/
+CI/.nutshell-venv
+CI/payment-tests/__pycache__/

@@ -22,7 +22,8 @@ let package = Package(
             ],
             sources: [
                 "IntegrationTestBase.swift",
-                "NutshellIntegrationTests.swift"
+                "NutshellIntegrationTests.swift",
+                "PaymentSafetyIntegrationTests.swift"
             ]
         )
     ]

@@ -173,6 +173,8 @@ jobs:
         python3 CI/receipt-recovery-proxy.py > "$RUNNER_TEMP/receipt-proxy.log" 2>&1 &
         echo $! > "$RUNNER_TEMP/receipt-proxy.pid"
         ./CI/start-cdk.sh
+        ./CI/start-payment-fixtures.sh
+        CI/.nutshell-venv/bin/python -m unittest discover -s CI/payment-tests -v
 
     - name: Run required Android UI suite
       if: env.UI_TIER != 'full'
@@ -184,6 +186,8 @@ jobs:
           ./gradlew --no-daemon :app:pixel2Api35DebugAndroidTest \
           -Pandroid.testInstrumentationRunnerArguments.notAnnotation=com.cashu.me.test.FullOnly \
           -Pandroid.testInstrumentationRunnerArguments.timeout_msec=600000 \
+          -Pandroid.testInstrumentationRunnerArguments.cashu.paymentFixtures=true \
+          -Pandroid.testInstrumentationRunnerArguments.cashu.paymentFixtureUrl=http://10.0.2.2:3341 \
           -Pandroid.testInstrumentationRunnerArguments.cashu.liveUiLocalMintEnabled=true \
           -Pandroid.testInstrumentationRunnerArguments.cashu.nativeWalletLocalMintIntegration=true \
           -Pandroid.testInstrumentationRunnerArguments.cashu.nutshellMintUrl=http://10.0.2.2:3338 \
@@ -199,11 +203,18 @@ jobs:
         bash ../CI/retry-android-ui-test.sh \
           ./gradlew --no-daemon :app:modernApi36DebugAndroidTest \
           -Pandroid.testInstrumentationRunnerArguments.timeout_msec=600000 \
+          -Pandroid.testInstrumentationRunnerArguments.cashu.paymentFixtures=true \
+          -Pandroid.testInstrumentationRunnerArguments.cashu.paymentFixtureUrl=http://10.0.2.2:3341 \
           -Pandroid.testInstrumentationRunnerArguments.cashu.liveUiLocalMintEnabled=true \
           -Pandroid.testInstrumentationRunnerArguments.cashu.nativeWalletLocalMintIntegration=true \
           -Pandroid.testInstrumentationRunnerArguments.cashu.nutshellMintUrl=http://10.0.2.2:3338 \
           -Pandroid.testInstrumentationRunnerArguments.cashu.receiptRecoveryMintUrl=http://10.0.2.2:3340 \
           -Pandroid.testInstrumentationRunnerArguments.cashu.cdkMintUrl=http://10.0.2.2:3339
+
+    - name: Enforce executed payment coverage
+      if: always()
+      working-directory: .
+      run: python3 CI/payment-tests/check_coverage.py --platform android --tier "$UI_TIER" android/app/build/outputs/androidTest-results/managedDevice
 
     - name: Stop local test mints
       if: always()
@@ -211,6 +222,7 @@ jobs:
       run: |
         chmod +x CI/stop-nutshell.sh CI/stop-cdk.sh
         if [ -f "$RUNNER_TEMP/receipt-proxy.pid" ]; then kill "$(cat "$RUNNER_TEMP/receipt-proxy.pid")" || true; fi
+        ./CI/stop-payment-fixtures.sh
         ./CI/stop-nutshell.sh
         ./CI/stop-cdk.sh
 
