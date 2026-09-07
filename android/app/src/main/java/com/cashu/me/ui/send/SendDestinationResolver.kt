@@ -1,12 +1,10 @@
 package com.cashu.me.ui.send
 
-import com.cashu.me.Core.LightningRequestParser
 import com.cashu.me.Core.PaymentRequestDecodeResult
 import com.cashu.me.Core.PaymentRequestDecoder
 import com.cashu.me.Core.TokenParser
 import com.cashu.me.Core.compatibleMintsForCashuPaymentRequest
 import com.cashu.me.Models.MintInfo
-import com.cashu.me.Models.PaymentMethodKind
 
 internal const val AmountlessBolt11Hint =
     "This BOLT11 invoice doesn't include an amount. Ask for an amount-specific invoice before paying."
@@ -35,7 +33,7 @@ internal fun resolveSendDestination(
 ): SendDestinationResolution {
     val trimmed = raw.trim()
     if (trimmed.isEmpty()) return SendDestinationResolution.Unrecognized
-    var decoded = decodeSendDestination(
+    var decoded = PaymentRequestDecoder.decode(
         trimmed,
         includeCashuPaymentRequests = true,
         preferCashuPaymentRequests = true,
@@ -44,7 +42,7 @@ internal fun resolveSendDestination(
     if (decoded is PaymentRequestDecodeResult.CashuPaymentRequest &&
         compatibleMintsForCashuPaymentRequest(decoded.summary, walletMints).isEmpty()
     ) {
-        val fallback = decodeSendDestination(trimmed)
+        val fallback = PaymentRequestDecoder.decode(trimmed)
         if (fallback !is PaymentRequestDecodeResult.Unrecognized) {
             decoded = fallback
             request = PaymentRequestDecoder.encodedLightningRequest(trimmed) ?: trimmed
@@ -94,24 +92,5 @@ internal fun resolveSendDestination(
                 ?.let(SendDestinationResolution::EcashToken)
                 ?: SendDestinationResolution.Unrecognized
         }
-    }
-}
-
-private fun decodeSendDestination(
-    raw: String,
-    includeCashuPaymentRequests: Boolean = false,
-    preferCashuPaymentRequests: Boolean = false,
-): PaymentRequestDecodeResult {
-    val decoded = PaymentRequestDecoder.decode(
-        raw,
-        includeCashuPaymentRequests = includeCashuPaymentRequests,
-        preferCashuPaymentRequests = preferCashuPaymentRequests,
-    )
-    if (decoded !is PaymentRequestDecodeResult.Unrecognized) return decoded
-    val lightning = runCatching { LightningRequestParser.parse(raw) }.getOrNull() ?: return decoded
-    return when (lightning.method) {
-        PaymentMethodKind.Bolt11 -> PaymentRequestDecodeResult.Bolt11(lightning.amountSats, lightning.description)
-        PaymentMethodKind.Bolt12 -> PaymentRequestDecodeResult.Bolt12(lightning.amountSats, lightning.description)
-        PaymentMethodKind.Onchain -> decoded
     }
 }
