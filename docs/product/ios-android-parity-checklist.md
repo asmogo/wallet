@@ -142,7 +142,7 @@ Platform-specific capabilities remain intentionally outside parity, including iC
 
 ### Settings — information architecture, display, and destructive actions
 
-- [ ] **[P1 · Android → iOS] Retry Lightning-address setup from Settings.** “Try setup again” recovers failed wallet initialization and initializes missing NPC keys from the stored seed. Existing identities, wallet data, and preferences are preserved. Loading and errors remain retryable. **Verification:** 13 NPC service tests pass, including recovery success, failure, and existing-identity preservation; device review pending.
+- [x] **[P1 · Android → iOS] Retry Lightning-address setup from Settings.** “Try setup again” recovers failed wallet initialization and initializes missing NPC keys from the stored seed. Existing identities, wallet data, and preferences are preserved. Loading and errors remain retryable. **Verification:** All 13 NPC service tests and the native setup-state capture passed on iOS 26.5; the app and test bundles build.
 
 
 - [x] **[P2 · iOS → Android] Make App Lock discoverable in a security-oriented Settings location.** Android currently places the toggle under Privacy even though it controls local device access. **Done when:** App Lock is discoverable under a clear security or backup-and-security destination while privacy/background networking controls remain conceptually separate. The exact iOS hierarchy is not required.
