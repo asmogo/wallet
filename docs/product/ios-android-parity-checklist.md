@@ -275,7 +275,7 @@ These are important, but they belong in dedicated security/privacy, design-syste
 - [ ] **[P2 · Design system] Retire the hand-rolled inline errors.** Highest priority: `SendView.swift:294` (`sendInputNotice`, a clone of the shared component that drops the VoiceOver severity prefix), the two scanner overlays, and `SendEcashScreen.kt:957` (bare red text under an already-`isError` field). **Done when:** no screen renders raw error-coloured text, which is the contract `InlineNotice`'s own KDoc already claims.
 
 
-- [ ] **[P2 · iOS → Android] Animate restore progress in shared restore components.** Material motion animates per-mint state changes and the recovered total, preserves trailing alignment, and can be interrupted. Reduced motion replaces values immediately. **Verification:** Compose regressions added for interruption and reduced motion; device review pending.
+- [x] **[P2 · iOS → Android] Animate restore progress in shared restore components.** Material motion animates per-mint state changes and the recovered total, preserves trailing alignment, and can be interrupted. Reduced motion replaces values immediately. **Verification:** Native interruption and reduced-motion regressions, Android unit/lint/build checks, and local transition-recording review passed.
 
 ## Completed and verified in the baseline
 
