@@ -29,6 +29,28 @@ class StorageDataStoreInstrumentedTest {
     private val json = Json { encodeDefaults = true }
 
     @Test
+    fun mintRemovalSurvivesReloadAndWalletRollbackButNotWalletDeletion() {
+        val storeName = uniqueStoreName("removed_mints")
+        val store = WalletStore(context, storeName)
+        val mint = MintInfo(url = "https://mint.example/Mint", balance = 21)
+        store.saveMints(listOf(mint))
+        // Model interruption after recording removal but before deleting the
+        // old metadata. Reload must still hide the retained mint and proofs.
+        store.setMintRemoved("https://MINT.example/Mint/", removed = true)
+        val reloaded = WalletStore(context, storeName)
+        assertTrue(reloaded.isMintRemoved(mint.url))
+        assertFalse(reloaded.isMintRemoved("https://mint.example/mint"))
+        assertTrue(reloaded.loadMints().isEmpty())
+        val snapshot = reloaded.snapshotWalletScopedData()
+        reloaded.removeAllWalletData()
+        assertFalse(reloaded.isMintRemoved(mint.url))
+        reloaded.restoreWalletScopedData(snapshot)
+        assertTrue(reloaded.isMintRemoved(mint.url))
+        assertTrue(reloaded.loadMints().isEmpty())
+        reloaded.removeAllWalletData()
+    }
+
+    @Test
     fun restoreBackupBarrierSurvivesReloadAndWalletRollback() {
         val storeName = uniqueStoreName("restore_barrier")
         val store = SettingsStore(context, storeName)

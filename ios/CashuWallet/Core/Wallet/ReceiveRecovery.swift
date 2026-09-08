@@ -33,8 +33,10 @@ extension WalletManager {
     func reconcileReceivedAccountsAssumingLease() async -> Bool {
         guard let db, let walletRepository else { return false }
         let candidates: [ReceiveRecoveryCandidate]
-        do { candidates = try await ReceiveRecoveryCandidate.discover(database: db) }
-        catch {
+        do {
+            candidates = try await ReceiveRecoveryCandidate.discover(database: db)
+                .filter { !walletStore.isMintRemoved(url: $0.mintURL) }
+        } catch {
             AppLogger.wallet.error("Unable to discover interrupted receipts")
             return false
         }

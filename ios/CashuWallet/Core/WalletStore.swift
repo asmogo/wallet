@@ -13,11 +13,28 @@ final class WalletStore {
     }
 
     func loadMints() -> [MintInfo] {
-        value(forKey: StorageKeys.mints, legacyKeys: [StorageKeys.Legacy.mints]) ?? []
+        let mints: [MintInfo] = value(forKey: StorageKeys.mints, legacyKeys: [StorageKeys.Legacy.mints]) ?? []
+        let removed: [String] = value(forKey: StorageKeys.removedMintUrls) ?? []
+        let removedIdentities = Set(removed.map(MintURLIdentity.normalized))
+        return mints.filter { !removedIdentities.contains(MintURLIdentity.normalized($0.url)) }
     }
 
     func saveMints(_ mints: [MintInfo]) {
         set(mints, forKey: StorageKeys.mints)
+    }
+
+    /// CDK retains proofs after removal; they must not implicitly reconnect a mint.
+    func isMintRemoved(url: String) -> Bool {
+        let removed: [String] = value(forKey: StorageKeys.removedMintUrls) ?? []
+        return removed.contains { MintURLIdentity.normalized($0) == MintURLIdentity.normalized(url) }
+    }
+
+    func setMintRemoved(url: String, removed: Bool) {
+        let current: [String] = value(forKey: StorageKeys.removedMintUrls) ?? []
+        let normalized = MintURLIdentity.normalized(url)
+        var updated = current.filter { MintURLIdentity.normalized($0) != normalized }
+        if removed { updated.append(normalized) }
+        if updated != current { set(updated, forKey: StorageKeys.removedMintUrls) }
     }
 
     func loadBalancesByUnit() -> [String: UInt64] {

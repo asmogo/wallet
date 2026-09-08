@@ -24,8 +24,26 @@ class WalletStore(
         get() = store.string(StorageKeys.walletActiveMintUrl)
         set(value) = store.putString(StorageKeys.walletActiveMintUrl, value)
 
-    fun loadMints(): List<MintInfo> = loadList(StorageKeys.walletMints, MintInfo.serializer())
+    fun loadMints(): List<MintInfo> {
+        val removed = loadList(StorageKeys.walletRemovedMintUrls, String.serializer())
+        return loadList(StorageKeys.walletMints, MintInfo.serializer()).filterNot { mint ->
+            removed.any { com.cashu.me.Core.CDK.mintRemovalUrlsMatch(it, mint.url) }
+        }
+    }
     fun saveMints(mints: List<MintInfo>) = saveList(StorageKeys.walletMints, MintInfo.serializer(), mints)
+
+    /** CDK retains proofs after removal; they must not implicitly reconnect a mint. */
+    fun isMintRemoved(url: String): Boolean =
+        loadList(StorageKeys.walletRemovedMintUrls, String.serializer())
+            .any { com.cashu.me.Core.CDK.mintRemovalUrlsMatch(it, url) }
+
+    @Synchronized
+    fun setMintRemoved(url: String, removed: Boolean) {
+        val current = loadList(StorageKeys.walletRemovedMintUrls, String.serializer())
+        val updated = current.filterNot { com.cashu.me.Core.CDK.mintRemovalUrlsMatch(it, url) } +
+            if (removed) listOf(url) else emptyList()
+        if (updated != current) saveList(StorageKeys.walletRemovedMintUrls, String.serializer(), updated)
+    }
 
     fun loadBalancesByUnit(): Map<String, Long> =
         loadMap(StorageKeys.walletBalancesByUnit, Long.serializer())

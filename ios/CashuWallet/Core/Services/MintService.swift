@@ -148,6 +148,7 @@ class MintService: ObservableObject {
             fetchedInfo: info
         )
         
+        walletStore.setMintRemoved(url: normalizedUrl, removed: false)
         mints.append(mintInfo)
         saveMints()
         
@@ -187,6 +188,9 @@ class MintService: ObservableObject {
                 )
             },
             commitMetadata: {
+                // Persist the exclusion first so a relaunch cannot rediscover
+                // retained CDK proofs if metadata removal is interrupted.
+                self.walletStore.setMintRemoved(url: mint.url, removed: true)
                 self.mints = MintRemovalPolicy.removingMint(
                     withURL: mint.url,
                     from: self.mints
@@ -312,6 +316,7 @@ class MintService: ObservableObject {
     /// Persist receipt evidence before metadata lookup or network recovery.
     func trackReceivedMintLocally(url: String, unit: CurrencyUnit) {
         let normalized = normalizeUrl(url)
+        guard !walletStore.isMintRemoved(url: normalized) else { return }
         if let index = mints.firstIndex(where: { MintRemovalPolicy.matches($0.url, normalized) }) {
             let unitName = PaymentRequestDecoder.unitDescription(unit)
             if mints[index].name == "Unknown Mint", !mints[index].units.contains(unitName) {
@@ -339,6 +344,7 @@ class MintService: ObservableObject {
     ///   user-selected active mint and the mint's balance are preserved.
     func ensureMintTracked(url: String, name: String? = nil) async {
         let normalizedUrl = normalizeUrl(url)
+        walletStore.setMintRemoved(url: normalizedUrl, removed: false)
         let existingIndex = mints.firstIndex(where: { MintRemovalPolicy.matches($0.url, normalizedUrl) })
 
         // Already tracked with real metadata — nothing to do.

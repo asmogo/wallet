@@ -124,6 +124,11 @@ extension WalletManager {
             defaultFailureOutcome: .ambiguousFailure
         ) {
             do {
+                // This receive has passed approval. Allow its durable receipt
+                // to reconnect a previously removed mint, even after a lost response.
+                if let recoveryContext {
+                    self.walletStore.setMintRemoved(url: recoveryContext.mintURL, removed: false)
+                }
                 // Receive first: tokenService creates the CDK wallet and consumes the
                 // keyset counter. Enriching the mint (createWallet/fetchMintInfo) before
                 // this desyncs the counter and makes the mint reject "duplicate outputs"

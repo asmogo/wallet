@@ -6,6 +6,52 @@ import XCTest
 final class ReceiveRecoveryTests: XCTestCase {
     private let mintURL = "http://localhost:3340"
 
+    func testRemovalSurvivesReloadWithoutReconnectingRetainedAccounts() async throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let db = try LifecycleSafeWalletDatabase(filePath: directory.appendingPathComponent("wallet.sqlite").path)
+        let repo = try WalletRepository(mnemonic: generateMnemonic(), store: customWalletStore(db: db))
+        let url = "https://mint.example/Mint"
+        try await repo.createWallet(mintUrl: MintUrl(url: url), unit: .sat, targetProofCount: nil)
+        let storage = InMemoryStorage()
+        let store = WalletStore(storage: storage)
+        let service = MintService(walletRepository: { repo }, walletStore: store)
+        service.trackReceivedMintLocally(url: url, unit: .sat)
+        try await service.removeMint(XCTUnwrap(service.mints.first))
+
+        let reloadedStore = WalletStore(storage: storage)
+        let reloaded = MintService(walletRepository: { nil }, walletStore: reloadedStore)
+        reloaded.loadCachedMints()
+        reloaded.trackReceivedMintLocally(url: "https://MINT.example/Mint/", unit: .sat)
+        reloaded.trackReceivedMintLocally(url: url, unit: .usd)
+        XCTAssertTrue(reloadedStore.isMintRemoved(url: url))
+        XCTAssertTrue(reloaded.mints.isEmpty)
+        XCTAssertNil(reloaded.activeMint)
+
+        // Deliberately reconnecting the mint enables receipt recovery again,
+        // even when metadata cannot be fetched yet.
+        await reloaded.ensureMintTracked(url: url)
+        reloaded.trackReceivedMintLocally(url: url, unit: .usd)
+        XCTAssertFalse(reloadedStore.isMintRemoved(url: url))
+        XCTAssertEqual(reloaded.mints.count, 1)
+        XCTAssertEqual(Set(reloaded.mints[0].units), ["sat", "usd"])
+    }
+
+    func testRemovalBeforeMetadataCommitSurvivesReloadAndClearsWithTheWallet() {
+        let storage = InMemoryStorage()
+        let store = WalletStore(storage: storage)
+        let url = "https://mint.example/Mint"
+        store.saveMints([MintInfo(url: url, name: "Test", isActive: true, balance: 21)])
+        store.setMintRemoved(url: "https://MINT.example/Mint/", removed: true)
+        let reloaded = WalletStore(storage: storage)
+        XCTAssertTrue(reloaded.isMintRemoved(url: url))
+        XCTAssertFalse(reloaded.isMintRemoved(url: "https://mint.example/mint"))
+        XCTAssertTrue(reloaded.loadMints().isEmpty)
+        reloaded.removeAllWalletData()
+        XCTAssertFalse(reloaded.isMintRemoved(url: url))
+    }
+
     func testOnlyReceiveSagasSupplyRecoveryCandidates() {
         XCTAssertEqual(ReceiveRecoveryCandidate.fromSaga(#"{"kind":"receive","mint_url":"https://mint.example","unit":"usd"}"#)?.unit, .usd)
         XCTAssertNil(ReceiveRecoveryCandidate.fromSaga(#"{"kind":"send","mint_url":"https://mint.example","unit":"sat"}"#))

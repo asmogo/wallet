@@ -47,6 +47,7 @@ object StorageKeys {
     const val priceDataPrefix = "price."
 
     const val walletMints = "wallet.mints"
+    const val walletRemovedMintUrls = "wallet.removedMintUrls"
     const val walletActiveMintUrl = "wallet.activeMintUrl"
     const val walletBalancesByUnit = "wallet.balancesByUnit"
     const val walletPendingReceiveTokens = "wallet.pendingReceiveTokens"
@@ -139,6 +140,7 @@ object StorageKeys {
 
     val walletBoundaryKeys = setOf(
         walletMints,
+        walletRemovedMintUrls,
         walletActiveMintUrl,
         walletBalancesByUnit,
         walletPendingReceiveTokens,

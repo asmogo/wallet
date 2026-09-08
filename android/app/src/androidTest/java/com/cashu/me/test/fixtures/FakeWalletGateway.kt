@@ -52,6 +52,8 @@ class FakeWalletGateway(
     var receiveCandidates = emptyList<com.cashu.me.Core.CDK.ReceiveRecoveryCandidate>()
     var receiveRecoveryCalls = 0
     var metadataFetches = 0
+    var metadataFailure: Throwable? = null
+    var onMetadataFetch: (() -> Unit)? = null
     var nextFailure: Throwable? = null
     var nextCloseFailure: Throwable? = null
     val latestMintQuoteId: String?
@@ -139,6 +141,8 @@ class FakeWalletGateway(
 
     override suspend fun fetchMintInfo(mintUrl: String): MintInfo? {
         metadataFetches++
+        onMetadataFetch?.invoke()
+        metadataFailure?.let { throw it }
         failIfRequested()
         check(repositoryOpen) { "Fake wallet repository is not open." }
         val normalized = normalize(mintUrl)

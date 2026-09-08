@@ -697,6 +697,7 @@ extension WalletManager {
             protectsBackgroundExecution: true
         ) {
             let mintUrl = MintUrl(url: normalizedUrl)
+            self.walletStore.setMintRemoved(url: normalizedUrl, removed: false)
 
             // Create wallet for this mint
             try await walletRepository.createWallet(mintUrl: mintUrl, unit: .sat, targetProofCount: nil)
