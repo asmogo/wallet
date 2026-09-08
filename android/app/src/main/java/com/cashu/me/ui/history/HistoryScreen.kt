@@ -365,7 +365,7 @@ fun HistoryScreen(
     requestPendingDelete?.let { req ->
         ActionConfirmationSheet(
             title = "Remove from history?",
-            message = "Only this request is removed from history. Payments already received stay in your wallet, and the request can still receive payments.",
+            message = "Only this request is removed from history. Payments already received stay in your wallet. The QR code and any pending payment routing remain valid, so the request can still receive payments.",
             actionLabel = "Remove",
             destructive = true,
             onConfirm = {
@@ -472,19 +472,22 @@ internal fun unifiedFiltered(
         }
         .map { HistoryItem.Req(it) as HistoryItem }
     val all = (txItems + reqItems).sortedByDescending { it.date }
-    if (query.isBlank()) return all
+    val normalizedQuery = query.trim()
+    if (normalizedQuery.isEmpty()) return all
     return all.filter { item ->
         when (item) {
             is HistoryItem.Tx -> {
                 val tx = item.transaction
-                TransactionDisplay.title(tx).contains(query, ignoreCase = true) ||
-                    tx.amount.toString().contains(query) ||
-                    tx.displayDescription?.contains(query, ignoreCase = true) == true
+                TransactionDisplay.title(tx).contains(normalizedQuery, ignoreCase = true) ||
+                    tx.amount.toString().contains(normalizedQuery) ||
+                    tx.displayDescription?.contains(normalizedQuery, ignoreCase = true) == true
             }
             is HistoryItem.Req -> {
-                item.request.displayTitle.contains(query, ignoreCase = true) ||
-                    (item.request.amount?.toString()?.contains(query) == true) ||
-                    item.request.displayDescription?.contains(query, ignoreCase = true) == true
+                item.request.displayTitle.contains(normalizedQuery, ignoreCase = true) ||
+                    (item.request.amount?.toString()?.contains(normalizedQuery) == true) ||
+                    (item.request.totalReceived > 0 &&
+                        item.request.totalReceived.toString().contains(normalizedQuery)) ||
+                    item.request.displayDescription?.contains(normalizedQuery, ignoreCase = true) == true
             }
         }
     }

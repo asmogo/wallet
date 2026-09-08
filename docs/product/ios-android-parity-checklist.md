@@ -44,6 +44,9 @@ Platform-specific capabilities remain intentionally outside parity, including iC
 
 ### Send — unified destination and payment flow
 
+- [x] **[P1 · iOS → Android] Reject malformed Lightning invoices at destination entry.** Send uses the central payment decoder without a prefix-only BOLT11 fallback. Valid and amountless BOLT11 invoices and the existing BOLT12 fallback retain their routing. **Verification:** All six destination tests passed with native CDK; Android unit/lint/build checks passed. Invalid destination entry was inspected on-device.
+
+
 - [x] **[P1 · iOS → Android] Support fiat-primary amount entry.** iOS converts keypad input according to the saved sats/fiat primary setting; Android’s unified Send amount step always interprets the input as sats. **Done when:** Android entry, Send Max, validation, and amount presentation honor the selected primary unit without changing the sat amount being paid.
 
 - [x] **[P1 · iOS → Android] Honor the preferred unit on payment confirmation.** Android confirmation renders a fixed sat string; iOS keeps the saved primary value and alternate conversion available. **Done when:** Android confirmation leads with the persisted primary unit and makes the alternate value available visually and to accessibility services through a native Android presentation. An identical iOS flip control is not required.
@@ -98,15 +101,15 @@ Platform-specific capabilities remain intentionally outside parity, including iC
 
 - [x] **[P1 · Android → iOS] Correlate an open Cashu Request success to a new payment record.** Android watches the request’s received-payment IDs; iOS has a fallback that treats any balance increase while the receive sheet is open as payment for that request. **Done when:** iOS cannot show request success for an unrelated balance increase, with regression coverage for concurrent balance changes.
 
-- [ ] **[P2 · Android → iOS] Show Total received in Cashu Request details.** Android adds the aggregate after one or more payments; iOS shows only the status count and original request amount. **Done when:** iOS includes a unit-correct aggregate row without confusing it with the requested amount.
+- [x] **[P2 · Android → iOS] Show Total received in Cashu Request details.** The total row landed in #344. Regression coverage now checks cumulative mint-unit totals across live payments, duplicate delivery, and reopening from persisted History. Requested amounts and payment counts remain separate. **Verification:** Six payment-observation tests passed, including cumulative totals and reopening. Native sat/USD receipt captures and iOS builds passed.
 
 ### History and transaction details
 
 - [x] **[P1 · Android → iOS] Search transaction and request memos.** Android includes memos in History search; iOS searches titles and numeric amounts only. **Done when:** iOS matches memo text case-insensitively for both item types.
 
-- [ ] **[P2 · iOS → Android] Search a Cashu Request’s Total received amount.** iOS includes the aggregate received value in search; Android only searches the requested amount. **Done when:** Android matches both configured and received totals using the same normalized amount formats as other History search.
+- [x] **[P2 · iOS → Android] Search a Cashu Request’s Total received amount.** Android searches positive cumulative received totals alongside requested amounts, titles, and descriptions. Queries are trimmed before matching; filters and ordering remain unchanged. **Verification:** Focused total-search regressions, Android unit/lint/build checks, and matched History search captures passed.
 
-- [ ] **[P1 · iOS → Android] Explain all consequences of removing a Cashu Request row.** iOS says the QR and pending payment routing remain valid; Android only says received payments stay in the wallet. **Done when:** Android states before deletion that previously received funds remain, the QR and payment routing remain valid, and only the History row is removed.
+- [x] **[P1 · Converge] Explain all consequences of removing a Cashu Request row.** Both native confirmations state that received funds stay in the wallet, the QR and pending payment routing remain valid, and only the History entry is removed. Removal behavior is unchanged. **Verification:** Android unit/lint/build checks and native confirmation captures passed. The matching iOS build and native removal-sheet capture passed on iOS 26.5.
 
 - [ ] **[P1 · iOS → Android] Add removal for an ordinary parked incoming token.** Android already supports declining a held Cashu Request payment, but it has no equivalent removal for a normal unclaimed token. **Done when:** Android provides a discoverable removal action for ordinary parked tokens and warns that the ecash will be discarded and only the sender can reissue it.
 
@@ -142,6 +145,9 @@ Platform-specific capabilities remain intentionally outside parity, including iC
 
 ### Settings — information architecture, display, and destructive actions
 
+- [x] **[P1 · Android → iOS] Retry Lightning-address setup from Settings.** “Try setup again” recovers failed wallet initialization and initializes missing NPC keys from the stored seed. Startup and retries share the in-flight runtime load, and successful runtime recovery restarts the Cashu Request listener. Existing identities, wallet data, and preferences are preserved. Loading and errors remain retryable. **Verification:** The initial implementation passed all 13 NPC service tests, the native setup-state capture on iOS 26.5, and app/test-bundle builds. The follow-up concurrency and listener fixes received static review; tests were not rerun.
+
+
 - [x] **[P2 · iOS → Android] Make App Lock discoverable in a security-oriented Settings location.** Android currently places the toggle under Privacy even though it controls local device access. **Done when:** App Lock is discoverable under a clear security or backup-and-security destination while privacy/background networking controls remain conceptually separate. The exact iOS hierarchy is not required.
 
 - [x] **[P0 · iOS → Android] Authenticate before enabling App Lock.** iOS verifies device-owner authentication and reverts with an error if enabling fails; Android directly persists the toggle. **Done when:** Android cannot enable App Lock until a device-owner challenge succeeds, and cancellation or failure leaves it disabled.
@@ -152,7 +158,7 @@ Platform-specific capabilities remain intentionally outside parity, including iC
 
 - [x] **[P1 · Android → iOS] Read the app version from build metadata.** Android uses `BuildConfig.VERSION_NAME`; iOS hard-codes `1.0.0`. **Done when:** iOS displays the shipped bundle version and, if included, its build number from metadata.
 
-- [ ] **[P2 · Android → iOS] Add localized currency names.** Android shows the ISO code plus the localized currency name; iOS shows only the code. **Done when:** iOS rows are understandable without memorizing ISO-4217 codes.
+- [x] **[P2 · Android → iOS] Add localized currency names.** iOS currency rows show the localized name beneath the ISO code and include both in the accessibility label, falling back to the code. Names wrap at large text sizes; ordering, selection, and avatars remain native. **Verification:** Native English/German accessibility-size tests and iOS builds passed; localized names were visually reviewed.
 
 - [x] **[P2 · iOS → Android] Show when the BTC price was last updated.** iOS includes a relative timestamp beside the price; Android omits it. **Done when:** Android exposes recency and handles never-loaded and stale states.
 

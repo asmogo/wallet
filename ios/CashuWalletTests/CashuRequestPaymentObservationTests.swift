@@ -23,6 +23,21 @@ final class CashuRequestPaymentObservationTests: XCTestCase {
         super.tearDown()
     }
 
+    func testCumulativeTotalSurvivesReopeningAndDuplicateDelivery() throws {
+        let request = store.createNew(id: "total-request", unit: "usd", encoded: "creqAtotal")
+        XCTAssertEqual(request.totalReceived, 0)
+        store.attachPayment(requestId: request.id, transactionId: "first", amount: 1234)
+        XCTAssertEqual(store.request(withId: request.id)?.totalReceived, 1234)
+        store.attachPayment(requestId: request.id, transactionId: "second", amount: 66)
+        store.attachPayment(requestId: request.id, transactionId: "second", amount: 66)
+        let reopened = CashuRequestStore(userDefaults: defaults)
+        let saved = try XCTUnwrap(reopened.request(withId: request.id))
+        XCTAssertEqual(saved.totalReceived, 1300)
+        XCTAssertEqual(saved.receivedPayments.count, 2)
+        XCTAssertEqual(saved.unit, "usd")
+        XCTAssertNil(saved.amount, "Received totals must not become the requested amount")
+    }
+
     func testUnrelatedConcurrentBalanceIncreaseDoesNotProduceRequestSuccess() throws {
         let watchedRequest = store.createNew(id: "watched-request", encoded: "creqAwatched")
         _ = store.createNew(id: "unrelated-request", encoded: "creqAunrelated")
