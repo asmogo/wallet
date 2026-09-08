@@ -59,8 +59,8 @@ extension WalletManager {
     func storedAccountUnits(mintURL: String) async -> [String]? {
         guard let db, let repo = walletRepository else { return nil }
         return try? await operationCoordinator.perform(kind: .balance, resourceID: mintURL) {
-            try await StoredWalletAccount.discover(database: db, repository: repo)
-                .filter { MintRemovalPolicy.matches($0.mintURL, mintURL) }.map(\.unitName).sorted()
+            let accounts = try await StoredWalletAccount.discover(database: db, repository: repo)
+            return Set(accounts.filter { $0.matches(mintURL: mintURL) }.map(\.unitName)).sorted()
         }
     }
 
@@ -69,15 +69,20 @@ extension WalletManager {
         if unit.lowercased() == "sat" {
             return mints.first(where: { $0.url == mintURL })?.balance
         }
-        guard let db else { return nil }
+        guard let db, let repo = walletRepository else { return nil }
         do {
             return try await operationCoordinator.perform(
                 kind: .balance,
                 resourceID: mintURL
             ) {
-                let mintUrl = MintUrl(url: mintURL)
                 let currencyUnit = PaymentRequestDecoder.currencyUnit(from: unit)
-                return try await db.getBalance(mintUrl: mintUrl, unit: currencyUnit, state: [.unspent])
+                let accounts = try await StoredWalletAccount.discover(database: db, repository: repo)
+                    .filter { $0.unit == currencyUnit && $0.matches(mintURL: mintURL) }
+                var total: UInt64 = 0
+                for account in accounts {
+                    total += try await db.getBalance(mintUrl: MintUrl(url: account.mintURL), unit: account.unit, state: [.unspent])
+                }
+                return total
             }
         } catch {
             AppLogger.wallet.debug(

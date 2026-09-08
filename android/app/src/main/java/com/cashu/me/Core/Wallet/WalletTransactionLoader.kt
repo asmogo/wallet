@@ -37,6 +37,9 @@ internal class WalletTransactionLoader(
         val savedTokens = walletStore.loadSavedTokens()
         val pendingReceiveTokens = walletStore.loadPendingReceiveTokens()
         val previous = walletStore.loadTransactions().filter { !it.isPendingReceiveToken }
+        // Synthesized invoice rows use the quote id as their row id; CDK rows
+        // use transaction ids. Only CDK rows may suppress a fresh quote read.
+        val previousAccountTransactions = previous.filter { it.id != it.quoteId }
         val remote = try {
             gateway.storedAccounts().filter { account ->
                 mints.any { com.cashu.me.Core.CDK.mintRemovalUrlsMatch(it.url, account.mintUrl) }
@@ -45,12 +48,12 @@ internal class WalletTransactionLoader(
                     gateway.listTransactions(mapOf(account.mintUrl to listOf(account.unit)))
                 } catch (error: Exception) {
                     if (error is kotlinx.coroutines.CancellationException) throw error
-                    previous.filter { it.unit == account.unit && com.cashu.me.Core.CDK.mintRemovalUrlsMatch(it.mintUrl.orEmpty(), account.mintUrl) }
+                    previousAccountTransactions.filter { it.unit == account.unit && com.cashu.me.Core.CDK.mintRemovalUrlsMatch(it.mintUrl.orEmpty(), account.mintUrl) }
                 }
             }
         } catch (error: Exception) {
             if (error is kotlinx.coroutines.CancellationException) throw error
-            previous.filter { tx -> mints.any { com.cashu.me.Core.CDK.mintRemovalUrlsMatch(it.url, tx.mintUrl.orEmpty()) } }
+            previousAccountTransactions.filter { tx -> mints.any { com.cashu.me.Core.CDK.mintRemovalUrlsMatch(it.url, tx.mintUrl.orEmpty()) } }
         }
         val remoteWithSavedTokens = remote
             .map { transaction ->
@@ -86,9 +89,10 @@ internal class WalletTransactionLoader(
         val quoteIdsWithTransactions = remoteWithTokens.mapNotNull { it.quoteId }.toSet()
         val mintQuoteTimestamps = walletStore.loadMintQuoteTimestamps().toMutableMap()
         val quoteRead = runCatching { gateway.listUnissuedMintQuotes() }
+        quoteRead.exceptionOrNull()?.let { if (it is kotlinx.coroutines.CancellationException) throw it }
         val unissuedMintQuotes = quoteRead.getOrDefault(emptyList())
         val retainedQuotes = if (quoteRead.isFailure) previous.filter {
-            it.quoteId != null && it.quoteId !in quoteIdsWithTransactions && it.mintUrl in trackedMintUrls
+            it.id == it.quoteId && it.id !in quoteIdsWithTransactions && it.mintUrl in trackedMintUrls
         } else emptyList()
         val pendingQuotes = pendingMintQuoteTransactions(
             quotes = unissuedMintQuotes,

@@ -60,16 +60,27 @@ class TransactionService: ObservableObject {
         // lifecycle status, so rows map one-to-one without local merging.
         var allTransactions: [WalletTransaction] = []
         var quoteIdsWithTransactions: Set<String> = []
-        let trackedMintUrls = Set(getTrackedMintUrls().filter { !$0.isEmpty })
+        let trackedMintUrls = Set(getTrackedMintUrls().filter { !$0.isEmpty }.map(MintURLIdentity.normalized))
+        let previous = transactions.filter {
+            !$0.isPendingReceiveToken && $0.mintUrl.map { trackedMintUrls.contains(MintURLIdentity.normalized($0)) } == true
+        }
+        // Synthesized invoice rows use their quote id as the row id. They must
+        // not suppress fresh quote reads when a CDK account read fails.
+        let previousAccountTransactions = previous.filter { $0.id != $0.quoteId }
 
         let accounts: [StoredWalletAccount]
         do {
             accounts = try await StoredWalletAccount.discover(database: database, repository: repo)
-                .filter { account in trackedMintUrls.contains { MintURLIdentity.normalized($0) == account.mintURL } }
-        } catch {
-            // Preserve existing history when discovery could only be partial.
-            AppLogger.wallet.error("Unable to discover stored transaction accounts")
+                .filter { trackedMintUrls.contains(MintURLIdentity.normalized($0.mintURL)) }
+        } catch is CancellationError {
             return
+        } catch {
+            // Preserve CDK rows, but still refresh quotes and locally parked
+            // tokens, whose stores may be available even when discovery fails.
+            accounts = []
+            allTransactions = previousAccountTransactions
+            quoteIdsWithTransactions.formUnion(previousAccountTransactions.compactMap(\.quoteId))
+            AppLogger.wallet.error("Unable to discover stored transaction accounts")
         }
         for account in accounts {
                 let mintUrlString = account.mintURL
@@ -131,10 +142,11 @@ class TransactionService: ObservableObject {
                         self.saveToken(txId: walletTxs[index].id, token: token)
                     }
                     allTransactions.append(contentsOf: walletTxs)
+                } catch is CancellationError {
+                    return
                 } catch {
-                    let retained = transactions.filter {
-                        !$0.isPendingReceiveToken && $0.unit == unitString
-                            && $0.mintUrl.map(MintURLIdentity.normalized) == mintUrlString
+                    let retained = previousAccountTransactions.filter {
+                        $0.unit == unitString && $0.mintUrl == mintUrlString
                     }
                     allTransactions.append(contentsOf: retained)
                     quoteIdsWithTransactions.formUnion(retained.compactMap(\.quoteId))
@@ -160,11 +172,11 @@ class TransactionService: ObservableObject {
                     observingQuoteID: observingQuoteID
                 )
                 allTransactions.append(contentsOf: pendingQuoteTransactions)
+            } catch is CancellationError {
+                return
             } catch {
-                allTransactions.append(contentsOf: transactions.filter {
-                    !$0.isPendingReceiveToken && $0.quoteId != nil
-                        && !quoteIdsWithTransactions.contains($0.quoteId!)
-                        && $0.mintUrl.map(trackedMintUrls.contains) == true
+                allTransactions.append(contentsOf: previous.filter {
+                    $0.id == $0.quoteId && !quoteIdsWithTransactions.contains($0.id)
                 })
                 AppLogger.wallet.error("Failed to load stored payment quotes: \(error)")
             }
@@ -193,6 +205,7 @@ class TransactionService: ObservableObject {
             return tx
         })
 
+        guard !Task.isCancelled else { return }
         persistMintQuoteTimestamps(for: allTransactions, using: mintQuoteTimestamps)
 
         // Restore from durable request metadata each load, even after payment/relaunch.
@@ -326,7 +339,7 @@ class TransactionService: ObservableObject {
         var transactions: [WalletTransaction] = []
 
         for quote in quotes {
-            guard trackedMintUrls.contains(quote.mintUrl.url) else {
+            guard trackedMintUrls.contains(MintURLIdentity.normalized(quote.mintUrl.url)) else {
                 continue
             }
 

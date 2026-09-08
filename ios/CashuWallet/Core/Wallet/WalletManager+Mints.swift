@@ -205,7 +205,7 @@ extension WalletManager {
         let projection: StoredBalanceProjection
         do {
             let accounts = try await StoredWalletAccount.discover(database: db, repository: walletRepository)
-                .filter { account in mintUrls.contains { MintURLIdentity.normalized($0) == account.mintURL } }
+                .filter { account in mintUrls.contains { account.matches(mintURL: $0) } }
             projection = try await StoredBalanceProjection.load(accounts: accounts, previousTotals: balancesByUnit) { account in
                 try await db.getBalance(mintUrl: MintUrl(url: account.mintURL), unit: account.unit, state: [.unspent])
             }
@@ -216,8 +216,7 @@ extension WalletManager {
         guard !Task.isCancelled else { return }
         let unitTotals = projection.totals
         let balancesByMintURL = Dictionary(uniqueKeysWithValues: mintUrls.map { url in
-            let account = StoredWalletAccount(mintURL: url, unit: .sat)
-            return (url, projection.balances[account] ?? mints.first { $0.url == url }?.balance ?? 0)
+            (url, projection.balance(mintURL: url, unit: .sat) ?? mints.first { $0.url == url }?.balance ?? 0)
         })
         mintService.updateMintBalances(balancesByMintURL)
         balance = unitTotals["sat"] ?? 0
