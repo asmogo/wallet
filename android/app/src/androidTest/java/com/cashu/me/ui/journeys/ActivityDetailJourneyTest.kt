@@ -16,7 +16,6 @@ import org.junit.Assert.assertTrue
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import androidx.test.core.graphics.writeToTestStorage
-import androidx.test.uiautomator.UiDevice
 import com.cashu.me.Models.TransactionKind
 import com.cashu.me.Models.TransactionStatus
 import com.cashu.me.Models.TransactionType
@@ -278,9 +277,6 @@ class ActivityDetailJourneyTest {
 
     private fun screenshot(name: String) {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
-        compose.waitForIdle()
-        // Semantics can exist before the dialog's platform window has drawn.
-        UiDevice.getInstance(instrumentation).waitForIdle()
         checkNotNull(instrumentation.uiAutomation.takeScreenshot()).writeToTestStorage(name)
     }
 }

@@ -2,7 +2,6 @@ import SwiftUI
 import UIKit
 
 struct CashuRequestDetailView: View {
-    @Environment(\.dismissActivitySheet) private var dismissActivitySheet
     @Environment(\.dismiss) private var dismiss
     @Environment(\.scenePhase) private var scenePhase
     @EnvironmentObject var walletManager: WalletManager
@@ -81,9 +80,7 @@ struct CashuRequestDetailView: View {
                 }
                 ToolbarItem(placement: .cancellationAction) {
                     SheetCloseButton {
-                        if let onClose { onClose() }
-                        else if let dismissActivitySheet { dismissActivitySheet() }
-                        else { dismiss() }
+                        if let onClose { onClose() } else { dismiss() }
                     }
                 }
                 ToolbarItem(placement: .topBarTrailing) {
@@ -161,8 +158,6 @@ struct CashuRequestDetailView: View {
                     showPaymentSuccess = false
                 } else if let onClose {
                     onClose()
-                } else if let dismissActivitySheet {
-                    dismissActivitySheet()
                 } else {
                     dismiss()
                 }
@@ -295,7 +290,7 @@ struct CashuRequestDetailView: View {
         Group {
             if paymentCount > 0 {
                 HStack(spacing: 6) {
-                    Image(systemName: "checkmark.circle")
+                    Image(systemName: "checkmark.circle.fill")
                     Text(paymentCount == 1 ? "1 payment received" : "\(paymentCount) payments received")
                 }
                 .font(.subheadline.weight(.medium))

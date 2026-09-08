@@ -152,9 +152,10 @@ struct MainWalletView: View {
                 sheetView(for: sheet)
                     .observeBottomSheetDismissal { isSheetDismissing = $0 }
             }
-            .activitySheet(item: $selectedTransaction, onDismissalStateChanged: { isSheetDismissing = $0 }) { transaction in
+            .sheet(item: $selectedTransaction) { transaction in
                 TransactionDetailView(transaction: transaction)
                     .environmentObject(walletManager)
+                    .observeBottomSheetDismissal { isSheetDismissing = $0 }
             }
             .task { await walletManager.loadTransactions() }
         }

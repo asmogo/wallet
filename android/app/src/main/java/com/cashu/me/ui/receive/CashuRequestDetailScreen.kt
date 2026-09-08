@@ -24,7 +24,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.CheckCircle
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.IosShare
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -612,7 +612,7 @@ private fun StatusBlock(received: Boolean, paymentCount: Int) {
                 horizontalArrangement = Arrangement.spacedBy(CashuTheme.spacing.snug),
             ) {
                 Icon(
-                    imageVector = Icons.Outlined.CheckCircle,
+                    imageVector = Icons.Filled.CheckCircle,
                     contentDescription = null,
                     tint = CashuTheme.colors.received,
                     modifier = Modifier.size(CashuTheme.spacing.loose),

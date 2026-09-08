@@ -41,61 +41,10 @@ struct ActivityDetailSheet<Content: View>: View {
     var onShare: (() -> Void)?
     @ViewBuilder var content: () -> Content
     @Environment(\.dismiss) private var dismiss
-    @Environment(\.activitySheetSizing) private var activitySheetSizing
-    @Environment(\.dismissActivitySheet) private var dismissActivitySheet
-    @Environment(\.colorScheme) private var colorScheme
-    @State private var navigationInset: CGFloat = 44
 
     var body: some View {
-        Group {
-            if let activitySheetSizing {
-                navigationContent
-                    .overlay(alignment: .top) {
-                        Capsule()
-                            .fill(.secondary.opacity(0.5))
-                            .frame(width: 36, height: 5)
-                            .padding(.top, 8)
-                            .allowsHitTesting(false)
-                            .accessibilityHidden(true)
-                    }
-                .environment(\.bottomSheetSurfaceStyle, .compact)
-                .background { CompactSheetBackground().ignoresSafeArea() }
-                .containerShape(UnevenRoundedRectangle(topLeadingRadius: 32, topTrailingRadius: 32))
-                .accessibilityElement(children: .contain)
-                .accessibilityIdentifier("cashu.history.sheet")
-                .onChange(of: fittedHeight, initial: true) { _, height in activitySheetSizing(height) }
-            } else {
-                navigationContent
-                    .compactBottomSheetSurface()
-                    .contentFitDetent(nativeContentHeight, enabled: fitsContent, estimate: 500, navigationBar: true)
-                    .presentationDragIndicator(.visible)
-            }
-        }
-        .accessibilityAction(.escape) {
-            if let dismissActivitySheet { dismissActivitySheet() } else { dismiss() }
-        }
-    }
-
-    private var fittedHeight: CGFloat? {
-        fitsContent ? (contentHeight > 0 ? contentHeight : 500) + navigationInset : nil
-    }
-
-    private var nativeContentHeight: CGFloat {
-        // Account for the actual navigation inset on floating iPad sheets too.
-        contentHeight > 0 ? contentHeight + max(0, navigationInset - ContentFitSheetMetrics.navigationBar) : 0
-    }
-
-    private var navigationContent: some View {
         NavigationStack {
             content()
-                .onGeometryChange(for: CGFloat.self) { $0.safeAreaInsets.top } action: { inset in
-                    if inset > 0 { navigationInset = inset }
-                }
-                .background {
-                    if activitySheetSizing != nil {
-                        CompactSheetPalette.sheet(for: colorScheme).ignoresSafeArea()
-                    }
-                }
                 .navigationBarTitleDisplayMode(.inline)
                 .toolbarBackground(.hidden, for: .navigationBar)
                 .toolbar {
@@ -113,5 +62,9 @@ struct ActivityDetailSheet<Content: View>: View {
                     }
                 }
         }
+        .compactBottomSheetSurface()
+        .contentFitDetent(contentHeight, enabled: fitsContent, estimate: 500, navigationBar: true)
+        .presentationDragIndicator(.visible)
+        .accessibilityAction(.escape) { dismiss() }
     }
 }

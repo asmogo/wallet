@@ -116,63 +116,6 @@ final class MainTabUITests: UITestBase {
 
 /// Actual receipt sheets with deterministic catalog records, without a live mint.
 final class ActivityDetailUITests: XCTestCase {
-    func testReceiptSurvivesOpeningAndClosingShareSheet() {
-        continueAfterFailure = false
-        let app = XCUIApplication()
-        app.launchEnvironment = ["SHOW_COMPONENT_CATALOG": "activity", "CI_INTEGRATION_TEST": "1"]
-        app.launch()
-        defer { app.terminate() }
-        let row = app.buttons["pending-lightning"]
-        XCTAssertTrue(row.waitForExistence(timeout: 10))
-        row.tap()
-        let share = app.buttons["Share"]
-        XCTAssertTrue(share.waitForExistence(timeout: 5))
-        share.tap()
-        let close = app.buttons["Close"].firstMatch
-        XCTAssertTrue(close.waitForExistence(timeout: 5))
-        close.tap()
-        XCTAssertTrue(app.staticTexts["Status"].waitForExistence(timeout: 5))
-        XCTAssertTrue(share.isHittable)
-    }
-
-    func testPhoneReceiptAttachesToEdgesAndCancelledSwipeKeepsItOpen() throws {
-        continueAfterFailure = false
-        let app = XCUIApplication()
-        app.launchEnvironment = ["SHOW_COMPONENT_CATALOG": "activity", "CI_INTEGRATION_TEST": "1"]
-        app.launch()
-        defer { app.terminate() }
-        try XCTSkipIf(app.frame.width >= 600, "Phone-width geometry check")
-        let row = app.buttons["received-ecash"]
-        XCTAssertTrue(row.waitForExistence(timeout: 10))
-        row.tap()
-        let sheet = app.descendants(matching: .any)["cashu.history.sheet"].firstMatch
-        XCTAssertTrue(sheet.waitForExistence(timeout: 5))
-        XCTAssertEqual(sheet.frame.minX, app.frame.minX, accuracy: 1)
-        XCTAssertEqual(sheet.frame.maxX, app.frame.maxX, accuracy: 1)
-        // The SwiftUI surface stops at the bottom safe area; its background
-        // extends through that area. Verify the physical edge in the capture.
-        XCTAssertLessThanOrEqual(app.frame.maxY - sheet.frame.maxY, 40)
-        XCTAssertTrue(app.buttons["Copy token"].exists)
-        let restingTop = sheet.frame.minY
-        let title = app.navigationBars.firstMatch
-        for _ in 0..<2 {
-            let start = title.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
-            start.press(forDuration: 0.1, thenDragTo: start.withOffset(CGVector(dx: 0, dy: 50)),
-                        withVelocity: .slow, thenHoldForDuration: 0.2)
-            let restored = XCTNSPredicateExpectation(predicate: NSPredicate(format: "hittable == true"),
-                                                    object: app.buttons["Copy token"])
-            XCTAssertEqual(XCTWaiter.wait(for: [restored], timeout: 5), .completed)
-            XCTAssertEqual(sheet.frame.minY, restingTop, accuracy: 1)
-        }
-        let attachment = XCTAttachment(screenshot: app.screenshot())
-        attachment.name = "history-phone-edge-attached"
-        attachment.lifetime = .keepAlways
-        add(attachment)
-        app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.15)).tap()
-        XCTAssertTrue(sheet.waitForNonExistence(timeout: 5))
-        XCTAssertTrue(row.isHittable)
-    }
-
     func testCurrencyAndMintEditsShowNewRequestWithoutRelabelingOldPayments() {
         continueAfterFailure = false
         let app = XCUIApplication()
@@ -273,17 +216,11 @@ final class ActivityDetailUITests: XCTestCase {
             }
             XCTAssertFalse(app.buttons["Show QR code"].exists)
             XCTAssertFalse(app.buttons["Hide QR code"].exists)
-            if app.frame.width >= 600 {
-                // Floating iPad sheets support dismissal outside their bounds;
-                // some request layouts don't expose a navigation-bar AX node.
-                app.coordinate(withNormalizedOffset: CGVector(dx: 0.02, dy: 0.5)).tap()
-                XCTAssertTrue(app.staticTexts[isRequest ? "Created" : "Status"].waitForNonExistence(timeout: 5))
-            } else {
-                let title = app.navigationBars.firstMatch
-                title.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
-                    .press(forDuration: 0.1, thenDragTo: app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.98)))
-                XCTAssertTrue(title.waitForNonExistence(timeout: 5))
-            }
+            // Native sheet gesture, starting on the title to avoid scrolling its body.
+            let title = app.navigationBars.firstMatch
+            title.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
+                .press(forDuration: 0.1, thenDragTo: app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.98)))
+            XCTAssertTrue(title.waitForNonExistence(timeout: 5))
         }
     }
 }

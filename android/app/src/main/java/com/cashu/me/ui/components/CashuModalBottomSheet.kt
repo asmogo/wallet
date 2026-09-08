@@ -21,8 +21,6 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.Shape
-import androidx.compose.ui.unit.Dp
 
 /** Native sheet gestures and layout, with spatial motion for dismissal. */
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3ExpressiveApi::class)
@@ -36,8 +34,6 @@ fun CashuModalBottomSheet(
     containerColor: Color = BottomSheetDefaults.ContainerColor,
     sheetGesturesEnabled: Boolean = true,
     onBackdropVisibilityChanged: (Boolean) -> Unit = {},
-    shape: Shape = BottomSheetDefaults.ExpandedShape,
-    sheetMaxWidth: Dp = BottomSheetDefaults.SheetMaxWidth,
     content: @Composable ColumnScope.() -> Unit,
 ) {
     val backdropVisibilityChanged by rememberUpdatedState(onBackdropVisibilityChanged)
@@ -62,8 +58,6 @@ fun CashuModalBottomSheet(
             sheetState = sheetState,
             containerColor = containerColor,
             sheetGesturesEnabled = sheetGesturesEnabled,
-            shape = shape,
-            sheetMaxWidth = sheetMaxWidth,
         ) {
             val columnScope = this
             // Buttons and content transitions retain the normal effects springs.
