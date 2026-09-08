@@ -155,7 +155,7 @@ Platform-specific capabilities remain intentionally outside parity, including iC
 
 - [x] **[P1 · Android → iOS] Read the app version from build metadata.** Android uses `BuildConfig.VERSION_NAME`; iOS hard-codes `1.0.0`. **Done when:** iOS displays the shipped bundle version and, if included, its build number from metadata.
 
-- [ ] **[P2 · Android → iOS] Add localized currency names.** Android shows the ISO code plus the localized currency name; iOS shows only the code. **Done when:** iOS rows are understandable without memorizing ISO-4217 codes.
+- [x] **[P2 · Android → iOS] Add localized currency names.** iOS currency rows show the localized name beneath the ISO code and include both in the accessibility label, falling back to the code. Names wrap at large text sizes; ordering, selection, and avatars remain native. **Verification:** Native English/German accessibility-size tests and iOS builds passed; localized names were visually reviewed.
 
 - [x] **[P2 · iOS → Android] Show when the BTC price was last updated.** iOS includes a relative timestamp beside the price; Android omits it. **Done when:** Android exposes recency and handles never-loaded and stale states.
 
