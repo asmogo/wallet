@@ -11,6 +11,15 @@ import com.cashu.me.App.MainActivity
 import com.cashu.me.App.UiRuntimePolicy
 import com.cashu.me.App.UiTestApplication
 import com.cashu.me.Core.CDK.CdkWalletGatewayImpl
+import com.cashu.me.Core.PriceService
+import com.cashu.me.Core.AppLockManager
+import com.cashu.me.Core.NPCClient
+import com.cashu.me.Core.NPCQuote
+import com.cashu.me.Core.NPCService
+import android.content.Context
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.Dispatchers
 import com.cashu.me.Models.TransactionKind
 import com.cashu.me.Models.PaymentMethodKind
 import com.cashu.me.Models.TransactionStatus
@@ -48,6 +57,9 @@ object AppTestFixture {
         deepLink: String? = null,
         supportedMintMethods: List<PaymentMethodKind> = listOf(PaymentMethodKind.Bolt11),
         paymentMintUrl: String? = null,
+        authenticate: (suspend (String) -> Boolean)? = null,
+        supportedUnits: List<String> = listOf("sat"),
+        npcQuotes: () -> List<NPCQuote> = { emptyList() },
     ): LaunchedFixture {
         val application = ApplicationProvider.getApplicationContext<UiTestApplication>()
         val usesLiveGateway = mode == FixtureMode.LiveLocalMint ||
@@ -94,6 +106,7 @@ object AppTestFixture {
         } else {
             FakeWalletGateway(
                 supportedMintMethods = supportedMintMethods,
+                supportedUnits = supportedUnits,
                 initialBalances = if (mode == FixtureMode.FundedWithHistory) {
                     mapOf(mintUrl to 500L)
                 } else {
@@ -107,6 +120,31 @@ object AppTestFixture {
                 UiRuntimePolicy.DeterministicTest.copy(runStartupMaintenance = true, pollQuotesInForeground = true)
             } else UiRuntimePolicy.DeterministicTest,
             walletGateway = { fake ?: CdkWalletGatewayImpl() },
+            npcService = { context, settings ->
+                NPCService(
+                    prefs = context.getSharedPreferences("npc_store", Context.MODE_PRIVATE),
+                    settingsState = settings.state,
+                    scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate),
+                    makeClient = { _, _ -> object : NPCClient {
+                        override suspend fun getQuotes() = npcQuotes()
+                        override suspend fun setMintUrl(mintUrl: String) = mintUrl
+                        override fun close() = Unit
+                    } },
+                )
+            },
+            appLockManager = { context, settings ->
+                AppLockManager(context, settings,
+                    authenticationAvailable = if (authenticate != null) ({ true }) else null,
+                    authenticationPrompt = authenticate,
+                )
+            },
+            priceService = { store ->
+                PriceService(
+                    settingsStore = store,
+                    priceFetcher = { currency -> if (currency == "EUR") 80_000.0 else 100_000.0 },
+                    enableAutoRefresh = false,
+                )
+            },
         )
         val container = AppContainer(application, dependencies)
 

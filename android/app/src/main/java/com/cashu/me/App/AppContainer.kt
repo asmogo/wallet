@@ -33,7 +33,7 @@ class AppContainer(
     val cashuRequestStore = CashuRequestStore(walletStore)
     val settingsStore = dependencies.settingsStore(appContext)
     val settingsManager = SettingsManager(settingsStore, secureStorage)
-    val appLockManager = AppLockManager(appContext, settingsManager)
+    val appLockManager = dependencies.appLockManager(appContext, settingsManager)
     val sentryService = SentryService(appContext, settingsStore)
     val nostrService = NostrService(secureStorage, settingsStore)
     val navigationManager = NavigationManager()
@@ -52,7 +52,7 @@ class AppContainer(
         },
         relayProvider = { settingsManager.state.value.nostrRelays },
     )
-    val npcService = NPCService(appContext, settingsManager)
+    val npcService = dependencies.npcService(appContext, settingsManager)
     val nostrMintBackupService = NostrMintBackupService(settingsManager, settingsStore, cdkGateway)
     val walletManager = WalletManager(
         secureStorage = secureStorage,
@@ -71,7 +71,7 @@ class AppContainer(
         externalServicesEnabled = runtimePolicy.startExternalListeners,
         allowCleartextLocalTestMints = runtimePolicy.allowCleartextLocalTestMints,
     )
-    val priceService = PriceService(settingsStore)
+    val priceService = dependencies.priceService(settingsStore)
     val mintDiscoveryManager = MintDiscoveryManager(settingsManager)
     val cashuRequestListener = CashuRequestListener(
         nostrService = nostrService,

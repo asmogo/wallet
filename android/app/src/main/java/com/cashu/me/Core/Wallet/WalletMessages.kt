@@ -43,6 +43,11 @@ object WalletErrorMessages {
         "The wallet couldn't finish that action. Try again in a moment."
 
     fun classify(error: Throwable): WalletMessage {
+        // This is an application safety policy, not a transport failure. Its
+        // guidance contains "connected", which the raw network matcher catches.
+        if (error is com.cashu.me.Core.CDK.MultiUnitWalletRemovalException) {
+            return WalletMessage(checkNotNull(error.message))
+        }
         if (error is com.cashu.me.Core.CDK.MeltPaymentRecoveryException) {
             return WalletMessage(
                 text = checkNotNull(error.message),

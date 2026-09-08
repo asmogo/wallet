@@ -287,6 +287,7 @@ struct SendView: View {
             .flatSheetSecondaryButton()
             .disabled(!canSend || isGenerating)
             .accessibilityLabel("Send")
+            .accessibilityIdentifier("cashu.send.ecash.submit")
             .accessibilityValue(isGenerating ? "In progress" : "")
             .padding(.horizontal)
             .padding(.top, 16)
@@ -414,7 +415,11 @@ struct SendView: View {
     private var unitBalanceKey: String { "\(displaySendMint?.url ?? "")|\(effectiveSendUnit)" }
 
     private func selectSendUnit(_ unit: String) {
+        let previousUnit = effectiveSendUnit
         selectedSendUnit = unit
+        // Selecting the current unit does not restart the balance task. Keep
+        // its loaded balance and amount instead of leaving Send disabled.
+        guard unit != previousUnit else { return }
         // The typed amount's meaning changes with the unit — clear it and its
         // now-stale balance rather than reinterpret the digits.
         amountString = ""

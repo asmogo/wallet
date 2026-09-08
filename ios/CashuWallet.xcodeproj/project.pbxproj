@@ -8,6 +8,9 @@
 
 /* Begin PBXBuildFile section */
 		E20100000000000000000001 /* PaymentSafetyIntegrationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E20100000000000000000002; };
+		A0C011000000000000000005 /* UITestNWCService.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0C011000000000000000006 /* UITestNWCService.swift */; };
+		A0C011000000000000000003 /* UITestNPCClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0C011000000000000000004 /* UITestNPCClient.swift */; };
+		A0C011000000000000000001 /* WalletLifecycleUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0C011000000000000000002 /* WalletLifecycleUITests.swift */; };
 		AA9600000000000000000001 /* NPCServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA9600000000000000000002 /* NPCServiceTests.swift */; };
 		BD0100000000000000000002 /* ReceivedBalanceFeedback.swift in Sources */ = {isa = PBXBuildFile; fileRef = BD0100000000000000000001 /* ReceivedBalanceFeedback.swift */; };
 		BD0100000000000000000004 /* ReceivedBalanceFeedbackTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BD0100000000000000000003 /* ReceivedBalanceFeedbackTests.swift */; };
@@ -215,6 +218,9 @@
 
 /* Begin PBXFileReference section */
 		E20100000000000000000002 /* PaymentSafetyIntegrationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = PaymentSafetyIntegrationTests.swift; path = ../CI/IntegrationTests/Tests/PaymentSafetyIntegrationTests.swift; sourceTree = "<group>"; };
+		A0C011000000000000000006 /* UITestNWCService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = UITestNWCService.swift; path = CashuWallet/Core/UITestNWCService.swift; sourceTree = "<group>"; };
+		A0C011000000000000000004 /* UITestNPCClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = UITestNPCClient.swift; path = CashuWallet/Core/UITestNPCClient.swift; sourceTree = "<group>"; };
+		A0C011000000000000000002 /* WalletLifecycleUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = WalletLifecycleUITests.swift; path = CashuWalletUITests/WalletLifecycleUITests.swift; sourceTree = "<group>"; };
 		AA9600000000000000000002 /* NPCServiceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CashuWalletTests/NPCServiceTests.swift; sourceTree = "<group>"; };
 		BD0100000000000000000001 /* ReceivedBalanceFeedback.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReceivedBalanceFeedback.swift; sourceTree = "<group>"; };
 		BD0100000000000000000003 /* ReceivedBalanceFeedbackTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = ReceivedBalanceFeedbackTests.swift; path = CashuWalletTests/ReceivedBalanceFeedbackTests.swift; sourceTree = "<group>"; };
@@ -489,6 +495,8 @@
 				172BA94269E4241413C46309 /* CashuWalletTests */,
 				46FCF584756C5A2EEED0B106 /* CashuWalletUITests */,
 				FB989C698CCB0CCD5FA8788D /* IntegrationTestConfig.swift */,
+				A0C011000000000000000004 /* UITestNPCClient.swift */,
+				A0C011000000000000000006 /* UITestNWCService.swift */,
 			);
 			sourceTree = "<group>";
 		};
@@ -715,6 +723,7 @@
 				T1A0000000000001 /* MainTabUITests.swift */,
 				T1A0000000000002 /* ReceiveUITests.swift */,
 				T1A0000000000003 /* SettingsUITests.swift */,
+				A0C011000000000000000002 /* WalletLifecycleUITests.swift */,
 				T1A0000000000004 /* UITestBase.swift */,
 			);
 			name = CashuWalletUITests;
@@ -1161,6 +1170,8 @@
 				6A8EC9482F2580000058C21B /* TransactionIcon.swift in Sources */,
 				6A8EC94A2F2590000058C21B /* PriceService.swift in Sources */,
 				6A8EC94C2F25A0000058C21B /* NostrService.swift in Sources */,
+				A0C011000000000000000003 /* UITestNPCClient.swift in Sources */,
+				A0C011000000000000000005 /* UITestNWCService.swift in Sources */,
 				6A8EC94E2F25A0000058C21B /* NPCService.swift in Sources */,
 				CC000000000000A1 /* NWCManager.swift in Sources */,
 				AB00000000000002 /* CashuRequestStore.swift in Sources */,
@@ -1238,6 +1249,7 @@
 				T2A0000000000001 /* MainTabUITests.swift in Sources */,
 				T2A0000000000002 /* ReceiveUITests.swift in Sources */,
 				T2A0000000000003 /* SettingsUITests.swift in Sources */,
+				A0C011000000000000000001 /* WalletLifecycleUITests.swift in Sources */,
 				T2A0000000000004 /* UITestBase.swift in Sources */,
 				T2A0000000000009 /* OnboardingChassisUITests.swift in Sources */,
 			);

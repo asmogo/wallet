@@ -74,7 +74,7 @@ final class NWCManager: ObservableObject {
 
     // MARK: - Private
 
-    private var service: NwcService?
+    private var service: (any NwcServiceProtocol)?
     private let settingsStore: SettingsStore
     private var lifecycleTask: Task<Void, Never>?
     private var lifecycleRevision: UInt64 = 0
@@ -162,30 +162,8 @@ final class NWCManager: ObservableObject {
         guard isEnabled, revision == lifecycleRevision else { return }
 
         do {
-            let serviceSecretKey = try nwcDeriveServiceSecretKeyFromSeed(seed: seed)
-            let wallet = try await resolveWallet(mintUrl: mintUrl)
+            let svc = try await makeService(mintUrl: mintUrl, seed: seed)
             guard isEnabled, revision == lifecycleRevision else { return }
-            let budgetMsat = try Self.paymentLimitMsat(budgetSats)
-
-            let svc: NwcService
-            if let uri = connectionUri,
-               let clientSecret = Self.clientSecret(fromConnectionUri: uri) {
-                // Reuse the existing connection so the previously shared URI keeps working.
-                svc = try NwcService.restore(
-                    wallet: wallet,
-                    relays: relays,
-                    serviceSecretKey: serviceSecretKey,
-                    clientSecretKey: clientSecret,
-                    maxPaymentMsat: budgetMsat
-                )
-            } else {
-                svc = try NwcService.create(
-                    wallet: wallet,
-                    relays: relays,
-                    serviceSecretKey: serviceSecretKey,
-                    maxPaymentMsat: budgetMsat
-                )
-            }
 
             do {
                 try await svc.start()
@@ -247,6 +225,25 @@ final class NWCManager: ObservableObject {
     }
 
     // MARK: - Helpers
+
+    private func makeService(mintUrl: String, seed: Data) async throws -> any NwcServiceProtocol {
+        let clientSecret = connectionUri.flatMap(Self.clientSecret(fromConnectionUri:))
+        let budgetMsat = try Self.paymentLimitMsat(budgetSats)
+        #if DEBUG
+        if IntegrationTestConfig.shouldUseDeterministicUIRuntime {
+            return UITestNWCService(clientSecret: clientSecret)
+        }
+        #endif
+        let serviceSecretKey = try nwcDeriveServiceSecretKeyFromSeed(seed: seed)
+        let wallet = try await resolveWallet(mintUrl: mintUrl)
+        if let clientSecret {
+            return try NwcService.restore(wallet: wallet, relays: relays,
+                serviceSecretKey: serviceSecretKey, clientSecretKey: clientSecret,
+                maxPaymentMsat: budgetMsat)
+        }
+        return try NwcService.create(wallet: wallet, relays: relays,
+            serviceSecretKey: serviceSecretKey, maxPaymentMsat: budgetMsat)
+    }
 
     private func restartService() async {
         await start()

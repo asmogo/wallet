@@ -15,7 +15,10 @@ class MainActivity : FragmentActivity() {
         installSplashScreen()
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
-        handleIntent(intent)
+        // A consumed launch link must not navigate again when Android recreates
+        // the activity (rotation, theme change, or process state restoration).
+        // New links delivered to the running activity are handled below.
+        if (savedInstanceState == null) handleIntent(intent)
         setContent {
             CashuApp(containerFlow = (application as CashuWalletApplication).container)
         }

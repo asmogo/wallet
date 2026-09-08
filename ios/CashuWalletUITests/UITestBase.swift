@@ -62,6 +62,17 @@ class UITestBase: XCTestCase {
 
     // MARK: - Onboarding helpers
 
+    /// Relaunch the existing wallet. Setup flags must never erase or reseed
+    /// state when a test is checking persistence or interrupted operations.
+    func relaunchPreservingWallet() {
+        app.terminate()
+        for key in ["RESET_WALLET", "UITEST_SEED_WALLET", "UITEST_SEED_MINT"] {
+            app.launchEnvironment.removeValue(forKey: key)
+        }
+        app.launch()
+        waitForMainTab()
+    }
+
     /// Walk through: welcome → create wallet → acknowledge seed → saved seed.
     /// Leaves the app on the "Pick your first mint" screen.
     func createWalletThroughSeed() {
@@ -213,8 +224,17 @@ class UITestBase: XCTestCase {
         file: StaticString = #filePath,
         line: UInt = #line
     ) {
+        let ready = element.waitUntilEnabledAndHittable(timeout: timeout)
+        if !ready {
+            let screenshot = XCTAttachment(screenshot: app.screenshot())
+            screenshot.lifetime = .keepAlways
+            add(screenshot)
+            let hierarchy = XCTAttachment(string: app.debugDescription)
+            hierarchy.lifetime = .keepAlways
+            add(hierarchy)
+        }
         XCTAssertTrue(
-            element.waitUntilEnabledAndHittable(timeout: timeout),
+            ready,
             message,
             file: file,
             line: line

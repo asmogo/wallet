@@ -6,7 +6,14 @@ import Cdk
 /// Provides Lightning address functionality via Nostr identity
 @MainActor
 class NPCService: ObservableObject {
-    static let shared = NPCService()
+    static let shared: NPCService = {
+        #if DEBUG
+        if IntegrationTestConfig.shouldUseDeterministicUIRuntime {
+            return NPCService(makeClient: { _, _ in UITestNPCClient() })
+        }
+        #endif
+        return NPCService()
+    }()
     
     // MARK: - Settings (persisted)
     

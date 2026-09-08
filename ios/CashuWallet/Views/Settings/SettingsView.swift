@@ -463,7 +463,7 @@ struct SecuritySettingsSection: View {
                     return
                 }
                 Task {
-                    let ok = await AppLockManager.shared.authenticate(reason: "Confirm to enable App Lock")
+                    let ok = await AppLockManager.shared.authenticateForAppLockEnablement()
                     settings.appLockEnabled = ok
                     if !ok {
                         authError = "Authentication failed. App Lock was not enabled. Try turning it on again."

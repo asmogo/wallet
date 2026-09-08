@@ -22,6 +22,8 @@ class AppLockManager(
     context: Context,
     private val settingsManager: SettingsManager,
     private val nowMillis: () -> Long = { System.currentTimeMillis() },
+    private val authenticationAvailable: (() -> Boolean)? = null,
+    private val authenticationPrompt: (suspend (String) -> Boolean)? = null,
 ) {
     private val appContext = context.applicationContext
     private val authenticators =
@@ -129,7 +131,7 @@ class AppLockManager(
 
         applyRuntime(AppLockPolicy.authenticating(runtime, isAuthenticating = true))
         return try {
-            val success = prompt(activity, reason)
+            val success = authenticationPrompt?.invoke(reason) ?: prompt(activity, reason)
             if (success) applyRuntime(AppLockPolicy.authenticated(runtime))
             success
         } finally {
@@ -179,7 +181,8 @@ class AppLockManager(
             .canAuthenticate(BiometricManager.Authenticators.BIOMETRIC_WEAK) == BiometricManager.BIOMETRIC_SUCCESS
 
     private fun canAuthenticate(): Boolean =
-        BiometricManager.from(appContext).canAuthenticate(authenticators) == BiometricManager.BIOMETRIC_SUCCESS
+        authenticationAvailable?.invoke()
+            ?: (BiometricManager.from(appContext).canAuthenticate(authenticators) == BiometricManager.BIOMETRIC_SUCCESS)
 
     private fun applyRuntime(next: AppLockRuntime) {
         runtime = next

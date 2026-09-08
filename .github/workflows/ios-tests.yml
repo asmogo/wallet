@@ -106,6 +106,7 @@ jobs:
 
         ./CI/setup-nutshell.sh &
         NUTSHELL_SETUP_PID=$!
+        # The shared multi-unit profile enables the USD UI payment journey.
         ./CI/setup-cdk.sh 3339 android &
         CDK_SETUP_PID=$!
 
@@ -155,7 +156,7 @@ jobs:
     # UI tests are deliberately serial. Two simulator clones on the hosted
     # three-core VM caused accessibility startup timeouts and made the suite
     # slower. A failed test gets one retry in a fresh app process.
-    - name: Run iOS UI smoke tests
+    - name: Run iOS UI journeys
       id: ui_tests
       if: ${{ always() && steps.build.outcome == 'success' && steps.setup_mints.outcome == 'success' && steps.start_mints.outcome == 'success' }}
       continue-on-error: true

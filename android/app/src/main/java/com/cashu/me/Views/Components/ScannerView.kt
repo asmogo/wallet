@@ -203,15 +203,6 @@ fun ScannerView(
     }
     if (cameraPermissionState != CameraPermissionState.Granted) return
 
-    if (useDeterministicPermission) {
-        CameraPermissionView(
-            title = "Camera Ready",
-            message = "The scanner is ready to read a QR code.",
-            onClose = onClose,
-        )
-        return
-    }
-
     cameraError?.let { message ->
         CameraPermissionView(
             title = "Camera Unavailable",
@@ -228,7 +219,11 @@ fun ScannerView(
             .fillMaxSize()
             .background(Color.Black),
     ) {
-        CameraPreviewScanner(
+        if (useDeterministicPermission) {
+            // Replace only the hardware preview. Keep the production scanner
+            // chrome and key shortcuts available to app UI journeys.
+            Text("Camera Ready", color = Color.White, modifier = Modifier.align(Alignment.Center))
+        } else CameraPreviewScanner(
             onCode = { code ->
                 if (completedScan) return@CameraPreviewScanner
                 val trimmed = code.trim()
