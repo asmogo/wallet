@@ -5,17 +5,18 @@ import android.os.Build
 import android.view.KeyEvent
 import android.window.OnBackInvokedCallback
 import android.window.OnBackInvokedDispatcher
-import android.graphics.Color
-import androidx.core.graphics.drawable.toDrawable
 import android.view.Window
 import android.view.WindowManager
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCompositionContext
 import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
@@ -27,6 +28,7 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.setViewTreeLifecycleOwner
 import androidx.savedstate.compose.LocalSavedStateRegistryOwner
 import androidx.savedstate.setViewTreeSavedStateRegistryOwner
+import com.cashu.me.R
 
 /**
  * A full-screen native modal window. The Activity and its drafts stay mounted;
@@ -44,7 +46,8 @@ internal fun AppLockDialog(isAuthenticating: Boolean = false, content: @Composab
     val authenticating by rememberUpdatedState(isAuthenticating)
     val onFocusChanged = remember { mutableListOf<(Boolean) -> Unit>() }
     val dialog = remember(context, source) {
-        object : Dialog(context) {
+        // The gate must be opaque from its first frame, including after a re-show.
+        object : Dialog(context, R.style.Theme_CashuWallet_AppLock) {
             @Suppress("OVERRIDE_DEPRECATION")
             override fun onWindowFocusChanged(hasFocus: Boolean) {
                 super.onWindowFocusChanged(hasFocus)
@@ -56,10 +59,20 @@ internal fun AppLockDialog(isAuthenticating: Boolean = false, content: @Composab
             setCanceledOnTouchOutside(false)
             setOnKeyListener { _, keyCode, _ -> keyCode == KeyEvent.KEYCODE_BACK }
             window?.apply {
-                setBackgroundDrawable(Color.TRANSPARENT.toDrawable())
                 addFlags(WindowManager.LayoutParams.FLAG_SECURE or WindowManager.LayoutParams.FLAG_ALT_FOCUSABLE_IM)
                 clearFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND)
-                WindowCompat.setDecorFitsSystemWindows(this, false)
+                // The non-floating theme fills the window; also extend the cover
+                // behind system bars and display cutouts on every supported API.
+                WindowCompat.enableEdgeToEdge(this)
+            }
+        }
+    }
+    val useDarkSystemBarIcons = MaterialTheme.colorScheme.background.luminance() > 0.5f
+    SideEffect {
+        dialog.window?.let { window ->
+            WindowCompat.getInsetsController(window, window.decorView).apply {
+                isAppearanceLightStatusBars = useDarkSystemBarIcons
+                isAppearanceLightNavigationBars = useDarkSystemBarIcons
             }
         }
     }
