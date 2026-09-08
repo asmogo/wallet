@@ -4,6 +4,39 @@ import Cdk
 
 @MainActor
 final class NPCServiceTests: XCTestCase {
+    func testSetupRetryRecoversRuntimeAndUsesStoredSeed() async throws {
+        var ready = false
+        var initializedSeed: Data?
+        let seed = Data(repeating: 7, count: 64)
+        try await LightningAddressSetupRecovery.retry(
+            isRuntimeReady: { ready }, initializeRuntime: { ready = true },
+            isAddressInitialized: { false }, loadSeed: { seed },
+            initializeAddress: { initializedSeed = $0 }
+        )
+        XCTAssertEqual(initializedSeed, seed)
+    }
+
+    func testSetupRetryDoesNotReplaceAnExistingIdentity() async throws {
+        try await LightningAddressSetupRecovery.retry(
+            isRuntimeReady: { true }, initializeRuntime: { XCTFail("Must not reopen a healthy wallet") },
+            isAddressInitialized: { true }, loadSeed: { XCTFail("Must not reload keys"); return Data() },
+            initializeAddress: { _ in XCTFail("Must not replace identity") }
+        )
+    }
+
+    func testSetupRetryStopsWhenRuntimeOrSeedRecoveryFails() async {
+        for runtimeReady in [false, true] {
+            do {
+                try await LightningAddressSetupRecovery.retry(
+                    isRuntimeReady: { runtimeReady }, initializeRuntime: {},
+                    isAddressInitialized: { false }, loadSeed: { throw WalletError.notInitialized },
+                    initializeAddress: { _ in XCTFail("Must not initialize without prerequisites") }
+                )
+                XCTFail("Expected recovery failure")
+            } catch { }
+        }
+    }
+
     func testRestoredEnabledAddressConnectsWhenSeedBecomesAvailable() async throws {
         let client = ControlledNPCClient()
         let service = makeService(client: client)

@@ -145,6 +145,9 @@ Platform-specific capabilities remain intentionally outside parity, including iC
 
 ### Settings — information architecture, display, and destructive actions
 
+- [x] **[P1 · Android → iOS] Retry Lightning-address setup from Settings.** “Try setup again” recovers failed wallet initialization and initializes missing NPC keys from the stored seed. Startup and retries share the in-flight runtime load, and successful runtime recovery restarts the Cashu Request listener. Existing identities, wallet data, and preferences are preserved. Loading and errors remain retryable. **Verification:** The initial implementation passed all 13 NPC service tests, the native setup-state capture on iOS 26.5, and app/test-bundle builds. The follow-up concurrency and listener fixes received static review; tests were not rerun.
+
+
 - [x] **[P2 · iOS → Android] Make App Lock discoverable in a security-oriented Settings location.** Android currently places the toggle under Privacy even though it controls local device access. **Done when:** App Lock is discoverable under a clear security or backup-and-security destination while privacy/background networking controls remain conceptually separate. The exact iOS hierarchy is not required.
 
 - [x] **[P0 · iOS → Android] Authenticate before enabling App Lock.** iOS verifies device-owner authentication and reverts with an error if enabling fails; Android directly persists the toggle. **Done when:** Android cannot enable App Lock until a device-owner challenge succeeds, and cancellation or failure leaves it disabled.

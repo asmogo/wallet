@@ -494,7 +494,40 @@ extension WalletManager {
         await loadWalletState()
     }
 
+    /// Recover only missing Lightning-address prerequisites using the existing wallet.
+    func retryLightningAddressSetup() async throws {
+        try await LightningAddressSetupRecovery.retry(
+            isRuntimeReady: { self.isRuntimeReady },
+            initializeRuntime: { await self.loadWalletState() },
+            isAddressInitialized: { NPCService.shared.isInitialized },
+            loadSeed: {
+                guard let mnemonic = try self.keychainService.loadMnemonic() else {
+                    throw WalletError.notInitialized
+                }
+                return try Self.bip39Seed(mnemonic: mnemonic)
+            },
+            initializeAddress: { try NPCService.shared.initializeWithSeed($0) }
+        )
+    }
+
     private func loadWalletState() async {
+        // Settings can be opened from the cached home before startup finishes.
+        // Join that load instead of opening a second repository over the same DB.
+        if let walletStateLoadTask {
+            await walletStateLoadTask.value
+            return
+        }
+        guard !isRuntimeReady else { return }
+
+        let task = Task { await self.performWalletStateLoad() }
+        walletStateLoadTask = task
+        // Only the caller that installed this task clears it; joined callers
+        // must not clear a newer retry after a failed attempt completes.
+        defer { walletStateLoadTask = nil }
+        await task.value
+    }
+
+    private func performWalletStateLoad() async {
         let signpostID = WalletStartupInstrumentation.signposter.makeSignpostID()
         let interval = WalletStartupInstrumentation.signposter.beginInterval(
             "WalletInitialize",
@@ -561,6 +594,9 @@ extension WalletManager {
                 }.value
 
                 installLaunchRuntime(runtime, mnemonic: storedMnemonic)
+                // The app's initial listener start may have already returned
+                // without Nostr keys after a failed launch. Recover it here too.
+                resumeCashuRequestListener()
                 startDeferredStartupMaintenance()
                 SentryService.breadcrumb("Wallet loaded", category: "wallet.lifecycle")
             } else {
@@ -829,7 +865,7 @@ extension WalletManager {
 
     private func resumeServicesAfterWalletBoundaryFailure() async {
         guard isRuntimeReady, walletRepository != nil else { return }
-        resumeCashuRequestListenerAfterWalletBoundaryRollback()
+        resumeCashuRequestListener()
         await NWCManager.shared.startIfEnabled()
     }
 
@@ -886,7 +922,7 @@ extension WalletManager {
                 if let recoveredMnemonic {
                     try initializeWalletForLaunch(mnemonic: recoveredMnemonic)
                     startDeferredStartupMaintenance()
-                    resumeCashuRequestListenerAfterWalletBoundaryRollback()
+                    resumeCashuRequestListener()
                 } else {
                     needsOnboarding = true
                     isRuntimeReady = true
@@ -903,7 +939,7 @@ extension WalletManager {
         if !IntegrationTestConfig.shouldUseDeterministicUIRuntime { performICloudBackup() }
     }
 
-    private func resumeCashuRequestListenerAfterWalletBoundaryRollback() {
+    private func resumeCashuRequestListener() {
         guard walletRepository != nil else { return }
         CashuRequestListener.shared.attach(walletManager: self)
         guard !IntegrationTestConfig.shouldUseDeterministicUIRuntime else { return }
