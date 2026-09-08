@@ -1487,10 +1487,14 @@ class LightningService: ObservableObject {
 
 }
 
-private enum LightningAddressResolver {
-    static func resolveBolt11Invoice(address: String, amountMsat: UInt64) async throws -> String {
+enum LightningAddressResolver {
+    static func resolveBolt11Invoice(
+        address: String,
+        amountMsat: UInt64,
+        load: (URLRequest) async throws -> (Data, URLResponse) = { try await URLSession.shared.data(for: $0) }
+    ) async throws -> String {
         let endpoint = try lightningAddressEndpoint(for: address)
-        let payRequest = try await fetchJSON(LnurlPayRequest.self, from: endpoint)
+        let payRequest = try await fetchJSON(LnurlPayRequest.self, from: endpoint, load: load)
 
         try throwIfServiceError(status: payRequest.status, reason: payRequest.reason)
 
@@ -1511,7 +1515,7 @@ private enum LightningAddressResolver {
         }
 
         let callbackURL = try invoiceCallbackURL(callback: callback, amountMsat: amountMsat)
-        let callbackResponse = try await fetchJSON(LnurlPayCallbackResponse.self, from: callbackURL)
+        let callbackResponse = try await fetchJSON(LnurlPayCallbackResponse.self, from: callbackURL, load: load)
 
         try throwIfServiceError(status: callbackResponse.status, reason: callbackResponse.reason)
 
@@ -1564,7 +1568,10 @@ private enum LightningAddressResolver {
     private static func invoiceCallbackURL(callback: String, amountMsat: UInt64) throws -> URL {
         guard var components = URLComponents(string: callback),
               components.scheme?.lowercased() == "https",
-              components.host?.isEmpty == false else {
+              components.host?.isEmpty == false,
+              components.user == nil,
+              components.password == nil,
+              components.fragment == nil else {
             throw LightningAddressResolverError.invalidCallback
         }
 
@@ -1580,11 +1587,14 @@ private enum LightningAddressResolver {
         return url
     }
 
-    private static func fetchJSON<T: Decodable>(_ type: T.Type, from url: URL) async throws -> T {
+    private static func fetchJSON<T: Decodable>(
+        _ type: T.Type, from url: URL,
+        load: (URLRequest) async throws -> (Data, URLResponse)
+    ) async throws -> T {
         var request = URLRequest(url: url, timeoutInterval: 20)
         request.setValue("application/json", forHTTPHeaderField: "Accept")
 
-        let (data, response) = try await URLSession.shared.data(for: request)
+        let (data, response) = try await load(request)
         guard let httpResponse = response as? HTTPURLResponse,
               (200..<300).contains(httpResponse.statusCode) else {
             throw LightningAddressResolverError.networkFailure
@@ -1625,7 +1635,7 @@ private struct LnurlPayCallbackResponse: Decodable {
     let reason: String?
 }
 
-private enum LightningAddressResolverError: LocalizedError {
+enum LightningAddressResolverError: LocalizedError {
     case invalidAddress
     case invalidCallback
     case invalidResponse(String)
