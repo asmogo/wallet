@@ -1054,6 +1054,9 @@ class RestoreProgressState internal constructor(
     }
 
     fun retry(url: String) {
+        if (phases[url] !is RestoreMintPhase.Failed) return
+        // Claim the retry before launching so repeated taps cannot queue another restore.
+        phases[url] = RestoreMintPhase.Restoring
         scope.launch { restoreMint(url) }
     }
 }
@@ -1092,13 +1095,15 @@ fun RestoreRecoveredTotal(
             tint = CashuTheme.colors.onReceivedContainer,
             modifier = Modifier.size(18.dp),
         )
-        Text(
-            text = "Recovered: $totalRecovered sats",
-            style = MaterialTheme.typography.bodyMedium
-                .copy(fontWeight = FontWeight.SemiBold)
-                .withMonoDigits(),
-            color = CashuTheme.colors.onReceivedContainer,
-        )
+        RestoreProgressTransition(value = totalRecovered, direction = { from, to -> if (to >= from) 1 else -1 }) { total ->
+            Text(
+                text = "Recovered: $total sats",
+                style = MaterialTheme.typography.bodyMedium
+                    .copy(fontWeight = FontWeight.SemiBold)
+                    .withMonoDigits(),
+                color = CashuTheme.colors.onReceivedContainer,
+            )
+        }
         if (centered) {
             Spacer(Modifier.weight(1f))
         }
@@ -1293,55 +1298,63 @@ private fun RestoreProgressRow(
             }
         }
 
-        when (phase) {
-            RestoreMintPhase.Pending, RestoreMintPhase.Restoring -> {
-                // Expressive loader per DESIGN-ANDROID.md §1 — the classic
-                // circular spinner is reserved for nothing.
-                LoadingIndicator(
-                    modifier = Modifier.size(ProgressSpinnerSize),
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-            is RestoreMintPhase.Recovered -> {
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(CashuTheme.spacing.micro),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Icon(
-                        imageVector = if (phase.result.totalRecovered > 0) {
-                            Icons.Filled.CheckCircle
-                        } else {
-                            Icons.Filled.RemoveCircleOutline
-                        },
-                        contentDescription = null,
-                        tint = if (phase.result.totalRecovered > 0) {
-                            CashuTheme.colors.onReceivedContainer
-                        } else {
-                            MaterialTheme.colorScheme.onSurfaceVariant
-                        },
-                        modifier = Modifier.size(18.dp),
-                    )
-                    Text(
-                        text = "${phase.result.unspent} sats",
-                        style = MaterialTheme.typography.bodyMedium
-                            .copy(
-                                fontWeight = if (phase.result.unspent > 0) {
-                                    FontWeight.SemiBold
-                                } else {
-                                    FontWeight.Normal
-                                },
-                            )
-                            .withMonoDigits(),
-                        color = if (phase.result.unspent > 0) {
-                            MaterialTheme.colorScheme.onSurface
-                        } else {
-                            MaterialTheme.colorScheme.onSurfaceVariant
-                        },
+        RestoreProgressTransition(value = phase) { displayPhase ->
+            when (displayPhase) {
+                RestoreMintPhase.Pending, RestoreMintPhase.Restoring -> {
+                    // Expressive loader per DESIGN-ANDROID.md §1 — the classic
+                    // circular spinner is reserved for nothing.
+                    LoadingIndicator(
+                        modifier = Modifier.size(ProgressSpinnerSize),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
-            }
-            is RestoreMintPhase.Failed -> {
-                GhostButton(context = TextButtonContext.Compact, text = "Retry", onClick = onRetry)
+                is RestoreMintPhase.Recovered -> {
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(CashuTheme.spacing.micro),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Icon(
+                            imageVector = if (displayPhase.result.totalRecovered > 0) {
+                                Icons.Filled.CheckCircle
+                            } else {
+                                Icons.Filled.RemoveCircleOutline
+                            },
+                            contentDescription = null,
+                            tint = if (displayPhase.result.totalRecovered > 0) {
+                                CashuTheme.colors.onReceivedContainer
+                            } else {
+                                MaterialTheme.colorScheme.onSurfaceVariant
+                            },
+                            modifier = Modifier.size(18.dp),
+                        )
+                        Text(
+                            text = "${displayPhase.result.unspent} sats",
+                            style = MaterialTheme.typography.bodyMedium
+                                .copy(
+                                    fontWeight = if (displayPhase.result.unspent > 0) {
+                                        FontWeight.SemiBold
+                                    } else {
+                                        FontWeight.Normal
+                                    },
+                                )
+                                .withMonoDigits(),
+                            color = if (displayPhase.result.unspent > 0) {
+                                MaterialTheme.colorScheme.onSurface
+                            } else {
+                                MaterialTheme.colorScheme.onSurfaceVariant
+                            },
+                        )
+                    }
+                }
+                is RestoreMintPhase.Failed -> {
+                    GhostButton(
+                        context = TextButtonContext.Compact,
+                        text = "Retry",
+                        onClick = onRetry,
+                        // The outgoing button can outlive the failure during its exit animation.
+                        enabled = phase is RestoreMintPhase.Failed,
+                    )
+                }
             }
         }
     }
