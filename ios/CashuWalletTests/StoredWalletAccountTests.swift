@@ -160,7 +160,7 @@ final class StoredWalletAccountTests: XCTestCase {
     }
 
     private func withHistoryService(
-        _ body: (FailingAccountHistoryDatabase, WalletRepository, TransactionService, WalletStore) async throws -> Void
+        _ body: (FailingAccountHistoryDatabase, WalletRepository, TransactionService, CashuWallet.WalletStore) async throws -> Void
     ) async throws {
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
