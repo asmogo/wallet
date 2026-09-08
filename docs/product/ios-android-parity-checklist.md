@@ -95,7 +95,7 @@ Platform-specific capabilities remain intentionally outside parity, including iC
 
 - [x] **[P2 · iOS → Android] Honor the preferred unit on generated invoice details.** iOS keeps sats and fiat available under a BOLT11 or fixed BOLT12 QR; Android renders a fixed amount string. **Done when:** Android leads with the saved primary unit and exposes the alternate conversion visually and accessibly through a native presentation.
 
-- [ ] **[P1 · iOS → Android] Make expiry the primary one-shot invoice status.** Android can keep “Waiting for payment” as the main status after expiry while only the small caption says Expired. **Done when:** the primary status, accessibility value, and available actions cannot contradict the expired state.
+- [x] **[P1 · iOS → Android] Make expiry the primary one-shot invoice status.** Android now derives the primary status and countdown from one clock. Settlement and issuance states take precedence; reusable offers and on-chain recovery retain their behavior. Regression tests cover the expiry boundary and settlement precedence. **Verification:** Expiry-boundary and settlement-precedence regressions, Android unit/lint/build checks, and before/after invoice captures passed.
 
 - [ ] **[P1 · Android → iOS] Add Total received to reusable-invoice details.** Android shows a cumulative total after BOLT12 payments; iOS swaps to a paid success state but exposes no cumulative total anywhere. **Done when:** iOS exposes the unit-correct cumulative amount.
 

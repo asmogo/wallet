@@ -156,7 +156,7 @@ private sealed interface ReceiveLnFace {
     )
 }
 
-private enum class MintQuoteSettlementState {
+internal enum class MintQuoteSettlementState {
     Waiting,
     PaymentDetected,
     Issuing,
@@ -1338,6 +1338,20 @@ private fun DisplayFace(
 ) {
     val confirmationToastController = LocalConfirmationToastController.current
     val isReusable = quote.paymentMethod == PaymentMethodKind.Bolt12
+    val displayExpiry = mintQuoteDisplayExpiry(quote.expiryEpochSeconds)
+    var nowSeconds by remember(quote.id, displayExpiry) {
+        mutableStateOf(System.currentTimeMillis() / 1000)
+    }
+    LaunchedEffect(quote.id, displayExpiry, isReusable) {
+        if (isReusable || displayExpiry == null) return@LaunchedEffect
+        while (nowSeconds < displayExpiry) {
+            delay(1000)
+            nowSeconds = System.currentTimeMillis() / 1000
+        }
+    }
+    val isExpired = receiveInvoiceIsExpired(
+        quote.paymentMethod, quote.expiryEpochSeconds, nowSeconds, settlementState,
+    )
     Column(modifier = Modifier.fillMaxSize()) {
         PaymentDetailContent(
             modifier = Modifier.weight(1f),
@@ -1373,12 +1387,14 @@ private fun DisplayFace(
                     state = settlementState,
                     onRetry = onRetryPendingMint,
                 )
+            } else if (isExpired) {
+                InlineNotice(text = "Expired", severity = NoticeSeverity.Error, centered = true)
             } else {
                 WaitingForPaymentRow(text = pendingStatusText)
             }
             errorText?.let { InlineNotice(text = it, severity = NoticeSeverity.Error) }
-            if (!isReusable) {
-                ExpiryCaption(expirySeconds = quote.expiryEpochSeconds)
+            if (!isReusable && settlementState == null && !isExpired) {
+                ExpiryCaption(expirySeconds = quote.expiryEpochSeconds, nowSeconds = nowSeconds)
             }
             Column(modifier = Modifier.fillMaxWidth()) {
                 if (mintName != null) {
@@ -1853,15 +1869,8 @@ private fun ReceiveMethodPickerSheet(
  *  under a minute. Reuses the shared [quoteExpiryText] formatter; hidden for
  *  never-expiring reusable offers (BOLT12 amountless). */
 @Composable
-private fun ExpiryCaption(expirySeconds: Long?) {
+private fun ExpiryCaption(expirySeconds: Long?, nowSeconds: Long) {
     val displayExpiry = mintQuoteDisplayExpiry(expirySeconds) ?: return
-    var nowSeconds by remember(displayExpiry) { mutableStateOf(System.currentTimeMillis() / 1000) }
-    LaunchedEffect(displayExpiry) {
-        while (nowSeconds < displayExpiry) {
-            delay(1000)
-            nowSeconds = System.currentTimeMillis() / 1000
-        }
-    }
     val text = quoteExpiryText(expirySeconds, nowSeconds) ?: return
     val remaining = displayExpiry - nowSeconds
     val urgent = remaining < 60
@@ -1927,3 +1936,12 @@ private fun ReceiveSuccessTerminal(
         },
     )
 }
+
+/** Payment detection/issuance always takes precedence over request expiry. */
+internal fun receiveInvoiceIsExpired(
+    method: PaymentMethodKind,
+    expirySeconds: Long?,
+    nowSeconds: Long,
+    settlementState: MintQuoteSettlementState?,
+): Boolean = method != PaymentMethodKind.Bolt12 && settlementState == null &&
+    mintQuoteDisplayExpiry(expirySeconds)?.let { nowSeconds >= it } == true
