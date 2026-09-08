@@ -1054,6 +1054,9 @@ class RestoreProgressState internal constructor(
     }
 
     fun retry(url: String) {
+        if (phases[url] !is RestoreMintPhase.Failed) return
+        // Claim the retry before launching so repeated taps cannot queue another restore.
+        phases[url] = RestoreMintPhase.Restoring
         scope.launch { restoreMint(url) }
     }
 }
@@ -1344,7 +1347,13 @@ private fun RestoreProgressRow(
                     }
                 }
                 is RestoreMintPhase.Failed -> {
-                    GhostButton(context = TextButtonContext.Compact, text = "Retry", onClick = onRetry)
+                    GhostButton(
+                        context = TextButtonContext.Compact,
+                        text = "Retry",
+                        onClick = onRetry,
+                        // The outgoing button can outlive the failure during its exit animation.
+                        enabled = phase is RestoreMintPhase.Failed,
+                    )
                 }
             }
         }
