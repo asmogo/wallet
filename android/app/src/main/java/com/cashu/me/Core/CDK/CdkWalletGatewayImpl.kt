@@ -262,14 +262,29 @@ class CdkWalletGatewayImpl : WalletGateway {
         )
     }
 
+    override suspend fun storedAccounts(): List<WalletAccountReference> = cdkCall {
+        val db = checkNotNull(database)
+        // Do not suppress discovery failures: callers must retain their last
+        // complete projection instead of interpreting an incomplete scan as zero.
+        buildList {
+            addAll(requireRepository().getWallets().map { WalletAccountReference(it.mintUrl().url, it.unit().toDomainUnit()) })
+            addAll(db.getProofs(null, null, null, null).map { WalletAccountReference(it.mintUrl.url, it.unit.toDomainUnit()) })
+            addAll(db.listTransactions(null, null, null).map { WalletAccountReference(it.mintUrl.url, it.unit.toDomainUnit()) })
+            addAll(db.getMintQuotes().map { WalletAccountReference(it.mintUrl.url, it.unit.toDomainUnit()) })
+            addAll(db.getMeltQuotes().mapNotNull { quote -> quote.mintUrl?.let { WalletAccountReference(it.url, quote.unit.toDomainUnit()) } })
+        }.distinct()
+    }
+
+    override suspend fun storedAccountBalance(account: WalletAccountReference): Long = cdkCall {
+        checkNotNull(database).getBalance(CdkMintUrl(account.mintUrl), cdkUnit(account.unit), listOf(org.cashudevkit.ProofState.UNSPENT)).toLong()
+    }
+
     override suspend fun totalBalance(mintUrl: String): Long = cdkCall {
         walletFor(mintUrl).totalBalance().value.toLong()
     }
 
     override suspend fun unitBalance(mintUrl: String, unit: String): Long = cdkCall {
-        val cdkUnit = cdkUnit(unit)
-        ensureWalletUnlocked(mintUrl, cdkUnit)
-        walletFor(mintUrl, cdkUnit).totalBalance().value.toLong()
+        checkNotNull(database).getBalance(CdkMintUrl(mintUrl), cdkUnit(unit), listOf(org.cashudevkit.ProofState.UNSPENT)).toLong()
     }
 
     override suspend fun unitBalanceIfExists(mintUrl: String, unit: String): Long? = cdkCall {
@@ -804,14 +819,9 @@ class CdkWalletGatewayImpl : WalletGateway {
 
     override suspend fun listTransactions(unitsByMint: Map<String, List<String>>): List<WalletTransaction> = cdkCall {
         unitsByMint.flatMap { (mintUrl, units) ->
-            units.flatMap units@{ unit ->
-                val wallet = runCatching { walletFor(mintUrl, cdkUnit(unit)) }
-                    .getOrNull() ?: return@units emptyList()
-                val incoming = runCatching { wallet.listTransactions(CdkTransactionDirection.INCOMING) }
-                    .getOrDefault(emptyList())
-                val outgoing = runCatching { wallet.listTransactions(CdkTransactionDirection.OUTGOING) }
-                    .getOrDefault(emptyList())
-                (incoming + outgoing).map { it.toDomain(unit) }
+            units.flatMap { unit ->
+                checkNotNull(database).listTransactions(CdkMintUrl(mintUrl), null, cdkUnit(unit))
+                    .map { it.toDomain(it.unit.toDomainUnit()) }
             }
         }
     }

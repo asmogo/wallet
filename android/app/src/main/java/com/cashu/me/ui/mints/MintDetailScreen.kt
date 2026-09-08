@@ -154,9 +154,12 @@ fun MintDetailScreen(
 
             // Stats block (unlabeled), matching iOS's identity rows under the
             // header: Balance [+ per-unit balances] then Connection.
-            val nonSatUnits = remember(mint.units) {
-                mint.units.filter { !it.equals("sat", ignoreCase = true) }.sorted()
+            var storedUnits by remember(mint.url) { mutableStateOf(emptyList<String>()) }
+            LaunchedEffect(mint.url, walletState.balancesByUnit, mint.units) {
+                try { storedUnits = walletManager.storedAccountUnits(mint.url) }
+                catch (error: Exception) { if (error is CancellationException) throw error }
             }
+            val nonSatUnits = (mint.units + storedUnits).distinct().filter { !it.equals("sat", ignoreCase = true) }.sorted()
             var unitBalances by remember(mint.url) { mutableStateOf<Map<String, Long>>(emptyMap()) }
             LaunchedEffect(mint.url, nonSatUnits) {
                 nonSatUnits.forEach { unit ->

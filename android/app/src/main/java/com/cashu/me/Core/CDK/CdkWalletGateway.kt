@@ -40,6 +40,9 @@ interface CdkWalletGateway {
     suspend fun removeWalletIfSingleUnit(mintUrl: String): Boolean
     suspend fun fetchMintInfo(mintUrl: String): MintInfo?
     suspend fun restoreMint(mintUrl: String): RestoreMintResult
+    /** Local CDK accounts, independent of the mint's current advertisements. */
+    suspend fun storedAccounts(): List<WalletAccountReference>
+    suspend fun storedAccountBalance(account: WalletAccountReference): Long
     suspend fun totalBalance(mintUrl: String): Long
 
     /** Balance of the (mint, unit) wallet, registering the unit wallet if needed. */
@@ -197,3 +200,6 @@ data class NfcReceiveReceipt(
 )
 
 class CdkGatewayUnavailable(message: String) : IllegalStateException(message)
+
+/** App-internal account identity. This does not alter any payment protocol. */
+data class WalletAccountReference(val mintUrl: String, val unit: String)

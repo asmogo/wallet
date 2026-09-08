@@ -36,8 +36,26 @@ internal class WalletTransactionLoader(
         val trackedMintUrls = mints.map { it.url }.toSet()
         val savedTokens = walletStore.loadSavedTokens()
         val pendingReceiveTokens = walletStore.loadPendingReceiveTokens()
-        val remote = runCatching { gateway.listTransactions(transactionUnitsByMint(mints)) }
-            .getOrDefault(emptyList())
+        val previous = walletStore.loadTransactions().filter { !it.isPendingReceiveToken }
+        // Synthesized invoice rows use the quote id as their row id; CDK rows
+        // use transaction ids. Only CDK rows may suppress a fresh quote read.
+        val previousAccountTransactions = previous.filter { it.id != it.quoteId }
+        val remote = try {
+            gateway.storedAccounts().filter { account ->
+                mints.any { com.cashu.me.Core.CDK.mintRemovalUrlsMatch(it.url, account.mintUrl) }
+            }.flatMap { account ->
+                try {
+                    gateway.listTransactions(mapOf(account.mintUrl to listOf(account.unit)))
+                } catch (error: Exception) {
+                    if (error is kotlinx.coroutines.CancellationException) throw error
+                    previousAccountTransactions.filter { it.unit == account.unit && com.cashu.me.Core.CDK.mintRemovalUrlsMatch(it.mintUrl.orEmpty(), account.mintUrl) }
+                }
+            }
+        } catch (error: Exception) {
+            if (error is kotlinx.coroutines.CancellationException) throw error
+            previousAccountTransactions.filter { tx -> mints.any { com.cashu.me.Core.CDK.mintRemovalUrlsMatch(it.url, tx.mintUrl.orEmpty()) } }
+        }
+        val remoteWithSavedTokens = remote
             .map { transaction ->
                 if (transaction.kind == TransactionKind.Ecash && transaction.token == null) {
                     transaction.copy(token = savedTokens[transaction.id])
@@ -48,7 +66,7 @@ internal class WalletTransactionLoader(
         // A sent token's string survives in the send saga until the token is
         // claimed. Backfill rows that predate the transaction-id-keyed token
         // store (e.g. sends recorded by an older app version) from the saga.
-        val remoteWithTokens = remote.map { transaction ->
+        val remoteWithTokens = remoteWithSavedTokens.map { transaction ->
             if (
                 transaction.kind == TransactionKind.Ecash &&
                 transaction.type == TransactionType.Outgoing &&
@@ -70,8 +88,12 @@ internal class WalletTransactionLoader(
         }
         val quoteIdsWithTransactions = remoteWithTokens.mapNotNull { it.quoteId }.toSet()
         val mintQuoteTimestamps = walletStore.loadMintQuoteTimestamps().toMutableMap()
-        val unissuedMintQuotes = runCatching { gateway.listUnissuedMintQuotes() }
-            .getOrDefault(emptyList())
+        val quoteRead = runCatching { gateway.listUnissuedMintQuotes() }
+        quoteRead.exceptionOrNull()?.let { if (it is kotlinx.coroutines.CancellationException) throw it }
+        val unissuedMintQuotes = quoteRead.getOrDefault(emptyList())
+        val retainedQuotes = if (quoteRead.isFailure) previous.filter {
+            it.id == it.quoteId && it.id !in quoteIdsWithTransactions && it.mintUrl in trackedMintUrls
+        } else emptyList()
         val pendingQuotes = pendingMintQuoteTransactions(
             quotes = unissuedMintQuotes,
             trackedMintUrls = trackedMintUrls,
@@ -90,7 +112,7 @@ internal class WalletTransactionLoader(
         // mint-issued quote ids, random pending-receive ids) and quote-backed
         // rows are skipped once CDK owns a transaction for the quote, so a
         // plain id dedupe is sufficient.
-        val merged = (remoteWithTokens + pendingQuoteTransactions + receiveTokenTransactions)
+        val merged = (remoteWithTokens + pendingQuoteTransactions + retainedQuotes + receiveTokenTransactions)
             .map { it.restoringDescription(requests) }
             .distinctBy { it.id }
             .sortedByDescending { it.dateEpochMillis }

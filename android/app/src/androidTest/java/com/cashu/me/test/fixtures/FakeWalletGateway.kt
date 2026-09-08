@@ -43,6 +43,7 @@ class FakeWalletGateway(
     private val walletUnits = linkedMapOf<String, MutableSet<String>>()
     private val mintInfo = linkedMapOf<String, MintInfo>()
     private val balances = initialBalances.toMutableMap()
+    private val nonSatBalances = mutableMapOf<Pair<String, String>, Long>()
     private val transactions = initialTransactions.toMutableList()
     private val mintQuotes = linkedMapOf<String, MutableStateFlow<MintQuoteInfo>>()
     private val meltQuotes = linkedMapOf<String, MeltQuoteInfo>()
@@ -52,6 +53,11 @@ class FakeWalletGateway(
     var nextCloseFailure: Throwable? = null
     val latestMintQuoteId: String?
         get() = mintQuotes.keys.lastOrNull()
+
+    suspend fun setUnitBalance(mintUrl: String, unit: String, amount: Long) {
+        ensureWallet(mintUrl, unit)
+        nonSatBalances[normalize(mintUrl) to unit] = amount
+    }
 
     fun setBalance(mintUrl: String, amount: Long) {
         balances[normalize(mintUrl)] = amount
@@ -146,11 +152,18 @@ class FakeWalletGateway(
         )
     }
 
+    override suspend fun storedAccounts() = walletUnits.flatMap { (url, units) ->
+        units.map { com.cashu.me.Core.CDK.WalletAccountReference(url, it) }
+    } + transactions.mapNotNull { tx -> tx.mintUrl?.let { com.cashu.me.Core.CDK.WalletAccountReference(it, tx.unit) } }
+
+    override suspend fun storedAccountBalance(account: com.cashu.me.Core.CDK.WalletAccountReference): Long =
+        unitBalance(account.mintUrl, account.unit)
+
     override suspend fun totalBalance(mintUrl: String): Long =
         balances[normalize(mintUrl)] ?: 0
 
     override suspend fun unitBalance(mintUrl: String, unit: String): Long =
-        if (unit.equals("sat", ignoreCase = true)) totalBalance(mintUrl) else 0
+        if (unit.equals("sat", ignoreCase = true)) totalBalance(mintUrl) else nonSatBalances[normalize(mintUrl) to unit] ?: 0
 
     override suspend fun unitBalanceIfExists(mintUrl: String, unit: String): Long? =
         if (unit.equals("sat", ignoreCase = true)) totalBalance(mintUrl) else null

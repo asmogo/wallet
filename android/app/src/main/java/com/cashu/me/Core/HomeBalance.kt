@@ -3,10 +3,7 @@ package com.cashu.me.Core
 /**
  * Pure logic for the home balance unit pager (port of iOS HomeBalance).
  *
- * The pager appears only when the active (default) mint advertises multiple
- * units AND a non-sat balance is actually held; a sat-only default mint renders
- * the single hero even if a non-sat balance exists at another mint (that
- * balance still shows on Send + Mint Detail).
+ * Held balances determine visibility independently of advertised payment units.
  */
 object HomeBalance {
     /** Pager page order: sat first, then held non-sat units sorted. */
@@ -24,7 +21,6 @@ object HomeBalance {
         if (units.contains(unit)) unit else "sat"
 
     fun showsUnitPager(
-        activeMintSupportsMultipleUnits: Boolean,
         balancesByUnit: Map<String, Long>,
-    ): Boolean = activeMintSupportsMultipleUnits && homeBalanceUnits(balancesByUnit).size > 1
+    ): Boolean = homeBalanceUnits(balancesByUnit).size > 1
 }

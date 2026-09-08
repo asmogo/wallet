@@ -242,7 +242,6 @@ fun HomeScreen(
                 balance = {
                     HomeBalanceHero(
                         showsPager = HomeBalance.showsUnitPager(
-                            activeMintSupportsMultipleUnits = walletState.activeMint?.supportsMultipleUnits == true,
                             balancesByUnit = walletState.balancesByUnit,
                         ),
                         balancesByUnit = walletState.balancesByUnit,
