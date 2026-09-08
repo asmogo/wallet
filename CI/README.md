@@ -198,8 +198,9 @@ the multi-currency UI journey; the historical profile name is used by both apps.
 7. Exercises local-mint payments, restore, onboarding, and settings
 8. Uploads test results and both mint logs on failure
 
-UI failures get one retry in a fresh app process. The job has a 45-minute bound
-for the expanded suite; duration depends on hosted-runner load and cache state.
+UI tests run once so first-attempt failures remain visible. The UI step has a
+30-minute bound inside the 45-minute job, leaving time for cleanup and failed
+test diagnostics; duration depends on hosted-runner load and cache state.
 
 ## Manual Testing
 

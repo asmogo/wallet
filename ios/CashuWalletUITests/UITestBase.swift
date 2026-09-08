@@ -111,6 +111,11 @@ class UITestBase: XCTestCase {
         // element nor any descendant has keyboard focus" — hittable is not the
         // same claim as focused. The keyboard is the observable proof that
         // focus actually arrived.
+        if !app.keyboards.element.waitForExistence(timeout: 2) {
+            // The first tap can arrive during the row's insertion transition.
+            // Refocus the field rather than typing into an unfocused control.
+            tapWhenReady(field)
+        }
         XCTAssertTrue(
             app.keyboards.element.waitForExistence(timeout: 10),
             "Tapping the mint field should raise the keyboard"

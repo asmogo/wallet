@@ -2,7 +2,8 @@
 
 The expansion adds **51 native UI tests**: 28 Android journeys and 23 iOS tests.
 The [coverage matrix](wallet-ui-coverage.md) lists priorities, test owners, and
-remaining device/service boundaries. All new UI cases have passed; detailed run boundaries are recorded below.
+remaining device/service boundaries. Local results and the subsequent hosted CI
+failures are recorded separately below.
 
 ## Confirmed application defects
 
@@ -135,3 +136,36 @@ suite passed after this correction; no design-system allowlist was loosened.
 - Physical camera/NFC, OS biometric enrollment, cloud accounts, and external
   signer/relay interoperability need their actual environments. The coverage
   matrix explicitly separates these from application behavior exercised by mocks.
+
+
+## Hosted CI follow-up
+
+The first PR run passed all required Android checks and the iOS unit/integration
+step (659 discovered, zero failures). The iOS UI bundle ran twice: the first
+attempt had five failures, and the second retained one failure out of 44 cases
+(with one configured skip). The job ended cancelled after nearly 55 minutes;
+no diagnostic artifacts were uploaded.
+
+- `testCancellingCurrencyPickerPreservesSelection` failed on both attempts.
+  Its navigation-bar swipe did not establish that the currency sheet had opened
+  or dismissed. The test now waits for the picker and drags the native sheet
+  grabber, then asserts that the picker disappears before checking selection.
+- The onboarding chassis test matched both the app's Continue action and the
+  first-use keyboard tutorial's Continue action. It now selects the existing
+  `onboarding-restore-continue` accessibility identifier.
+- The amount-entry journey lost its initial mint-field focus. The shared helper
+  now checks for the keyboard and refocuses once if the insertion transition
+  consumed the tap; it still requires the keyboard before typing.
+- Last-mint removal and seed restore reported generic tappability failures on
+  the first attempt and passed on the second. Without the missing attachments,
+  their exact failing controls cannot be established from the hosted log.
+- Xcode's repetition configuration ran the complete bundle twice, adding about
+  20 minutes. CI now executes once, bounds the UI step to 30 minutes within the
+  45-minute job, and attempts diagnostic upload on failure or cancellation.
+  First-attempt failures remain failures; no assertions or cases were removed.
+
+All five affected cases passed locally without retries: currency dismissal and
+onboarding together (2/2), then amount entry, last-mint removal, and seed restore
+against the local mints (3/3). Workflow YAML and every embedded shell step parse.
+These focused results do not establish a green hosted suite; the updated PR
+requires a fresh CI run.

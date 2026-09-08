@@ -133,7 +133,13 @@ final class SettingsUITests: UITestBase {
         let currency = app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", "Currency")).firstMatch
         let original = currency.label
         tapWhenReady(currency)
-        app.navigationBars["Currency"].swipeDown()
+        let picker = app.navigationBars["Currency"]
+        XCTAssertTrue(picker.waitForExistence(timeout: 10))
+        let grabber = app.buttons["Sheet Grabber"]
+        XCTAssertTrue(grabber.waitUntilEnabledAndHittable(timeout: 10))
+        grabber.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
+            .press(forDuration: 0.1, thenDragTo: app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.95)))
+        XCTAssertTrue(picker.waitForNonExistence(timeout: 10), "Dragging the sheet grabber should dismiss the picker")
         XCTAssertTrue(currency.waitUntilEnabledAndHittable(timeout: 5))
         XCTAssertEqual(currency.label, original)
     }
