@@ -219,13 +219,23 @@ final class AppLockManager: ObservableObject {
     /// Quick app-switches shorter than this don't re-lock.
     private let gracePeriod: TimeInterval = 30
 
-    private var isEnabled: Bool { SettingsManager.shared.appLockEnabled }
+    private let enabled: @MainActor () -> Bool
+    private let available: @MainActor () -> Bool
+    private let now: () -> Date
+    private let evaluation: ((String) async -> Bool)?
+    private var isEnabled: Bool { enabled() }
 
-    private init() {
-        // Cold launch: start locked only if enabled AND we can actually
-        // authenticate. Fail open — never strand the user behind a gate we
-        // can't open.
-        isLocked = SettingsManager.shared.appLockEnabled && Self.canEvaluate()
+    init(
+        enabled: @escaping @MainActor () -> Bool = { SettingsManager.shared.appLockEnabled },
+        available: @escaping @MainActor () -> Bool = { AppLockManager.canEvaluate() },
+        now: @escaping () -> Date = Date.init,
+        evaluation: ((String) async -> Bool)? = nil
+    ) {
+        self.enabled = enabled
+        self.available = available
+        self.now = now
+        self.evaluation = evaluation
+        isLocked = enabled() && available()
     }
 
     /// Whether `deviceOwnerAuthentication` (biometrics OR passcode) is available.
@@ -245,6 +255,12 @@ final class AppLockManager: ObservableObject {
         guard !isAuthenticating else { return false }
         isAuthenticating = true
         defer { isAuthenticating = false }
+
+        if let evaluation {
+            let success = await evaluation(reason)
+            if success { unlock() }
+            return success
+        }
 
         // A fresh context per evaluation is mandatory: reusing one short-circuits
         // auth and caches stale enrollment / biometryType.
@@ -282,7 +298,7 @@ final class AppLockManager: ObservableObject {
     /// the grace clock. Ignored while we're driving our own auth sheet.
     func appResignedActive() {
         guard isEnabled, !isAuthenticating else { return }
-        if backgroundedAt == nil { backgroundedAt = Date() }
+        if backgroundedAt == nil { backgroundedAt = now() }
         isObscured = true
     }
 
@@ -292,7 +308,7 @@ final class AppLockManager: ObservableObject {
         guard isEnabled, !isAuthenticating else { return }
         if isLocked { isObscured = true; return }
 
-        if let backgroundedAt, Date().timeIntervalSince(backgroundedAt) >= gracePeriod {
+        if let backgroundedAt, now().timeIntervalSince(backgroundedAt) >= gracePeriod {
             isLocked = true
             isObscured = true
         } else {
@@ -374,7 +390,7 @@ struct PrivacyCoverView: View {
                 .font(.system(size: 40, weight: .regular))
                 .foregroundStyle(.tertiary)
         }
-        .allowsHitTesting(false)
+        .accessibilityLabel("Wallet hidden")
     }
 }
 
