@@ -115,7 +115,7 @@ Platform-specific capabilities remain intentionally outside parity, including iC
 
 - [ ] **[P2 · iOS → Android] Honor the preferred amount unit in transaction details.** iOS makes sats and fiat available for sat-denominated Lightning/ecash records; Android always displays sats. **Done when:** Android leads with the saved primary setting, exposes the alternate value accessibly, and preserves on-chain and non-sat-unit exceptions.
 
-- [ ] **[P2 · iOS → Android] Announce the active History filter.** iOS exposes the selected filter as an accessibility value; Android’s filter control is announced only as “Filter.” **Done when:** TalkBack reports All, Pending only, or Completed only on the control.
+- [x] **[P2 · iOS → Android] Announce the active History filter.** The filter is labeled “Filter transactions” with an accessibility state of All, Pending only, or Completed only. Menu items expose their selected state; a Compose regression checks every control state. **Verification:** Native Compose checks passed for all three accessibility states; Android unit/lint/build and visual control checks passed.
 
 ### Mints list, add, and discovery
 
