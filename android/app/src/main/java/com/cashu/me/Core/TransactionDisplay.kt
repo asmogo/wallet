@@ -53,7 +53,7 @@ object TransactionDisplay {
     fun qrContent(transaction: WalletTransaction): String? =
         transaction.token ?: transaction.invoice
 
-    /** Pending payment artifacts retain their QR, Copy and Share; reusable offers stay live. */
+    /** Pending artifacts retain their QR. Settled offers live in request details, not receipts. */
     fun showsQr(transaction: WalletTransaction): Boolean = when (transaction.kind) {
         TransactionKind.Ecash ->
             !transaction.token.isNullOrEmpty() &&
@@ -61,9 +61,7 @@ object TransactionDisplay {
                 transaction.status == TransactionStatus.Pending
         TransactionKind.Lightning ->
             !transaction.invoice.isNullOrEmpty() &&
-                (transaction.status == TransactionStatus.Pending ||
-                    (transaction.status == TransactionStatus.Completed &&
-                        transaction.invoice.startsWith("lno", ignoreCase = true)))
+                transaction.status == TransactionStatus.Pending
         TransactionKind.Onchain ->
             !transaction.invoice.isNullOrEmpty() &&
                 transaction.status == TransactionStatus.Pending

@@ -334,8 +334,8 @@ tap the scrim to dismiss. The presenting canvas takes a restrained 2–2.5pt blu
 beneath the native dimming scrim. Pending, failed, expired, QR, and claim/check states
 retain the large detail workspace. The slot resolves by state: an **actionable request**
 shows its QR (unclaimed outgoing token — gated on `status == .pending` since the
-token string is retained after claim — a pending invoice, or a reusable BOLT12
-offer, `lno` prefix); a **completed** transaction shows the 64pt green
+token string is retained after claim — or a pending invoice); a **completed**
+transaction, including a payment to a reusable BOLT12 offer, shows the 64pt green
 `checkmark.circle.fill`; a **failed** one shows the 64pt red `xmark.circle.fill`;
 both bounce in on open (`.symbolEffect(.bounce, value: didAppear)`), matching the
 payment-success entrance. A **pending, no-QR** transaction shows no glyph. The old
@@ -534,8 +534,8 @@ tap the scrim to dismiss. The presenting canvas takes a restrained 2–2.5pt blu
 beneath the native dimming scrim. Pending, failed, expired, QR, and claim/check states
 retain the large detail workspace. The slot resolves by state: an **actionable request**
 shows its QR (unclaimed outgoing token — gated on `status == .pending` since the
-token string is retained after claim — a pending invoice, or a reusable BOLT12
-offer, `lno` prefix); a **completed** transaction shows the 64pt green
+token string is retained after claim — or a pending invoice); a **completed**
+transaction, including a payment to a reusable BOLT12 offer, shows the 64pt green
 `checkmark.circle.fill`; a **failed** one shows the 64pt red `xmark.circle.fill`;
 both bounce in on open (`.symbolEffect(.bounce, value: didAppear)`), matching the
 payment-success entrance. A **pending, no-QR** transaction shows no glyph. The old
@@ -1679,3 +1679,8 @@ drags still scroll, so it adds nothing to either path's cost.
   confetti, no neon-on-black "crypto default" palette, no mascots, no
   signature gradients, no holographic borders, no glowing rings. Money is not
   a game and the wallet should not fight iOS for attention.
+
+Reusable Invoice request details retain their QR, payment count, and total received.
+Their received-payment status uses native SwiftUI green on iOS and the matching
+received success color on Android. Individual settled payment receipts show the
+success checkmark and do not expose the reusable offer QR, Copy, or Share actions.

@@ -103,7 +103,8 @@ class TransactionDisplayTest {
             type = TransactionType.Incoming,
             invoice = "lno1offer",
         )
-        assertTrue(TransactionDisplay.showsQr(reusableOffer))
+        assertTrue(!TransactionDisplay.showsQr(reusableOffer))
+        assertEquals(null, TransactionDisplay.copyableContent(reusableOffer))
     }
 
     @Test
@@ -192,10 +193,10 @@ class TransactionDisplayTest {
     }
 
     @Test
-    fun failedOffersRetireWhilePendingOutgoingArtifactsRemainAvailable() {
+    fun settledAndFailedOfferReceiptsRetireWhilePendingOutgoingArtifactsRemainAvailable() {
         val offer = transaction(kind = TransactionKind.Lightning, type = TransactionType.Incoming,
             invoice = "LNO1offer")
-        assertTrue(TransactionDisplay.showsQr(offer))
+        assertTrue(!TransactionDisplay.showsQr(offer))
         assertTrue(!TransactionDisplay.showsQr(offer.copy(status = TransactionStatus.Failed)))
         assertTrue(TransactionDisplay.showsQr(offer.copy(type = TransactionType.Outgoing,
             status = TransactionStatus.Pending)))
