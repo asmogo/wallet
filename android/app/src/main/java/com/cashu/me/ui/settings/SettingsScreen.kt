@@ -34,6 +34,9 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.mutableStateOf
@@ -77,10 +80,21 @@ fun SettingsScreen(
 ) {
     val context = LocalContext.current
     val settings by settingsManager.state.collectAsState()
+    val deletion = walletManager.deletionAction
+    val deleting by deletion.running.collectAsState()
+    val deletionError by deletion.error.collectAsState()
+    val snackbar = remember { SnackbarHostState() }
+    LaunchedEffect(deletionError) {
+        deletionError?.let { message ->
+            snackbar.showSnackbar(message)
+            deletion.acknowledgeError(message)
+        }
+    }
     var confirmDelete by remember { mutableStateOf(false) }
     var currencyPickerOpen by remember { mutableStateOf(false) }
 
     Scaffold(
+        snackbarHost = { SnackbarHost(snackbar) },
         modifier = Modifier
             .testTag(UiTestTags.SettingsScreen)
             .padding(contentPadding)
@@ -209,7 +223,8 @@ fun SettingsScreen(
                 NavRow(
                     title = "Delete Wallet",
                     leadingIcon = Icons.Outlined.DeleteOutline,
-                    onClick = { confirmDelete = true },
+                    onClick = { if (!deleting) confirmDelete = true },
+                    enabled = !deleting,
                     tint = MaterialTheme.colorScheme.error,
                     showChevron = false,
                 )
@@ -244,7 +259,7 @@ fun SettingsScreen(
             destructive = true,
             onConfirm = {
                 confirmDelete = false
-                walletManager.launch { walletManager.deleteWallet() }
+                deletion.submit()
             },
             onDismiss = { confirmDelete = false },
         )

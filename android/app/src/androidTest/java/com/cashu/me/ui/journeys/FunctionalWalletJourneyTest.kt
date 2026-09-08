@@ -282,6 +282,25 @@ class FunctionalWalletJourneyTest {
     }
 
     @Test
+    fun failedWalletDeletionShowsFeedbackAndRequiresAnotherConfirmation() {
+        val fixture = launch(FixtureMode.SeededWithoutMint)
+        val failure = IllegalStateException("code=11001, errorMessage=private storage detail")
+        fixture.fakeGateway!!.nextCloseFailure = failure
+        robot.awaitTag(UiTestTags.WalletScreen)
+            .tapDescription("Settings")
+            .awaitTag(UiTestTags.SettingsScreen)
+            .scrollToText(UiTestTags.SettingsList, "Delete Wallet")
+            .tapText("Delete Wallet")
+            .awaitText("Delete wallet?")
+            .tapText("Delete")
+            .awaitText(com.cashu.me.Core.Wallet.WalletErrorMessages.classify(failure).text)
+            .tapText("Delete Wallet")
+            .awaitText("Delete wallet?")
+            .tapText("Cancel")
+            .awaitTag(UiTestTags.SettingsScreen)
+    }
+
+    @Test
     fun deleteWalletConfirmationReturnsToOnboarding() {
         launch(FixtureMode.SeededWithoutMint)
 

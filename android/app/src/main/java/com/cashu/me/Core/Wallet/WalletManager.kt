@@ -1691,6 +1691,10 @@ class WalletManager(
         }
     }
 
+    internal val deletionAction by lazy {
+        WalletDeletionAction(::launch, ::deleteWallet)
+    }
+
     fun launch(block: suspend CoroutineScope.() -> Unit) {
         scope.launch { block() }
     }
