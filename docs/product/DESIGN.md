@@ -198,6 +198,11 @@ What this system explicitly rejects, pulled verbatim from docs/product/PRODUCT.m
 History and Home activity details share native sheet presentation on iOS and
 Android, while retaining the existing payment-specific content and actions.
 
+- Phone history sheets attach to the side and bottom edges, with rounded top
+  corners and square bottom corners. This covers all transaction rails and saved
+  payment requests. Wider windows retain native width-limited sizing; floating
+  iPad sheets keep their system corner treatment. Scope this to activity details,
+  preserving safe areas, scrolling, swipe cancellation, and accessibility escape.
 - Every transaction and stored receive request opens a sheet over its list with
   a centered title and drag handle. Dismiss by swipe, native accessibility escape,
   or Android Back. No redundant top-left close X.

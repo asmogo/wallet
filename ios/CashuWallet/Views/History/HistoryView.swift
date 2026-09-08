@@ -148,15 +148,13 @@ struct HistoryView: View {
                     isSearchMounted = false
                 }
             }
-            .sheet(item: $selectedTransaction) { transaction in
+            .activitySheet(item: $selectedTransaction, onDismissalStateChanged: { isSheetDismissing = $0 }) { transaction in
                 TransactionDetailView(transaction: transaction)
                     .environmentObject(walletManager)
-                    .observeBottomSheetDismissal { isSheetDismissing = $0 }
             }
-            .sheet(item: $selectedRequest) { request in
+            .activitySheet(item: $selectedRequest, onDismissalStateChanged: { isSheetDismissing = $0 }) { request in
                 CashuRequestReceiptView(request: request)
                     .environmentObject(walletManager)
-                    .observeBottomSheetDismissal { isSheetDismissing = $0 }
             }
             .backdropSheet(item: $requestPendingDeletion) { request in
                 ActionConfirmationSheet(

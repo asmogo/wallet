@@ -1,6 +1,7 @@
 import SwiftUI
 
 struct TransactionDetailView: View {
+    @Environment(\.dismissActivitySheet) private var dismissActivitySheet
     @Environment(\.dismiss) private var dismiss
     @Environment(\.scenePhase) private var scenePhase
     @EnvironmentObject var walletManager: WalletManager
@@ -148,7 +149,7 @@ struct TransactionDetailView: View {
                 tokenString: pending.token,
                 onComplete: {
                     claimReceiveToken = nil
-                    dismiss()
+                    if let dismissActivitySheet { dismissActivitySheet() } else { dismiss() }
                 },
                 claim: { try await walletManager.claimPendingReceiveToken(pending) }
             )
