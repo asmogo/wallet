@@ -76,7 +76,6 @@ internal class LightningAddressResolver(
 
         val callbackUrl = invoiceCallbackUrl(
             callback = callback,
-            expectedHost = endpoint.host,
             amountMsat = amountMsat,
         )
         val invoiceResponse = try {
@@ -153,16 +152,16 @@ internal class LightningAddressResolver(
 
     private fun invoiceCallbackUrl(
         callback: String,
-        expectedHost: String,
         amountMsat: Long,
     ): HttpUrl {
         val parsed = callback.toHttpUrlOrNull()
             ?: throw LightningAddressResolutionException.Invalid(
                 "Lightning address service returned an invalid payment callback.",
             )
+        val authority = runCatching { java.net.URI(callback).rawAuthority }.getOrNull()
         if (
+            authority == null || authority.contains('@') ||
             parsed.scheme != "https" ||
-            parsed.host != expectedHost ||
             parsed.username.isNotEmpty() ||
             parsed.password.isNotEmpty() ||
             parsed.fragment != null

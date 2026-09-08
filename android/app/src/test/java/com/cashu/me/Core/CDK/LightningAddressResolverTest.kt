@@ -77,24 +77,55 @@ class LightningAddressResolverTest {
     }
 
     @Test
-    fun rejectsCallbackOnDifferentHost() = runBlocking {
+    fun acceptsDelegatedCallbackAndReplacesEveryAmountParameter() = runBlocking {
         val transport = RecordingTransport(
-            LnurlHttpResponse(
-                code = 200,
-                body = payRequestJson(callback = "https://attacker.example/lnurl/callback"),
-            ),
+            LnurlHttpResponse(200, payRequestJson("https://pay.example.net/invoice?amount=1&Amount=2&memo=coffee")),
+            LnurlHttpResponse(200, """{"pr":"$Bolt11AmountfulCoffeeInvoice"}"""),
         )
+        assertEquals(Bolt11AmountfulCoffeeInvoice, resolver(transport, InvoiceAmountMsat)
+            .resolveBolt11Invoice("alice@example.com", InvoiceAmountMsat))
+        val callback = transport.requestedUrls.last()
+        assertEquals("pay.example.net", callback.host)
+        assertEquals(listOf(InvoiceAmountMsat.toString()), callback.queryParameterValues("amount"))
+        assertEquals(emptyList<String>(), callback.queryParameterValues("Amount"))
+        assertEquals("coffee", callback.queryParameter("memo"))
+    }
 
-        val error = runCatching {
-            resolver(transport, decodedAmountMsat = InvoiceAmountMsat).resolveBolt11Invoice(
-                address = "alice@example.com",
-                amountMsat = InvoiceAmountMsat,
+    @Test
+    fun rejectsUnsafeCallbacksBeforeRequestingAnInvoice() = runBlocking {
+        listOf(
+            "http://pay.example.net/invoice",
+            "https://@pay.example.net/invoice",
+            "https:///invoice",
+            "https://bad host/invoice",
+            "https://user:pass@pay.example.net/invoice",
+            "https://pay.example.net/invoice#fragment",
+            "not a URL",
+        ).forEach { callback ->
+            val transport = RecordingTransport(LnurlHttpResponse(200, payRequestJson(callback)))
+            val error = runCatching {
+                resolver(transport, InvoiceAmountMsat).resolveBolt11Invoice("alice@example.com", InvoiceAmountMsat)
+            }.exceptionOrNull()
+            assertTrue(callback, error is LightningAddressResolutionException.Invalid)
+            assertEquals(1, transport.requestedUrls.size)
+        }
+    }
+
+    @Test
+    fun rejectsInvalidAndNonBolt11InvoicesFromDelegatedCallback() = runBlocking {
+        listOf<LightningInvoiceDecoder>(
+            LightningInvoiceDecoder { throw IllegalArgumentException("bad invoice") },
+            LightningInvoiceDecoder { LightningInvoiceMetadata(false, InvoiceAmountMsat.toULong()) },
+        ).forEach { decoder ->
+            val transport = RecordingTransport(
+                LnurlHttpResponse(200, payRequestJson("https://pay.example.net/invoice")),
+                LnurlHttpResponse(200, """{"pr":"invalid"}"""),
             )
-        }.exceptionOrNull()
-
-        assertTrue(error is LightningAddressResolutionException.Invalid)
-        assertTrue(error?.message.orEmpty().contains("unsafe payment callback"))
-        assertEquals(1, transport.requestedUrls.size)
+            val error = runCatching {
+                LightningAddressResolver(transport, decoder).resolveBolt11Invoice("alice@example.com", InvoiceAmountMsat)
+            }.exceptionOrNull()
+            assertTrue(error is LightningAddressResolutionException.Invalid)
+        }
     }
 
     private fun payRequestJson(

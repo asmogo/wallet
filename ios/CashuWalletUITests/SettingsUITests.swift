@@ -14,6 +14,27 @@ final class SettingsUITests: UITestBase {
 
     // MARK: - Tests
 
+    func testCurrencyNamesRemainAccessibleAtLargeTextSizes() {
+        for (language, locale) in [("en", "en_US"), ("de", "de_DE")] {
+            app.terminate()
+            app.launchArguments = ["-AppleLanguages", "(\(language))", "-AppleLocale", locale,
+                                    "-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryAccessibilityL"]
+            app.launch()
+            navigateToSettings()
+            tapWhenReady(app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", "Currency")).firstMatch)
+            let name = Locale(identifier: locale).localizedString(forCurrencyCode: "USD") ?? "USD"
+            let row = app.buttons["USD, \(name)"]
+            XCTAssertTrue(row.waitForExistence(timeout: 5))
+            XCTAssertTrue(row.isHittable)
+            let attachment = XCTAttachment(screenshot: app.screenshot())
+            attachment.name = "currency-names-\(locale)-large-text"
+            attachment.lifetime = .keepAlways
+            add(attachment)
+            tapWhenReady(row)
+            XCTAssertTrue(screen("settings-screen").waitForExistence(timeout: 5))
+        }
+    }
+
     func testSettingsRoundTrip() throws {
         navigateToSettings()
 

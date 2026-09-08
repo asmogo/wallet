@@ -161,7 +161,7 @@ struct HistoryView: View {
             .backdropSheet(item: $requestPendingDeletion) { request in
                 ActionConfirmationSheet(
                     title: "Remove from history?",
-                    message: "Only this request is removed from history. Payments already received stay in your wallet, and the request can still receive payments.",
+                    message: "Only this request is removed from history. Payments already received stay in your wallet. The QR code and any pending payment routing remain valid, so the request can still receive payments.",
                     actionLabel: "Remove",
                     destructive: true
                 ) {

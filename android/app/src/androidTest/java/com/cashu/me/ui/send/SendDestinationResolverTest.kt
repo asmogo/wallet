@@ -59,6 +59,19 @@ class SendDestinationResolverTest {
         assertEquals(SendDestinationResolution.EcashToken(token), resolution)
     }
 
+    @Test
+    fun malformedBolt11DoesNotAdvanceAfterStrictDecodingFails() {
+        val inputs = listOf(
+            "lnbc10u1bogus", "lightning:lnbc10u1bogus", "LNBC10U1BOGUS",
+            Bolt11AmountfulCoffeeInvoice.dropLast(1),
+            Bolt11AmountfulCoffeeInvoice.dropLast(1) + "q",
+        )
+        inputs.forEach { input ->
+            assertEquals(SendDestinationResolution.Unrecognized,
+                resolveSendDestination(input, walletMints = emptyList()))
+        }
+    }
+
     private companion object {
         private const val AmountlessBolt12Offer =
             "lno1pgqpvggr25nht4nyqrgtnhxltctkdsfrf3myhj008f6fyulf4tplmarx8hxq"

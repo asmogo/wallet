@@ -44,6 +44,9 @@ Platform-specific capabilities remain intentionally outside parity, including iC
 
 ### Send — unified destination and payment flow
 
+- [x] **[P1 · iOS → Android] Reject malformed Lightning invoices at destination entry.** Send uses the central payment decoder without a prefix-only BOLT11 fallback. Valid and amountless BOLT11 invoices and the existing BOLT12 fallback retain their routing. **Verification:** All six destination tests passed with native CDK; Android unit/lint/build checks passed. Invalid destination entry was inspected on-device.
+
+
 - [x] **[P1 · iOS → Android] Support fiat-primary amount entry.** iOS converts keypad input according to the saved sats/fiat primary setting; Android’s unified Send amount step always interprets the input as sats. **Done when:** Android entry, Send Max, validation, and amount presentation honor the selected primary unit without changing the sat amount being paid.
 
 - [x] **[P1 · iOS → Android] Honor the preferred unit on payment confirmation.** Android confirmation renders a fixed sat string; iOS keeps the saved primary value and alternate conversion available. **Done when:** Android confirmation leads with the persisted primary unit and makes the alternate value available visually and to accessibility services through a native Android presentation. An identical iOS flip control is not required.
@@ -106,7 +109,7 @@ Platform-specific capabilities remain intentionally outside parity, including iC
 
 - [ ] **[P2 · iOS → Android] Search a Cashu Request’s Total received amount.** iOS includes the aggregate received value in search; Android only searches the requested amount. **Done when:** Android matches both configured and received totals using the same normalized amount formats as other History search.
 
-- [ ] **[P1 · iOS → Android] Explain all consequences of removing a Cashu Request row.** iOS says the QR and pending payment routing remain valid; Android only says received payments stay in the wallet. **Done when:** Android states before deletion that previously received funds remain, the QR and payment routing remain valid, and only the History row is removed.
+- [x] **[P1 · Converge] Explain all consequences of removing a Cashu Request row.** Both native confirmations state that received funds stay in the wallet, the QR and pending payment routing remain valid, and only the History entry is removed. Removal behavior is unchanged. **Verification:** Android unit/lint/build checks and native confirmation captures passed. The matching iOS build and native removal-sheet capture passed on iOS 26.5.
 
 - [ ] **[P1 · iOS → Android] Add removal for an ordinary parked incoming token.** Android already supports declining a held Cashu Request payment, but it has no equivalent removal for a normal unclaimed token. **Done when:** Android provides a discoverable removal action for ordinary parked tokens and warns that the ecash will be discarded and only the sender can reissue it.
 
@@ -152,7 +155,7 @@ Platform-specific capabilities remain intentionally outside parity, including iC
 
 - [x] **[P1 · Android → iOS] Read the app version from build metadata.** Android uses `BuildConfig.VERSION_NAME`; iOS hard-codes `1.0.0`. **Done when:** iOS displays the shipped bundle version and, if included, its build number from metadata.
 
-- [ ] **[P2 · Android → iOS] Add localized currency names.** Android shows the ISO code plus the localized currency name; iOS shows only the code. **Done when:** iOS rows are understandable without memorizing ISO-4217 codes.
+- [x] **[P2 · Android → iOS] Add localized currency names.** iOS currency rows show the localized name beneath the ISO code and include both in the accessibility label, falling back to the code. Names wrap at large text sizes; ordering, selection, and avatars remain native. **Verification:** Native English/German accessibility-size tests and iOS builds passed; localized names were visually reviewed.
 
 - [x] **[P2 · iOS → Android] Show when the BTC price was last updated.** iOS includes a relative timestamp beside the price; Android omits it. **Done when:** Android exposes recency and handles never-loaded and stale states.
 
