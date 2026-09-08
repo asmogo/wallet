@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Lock
@@ -87,10 +88,25 @@ fun AppLockGate(
         }
     }
 
+    AppLockGateContent(
+        isAuthenticating = state.isAuthenticating,
+        onUnlock = { scope.launch { appLockManager.authenticate(activity) } },
+        modifier = modifier,
+    )
+}
+
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
+@Composable
+internal fun AppLockGateContent(
+    isAuthenticating: Boolean,
+    onUnlock: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
     Box(
         modifier = modifier
             .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background),
+            .background(MaterialTheme.colorScheme.background)
+            .safeDrawingPadding(),
     ) {
         Column(
             modifier = Modifier
@@ -117,17 +133,15 @@ fun AppLockGate(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 textAlign = TextAlign.Center,
             )
-            if (state.isAuthenticating) {
+            if (isAuthenticating) {
                 Spacer(Modifier.height(CashuTheme.spacing.snug))
                 LoadingIndicator()
             }
         }
         PrimaryButton(
             text = "Unlock",
-            onClick = {
-                scope.launch { appLockManager.authenticate(activity) }
-            },
-            enabled = !state.isAuthenticating,
+            onClick = onUnlock,
+            enabled = !isAuthenticating,
             modifier = Modifier
                 .align(Alignment.BottomCenter)
                 .fillMaxWidth()

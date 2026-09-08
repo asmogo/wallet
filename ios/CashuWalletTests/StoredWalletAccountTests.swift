@@ -67,6 +67,10 @@ final class StoredWalletAccountTests: XCTestCase {
             let keys = ["02", "03"].map { $0 + "79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798" }
             for (index, url) in urls.enumerated() {
                 let mint = MintUrl(url: url)
+                // CDK derives stored transaction ids from the saga (or ys),
+                // rather than the FFI record's id. Distinct sagas prevent the
+                // second fixture row from replacing the first one.
+                let sagaID = UUID().uuidString
                 try await db.addMint(mintUrl: mint, mintInfo: nil)
                 try await db.updateProofs(added: [ProofInfo(
                     proof: Proof(amount: Amount(value: UInt64(8 << index)), secret: "stored-account-\(index)",
@@ -79,9 +83,11 @@ final class StoredWalletAccountTests: XCTestCase {
                     id: TransactionId(hex: String(repeating: index == 0 ? "a" : "b", count: 64)),
                     mintUrl: mint, direction: .incoming, amount: Amount(value: 8), fee: Amount(value: 0),
                     unit: .usd, ys: [], timestamp: 1, memo: nil, metadata: [:], quoteId: nil,
-                    paymentRequest: nil, paymentProof: nil, paymentMethod: nil, sagaId: nil, status: .completed
+                    paymentRequest: nil, paymentProof: nil, paymentMethod: nil, sagaId: sagaID, status: .completed
                 ))
             }
+            let storedTransactions = try await db.listTransactions(mintUrl: nil, direction: nil, unit: .usd)
+            XCTAssertEqual(Set(storedTransactions.map { $0.id.hex }).count, 2)
             let accounts = try await StoredWalletAccount.discover(database: db, repository: repo)
                 .filter { $0.unit == .usd && $0.matches(mintURL: urls[1]) }
             XCTAssertEqual(Set(accounts.map(\.mintURL)), Set(urls))

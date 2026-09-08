@@ -49,6 +49,9 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
@@ -170,12 +173,21 @@ fun HistoryScreen(
                         )
                     }
                     Box {
-                        IconButton(onClick = { filterMenuOpen = true }) {
+                        IconButton(
+                            onClick = { filterMenuOpen = true },
+                            modifier = Modifier.semantics {
+                                stateDescription = when (filter) {
+                                    HistoryFilter.All -> "All"
+                                    HistoryFilter.Pending -> "Pending only"
+                                    HistoryFilter.Completed -> "Completed only"
+                                }
+                            },
+                        ) {
                             // Outlined ↔ filled glyph swap animates (symbol-replace parity).
                             IconSwap(
                                 icon = if (filter == HistoryFilter.All)
                                     Icons.Outlined.FilterList else Icons.Filled.FilterList,
-                                contentDescription = "Filter",
+                                contentDescription = "Filter transactions",
                                 iconSize = CashuTheme.iconSizes.toolbar,
                             )
                         }
@@ -187,6 +199,7 @@ fun HistoryScreen(
                             HistoryFilter.entries.forEach { entry ->
                                 DropdownMenuItem(
                                     text = { Text(entry.label) },
+                                    modifier = Modifier.semantics { selected = entry == filter },
                                     onClick = {
                                         filter = entry
                                         filterMenuOpen = false
@@ -472,19 +485,22 @@ internal fun unifiedFiltered(
         }
         .map { HistoryItem.Req(it) as HistoryItem }
     val all = (txItems + reqItems).sortedByDescending { it.date }
-    if (query.isBlank()) return all
+    val normalizedQuery = query.trim()
+    if (normalizedQuery.isEmpty()) return all
     return all.filter { item ->
         when (item) {
             is HistoryItem.Tx -> {
                 val tx = item.transaction
-                TransactionDisplay.title(tx).contains(query, ignoreCase = true) ||
-                    tx.amount.toString().contains(query) ||
-                    tx.displayDescription?.contains(query, ignoreCase = true) == true
+                TransactionDisplay.title(tx).contains(normalizedQuery, ignoreCase = true) ||
+                    tx.amount.toString().contains(normalizedQuery) ||
+                    tx.displayDescription?.contains(normalizedQuery, ignoreCase = true) == true
             }
             is HistoryItem.Req -> {
-                item.request.displayTitle.contains(query, ignoreCase = true) ||
-                    (item.request.amount?.toString()?.contains(query) == true) ||
-                    item.request.displayDescription?.contains(query, ignoreCase = true) == true
+                item.request.displayTitle.contains(normalizedQuery, ignoreCase = true) ||
+                    (item.request.amount?.toString()?.contains(normalizedQuery) == true) ||
+                    (item.request.totalReceived > 0 &&
+                        item.request.totalReceived.toString().contains(normalizedQuery)) ||
+                    item.request.displayDescription?.contains(normalizedQuery, ignoreCase = true) == true
             }
         }
     }

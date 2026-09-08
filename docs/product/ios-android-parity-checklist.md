@@ -95,19 +95,19 @@ Platform-specific capabilities remain intentionally outside parity, including iC
 
 - [x] **[P2 · iOS → Android] Honor the preferred unit on generated invoice details.** iOS keeps sats and fiat available under a BOLT11 or fixed BOLT12 QR; Android renders a fixed amount string. **Done when:** Android leads with the saved primary unit and exposes the alternate conversion visually and accessibly through a native presentation.
 
-- [ ] **[P1 · iOS → Android] Make expiry the primary one-shot invoice status.** Android can keep “Waiting for payment” as the main status after expiry while only the small caption says Expired. **Done when:** the primary status, accessibility value, and available actions cannot contradict the expired state.
+- [x] **[P1 · iOS → Android] Make expiry the primary one-shot invoice status.** Android now derives the primary status and countdown from one clock. Settlement and issuance states take precedence; reusable offers and on-chain recovery retain their behavior. Regression tests cover the expiry boundary and settlement precedence. **Verification:** Expiry-boundary and settlement-precedence regressions, Android unit/lint/build checks, and before/after invoice captures passed.
 
 - [ ] **[P1 · Android → iOS] Add Total received to reusable-invoice details.** Android shows a cumulative total after BOLT12 payments; iOS swaps to a paid success state but exposes no cumulative total anywhere. **Done when:** iOS exposes the unit-correct cumulative amount.
 
 - [x] **[P1 · Android → iOS] Correlate an open Cashu Request success to a new payment record.** Android watches the request’s received-payment IDs; iOS has a fallback that treats any balance increase while the receive sheet is open as payment for that request. **Done when:** iOS cannot show request success for an unrelated balance increase, with regression coverage for concurrent balance changes.
 
-- [ ] **[P2 · Android → iOS] Show Total received in Cashu Request details.** Android adds the aggregate after one or more payments; iOS shows only the status count and original request amount. **Done when:** iOS includes a unit-correct aggregate row without confusing it with the requested amount.
+- [x] **[P2 · Android → iOS] Show Total received in Cashu Request details.** The total row landed in #344. Regression coverage now checks cumulative mint-unit totals across live payments, duplicate delivery, and reopening from persisted History. Requested amounts and payment counts remain separate. **Verification:** Six payment-observation tests passed, including cumulative totals and reopening. Native sat/USD receipt captures and iOS builds passed.
 
 ### History and transaction details
 
 - [x] **[P1 · Android → iOS] Search transaction and request memos.** Android includes memos in History search; iOS searches titles and numeric amounts only. **Done when:** iOS matches memo text case-insensitively for both item types.
 
-- [ ] **[P2 · iOS → Android] Search a Cashu Request’s Total received amount.** iOS includes the aggregate received value in search; Android only searches the requested amount. **Done when:** Android matches both configured and received totals using the same normalized amount formats as other History search.
+- [x] **[P2 · iOS → Android] Search a Cashu Request’s Total received amount.** Android searches positive cumulative received totals alongside requested amounts, titles, and descriptions. Queries are trimmed before matching; filters and ordering remain unchanged. **Verification:** Focused total-search regressions, Android unit/lint/build checks, and matched History search captures passed.
 
 - [x] **[P1 · Converge] Explain all consequences of removing a Cashu Request row.** Both native confirmations state that received funds stay in the wallet, the QR and pending payment routing remain valid, and only the History entry is removed. Removal behavior is unchanged. **Verification:** Android unit/lint/build checks and native confirmation captures passed. The matching iOS build and native removal-sheet capture passed on iOS 26.5.
 
@@ -115,7 +115,7 @@ Platform-specific capabilities remain intentionally outside parity, including iC
 
 - [ ] **[P2 · iOS → Android] Honor the preferred amount unit in transaction details.** iOS makes sats and fiat available for sat-denominated Lightning/ecash records; Android always displays sats. **Done when:** Android leads with the saved primary setting, exposes the alternate value accessibly, and preserves on-chain and non-sat-unit exceptions.
 
-- [ ] **[P2 · iOS → Android] Announce the active History filter.** iOS exposes the selected filter as an accessibility value; Android’s filter control is announced only as “Filter.” **Done when:** TalkBack reports All, Pending only, or Completed only on the control.
+- [x] **[P2 · iOS → Android] Announce the active History filter.** The filter is labeled “Filter transactions” with an accessibility state of All, Pending only, or Completed only. Menu items expose their selected state; a Compose regression checks every control state. **Verification:** Native Compose checks passed for all three accessibility states; Android unit/lint/build and visual control checks passed.
 
 ### Mints list, add, and discovery
 
@@ -145,13 +145,16 @@ Platform-specific capabilities remain intentionally outside parity, including iC
 
 ### Settings — information architecture, display, and destructive actions
 
+- [x] **[P1 · Android → iOS] Retry Lightning-address setup from Settings.** “Try setup again” recovers failed wallet initialization and initializes missing NPC keys from the stored seed. Startup and retries share the in-flight runtime load, and successful runtime recovery restarts the Cashu Request listener. Existing identities, wallet data, and preferences are preserved. Loading and errors remain retryable. **Verification:** The initial implementation passed all 13 NPC service tests, the native setup-state capture on iOS 26.5, and app/test-bundle builds. The follow-up concurrency and listener fixes received static review; tests were not rerun.
+
+
 - [x] **[P2 · iOS → Android] Make App Lock discoverable in a security-oriented Settings location.** Android currently places the toggle under Privacy even though it controls local device access. **Done when:** App Lock is discoverable under a clear security or backup-and-security destination while privacy/background networking controls remain conceptually separate. The exact iOS hierarchy is not required.
 
 - [x] **[P0 · iOS → Android] Authenticate before enabling App Lock.** iOS verifies device-owner authentication and reverts with an error if enabling fails; Android directly persists the toggle. **Done when:** Android cannot enable App Lock until a device-owner challenge succeeds, and cancellation or failure leaves it disabled.
 
 - [x] **[P1 · iOS → Android] Explain unavailable App Lock and preserve access.** iOS detects the absence of a device passcode, gives setup guidance, and explains that seed reveal always authenticates; Android exposes no equivalent guidance. Android’s manager currently fails open, so this is not an established lockout bug. **Done when:** Android reports capability state, points to device security setup, states the seed-reveal guarantee, and never presents an unavailable lock as active.
 
-- [ ] **[P1 · iOS → Android] Show wallet-deletion failures.** iOS catches deletion errors and displays a banner; Android starts deletion without dedicated error feedback. **Done when:** Android reports failure and leaves the existing wallet state intact and understandable.
+- [x] **[P1 · iOS → Android] Show wallet-deletion failures.** The wallet-owned deletion action suppresses duplicate submissions and presents mapped failures in a native snackbar. Every new attempt still requires confirmation. Regression tests cover failure, cancellation, and retry. **Verification:** Unit/lint/build checks and native deletion failure/reconfirmation tests passed; matched failure captures show the snackbar.
 
 - [x] **[P1 · Android → iOS] Read the app version from build metadata.** Android uses `BuildConfig.VERSION_NAME`; iOS hard-codes `1.0.0`. **Done when:** iOS displays the shipped bundle version and, if included, its build number from metadata.
 
@@ -276,6 +279,9 @@ These are important, but they belong in dedicated security/privacy, design-syste
 - [ ] **[P1 · Design system] Unify the inline-error surface across platforms.** The two apps render in-context errors through components that disagree on severity count (Android 4, iOS 3), `error` glyph (outlined circle vs filled triangle), `tinted` default (true vs false), and row alignment — and iOS ships a second surface, `ErrorBannerView`, with no Android counterpart. 12 Android and 8 iOS visual variants in total. **Done when:** one severity vocabulary and one glyph table are shared, iOS collapses to a single notice surface, and the hand-rolled variants named in `inline-error-audit.md` §4 route through the component. See [inline-error-audit.md](inline-error-audit.md).
 
 - [ ] **[P2 · Design system] Retire the hand-rolled inline errors.** Highest priority: `SendView.swift:294` (`sendInputNotice`, a clone of the shared component that drops the VoiceOver severity prefix), the two scanner overlays, and `SendEcashScreen.kt:957` (bare red text under an already-`isError` field). **Done when:** no screen renders raw error-coloured text, which is the contract `InlineNotice`'s own KDoc already claims.
+
+
+- [x] **[P2 · iOS → Android] Animate restore progress in shared restore components.** Material motion animates per-mint state changes and the recovered total, preserves trailing alignment, and can be interrupted. Reduced motion replaces values immediately. **Verification:** Native interruption and reduced-motion regressions, Android unit/lint/build checks, and local transition-recording review passed.
 
 ## Completed and verified in the baseline
 

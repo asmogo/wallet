@@ -122,9 +122,16 @@ fun CashuApp(containerFlow: StateFlow<AppContainer?>) {
                 } else {
                     CashuAppContent(container = checkNotNull(container))
                 }
-                ConfirmationToastHost(
-                    controller = confirmationToastController,
-                )
+                val lockState = container?.appLockManager?.state?.collectAsState()?.value
+                if (lockState?.isLocked != true && lockState?.isObscured != true) {
+                    ConfirmationToastHost(controller = confirmationToastController)
+                }
+                if (lockState?.isLocked == true || lockState?.isObscured == true) {
+                    com.cashu.me.ui.security.AppLockDialog(isAuthenticating = lockState.isAuthenticating) {
+                        if (lockState.isLocked) AppLockGate(appLockManager = checkNotNull(container).appLockManager)
+                        else PrivacyCover()
+                    }
+                }
             }
         }
     }
@@ -563,7 +570,7 @@ private fun AuthenticatedShell(container: AppContainer) {
         // OnBackPressedDispatcher and takes precedence over NavHost back handling
         // while an overlay is visible. Receive detail renders above the scanner.
         // Modal sheets live in their own windows and handle back themselves.
-        BackHandler(enabled = !appLockState.isLocked && (receiveTokenDetail != null || activeScannerTarget != null)) {
+        BackHandler(enabled = !appLockState.isLocked && !appLockState.isObscured && (receiveTokenDetail != null || activeScannerTarget != null)) {
             when (shellBackAction(receiveTokenDetail != null, activeScannerTarget != null)) {
                 com.cashu.me.ui.navigation.ShellBackAction.CloseReceiveDetail -> {
                     // Never abandon a redeem in flight.
@@ -572,12 +579,6 @@ private fun AuthenticatedShell(container: AppContainer) {
                 com.cashu.me.ui.navigation.ShellBackAction.CloseScanner -> closeScanner()
                 null -> Unit
             }
-        }
-        if (appLockState.isObscured && !appLockState.isLocked) {
-            PrivacyCover()
-        }
-        if (appLockState.isLocked) {
-            AppLockGate(appLockManager = container.appLockManager)
         }
     }
 

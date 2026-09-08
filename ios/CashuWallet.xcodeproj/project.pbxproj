@@ -188,6 +188,8 @@
 		T2B0000000000100 /* ConnectMintContextTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = T1B0000000000100 /* ConnectMintContextTests.swift */; };
 		F9B9C2789923138C562B8CBF /* StoredWalletAccount.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5DDA5FB4E01D8EAEC9BB97FA /* StoredWalletAccount.swift */; };
 		881794875F3E0162F335D0D7 /* StoredWalletAccountTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9804DC8F57E0384EDE3B390B /* StoredWalletAccountTests.swift */; };
+		36245814414F1DB5CF522A7E /* AppLockWindow.swift in Sources */ = {isa = PBXBuildFile; fileRef = 65B376BD104CC679F24FFE37 /* AppLockWindow.swift */; };
+		CCCBC379C1AF8196BDD9CAD9 /* AppLockPresentationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 163973969F1D25EA091AC4FF /* AppLockPresentationTests.swift */; };
 		6E771298AB0DD61628FCF572 /* LightningAddressResolverTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2686B0C8F81DE3346F5643EA /* LightningAddressResolverTests.swift */; };
 /* End PBXBuildFile section */
 
@@ -388,6 +390,8 @@
 		T1B0000000000100 /* ConnectMintContextTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = ConnectMintContextTests.swift; path = CashuWalletTests/ConnectMintContextTests.swift; sourceTree = "<group>"; };
 		5DDA5FB4E01D8EAEC9BB97FA /* StoredWalletAccount.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StoredWalletAccount.swift; sourceTree = "<group>"; };
 		9804DC8F57E0384EDE3B390B /* StoredWalletAccountTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CashuWalletTests/StoredWalletAccountTests.swift; sourceTree = "<group>"; };
+		65B376BD104CC679F24FFE37 /* AppLockWindow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ../../App/AppLockWindow.swift; sourceTree = "<group>"; };
+		163973969F1D25EA091AC4FF /* AppLockPresentationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CashuWalletTests/AppLockPresentationTests.swift; sourceTree = "<group>"; };
 		2686B0C8F81DE3346F5643EA /* LightningAddressResolverTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CashuWalletTests/LightningAddressResolverTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
@@ -452,6 +456,7 @@
 				MW00000000000011 /* MeltSettlementWaitTests.swift */,
 				A09100000000000000000006 /* WalletAuditRegressionTests.swift */,
 				9804DC8F57E0384EDE3B390B /* StoredWalletAccountTests.swift */,
+				163973969F1D25EA091AC4FF /* AppLockPresentationTests.swift */,
 				2686B0C8F81DE3346F5643EA /* LightningAddressResolverTests.swift */,
 				TG00000000000012 /* TypographyGuardTests.swift */,
 				WE00000000000012 /* WalletErrorMessageTests.swift */,
@@ -763,6 +768,7 @@
 			children = (
 				2100000000000004 /* WalletManager.swift */,
 				5DDA5FB4E01D8EAEC9BB97FA /* StoredWalletAccount.swift */,
+				65B376BD104CC679F24FFE37 /* AppLockWindow.swift */,
 				D100000000000101 /* WalletManager+Lifecycle.swift */,
 				D100000000000102 /* WalletManager+NPC.swift */,
 				D100000000000103 /* WalletManager+Mints.swift */,
@@ -1058,6 +1064,7 @@
 				MW00000000000001 /* MeltSettlementWaitTests.swift in Sources */,
 				A09100000000000000000005 /* WalletAuditRegressionTests.swift in Sources */,
 				881794875F3E0162F335D0D7 /* StoredWalletAccountTests.swift in Sources */,
+				CCCBC379C1AF8196BDD9CAD9 /* AppLockPresentationTests.swift in Sources */,
 				6E771298AB0DD61628FCF572 /* LightningAddressResolverTests.swift in Sources */,
 				TG00000000000002 /* TypographyGuardTests.swift in Sources */,
 				WE00000000000002 /* WalletErrorMessageTests.swift in Sources */,
@@ -1082,6 +1089,7 @@
 				6A8EC9362F244C8C0058C21B /* TransactionDetailView.swift in Sources */,
 				1100000000000004 /* WalletManager.swift in Sources */,
 				F9B9C2789923138C562B8CBF /* StoredWalletAccount.swift in Sources */,
+				36245814414F1DB5CF522A7E /* AppLockWindow.swift in Sources */,
 				D200000000000101 /* WalletManager+Lifecycle.swift in Sources */,
 				D200000000000102 /* WalletManager+NPC.swift in Sources */,
 				D200000000000103 /* WalletManager+Mints.swift in Sources */,

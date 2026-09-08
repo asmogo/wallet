@@ -50,6 +50,7 @@ class FakeWalletGateway(
     private var repositoryOpen = false
 
     var nextFailure: Throwable? = null
+    var nextCloseFailure: Throwable? = null
     val latestMintQuoteId: String?
         get() = mintQuotes.keys.lastOrNull()
 
@@ -98,6 +99,10 @@ class FakeWalletGateway(
     }
 
     override suspend fun closeWalletRepository() {
+        nextCloseFailure?.let { failure ->
+            nextCloseFailure = null
+            throw failure
+        }
         repositoryOpen = false
     }
 

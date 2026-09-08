@@ -140,6 +140,8 @@ class WalletManager: ObservableObject {
     let keychainService = KeychainService()
     var mnemonic: String?
     var hasInitialized = false
+    /// Cold startup and Settings recovery share one database-open attempt.
+    var walletStateLoadTask: Task<Void, Never>?
     /// Per-mint launch reconciliation. The usable wallet state is published
     /// before this task starts, and wallet-boundary resets cancel it.
     var startupMaintenanceTask: Task<Void, Never>?
