@@ -44,6 +44,9 @@ Platform-specific capabilities remain intentionally outside parity, including iC
 
 ### Send — unified destination and payment flow
 
+- [x] **[P1 · iOS → Android] Reject malformed Lightning invoices at destination entry.** Send uses the central payment decoder without a prefix-only BOLT11 fallback. Valid and amountless BOLT11 invoices and the existing BOLT12 fallback retain their routing. **Verification:** All six destination tests passed with native CDK; Android unit/lint/build checks passed. Invalid destination entry was inspected on-device.
+
+
 - [x] **[P1 · iOS → Android] Support fiat-primary amount entry.** iOS converts keypad input according to the saved sats/fiat primary setting; Android’s unified Send amount step always interprets the input as sats. **Done when:** Android entry, Send Max, validation, and amount presentation honor the selected primary unit without changing the sat amount being paid.
 
 - [x] **[P1 · iOS → Android] Honor the preferred unit on payment confirmation.** Android confirmation renders a fixed sat string; iOS keeps the saved primary value and alternate conversion available. **Done when:** Android confirmation leads with the persisted primary unit and makes the alternate value available visually and to accessibility services through a native Android presentation. An identical iOS flip control is not required.
