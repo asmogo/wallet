@@ -183,19 +183,24 @@ max_delay_time = 0
 
 ## GitHub Actions Workflow
 
-The workflow (`.github/workflows/integration-tests.yml`) runs on every push/PR to main:
+The iOS workflow (`.github/workflows/ios-tests.yml`) runs for relevant pull
+requests and pushes to main/develop. Native UI coverage is described in the
+[wallet UI matrix](../docs/testing/wallet-ui-coverage.md). The workflow uses
+`./CI/setup-cdk.sh 3339 android` to enable the shared SAT/USD profile needed by
+the multi-currency UI journey; the historical profile name is used by both apps.
 
 1. Checks out code
 2. Setups Python 3.11 and Xcode
 3. Restores the Swift package cache
-4. Sets up and starts Nutshell and CDK in parallel
-5. Builds the iOS test products while the simulator boots
-6. Runs unit, protocol, and UI tests in one bounded-parallel Xcode session
-7. Exercises all live protocol scenarios and onboarding against both mints
+4. Builds the iOS test products while the simulator boots
+5. Sets up and starts Nutshell and CDK in parallel
+6. Runs unit/protocol tests, followed by serial native UI journeys
+7. Exercises local-mint payments, restore, onboarding, and settings
 8. Uploads test results and both mint logs on failure
 
-The optimized workflow targets roughly 6–9 minutes instead of the previous
-19–26 minute range; the exact duration depends on hosted-runner load and cache state.
+UI tests run once so first-attempt failures remain visible. The UI step has a
+30-minute bound inside the 45-minute job, leaving time for cleanup and failed
+test diagnostics; duration depends on hosted-runner load and cache state.
 
 ## Manual Testing
 

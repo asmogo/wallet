@@ -259,6 +259,7 @@ struct ReceiveTokenDetailView: View {
                 Button(action: receiveToken) {
                     Text(reviewPresentation.claimActionTitle)
                 }
+                .accessibilityIdentifier("receive-token-confirm")
                 .glassButton()
                 .disabled(!isValidToken || !tokenLockedToKnownKey || isLoadingFee || receiveFee == nil)
 

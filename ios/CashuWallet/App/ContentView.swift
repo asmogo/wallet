@@ -241,6 +241,11 @@ final class AppLockManager: ObservableObject {
     /// Whether `deviceOwnerAuthentication` (biometrics OR passcode) is available.
     /// False only when no device passcode is set at all.
     static func canEvaluate() -> Bool {
+        #if DEBUG
+        if let outcome = authenticationFixture {
+            return outcome != "unavailable"
+        }
+        #endif
         var error: NSError?
         let ok = LAContext().canEvaluatePolicy(.deviceOwnerAuthentication, error: &error)
         if !ok {
@@ -252,6 +257,23 @@ final class AppLockManager: ObservableObject {
     /// Runs one biometric/passcode evaluation. Returns `true` on success.
     @discardableResult
     func authenticate(reason: String = "Unlock your wallet") async -> Bool {
+        await authenticate(reason: reason, succeedWhenUnavailable: true)
+    }
+
+    /// Enabling a lock must require a successful device-owner challenge.
+    /// Runtime unlocking may still recover when device authentication disappears.
+    func authenticateForAppLockEnablement() async -> Bool {
+        await authenticate(reason: "Confirm to enable App Lock", succeedWhenUnavailable: false)
+    }
+
+    #if DEBUG
+    private static var authenticationFixture: String? {
+        guard IntegrationTestConfig.shouldUseDeterministicUIRuntime else { return nil }
+        return ProcessInfo.processInfo.environment["UITEST_AUTHENTICATION"]
+    }
+    #endif
+
+    private func authenticate(reason: String, succeedWhenUnavailable: Bool) async -> Bool {
         guard !isAuthenticating else { return false }
         isAuthenticating = true
         defer { isAuthenticating = false }
@@ -262,6 +284,14 @@ final class AppLockManager: ObservableObject {
             return success
         }
 
+        #if DEBUG
+        if let outcome = Self.authenticationFixture {
+            let success = outcome == "allow" || (outcome == "unavailable" && succeedWhenUnavailable)
+            if success { unlock() }
+            return success
+        }
+        #endif
+
         // A fresh context per evaluation is mandatory: reusing one short-circuits
         // auth and caches stale enrollment / biometryType.
         let context = LAContext()
@@ -269,10 +299,11 @@ final class AppLockManager: ObservableObject {
 
         var policyError: NSError?
         guard context.canEvaluatePolicy(.deviceOwnerAuthentication, error: &policyError) else {
-            // Capability gap (no passcode) → fail open so funds are never bricked.
-            AppLogger.security.warning("Auth unavailable, unlocking: \(policyError?.localizedDescription ?? "unknown")")
-            unlock()
-            return true
+            // Runtime recovery can allow access without a passcode, but a new
+            // App Lock must never be enabled without a successful challenge.
+            AppLogger.security.warning("Device-owner authentication unavailable: \(policyError?.localizedDescription ?? "unknown")")
+            if succeedWhenUnavailable { unlock() }
+            return succeedWhenUnavailable
         }
 
         do {

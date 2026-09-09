@@ -9,6 +9,15 @@ import org.junit.Test
 /** iOS parity: `WalletErrorMessageTests.swift`. */
 class WalletErrorMessagesTest {
 
+    @Test
+    fun multiUnitRemovalPreservesSafetyGuidanceInsteadOfSuggestingNetworkRetry() {
+        val error = com.cashu.me.Core.CDK.MultiUnitWalletRemovalException(listOf("sat", "usd"))
+        assertEquals(
+            "This mint uses multiple currency units and cannot be removed safely yet. Keep it connected and try again after updating the app.",
+            WalletErrorMessages.classify(error).text,
+        )
+    }
+
     private val mintLimitsCopy =
         "This amount is outside the mint's limits. Try a different amount."
 

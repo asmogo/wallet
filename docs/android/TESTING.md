@@ -23,6 +23,11 @@ UX, and destructive-action confirmation.
 Nutshell. Tests annotated `FullOnly` run only in nightly and release tiers;
 tests annotated `Compatibility` form the small cross-device behavior pack.
 
+The [wallet UI coverage matrix](../testing/wallet-ui-coverage.md) lists the
+priority interactions, including currency units, restore, app lock, advanced
+settings, and recovery. The [bug report](../testing/ui-coverage-report.md) records
+defects found while adding these journeys and their validation results.
+
 ## Deterministic app runtime
 
 `CashuUiTestRunner` launches the debug-only `UiTestApplication`. The application
@@ -51,6 +56,12 @@ The fake has fixed test-only seed, token, invoice, balance, quote, and
 transaction data. Tests explicitly advance quote states such as invoice-paid;
 there are no timer-based transitions. Android Test Orchestrator clears package
 data and creates a fresh instrumentation process for every test.
+
+Price, NPC transport, and authentication responses are injected through app
+dependencies. Currency journeys use fixed exchange rates. The camera fixture
+replaces capture while retaining production scanner controls and key shortcuts.
+These fixtures exercise application behavior, not OS enrollment or real camera
+recognition.
 
 ## Local commands
 

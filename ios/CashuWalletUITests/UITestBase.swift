@@ -62,6 +62,17 @@ class UITestBase: XCTestCase {
 
     // MARK: - Onboarding helpers
 
+    /// Relaunch the existing wallet. Setup flags must never erase or reseed
+    /// state when a test is checking persistence or interrupted operations.
+    func relaunchPreservingWallet() {
+        app.terminate()
+        for key in ["RESET_WALLET", "UITEST_SEED_WALLET", "UITEST_SEED_MINT"] {
+            app.launchEnvironment.removeValue(forKey: key)
+        }
+        app.launch()
+        waitForMainTab()
+    }
+
     /// Walk through: welcome → create wallet → acknowledge seed → saved seed.
     /// Leaves the app on the "Pick your first mint" screen.
     func createWalletThroughSeed() {
@@ -100,6 +111,11 @@ class UITestBase: XCTestCase {
         // element nor any descendant has keyboard focus" — hittable is not the
         // same claim as focused. The keyboard is the observable proof that
         // focus actually arrived.
+        if !app.keyboards.element.waitForExistence(timeout: 2) {
+            // The first tap can arrive during the row's insertion transition.
+            // Refocus the field rather than typing into an unfocused control.
+            tapWhenReady(field)
+        }
         XCTAssertTrue(
             app.keyboards.element.waitForExistence(timeout: 10),
             "Tapping the mint field should raise the keyboard"
@@ -206,6 +222,25 @@ class UITestBase: XCTestCase {
         app.descendants(matching: .any).matching(identifier: identifier).firstMatch
     }
 
+    func scrollToButton(
+        _ button: XCUIElement,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) {
+        let scrollView = app.scrollViews.firstMatch
+        XCTAssertTrue(scrollView.waitForExistence(timeout: 5), file: file, line: line)
+        for attempt in 0...10 {
+            // XCTest can report a SwiftUI button as hittable below the viewport.
+            // Require its whole frame to be visible before trusting a tap.
+            let viewport = scrollView.frame.intersection(app.frame)
+            if button.exists && viewport.contains(button.frame) && button.isHittable {
+                return
+            }
+            if attempt < 10 { scrollView.swipeUp() }
+        }
+        XCTFail("Button must be visible inside the scroll view: \(button.label)", file: file, line: line)
+    }
+
     func tapWhenReady(
         _ element: XCUIElement,
         timeout: TimeInterval = 5,
@@ -213,8 +248,17 @@ class UITestBase: XCTestCase {
         file: StaticString = #filePath,
         line: UInt = #line
     ) {
+        let ready = element.waitUntilEnabledAndHittable(timeout: timeout)
+        if !ready {
+            let screenshot = XCTAttachment(screenshot: app.screenshot())
+            screenshot.lifetime = .keepAlways
+            add(screenshot)
+            let hierarchy = XCTAttachment(string: app.debugDescription)
+            hierarchy.lifetime = .keepAlways
+            add(hierarchy)
+        }
         XCTAssertTrue(
-            element.waitUntilEnabledAndHittable(timeout: timeout),
+            ready,
             message,
             file: file,
             line: line

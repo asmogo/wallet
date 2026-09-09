@@ -107,6 +107,15 @@ class LivePaymentUITestBase: UITestBase {
         tapWhenReady(field)
         field.typeText(invoice)
         let pay = app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", "Pay 21")).firstMatch
+        if backend == "nutshell" {
+            // Nutshell 0.20.1 returns PENDING before its background melt task
+            // persists that state. Match the native integration fixture's
+            // pacing so the first status read cannot race that backend write.
+            _ = try fixtureCall("/sessions/" + fixtureSession + "/faults", method: "POST", body: [
+                "method": "GET", "path": "/v1/melt/quote/bolt11/",
+                "action": "delay", "seconds": 1, "remaining": 1,
+            ])
+        }
         tapWhenReady(pay, timeout: 20)
         XCTAssertTrue(app.staticTexts["Payment Sent!"].waitForExistence(timeout: 30))
         tapWhenReady(app.buttons["Done"])

@@ -71,7 +71,7 @@ final class OnboardingChassisUITests: UITestBase {
             app.keyboards.element.waitForExistence(timeout: 10),
             "restoreInput should focus the seed field on arrival"
         )
-        assertBottomAnchored(app.buttons["Continue"], "restoreInput")
+        assertBottomAnchored(app.buttons["onboarding-restore-continue"], "restoreInput")
         // Paste is a chip in the stage now (directly under the word card), not
         // a chassis action — assert it offers itself while nothing is entered.
         XCTAssertTrue(

@@ -29,6 +29,7 @@ final class TypographyGuardTests: XCTestCase {
             .deletingLastPathComponent()   // CashuWalletTests
             .deletingLastPathComponent()   // ios
             .appendingPathComponent("CashuWallet")
+            .resolvingSymlinksInPath()
 
         try XCTSkipUnless(
             FileManager.default.fileExists(atPath: root.path),
@@ -41,7 +42,7 @@ final class TypographyGuardTests: XCTestCase {
 
         return walker.compactMap { entry in
             guard let url = entry as? URL, url.pathExtension == "swift" else { return nil }
-            let path = url.path.replacingOccurrences(of: root.path + "/", with: "")
+            let path = url.resolvingSymlinksInPath().path.replacingOccurrences(of: root.path + "/", with: "")
             guard !path.hasPrefix("DesignSystem/") else { return nil }
             guard let text = try? String(contentsOf: url, encoding: .utf8) else { return nil }
             return (path, text)

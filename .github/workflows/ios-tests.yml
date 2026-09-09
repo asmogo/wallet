@@ -106,6 +106,7 @@ jobs:
 
         ./CI/setup-nutshell.sh &
         NUTSHELL_SETUP_PID=$!
+        # The shared multi-unit profile enables the USD UI payment journey.
         ./CI/setup-cdk.sh 3339 android &
         CDK_SETUP_PID=$!
 
@@ -154,9 +155,11 @@ jobs:
 
     # UI tests are deliberately serial. Two simulator clones on the hosted
     # three-core VM caused accessibility startup timeouts and made the suite
-    # slower. A failed test gets one retry in a fresh app process.
-    - name: Run iOS UI smoke tests
+    # slower. Run once: Xcode's repetition flags reran the entire bundle,
+    # doubling runtime and obscuring first-attempt interaction failures.
+    - name: Run iOS UI journeys
       id: ui_tests
+      timeout-minutes: 30
       if: ${{ always() && steps.build.outcome == 'success' && steps.setup_mints.outcome == 'success' && steps.start_mints.outcome == 'success' }}
       continue-on-error: true
       run: |
@@ -173,9 +176,6 @@ jobs:
           -test-timeouts-enabled YES \
           -default-test-execution-time-allowance 90 \
           -maximum-test-execution-time-allowance 150 \
-          -retry-tests-on-failure \
-          -test-iterations 2 \
-          -test-repetition-relaunch-enabled YES \
           -resultBundlePath "$RUNNER_TEMP/CashuWalletUITests.xcresult" \
           CODE_SIGNING_ALLOWED=YES CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="-" \
           | tee ios-ui-test-output.log | xcbeautify
@@ -224,12 +224,12 @@ jobs:
           exit 1
         fi
         if [ "${{ steps.ui_tests.outcome }}" != "success" ]; then
-          echo "UI smoke tests failed after retry"
+          echo "UI journeys failed"
           exit 1
         fi
 
     - name: Upload failed test diagnostics
-      if: failure()
+      if: ${{ always() && (failure() || cancelled() || steps.ui_tests.outcome == 'failure') }}
       uses: actions/upload-artifact@v4
       with:
         name: ios-test-results-${{ github.sha }}

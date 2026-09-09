@@ -153,6 +153,14 @@ struct ScannerWrapperView: View {
     @State private var resolvedQuickFills: [ScannerQuickFill] = []
     @State private var cameraAuthorizationState: CameraAuthorizationState = .checking
     @State private var cameraFailureMessage: String?
+
+    private var usesTestCamera: Bool {
+        #if DEBUG
+        IntegrationTestConfig.shouldUseDeterministicUIRuntime
+        #else
+        false
+        #endif
+    }
     
     var body: some View {
         NavigationStack {
@@ -174,6 +182,10 @@ struct ScannerWrapperView: View {
                             actionTitle: "Try Again",
                             action: retryCamera
                         )
+                    } else if usesTestCamera {
+                        // Keep native scanner controls and routing; substitute
+                        // only hardware capture in simulator UI journeys.
+                        Text("Camera Ready").foregroundStyle(.white)
                     } else {
                         LegacyQRScannerView(
                             onResult: { code in
@@ -313,6 +325,10 @@ struct ScannerWrapperView: View {
     }
 
     private func refreshCameraAuthorization() {
+        if usesTestCamera {
+            cameraAuthorizationState = .authorized
+            return
+        }
         switch AVCaptureDevice.authorizationStatus(for: .video) {
         case .authorized:
             cameraAuthorizationState = .authorized

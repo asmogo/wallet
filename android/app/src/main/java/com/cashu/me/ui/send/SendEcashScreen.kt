@@ -558,10 +558,13 @@ fun SendEcashScreen(
             units = activeMint?.units ?: listOf("sat"),
             selectedUnit = effectiveUnit,
             onSelect = {
+                val changedUnit = it != effectiveUnit
                 selectedUnit = it
-                amount = ""
-                nonSatBalance = null
-                errorText = null
+                if (changedUnit) {
+                    amount = ""
+                    nonSatBalance = null
+                    errorText = null
+                }
                 unitPickerOpen = false
             },
             onDismiss = { unitPickerOpen = false },

@@ -7,6 +7,10 @@ import com.cashu.me.Core.Platform.AndroidSecureStorage
 import com.cashu.me.Core.Protocols.SecureStorage
 import com.cashu.me.Core.SettingsStore
 import com.cashu.me.Core.WalletStore
+import com.cashu.me.Core.PriceService
+import com.cashu.me.Core.AppLockManager
+import com.cashu.me.Core.SettingsManager
+import com.cashu.me.Core.NPCService
 
 /**
  * Runtime switches for work that is unrelated to an explicitly requested UI
@@ -51,4 +55,9 @@ data class AppContainerDependencies(
     val secureStorage: (Context) -> SecureStorage = { AndroidSecureStorage(it) },
     val walletStore: (Context) -> WalletStore = { WalletStore(it) },
     val settingsStore: (Context) -> SettingsStore = { SettingsStore(it) },
+    val priceService: (SettingsStore) -> PriceService = { PriceService(it) },
+    val appLockManager: (Context, SettingsManager) -> AppLockManager = { context, settings ->
+        AppLockManager(context, settings)
+    },
+    val npcService: (Context, SettingsManager) -> NPCService = { context, settings -> NPCService(context, settings) },
 )

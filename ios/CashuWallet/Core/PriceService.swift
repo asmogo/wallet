@@ -4,7 +4,17 @@ import SwiftUI
 /// Service for fetching Bitcoin price from Coinbase API
 @MainActor
 class PriceService: ObservableObject {
-    static let shared = PriceService()
+    static let shared: PriceService = {
+        #if DEBUG
+        if IntegrationTestConfig.shouldUseDeterministicUIRuntime {
+            return PriceService(
+                priceFetcher: { $0 == "EUR" ? 80_000 : 100_000 },
+                enableAutoRefresh: false
+            )
+        }
+        #endif
+        return PriceService()
+    }()
     
     // MARK: - Published Properties
     
