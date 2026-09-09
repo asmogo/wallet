@@ -31,6 +31,9 @@ struct WalletMessage {
 enum WalletErrorMessage {
     /// Resolve an error to its user-facing message **and** severity.
     static func classified(for error: Error) -> WalletMessage {
+        if let checkpointError = error as? WalletCheckpointError {
+            return .error(checkpointError.localizedDescription)
+        }
         if let meltRecoveryError = error as? MeltPaymentRecoveryError {
             switch meltRecoveryError {
             case .compensated:
@@ -452,6 +455,14 @@ extension Error {
 
     var meltRetryRequiresFreshQuote: Bool {
         (self as? MeltPaymentRecoveryError)?.retryRequiresFreshQuote == true
+    }
+}
+
+enum WalletCheckpointError: LocalizedError, Equatable {
+    case busy
+
+    var errorDescription: String? {
+        "Wallet database is still busy. Try again in a moment."
     }
 }
 

@@ -11,6 +11,13 @@ private struct RawMintError: Error, CustomStringConvertible {
 
 final class WalletErrorMessageTests: XCTestCase {
 
+    func testCheckpointBusyPreservesRetryGuidance() {
+        let message = WalletCheckpointError.busy.walletMessage
+        XCTAssertEqual(message.text, "Wallet database is still busy. Try again in a moment.")
+        XCTAssertEqual(message.severity, .error)
+        XCTAssertEqual(message.recoverability, .retryable)
+    }
+
     /// A NUT-04/05 amount rejection must never reach the UI as CDK's own text.
     /// The mint returns code 11006 with the real bounds in `detail`, but decoding
     /// that response back into an Error rebuilds the variant with three

@@ -7,7 +7,7 @@ import SQLite3
 final class WalletAuditRegressionTests: XCTestCase {
     private enum Failure: Error { case offline }
 
-    func testReplacementCheckpointPreservesSqliteWalContents() throws {
+    func testReplacementCheckpointPreservesSqliteWalContents() async throws {
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: directory) }
@@ -16,7 +16,7 @@ final class WalletAuditRegressionTests: XCTestCase {
         XCTAssertEqual(sqlite3_open(database.path, &connection), SQLITE_OK)
         defer { sqlite3_close(connection) }
         XCTAssertEqual(sqlite3_exec(connection, "PRAGMA journal_mode=WAL; CREATE TABLE recovery_test(value TEXT); INSERT INTO recovery_test VALUES ('proofs before replacement');", nil, nil, nil), SQLITE_OK)
-        try WalletReplacementCheckpoint.flushDatabases(in: [directory])
+        try await WalletReplacementCheckpoint.flushDatabases(in: [directory])
         let copy = directory.appendingPathComponent("snapshot.db")
         try FileManager.default.copyItem(at: database, to: copy)
         var reopened: OpaquePointer?
@@ -27,6 +27,100 @@ final class WalletAuditRegressionTests: XCTestCase {
         defer { sqlite3_finalize(statement) }
         XCTAssertEqual(sqlite3_step(statement), SQLITE_ROW)
         XCTAssertEqual(String(cString: sqlite3_column_text(statement, 0)), "proofs before replacement")
+    }
+
+    func testReplacementCheckpointWaitsForTransientWriterAndSchemaLocks() async throws {
+        // WAL blocks the checkpoint; DELETE's exclusive lock blocks statement
+        // preparation. Both can occur while the native database is closing.
+        for journalMode in ["WAL", "DELETE"] {
+            let (directory, writer) = try makeCheckpointDatabase(journalMode: journalMode)
+            defer {
+                sqlite3_close(writer)
+                try? FileManager.default.removeItem(at: directory)
+            }
+            XCTAssertEqual(sqlite3_exec(writer, "BEGIN EXCLUSIVE; INSERT INTO recovery_test VALUES(2)", nil, nil, nil), SQLITE_OK)
+            let started = expectation(description: "Checkpoint started for \(journalMode)")
+            let checkpoint = Task.detached(priority: .userInitiated) {
+                started.fulfill()
+                try await WalletReplacementCheckpoint.flushDatabases(in: [directory])
+            }
+            await fulfillment(of: [started], timeout: 5)
+            try await Task.sleep(for: .milliseconds(100))
+            XCTAssertEqual(sqlite3_exec(writer, "COMMIT", nil, nil, nil), SQLITE_OK)
+            try await checkpoint.value
+
+            // The replacement copies the main file, so the committed value
+            // must survive without depending on the original WAL sidecar.
+            let snapshot = directory.appendingPathComponent("snapshot.db")
+            try FileManager.default.copyItem(at: directory.appendingPathComponent("wallet.db"), to: snapshot)
+            XCTAssertEqual(try checkpointValues(at: snapshot), [1, 2])
+        }
+    }
+
+    func testReplacementCheckpointRejectsPersistentLockWithoutLosingData() async throws {
+        let (directory, writer) = try makeCheckpointDatabase(journalMode: "WAL")
+        defer {
+            sqlite3_close(writer)
+            try? FileManager.default.removeItem(at: directory)
+        }
+        XCTAssertEqual(sqlite3_exec(writer, "BEGIN IMMEDIATE; INSERT INTO recovery_test VALUES(2)", nil, nil, nil), SQLITE_OK)
+        let clock = ContinuousClock()
+        let started = clock.now
+        do {
+            try await WalletReplacementCheckpoint.flushDatabases(in: [directory], retryTimeout: .milliseconds(80))
+            XCTFail("A writer that stays active must prevent replacement")
+        } catch {
+            XCTAssertEqual(error as? WalletCheckpointError, .busy)
+        }
+        XCTAssertGreaterThanOrEqual(started.duration(to: clock.now), .milliseconds(80))
+        XCTAssertLessThan(started.duration(to: clock.now), .seconds(5))
+
+        XCTAssertEqual(sqlite3_exec(writer, "ROLLBACK", nil, nil, nil), SQLITE_OK)
+        try await WalletReplacementCheckpoint.flushDatabases(in: [directory])
+        XCTAssertEqual(try checkpointValues(at: directory.appendingPathComponent("wallet.db")), [1])
+    }
+
+    func testReplacementCheckpointWaitsForNativeDatabaseTeardown() async throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        for index in 0..<10 {
+            let databaseURL = directory.appendingPathComponent("wallet-\(index).db")
+            try autoreleasepool {
+                let database = try LifecycleSafeWalletDatabase(filePath: databaseURL.path)
+                let repository = try WalletRepository(mnemonic: generateMnemonic(), store: customWalletStore(db: database))
+                withExtendedLifetime(repository) {}
+            }
+            try await WalletReplacementCheckpoint.flushDatabases(in: [databaseURL])
+        }
+    }
+
+    private func makeCheckpointDatabase(journalMode: String) throws -> (URL, OpaquePointer) {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        var connection: OpaquePointer?
+        let url = directory.appendingPathComponent("wallet.db")
+        XCTAssertEqual(sqlite3_open(url.path, &connection), SQLITE_OK)
+        let database = try XCTUnwrap(connection)
+        XCTAssertEqual(sqlite3_exec(database, "PRAGMA journal_mode=\(journalMode); CREATE TABLE recovery_test(value INTEGER); INSERT INTO recovery_test VALUES(1)", nil, nil, nil), SQLITE_OK)
+        return (directory, database)
+    }
+
+    private func checkpointValues(at url: URL) throws -> [Int32] {
+        var connection: OpaquePointer?
+        XCTAssertEqual(sqlite3_open(url.path, &connection), SQLITE_OK)
+        defer { sqlite3_close(connection) }
+        var statement: OpaquePointer?
+        XCTAssertEqual(sqlite3_prepare_v2(connection, "SELECT value FROM recovery_test ORDER BY value", -1, &statement, nil), SQLITE_OK)
+        defer { sqlite3_finalize(statement) }
+        var values: [Int32] = []
+        var result = sqlite3_step(statement)
+        while result == SQLITE_ROW {
+            values.append(sqlite3_column_int(statement, 0))
+            result = sqlite3_step(statement)
+        }
+        XCTAssertEqual(result, SQLITE_DONE)
+        return values
     }
 
     func testReplacementRelaunchRestoresSeedDefaultsAndDatabase() throws {
