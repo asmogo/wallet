@@ -42,10 +42,10 @@ missing, skipped, or unsuccessful required case. The existing suites still run.
 | P2PK on both mint implementations | Wrong key cannot credit; correct key subsequently succeeds | PR |
 | Concurrent redemption | Two separate receivers race; exactly one succeeds and total credit equals token value | PR |
 | Real native UI on both mints | Receive 100, pay 21, history survives relaunch (iOS) / activity recreation (Android) | PR |
-| Cashu Request HTTP | Fixed and amountless request, matching request ID, actual recipient redemption | Full |
+| Cashu Request HTTP | Fixed and amountless request, matching request ID, actual recipient redemption, exact sender debit on the zero-fee mint | Full |
 | Cashu Request delivery failure | Failed HTTP delivery leaves a reclaimable operation; revoke restores balance | Full |
 | Proof reservation release | Swift competing preparation/cancel; Android repeated real fee-preview/cancel; full balance remains spendable | Full |
-| Currency isolation | Sat and USD payments cannot cross-credit unit balances | Full |
+| Currency isolation | Sat and USD share one repository/database per wallet owner; USD payments preserve both sender and recipient sat balances | Full |
 | NWC over local signed Nostr relay | Balance, payment limit, duplicated request event, one payment and conserved funds | Full |
 
 Repository reopen tests use the same mnemonic and SQLite file; they are not

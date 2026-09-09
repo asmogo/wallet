@@ -70,6 +70,17 @@ class PaymentFixtureTestCase: XCTestCase {
         return wallet
     }
 
+    func makeWallet(inSameRepositoryAs wallet: Wallet, unit: CurrencyUnit) async throws -> Wallet {
+        let index = try XCTUnwrap(storeByWallet[ObjectIdentifier(wallet)])
+        let repo = stores[index].0
+        let url = wallet.mintUrl()
+        try await repo.createWallet(mintUrl: url, unit: unit, targetProofCount: nil)
+        let additionalWallet = try await repo.getWallet(mintUrl: url, unit: unit)
+        walletHandles.append(additionalWallet)
+        storeByWallet[ObjectIdentifier(additionalWallet)] = index
+        return additionalWallet
+    }
+
     func reopen(_ wallet: Wallet) async throws -> Wallet {
         let index = try XCTUnwrap(storeByWallet[ObjectIdentifier(wallet)])
         let entry = stores[index]
@@ -422,7 +433,11 @@ final class PaymentExtendedIntegrationTests: PaymentFixtureTestCase {
             let credited = try await receive(receiver, token: token)
             XCTAssertEqual(credited, 21, "A payment request includes the receiver's redemption fee")
             let left = try await balance(payer)
-            XCTAssertLessThanOrEqual(left, 79)
+            if mint == "controlled" {
+                XCTAssertEqual(left, 79, "A zero-fee request must debit exactly the requested amount")
+            } else {
+                XCTAssertLessThanOrEqual(left, 79)
+            }
         }
     }
 
@@ -459,17 +474,22 @@ final class PaymentExtendedIntegrationTests: PaymentFixtureTestCase {
 
     func testMultipleMintUnitsDoNotCrossCredit() async throws {
         let sat = try await makeWallet("cdk")
-        let usd = try await makeWallet("cdk", unit: .usd)
+        let usd = try await makeWallet(inSameRepositoryAs: sat, unit: .usd)
         try await fund(sat, amount: 21)
         try await fund(usd, amount: 125)
-        let recipient = try await makeWallet("cdk", unit: .usd)
+        let recipientSat = try await makeWallet("cdk")
+        let recipient = try await makeWallet(inSameRepositoryAs: recipientSat, unit: .usd)
         let token = try await send(usd, amount: 25).confirm(memo: nil)
         let received = try await receive(recipient, token: token)
         XCTAssertEqual(received, 25)
         let sats = try await balance(sat)
         let dollars = try await balance(usd)
+        let recipientSats = try await balance(recipientSat)
+        let recipientDollars = try await balance(recipient)
         XCTAssertEqual(sats, 21)
         XCTAssertEqual(dollars, 100)
+        XCTAssertEqual(recipientSats, 0)
+        XCTAssertEqual(recipientDollars, 25)
     }
 
     func testNwcPaymentLimitReplayAndBalance() async throws {

@@ -37,7 +37,11 @@ class PaymentExtendedLocalMintTest : PaymentFixtureTest() {
             assertEquals(id, delivered.getValue("id").jsonPrimitive.content)
             assertEquals("Payment request must include the receiver's redemption fee", 21,
                 receiver.receive(delivered.getValue("token").jsonPrimitive.content))
-            assertTrue(payer.balance() <= 79)
+            if (mint == "controlled") {
+                assertEquals("A zero-fee request must debit exactly the requested amount", 79, payer.balance())
+            } else {
+                assertTrue(payer.balance() <= 79)
+            }
         }
     }
 
