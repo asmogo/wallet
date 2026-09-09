@@ -8,7 +8,15 @@ on:
       - 'ios/**'
       - 'CI/**'
       - '.github/workflows/ios-tests.yml'
+  schedule:
+    - cron: '0 4 * * *'
   workflow_dispatch:
+    inputs:
+      tier:
+        description: Payment test depth
+        type: choice
+        default: pr
+        options: [pr, full]
 
 concurrency:
   group: ios-tests-${{ github.ref }}
@@ -17,12 +25,15 @@ concurrency:
 env:
   NUTSHELL_MINT_URL: http://localhost:3338
   CDK_MINT_URL: http://127.0.0.1:3339
+  PAYMENT_TIER: ${{ (github.event_name == 'schedule' && 'full') || inputs.tier || 'pr' }}
+  TEST_RUNNER_PAYMENT_FIXTURE_URL: http://127.0.0.1:3341
+  TEST_RUNNER_PAYMENT_TEST_TIER: ${{ (github.event_name == 'schedule' && 'full') || inputs.tier || 'pr' }}
 
 jobs:
   ios-tests:
     name: iOS Unit, Mint Integration & UI Tests
     runs-on: macos-26
-    timeout-minutes: 30
+    timeout-minutes: 45
 
     steps:
     - name: Checkout code
@@ -95,7 +106,7 @@ jobs:
 
         ./CI/setup-nutshell.sh &
         NUTSHELL_SETUP_PID=$!
-        ./CI/setup-cdk.sh &
+        ./CI/setup-cdk.sh 3339 android &
         CDK_SETUP_PID=$!
 
         STATUS=0
@@ -119,7 +130,9 @@ jobs:
         STATUS=0
         wait "$NUTSHELL_START_PID" || STATUS=$?
         wait "$CDK_START_PID" || STATUS=$?
-        exit "$STATUS"
+        if [ "$STATUS" != 0 ]; then exit "$STATUS"; fi
+        ./CI/start-payment-fixtures.sh
+        CI/.nutshell-venv/bin/python -m unittest discover -s CI/payment-tests -v
 
     - name: Run unit and mint integration tests
       id: unit_tests
@@ -167,11 +180,18 @@ jobs:
           CODE_SIGNING_ALLOWED=YES CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="-" \
           | tee ios-ui-test-output.log | xcbeautify
 
+    - name: Enforce executed payment coverage
+      if: ${{ always() && steps.build.outcome == 'success' }}
+      run: |
+        python3 CI/payment-tests/check_coverage.py --platform ios --tier "$PAYMENT_TIER" \
+          "$RUNNER_TEMP/CashuWalletUnitTests.xcresult" "$RUNNER_TEMP/CashuWalletUITests.xcresult"
+
     - name: Stop local test mints
       if: always()
       run: |
         chmod +x CI/stop-nutshell.sh CI/stop-cdk.sh
         if [ -f "$RUNNER_TEMP/receipt-proxy.pid" ]; then kill "$(cat "$RUNNER_TEMP/receipt-proxy.pid")" || true; fi
+        ./CI/stop-payment-fixtures.sh
         ./CI/stop-nutshell.sh &
         NUTSHELL_STOP_PID=$!
         ./CI/stop-cdk.sh &

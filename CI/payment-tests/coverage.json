@@ -1,0 +1,52 @@
+{
+  "ios": {
+    "pr": [
+      "PaymentSafetyIntegrationTests/testControlledQuoteIsUnpaidUntilExplicitPaymentAndIssuesOnlyOnce",
+      "PaymentSafetyIntegrationTests/testBolt11InternalAndExternalPaymentsConserveBalanceAndPersistReceipt",
+      "PaymentSafetyIntegrationTests/testLostMeltResponseRecoversWithoutSecondDebit",
+      "PaymentSafetyIntegrationTests/testLostMintResponseRecoversPaidQuoteExactlyOnce",
+      "PaymentSafetyIntegrationTests/testInsufficientFundsAndOfflineQuoteDoNotDebit",
+      "PaymentSafetyIntegrationTests/testBackendFailureReturnsSpendableFunds",
+      "PaymentSafetyIntegrationTests/testPaidBolt11RecoversAfterDatabaseReopenExactlyOnce",
+      "PaymentSafetyIntegrationTests/testEcashClaimAfterReopenCannotBeRevokedOrReceivedTwice",
+      "PaymentSafetyIntegrationTests/testRevokeUnclaimedTokenRestoresSpendability",
+      "PaymentSafetyIntegrationTests/testFeeChargingMintMaxSendAndReceiveConserveValue",
+      "PaymentSafetyIntegrationTests/testP2PKWrongKeyThenCorrectKeyOnBothMints",
+      "PaymentSafetyIntegrationTests/testConcurrentReceiversCannotDoubleCredit",
+      "LiveCdkPaymentUITests/testReceivePayAndRelaunch",
+      "LiveNutshellPaymentUITests/testReceivePayAndRelaunch"
+    ],
+    "full": [
+      "PaymentExtendedIntegrationTests/testCashuRequestFixedAndAmountlessHttpDelivery",
+      "PaymentExtendedIntegrationTests/testCashuRequestDeliveryFailureLeavesReclaimableToken",
+      "PaymentExtendedIntegrationTests/testPreparedSendCancellationAndCompetingSpendPreserveFunds",
+      "PaymentExtendedIntegrationTests/testMultipleMintUnitsDoNotCrossCredit",
+      "PaymentExtendedIntegrationTests/testNwcPaymentLimitReplayAndBalance"
+    ]
+  },
+  "android": {
+    "pr": [
+      "PaymentSafetyLocalMintTest/controlledQuoteRequiresPaymentAndIssuesOnlyOnce",
+      "PaymentSafetyLocalMintTest/bolt11InternalAndExternalPaymentsConserveBalanceAndPersistReceipt",
+      "PaymentSafetyLocalMintTest/lostMeltResponseRecoversWithoutSecondDebit",
+      "PaymentSafetyLocalMintTest/lostMintResponseRecoversPaidQuoteExactlyOnce",
+      "PaymentSafetyLocalMintTest/insufficientFundsAndOfflineQuoteDoNotDebit",
+      "PaymentSafetyLocalMintTest/backendFailureReturnsSpendableFunds",
+      "PaymentSafetyLocalMintTest/paidBolt11RecoversAfterDatabaseReopenExactlyOnce",
+      "PaymentSafetyLocalMintTest/ecashClaimAfterReopenCannotBeRevokedOrReceivedTwice",
+      "PaymentSafetyLocalMintTest/revokeUnclaimedTokenRestoresSpendability",
+      "PaymentSafetyLocalMintTest/feeChargingMintMaxSendAndReceiveConserveValue",
+      "PaymentSafetyLocalMintTest/p2pkWrongKeyThenCorrectKeyOnBothMints",
+      "PaymentSafetyLocalMintTest/concurrentReceiversCannotDoubleCredit",
+      "LivePaymentJourneyTest/cdkReceivePayAndReopenHistory",
+      "LivePaymentJourneyTest/nutshellReceivePayAndReopenHistory"
+    ],
+    "full": [
+      "PaymentExtendedLocalMintTest/cashuRequestFixedAndAmountlessHttpDelivery",
+      "PaymentExtendedLocalMintTest/cashuRequestDeliveryFailureLeavesReclaimableToken",
+      "PaymentExtendedLocalMintTest/repeatedFeePreviewReleasesReservedProofs",
+      "PaymentExtendedLocalMintTest/multipleMintUnitsDoNotCrossCredit",
+      "PaymentExtendedLocalMintTest/nwcPaymentLimitReplayAndBalance"
+    ]
+  }
+}

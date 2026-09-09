@@ -482,6 +482,9 @@ extension WalletManager {
             SettingsManager.shared.resetWalletScopedData()
         }
 
+        if let relay = IntegrationTestConfig.localPaymentTestRelay {
+            SettingsManager.shared.nostrRelays = [relay]
+        }
         if IntegrationTestConfig.shouldSeedWallet {
             do {
                 try await installSeededUITestWallet()
@@ -752,7 +755,7 @@ extension WalletManager {
             }
         }
         needsOnboarding = false
-        guard !IntegrationTestConfig.shouldUseDeterministicUIRuntime else { return }
+        guard IntegrationTestConfig.shouldRunPaymentServices else { return }
         startDeferredStartupMaintenance()
         CashuRequestListener.shared.attach(walletManager: self)
         CashuRequestListener.shared.requestStart()
@@ -943,7 +946,7 @@ extension WalletManager {
     private func resumeCashuRequestListener() {
         guard walletRepository != nil else { return }
         CashuRequestListener.shared.attach(walletManager: self)
-        guard !IntegrationTestConfig.shouldUseDeterministicUIRuntime else { return }
+        guard IntegrationTestConfig.shouldRunPaymentServices else { return }
         CashuRequestListener.shared.requestStart()
     }
 

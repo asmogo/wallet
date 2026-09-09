@@ -7,7 +7,11 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 echo "🧹 Cleaning up CI test environment..."
 
-# Stop any running mints
+# Stop any running mints and scenario fixtures
+if [ -f "$SCRIPT_DIR/stop-payment-fixtures.sh" ]; then
+    bash "$SCRIPT_DIR/stop-payment-fixtures.sh" 2>/dev/null || true
+fi
+
 if [ -f "$SCRIPT_DIR/stop-nutshell.sh" ]; then
     bash "$SCRIPT_DIR/stop-nutshell.sh" 2>/dev/null || true
 fi

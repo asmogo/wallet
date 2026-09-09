@@ -25,6 +25,7 @@ enum class FixtureMode {
     FundedWithHistory,
     LiveSeededWithoutMint,
     LiveLocalMint,
+    LivePayments,
 }
 
 data class LaunchedFixture(
@@ -46,11 +47,14 @@ object AppTestFixture {
         mode: FixtureMode,
         deepLink: String? = null,
         supportedMintMethods: List<PaymentMethodKind> = listOf(PaymentMethodKind.Bolt11),
+        paymentMintUrl: String? = null,
     ): LaunchedFixture {
         val application = ApplicationProvider.getApplicationContext<UiTestApplication>()
         val usesLiveGateway = mode == FixtureMode.LiveLocalMint ||
-            mode == FixtureMode.LiveSeededWithoutMint
-        val mintUrl = if (usesLiveGateway) {
+            mode == FixtureMode.LiveSeededWithoutMint || mode == FixtureMode.LivePayments
+        val mintUrl = if (mode == FixtureMode.LivePayments) {
+            requireNotNull(paymentMintUrl) { "Live payments require an isolated local mint" }
+        } else if (usesLiveGateway) {
             InstrumentationRegistry.getArguments()
                 .getString("cashu.nutshellMintUrl")
                 ?.trim()
@@ -99,7 +103,9 @@ object AppTestFixture {
             )
         }
         val dependencies = AppContainerDependencies(
-            runtimePolicy = UiRuntimePolicy.DeterministicTest,
+            runtimePolicy = if (mode == FixtureMode.LivePayments) {
+                UiRuntimePolicy.DeterministicTest.copy(runStartupMaintenance = true, pollQuotesInForeground = true)
+            } else UiRuntimePolicy.DeterministicTest,
             walletGateway = { fake ?: CdkWalletGatewayImpl() },
         )
         val container = AppContainer(application, dependencies)
@@ -107,11 +113,14 @@ object AppTestFixture {
         runBlocking {
             container.walletManager.initialize()
             if (mode != FixtureMode.EmptyWallet) {
-                container.walletManager.createNewWalletFromMnemonic(FakeWalletGateway.FixedMnemonic)
+                val mnemonic = if (mode == FixtureMode.LivePayments) {
+                    CdkWalletGatewayImpl().generateMnemonic()
+                } else FakeWalletGateway.FixedMnemonic
+                container.walletManager.createNewWalletFromMnemonic(mnemonic)
             }
             if (mode == FixtureMode.SeededWithMint ||
                 mode == FixtureMode.FundedWithHistory ||
-                mode == FixtureMode.LiveLocalMint
+                mode == FixtureMode.LiveLocalMint || mode == FixtureMode.LivePayments
             ) {
                 container.walletManager.addMint(mintUrl)
                 container.walletManager.refreshBalance()

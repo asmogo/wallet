@@ -78,7 +78,7 @@ struct CashuWalletApp: App {
                             SentryService.initialize()
                         }
                         await walletManager.initialize()
-                        guard !IntegrationTestConfig.shouldUseDeterministicUIRuntime else { return }
+                        guard IntegrationTestConfig.shouldRunPaymentServices else { return }
                         CashuRequestListener.shared.attach(walletManager: walletManager)
                         CashuRequestListener.shared.requestStart()
                         if SettingsManager.shared.checkSentTokens {
@@ -97,7 +97,7 @@ struct CashuWalletApp: App {
                 }
             }
             .onChange(of: scenePhase) { _, newPhase in
-                guard !IntegrationTestConfig.shouldUseDeterministicUIRuntime else { return }
+                guard IntegrationTestConfig.shouldRunPaymentServices else { return }
                 switch newPhase {
                 case .active:
                     appLockManager.appBecameActive()
@@ -109,8 +109,10 @@ struct CashuWalletApp: App {
                     Task { await walletManager.syncPendingMeltQuotes() }
                     Task { await NWCManager.shared.startIfEnabled() }
                     // Recover enabled services and re-arm polling after backgrounding.
-                    Task { await NPCService.shared.initializeIfEnabled() }
-                    if PriceService.shared.isEnabled {
+                    if !IntegrationTestConfig.isEnabled {
+                        Task { await NPCService.shared.initializeIfEnabled() }
+                    }
+                    if !IntegrationTestConfig.isEnabled && PriceService.shared.isEnabled {
                         PriceService.shared.startAutoRefresh()
                     }
                     walletManager.startPendingQuoteForegroundPolling()

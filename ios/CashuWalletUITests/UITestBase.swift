@@ -37,7 +37,7 @@ class UITestBase: XCTestCase {
         app = nil
     }
 
-    private func launchEnvironment(for mode: LaunchMode) -> [String: String] {
+    func launchEnvironment(for mode: LaunchMode) -> [String: String] {
         var environment = [
             "CI_INTEGRATION_TEST": "1",
             "RESET_WALLET": "1",
