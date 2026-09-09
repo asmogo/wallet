@@ -45,12 +45,12 @@ final class QRContextAccessibilityTests: XCTestCase {
         }
     }
 
-    func testReusableOfferStaysAvailableAndPendingOutgoingArtifactIsPreserved() {
+    func testSettledOfferReceiptRetiresCodeAndPendingOutgoingArtifactIsPreserved() {
         var transaction = WalletTransaction(
             id: "offer", amount: 21, type: .incoming, kind: .lightning, date: .now,
             status: .completed, invoice: "LNO1offer"
         )
-        XCTAssertTrue(transaction.hasActionablePaymentCode)
+        XCTAssertFalse(transaction.hasActionablePaymentCode)
         transaction.status = .failed
         XCTAssertFalse(transaction.hasActionablePaymentCode)
         let outgoing = WalletTransaction(
