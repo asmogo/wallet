@@ -99,7 +99,11 @@ default contactless app or start on field detection/double-click.
 
 `NFCReceiveTests` covers request encoding, APDU selection/read/write, both NLEN
 write orders, missing chunks, reconnect resets, malformed NDEF, binary records,
-and request terms. These tests run in Simulator without HCE approval.
+and request terms. `NFCReceiveLifecycleTests` covers cancellation, stale sessions,
+review, and failed claims. These tests run in Simulator without HCE approval.
+`NFCReceiveIntegrationTests` uses the [CI fake mint](../CI/README.md) to create
+real test tokens, transfer them in text and binary APDUs, redeem them, and verify
+that a duplicate cannot credit twice.
 
 Before shipping an HCE build, use an entitled physical iPhone and an Android or
 Macadamia payer to verify:

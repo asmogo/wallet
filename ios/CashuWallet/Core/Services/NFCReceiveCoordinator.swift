@@ -64,7 +64,8 @@ final class NFCReceiveCoordinator {
             } catch {
                 guard generation == current, !Task.isCancelled else { return }
                 phase = .idle
-                message = "Couldn't receive by tap. Keep the phones together and try again."
+                message = (error as? NFCReceiveError)?.errorDescription
+                    ?? "Couldn't receive by tap. Keep the phones together and try again."
             }
             if generation == current {
                 exchangeTask = nil

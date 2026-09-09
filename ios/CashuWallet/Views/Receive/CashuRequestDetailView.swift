@@ -28,6 +28,7 @@ struct CashuRequestDetailView: View {
     @State private var showShareSheet = false
     @State private var nfcReceive = NFCReceiveCoordinator()
     @State private var contactlessAvailable = false
+    @State private var nfcPaymentCountAtStart = 0
 
     init(request: CashuRequest, onClose: (() -> Void)? = nil, showsNavigationHeader: Bool = true) {
         self._requestId = State(initialValue: request.id)
@@ -136,11 +137,13 @@ struct CashuRequestDetailView: View {
         .onChange(of: nfcReceive.receivedAmount) {
             // CDK may credit the wallet without returning an attributable tx ID.
             // Still show the actual redeemed amount in that case.
-            if let amount = nfcReceive.receivedAmount, !showPaymentSuccess {
+            if let amount = nfcReceive.receivedAmount, !showPaymentSuccess,
+               paymentCount == nfcPaymentCountAtStart {
                 receivedAmount = amount
                 showPaymentSuccess = true
             }
         }
+        .onChange(of: nfcReceive.reviewPayment) { presentNextPayment() }
         .task(id: monitoredQuoteID) {
             guard let quoteID = monitoredQuoteID else { return }
             await walletManager.monitorDisplayedMintQuote(quoteID: quoteID, homeHaptic: false)
@@ -174,8 +177,17 @@ struct CashuRequestDetailView: View {
     /// Keep the current receipt stable; payments arriving during it are picked
     /// up after Done without replaying any previously acknowledged payment.
     private func presentNextPayment() {
-        guard !showPaymentSuccess, let request,
-              let payment = paymentObservation.newlyLinkedPayment(in: request.receivedPayments) else { return }
+        guard !showPaymentSuccess, let request else { return }
+        if let reviewed = nfcReceive.reviewPayment {
+            // The review screen owns this payment's success. Keep other
+            // concurrent receipts queued until that screen closes.
+            let saved = walletManager.walletStore.loadSavedTokens()
+            for payment in request.receivedPayments where saved[payment.transactionId] == reviewed.token {
+                paymentObservation.acknowledge(transactionId: payment.transactionId)
+            }
+            return
+        }
+        guard let payment = paymentObservation.newlyLinkedPayment(in: request.receivedPayments) else { return }
         receivedAmount = payment.amount
         // PaymentStatusView owns the success haptic on appear — don't buzz here.
         showPaymentSuccess = true
@@ -327,6 +339,7 @@ struct CashuRequestDetailView: View {
         if contactlessAvailable && (request.rail == .ecash || request.receivedPayments.isEmpty) {
             VStack(spacing: 8) {
                 Button {
+                    nfcPaymentCountAtStart = paymentCount
                     nfcReceive.start(request: request, walletManager: walletManager)
                 } label: {
                     if nfcReceive.phase == .redeeming {
@@ -578,6 +591,10 @@ struct CashuRequestPaymentObservation {
 
     init(existingPayments: [CashuRequestPayment]) {
         observedTransactionIds = Set(existingPayments.map(\.transactionId))
+    }
+
+    mutating func acknowledge(transactionId: String) {
+        observedTransactionIds.insert(transactionId)
     }
 
     mutating func newlyLinkedPayment(

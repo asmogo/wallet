@@ -2,6 +2,69 @@ import Cdk
 import XCTest
 @testable import CashuWallet
 
+/// Uses the same fake-money mint fixture as the existing receipt recovery tests.
+@MainActor
+final class NFCReceiveIntegrationTests: XCTestCase {
+    func testTextAndBinaryTokensSurviveChunkedNfcTransferAndRedeemOnce() async throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let senderDB = try LifecycleSafeWalletDatabase(filePath: directory.appendingPathComponent("sender.sqlite").path)
+        let receiverDB = try LifecycleSafeWalletDatabase(filePath: directory.appendingPathComponent("receiver.sqlite").path)
+        let sender = try WalletRepository(mnemonic: generateMnemonic(), store: customWalletStore(db: senderDB))
+        let receiver = try WalletRepository(mnemonic: generateMnemonic(), store: customWalletStore(db: receiverDB))
+        let mint = MintUrl(url: "http://localhost:3338")
+        try await sender.createWallet(mintUrl: mint, unit: .sat, targetProofCount: nil)
+        let wallet = try await sender.getWallet(mintUrl: mint, unit: .sat)
+        let quote = try await wallet.mintQuote(paymentMethod: .bolt11, amount: Amount(value: 32), description: nil, extra: nil)
+        for _ in 0..<40 {
+            if try await wallet.checkMintQuote(quoteId: quote.id).state == .paid { break }
+            try await Task.sleep(for: .milliseconds(100))
+        }
+        _ = try await wallet.mint(quoteId: quote.id, amountSplitTarget: .none, spendingConditions: nil)
+        let senderService = TokenService(walletRepository: { sender }, getActiveMint: { nil })
+        let receiverService = TokenService(walletRepository: { receiver }, getActiveMint: { nil })
+
+        for binary in [false, true] {
+            let tokenString = try await senderService.sendTokens(amount: 16, mintUrl: mint.url).token
+            let token = try Token.decode(encodedToken: tokenString)
+            let file: [UInt8]
+            if binary {
+                let payload = [UInt8](try token.toRawBytes())
+                let mime = Array("application/octet-stream".utf8)
+                let length = UInt32(payload.count)
+                let record: [UInt8] = [0xC2, UInt8(mime.count), UInt8(length >> 24), UInt8((length >> 16) & 255),
+                                       UInt8((length >> 8) & 255), UInt8(length & 255)] + mime + payload
+                file = [UInt8(record.count >> 8), UInt8(record.count & 255)] + record
+            } else {
+                file = try NFCNdefCodec.textFile("https://wallet.example/#token=\(tokenString)")
+            }
+            var tag = try NFCType4Tag(request: PaymentRequestBuilder.buildNFC(request:
+                CashuRequest(encoded: "unused", amount: 16, mints: [mint.url])))
+            _ = tag.process(Data([0, 0xA4, 4, 0, 7] + NFCType4Tag.aid))
+            _ = tag.process(Data([0, 0xA4, 0, 0x0C, 2, 0xE1, 4]))
+            var received: NFCNdefPayload?
+            for offset in stride(from: 0, to: file.count, by: 52) {
+                let chunk = Array(file[offset..<min(offset + 52, file.count)])
+                let result = tag.process(Data([0, 0xD6, UInt8(offset >> 8), UInt8(offset & 255), UInt8(chunk.count)] + chunk))
+                XCTAssertEqual(result.response, Data([0x90, 0]))
+                received = result.payload ?? received
+            }
+            let decoded = try NFCReceivePayment.decode(XCTUnwrap(received))
+            XCTAssertEqual(try decoded.value().value, 16)
+            let credited = try await receiverService.receiveTokens(tokenString: decoded.encode())
+            XCTAssertEqual(credited, 16)
+            do {
+                _ = try await receiverService.receiveTokens(tokenString: decoded.encode())
+                XCTFail("The same proofs must not credit twice")
+            } catch { }
+        }
+        let receivedWallet = try await receiver.getWallet(mintUrl: mint, unit: .sat)
+        let balance = try await receivedWallet.totalBalance().value
+        XCTAssertEqual(balance, 32)
+    }
+}
+
 final class NFCReceiveTests: XCTestCase {
     private let selectApplication: [UInt8] = [0, 0xA4, 4, 0, 7] + NFCType4Tag.aid + [0]
     private let selectNdef: [UInt8] = [0, 0xA4, 0, 0x0C, 2, 0xE1, 4]
@@ -148,6 +211,15 @@ final class NFCReceiveTests: XCTestCase {
         let paid = [CashuRequestPayment(transactionId: "tx", amount: 21, receivedAt: Date())]
         XCTAssertFalse(NFCReceivePayment.canPresent(CashuRequest(encoded: "unused", amount: 21, receivedPayments: paid, rail: .bolt11)))
         XCTAssertTrue(NFCReceivePayment.canPresent(CashuRequest(encoded: "unused", amount: 21, receivedPayments: paid)))
+    }
+
+    func testReviewedReceiptDoesNotReplaySuccessOrSuppressConcurrentPayment() {
+        let reviewed = CashuRequestPayment(transactionId: "reviewed", amount: 21, receivedAt: Date())
+        let concurrent = CashuRequestPayment(transactionId: "concurrent", amount: 5, receivedAt: Date())
+        var observation = CashuRequestPaymentObservation(existingPayments: [])
+        observation.acknowledge(transactionId: reviewed.transactionId)
+        XCTAssertEqual(observation.newlyLinkedPayment(in: [concurrent, reviewed])?.transactionId, "concurrent")
+        XCTAssertNil(observation.newlyLinkedPayment(in: [concurrent, reviewed]))
     }
 }
 

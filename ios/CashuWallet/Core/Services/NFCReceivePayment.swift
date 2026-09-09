@@ -57,10 +57,16 @@ extension WalletManager {
     func stageNFCReceive(_ payload: NFCNdefPayload, request: CashuRequest) throws -> NFCReceivePayment {
         let token = try NFCReceivePayment.decode(payload)
         let encoded = token.encode()
+        let savedTokens = walletStore.loadSavedTokens()
+        guard !transactions.contains(where: {
+            $0.type == .incoming && $0.status == .completed && savedTokens[$0.id] == encoded
+        }) else {
+            throw NFCReceiveError.message("This token has already been received.")
+        }
         let amount = try token.value().value
         let mint = try token.mintUrl().url
         let unit = PaymentRequestDecoder.unitDescription(token.unit() ?? .sat)
-        let message = NFCReceivePayment.validationMessage(request: request, amount: amount, unit: unit, mint: mint)
+        var message = NFCReceivePayment.validationMessage(request: request, amount: amount, unit: unit, mint: mint)
         let known = mints.contains { MintURLIdentity.normalized($0.url) == MintURLIdentity.normalized(mint) }
         let pending = pendingReceiveTokens.first { $0.token == encoded } ?? PendingReceiveToken(
             tokenId: UUID().uuidString, token: encoded, amount: amount, unit: unit,
@@ -68,6 +74,9 @@ extension WalletManager {
             // Mismatched payments stay claimable without fulfilling this request.
             cashuRequestId: message == nil ? request.id : nil, memo: token.memo()
         )
+        if message == nil, pending.cashuRequestId != request.id {
+            message = "This token was already saved for another receipt."
+        }
         savePendingReceiveToken(pending)
         guard walletStore.loadPendingReceiveTokens().contains(where: { $0.token == encoded }) else {
             throw NFCReceiveError.message("Couldn't save the payment. Try again.")
