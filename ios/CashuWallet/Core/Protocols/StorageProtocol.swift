@@ -87,6 +87,7 @@ enum StorageKeys {
 
     // Wallet
     static let mints = "wallet.mints"
+    static let removedMintUrls = "wallet.removedMintUrls"
     static let activeMintUrl = "wallet.activeMintUrl"
     static let balancesByUnit = "wallet.balancesByUnit"
     static let pendingReceiveTokens = "wallet.pendingReceiveTokens"
@@ -220,6 +221,7 @@ enum StorageKeys {
 
     static let walletDataKeys = [
         mints,
+        removedMintUrls,
         activeMintUrl,
         balancesByUnit,
         pendingReceiveTokens,

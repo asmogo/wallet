@@ -191,6 +191,8 @@
 		36245814414F1DB5CF522A7E /* AppLockWindow.swift in Sources */ = {isa = PBXBuildFile; fileRef = 65B376BD104CC679F24FFE37 /* AppLockWindow.swift */; };
 		CCCBC379C1AF8196BDD9CAD9 /* AppLockPresentationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 163973969F1D25EA091AC4FF /* AppLockPresentationTests.swift */; };
 		6E771298AB0DD61628FCF572 /* LightningAddressResolverTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2686B0C8F81DE3346F5643EA /* LightningAddressResolverTests.swift */; };
+		94EA670D6C07D36761841BF6 /* ReceiveRecovery.swift in Sources */ = {isa = PBXBuildFile; fileRef = 199A5C29E6AB4761101E511B /* ReceiveRecovery.swift */; };
+		996597CC795B00455F4CB48B /* ReceiveRecoveryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 562DD3E83FDF0A975042E7BF /* ReceiveRecoveryTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -393,6 +395,8 @@
 		65B376BD104CC679F24FFE37 /* AppLockWindow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ../../App/AppLockWindow.swift; sourceTree = "<group>"; };
 		163973969F1D25EA091AC4FF /* AppLockPresentationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CashuWalletTests/AppLockPresentationTests.swift; sourceTree = "<group>"; };
 		2686B0C8F81DE3346F5643EA /* LightningAddressResolverTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CashuWalletTests/LightningAddressResolverTests.swift; sourceTree = "<group>"; };
+		199A5C29E6AB4761101E511B /* ReceiveRecovery.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReceiveRecovery.swift; sourceTree = "<group>"; };
+		562DD3E83FDF0A975042E7BF /* ReceiveRecoveryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CashuWalletTests/ReceiveRecoveryTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -458,6 +462,7 @@
 				9804DC8F57E0384EDE3B390B /* StoredWalletAccountTests.swift */,
 				163973969F1D25EA091AC4FF /* AppLockPresentationTests.swift */,
 				2686B0C8F81DE3346F5643EA /* LightningAddressResolverTests.swift */,
+				562DD3E83FDF0A975042E7BF /* ReceiveRecoveryTests.swift */,
 				TG00000000000012 /* TypographyGuardTests.swift */,
 				WE00000000000012 /* WalletErrorMessageTests.swift */,
 				AA9600000000000000000002 /* NPCServiceTests.swift */,
@@ -769,6 +774,7 @@
 				2100000000000004 /* WalletManager.swift */,
 				5DDA5FB4E01D8EAEC9BB97FA /* StoredWalletAccount.swift */,
 				65B376BD104CC679F24FFE37 /* AppLockWindow.swift */,
+				199A5C29E6AB4761101E511B /* ReceiveRecovery.swift */,
 				D100000000000101 /* WalletManager+Lifecycle.swift */,
 				D100000000000102 /* WalletManager+NPC.swift */,
 				D100000000000103 /* WalletManager+Mints.swift */,
@@ -1066,6 +1072,7 @@
 				881794875F3E0162F335D0D7 /* StoredWalletAccountTests.swift in Sources */,
 				CCCBC379C1AF8196BDD9CAD9 /* AppLockPresentationTests.swift in Sources */,
 				6E771298AB0DD61628FCF572 /* LightningAddressResolverTests.swift in Sources */,
+				996597CC795B00455F4CB48B /* ReceiveRecoveryTests.swift in Sources */,
 				TG00000000000002 /* TypographyGuardTests.swift in Sources */,
 				WE00000000000002 /* WalletErrorMessageTests.swift in Sources */,
 				AA9600000000000000000001 /* NPCServiceTests.swift in Sources */,
@@ -1090,6 +1097,7 @@
 				1100000000000004 /* WalletManager.swift in Sources */,
 				F9B9C2789923138C562B8CBF /* StoredWalletAccount.swift in Sources */,
 				36245814414F1DB5CF522A7E /* AppLockWindow.swift in Sources */,
+				94EA670D6C07D36761841BF6 /* ReceiveRecovery.swift in Sources */,
 				D200000000000101 /* WalletManager+Lifecycle.swift in Sources */,
 				D200000000000102 /* WalletManager+NPC.swift in Sources */,
 				D200000000000103 /* WalletManager+Mints.swift in Sources */,

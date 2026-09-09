@@ -269,3 +269,16 @@ This isn't just "does the app work" — this tests **CDK-Swift ↔ real Cashu mi
 - ✅ Multi-mint management
 
 **This catches real integration bugs** that unit tests can't find!
+
+### Interrupted receipt recovery
+
+`python3 CI/receipt-recovery-proxy.py` starts a loopback-only proxy on port 3340
+in front of the Nutshell test mint on port 3338. The iOS `ReceiveRecoveryTests`
+and Android `ReceiptRecoveryInstrumentedTest` exercise a completed receipt before
+app tracking, an accepted swap whose response is interrupted, an offline database
+reopen, and repeated CDK reconciliation. They never redeem the original token a
+second time. Run these tests serially because they share the proxy's fault state.
+The native CI jobs start and stop the proxy automatically. Android uses
+`cashu.nativeWalletLocalMintIntegration=true` and
+`cashu.receiptRecoveryMintUrl=http://10.0.2.2:3340` on hosted emulators; use an ADB
+reverse mapping and the emulator loopback address for a local run.

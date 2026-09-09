@@ -170,6 +170,8 @@ jobs:
       run: |
         chmod +x CI/start-nutshell.sh CI/start-cdk.sh
         ./CI/start-nutshell.sh 3338
+        python3 CI/receipt-recovery-proxy.py > "$RUNNER_TEMP/receipt-proxy.log" 2>&1 &
+        echo $! > "$RUNNER_TEMP/receipt-proxy.pid"
         ./CI/start-cdk.sh
 
     - name: Run required Android UI suite
@@ -185,6 +187,7 @@ jobs:
           -Pandroid.testInstrumentationRunnerArguments.cashu.liveUiLocalMintEnabled=true \
           -Pandroid.testInstrumentationRunnerArguments.cashu.nativeWalletLocalMintIntegration=true \
           -Pandroid.testInstrumentationRunnerArguments.cashu.nutshellMintUrl=http://10.0.2.2:3338 \
+          -Pandroid.testInstrumentationRunnerArguments.cashu.receiptRecoveryMintUrl=http://10.0.2.2:3340 \
           -Pandroid.testInstrumentationRunnerArguments.cashu.cdkMintUrl=http://10.0.2.2:3339
 
     - name: Run full Android UI and native suite
@@ -199,6 +202,7 @@ jobs:
           -Pandroid.testInstrumentationRunnerArguments.cashu.liveUiLocalMintEnabled=true \
           -Pandroid.testInstrumentationRunnerArguments.cashu.nativeWalletLocalMintIntegration=true \
           -Pandroid.testInstrumentationRunnerArguments.cashu.nutshellMintUrl=http://10.0.2.2:3338 \
+          -Pandroid.testInstrumentationRunnerArguments.cashu.receiptRecoveryMintUrl=http://10.0.2.2:3340 \
           -Pandroid.testInstrumentationRunnerArguments.cashu.cdkMintUrl=http://10.0.2.2:3339
 
     - name: Stop local test mints
@@ -206,6 +210,7 @@ jobs:
       working-directory: .
       run: |
         chmod +x CI/stop-nutshell.sh CI/stop-cdk.sh
+        if [ -f "$RUNNER_TEMP/receipt-proxy.pid" ]; then kill "$(cat "$RUNNER_TEMP/receipt-proxy.pid")" || true; fi
         ./CI/stop-nutshell.sh
         ./CI/stop-cdk.sh
 

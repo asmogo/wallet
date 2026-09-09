@@ -635,6 +635,27 @@ class CdkWalletGatewayImpl : WalletGateway {
         quote.toDomain(fallbackMethod = stored?.paymentMethod?.toDomain() ?: quote.paymentMethod.toDomain())
     }
 
+    override suspend fun receiveRecoveryCandidates(): List<ReceiveRecoveryCandidate> = cdkCall {
+        val db = checkNotNull(database)
+        val states = listOf(org.cashudevkit.ProofState.UNSPENT, org.cashudevkit.ProofState.RESERVED, org.cashudevkit.ProofState.PENDING)
+        val proofs = db.getProofs(null, null, states, null).map {
+            ReceiveRecoveryCandidate(it.mintUrl.url, it.unit.toDomainUnit())
+        }
+        (proofs + db.getIncompleteSagas().mapNotNull(::receiveRecoveryCandidate)).distinct()
+    }
+
+    override suspend fun recoverReceiveAccount(candidate: ReceiveRecoveryCandidate): SagaRecoveryReport = cdkCall {
+        val unit = cdkUnit(candidate.unit)
+        // Reconstruct a missing account locally. Do not fetch mint metadata or
+        // replace an existing wallet/keyset counter before resuming its saga.
+        val repo = requireRepository()
+        if (!repo.getWallets().any { mintRemovalUrlsMatch(it.mintUrl().url, candidate.mintUrl) && it.unit() == unit }) {
+            repo.createWallet(CdkMintUrl(candidate.mintUrl), unit, null)
+        }
+        val report = walletFor(candidate.mintUrl, unit).recoverIncompleteSagas()
+        SagaRecoveryReport(report.recovered.toLong(), report.compensated.toLong(), report.skipped.toLong(), report.failed.toLong())
+    }
+
     override suspend fun recoverIncompleteSagas(mintUrl: String): SagaRecoveryReport = cdkCall {
         val report = walletFor(mintUrl, CdkCurrencyUnit.Sat).recoverIncompleteSagas()
         SagaRecoveryReport(

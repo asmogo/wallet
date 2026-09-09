@@ -235,6 +235,7 @@ class WalletManager(
             // background maintenance contends for CDK's operation mutex.
             kotlinx.coroutines.yield()
             if (hasStoredWallet) {
+                reconcileReceivedAccounts()
                 runCatching { refreshBalance() }
                     .onFailure { AppLogger.wallet.error("Deferred balance refresh failed", it) }
 
@@ -398,6 +399,7 @@ class WalletManager(
             val fetched = gateway.fetchMintInfo(normalized)
                 ?: throw IllegalStateException("Mint did not return info via CDK.")
             val updated = mutableState.value.mints + fetched
+            walletStore.setMintRemoved(normalized, removed = false)
             walletStore.saveMints(updated)
             if (mutableState.value.activeMint == null) walletStore.activeMintURL = fetched.url
             loadCachedState(needsOnboarding = false)
@@ -436,6 +438,9 @@ class WalletManager(
                 mintUrl = trackedMint.url,
                 removeWalletIfSingleUnit = gateway::removeWalletIfSingleUnit,
             ) {
+                // Persist the exclusion before deleting metadata so retained
+                // CDK proofs cannot reconnect this mint after a relaunch.
+                walletStore.setMintRemoved(trackedMint.url, removed = true)
                 val updated = mutableState.value.mints.filterNot { it.url == trackedMint.url }
                 walletStore.saveMints(updated)
                 if (walletStore.activeMintURL == trackedMint.url) {
@@ -1029,11 +1034,24 @@ class WalletManager(
         tokenString: String,
         confirmationOwner: ReceiveConfirmationOwner?,
     ): Long {
-        val unit = com.cashu.me.Models.TokenInfo.parse(tokenString)?.unit ?: "sat"
+        val tokenInfo = com.cashu.me.Models.TokenInfo.parse(tokenString)
+        val unit = tokenInfo?.unit ?: "sat"
         val amount = withLoadingResult {
             val p2pkPubkeys = TokenParser.p2pkPubkeys(tokenString)
             val signingKeys = settingsManager.p2pkSigningKeysFor(p2pkPubkeys)
-            gateway.receiveEcashToken(tokenString, signingKeys).also {
+            // This receive has passed approval. Its receipt may reconnect a
+            // removed mint, including when the swap response is lost.
+            tokenInfo?.mint?.let { walletStore.setMintRemoved(it, removed = false) }
+            val received = try {
+                gateway.receiveEcashToken(tokenString, signingKeys)
+            } catch (error: Exception) {
+                if (error is kotlinx.coroutines.CancellationException) throw error
+                // The mint may have accepted the swap before the response was
+                // lost. Resume CDK's saga; never submit the original token again.
+                reconcileReceivedAccounts()
+                throw error
+            }
+            received.also {
                 p2pkPubkeys.forEach(settingsManager::markP2PKKeyUsed)
                 // iOS parity (WalletManager+Tokens.receiveTokens): track the
                 // token's mint only after a successful receive, so an
@@ -1045,7 +1063,10 @@ class WalletManager(
                     onTrackingFailed = {
                         AppLogger.wallet.error("Failed to track mint for received token", it)
                     },
-                    ensureMintTracked = { ensureMintTracked(it) },
+                    ensureMintTracked = {
+                        trackReceivedMintLocally(it, unit)
+                        ensureMintTracked(it)
+                    },
                 )
                 refreshBalance()
                 loadTransactions()
@@ -1083,11 +1104,13 @@ class WalletManager(
         tokenString: String,
         processedId: String,
     ): com.cashu.me.Core.CDK.NfcReceiveReceipt {
-        val unit = com.cashu.me.Models.TokenInfo.parse(tokenString)?.unit ?: "sat"
+        val tokenInfo = com.cashu.me.Models.TokenInfo.parse(tokenString)
+        val unit = tokenInfo?.unit ?: "sat"
         val receipt = withLoadingResult {
             require(processedId !in walletStore.loadProcessedCashuRequests()) { "This payment was already received." }
             val p2pkPubkeys = TokenParser.p2pkPubkeys(tokenString)
             val signingKeys = settingsManager.p2pkSigningKeysFor(p2pkPubkeys)
+            tokenInfo?.mint?.let { walletStore.setMintRemoved(it, removed = false) }
             gateway.receiveNfcEcashToken(tokenString, signingKeys).also {
                 p2pkPubkeys.forEach(settingsManager::markP2PKKeyUsed)
                 trackMintForReceivedToken(
@@ -1606,25 +1629,80 @@ class WalletManager(
         return mints.firstOrNull { it.url == saved } ?: mints.firstOrNull()
     }
 
+    /** Publish the durable mint before any online reconciliation can fail. */
+    private fun trackReceivedMintLocally(url: String, unit: String) {
+        val normalized = mintMetadataFetcher.normalizeMintUrl(url)
+        if (walletStore.isMintRemoved(normalized)) return
+        val current = walletStore.loadMints()
+        val existing = current.firstOrNull { com.cashu.me.Core.CDK.mintRemovalUrlsMatch(it.url, normalized) }
+        if (existing != null && (existing.name != "Unknown Mint" || unit in existing.units)) return
+        val updated = if (existing == null) {
+            current + MintInfo(url = normalized, name = "Unknown Mint", units = listOf(unit))
+        } else {
+            current.map { if (it == existing) it.copy(units = (it.units + unit).distinct()) else it }
+        }
+        walletStore.saveMints(updated)
+        if (walletStore.activeMintURL == null) walletStore.activeMintURL = normalized
+        update { copy(mints = updated, activeMint = activeMintFrom(updated)) }
+    }
+
+    internal suspend fun reconcileReceivedAccounts() {
+        val candidates = try {
+            gateway.receiveRecoveryCandidates().filterNot { walletStore.isMintRemoved(it.mintUrl) }
+        } catch (error: Exception) {
+            if (error is kotlinx.coroutines.CancellationException) throw error
+            AppLogger.wallet.error("Unable to discover interrupted receipts", error)
+            return
+        }
+        // Track every candidate before network recovery of any one account.
+        candidates.forEach { trackReceivedMintLocally(it.mintUrl, it.unit) }
+        for (candidate in candidates) {
+            if (walletStore.isMintRemoved(candidate.mintUrl)) continue
+            try { gateway.recoverReceiveAccount(candidate) } catch (error: Exception) {
+                if (error is kotlinx.coroutines.CancellationException) throw error
+                AppLogger.wallet.error("Receipt recovery remains pending", error)
+            }
+        }
+        if (candidates.isNotEmpty()) {
+            refreshBalance()
+            loadTransactions()
+        }
+        // Deliberately no receive confirmation or token redemption here.
+    }
+
     private suspend fun ensureMintTracked(url: String): String {
         val normalized = mintMetadataFetcher.normalizeMintUrl(url)
+        walletStore.setMintRemoved(normalized, removed = false)
         runCatching { gateway.ensureWallet(normalized) }
             .onFailure { AppLogger.wallet.error("CDK wallet preparation is not available yet for $normalized", it) }
-        if (walletStore.loadMints().any { it.url == normalized }) return normalized
+        val existing = walletStore.loadMints().firstOrNull {
+            com.cashu.me.Core.CDK.mintRemovalUrlsMatch(it.url, normalized)
+        }
+        if (existing != null && existing.name != "Unknown Mint") return existing.url
 
-        val fetched = runCatching { gateway.fetchMintInfo(normalized) }.getOrElse {
+        val fetched = runCatching { gateway.fetchMintInfo(normalized) }.onFailure {
             AppLogger.wallet.error("Failed to fetch CDK mint info for $normalized", it)
-            MintInfo(
-                url = normalized,
-                name = runCatching { URL(normalized).host }.getOrNull() ?: "Unknown Mint",
-            )
-        } ?: MintInfo(
+        }.getOrNull()
+        // Re-read after the network suspension so enrichment preserves balances
+        // and every currency recovered into the locally persisted placeholder.
+        val current = walletStore.loadMints()
+        val placeholder = current.firstOrNull {
+            com.cashu.me.Core.CDK.mintRemovalUrlsMatch(it.url, normalized)
+        }
+        if (walletStore.isMintRemoved(normalized)) return normalized
+        val enriched = fetched?.copy(
+            url = placeholder?.url ?: normalized,
+            units = (placeholder?.units.orEmpty() + fetched.units).distinct(),
+            balance = placeholder?.balance ?: 0,
+            isActive = placeholder?.isActive ?: fetched.isActive,
+        ) ?: placeholder ?: MintInfo(
             url = normalized,
             name = runCatching { URL(normalized).host }.getOrNull() ?: "Unknown Mint",
         )
-        val updated = walletStore.loadMints().filterNot { it.url == normalized } + fetched
+        val updated = if (placeholder == null) current + enriched else
+            current.map { if (it == placeholder) enriched else it }
         walletStore.saveMints(updated)
-        if (walletStore.activeMintURL == null) walletStore.activeMintURL = fetched.url
+        if (walletStore.activeMintURL == null) walletStore.activeMintURL = enriched.url
         update {
             copy(
                 mints = updated,
@@ -1632,7 +1710,7 @@ class WalletManager(
                 balance = updated.sumOf { it.balance },
             )
         }
-        return normalized
+        return enriched.url
     }
 
     private suspend fun deriveNostrKey(mnemonic: String) {

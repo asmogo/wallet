@@ -148,6 +148,7 @@ class MintService: ObservableObject {
             fetchedInfo: info
         )
         
+        walletStore.setMintRemoved(url: normalizedUrl, removed: false)
         mints.append(mintInfo)
         saveMints()
         
@@ -187,6 +188,9 @@ class MintService: ObservableObject {
                 )
             },
             commitMetadata: {
+                // Persist the exclusion first so a relaunch cannot rediscover
+                // retained CDK proofs if metadata removal is interrupted.
+                self.walletStore.setMintRemoved(url: mint.url, removed: true)
                 self.mints = MintRemovalPolicy.removingMint(
                     withURL: mint.url,
                     from: self.mints
@@ -309,6 +313,26 @@ class MintService: ObservableObject {
         mints.contains { MintRemovalPolicy.matches($0.url, normalizeUrl(url)) }
     }
 
+    /// Persist receipt evidence before metadata lookup or network recovery.
+    func trackReceivedMintLocally(url: String, unit: CurrencyUnit) {
+        let normalized = normalizeUrl(url)
+        guard !walletStore.isMintRemoved(url: normalized) else { return }
+        if let index = mints.firstIndex(where: { MintRemovalPolicy.matches($0.url, normalized) }) {
+            let unitName = PaymentRequestDecoder.unitDescription(unit)
+            if mints[index].name == "Unknown Mint", !mints[index].units.contains(unitName) {
+                mints[index].units.append(unitName)
+                saveMints()
+                if activeMint?.url == mints[index].url { activeMint = mints[index] }
+            }
+            return
+        }
+        var placeholder = MintInfo(url: normalized, name: "Unknown Mint", isActive: true, balance: 0)
+        placeholder.units = [PaymentRequestDecoder.unitDescription(unit)]
+        mints.append(placeholder)
+        saveMints()
+        if activeMint == nil { activeMint = placeholder }
+    }
+
     /// Ensure a mint discovered via an incoming token or NPC quote is tracked with
     /// full metadata (NUT-04/05 payment methods, on-chain confirmations), not a bare
     /// placeholder. Fetches mint info through the CDK wallet so the send/receive
@@ -320,6 +344,7 @@ class MintService: ObservableObject {
     ///   user-selected active mint and the mint's balance are preserved.
     func ensureMintTracked(url: String, name: String? = nil) async {
         let normalizedUrl = normalizeUrl(url)
+        walletStore.setMintRemoved(url: normalizedUrl, removed: false)
         let existingIndex = mints.firstIndex(where: { MintRemovalPolicy.matches($0.url, normalizedUrl) })
 
         // Already tracked with real metadata — nothing to do.
