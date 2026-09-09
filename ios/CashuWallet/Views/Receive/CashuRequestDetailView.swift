@@ -26,6 +26,8 @@ struct CashuRequestDetailView: View {
     /// VoiceOver Share action for the QR: ShareLink can't be invoked
     /// imperatively, so the accessibility action presents the share sheet.
     @State private var showShareSheet = false
+    @State private var nfcReceive = NFCReceiveCoordinator()
+    @State private var contactlessAvailable = false
 
     init(request: CashuRequest, onClose: (() -> Void)? = nil, showsNavigationHeader: Bool = true) {
         self._requestId = State(initialValue: request.id)
@@ -125,14 +127,46 @@ struct CashuRequestDetailView: View {
             }
         }
         .onChange(of: request?.receivedPayments) {
+            nfcReceive.stop()
             presentNextPayment()
         }
         .onChange(of: showPaymentSuccess) {
             presentNextPayment()
         }
+        .onChange(of: nfcReceive.receivedAmount) {
+            // CDK may credit the wallet without returning an attributable tx ID.
+            // Still show the actual redeemed amount in that case.
+            if let amount = nfcReceive.receivedAmount, !showPaymentSuccess {
+                receivedAmount = amount
+                showPaymentSuccess = true
+            }
+        }
         .task(id: monitoredQuoteID) {
             guard let quoteID = monitoredQuoteID else { return }
             await walletManager.monitorDisplayedMintQuote(quoteID: quoteID, homeHaptic: false)
+        }
+        .task(id: scenePhase) {
+            if scenePhase == .active {
+                contactlessAvailable = await NFCReceiveCardSession.isAvailable
+            } else if scenePhase == .background {
+                nfcReceive.stop()
+            }
+        }
+        .onChange(of: request) { nfcReceive.stop() }
+        .onDisappear { nfcReceive.stop() }
+        .fullScreenCover(item: Binding(
+            get: { nfcReceive.reviewPayment },
+            set: { if $0 == nil { nfcReceive.dismissReview() } }
+        )) { pending in
+            ReceiveTokenDetailView(
+                tokenString: pending.token,
+                onComplete: { nfcReceive.dismissReview() },
+                claim: { try await walletManager.claimPendingReceiveToken(pending) },
+                secondaryActionTitle: "Review Later",
+                onSecondaryAction: { nfcReceive.dismissReview() }
+            )
+            .environmentObject(walletManager)
+            .canvasSheetBackground()
         }
         .compactBottomSheetSurface()
     }
@@ -213,6 +247,8 @@ struct CashuRequestDetailView: View {
 
                     deliveryStatus(for: request)
 
+                    contactlessReceive(request: request)
+
                     if let regenerationError {
                         InlineNotice(message: regenerationError, severity: .error)
                     }
@@ -283,6 +319,43 @@ struct CashuRequestDetailView: View {
             .multilineTextAlignment(.center)
             .padding(.horizontal)
             .padding(.bottom, 16)
+        }
+    }
+
+    @ViewBuilder
+    private func contactlessReceive(request: CashuRequest) -> some View {
+        if contactlessAvailable && (request.rail == .ecash || request.receivedPayments.isEmpty) {
+            VStack(spacing: 8) {
+                Button {
+                    nfcReceive.start(request: request, walletManager: walletManager)
+                } label: {
+                    if nfcReceive.phase == .redeeming {
+                        HStack {
+                            ProgressView()
+                            Text("Securing ecash…")
+                        }
+                    } else {
+                        Label("Receive by Tap", systemImage: "wave.3.right")
+                    }
+                }
+                .flatSheetSecondaryButton()
+                .disabled(nfcReceive.isBusy || !NFCReceivePayment.canPresent(request) || !walletManager.isRuntimeReady)
+                .accessibilityIdentifier("cashu.receive.contactless")
+                .accessibilityHint("Hold this iPhone near the payer's device to receive ecash")
+                if (request.amount ?? 0) == 0 {
+                    Text("Set an amount to receive by tap.")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                } else {
+                    Text("Hold this iPhone near the payer's device. You'll review payments from new mints before claiming.")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.center)
+                }
+                if let message = nfcReceive.message {
+                    InlineNotice(message: message, severity: .caution)
+                }
+            }
         }
     }
 

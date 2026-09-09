@@ -99,6 +99,7 @@
 		BE86C0C8B9BAF95539080EF9 /* Cdk in Frameworks */ = {isa = PBXBuildFile; productRef = E118F77A2062DDD58C0A6DA3 /* Cdk */; };
 		BF36C01CE0AB810E1B462448 /* IntegrationTestBase.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1CF8C0C2E1379BCD23CF8C6 /* IntegrationTestBase.swift */; };
 		C0A100000000000000000002 /* CashuRequestPaymentObservationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0A100000000000000000001 /* CashuRequestPaymentObservationTests.swift */; };
+		AFCE00000000000000000FFF /* NFCReceiveTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AFCE10000000000000000FFF /* NFCReceiveTests.swift */; };
 		CC00000000000001 /* ThemeSettingsSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC00000000000011 /* ThemeSettingsSection.swift */; };
 		CC00000000000002 /* BackupSettingsSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC00000000000012 /* BackupSettingsSection.swift */; };
 		CC00000000000004 /* P2PKSettingsSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC00000000000014 /* P2PKSettingsSection.swift */; };
@@ -194,6 +195,10 @@
 		6E771298AB0DD61628FCF572 /* LightningAddressResolverTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2686B0C8F81DE3346F5643EA /* LightningAddressResolverTests.swift */; };
 		94EA670D6C07D36761841BF6 /* ReceiveRecovery.swift in Sources */ = {isa = PBXBuildFile; fileRef = 199A5C29E6AB4761101E511B /* ReceiveRecovery.swift */; };
 		996597CC795B00455F4CB48B /* ReceiveRecoveryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 562DD3E83FDF0A975042E7BF /* ReceiveRecoveryTests.swift */; };
+		AFCE00000000000000000001 /* NFCType4Tag.swift in Sources */ = {isa = PBXBuildFile; fileRef = AFCE10000000000000000001 /* NFCType4Tag.swift */; };
+		AFCE00000000000000000002 /* NFCReceivePayment.swift in Sources */ = {isa = PBXBuildFile; fileRef = AFCE10000000000000000002 /* NFCReceivePayment.swift */; };
+		AFCE00000000000000000003 /* NFCReceiveCardSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = AFCE10000000000000000003 /* NFCReceiveCardSession.swift */; };
+		AFCE00000000000000000004 /* NFCReceiveCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = AFCE10000000000000000004 /* NFCReceiveCoordinator.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -302,6 +307,7 @@
 		BB00000000000013 /* TokenService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TokenService.swift; sourceTree = "<group>"; };
 		BB00000000000014 /* LightningService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LightningService.swift; sourceTree = "<group>"; };
 		C0A100000000000000000001 /* CashuRequestPaymentObservationTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = CashuRequestPaymentObservationTests.swift; path = CashuWalletTests/CashuRequestPaymentObservationTests.swift; sourceTree = "<group>"; };
+		AFCE10000000000000000FFF /* NFCReceiveTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = NFCReceiveTests.swift; path = CashuWalletTests/NFCReceiveTests.swift; sourceTree = "<group>"; };
 		CC00000000000011 /* ThemeSettingsSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ThemeSettingsSection.swift; sourceTree = "<group>"; };
 		CC00000000000012 /* BackupSettingsSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BackupSettingsSection.swift; sourceTree = "<group>"; };
 		CC00000000000014 /* P2PKSettingsSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = P2PKSettingsSection.swift; sourceTree = "<group>"; };
@@ -399,6 +405,10 @@
 		2686B0C8F81DE3346F5643EA /* LightningAddressResolverTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CashuWalletTests/LightningAddressResolverTests.swift; sourceTree = "<group>"; };
 		199A5C29E6AB4761101E511B /* ReceiveRecovery.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReceiveRecovery.swift; sourceTree = "<group>"; };
 		562DD3E83FDF0A975042E7BF /* ReceiveRecoveryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CashuWalletTests/ReceiveRecoveryTests.swift; sourceTree = "<group>"; };
+		AFCE10000000000000000001 /* NFCType4Tag.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NFCType4Tag.swift; sourceTree = "<group>"; };
+		AFCE10000000000000000002 /* NFCReceivePayment.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NFCReceivePayment.swift; sourceTree = "<group>"; };
+		AFCE10000000000000000003 /* NFCReceiveCardSession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NFCReceiveCardSession.swift; sourceTree = "<group>"; };
+		AFCE10000000000000000004 /* NFCReceiveCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NFCReceiveCoordinator.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -457,6 +467,7 @@
 				T1B0000000000100 /* ConnectMintContextTests.swift */,
 				T1B000000000000D /* CashuRequestRouteExplanationTests.swift */,
 				C0A100000000000000000001 /* CashuRequestPaymentObservationTests.swift */,
+				AFCE10000000000000000FFF /* NFCReceiveTests.swift */,
 				T1B000000000000E /* CrashReportSanitizerTests.swift */,
 				T1B000000000000F /* HistorySearchTests.swift */,
 				AV00000000000012 /* AppVersionTests.swift */,
@@ -760,6 +771,10 @@
 				F200000000000001 /* NDEFTextRecordCoder.swift */,
 				F200000000000002 /* NFCReaderDelegate.swift */,
 				F200000000000003 /* NFCPaymentService.swift */,
+				AFCE10000000000000000004 /* NFCReceiveCoordinator.swift */,
+				AFCE10000000000000000003 /* NFCReceiveCardSession.swift */,
+				AFCE10000000000000000002 /* NFCReceivePayment.swift */,
+				AFCE10000000000000000001 /* NFCType4Tag.swift */,
 				F200000000000004 /* ContactlessPaymentCoordinator.swift */,
 				BB00000000000012 /* TransactionService.swift */,
 				BB00000000000013 /* TokenService.swift */,
@@ -1068,6 +1083,7 @@
 				T2B0000000000100 /* ConnectMintContextTests.swift in Sources */,
 				T2B000000000000D /* CashuRequestRouteExplanationTests.swift in Sources */,
 				C0A100000000000000000002 /* CashuRequestPaymentObservationTests.swift in Sources */,
+				AFCE00000000000000000FFF /* NFCReceiveTests.swift in Sources */,
 				T2B000000000000E /* CrashReportSanitizerTests.swift in Sources */,
 				T2B000000000000F /* HistorySearchTests.swift in Sources */,
 				AV00000000000002 /* AppVersionTests.swift in Sources */,
@@ -1206,6 +1222,10 @@
 				F100000000000001 /* NDEFTextRecordCoder.swift in Sources */,
 				F100000000000002 /* NFCReaderDelegate.swift in Sources */,
 				F100000000000003 /* NFCPaymentService.swift in Sources */,
+				AFCE00000000000000000004 /* NFCReceiveCoordinator.swift in Sources */,
+				AFCE00000000000000000003 /* NFCReceiveCardSession.swift in Sources */,
+				AFCE00000000000000000002 /* NFCReceivePayment.swift in Sources */,
+				AFCE00000000000000000001 /* NFCType4Tag.swift in Sources */,
 				F100000000000004 /* ContactlessPaymentCoordinator.swift in Sources */,
 				F300000000000001 /* CurrencyAmountDisplay.swift in Sources */,
 				F300000000000002 /* NumberPadAmountInput.swift in Sources */,
@@ -1403,6 +1423,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CASHU_HCE_ENABLED = NO;
 				CODE_SIGN_ENTITLEMENTS = CashuWallet/CashuWallet.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
@@ -1411,7 +1432,7 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = CashuWallet/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = Cashu;
-				INFOPLIST_KEY_NFCReaderUsageDescription = "Hold your iPhone near a payment terminal or NFC tag to send Cashu ecash.";
+				INFOPLIST_KEY_NFCReaderUsageDescription = "Hold your iPhone near another device to send or receive Cashu ecash.";
 				INFOPLIST_KEY_NSCameraUsageDescription = "Camera is used to scan QR codes for receiving ecash tokens and Lightning invoices.";
 				INFOPLIST_KEY_NSFaceIDUsageDescription = "Cashu Wallet uses Face ID to unlock the app and protect your funds.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
@@ -1442,6 +1463,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CASHU_HCE_ENABLED = NO;
 				CODE_SIGN_ENTITLEMENTS = CashuWallet/CashuWallet.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
@@ -1450,7 +1472,7 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = CashuWallet/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = Cashu;
-				INFOPLIST_KEY_NFCReaderUsageDescription = "Hold your iPhone near a payment terminal or NFC tag to send Cashu ecash.";
+				INFOPLIST_KEY_NFCReaderUsageDescription = "Hold your iPhone near another device to send or receive Cashu ecash.";
 				INFOPLIST_KEY_NSCameraUsageDescription = "Camera is used to scan QR codes for receiving ecash tokens and Lightning invoices.";
 				INFOPLIST_KEY_NSFaceIDUsageDescription = "Cashu Wallet uses Face ID to unlock the app and protect your funds.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;

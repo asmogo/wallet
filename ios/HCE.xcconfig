@@ -1,0 +1,4 @@
+// Use only with an Apple-approved HCE provisioning profile for this bundle ID.
+// xcodebuild ... -xcconfig HCE.xcconfig
+CASHU_HCE_ENABLED = YES
+CODE_SIGN_ENTITLEMENTS = CashuWallet/CashuWalletHCE.entitlements

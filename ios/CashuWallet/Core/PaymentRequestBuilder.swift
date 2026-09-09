@@ -1,6 +1,20 @@
 import Foundation
 
 enum PaymentRequestBuilder {
+    /// In-band NUT-18 request: omit transports so the payer writes the token
+    /// back to the emulated tag instead of delivering it over Nostr.
+    static func buildNFC(request: CashuRequest) -> String {
+        var fields: [(Nut18Key, Nut18Value)] = [(.text("i"), .text(request.id))]
+        if let amount = request.amount, amount > 0 { fields.append((.text("a"), .uint(amount))) }
+        fields.append((.text("u"), .text(request.unit)))
+        fields.append((.text("s"), .bool(!request.reusable)))
+        if !request.mints.isEmpty {
+            fields.append((.text("m"), .array(request.mints.map { .text($0) })))
+        }
+        if let memo = request.memo, !memo.isEmpty { fields.append((.text("d"), .text(memo))) }
+        return "creqA" + Base64URL.encode(Nut18CBOR.encode(.map(fields)))
+    }
+
     enum BuildError: Error {
         case invalidPubkeyHex
         case nprofileEncodeFailed
