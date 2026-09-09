@@ -160,7 +160,7 @@ fake-payment services to a public interface.
 Nutshell 0.20.1 has a fixture timing limitation: it can return async `PENDING`
 before its background task persists the new state, and stock FakeWallet reports
 external payments settled even before they execute. The fast internal-payment
-scenario delays its first status GET by one second; external Nutshell payments are
-also exercised through the real UI. This pacing does not establish correctness of
+scenario and the iOS external-payment UI journey delay their first status GET by
+one second through the session proxy. This pacing does not establish correctness of
 the mint's immediate-status race. The standalone Swift package can also emit
 nonfatal native Tokio runtime-drop warnings from CDK 0.18 during teardown.

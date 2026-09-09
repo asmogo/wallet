@@ -43,6 +43,7 @@ final class WalletLifecycleUITests: UITestBase {
         tapWhenReady(mintRow(url: mintURL))
         scrollTo("Remove mint")
         tapWhenReady(app.buttons["Remove mint"])
+        XCTAssertTrue(app.staticTexts["Remove mint?"].waitForExistence(timeout: 5))
         tapWhenReady(app.buttons["Remove"])
         XCTAssertTrue(mintRow(url: mintURL).waitForNonExistence(timeout: 15))
         relaunchPreservingWallet()
@@ -289,10 +290,6 @@ final class WalletLifecycleUITests: UITestBase {
     }
 
     private func scrollTo(_ title: String) {
-        for _ in 0..<10 {
-            if app.buttons[title].isHittable { return }
-            app.scrollViews.firstMatch.swipeUp()
-        }
-        XCTFail("Mint action must be reachable: \(title)")
+        scrollToButton(app.buttons[title])
     }
 }

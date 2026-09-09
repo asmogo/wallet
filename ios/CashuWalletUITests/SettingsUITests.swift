@@ -88,10 +88,7 @@ final class SettingsUITests: UITestBase {
         let mintRow = app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "Cashu mint")).firstMatch
         tapWhenReady(mintRow)
         let removeRow = app.buttons["Remove mint"]
-        for _ in 0..<6 {
-            if removeRow.isHittable { break }
-            app.scrollViews.firstMatch.swipeUp()
-        }
+        scrollToButton(removeRow)
         tapWhenReady(removeRow)
         XCTAssertTrue(app.staticTexts["Remove mint?"].waitForExistence(timeout: 5))
         XCTAssertEqual(app.alerts.count, 0)
@@ -113,14 +110,14 @@ final class SettingsUITests: UITestBase {
     func testDisplayCurrencyPersistsAcrossRelaunchAndCanBeDisabled() {
         navigateToSettings()
         tapWhenReady(app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", "Currency")).firstMatch)
-        tapWhenReady(app.buttons["EUR"])
+        tapWhenReady(app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", "EUR, ")).firstMatch)
         XCTAssertTrue(screen("settings-screen").waitForExistence(timeout: 5))
         relaunchPreservingWallet()
         navigateToSettings()
         let currency = app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", "Currency")).firstMatch
         XCTAssertTrue(currency.label.contains("EUR"), "Currency preference must survive a fresh process")
         tapWhenReady(currency)
-        tapWhenReady(app.buttons["USD"])
+        tapWhenReady(app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", "USD, ")).firstMatch)
         tapWhenReady(currency)
         tapWhenReady(app.buttons["Off, sats only"])
         relaunchPreservingWallet()

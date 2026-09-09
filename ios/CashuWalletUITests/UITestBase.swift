@@ -222,6 +222,25 @@ class UITestBase: XCTestCase {
         app.descendants(matching: .any).matching(identifier: identifier).firstMatch
     }
 
+    func scrollToButton(
+        _ button: XCUIElement,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) {
+        let scrollView = app.scrollViews.firstMatch
+        XCTAssertTrue(scrollView.waitForExistence(timeout: 5), file: file, line: line)
+        for attempt in 0...10 {
+            // XCTest can report a SwiftUI button as hittable below the viewport.
+            // Require its whole frame to be visible before trusting a tap.
+            let viewport = scrollView.frame.intersection(app.frame)
+            if button.exists && viewport.contains(button.frame) && button.isHittable {
+                return
+            }
+            if attempt < 10 { scrollView.swipeUp() }
+        }
+        XCTFail("Button must be visible inside the scroll view: \(button.label)", file: file, line: line)
+    }
+
     func tapWhenReady(
         _ element: XCUIElement,
         timeout: TimeInterval = 5,

@@ -60,9 +60,9 @@ class PaymentRecoveryJourneyTest {
 
     @Test fun historyFilterAndSearchComposeAndCanBeCleared() {
         launch()
-        robot.awaitTag(UiTestTags.WalletScreen).tapText("History").tapDescription("Filter")
+        robot.awaitTag(UiTestTags.WalletScreen).tapText("History").tapDescription("Filter transactions")
             .tapText("Pending").assertTagDoesNotExist(UiTestTags.transactionRow("fixture-incoming"))
-            .tapDescription("Filter").tapText("Completed")
+            .tapDescription("Filter transactions").tapText("Completed")
             .awaitTag(UiTestTags.transactionRow("fixture-incoming"))
             .tapDescription("Search history").typeIntoTag(UiTestTags.HistorySearch, "deposit")
             .awaitTag(UiTestTags.transactionRow("fixture-incoming"))
